@@ -8,7 +8,14 @@ import {
   type State,
 } from './workspace';
 import { WorkflowProgress } from './change-workflow';
-import { ChangeChecks, ChangeHistory, ChangeOutcome } from './change-shared';
+import {
+  ChangeChecks,
+  ChangeHistory,
+  ChangeOutcome,
+  ProposalDiff,
+  isAddedLine,
+  isRemovedLine,
+} from './change-shared';
 import { native } from './api';
 import type * as M from './models';
 import {
@@ -53,7 +60,7 @@ function buildSplitDiffRows(
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    if (line.kind !== 'add' && line.kind !== 'delete') {
+    if (!isAddedLine(line.kind) && !isRemovedLine(line.kind)) {
       rows.push({
         oldLine: line.old_line || undefined,
         oldText: line.text,
@@ -67,11 +74,11 @@ function buildSplitDiffRows(
     }
     const dels: typeof lines = [];
     const adds: typeof lines = [];
-    while (i < lines.length && lines[i].kind === 'delete') {
+    while (i < lines.length && isRemovedLine(lines[i].kind)) {
       dels.push(lines[i]);
       i++;
     }
-    while (i < lines.length && lines[i].kind === 'add') {
+    while (i < lines.length && isAddedLine(lines[i].kind)) {
       adds.push(lines[i]);
       i++;
     }
@@ -97,7 +104,7 @@ function splitDiffIntoHunks(
 ): DiffHunk[] {
   const changedIndices: number[] = [];
   lines.forEach((line, idx) => {
-    if (line.kind === 'add' || line.kind === 'delete') changedIndices.push(idx);
+    if (isAddedLine(line.kind) || isRemovedLine(line.kind)) changedIndices.push(idx);
   });
   if (!changedIndices.length) return [];
   const ranges: [number, number][] = [];
@@ -133,9 +140,9 @@ function rejectHunkFromDiff(
   const kept: string[] = [];
   for (const line of allLines) {
     if (hunkSet.has(line)) {
-      if (line.kind !== 'add') kept.push(line.text);
+      if (!isAddedLine(line.kind)) kept.push(line.text);
     } else {
-      if (line.kind !== 'delete') kept.push(line.text);
+      if (!isRemovedLine(line.kind)) kept.push(line.text);
     }
   }
   return kept.join('\n');
@@ -227,7 +234,25 @@ export function Editor({ s }: { s: State }) {
 
   const change = s.change;
   const changedPaths = useMemo(() => (change?.changes || []).map((c) => c.path), [change?.changes]);
-  const activePath = s.file?.path || changedPaths[0] || s.changeSeed?.paths[0] || '';
+  const [selectedPath, setSelectedPath] = useState<string>(
+    () =>
+      (s.file?.path && changedPaths.includes(s.file.path) ? s.file.path : changedPaths[0]) ||
+      s.file?.path ||
+      s.changeSeed?.paths[0] ||
+      '',
+  );
+  useEffect(() => {
+    if (s.file?.path) setSelectedPath(s.file.path);
+  }, [s.file?.path]);
+  useEffect(() => {
+    if (changedPaths.length > 0 && (!selectedPath || !changedPaths.includes(selectedPath))) {
+      setSelectedPath(changedPaths[0]);
+      setMode('diff');
+    }
+  }, [change?.id, change?.revision, changedPaths]);
+
+  const activePath =
+    selectedPath || s.file?.path || changedPaths[0] || s.changeSeed?.paths[0] || '';
   const activeEdit = useMemo(
     () => (change?.changes || []).find((c) => c.path === activePath),
     [change?.changes, activePath],
@@ -265,8 +290,8 @@ export function Editor({ s }: { s: State }) {
   const diffStats = useMemo(() => {
     const map = new Map<string, { adds: number; dels: number }>();
     for (const edit of change?.changes || []) {
-      const adds = edit.diff?.lines?.filter((l) => l.kind === 'add').length || 0;
-      const dels = edit.diff?.lines?.filter((l) => l.kind === 'delete').length || 0;
+      const adds = edit.diff?.lines?.filter((l) => isAddedLine(l.kind)).length || 0;
+      const dels = edit.diff?.lines?.filter((l) => isRemovedLine(l.kind)).length || 0;
       map.set(edit.path, { adds, dels });
     }
     return map;
@@ -283,6 +308,7 @@ export function Editor({ s }: { s: State }) {
   );
 
   const selectPath = (path: string) => {
+    setSelectedPath(path);
     const existsInIndex = s.index?.files.some((f) => f.path === path);
     if (existsInIndex || !change?.changes.some((c) => c.path === path)) {
       void w.openFile(path);
@@ -631,129 +657,125 @@ export function Editor({ s }: { s: State }) {
                     </div>
 
                     {activeEdit ? (
-                      hunks.map((hunk) => {
-                        const isAccepted = fileAcceptedHunks.includes(hunk.index);
-                        return (
-                          <div
-                            key={hunk.index}
-                            className={`hunk-card ${isAccepted ? 'accepted' : ''}`}
-                          >
-                            <div className="hunk-card-head">
-                              <span>
-                                {activeEdit.path} · Hunk #{hunk.index + 1} (Lines {hunk.newStart}–
-                                {hunk.newEnd})
-                              </span>
-                              <div className="row" style={{ gap: '6px' }}>
-                                <Button
-                                  tone={isAccepted ? 'primary small' : 'ghost small'}
-                                  icon="check"
-                                  disabled={!!s.busy || change.state !== 'draft'}
-                                  onClick={() =>
-                                    setAcceptedHunks((prev) => ({
-                                      ...prev,
-                                      [activePath]: isAccepted
-                                        ? (prev[activePath] || []).filter((i) => i !== hunk.index)
-                                        : [...(prev[activePath] || []), hunk.index],
-                                    }))
-                                  }
-                                >
-                                  {isAccepted ? 'Accepted' : 'Accept Hunk'}
-                                </Button>
-                                <Button
-                                  tone="ghost small"
-                                  icon="close"
-                                  disabled={!!s.busy || change.state !== 'draft'}
-                                  onClick={() => {
-                                    const nextContent = rejectHunkFromDiff(
-                                      activeEdit.diff.lines,
-                                      hunk,
-                                    );
-                                    void w.updateProposalFileContent(
-                                      activeEdit.path,
-                                      nextContent,
-                                      `Rejected hunk #${hunk.index + 1} in ${activeEdit.path}.`,
-                                    );
-                                  }}
-                                >
-                                  Reject Hunk
-                                </Button>
-                                <Button
-                                  tone="ghost small"
-                                  icon="code"
-                                  onClick={() => {
-                                    setDraftContent(activeEdit.content);
-                                    setMode('edit');
-                                  }}
-                                >
-                                  Edit Inline
-                                </Button>
+                      hunks.length > 0 ? (
+                        hunks.map((hunk) => {
+                          const isAccepted = fileAcceptedHunks.includes(hunk.index);
+                          return (
+                            <div
+                              key={hunk.index}
+                              className={`hunk-card ${isAccepted ? 'accepted' : ''}`}
+                            >
+                              <div className="hunk-card-head">
+                                <span>
+                                  {activeEdit.path} · Hunk #{hunk.index + 1} (Lines {hunk.newStart}–
+                                  {hunk.newEnd})
+                                </span>
+                                <div className="row" style={{ gap: '6px' }}>
+                                  <Button
+                                    tone={isAccepted ? 'primary small' : 'ghost small'}
+                                    icon="check"
+                                    disabled={!!s.busy || change.state !== 'draft'}
+                                    onClick={() =>
+                                      setAcceptedHunks((prev) => ({
+                                        ...prev,
+                                        [activePath]: isAccepted
+                                          ? (prev[activePath] || []).filter((i) => i !== hunk.index)
+                                          : [...(prev[activePath] || []), hunk.index],
+                                      }))
+                                    }
+                                  >
+                                    {isAccepted ? 'Accepted' : 'Accept Hunk'}
+                                  </Button>
+                                  <Button
+                                    tone="ghost small"
+                                    icon="close"
+                                    disabled={!!s.busy || change.state !== 'draft'}
+                                    onClick={() => {
+                                      const nextContent = rejectHunkFromDiff(
+                                        activeEdit.diff.lines,
+                                        hunk,
+                                      );
+                                      void w.updateProposalFileContent(
+                                        activeEdit.path,
+                                        nextContent,
+                                        `Rejected hunk #${hunk.index + 1} in ${activeEdit.path}.`,
+                                      );
+                                    }}
+                                  >
+                                    Reject Hunk
+                                  </Button>
+                                  <Button
+                                    tone="ghost small"
+                                    icon="code"
+                                    onClick={() => {
+                                      setDraftContent(activeEdit.content);
+                                      setMode('edit');
+                                    }}
+                                  >
+                                    Edit Inline
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                            {diffLayout === 'split' ? (
-                              <table className="hunk-code-table hunk-split-table">
-                                <tbody>
-                                  {buildSplitDiffRows(hunk.lines).map((row, rowIdx) => (
-                                    <tr key={rowIdx}>
-                                      <td className={`ln ${row.oldKind === 'del' ? 'del' : ''}`}>
-                                        {row.oldLine ?? ''}
-                                      </td>
-                                      <td
-                                        className={`split-cell ${row.oldKind === 'del' ? 'del' : ''}`}
-                                      >
-                                        {row.oldText !== undefined
-                                          ? `${row.oldKind === 'del' ? '- ' : '  '}${row.oldText}`
-                                          : ''}
-                                      </td>
-                                      <td className={`ln ${row.newKind === 'add' ? 'add' : ''}`}>
-                                        {row.newLine ?? ''}
-                                      </td>
-                                      <td
-                                        className={`split-cell ${row.newKind === 'add' ? 'add' : ''}`}
-                                      >
-                                        {row.newText !== undefined
-                                          ? `${row.newKind === 'add' ? '+ ' : '  '}${row.newText}`
-                                          : ''}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            ) : (
-                              <table className="hunk-code-table">
-                                <tbody>
-                                  {hunk.lines.map((line, lineIdx) => {
-                                    const cls =
-                                      line.kind === 'add'
-                                        ? 'add'
-                                        : line.kind === 'delete'
-                                          ? 'del'
-                                          : '';
-                                    const prefix =
-                                      line.kind === 'add'
-                                        ? '+'
-                                        : line.kind === 'delete'
-                                          ? '-'
-                                          : ' ';
-                                    return (
-                                      <tr key={lineIdx} className={cls}>
-                                        <td className="ln">
-                                          {line.kind === 'add' ? '' : line.old_line || ''}
+                              {diffLayout === 'split' ? (
+                                <table className="hunk-code-table hunk-split-table">
+                                  <tbody>
+                                    {buildSplitDiffRows(hunk.lines).map((row, rowIdx) => (
+                                      <tr key={rowIdx}>
+                                        <td className={`ln ${row.oldKind === 'del' ? 'del' : ''}`}>
+                                          {row.oldLine ?? ''}
                                         </td>
-                                        <td className="ln">
-                                          {line.kind === 'delete' ? '' : line.new_line || ''}
+                                        <td
+                                          className={`split-cell ${row.oldKind === 'del' ? 'del' : ''}`}
+                                        >
+                                          {row.oldText !== undefined
+                                            ? `${row.oldKind === 'del' ? '- ' : '  '}${row.oldText}`
+                                            : ''}
                                         </td>
-                                        <td>
-                                          {prefix} {line.text}
+                                        <td className={`ln ${row.newKind === 'add' ? 'add' : ''}`}>
+                                          {row.newLine ?? ''}
+                                        </td>
+                                        <td
+                                          className={`split-cell ${row.newKind === 'add' ? 'add' : ''}`}
+                                        >
+                                          {row.newText !== undefined
+                                            ? `${row.newKind === 'add' ? '+ ' : '  '}${row.newText}`
+                                            : ''}
                                         </td>
                                       </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-                        );
-                      })
+                                    ))}
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <table className="hunk-code-table">
+                                  <tbody>
+                                    {hunk.lines.map((line, lineIdx) => {
+                                      const isAdd = isAddedLine(line.kind);
+                                      const isDel = isRemovedLine(line.kind);
+                                      const cls = isAdd ? 'add' : isDel ? 'del' : '';
+                                      const prefix = isAdd ? '+' : isDel ? '-' : ' ';
+                                      return (
+                                        <tr key={lineIdx} className={cls}>
+                                          <td className="ln">{isAdd ? '' : line.old_line || ''}</td>
+                                          <td className="ln">{isDel ? '' : line.new_line || ''}</td>
+                                          <td>
+                                            {prefix} {line.text}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <ProposalDiff
+                          edit={activeEdit}
+                          index={Math.max(0, changedPaths.indexOf(activeEdit.path))}
+                          total={change.changes.length}
+                        />
+                      )
                     ) : (
                       <Empty
                         title="Select a changed file to inspect hunks"

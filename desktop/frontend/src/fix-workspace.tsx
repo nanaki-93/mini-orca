@@ -11,7 +11,13 @@ import {
   type State,
 } from './workspace';
 import { WorkflowProgress } from './change-workflow';
-import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
+import {
+  ChangeChecks,
+  ChangeOutcome,
+  ProposalDiff,
+  isAddedLine,
+  isRemovedLine,
+} from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
 import { ProjectGuidance } from './project-guidance';
@@ -495,9 +501,9 @@ export function ProposalReview({
                       <tbody>
                         {files.map((file) => {
                           const adds =
-                            file.diff?.lines?.filter((l) => l.kind === 'add').length || 0;
+                            file.diff?.lines?.filter((l) => isAddedLine(l.kind)).length || 0;
                           const dels =
-                            file.diff?.lines?.filter((l) => l.kind === 'delete').length || 0;
+                            file.diff?.lines?.filter((l) => isRemovedLine(l.kind)).length || 0;
                           const isVisited = viewed.includes(file.path);
                           return (
                             <tr key={file.path}>
