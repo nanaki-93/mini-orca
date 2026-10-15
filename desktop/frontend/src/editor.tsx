@@ -2,14 +2,11 @@ import { useWorkspace } from './workspace-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeChangeWorkflow,
-  canAcceptChange,
   changeChecksPassed,
   workflowSetupModels,
   type State,
 } from './workspace';
-import { WorkflowProgress } from './change-workflow';
 import {
-  ChangeChecks,
   ChangeHistory,
   ChangeOutcome,
   ProposalDiff,
@@ -579,16 +576,6 @@ export function Editor({ s }: { s: State }) {
                   Save File (⌘S)
                 </Button>
               )}
-              {mode === 'diff' && change && change.state === 'draft' && (
-                <Button
-                  tone="primary small"
-                  icon="check"
-                  disabled={!!s.busy || activeChangeWorkflow(change)}
-                  onClick={() => void w.applyProposalNow(change.title)}
-                >
-                  Accept All & Apply
-                </Button>
-              )}
             </div>
           </div>
 
@@ -603,8 +590,6 @@ export function Editor({ s }: { s: State }) {
                 </Notice>
               )}
               <ChangeOutcome s={s} />
-              {change?.workflow && <WorkflowProgress s={s} />}
-              {change && change.checks.length > 0 && <ChangeChecks s={s} />}
 
               {mode === 'diff' ? (
                 change && change.changes.length > 0 ? (
@@ -627,6 +612,15 @@ export function Editor({ s }: { s: State }) {
                         </span>
                       </div>
                       <div className="row wrap" style={{ gap: '8px' }}>
+                        {change.workflow && (
+                          <Button
+                            tone="ghost small"
+                            icon="sparkles"
+                            onClick={() => void w.navigate('agents')}
+                          >
+                            Workflow Stages
+                          </Button>
+                        )}
                         {change.state === 'draft' && (
                           <>
                             {change.checks.some((c) => c.state === 'failed') && (
@@ -641,27 +635,19 @@ export function Editor({ s }: { s: State }) {
                             )}
                             <Button
                               tone="ghost small"
-                              icon="play"
-                              disabled={!!s.busy}
-                              onClick={() => void w.checkChange(true)}
-                            >
-                              Verify Checks
-                            </Button>
-                            <Button
-                              tone="ghost small"
                               icon="close"
-                              disabled={!!s.busy}
+                              disabled={!!s.busy || activeChangeWorkflow(change)}
                               onClick={() => w.newChange()}
                             >
-                              Discard Proposal
+                              Discard
                             </Button>
                             <Button
                               tone="primary small"
                               icon="check"
-                              disabled={!!s.busy}
+                              disabled={!!s.busy || activeChangeWorkflow(change)}
                               onClick={() => void w.applyProposalNow(change.title)}
                             >
-                              {canAcceptChange(s) ? 'Commit & Apply' : 'Check & Apply Now'}
+                              Accept &amp; Commit
                             </Button>
                           </>
                         )}
