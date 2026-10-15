@@ -505,6 +505,9 @@ export function AnalysisPreview({ s }: { s: State }) {
   );
 }
 export function AnalysisRun({ s }: { s: State }) {
+  const [tab, setTab] = useState<'overview' | 'files' | 'models'>('overview');
+  const [fileQuery, setFileQuery] = useState('');
+  const [onlyFailedFiles, setOnlyFailedFiles] = useState(false);
   const run = s.run;
   if (!run)
     return (
@@ -544,6 +547,11 @@ export function AnalysisRun({ s }: { s: State }) {
   const runningStage = runningFile?.stages.find((stage) => stage.status === 'running');
   const failedFiles = run.files.filter((file) =>
     file.stages.some((stage) => stage.status === 'failed'),
+  );
+  const filteredRunFiles = run.files.filter(
+    (file) =>
+      (!onlyFailedFiles || file.stages.some((stage) => stage.status === 'failed')) &&
+      (!fileQuery.trim() || file.path.toLowerCase().includes(fileQuery.trim().toLowerCase())),
   );
   const totalFindings = run.sections.reduce(
     (sum, section) => sum + (section.finding_count || 0),
@@ -639,257 +647,370 @@ export function AnalysisRun({ s }: { s: State }) {
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
       {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
-      <Panel className="analysis-progress">
-        <div className="analysis-progress-heading">
-          <div>
-            <h2>File analysis</h2>
-            <p className="small muted">
-              {total > 0
-                ? `${done} of ${total} file analysis steps finished`
-                : 'No file analysis steps'}
-            </p>
-          </div>
-          {total > 0 && (
-            <strong className="analysis-progress-percent" aria-hidden="true">
-              {Math.floor((done / total) * 100)}
-              <small>%</small>
-            </strong>
-          )}
-        </div>
-        {total > 0 && (
-          <progress
-            className="analysis-progress-bar"
-            value={done}
-            max={total}
-            aria-label="File analysis progress"
-            aria-valuetext={`${done} of ${total} file analysis steps finished`}
-          />
-        )}
-        <div className="analysis-progress-meta small muted">
-          <span>{run.window_files_completed} files completed this batch</span>
-          <span>
-            {failedFiles.length > 0 ? `${failedFiles.length} failed · ` : ''}
-            {elapsed} elapsed
-          </span>
-        </div>
-        {activeRun(run) && (
-          <div className="analysis-current-step" role="status" aria-label="Current analysis step">
-            <Spinner />
-            <p>{currentStep}</p>
-          </div>
-        )}
-        {run.features && (
-          <div
-            className="analysis-feature-progress"
-            role="status"
-            aria-label="Feature discovery progress"
+
+      <div className="toolbar">
+        <div className="mode-switch-group" role="tablist" aria-label="Last run views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'overview'}
+            className={`mode-switch-btn ${tab === 'overview' ? 'active' : ''}`}
+            onClick={() => setTab('overview')}
           >
-            <span className="row">
-              <Icon name="sparkles" />
-              Feature discovery
-            </span>
-            <span className="analysis-run-status">
-              <StatusDot value={run.features.status} label="Feature discovery" />
-              <span>{human(run.features.status)}</span>
-            </span>
-          </div>
-        )}
-        <div
-          className="analysis-feature-progress"
-          role="status"
-          aria-label="Engineering specification progress"
-        >
-          <span className="row">
-            <Icon name="book" />
-            Engineering specification (Docs)
-          </span>
-          <span className="analysis-run-status">
-            <StatusDot value={docsStatus} label="Engineering specification" />
-            <span>{human(docsStatus)}</span>
-          </span>
+            1. Overview &amp; Categories ({run.sections.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'files'}
+            className={`mode-switch-btn ${tab === 'files' ? 'active' : ''}`}
+            onClick={() => setTab('files')}
+          >
+            2. File Coverage ({run.files.length}
+            {failedFiles.length > 0 ? ` · ${failedFiles.length} failed` : ''})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'models'}
+            className={`mode-switch-btn ${tab === 'models' ? 'active' : ''}`}
+            onClick={() => setTab('models')}
+          >
+            3. Models &amp; Run Config
+          </button>
         </div>
-      </Panel>
-      <section className="stack analysis-run-details" aria-labelledby="analysis-run-details-title">
-        <div className="row between wrap">
-          <h2 id="analysis-run-details-title">Run details</h2>
-          <span className="small muted">
-            Select any category below to inspect findings or start a fix
-          </span>
-        </div>
-        <div className="grid analysis-run-categories">
-          {run.sections.map((section) => (
-            <Panel
-              key={section.category}
-              title={human(section.category)}
-              className="run-result-card"
-              actions={<StatusDot value={section.status} label={human(section.category)} />}
-            >
-              <div data-accent={section.category} className="run-result-summary">
-                <div className="metric-number">{section.finding_count ?? '—'}</div>
-                <span>{human(section.status)}</span>
-              </div>
-              <p className="small muted">
-                {section.coverage.succeeded}/{section.coverage.total} files succeeded ·{' '}
-                {section.finding_count === null
-                  ? 'No evidence yet'
-                  : section.category === 'performance'
-                    ? 'Hypotheses'
-                    : 'Saved findings'}
-              </p>
-              <div className="row between wrap" style={{ marginTop: '6px' }}>
-                <Go
-                  page={section.category as 'bugs' | 'security' | 'performance'}
-                  icon={
-                    section.category === 'security'
-                      ? 'shield'
-                      : section.category === 'performance'
-                        ? 'gauge'
-                        : 'bug'
-                  }
-                  tone="ghost small"
-                >
-                  Open {human(section.category)} →
-                </Go>
-              </div>
-              <Disclosure title="Coverage details">
-                <KeyValues
-                  values={[
-                    ['Completed', section.coverage.succeeded],
-                    ['Partial', section.coverage.partial],
-                    ['Failed', section.coverage.failed],
-                    ['Unavailable', section.coverage.unavailable],
-                    ['Skipped', section.coverage.skipped],
-                    ['Pending', section.coverage.pending],
-                  ]}
-                />
-              </Disclosure>
-            </Panel>
-          ))}
-          {run.features && (
-            <Panel
-              title="New feature suggestions"
-              className="run-result-card"
-              actions={<StatusDot value={run.features.status} label="Features" />}
-            >
-              <div data-accent="features" className="run-result-summary">
-                <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
-                <span>{human(run.features.status)}</span>
-              </div>
-              <p className="small muted">Advisory ideas</p>
-              <div className="row between wrap" style={{ marginTop: '6px' }}>
-                <Go page="features" icon="sparkles" tone="ghost small">
-                  Open Features →
-                </Go>
-              </div>
-              <Disclosure title="Attempt details">
-                <p>
-                  {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts used
+      </div>
+
+      {tab === 'overview' && (
+        <>
+          <Panel className="analysis-progress">
+            <div className="analysis-progress-heading">
+              <div>
+                <h2>File analysis</h2>
+                <p className="small muted">
+                  {total > 0
+                    ? `${done} of ${total} file analysis steps finished`
+                    : 'No file analysis steps'}
                 </p>
-              </Disclosure>
+              </div>
+              {total > 0 && (
+                <strong className="analysis-progress-percent" aria-hidden="true">
+                  {Math.floor((done / total) * 100)}
+                  <small>%</small>
+                </strong>
+              )}
+            </div>
+            {total > 0 && (
+              <progress
+                className="analysis-progress-bar"
+                value={done}
+                max={total}
+                aria-label="File analysis progress"
+                aria-valuetext={`${done} of ${total} file analysis steps finished`}
+              />
+            )}
+            <div className="analysis-progress-meta small muted">
+              <span>{run.window_files_completed} files completed this batch</span>
+              <span>
+                {failedFiles.length > 0 ? `${failedFiles.length} failed · ` : ''}
+                {elapsed} elapsed
+              </span>
+            </div>
+            {activeRun(run) && (
+              <div
+                className="analysis-current-step"
+                role="status"
+                aria-label="Current analysis step"
+              >
+                <Spinner />
+                <p>{currentStep}</p>
+              </div>
+            )}
+            {run.features && (
+              <div
+                className="analysis-feature-progress"
+                role="status"
+                aria-label="Feature discovery progress"
+              >
+                <span className="row">
+                  <Icon name="sparkles" />
+                  Feature discovery
+                </span>
+                <span className="analysis-run-status">
+                  <StatusDot value={run.features.status} label="Feature discovery" />
+                  <span>{human(run.features.status)}</span>
+                </span>
+              </div>
+            )}
+            <div
+              className="analysis-feature-progress"
+              role="status"
+              aria-label="Engineering specification progress"
+            >
+              <span className="row">
+                <Icon name="book" />
+                Engineering specification (Docs)
+              </span>
+              <span className="analysis-run-status">
+                <StatusDot value={docsStatus} label="Engineering specification" />
+                <span>{human(docsStatus)}</span>
+              </span>
+            </div>
+          </Panel>
+
+          {failedFiles.length > 0 && (
+            <Notice error>
+              <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                <span>
+                  {failedFiles.length} {failedFiles.length === 1 ? 'file' : 'files'} encountered
+                  stage failures during this run.
+                </span>
+                <Button
+                  tone="ghost small"
+                  onClick={() => {
+                    setOnlyFailedFiles(true);
+                    setTab('files');
+                  }}
+                >
+                  Inspect Failed Files ({failedFiles.length})
+                </Button>
+              </div>
+            </Notice>
+          )}
+
+          <section
+            className="stack analysis-run-details"
+            aria-labelledby="analysis-run-details-title"
+          >
+            <div className="row between wrap">
+              <h2 id="analysis-run-details-title">Run details</h2>
+              <span className="small muted">
+                Select any category below to inspect findings or start a fix
+              </span>
+            </div>
+            <div className="grid analysis-run-categories">
+              {run.sections.map((section) => (
+                <Panel
+                  key={section.category}
+                  title={human(section.category)}
+                  className="run-result-card"
+                  actions={<StatusDot value={section.status} label={human(section.category)} />}
+                >
+                  <div data-accent={section.category} className="run-result-summary">
+                    <div className="metric-number">{section.finding_count ?? '—'}</div>
+                    <span>{human(section.status)}</span>
+                  </div>
+                  <p className="small muted">
+                    {section.coverage.succeeded}/{section.coverage.total} files succeeded ·{' '}
+                    {section.finding_count === null
+                      ? 'No evidence yet'
+                      : section.category === 'performance'
+                        ? 'Hypotheses'
+                        : 'Saved findings'}
+                  </p>
+                  <div className="row between wrap" style={{ marginTop: '6px' }}>
+                    <Go
+                      page={section.category as 'bugs' | 'security' | 'performance'}
+                      icon={
+                        section.category === 'security'
+                          ? 'shield'
+                          : section.category === 'performance'
+                            ? 'gauge'
+                            : 'bug'
+                      }
+                      tone="ghost small"
+                    >
+                      Open {human(section.category)} →
+                    </Go>
+                  </div>
+                  <Disclosure title="Coverage details">
+                    <KeyValues
+                      values={[
+                        ['Completed', section.coverage.succeeded],
+                        ['Partial', section.coverage.partial],
+                        ['Failed', section.coverage.failed],
+                        ['Unavailable', section.coverage.unavailable],
+                        ['Skipped', section.coverage.skipped],
+                        ['Pending', section.coverage.pending],
+                      ]}
+                    />
+                  </Disclosure>
+                </Panel>
+              ))}
+              {run.features && (
+                <Panel
+                  title="New feature suggestions"
+                  className="run-result-card"
+                  actions={<StatusDot value={run.features.status} label="Features" />}
+                >
+                  <div data-accent="features" className="run-result-summary">
+                    <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
+                    <span>{human(run.features.status)}</span>
+                  </div>
+                  <p className="small muted">Advisory ideas</p>
+                  <div className="row between wrap" style={{ marginTop: '6px' }}>
+                    <Go page="features" icon="sparkles" tone="ghost small">
+                      Open Features →
+                    </Go>
+                  </div>
+                  <Disclosure title="Attempt details">
+                    <p>
+                      {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts
+                      used
+                    </p>
+                  </Disclosure>
+                </Panel>
+              )}
+              <Panel
+                title="Engineering Specification"
+                className="run-result-card"
+                actions={<StatusDot value={docsStatus} label="Docs" />}
+              >
+                <div data-accent="docs" className="run-result-summary">
+                  <div className="metric-number">{docsCount || '—'}</div>
+                  <span>Subsystems</span>
+                </div>
+                <p className="small muted">C4 Context · Contracts · Scenarios · ADRs</p>
+                <Go page="docs" icon="book" tone="ghost small">
+                  Open Engineering Spec →
+                </Go>
+              </Panel>
+            </div>
+          </section>
+        </>
+      )}
+
+      {tab === 'files' && (
+        <section className="stack" aria-label="File coverage">
+          <div className="toolbar">
+            <div className="input-wrap" style={{ flex: 1 }}>
+              <Icon name="search" />
+              <input
+                aria-label="Filter files in this run"
+                value={fileQuery}
+                onChange={(e) => setFileQuery(e.target.value)}
+                placeholder="Filter analyzed files by path…"
+              />
+            </div>
+            {failedFiles.length > 0 && (
+              <div className="actions">
+                <Button
+                  tone={!onlyFailedFiles ? 'primary small' : 'ghost small'}
+                  onClick={() => setOnlyFailedFiles(false)}
+                >
+                  All Files ({run.files.length})
+                </Button>
+                <Button
+                  tone={onlyFailedFiles ? 'primary small' : 'ghost small'}
+                  onClick={() => setOnlyFailedFiles(true)}
+                >
+                  Failed Only ({failedFiles.length})
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {failedFiles.length > 0 && (
+            <Panel
+              title={`Files with failures (${failedFiles.length})`}
+              className="analysis-failed-files"
+            >
+              <div className="scroll-list">
+                {failedFiles.map((file) => (
+                  <Disclosure
+                    title={
+                      <span className="row between wrap">
+                        <span className="mono small analysis-file-path">{file.path}</span>
+                        <span className="row wrap analysis-file-statuses">
+                          {file.stages.map((stage) => (
+                            <span key={stage.stage} title={stageNames[stage.stage]}>
+                              <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                            </span>
+                          ))}
+                        </span>
+                      </span>
+                    }
+                    key={file.path}
+                  >
+                    {file.stages.map((stage) => (
+                      <div className="list-row" key={stage.stage}>
+                        <span className="list-copy">
+                          <strong>{stageNames[stage.stage]}</strong>
+                          <small>
+                            {stage.reason ||
+                              `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
+                          </small>
+                        </span>
+                        <span className="analysis-run-status small">
+                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                          <span>{human(stage.status)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </Disclosure>
+                ))}
+              </div>
             </Panel>
           )}
-          <Panel
-            title="Engineering Specification"
-            className="run-result-card"
-            actions={<StatusDot value={docsStatus} label="Docs" />}
-          >
-            <div data-accent="docs" className="run-result-summary">
-              <div className="metric-number">{docsCount || '—'}</div>
-              <span>Subsystems</span>
-            </div>
-            <p className="small muted">C4 Context · Contracts · Scenarios · ADRs</p>
-            <Go page="docs" icon="book" tone="ghost small">
-              Open Engineering Spec →
-            </Go>
-          </Panel>
-        </div>
 
-        {failedFiles.length > 0 && (
-          <Panel
-            title={`Files with failures (${failedFiles.length})`}
-            className="analysis-failed-files"
-          >
-            <div className="scroll-list">
-              {failedFiles.map((file) => (
-                <Disclosure
-                  title={
-                    <span className="row between wrap">
-                      <span className="mono small analysis-file-path">{file.path}</span>
-                      <span className="row wrap analysis-file-statuses">
-                        {file.stages.map((stage) => (
-                          <span key={stage.stage} title={stageNames[stage.stage]}>
-                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                          </span>
-                        ))}
-                      </span>
+          <Panel title={`Files in this run (${filteredRunFiles.length})`}>
+            {filteredRunFiles.length === 0 ? (
+              <p className="small muted">No matching files recorded in this run.</p>
+            ) : (
+              <div className="scroll-list">
+                {filteredRunFiles.map((file) => (
+                  <div className="list-row" key={file.path}>
+                    <span className="list-copy">
+                      <strong className="font-mono small">{file.path}</strong>
                     </span>
-                  }
-                  key={file.path}
-                >
-                  {file.stages.map((stage) => (
-                    <div className="list-row" key={stage.stage}>
-                      <span className="list-copy">
-                        <strong>{stageNames[stage.stage]}</strong>
-                        <small>
-                          {stage.reason ||
-                            `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
-                        </small>
-                      </span>
-                      <span className="analysis-run-status small">
-                        <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                        <span>{human(stage.status)}</span>
-                      </span>
-                    </div>
-                  ))}
-                </Disclosure>
-              ))}
-            </div>
-          </Panel>
-        )}
-
-        <Disclosure title={`Analyzed files (${run.files.length}) & Captured models`}>
-          <div className="stack" style={{ gap: '12px', paddingTop: '8px' }}>
-            <Panel title="Captured models" className="analysis-run-models">
-              <CapturedModels plan={run.plan} compact />
-            </Panel>
-            <Panel title={`Files in this run (${run.files.length})`}>
-              {run.files.length === 0 ? (
-                <p className="small muted">No files recorded in this run.</p>
-              ) : (
-                <div className="scroll-list">
-                  {run.files.map((file) => (
-                    <div className="list-row" key={file.path}>
-                      <span className="list-copy">
-                        <strong className="font-mono small">{file.path}</strong>
-                      </span>
-                      <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                        {file.stages.map((stage) => (
-                          <span
-                            key={stage.stage}
-                            className="row"
-                            style={{ gap: '4px', fontSize: '0.75rem' }}
-                            title={`${stageNames[stage.stage]}: ${human(stage.status)}`}
-                          >
-                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                            <span className="muted">{stageNames[stage.stage]}</span>
-                          </span>
-                        ))}
-                        <Button
-                          tone="ghost small"
-                          icon="code"
-                          onClick={() => void w.openFile(file.path)}
+                    <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                      {file.stages.map((stage) => (
+                        <span
+                          key={stage.stage}
+                          className="row"
+                          style={{ gap: '4px', fontSize: '0.75rem' }}
+                          title={`${stageNames[stage.stage]}: ${human(stage.status)}${stage.reason ? ` — ${stage.reason}` : ''}`}
                         >
-                          Open
-                        </Button>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Panel>
-          </div>
-        </Disclosure>
-      </section>
+                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                          <span className="muted">{stageNames[stage.stage]}</span>
+                        </span>
+                      ))}
+                      <Button
+                        tone="ghost small"
+                        icon="code"
+                        onClick={() => void w.openFile(file.path)}
+                      >
+                        Open
+                      </Button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </section>
+      )}
+
+      {tab === 'models' && (
+        <section className="grid two-columns" aria-label="Models and run configuration">
+          <Panel title="Captured models" className="analysis-run-models">
+            <CapturedModels plan={run.plan} compact />
+          </Panel>
+          <Panel title="Run limits &amp; configuration">
+            <KeyValues
+              values={[
+                ['Files in scope', run.files.length],
+                ['Batch size', `${run.plan.limits.batch_files} files`],
+                ['Time budget', `${run.plan.limits.budget_seconds} seconds`],
+                ['Max attempts per stage', run.plan.limits.max_attempts_per_stage],
+                ['Existing results', run.plan.refresh ? 'Refresh all' : 'Reuse when current'],
+                ['Expected model requests', run.plan.expected_model_requests],
+                ['Maximum model requests', run.plan.max_model_requests],
+              ]}
+            />
+          </Panel>
+        </section>
+      )}
     </div>
   );
 }
