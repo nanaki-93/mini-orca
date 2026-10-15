@@ -24,6 +24,7 @@ type GitWorktree struct {
 	Dirty     *bool                `json:"dirty,omitempty"`
 	Mergeable bool                 `json:"mergeable"`
 	Completed []ChangeHistoryEntry `json:"completed"`
+	Sessions  []ChangeHistoryEntry `json:"sessions,omitempty"`
 	Error     string               `json:"error,omitempty"`
 }
 
@@ -123,6 +124,7 @@ func populateGitWorktree(ctx context.Context, target *GitRepository, tree *GitWo
 		tree.Error = "Fix history unavailable: " + err.Error()
 		return
 	}
+	tree.Sessions = history
 	for _, entry := range history {
 		if entry.State == "applied" && entry.Commit != nil && entry.Commit.State == "committed" {
 			tree.Completed = append(tree.Completed, entry)

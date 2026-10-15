@@ -144,6 +144,10 @@ func (s *Service) ListFindings(filter FindingFilter) ([]project.UnifiedFinding, 
 // UpdateFindingStatus records an explicit triage decision only for the active
 // project revision.
 func (s *Service) UpdateFindingStatus(revision, id, status string) error {
+	return s.UpdateFindingTargetStatus(revision, project.FindingTarget{ID: id}, status)
+}
+
+func (s *Service) UpdateFindingTargetStatus(revision string, target project.FindingTarget, status string) error {
 	_, _, input, err := s.workspaceState()
 	if err != nil {
 		return err
@@ -155,7 +159,16 @@ func (s *Service) UpdateFindingStatus(revision, id, status string) error {
 	if err != nil {
 		return err
 	}
-	return store.SetStatus(id, status)
+	if target.Kind == "" {
+		return store.SetStatus(target.ID, status)
+	}
+	if target.ProjectID == "" {
+		target.ProjectID = input.ProjectID
+	}
+	if target.ProjectID != input.ProjectID {
+		return project.ErrRevisionConflict
+	}
+	return store.SetTargetStatus(target, status, "manual")
 }
 
 func (s *Service) workspaceState() (*project.Analysis, *project.ProjectIndex, project.FindingInput, error) {

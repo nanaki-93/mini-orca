@@ -192,15 +192,7 @@ func (s *FindingStore) SetStatus(id, status string) error {
 	for index := range findings {
 		if findings[index].ID == id {
 			findings[index].Status = status
-			if status != FindingStatusFixed {
-				retained := document.Completed[:0]
-				for _, completion := range document.Completed {
-					if completion.Kind != "semantic" || completion.ID != id || completion.ProjectID != findings[index].ProjectID {
-						retained = append(retained, completion)
-					}
-				}
-				document.Completed = retained
-			}
+			updateSemanticCompletion(document, findings[index], status)
 			return s.storeLocked(document)
 		}
 	}

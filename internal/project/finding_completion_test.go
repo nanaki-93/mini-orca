@@ -63,6 +63,31 @@ func TestFindingCompletionSurvivesRefreshAndReopen(t *testing.T) {
 	if completed, err := restarted.Completions(input.ProjectID); err != nil || len(completed) != 0 {
 		t.Fatalf("reopen retained completion: %+v, %v", completed, err)
 	}
+	if err := restarted.SetStatus(completion.ID, FindingStatusFixed); err != nil {
+		t.Fatal(err)
+	}
+	current, err = restarted.ReconcileSource(input, FindingSourceAI, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range current {
+		if finding.ID == completion.ID && finding.Status != FindingStatusFixed {
+			t.Fatalf("manual Mark as Done was overwritten by reconciliation: %+v", finding)
+		}
+	}
+	perfTarget := FindingTarget{ProjectID: input.ProjectID, Kind: "performance", ID: "perf-1", Path: "main.go"}
+	if err := restarted.SetTargetStatus(perfTarget, FindingStatusFixed, ""); err != nil {
+		t.Fatal(err)
+	}
+	if completed, err := restarted.Completions(input.ProjectID); err != nil || len(completed) != 2 {
+		t.Fatalf("expected semantic and performance completions: %+v, %v", completed, err)
+	}
+	if err := restarted.SetTargetStatus(perfTarget, FindingStatusOpen, ""); err != nil {
+		t.Fatal(err)
+	}
+	if completed, err := restarted.Completions(input.ProjectID); err != nil || len(completed) != 1 {
+		t.Fatalf("reopen target did not remove completion: %+v, %v", completed, err)
+	}
 }
 
 func TestFindingCompletionConcurrentStoresPreserveAllProducers(t *testing.T) {

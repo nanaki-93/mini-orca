@@ -72,6 +72,9 @@ type securityReviewRequest struct {
 type findingStatusRequest struct {
 	ProjectRevision string `json:"project_revision"`
 	Status          string `json:"status"`
+	Kind            string `json:"kind,omitempty"`
+	Path            string `json:"path,omitempty"`
+	Source          string `json:"source,omitempty"`
 }
 
 type goScanRequest struct {
@@ -189,7 +192,17 @@ func (h *ProjectHandler) UpdateFindingStatus(w http.ResponseWriter, r *http.Requ
 	if !decodeStrictJSON(w, r, &request, "invalid finding triage request", "Provide project_revision and status.") || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
 		return
 	}
-	if err := h.service.UpdateFindingStatus(request.ProjectRevision, r.PathValue("findingID"), request.Status); err != nil {
+	id := r.PathValue("findingID")
+	err := h.service.UpdateFindingStatus(request.ProjectRevision, id, request.Status)
+	if request.Kind != "" {
+		err = h.service.UpdateFindingTargetStatus(request.ProjectRevision, project.FindingTarget{
+			ID:     id,
+			Kind:   request.Kind,
+			Path:   request.Path,
+			Source: request.Source,
+		}, request.Status)
+	}
+	if err != nil {
 		writeProjectError(w, "update finding triage failed", err)
 		return
 	}
