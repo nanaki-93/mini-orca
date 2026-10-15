@@ -11,6 +11,7 @@ import {
 import { createRoot } from 'react-dom/client';
 import {
   workspace as w,
+  activeChangeWorkflow,
   canCancelOperation,
   findingCategory,
   allModelPresets,
@@ -189,20 +190,32 @@ function App() {
     return () => window.removeEventListener('keydown', key);
   }, [s.confirmation, s.project, live.page]);
   const issueCount =
-    (s.findings?.filter((f) => f.status !== 'fixed').length ||
+    (s.findings?.filter(
+      (f) => f.status !== 'fixed' && f.status !== 'retired' && f.status !== 'dismissed',
+    ).length ||
       s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
       0) + (s.features?.suggestions.length || 0);
-  const worktreeCount = s.gitWorkspace?.worktrees.length || 0;
+  const nonCurrentWorktrees = s.gitWorkspace?.worktrees.filter((t) => !t.current) || [];
+  const worktreeCount = nonCurrentWorktrees.length;
+  const runningAgentsCount =
+    (activeChangeWorkflow(s.change) ? 1 : 0) +
+    s.implementations.filter((impl) => activeChangeWorkflow(impl.state.change)).length;
+  const activeAgentsCount =
+    (s.change || s.changeSeed ? 1 : 0) +
+    nonCurrentWorktrees.filter((t) => (t.sessions?.length || 0) > 0 || t.completed.length > 0)
+      .length;
   const changeCount = s.change?.changes?.length || 0;
   const nav = (items: typeof mainNav) =>
     items.map(([page, label, icon]) => {
       const count =
         page === 'editor' && changeCount > 0
           ? `${changeCount} diff`
-          : page === 'agents' && s.change?.workflow
-            ? s.change.workflow.status === 'running'
-              ? 'run'
-              : 'ready'
+          : page === 'agents' && (runningAgentsCount > 0 || activeAgentsCount > 0)
+            ? runningAgentsCount > 0
+              ? `${runningAgentsCount} run`
+              : activeAgentsCount > 1
+                ? `${activeAgentsCount} agents`
+                : 'ready'
             : page === 'bugs' && issueCount > 0
               ? issueCount
               : page === 'git' && worktreeCount > 0

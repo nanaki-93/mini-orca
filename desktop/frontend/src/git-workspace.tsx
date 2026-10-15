@@ -1,23 +1,50 @@
 import { useEffect, useState } from 'react';
-import { workspace as w, type State } from './workspace';
+import { activeChangeWorkflow, workspace as w, type State } from './workspace';
 import { Implementations } from './worktree-implementation';
 import type * as M from './models';
-import { Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
+import { Badge, Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
 
 function getWorktreeInfo(tree: M.GitWorktree, s: State) {
   const child = s.implementations?.find((item) => item.worktreePath === tree.path);
   const childChange = child?.state?.change || child?.state?.changeSeed;
+  const latestSession = tree.completed?.[0] || tree.sessions?.[0];
+  const running =
+    activeChangeWorkflow(child?.state?.change) ||
+    latestSession?.workflow_status === 'running' ||
+    latestSession?.workflow_status === 'canceling';
+  const statusLabel = tree.mergeable
+    ? 'Ready to Merge'
+    : running
+      ? 'Agent Running'
+      : latestSession?.state === 'draft'
+        ? 'Draft / Awaiting Commit'
+        : tree.dirty
+          ? 'Uncommitted Changes'
+          : 'In Progress';
+  const statusTone: 'green' | 'violet' | 'amber' | undefined = tree.mergeable
+    ? 'green'
+    : running
+      ? 'violet'
+      : 'amber';
   if (childChange) {
     return {
       title: childChange.title,
       kind: childChange.kind || 'fix',
+      statusLabel,
+      statusTone,
+      commitOid:
+        child?.state?.change?.commit?.oid ||
+        child?.state?.changeReceipt?.commit?.oid ||
+        latestSession?.commit?.oid,
     };
   }
-  const lastCompleted = tree.completed?.[0];
-  if (lastCompleted) {
+  if (latestSession) {
     return {
-      title: lastCompleted.title,
-      kind: lastCompleted.kind || 'fix',
+      title: latestSession.title,
+      kind: latestSession.kind || 'fix',
+      statusLabel,
+      statusTone,
+      commitOid: latestSession.commit?.oid,
     };
   }
   let kind = 'fix';
@@ -27,11 +54,11 @@ function getWorktreeInfo(tree: M.GitWorktree, s: State) {
   else if (tree.branch.includes('feature')) kind = 'feature';
 
   const cleanTitle = tree.branch
-    .replace(/^(fix|perf|security|feature)[/-]/, '')
+    .replace(/^(codex|fix|perf|security|feature)[/-]/, '')
     .replace(/[-_]/g, ' ')
     .trim();
   const title = cleanTitle ? cleanTitle[0].toUpperCase() + cleanTitle.slice(1) : tree.branch;
-  return { title, kind };
+  return { title, kind, statusLabel, statusTone, commitOid: undefined };
 }
 
 function kindIcon(kind: string) {
@@ -55,7 +82,7 @@ export function GitWorkspace({ s }: { s: State }) {
     void action().finally(() => setPending(''));
   };
   const repository = s.gitWorkspace;
-  const worktrees = repository?.worktrees.filter((tree) => tree.mergeable) || [];
+  const worktrees = repository?.worktrees.filter((tree) => !tree.current) || [];
   const failed = repository?.worktrees.filter((tree) => tree.error) || [];
   const busy = !!s.busy;
   const blocked = busy || !!s.resourceErrors['Git / Worktrees'] || s.uncertain;
@@ -171,16 +198,20 @@ export function GitWorkspace({ s }: { s: State }) {
                   </span>
                 </div>
                 <p className="small muted">
-                  In-place proposals and direct file saves apply directly to{' '}
-                  <code>{repository.branch || 'current branch'}</code> with guarded Undo.
+                  Agent fixes run in isolated Git worktrees and merge into{' '}
+                  <code>{repository.branch || 'current branch'}</code> after you Accept &amp;
+                  Commit.
                 </p>
                 <div className="actions">
                   <Button
                     tone="primary small"
-                    icon="code"
-                    onClick={() => void w.navigate('editor')}
+                    icon="sparkles"
+                    onClick={() => void w.navigate('agents')}
                   >
-                    Open Code & Diff
+                    Open Agent Dashboard
+                  </Button>
+                  <Button tone="ghost small" icon="code" onClick={() => void w.navigate('editor')}>
+                    Open Code &amp; Diff
                   </Button>
                   {s.changeReceipt?.undo_available && (
                     <Button
@@ -196,14 +227,14 @@ export function GitWorkspace({ s }: { s: State }) {
               </div>
             </Panel>
 
-            <Panel title="Worktrees">
+            <Panel title={`Agent Worktrees (${worktrees.length})`}>
               {worktrees.length === 0 ? (
                 <Empty
-                  title="No worktrees ready to merge"
+                  title="No active worktrees"
                   detail={
                     repository.dirty
-                      ? 'Commit or move local changes in the current branch, then refresh Git.'
-                      : 'Check the Worktree toggle in the Code & Diff prompt bar to run tasks in isolated worktrees.'
+                      ? 'Commit or stash local changes in the current branch so agents can create isolated worktrees.'
+                      : 'Click "Fix with Agent" on any issue to launch an isolated agent worktree.'
                   }
                 />
               ) : (
@@ -221,11 +252,10 @@ export function GitWorkspace({ s }: { s: State }) {
                         <div className="list-copy">
                           <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
                             <strong>{info.title}</strong>
-                            <span
-                              className={`severity-tag ${info.kind === 'security' ? 'danger' : info.kind === 'performance' ? 'warning' : 'info'}`}
-                            >
-                              {info.kind.toUpperCase()}
-                            </span>
+                            <Badge value={info.statusLabel} tone={info.statusTone} />
+                            {info.commitOid && (
+                              <Badge value={info.commitOid.slice(0, 7)} tone="green" />
+                            )}
                           </div>
                           <small>
                             <span className="path font-mono">{tree.branch}</span>
@@ -235,10 +265,11 @@ export function GitWorkspace({ s }: { s: State }) {
                         <div className="git-worktree-actions">
                           <Button
                             tone="ghost small"
+                            icon="sparkles"
                             disabled={blocked}
-                            onClick={() => void w.openWorktree(tree.path)}
+                            onClick={() => void w.selectAgent(tree.path)}
                           >
-                            View implementation
+                            Open in Agents
                           </Button>
                           <Button
                             tone="danger small"
@@ -250,16 +281,18 @@ export function GitWorkspace({ s }: { s: State }) {
                           >
                             Discard
                           </Button>
-                          <Button
-                            tone="primary small"
-                            disabled={blocked}
-                            loading={pending === `merge:${tree.path}`}
-                            onClick={() =>
-                              run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
-                            }
-                          >
-                            Merge
-                          </Button>
+                          {tree.mergeable && (
+                            <Button
+                              tone="primary small"
+                              disabled={blocked}
+                              loading={pending === `merge:${tree.path}`}
+                              onClick={() =>
+                                run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
+                              }
+                            >
+                              Merge into {repository.branch || 'branch'}
+                            </Button>
+                          )}
                         </div>
                       </article>
                     );

@@ -72,18 +72,140 @@ const PIPELINE_STAGES: StageSpec[] = [
   },
 ];
 
+export interface AgentDashboardItem {
+  key: string;
+  path?: string;
+  title: string;
+  branch: string;
+  stageLabel: string;
+  status: string;
+  tone?: 'green' | 'violet' | 'amber';
+  mergeable?: boolean;
+  commitOid?: string;
+}
+
+export function collectAgentDashboardItems(s: State): AgentDashboardItem[] {
+  const items: AgentDashboardItem[] = [];
+  const mainBranch = s.repository?.branch || 'main';
+  if (s.change || s.changeSeed || !s.selectedAgentPath) {
+    const c = s.change;
+    const running = activeChangeWorkflow(c);
+    const ready = canAcceptChange(s);
+    const committed = c?.state === 'applied';
+    const runningStage = c?.workflow?.stages.find((st) => st.status === 'running')?.name;
+    const stageLabel = running
+      ? `Running · ${runningStage ? human(runningStage) : 'Pipeline'}`
+      : committed
+        ? 'Committed on branch'
+        : ready || (c?.changes.length || 0) > 0
+          ? 'Step 4 · Review & Commit'
+          : s.changeSeed
+            ? 'Step 1 · Staged'
+            : 'New Mission';
+    const status = running
+      ? 'running'
+      : committed
+        ? 'completed'
+        : ready
+          ? 'awaiting_human_review'
+          : c?.workflow?.status || c?.state || 'idle';
+    items.push({
+      key: 'main',
+      path: undefined,
+      title: c?.title || s.changeSeed?.title || 'Main Workspace Mission',
+      branch: mainBranch,
+      stageLabel,
+      status,
+      tone: committed || ready ? 'green' : running ? 'violet' : undefined,
+      commitOid: c?.commit?.oid || s.changeReceipt?.commit?.oid,
+    });
+  }
+
+  const worktrees = s.gitWorkspace?.worktrees.filter((t) => !t.current) || [];
+  for (const tree of worktrees) {
+    const child = s.implementations.find((impl) => impl.worktreePath === tree.path);
+    const c = child?.state.change;
+    const seed = child?.state.changeSeed;
+    const latest = tree.completed?.[0] || tree.sessions?.[0];
+    const cleanBranchTitle =
+      tree.branch
+        .replace(/^(codex|fix|perf|security|feature)[/-]/, '')
+        .replace(/[-_]/g, ' ')
+        .trim() || tree.branch;
+    const title =
+      c?.title ||
+      seed?.title ||
+      latest?.title ||
+      cleanBranchTitle[0]?.toUpperCase() + cleanBranchTitle.slice(1);
+    const running =
+      activeChangeWorkflow(c) ||
+      latest?.workflow_status === 'running' ||
+      latest?.workflow_status === 'canceling';
+    const committed = c?.state === 'applied' || latest?.state === 'applied' || tree.mergeable;
+    const ready = (child ? canAcceptChange(child.state) : false) || (c?.changes.length || 0) > 0;
+    const runningStage = c?.workflow?.stages.find((st) => st.status === 'running')?.name;
+    const stageLabel = tree.mergeable
+      ? 'Step 4 · Committed (Ready to Merge)'
+      : running
+        ? `Running · ${runningStage ? human(runningStage) : 'Pipeline'}`
+        : committed
+          ? 'Step 4 · Committed'
+          : ready
+            ? 'Step 4 · Review & Commit'
+            : latest?.workflow_status === 'failed'
+              ? 'Failed · Needs Attention'
+              : 'Step 1 · In Progress';
+    const status = tree.mergeable
+      ? 'completed'
+      : running
+        ? 'running'
+        : ready
+          ? 'awaiting_human_review'
+          : c?.workflow?.status || latest?.workflow_status || latest?.state || 'pending';
+    items.push({
+      key: tree.path,
+      path: tree.path,
+      title,
+      branch: tree.branch,
+      stageLabel,
+      status,
+      tone: tree.mergeable || ready ? 'green' : running ? 'violet' : 'amber',
+      mergeable: tree.mergeable,
+      commitOid: c?.commit?.oid || child?.state.changeReceipt?.commit?.oid || latest?.commit?.oid,
+    });
+  }
+  return items;
+}
+
 export function AgentsWorkspace({ s }: { s: State }) {
-  const change = s.change;
-  const seed = s.changeSeed;
+  const selectedChild = s.selectedAgentPath
+    ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
+    : undefined;
+  const agentW = selectedChild || w;
+  const agentState = selectedChild ? selectedChild.state : s;
+  const isWorktreeAgent = !!selectedChild?.worktreePath;
+  const activeWorktree = s.selectedAgentPath
+    ? s.gitWorkspace?.worktrees.find((t) => t.path === s.selectedAgentPath)
+    : undefined;
+
+  const change = agentState.change;
+  const seed = agentState.changeSeed;
   const workflow = change?.workflow;
   const models = workflowSetupModels(s);
   const running = activeChangeWorkflow(change);
+  const busy = !!s.busy || !!agentState.busy;
   const [missionTitle, setMissionTitle] = useState(seed?.title || '');
   const [missionPaths, setMissionPaths] = useState(
     seed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
   );
   const [missionPrompt, setMissionPrompt] = useState(seed?.message || '');
   const [selectedDiffPath, setSelectedDiffPath] = useState<string>('all');
+
+  useEffect(() => {
+    if (s.selectedAgentPath && !selectedChild && !s.busy) {
+      void w.selectAgent(s.selectedAgentPath);
+    }
+  }, [s.selectedAgentPath, selectedChild, s.busy]);
 
   const changedFiles = change?.changes || [];
   let addedLines = 0;
@@ -107,7 +229,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
   const checks = change?.checks || [];
   const passedChecks = checks.filter((c) => c.state === 'passed').length;
   const allChecksPassed = change ? changeChecksPassed(change) : false;
-  const readyToApply = canAcceptChange(s);
+  const readyToApply = canAcceptChange(agentState);
 
   const stageStatus = (id: StageId): string => {
     const found = workflow?.stages.find((st) => st.name === id);
@@ -146,6 +268,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
   useEffect(() => {
     setSelectedStage(autoStage);
   }, [
+    s.selectedAgentPath,
     autoStage,
     change?.id,
     change?.revision,
@@ -165,11 +288,14 @@ export function AgentsWorkspace({ s }: { s: State }) {
 
   useEffect(() => {
     setSelectedDiffPath('all');
-  }, [change?.id, change?.revision]);
+  }, [s.selectedAgentPath, change?.id, change?.revision]);
 
   useEffect(() => {
     if (s.project && !s.changeHistory) {
       void w.loadChangeHistory();
+    }
+    if (s.project && !s.gitWorkspace && !s.resourceErrors['Git / Worktrees']) {
+      void w.loadGitWorkspace();
     }
   }, [s.project?.project_id]);
 
@@ -204,35 +330,58 @@ export function AgentsWorkspace({ s }: { s: State }) {
       .filter(Boolean)
       .slice(0, 8);
     if (!rawPaths.length || !missionPrompt.trim()) {
-      w.fail('Specify at least one target file path and a fix objective.');
+      agentW.fail('Specify at least one target file path and a fix objective.');
       return;
     }
     const prepared = workflowSeed({
-      title: missionTitle.trim() || 'Agent fix mission',
-      kind: 'fix',
+      finding_targets: seed?.finding_targets,
+      finding: seed?.finding,
+      title: missionTitle.trim() || seed?.title || 'Agent fix mission',
+      kind: seed?.kind || 'fix',
       paths: rawPaths,
       message: missionPrompt.trim(),
-      acceptance_criteria: [
-        'Keep the diff minimal and limited to the requested behavior.',
-        'Ensure all unit tests and static checks pass.',
-      ],
+      acceptance_criteria: seed?.acceptance_criteria?.length
+        ? seed.acceptance_criteria
+        : [
+            'Keep the diff minimal and limited to the requested behavior.',
+            'Ensure all unit tests and static checks pass.',
+          ],
     });
-    w.seedChange(prepared, 'agents');
-    void (async () => {
-      try {
-        const context = await w.readFixPreparation();
-        const useAgents = prepared.paths.some(isTestFilePath);
-        if (useAgents) {
-          await w.startChangeWorkflow(prepared, models, context, 'agents');
-        } else {
-          await w.prepareChange(prepared, true, models.create, context, 'agents');
+    if (isWorktreeAgent) {
+      agentW.seedChange(prepared, 'agents');
+      void (async () => {
+        try {
+          const context = await agentW.readFixPreparation();
+          const useAgents = prepared.paths.some(isTestFilePath);
+          if (useAgents) {
+            await agentW.startChangeWorkflow(prepared, models, context, 'agents');
+          } else {
+            await agentW.prepareChange(prepared, true, models.create, context, 'agents');
+          }
+          await w.loadGitWorkspace();
+        } catch (error) {
+          agentW.fail(error);
         }
-      } catch (error) {
-        w.fail(error);
-      }
-    })();
+      })();
+      return;
+    }
+    void w.startAgentFix(prepared);
   };
 
+  const startFreshAgentMission = () => {
+    w.set({
+      selectedAgentPath: undefined,
+      change: undefined,
+      changeSeed: undefined,
+      changeReceipt: undefined,
+      error: '',
+    });
+    setMissionTitle('');
+    setMissionPrompt('');
+    setSelectedStage('create');
+  };
+
+  const dashboardItems = collectAgentDashboardItems(s);
   const visibleDiffFiles =
     selectedDiffPath === 'all'
       ? changedFiles
@@ -243,32 +392,98 @@ export function AgentsWorkspace({ s }: { s: State }) {
     seed?.message ||
     missionPrompt;
 
+  const commitOid =
+    change?.commit?.oid ||
+    agentState.changeReceipt?.commit?.oid ||
+    activeWorktree?.completed?.[0]?.commit?.oid;
+  const commitBranch =
+    change?.commit?.branch || activeWorktree?.branch || agentState.repository?.branch || 'main';
+  const mainBranch = s.repository?.branch || 'main';
+
   return (
     <div className="workspace-page agents-page">
       <Heading
         variant="intro"
         title="Agent Mission Control"
-        detail="Click any in-progress or completed stage below to inspect it. Focus on one step at a time."
+        detail="Run multiple agents in parallel worktrees, click any agent to inspect its live workflow stage, then Accept & Commit and Merge."
       >
         <Go page="bugs" tone="ghost" icon="bug">
           Browse Issues
         </Go>
+        <Go page="git" tone="ghost" icon="git">
+          Git &amp; Worktrees
+        </Go>
         <Go page="models" tone="ghost" icon="compass">
           Configure Models
         </Go>
-        {s.changeReceipt?.undo_available && (
-          <Button tone="ghost" icon="undo" disabled={!!s.busy} onClick={() => void w.undoChange()}>
+        {agentState.changeReceipt?.undo_available && (
+          <Button tone="ghost" icon="undo" disabled={busy} onClick={() => void agentW.undoChange()}>
             Undo Last Change
           </Button>
         )}
-        {change && !running && (
-          <Button tone="ghost" icon="plus" disabled={!!s.busy} onClick={() => w.newChange()}>
-            New Fix
-          </Button>
-        )}
+        <Button tone="ghost" icon="plus" disabled={!!s.busy} onClick={startFreshAgentMission}>
+          New Fix
+        </Button>
       </Heading>
 
-      <ChangeOutcome s={s} />
+      {agentState.error && <Notice error>{agentState.error}</Notice>}
+      <ChangeOutcome s={agentState} />
+
+      {/* Multi-Agent Dashboard Strip */}
+      {(dashboardItems.length > 1 ||
+        (s.gitWorkspace?.worktrees.filter((t) => !t.current).length || 0) > 0) && (
+        <Panel
+          title={`Running & Active Agents (${dashboardItems.length})`}
+          actions={
+            <span className="small muted">Click any agent to inspect its 4-stage workflow</span>
+          }
+        >
+          <div
+            className="row wrap"
+            style={{ gap: '8px' }}
+            role="tablist"
+            aria-label="Active agents"
+          >
+            {dashboardItems.map((item) => {
+              const isSelected = (s.selectedAgentPath || undefined) === item.path;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => void w.selectAgent(item.path)}
+                  className={`kpi-pulse-card card-kpi box-card ${isSelected ? 'active' : ''}`}
+                  style={{
+                    flex: '1 1 240px',
+                    maxWidth: '360px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                    borderColor: isSelected ? 'var(--accent)' : undefined,
+                    boxShadow: isSelected ? '0 0 0 1px var(--accent)' : undefined,
+                  }}
+                >
+                  <div className="row between wrap" style={{ gap: '6px' }}>
+                    <span className="row" style={{ gap: '6px', alignItems: 'center' }}>
+                      <StatusDot value={item.status} label={item.title} />
+                      <strong className="small">{item.title}</strong>
+                    </span>
+                    <Badge value={item.stageLabel} tone={item.tone} />
+                  </div>
+                  <div
+                    className="row between wrap small muted font-mono"
+                    style={{ marginTop: '6px', gap: '6px' }}
+                  >
+                    <span>{item.branch}</span>
+                    {item.commitOid && <span>#{item.commitOid.slice(0, 7)}</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
 
       {/* Top Clickable 4-Stage Workflow Bar */}
       <div
@@ -347,10 +562,15 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 : 'Step 1 · Start a Fix Mission'
           }
           actions={
-            <Badge
-              value={human(stageStatus('create'))}
-              tone={stageStatus('create') === 'completed' ? 'green' : 'violet'}
-            />
+            <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
+              {isWorktreeAgent && activeWorktree && (
+                <Badge value={`Worktree: ${activeWorktree.branch}`} tone="violet" />
+              )}
+              <Badge
+                value={human(stageStatus('create'))}
+                tone={stageStatus('create') === 'completed' ? 'green' : 'violet'}
+              />
+            </div>
           }
         >
           {running ? (
@@ -369,8 +589,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <div className="row">
                 <Button
                   tone="danger"
-                  disabled={!!s.busy || workflow?.status === 'canceling'}
-                  onClick={() => void w.cancelChangeWorkflow()}
+                  disabled={busy || workflow?.status === 'canceling'}
+                  onClick={() => void agentW.cancelChangeWorkflow()}
                 >
                   Cancel Agent Run
                 </Button>
@@ -395,8 +615,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 <Button
                   tone="ghost"
                   icon="sparkles"
-                  disabled={!!s.busy}
-                  onClick={() => void w.rerunChangeWorkflow('agents')}
+                  disabled={busy}
+                  onClick={() => void agentW.rerunChangeWorkflow('agents')}
                 >
                   Re-run Fix
                 </Button>
@@ -412,8 +632,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   <Button
                     tone="primary"
                     icon="sparkles"
-                    disabled={!!s.busy}
-                    onClick={() => void w.rerunChangeWorkflow('agents')}
+                    disabled={busy}
+                    onClick={() => void agentW.rerunChangeWorkflow('agents')}
                   >
                     Generate Fix Now
                   </Button>
@@ -462,30 +682,31 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 <Button
                   tone="primary"
                   icon="sparkles"
-                  disabled={!!s.busy || running}
+                  disabled={busy || running}
                   onClick={dispatchCustomMission}
                 >
                   Dispatch Agent Pipeline
                 </Button>
               </div>
 
-              {(s.changeHistory?.length || 0) > 0 && (
-                <Disclosure title={`Recent Fixes (${s.changeHistory?.length || 0})`}>
+              {(agentState.changeHistory?.length || 0) > 0 && (
+                <Disclosure title={`Recent Fixes (${agentState.changeHistory?.length || 0})`}>
                   <div className="stack" style={{ gap: '6px', paddingTop: '6px' }}>
-                    {s.changeHistory!.slice(0, 8).map((entry) => (
+                    {agentState.changeHistory!.slice(0, 8).map((entry) => (
                       <div className="list-row" key={entry.id}>
                         <div className="list-copy">
                           <strong>{entry.title}</strong>
                           <small className="muted">
                             Revision {entry.revision} · {human(entry.kind)}
+                            {entry.commit?.oid ? ` · #${entry.commit.oid.slice(0, 7)}` : ''}
                           </small>
                         </div>
                         <div className="row" style={{ gap: '8px' }}>
                           <Badge value={entry.workflow_status || entry.state} />
                           <Button
                             tone="ghost small"
-                            disabled={!!s.busy || running}
-                            onClick={() => void w.viewChange(entry.id, 'agents')}
+                            disabled={busy || running}
+                            onClick={() => void agentW.viewChange(entry.id, 'agents')}
                           >
                             Open Fix
                           </Button>
@@ -555,16 +776,16 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <Button
                 tone="ghost"
                 icon="refresh"
-                disabled={!!s.busy || running}
-                onClick={() => void w.checkChange(true)}
+                disabled={busy || running}
+                onClick={() => void agentW.checkChange(true)}
               >
                 Re-run Checks
               </Button>
               {running ? (
                 <Button
                   tone="danger"
-                  disabled={!!s.busy || workflow?.status === 'canceling'}
-                  onClick={() => void w.cancelChangeWorkflow()}
+                  disabled={busy || workflow?.status === 'canceling'}
+                  onClick={() => void agentW.cancelChangeWorkflow()}
                 >
                   Cancel Agent Run
                 </Button>
@@ -572,8 +793,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 <Button
                   tone="primary"
                   icon="sparkles"
-                  disabled={!!s.busy}
-                  onClick={() => void w.repairChange()}
+                  disabled={busy}
+                  onClick={() => void agentW.repairChange()}
                 >
                   Repair Failed Checks
                 </Button>
@@ -634,8 +855,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 <Button
                   tone="primary"
                   icon="sparkles"
-                  disabled={!!s.busy || running}
-                  onClick={() => void w.rerunChangeWorkflow('agents')}
+                  disabled={busy || running}
+                  onClick={() => void agentW.rerunChangeWorkflow('agents')}
                 >
                   Re-run Fix with Critic Feedback
                 </Button>
@@ -665,7 +886,9 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <Badge
                 value={
                   change.state === 'applied'
-                    ? 'Applied'
+                    ? commitOid
+                      ? `Committed #${commitOid.slice(0, 7)}`
+                      : 'Applied'
                     : readyToApply
                       ? 'Ready to Commit'
                       : human(workflow?.status || change.state)
@@ -706,19 +929,42 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     tone={workflow.review.verdict === 'approve' ? 'green' : 'violet'}
                   />
                 )}
+                {change.state === 'applied' && (
+                  <Badge
+                    value={`Branch: ${commitBranch}${commitOid ? ` (${commitOid.slice(0, 7)})` : ''}`}
+                    tone="green"
+                  />
+                )}
               </div>
               <div className="row wrap" style={{ gap: '8px' }}>
-                <Button tone="ghost" icon="code" onClick={() => void w.navigate('editor')}>
-                  Edit Hunks in Code &amp; Diff
-                </Button>
+                {change.state === 'draft' && (
+                  <Button tone="ghost" icon="code" onClick={() => void agentW.navigate('editor')}>
+                    Edit Hunks in Code &amp; Diff
+                  </Button>
+                )}
                 {change.state === 'draft' && changedFiles.length > 0 && (
                   <Button
                     tone="primary"
                     icon="check"
-                    disabled={!!s.busy || running}
-                    onClick={() => void w.applyProposalNow(change.title)}
+                    disabled={busy || running}
+                    onClick={() => void agentW.applyProposalNow(change.title)}
                   >
                     Accept &amp; Commit
+                  </Button>
+                )}
+                {change.state === 'applied' && isWorktreeAgent && selectedChild?.worktreePath && (
+                  <Button
+                    tone="primary"
+                    icon="git"
+                    disabled={busy}
+                    onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
+                  >
+                    Merge into {mainBranch} &amp; Close Issue
+                  </Button>
+                )}
+                {change.state === 'applied' && !isWorktreeAgent && (
+                  <Button tone="primary" icon="check" onClick={() => void w.navigate('bugs')}>
+                    Issue Closed · Back to Issues
                   </Button>
                 )}
               </div>
