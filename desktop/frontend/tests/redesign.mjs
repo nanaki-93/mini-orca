@@ -446,11 +446,14 @@ try {
       await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
       await page.getByText('Analysis paused', { exact: true }).waitFor();
 
-      // Navigate to Last Run to inspect progress and coverage
+      // Navigate to Last Run to inspect progress and coverage across sub-view tabs
       await page.getByRole('button', { name: 'Last Run', exact: true }).first().click();
       await idle(page);
       await page.getByRole('heading', { name: 'Last Run', exact: true }).waitFor();
       await page.getByText('Run details', { exact: true }).waitFor();
+      await page.getByRole('tab', { name: /^2\. File Coverage/ }).click();
+      await page.getByRole('tab', { name: '3. Models & Run Config', exact: true }).click();
+      await page.getByRole('tab', { name: /^1\. Overview & Categories/ }).click();
 
       // Resume the paused analysis directly from Last Run
       await page.getByRole('button', { name: 'Resume Analysis', exact: true }).click();
@@ -502,6 +505,8 @@ try {
       await idle(page);
       await page.getByRole('heading', { name: 'Architecture', exact: true }).waitFor();
       await page.getByText('Quick Entry Files', { exact: true }).waitFor();
+      await page.getByRole('tab', { name: /^2\. Runtime Flows/ }).click();
+      await page.getByRole('tab', { name: /^1\. Topology & Entry Points/ }).click();
 
       await nav(page, 'Features');
       await idle(page);
@@ -517,6 +522,8 @@ try {
       await page.getByRole('heading', { name: 'Models', exact: true }).waitFor();
       await page.getByText('Analysis models', { exact: true }).waitFor();
       await page.getByText('Workflow models', { exact: true }).waitFor();
+      await page.getByRole('tab', { name: /^3\. Presets & Batch Limits/ }).click();
+      await page.getByRole('tab', { name: /^1\. All Routing & Presets/ }).click();
     } finally {
       await close();
     }
@@ -599,11 +606,37 @@ try {
       );
       await page.getByRole('button', { name: /\[In Progress \(/ }).click();
 
-      // Use orca> command prompt to return to GUI mode
+      // Verify keyboard-only TUI navigation and interactive Keybindings Reference (? and :keys)
+      await tui.focus();
+      await page.keyboard.press('?');
+      const keybindsModal = page.getByRole('dialog', {
+        name: 'TUI Keybindings Reference',
+        exact: true,
+      });
+      await keybindsModal.waitFor();
+      await page.keyboard.press('Escape');
+      assert.equal(await keybindsModal.count(), 0);
+
+      // Cycle issue filter via keyboard (h/l) and move row cursor via keyboard (j/k)
+      await page.keyboard.press('h');
+      await page.keyboard.press('j');
+      await page.keyboard.press('k');
+
+      // Open keybinds help via orca> :keys command, then close and return to GUI mode
       const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
+      await cmdPrompt.fill(':keys');
+      await cmdPrompt.press('Enter');
+      await keybindsModal.waitFor();
+      await page.getByRole('button', { name: 'Close keybindings reference', exact: true }).click();
       await cmdPrompt.fill(':gui');
       await cmdPrompt.press('Enter');
       await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
+
+      // Verify split sub-view tabs on Settings & Rules
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page.getByRole('tab', { name: /^2\. Guideline Library/ }).click();
+      await page.getByRole('tab', { name: /^3\. Active Scope/ }).click();
 
       // Navigating to Code & Diff after a clean committed apply does not show a stale Change applied banner
       await nav(page, 'Code & Diff');
@@ -619,7 +652,12 @@ try {
   });
 
   await test('Grouped issues in one agent, In Progress issues view, problem highlight on dashboard, and Done only on merge', async () => {
-    const { page, close } = await pageFor({ git: true, trusted: true, featuresReady: true });
+    const { page, close } = await pageFor({
+      git: true,
+      trusted: true,
+      featuresReady: true,
+      analysisCompletes: true,
+    });
     try {
       // 1. Verify Git & Worktrees shows in-progress worktrees without duplicate Worktree implementations panel
       await page.evaluate(() => {
@@ -675,6 +713,12 @@ try {
       await inProgressBtn.click();
       assert.equal(await page.locator('.result-row').count(), 2);
 
+      // Starting a new analysis while issues are in progress clears open issues (3 -> 2) and preserves the 2 in-progress issues
+      await page.getByRole('button', { name: 'Run Analysis', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'In Progress (2)', exact: true }).waitFor();
+      assert.equal(await page.locator('.result-row').count(), 2);
+
       // Clicking "Open Agent" on an in-progress issue opens the Agent & Issue Detail page
       await page.getByRole('button', { name: 'Open Agent', exact: true }).first().click();
       await idle(page);
@@ -689,8 +733,8 @@ try {
 
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByRole('button', { name: /^All \(3\)/ }).click();
-      await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /^All \(2\)/ }).click();
+      await page.getByText('2 issues · 1 feature ideas', { exact: true }).waitFor();
 
       // 5. Return to Agent Detail and click Merge into main & Close 2 Issues -> marks both grouped issues Done
       await page.getByRole('button', { name: 'Open Agent', exact: true }).first().click();
@@ -706,7 +750,7 @@ try {
       // Verify both grouped issues are now marked Done after merging into main
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByText('1 issue · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByText('0 issues · 1 feature ideas', { exact: true }).waitFor();
       await page.getByText('Show Done (2)', { exact: true }).waitFor();
     } finally {
       await close();

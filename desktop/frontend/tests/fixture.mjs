@@ -1500,22 +1500,44 @@ export function installFixture(options = {}) {
                   generations: [],
                   last_generation: undefined,
                 };
-                const filterSec = (sec) => {
-                  const semantic = (sec?.semantic || [])
+                const filterSec = (category, sec) => {
+                  const baseSemantic =
+                    sec?.semantic ?? (category === 'bugs' ? [state.finding] : []);
+                  const basePerf =
+                    sec?.performance ?? (category === 'performance' ? [state.performance] : []);
+                  const baseSec =
+                    sec?.security ?? (category === 'security' ? [state.security] : []);
+                  const semantic = baseSemantic
                     .filter((f) => f.status === 'in_progress' || activeIds.has(f.id))
                     .map((f) => (f.status === 'open' ? { ...f, status: 'in_progress' } : f));
+                  const performance = basePerf
+                    .map((r) => ({
+                      ...r,
+                      findings: (r.findings || []).filter(
+                        (f) => f.triage === 'in_progress' || activeIds.has(f.id),
+                      ),
+                    }))
+                    .filter((r) => r.findings.length > 0);
+                  const security = baseSec
+                    .map((r) => ({
+                      ...r,
+                      findings: (r.findings || []).filter(
+                        (f) => f.triage === 'in_progress' || activeIds.has(f.id),
+                      ),
+                    }))
+                    .filter((r) => r.findings.length > 0);
                   return {
-                    saved_finding_count: semantic.length,
+                    saved_finding_count: semantic.length + performance.length + security.length,
                     semantic,
-                    performance: [],
-                    security: [],
+                    performance,
+                    security,
                     unclassified: [],
                   };
                 };
                 state.results = {
-                  bugs: filterSec(state.results?.bugs),
-                  performance: filterSec(state.results?.performance),
-                  security: filterSec(state.results?.security),
+                  bugs: filterSec('bugs', state.results?.bugs),
+                  performance: filterSec('performance', state.results?.performance),
+                  security: filterSec('security', state.results?.security),
                 };
               }
               const nextStatus = options.analysisCompletes ? 'completed' : 'running';
