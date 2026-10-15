@@ -1471,7 +1471,26 @@ export function installFixture(options = {}) {
                 };
               if (body.clear_results) {
                 state.clearedResults = true;
-                state.findingsList = [];
+                const activeIds = new Set();
+                for (const c of Object.values(state.changes || {})) {
+                  if (c.state === 'draft') {
+                    for (const t of c.finding_targets || []) activeIds.add(t.id);
+                  }
+                }
+                for (const tree of state.gitWorktrees || []) {
+                  if (tree.path === state.project.path) continue;
+                  const childSessions = worktreeStates[tree.path]
+                    ? Object.values(worktreeStates[tree.path].changes)
+                    : tree.completed || [];
+                  for (const c of childSessions) {
+                    if (c.state === 'draft' || c.state === 'applied') {
+                      for (const t of c.finding_targets || []) activeIds.add(t.id);
+                    }
+                  }
+                }
+                state.findingsList = (state.findingsList || [])
+                  .filter((f) => f.status === 'in_progress' || activeIds.has(f.id))
+                  .map((f) => (f.status === 'open' ? { ...f, status: 'in_progress' } : f));
                 state.features = {
                   ...state.features,
                   hash: 'features-cleared',
@@ -1481,28 +1500,22 @@ export function installFixture(options = {}) {
                   generations: [],
                   last_generation: undefined,
                 };
+                const filterSec = (sec) => {
+                  const semantic = (sec?.semantic || [])
+                    .filter((f) => f.status === 'in_progress' || activeIds.has(f.id))
+                    .map((f) => (f.status === 'open' ? { ...f, status: 'in_progress' } : f));
+                  return {
+                    saved_finding_count: semantic.length,
+                    semantic,
+                    performance: [],
+                    security: [],
+                    unclassified: [],
+                  };
+                };
                 state.results = {
-                  bugs: {
-                    saved_finding_count: 0,
-                    semantic: [],
-                    performance: [],
-                    security: [],
-                    unclassified: [],
-                  },
-                  performance: {
-                    saved_finding_count: 0,
-                    semantic: [],
-                    performance: [],
-                    security: [],
-                    unclassified: [],
-                  },
-                  security: {
-                    saved_finding_count: 0,
-                    semantic: [],
-                    performance: [],
-                    security: [],
-                    unclassified: [],
-                  },
+                  bugs: filterSec(state.results?.bugs),
+                  performance: filterSec(state.results?.performance),
+                  security: filterSec(state.results?.security),
                 };
               }
               const nextStatus = options.analysisCompletes ? 'completed' : 'running';

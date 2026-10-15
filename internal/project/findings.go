@@ -28,10 +28,11 @@ const (
 	FindingConfidenceSuggested    = "suggested"
 	FindingConfidenceToolReported = "tool_reported"
 
-	FindingStatusOpen      = "open"
-	FindingStatusDismissed = "dismissed"
-	FindingStatusFixed     = "fixed"
-	FindingStatusRetired   = "retired"
+	FindingStatusOpen       = "open"
+	FindingStatusInProgress = "in_progress"
+	FindingStatusDismissed  = "dismissed"
+	FindingStatusFixed      = "fixed"
+	FindingStatusRetired    = "retired"
 
 	FindingFreshnessFresh = "fresh"
 	FindingFreshnessStale = "stale"
@@ -164,7 +165,7 @@ func (s *FindingStore) ReconcileSource(input FindingInput, source string, report
 		if seen[id] {
 			continue
 		}
-		finding.Status = FindingStatusRetired
+		finding.Status = unseenFindingStatus(finding.Status)
 		finding.Freshness = FindingFreshnessStale
 		current = append(current, finding)
 	}
@@ -175,6 +176,13 @@ func (s *FindingStore) ReconcileSource(input FindingInput, source string, report
 		return nil, err
 	}
 	return cloneFindings(current), nil
+}
+
+func unseenFindingStatus(status string) string {
+	if status == FindingStatusInProgress {
+		return FindingStatusInProgress
+	}
+	return FindingStatusRetired
 }
 
 // SetStatus records an explicit user triage decision for one persisted finding.
@@ -203,10 +211,50 @@ func (s *FindingStore) SetStatus(id, status string) error {
 func (s *FindingStore) Clear() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.clearLocked()
+}
+
+func (s *FindingStore) clearLocked() error {
 	if err := os.Remove(filepath.Join(s.root, findingStorePath)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("clear findings: %w", err)
 	}
 	return nil
+}
+
+// ClearExcept removes persisted findings except those that are currently in progress.
+func (s *FindingStore) ClearExcept(keep []FindingTarget) error {
+	if len(keep) == 0 {
+		return s.Clear()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	document, err := s.loadLocked(true)
+	if err != nil {
+		return err
+	}
+	retained := make([]UnifiedFinding, 0)
+	for _, finding := range document.Findings {
+		if finding.Status == FindingStatusInProgress || findingMatchesAnyTarget(finding, keep) {
+			if finding.Status == FindingStatusOpen || finding.Status == FindingStatusRetired {
+				finding.Status = FindingStatusInProgress
+			}
+			retained = append(retained, finding)
+		}
+	}
+	if len(retained) == 0 && len(document.Completed) == 0 {
+		return s.clearLocked()
+	}
+	document.Findings = retained
+	return s.storeLocked(document)
+}
+
+func findingMatchesAnyTarget(finding UnifiedFinding, targets []FindingTarget) bool {
+	for _, target := range targets {
+		if (target.ProjectID == "" || target.ProjectID == finding.ProjectID) && target.ID == finding.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *FindingStore) loadLocked(recoverCorrupt bool) (*findingDocument, error) {
@@ -351,7 +399,7 @@ func validFindingConfidence(source, confidence string) bool {
 	return confidence == FindingConfidenceToolReported
 }
 func validFindingStatus(value string) bool {
-	return value == FindingStatusOpen || value == FindingStatusDismissed || value == FindingStatusFixed || value == FindingStatusRetired
+	return value == FindingStatusOpen || value == FindingStatusInProgress || value == FindingStatusDismissed || value == FindingStatusFixed || value == FindingStatusRetired
 }
 func sanitizeFindingText(value string, limit int) string {
 	value = strings.TrimSpace(findingSecret.ReplaceAllString(value, "[redacted]"))

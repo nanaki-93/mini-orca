@@ -160,6 +160,7 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 			return err
 		}
 	}
+	reader.appendInProgressSemantic(ctx, path)
 	if reader.hasEvidence {
 		count := len(reader.result.Semantic)
 		for _, report := range reader.result.Performance {
@@ -171,6 +172,37 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 		reader.result.SavedFindingCount = &count
 	}
 	return nil
+}
+
+func (reader *analysisSectionReader) appendInProgressSemantic(ctx context.Context, path string) {
+	store, err := project.NewFindingStore(reader.root)
+	if err != nil {
+		return
+	}
+	stored, err := store.Load(project.FindingInput{ProjectID: reader.run.Identity.ProjectID, ProjectRevision: reader.run.Identity.ProjectRevision})
+	if err != nil || len(stored) == 0 {
+		return
+	}
+	targets := reader.service.inProgressFindingTargets(ctx, reader.root, reader.run.Identity.ProjectID)
+	inProgress := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		inProgress[target.ID] = true
+	}
+	seen := make(map[string]bool, len(reader.result.Semantic))
+	for _, existing := range reader.result.Semantic {
+		seen[existing.ID] = true
+	}
+	for _, finding := range stored {
+		if seen[finding.ID] || (finding.Status != project.FindingStatusInProgress && !inProgress[finding.ID]) {
+			continue
+		}
+		if finding.Category != reader.result.Progress.Category || (path != "" && finding.Location.Path != path) {
+			continue
+		}
+		reader.result.Semantic = append(reader.result.Semantic, finding)
+		reader.hasEvidence = true
+		seen[finding.ID] = true
+	}
 }
 
 func (reader *analysisSectionReader) readFile(indexed project.IndexFile, file AnalysisRunFile) error {

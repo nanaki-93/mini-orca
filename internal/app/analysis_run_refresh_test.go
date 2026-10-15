@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -204,4 +205,80 @@ func TestAnalysisClearResultsReplacesPausedRunAndRestartsFromZero(t *testing.T) 
 		t.Fatalf("expected completed_empty run after resume, got %+v", finished)
 	}
 	assertSavedAnalysisCounts(t, s, finished, 0, 0, 0)
+}
+
+func TestAnalysisClearResultsPreservesInProgressIssues(t *testing.T) {
+	var emptyReply atomic.Bool
+	server, _ := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if emptyReply.Load() {
+			return emptyAnalysisReply(stage)
+		}
+		if stage == AnalysisStageSemantic {
+			return strings.Replace(validSemanticAnalysis, `"risks":[]`, `"risks":[{"category":"bugs","severity":"high","summary":"In-progress bug to keep."},{"category":"bugs","severity":"low","summary":"Idle bug to remove."}]`, 1)
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	ctx := context.Background()
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPreview, err := s.PreviewAnalysisRun(ctx, AnalysisPreviewRequest{
+		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Scope: AnalysisRunScopeProject, Limits: AnalysisRunLimits{10, 30, 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(firstPreview)); err != nil {
+		t.Fatal(err)
+	}
+	firstRun := completedAnalysisRun(t, s)
+	bugsBefore, err := s.ReadAnalysisSection(ctx, firstRun.Identity, project.FindingCategoryBugs, "")
+	if err != nil || len(bugsBefore.Semantic) != 2 {
+		t.Fatalf("expected 2 bugs before clear, got %+v %v", bugsBefore, err)
+	}
+	var inProgressID string
+	for _, f := range bugsBefore.Semantic {
+		if f.Message == "In-progress bug to keep." {
+			inProgressID = f.ID
+		}
+	}
+	if inProgressID == "" {
+		t.Fatal("missing target finding ID")
+	}
+	if _, err := s.OpenChangeSession(ctx, ChangeCreateRequest{
+		ProjectID:       analysis.ProjectID,
+		ProjectRevision: analysis.ProjectRevision,
+		Kind:            "fix",
+		Title:           "Fix in-progress bug",
+		Paths:           []string{"main.go"},
+		FindingTargets: []project.FindingTarget{{
+			ProjectID: analysis.ProjectID,
+			Kind:      "semantic",
+			ID:        inProgressID,
+			Path:      "main.go",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyReply.Store(true)
+	clearPreview, err := s.PreviewAnalysisRun(ctx, AnalysisPreviewRequest{
+		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Scope: AnalysisRunScopeProject, Refresh: true, ClearResults: true,
+		Limits: AnalysisRunLimits{10, 30, 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(clearPreview)); err != nil {
+		t.Fatal(err)
+	}
+	secondRun := completedAnalysisRun(t, s)
+	bugsAfter, err := s.ReadAnalysisSection(ctx, secondRun.Identity, project.FindingCategoryBugs, "")
+	if err != nil || len(bugsAfter.Semantic) != 1 || bugsAfter.Semantic[0].ID != inProgressID || bugsAfter.Semantic[0].Status != project.FindingStatusInProgress {
+		t.Fatalf("expected only the in-progress bug to remain after ClearResults, got %+v %v", bugsAfter, err)
+	}
 }
