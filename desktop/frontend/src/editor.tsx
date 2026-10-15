@@ -242,6 +242,11 @@ export function Editor({ s }: { s: State }) {
       '',
   );
   useEffect(() => {
+    if (s.project && !s.changeHistory) {
+      void w.loadChangeHistory();
+    }
+  }, [s.project?.project_id]);
+  useEffect(() => {
     if (s.file?.path) setSelectedPath(s.file.path);
   }, [s.file?.path]);
   useEffect(() => {
@@ -253,17 +258,18 @@ export function Editor({ s }: { s: State }) {
 
   const activePath =
     selectedPath || s.file?.path || changedPaths[0] || s.changeSeed?.paths[0] || '';
-  const activeEdit = useMemo(
+  const exactEdit = useMemo(
     () => (change?.changes || []).find((c) => c.path === activePath),
     [change?.changes, activePath],
   );
 
   const [mode, setMode] = useState<'diff' | 'edit'>(() =>
-    activeEdit || s.page === 'changes' ? 'diff' : 'edit',
+    exactEdit || changedPaths.length > 0 || s.page === 'changes' ? 'diff' : 'edit',
   );
+  const activeEdit = mode === 'diff' ? exactEdit || change?.changes?.[0] : exactEdit;
   useEffect(() => {
-    if (activeEdit) setMode('diff');
-  }, [activeEdit?.path, change?.revision]);
+    if (exactEdit) setMode('diff');
+  }, [exactEdit?.path, change?.revision]);
 
   const [opened, setOpened] = useState<string[]>(() =>
     [...new Set([activePath, ...changedPaths])].filter(Boolean),
@@ -281,7 +287,7 @@ export function Editor({ s }: { s: State }) {
     });
   }, [activePath, changedPaths]);
 
-  const baseContent = activeEdit ? activeEdit.content : s.file?.content || '';
+  const baseContent = exactEdit ? exactEdit.content : s.file?.content || '';
   const [draftContent, setDraftContent] = useState(baseContent);
   useEffect(() => {
     setDraftContent(baseContent);
@@ -318,7 +324,8 @@ export function Editor({ s }: { s: State }) {
   };
 
   const hunks = useMemo(() => splitDiffIntoHunks(activeEdit?.diff?.lines || []), [activeEdit]);
-  const fileAcceptedHunks = acceptedHunks[activePath] || [];
+  const editPath = activeEdit?.path || activePath;
+  const fileAcceptedHunks = acceptedHunks[editPath] || [];
   const dirty = !s.file?.binary && draftContent !== (s.file?.content ?? '');
   const draftLineCount = useMemo(
     () => Math.max(1, draftContent.split('\n').length),
@@ -535,7 +542,12 @@ export function Editor({ s }: { s: State }) {
                   role="tab"
                   aria-selected={mode === 'diff'}
                   className={`mode-switch-btn ${mode === 'diff' ? 'active' : ''}`}
-                  onClick={() => setMode('diff')}
+                  onClick={() => {
+                    if (changedPaths.length > 0 && !changedPaths.includes(activePath)) {
+                      setSelectedPath(changedPaths[0]);
+                    }
+                    setMode('diff');
+                  }}
                 >
                   Diff Review {hunks.length > 0 ? `(${hunks.length})` : ''}
                 </button>
@@ -678,9 +690,9 @@ export function Editor({ s }: { s: State }) {
                                     onClick={() =>
                                       setAcceptedHunks((prev) => ({
                                         ...prev,
-                                        [activePath]: isAccepted
-                                          ? (prev[activePath] || []).filter((i) => i !== hunk.index)
-                                          : [...(prev[activePath] || []), hunk.index],
+                                        [editPath]: isAccepted
+                                          ? (prev[editPath] || []).filter((i) => i !== hunk.index)
+                                          : [...(prev[editPath] || []), hunk.index],
                                       }))
                                     }
                                   >
@@ -785,17 +797,47 @@ export function Editor({ s }: { s: State }) {
                     )}
                   </div>
                 ) : (
-                  <Empty
-                    title="No active diff for this file"
-                    detail="Switch to Direct Edit to modify the file directly, or describe a change in the AI prompt bar below to generate a hunk-by-hunk diff."
-                    icon="sparkles"
-                  >
-                    {activePath && (
-                      <Button tone="primary" icon="code" onClick={() => setMode('edit')}>
-                        Switch to Direct Edit
-                      </Button>
+                  <div className="stack" style={{ gap: '12px' }}>
+                    <Empty
+                      title="No active diff for this file"
+                      detail="Switch to Direct Edit to modify the file directly, or describe a change in the AI prompt bar below to generate a hunk-by-hunk diff."
+                      icon="sparkles"
+                    >
+                      <div className="actions">
+                        {activePath && (
+                          <Button tone="primary" icon="code" onClick={() => setMode('edit')}>
+                            Switch to Direct Edit
+                          </Button>
+                        )}
+                        <Go page="bugs" tone="ghost" icon="bug">
+                          Fix an Issue
+                        </Go>
+                      </div>
+                    </Empty>
+                    {(s.changeHistory || []).length > 0 && (
+                      <Panel title="Saved Proposals & Fixes">
+                        <div className="stack" style={{ gap: '6px' }}>
+                          {(s.changeHistory || []).slice(0, 6).map((entry) => (
+                            <div className="list-row" key={entry.id}>
+                              <span className="list-copy">
+                                <strong>{entry.title}</strong>
+                                <small className="muted">
+                                  {entry.workflow_status || entry.state} · revision {entry.revision}
+                                </small>
+                              </span>
+                              <Button
+                                tone="primary small"
+                                disabled={!!s.busy}
+                                onClick={() => void w.resumeChange(entry.id)}
+                              >
+                                Open Diff
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </Panel>
                     )}
-                  </Empty>
+                  </div>
                 )
               ) : activePath && s.file ? (
                 <div className="source-document">
