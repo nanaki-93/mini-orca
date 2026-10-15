@@ -92,6 +92,76 @@ func (s *FindingStore) Complete(completions []FindingCompletion) error {
 	return s.storeLocked(document)
 }
 
+func (s *FindingStore) SetTargetStatus(target FindingTarget, status, commitOID string) error {
+	if err := target.Validate(); err != nil {
+		return err
+	}
+	if !validFindingStatus(status) || status == FindingStatusRetired {
+		return fmt.Errorf("finding status is invalid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	document, err := s.loadLocked(true)
+	if err != nil {
+		return err
+	}
+	setDocumentTargetCompletion(document, target, status, commitOID)
+	if target.Kind == "semantic" {
+		for index := range document.Findings {
+			if document.Findings[index].ID == target.ID && document.Findings[index].ProjectID == target.ProjectID {
+				document.Findings[index].Status = status
+			}
+		}
+	}
+	applyFindingCompletions(document)
+	return s.storeLocked(document)
+}
+
+func setDocumentTargetCompletion(document *findingDocument, target FindingTarget, status, commitOID string) {
+	if status == FindingStatusFixed {
+		if strings.TrimSpace(commitOID) == "" {
+			commitOID = "manual"
+		}
+		if !hasFindingCompletion(document.Completed, target) {
+			document.Completed = append(document.Completed, FindingCompletion{FindingTarget: target, CommitOID: commitOID})
+		}
+		return
+	}
+	retained := document.Completed[:0]
+	for _, completion := range document.Completed {
+		if completion.FindingTarget != target {
+			retained = append(retained, completion)
+		}
+	}
+	document.Completed = retained
+}
+
+func updateSemanticCompletion(document *findingDocument, finding UnifiedFinding, status string) {
+	if status == FindingStatusFixed && finding.Location.Path != "" {
+		target := FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path}
+		if target.Validate() == nil {
+			setDocumentTargetCompletion(document, target, status, "manual")
+		}
+		return
+	}
+	retained := document.Completed[:0]
+	for _, completion := range document.Completed {
+		if completion.Kind != "semantic" || completion.ID != finding.ID || completion.ProjectID != finding.ProjectID {
+			retained = append(retained, completion)
+		}
+	}
+	document.Completed = retained
+}
+
+func hasFindingCompletion(completed []FindingCompletion, target FindingTarget) bool {
+	for _, completion := range completed {
+		if completion.FindingTarget == target {
+			return true
+		}
+	}
+	return false
+}
+
 func applyFindingCompletions(document *findingDocument) {
 	completed := make(map[FindingTarget]bool, len(document.Completed))
 	for _, completion := range document.Completed {
