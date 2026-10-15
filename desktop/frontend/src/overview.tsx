@@ -272,21 +272,7 @@ export function Summary({ s }: { s: State }) {
       </div>
 
       {(activeRun(s.run) || pausedOrInterrupted) && (
-        <div
-          className="analysis-live-banner"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            padding: '12px 18px',
-            background: 'var(--panel)',
-            border: '1px solid var(--line)',
-            borderLeft: '4px solid var(--accent)',
-            borderRadius: '8px',
-            marginBottom: '16px',
-          }}
-        >
+        <div className="analysis-live-banner">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
             <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
               {activeRun(s.run) ? (
@@ -586,15 +572,6 @@ export function Models({ s }: { s: State }) {
                   <div
                     key={preset.id}
                     className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
-                    style={{
-                      padding: '12px',
-                      borderRadius: '6px',
-                      border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                    }}
                   >
                     <div>
                       <div

@@ -777,21 +777,7 @@ export function Results({ s }: { s: State }) {
         <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
       )}
       {(activeRun(s.run) || pausedOrInterrupted) && (
-        <div
-          className="analysis-live-banner"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            padding: '12px 18px',
-            background: 'var(--panel)',
-            border: '1px solid var(--line)',
-            borderLeft: '4px solid var(--accent)',
-            borderRadius: '6px',
-            marginBottom: '16px',
-          }}
-        >
+        <div className="analysis-live-banner">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
             <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
               {activeRun(s.run) ? (
@@ -1051,14 +1037,6 @@ export function Results({ s }: { s: State }) {
               className="batch-findings-bar row between wrap"
               role="region"
               aria-label="Batch issue actions"
-              style={{
-                padding: '8px 12px',
-                marginBottom: '8px',
-                borderRadius: '6px',
-                border: '1px solid var(--accent)',
-                background: 'var(--panel)',
-                gap: '8px',
-              }}
             >
               <span className="small">
                 <strong>{selectedRows.length}</strong> selected (
@@ -1404,14 +1382,7 @@ export function Results({ s }: { s: State }) {
                 if (!inspectorAgent) return null;
                 return (
                   <div
-                    className="row between wrap"
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: `1px solid ${inspectorAgent.hasProblem ? 'var(--red, #e5534b)' : 'var(--accent)'}`,
-                      background: 'var(--bg-elevated)',
-                      gap: '8px',
-                    }}
+                    className={`inspector-agent-banner row between wrap ${inspectorAgent.hasProblem ? 'has-problem' : ''}`}
                   >
                     <div className="stack" style={{ gap: '2px' }}>
                       <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
