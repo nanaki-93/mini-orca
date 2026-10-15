@@ -465,6 +465,31 @@ export function worktreeDefaultTarget(title: string) {
   };
 }
 
+export function inProgressFindingTargets(s: State): M.FindingTarget[] {
+  const seen = new Set<string>();
+  const targets: M.FindingTarget[] = [];
+  const add = (list?: M.FindingTarget[]) => {
+    for (const t of list || []) {
+      const key = `${t.kind}:${t.id}:${t.path}:${t.source || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        targets.push(t);
+      }
+    }
+  };
+  if (s.change?.state === 'draft') add(s.change.finding_targets);
+  for (const entry of s.changeHistory || []) {
+    if (entry.state === 'draft') add(entry.finding_targets);
+  }
+  for (const tree of s.gitWorkspace?.worktrees || []) {
+    if (tree.current || tree.prunable) continue;
+    for (const entry of [...(tree.sessions || []), ...(tree.completed || [])]) {
+      if (entry.state === 'draft' || entry.state === 'applied') add(entry.finding_targets);
+    }
+  }
+  return targets;
+}
+
 export class Workspace {
   state = initial();
   private listeners = new Set<() => void>();
@@ -1529,6 +1554,12 @@ export class Workspace {
     if (epoch !== this.epoch || operation !== this.operation) return;
     if (projectKey(run.identity) !== projectKey(p.identity))
       throw new Error('Analysis belongs to another project revision.');
+    const activeTargets = clearing ? inProgressFindingTargets(this.state) : [];
+    const retainedFindings = clearing
+      ? (this.state.findings || [])
+          .filter((f) => f.status === 'in_progress' || activeTargets.some((t) => t.id === f.id))
+          .map((f) => (f.status === 'open' ? { ...f, status: 'in_progress' } : f))
+      : this.state.findings;
     this.set({
       run,
       preview: undefined,
@@ -1536,7 +1567,7 @@ export class Workspace {
       results: {},
       ...(clearing
         ? {
-            findings: [],
+            findings: retainedFindings,
             features: this.state.features
               ? { ...this.state.features, suggestions: [], generations: [] }
               : undefined,

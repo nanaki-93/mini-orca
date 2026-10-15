@@ -4,6 +4,7 @@ import {
   workspace as w,
   activeChangeWorkflow,
   findingCategory,
+  inProgressFindingTargets,
   isTestFilePath,
   workflowSeed,
   workflowSetupModels,
@@ -172,9 +173,18 @@ function security(report: M.SecurityReport): ResultRow[] {
 }
 function resultRows(s: State, category: FindingCategory): ResultRow[] {
   const results = s.results[category];
+  const activeTargets = inProgressFindingTargets(s);
+  const retainedSemantic = (s.findings || [])
+    .filter(
+      (f) =>
+        f.category === category &&
+        (f.status === 'in_progress' || activeTargets.some((t) => t.id === f.id)),
+    )
+    .map(semantic);
   const rows = results
     ? [
         ...(results.semantic || []).map(semantic),
+        ...retainedSemantic,
         ...(results.performance || []).flatMap(performance),
         ...(results.security || []).flatMap(security),
       ]
