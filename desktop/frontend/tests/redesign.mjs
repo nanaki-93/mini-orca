@@ -604,6 +604,15 @@ try {
       await cmdPrompt.fill(':gui');
       await cmdPrompt.press('Enter');
       await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
+
+      // Navigating to Code & Diff after a clean committed apply does not show a stale Change applied banner
+      await nav(page, 'Code & Diff');
+      await idle(page);
+      assert.equal(
+        await page.getByRole('heading', { name: 'Change applied', exact: true }).count(),
+        0,
+      );
+      await page.getByRole('button', { name: 'Undo Last Change', exact: true }).waitFor();
     } finally {
       await close();
     }
@@ -612,7 +621,7 @@ try {
   await test('Grouped issues in one agent, In Progress issues view, problem highlight on dashboard, and Done only on merge', async () => {
     const { page, close } = await pageFor({ git: true, trusted: true, featuresReady: true });
     try {
-      // 1. Verify Git & Worktrees shows in-progress worktrees
+      // 1. Verify Git & Worktrees shows in-progress worktrees without duplicate Worktree implementations panel
       await page.evaluate(() => {
         window.fixture.state.gitWorktrees.push({
           path: '/fixture/harbor/.worktrees/in-progress-agent',
@@ -629,6 +638,7 @@ try {
       await page.getByText('codex/fix', { exact: true }).waitFor();
       await page.getByText('codex/in-progress-agent', { exact: true }).waitFor();
       assert.equal(await page.locator('.git-worktree').count(), 2);
+      assert.equal(await page.getByText('Worktree implementations', { exact: true }).count(), 0);
 
       // 2. Select 2 issues in Issues & Ideas and dispatch a single grouped agent fix
       await nav(page, 'Issues & Ideas');

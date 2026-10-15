@@ -158,7 +158,8 @@ export function Summary({ s }: { s: State }) {
   const features = s.features;
   const featureCount =
     features?.suggestions.filter((idea) => idea.status !== 'dismissed').length || 0;
-  const currentWork = s.change || s.changeHistory?.find((entry) => entry.state === 'draft');
+  const draftChange = s.change?.state === 'draft' ? s.change : undefined;
+  const currentWork = draftChange || s.changeHistory?.find((entry) => entry.state === 'draft');
   const bugSection = s.run?.sections.find((value) => value.category === 'bugs');
   const secSection = s.run?.sections.find((value) => value.category === 'security');
   const perfSection = s.run?.sections.find((value) => value.category === 'performance');
@@ -463,8 +464,8 @@ export function Summary({ s }: { s: State }) {
             <span className="pill">{s.repository?.branch || 'main'}</span>
           </div>
           <div className="kpi-pulse-value box-value" style={{ color: 'var(--accent)' }}>
-            {s.change?.changes?.length
-              ? `${s.change.changes.length} ${s.change.changes.length === 1 ? 'File' : 'Files'} Changed`
+            {draftChange?.changes?.length
+              ? `${draftChange.changes.length} ${draftChange.changes.length === 1 ? 'File' : 'Files'} Changed`
               : currentWork
                 ? currentWork.title
                 : 'Ready to Edit'}

@@ -12,6 +12,7 @@ import {
   ProposalDiff,
   isAddedLine,
   isRemovedLine,
+  receiptNeedsAttention,
 } from './change-shared';
 import { native } from './api';
 import type * as M from './models';
@@ -229,7 +230,7 @@ export function Editor({ s }: { s: State }) {
   const [contextPickerOpen, setContextPickerOpen] = useState(false);
   const gutterRef = useRef<HTMLDivElement | null>(null);
 
-  const change = s.change;
+  const change = s.change?.state === 'draft' ? s.change : undefined;
   const changedPaths = useMemo(() => (change?.changes || []).map((c) => c.path), [change?.changes]);
   const [selectedPath, setSelectedPath] = useState<string>(
     () =>
@@ -589,7 +590,7 @@ export function Editor({ s }: { s: State }) {
                   </Button>
                 </Notice>
               )}
-              <ChangeOutcome s={s} />
+              {(s.uncertain || receiptNeedsAttention(s.changeReceipt)) && <ChangeOutcome s={s} />}
 
               {mode === 'diff' ? (
                 change && change.changes.length > 0 ? (
