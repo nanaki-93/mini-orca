@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { activeChangeWorkflow, workspace as w, type State } from './workspace';
-import { Implementations } from './worktree-implementation';
 import type * as M from './models';
 import { Badge, Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
 
@@ -301,7 +300,6 @@ export function GitWorkspace({ s }: { s: State }) {
               )}
             </Panel>
           </div>
-          {s.implementations.length > 0 && <Implementations s={s} />}
         </>
       )}
       {s.gitPreview && (
