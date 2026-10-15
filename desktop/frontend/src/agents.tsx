@@ -9,6 +9,7 @@ import {
   workspace as w,
   type State,
 } from './workspace';
+import { ChangeOutcome, ProposalDiff, isAddedLine, isRemovedLine } from './change-shared';
 import {
   Badge,
   BulletContent,
@@ -37,30 +38,30 @@ interface StageSpec {
 const PIPELINE_STAGES: StageSpec[] = [
   {
     id: 'create',
-    step: 'Stage 1',
+    step: 'Step 1',
     title: 'Architect & Code Agent',
-    role: 'Synthesizes minimal, surgical diffs within captured files (max 8 paths).',
+    role: 'Generates minimal diffs in target files.',
     modelKey: 'create',
   },
   {
     id: 'test',
-    step: 'Stage 2',
+    step: 'Step 2',
     title: 'Verification & Test Agent',
-    role: 'Authors unit tests and executes compiler, vet, and race-detector checks.',
+    role: 'Writes unit tests and runs compiler and test checks.',
     modelKey: 'test',
   },
   {
     id: 'review',
-    step: 'Stage 3',
+    step: 'Step 3',
     title: 'Clean-Code Critic Agent',
-    role: 'Audits diffs against AGENTS.md rules, complexity bounds, and edge cases.',
+    role: 'Reviews diffs against project rules and acceptance criteria.',
     modelKey: 'review',
   },
   {
     id: 'human_review',
-    step: 'Stage 4',
+    step: 'Step 4',
     title: 'Human Precision Gate',
-    role: 'SHA-256 pre-image verification, hunk review, and explicit Apply with Undo.',
+    role: 'Inspect the diff below and click Accept & Apply Fix.',
   },
 ];
 
@@ -75,6 +76,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
     seed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
   );
   const [missionPrompt, setMissionPrompt] = useState(seed?.message || '');
+  const [selectedDiffPath, setSelectedDiffPath] = useState<string>('all');
 
   useEffect(() => {
     if (seed) {
@@ -85,19 +87,22 @@ export function AgentsWorkspace({ s }: { s: State }) {
   }, [seed?.title, seed?.message]);
 
   useEffect(() => {
+    setSelectedDiffPath('all');
+  }, [change?.id, change?.revision]);
+
+  useEffect(() => {
     if (s.project && !s.changeHistory) {
       void w.loadChangeHistory();
     }
   }, [s.project?.project_id]);
 
-  // Compute real diff and precision metrics from the active ChangeSession
   const changedFiles = change?.changes || [];
   let addedLines = 0;
   let removedLines = 0;
   for (const fileChange of changedFiles) {
     for (const line of fileChange.diff?.lines || []) {
-      if (line.kind === 'add') addedLines++;
-      else if (line.kind === 'del' || line.kind === 'remove') removedLines++;
+      if (isAddedLine(line.kind)) addedLines++;
+      else if (isRemovedLine(line.kind)) removedLines++;
     }
   }
   const totalDelta = addedLines + removedLines;
@@ -140,11 +145,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
       .filter(Boolean)
       .slice(0, 8);
     if (!rawPaths.length || !missionPrompt.trim()) {
-      w.fail('Specify at least one target file path and a clean-code objective.');
+      w.fail('Specify at least one target file path and a fix objective.');
       return;
     }
     const prepared = workflowSeed({
-      title: missionTitle.trim() || 'Clean-code agent mission',
+      title: missionTitle.trim() || 'Agent fix mission',
       kind: 'fix',
       paths: rawPaths,
       message: missionPrompt.trim(),
@@ -169,12 +174,68 @@ export function AgentsWorkspace({ s }: { s: State }) {
     })();
   };
 
+  const visibleDiffFiles =
+    selectedDiffPath === 'all'
+      ? changedFiles
+      : changedFiles.filter((f) => f.path === selectedDiffPath);
+
+  const missionFormContent = (
+    <div className="stack" style={{ gap: '10px' }}>
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <label className="block">
+          <span className="small muted">Fix Title</span>
+          <input
+            aria-label="Agent mission title"
+            className="field"
+            value={missionTitle}
+            onChange={(e) => setMissionTitle(e.target.value)}
+            placeholder="e.g., Enforce bounded retry in worker queue"
+          />
+        </label>
+        <label className="block">
+          <span className="small muted">Target Files (comma-separated, max 8)</span>
+          <input
+            aria-label="Agent target files"
+            className="field font-mono"
+            value={missionPaths}
+            onChange={(e) => setMissionPaths(e.target.value)}
+            placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
+          />
+        </label>
+      </div>
+      <label className="block">
+        <span className="small muted">Fix Instructions &amp; Constraints</span>
+        <textarea
+          aria-label="Agent mission specification"
+          rows={3}
+          value={missionPrompt}
+          onChange={(e) => setMissionPrompt(e.target.value)}
+          placeholder="Describe the exact behavior to fix, invariants to preserve, and edge cases to test…"
+        />
+      </label>
+      <div className="row between wrap">
+        <span className="small muted">
+          Models: <code>{models.create}</code> (Create) → <code>{models.test}</code> (Test) →{' '}
+          <code>{models.review}</code> (Critic).
+        </span>
+        <Button
+          tone="primary"
+          icon="sparkles"
+          disabled={!!s.busy || running}
+          onClick={dispatchCustomMission}
+        >
+          Dispatch Agent Pipeline
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="workspace-page agents-page">
       <Heading
         variant="intro"
         title="Agent Mission Control"
-        detail="4-stage autonomous pipeline for clean, tested, and verified software changes."
+        detail="Step-by-step fix pipeline: generate diff, run tests, verify with critic, and apply."
       >
         <Go page="bugs" tone="ghost" icon="bug">
           Browse Issues
@@ -182,6 +243,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
         <Go page="models" tone="ghost" icon="compass">
           Configure Models
         </Go>
+        {s.changeReceipt?.undo_available && (
+          <Button tone="ghost" icon="undo" disabled={!!s.busy} onClick={() => void w.undoChange()}>
+            Undo Last Change
+          </Button>
+        )}
         {running && (
           <Button
             tone="danger"
@@ -192,11 +258,23 @@ export function AgentsWorkspace({ s }: { s: State }) {
           </Button>
         )}
         {changedFiles.length > 0 && (
-          <Button tone="primary" icon="code" onClick={() => void w.navigate('editor')}>
-            Review Diff &amp; Apply ({changedFiles.length})
+          <Button tone="ghost" icon="code" onClick={() => void w.navigate('editor')}>
+            Open in Code &amp; Diff ({changedFiles.length})
+          </Button>
+        )}
+        {change && change.state === 'draft' && changedFiles.length > 0 && (
+          <Button
+            tone="primary"
+            icon="check"
+            disabled={!!s.busy || running || !readyToApply}
+            onClick={() => void w.applyProposalNow(change.title)}
+          >
+            Accept &amp; Apply Fix
           </Button>
         )}
       </Heading>
+
+      <ChangeOutcome s={s} />
 
       {running && (
         <div
@@ -218,8 +296,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
           <div className="row wrap" style={{ gap: '10px', alignItems: 'center' }}>
             <Spinner />
             <strong>
-              Agent pipeline running:{' '}
-              {change?.title || seed?.title || 'Synthesizing & verifying fix'}
+              Agent pipeline running: {change?.title || seed?.title || 'Generating & verifying fix'}
             </strong>
             <Badge value={workflow?.status || 'running'} tone="violet" />
           </div>
@@ -233,7 +310,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
         </div>
       )}
 
-      {/* 4-Stage Precision Pipeline Visualizer */}
+      {/* 4-Step Fix Progress Bar */}
       <div
         className="kpi-pulse-grid box-grid-4 agent-pipeline-grid"
         role="list"
@@ -250,7 +327,10 @@ export function AgentsWorkspace({ s }: { s: State }) {
               role="listitem"
               className="kpi-pulse-card card-kpi box-card"
               style={{
-                borderColor: status === 'running' ? 'var(--accent)' : undefined,
+                borderColor:
+                  status === 'running' || status === 'awaiting_human_review'
+                    ? 'var(--accent)'
+                    : undefined,
               }}
             >
               <div className="box-head">
@@ -260,15 +340,19 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   <Badge
                     value={human(status)}
                     tone={
-                      status === 'completed' ? 'green' : status === 'running' ? 'violet' : undefined
+                      status === 'completed'
+                        ? 'green'
+                        : status === 'running' || status === 'awaiting_human_review'
+                          ? 'violet'
+                          : undefined
                     }
                   />
                 </span>
               </div>
-              <div className="box-value" style={{ fontSize: '1rem', marginTop: '4px' }}>
+              <div className="box-value" style={{ fontSize: '0.96rem', marginTop: '4px' }}>
                 {stage.title}
               </div>
-              <p className="small muted" style={{ margin: '6px 0' }}>
+              <p className="small muted" style={{ margin: '4px 0' }}>
                 {stage.role}
               </p>
               <div className="box-meta">
@@ -279,91 +363,188 @@ export function AgentsWorkspace({ s }: { s: State }) {
         })}
       </div>
 
-      {/* Active Mission & Clean-Software Precision Scorecard */}
+      {/* Active Fix Step: Diff Review, Critic Gate & Direct Apply */}
       {change ? (
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}
-        >
+        <div className="stack" style={{ gap: '16px' }}>
           <Panel
-            title={`Active Mission · ${change.title}`}
+            title={`Proposed Fix · ${change.title}`}
             actions={
-              <Badge
-                value={
-                  change.state === 'applied' ? 'Applied' : human(workflow?.status || change.state)
-                }
-                tone={change.state === 'applied' || readyToApply ? 'green' : 'violet'}
-              />
+              <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                <span className="small font-mono">
+                  <span style={{ color: 'var(--green)' }}>+{addedLines}</span> /{' '}
+                  <span style={{ color: 'var(--red)' }}>-{removedLines}</span> lines ({scopeLabel})
+                </span>
+                <Badge
+                  value={
+                    change.state === 'applied'
+                      ? 'Applied'
+                      : readyToApply
+                        ? 'Ready to Apply'
+                        : human(workflow?.status || change.state)
+                  }
+                  tone={change.state === 'applied' || readyToApply ? 'green' : 'violet'}
+                />
+              </div>
             }
           >
-            <div className="stack">
-              <div className="row between wrap">
-                <span className="small muted">
-                  Scope: <strong>{changedFiles.length || change.targets.length}</strong> / 8 max
-                  files ·{' '}
-                  <span className="font-mono">
-                    +{addedLines} / -{removedLines} lines
-                  </span>{' '}
-                  (<strong>{scopeLabel}</strong>)
-                </span>
-                <span className="small muted">
-                  Self-repairs: <strong>{change.repair_attempts} / 3</strong>
-                </span>
-              </div>
-
-              {(change.acceptance_criteria || []).length > 0 && (
-                <div>
-                  <strong className="small uppercase muted">Precision Acceptance Criteria</strong>
-                  <ul className="compact-list" style={{ marginTop: '6px' }}>
-                    {(change.acceptance_criteria || []).map((criterion, idx) => (
-                      <li key={idx}>{criterion}</li>
-                    ))}
-                  </ul>
-                </div>
+            <div className="stack" style={{ gap: '12px' }}>
+              {workflow?.reason && (
+                <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
               )}
 
-              <div>
-                <strong className="small uppercase muted">Captured Files</strong>
-                <div className="row wrap" style={{ gap: '6px', marginTop: '6px' }}>
-                  {(changedFiles.length ? changedFiles : change.targets || []).map((item) => (
+              {/* Primary Fix Actions Bar */}
+              <div
+                className="proposal-action-banner"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                  <span className="small">
+                    <strong>{changedFiles.length}</strong>{' '}
+                    {changedFiles.length === 1 ? 'changed file' : 'changed files'} ·{' '}
+                    <strong>
+                      {passedChecks}/{checks.length}
+                    </strong>{' '}
+                    checks passed
+                  </span>
+                  {workflow?.review && (
+                    <Badge
+                      value={`Critic: ${workflow.review.verdict}`}
+                      tone={workflow.review.verdict === 'approve' ? 'green' : 'violet'}
+                    />
+                  )}
+                </div>
+                <div className="row wrap" style={{ gap: '8px' }}>
+                  {change.state === 'draft' && (
+                    <>
+                      <Button
+                        tone="primary"
+                        icon="check"
+                        disabled={!!s.busy || running || !readyToApply}
+                        onClick={() => void w.applyProposalNow(change.title)}
+                      >
+                        Accept &amp; Apply Fix
+                      </Button>
+                      {!readyToApply && !running && (
+                        <Button
+                          tone="ghost"
+                          icon="sparkles"
+                          disabled={!!s.busy}
+                          onClick={() => void w.rerunChangeWorkflow('agents')}
+                        >
+                          Re-run Fix
+                        </Button>
+                      )}
+                      <Button
+                        tone="ghost"
+                        icon="refresh"
+                        disabled={!!s.busy || running}
+                        onClick={() => void w.checkChange(true)}
+                      >
+                        Verify Checks
+                      </Button>
+                      {!allChecksPassed && checks.length > 0 && (
+                        <Button
+                          tone="ghost"
+                          icon="sparkles"
+                          disabled={!!s.busy || running}
+                          onClick={() => void w.repairChange()}
+                        >
+                          Repair Checks
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  <Button tone="ghost" icon="code" onClick={() => void w.navigate('editor')}>
+                    Edit Hunks in Code &amp; Diff
+                  </Button>
+                  {change.state === 'draft' && (
                     <Button
-                      key={item.path}
-                      tone="ghost small"
-                      icon="file"
-                      onClick={() => void w.openFile(item.path)}
+                      tone="ghost"
+                      icon="close"
+                      disabled={!!s.busy || running}
+                      onClick={() => w.newChange()}
                     >
-                      <span className="font-mono">{item.path}</span>
+                      Discard
                     </Button>
-                  ))}
+                  )}
                 </div>
               </div>
 
-              <div className="actions" style={{ marginTop: '8px' }}>
-                <Button tone="primary" icon="code" onClick={() => void w.navigate('editor')}>
-                  Inspect Diff &amp; Apply in Editor
-                </Button>
-                <Button
-                  tone="ghost"
-                  icon="refresh"
-                  disabled={!!s.busy || running}
-                  onClick={() => void w.checkChange(true)}
+              {/* File Filter Tabs + Inline Proposed Diffs */}
+              {changedFiles.length > 0 ? (
+                <div className="stack" style={{ gap: '10px' }}>
+                  {changedFiles.length > 1 && (
+                    <div className="row wrap" style={{ gap: '6px' }} role="tablist">
+                      <Button
+                        tone={selectedDiffPath === 'all' ? 'primary small' : 'ghost small'}
+                        onClick={() => setSelectedDiffPath('all')}
+                      >
+                        All files ({changedFiles.length})
+                      </Button>
+                      {changedFiles.map((fc) => {
+                        const fAdds =
+                          fc.diff?.lines?.filter((l) => isAddedLine(l.kind)).length || 0;
+                        const fDels =
+                          fc.diff?.lines?.filter((l) => isRemovedLine(l.kind)).length || 0;
+                        return (
+                          <Button
+                            key={fc.path}
+                            tone={selectedDiffPath === fc.path ? 'primary small' : 'ghost small'}
+                            icon="file"
+                            onClick={() => setSelectedDiffPath(fc.path)}
+                          >
+                            <span className="font-mono">{fc.path.split('/').at(-1)}</span>{' '}
+                            <span className="font-mono small">
+                              +{fAdds}/-{fDels}
+                            </span>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="stack" style={{ gap: '12px' }}>
+                    {visibleDiffFiles.map((edit, idx) => (
+                      <ProposalDiff
+                        key={edit.path}
+                        edit={edit}
+                        index={idx}
+                        total={visibleDiffFiles.length}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Empty
+                  title={running ? 'Generating proposed diff…' : 'No diff generated yet'}
+                  detail={
+                    running
+                      ? 'The agent pipeline is currently creating and testing the change.'
+                      : 'Click Re-run Fix to generate a fresh diff for the target files.'
+                  }
+                  icon="code"
                 >
-                  Re-run Verification Gate
-                </Button>
-                {!allChecksPassed && checks.length > 0 && (
-                  <Button
-                    tone="ghost"
-                    icon="sparkles"
-                    disabled={!!s.busy || running}
-                    onClick={() => void w.repairChange()}
-                  >
-                    Agent Self-Repair
-                  </Button>
-                )}
-              </div>
+                  {!running && (
+                    <Button
+                      tone="primary"
+                      icon="sparkles"
+                      disabled={!!s.busy}
+                      onClick={() => void w.rerunChangeWorkflow('agents')}
+                    >
+                      Generate Fix Now
+                    </Button>
+                  )}
+                </Empty>
+              )}
             </div>
           </Panel>
 
+          {/* Clean-Software Precision Gate: Critic Review & Checks */}
           <Panel
             title="Clean-Software Precision Gate"
             actions={
@@ -381,13 +562,9 @@ export function AgentsWorkspace({ s }: { s: State }) {
               />
             }
           >
-            <div className="stack">
-              {workflow?.reason && (
-                <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
-              )}
-
+            <div className="stack" style={{ gap: '12px' }}>
               {workflow?.review ? (
-                <div className="stack" style={{ gap: '8px' }}>
+                <div className="stack" style={{ gap: '6px' }}>
                   <div className="row between wrap">
                     <strong className="small uppercase muted">Critic Agent Verdict</strong>
                     <Badge
@@ -405,7 +582,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 </div>
               ) : (
                 <p className="small muted">
-                  Critic Agent review will appear here once Stage 3 completes.
+                  Critic Agent review will appear here once Step 3 completes.
                 </p>
               )}
 
@@ -445,13 +622,23 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   </div>
                 )}
               </div>
+
+              {(change.acceptance_criteria || []).length > 0 && (
+                <Disclosure title={`Acceptance Criteria (${change.acceptance_criteria.length})`}>
+                  <ul className="compact-list" style={{ marginTop: '6px' }}>
+                    {change.acceptance_criteria.map((criterion, idx) => (
+                      <li key={idx}>{criterion}</li>
+                    ))}
+                  </ul>
+                </Disclosure>
+              )}
             </div>
           </Panel>
         </div>
       ) : seed ? (
         <Panel
-          title={`Staged Agent Mission · ${seed.title}`}
-          actions={<Badge value="Ready to Dispatch" tone="violet" />}
+          title={`Staged Fix · ${seed.title}`}
+          actions={<Badge value="Ready to Run" tone="violet" />}
         >
           <div className="stack">
             <p className="small muted font-mono">Target files: {seed.paths.join(', ')}</p>
@@ -463,7 +650,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 disabled={!!s.busy}
                 onClick={dispatchCustomMission}
               >
-                Launch 4-Stage Agent Pipeline
+                Start Fix Pipeline
               </Button>
               <Button tone="ghost" icon="code" onClick={() => void w.navigate('editor')}>
                 Open in Code &amp; Diff
@@ -473,64 +660,23 @@ export function AgentsWorkspace({ s }: { s: State }) {
         </Panel>
       ) : null}
 
-      {/* Dispatch New Clean-Code Agent Mission */}
-      <Panel
-        title="Dispatch Precision Agent Mission"
-        actions={<span className="small muted">Auto-includes unit test target when eligible</span>}
-      >
-        <div className="stack" style={{ gap: '10px' }}>
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <label className="block">
-              <span className="small muted">Mission Title</span>
-              <input
-                aria-label="Agent mission title"
-                className="field"
-                value={missionTitle}
-                onChange={(e) => setMissionTitle(e.target.value)}
-                placeholder="e.g., Enforce bounded retry in worker queue"
-              />
-            </label>
-            <label className="block">
-              <span className="small muted">Target Files (comma-separated, max 8)</span>
-              <input
-                aria-label="Agent target files"
-                className="field font-mono"
-                value={missionPaths}
-                onChange={(e) => setMissionPaths(e.target.value)}
-                placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
-              />
-            </label>
-          </div>
-          <label className="block">
-            <span className="small muted">Clean-Code Specification &amp; Constraints</span>
-            <textarea
-              aria-label="Agent mission specification"
-              rows={3}
-              value={missionPrompt}
-              onChange={(e) => setMissionPrompt(e.target.value)}
-              placeholder="Describe the exact behavior, invariants to preserve, and edge cases to test…"
-            />
-          </label>
-          <div className="row between wrap">
-            <span className="small muted">
-              Pipeline routes through <code>{models.create}</code> (Create) →{' '}
-              <code>{models.test}</code> (Test) → <code>{models.review}</code> (Critic).
-            </span>
-            <Button
-              tone="primary"
-              icon="sparkles"
-              disabled={!!s.busy || running}
-              onClick={dispatchCustomMission}
-            >
-              Dispatch Agent Pipeline
-            </Button>
-          </div>
-        </div>
-      </Panel>
+      {/* Custom Fix Mission Form: collapsed when an active fix is already open */}
+      {change ? (
+        <Disclosure title="Start a New Custom Fix Mission">{missionFormContent}</Disclosure>
+      ) : (
+        <Panel
+          title="Start a Fix Mission"
+          actions={
+            <span className="small muted">Auto-includes unit test target when eligible</span>
+          }
+        >
+          {missionFormContent}
+        </Panel>
+      )}
 
       {/* Parallel Worktree Agents & Mission History */}
       <Disclosure
-        title={`Worktree Agent Fleet (${s.implementations.length}) & Recent Missions (${s.changeHistory?.length || 0})`}
+        title={`Worktree Agent Fleet (${s.implementations.length}) & Recent Fixes (${s.changeHistory?.length || 0})`}
       >
         <div className="stack" style={{ gap: '12px', paddingTop: '8px' }}>
           {s.implementations.length > 0 && (
@@ -563,11 +709,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
               </div>
             </Panel>
           )}
-          <Panel title="Recent Agent Missions">
+          <Panel title="Recent Fixes">
             {!s.changeHistory?.length ? (
               <Empty
-                title="No saved agent missions yet"
-                detail="Dispatch a fix from Issues & Ideas or launch a precision mission above."
+                title="No saved fixes yet"
+                detail="Start a fix from Issues & Ideas or launch a mission above."
               />
             ) : (
               <div className="stack" style={{ gap: '6px' }}>
@@ -586,7 +732,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                         disabled={!!s.busy || running}
                         onClick={() => void w.resumeChange(entry.id)}
                       >
-                        Open Mission
+                        Open Fix
                       </Button>
                     </div>
                   </div>
