@@ -54,6 +54,7 @@ export interface FixPreparationContext {
 export interface State {
   implementations: Workspace[];
   implementation?: Workspace;
+  selectedAgentPath?: string;
   page: Page;
   busy: string;
   error: string;
@@ -441,6 +442,19 @@ export function workflowReviewable(change: M.ChangeSession) {
       flow.review?.verdict === 'approve' &&
       flow.review.proposal_hash === change.hash)
   );
+}
+export function worktreeDefaultTarget(title: string) {
+  const slug =
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 32) || 'fix';
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return {
+    branch: `codex/${slug}-${suffix}`,
+    path: `.worktrees/${slug}-${suffix}`,
+  };
 }
 
 export class Workspace {
@@ -955,6 +969,141 @@ export class Workspace {
     if (seed.paths.some(isTestFilePath)) await child.startChangeWorkflow(seed, models, fresh);
     else await child.prepareChange(seed, tests, models.create, fresh);
   }
+  async ensureAgentWorktree(path: string): Promise<Workspace | undefined> {
+    let child = this.state.implementations.find((item) => item.worktreePath === path);
+    if (child) return child;
+    const epoch = this.epoch;
+    child = new Workspace(path, this);
+    const project = await child.api.get<M.Project>(current);
+    if (epoch !== this.epoch) return undefined;
+    child.set({
+      project,
+      connected: true,
+      models: this.state.models,
+      availableModels: this.state.availableModels,
+      workflowModels: this.state.workflowModels,
+      workspaceTrust: this.state.workspaceTrust,
+      page: 'agents',
+    });
+    await child.refreshProject();
+    if (epoch !== this.epoch) return undefined;
+    if (!child.state.change && child.state.changeHistory?.length) {
+      await child.viewChange(child.state.changeHistory[0].id, 'agents');
+    }
+    this.set({ implementations: [...this.state.implementations, child] });
+    child.subscribe(() => this.set({}));
+    child.connectEvents();
+    child.schedule();
+    return child;
+  }
+  async selectAgent(worktreePath?: string) {
+    if (!worktreePath) {
+      this.set({ selectedAgentPath: undefined, page: 'agents', error: '' });
+      return;
+    }
+    await this.act('Open agent workspace', async () => {
+      const child = await this.ensureAgentWorktree(worktreePath);
+      if (!child) return;
+      if (!child.state.change && child.state.changeHistory?.length) {
+        await child.viewChange(child.state.changeHistory[0].id, 'agents');
+      }
+      this.set({ selectedAgentPath: worktreePath, page: 'agents', error: '' });
+    });
+  }
+  async startAgentFix(rawSeed: M.ChangeSeed, options?: { preferWorktree?: boolean }) {
+    const preparedSeed = workflowSeed(rawSeed);
+    const useWorktree = options?.preferWorktree ?? true;
+    try {
+      const context = await this.readFixPreparation();
+      const models = workflowSetupModels(this.state);
+      const canCreateWorktree =
+        useWorktree &&
+        !this.worktreePath &&
+        context.repository.available &&
+        context.repository.at_root &&
+        !context.repository.dirty &&
+        !!context.repository.branch &&
+        !!context.repository.head &&
+        !context.repository.merge_head &&
+        !context.repository.operation;
+      if (canCreateWorktree) {
+        const target = worktreeDefaultTarget(preparedSeed.title);
+        let created: string | undefined;
+        await this.act('Create worktree', async () => {
+          const epoch = this.epoch;
+          const profiles = preparedSeed.paths.some(isTestFilePath)
+            ? Object.values(models)
+            : [models.create];
+          const latest = await this.checkedFixPreparation(profiles, context);
+          if (!latest || epoch !== this.epoch) return;
+          await this.api.post(`${current}/execution-trust`, {
+            project_revision: latest.trust.project_revision,
+            confirm: true,
+          });
+          const result = await this.api.post<M.GitMutation>(`${current}/git/worktrees`, {
+            ...this.identity(),
+            head: context.repository.head,
+            branch: context.repository.branch,
+            target_branch: target.branch,
+            path: target.path,
+            confirm: true,
+            confirm_execution: true,
+          });
+          if (epoch !== this.epoch) return;
+          this.set({ gitResult: result });
+          if (result.state !== 'created' || result.error || !result.path)
+            throw new Error(
+              `${result.error || 'Worktree creation failed.'}${result.path ? ` Path: ${result.path}` : ''}`,
+            );
+          created = result.path;
+        });
+        if (!created) return;
+        await this.loadGitWorkspace();
+        const child = await this.ensureAgentWorktree(created);
+        if (!child) return;
+        child.seedChange(preparedSeed, 'agents');
+        this.set({ selectedAgentPath: created, page: 'agents', error: '' });
+        void (async () => {
+          try {
+            const fresh = await child.readFixPreparation();
+            if (preparedSeed.paths.some(isTestFilePath)) {
+              await child.startChangeWorkflow(preparedSeed, models, fresh, 'agents');
+            } else {
+              await child.prepareChange(preparedSeed, true, models.create, fresh, 'agents');
+            }
+            await this.loadGitWorkspace();
+          } catch (error) {
+            child.fail(error);
+          }
+        })();
+        return;
+      }
+      this.seedChange(preparedSeed, 'agents');
+      this.set({ selectedAgentPath: undefined, page: 'agents' });
+      const useAgents = preparedSeed.paths.some(isTestFilePath);
+      if (useAgents) {
+        await this.startChangeWorkflow(preparedSeed, models, context, 'agents');
+      } else {
+        await this.prepareChange(preparedSeed, true, models.create, context, 'agents');
+      }
+    } catch (error) {
+      this.fail(error);
+    }
+  }
+  async mergeAgentWorktree(worktreePath: string) {
+    if (!this.state.gitWorkspace) await this.loadGitWorkspace();
+    const tree = this.state.gitWorkspace?.worktrees.find((item) => item.path === worktreePath);
+    if (!tree) {
+      this.fail(new Error('Worktree not found. Refresh Git status.'));
+      return;
+    }
+    await this.gitAction('merge', tree);
+    if (this.state.run) {
+      await Promise.all(
+        (['bugs', 'security', 'performance'] as const).map((cat) => this.loadResults(cat)),
+      );
+    }
+  }
   async openWorktree(path: string) {
     let child = this.state.implementations.find((item) => item.worktreePath === path);
     await this.act('Open implementation', async () => {
@@ -990,6 +1139,7 @@ export class Workspace {
     child.stop();
     this.set({
       implementations: this.state.implementations.filter((item) => item !== child),
+      ...(this.state.selectedAgentPath === path ? { selectedAgentPath: undefined } : {}),
       ...(this.state.implementation === child
         ? { implementation: undefined, ...(this.state.page === 'worktree' ? { page: 'git' } : {}) }
         : {}),
@@ -999,6 +1149,7 @@ export class Workspace {
     const identity = this.identity();
     await Promise.all([
       this.refreshRepository(),
+      ...(!this.worktreePath ? [this.loadGitWorkspace()] : []),
       this.loadFeatures(),
       this.loadChangeHistory(),
       this.loadProjectInstructions(),
@@ -1429,25 +1580,44 @@ export class Workspace {
         this.resultRequests[category] === request,
     );
   }
-  async triage(finding: M.Finding, status: string) {
+  async triage(finding: M.Finding | M.FindingTarget, status: string) {
     await this.act('Update finding', async () => {
+      const target = 'kind' in finding ? finding : undefined;
       await this.api.request('PATCH', `${current}/findings/${encodeURIComponent(finding.id)}`, {
         project_revision: this.identity().project_revision,
         status,
+        ...(target
+          ? {
+              kind: target.kind,
+              path: target.path,
+              ...(target.source ? { source: target.source } : {}),
+            }
+          : {}),
       });
       await this.refreshProject();
-      const category = findingCategory(this.state);
-      if (category) await this.loadResults(category);
+      for (const cat of ['bugs', 'security', 'performance'] as const) {
+        if (this.state.results[cat] || findingCategory(this.state) === cat) {
+          await this.loadResults(cat);
+        }
+      }
     });
   }
-  async batchTriage(findings: M.Finding[], status: string) {
+  async batchTriage(findings: (M.Finding | M.FindingTarget)[], status: string) {
     if (!findings.length) return;
     await this.act('Update findings', async () => {
       const project_revision = this.identity().project_revision;
       for (const finding of findings) {
+        const target = 'kind' in finding ? finding : undefined;
         await this.api.request('PATCH', `${current}/findings/${encodeURIComponent(finding.id)}`, {
           project_revision,
           status,
+          ...(target
+            ? {
+                kind: target.kind,
+                path: target.path,
+                ...(target.source ? { source: target.source } : {}),
+              }
+            : {}),
         });
       }
       await this.refreshProject();
@@ -2778,7 +2948,12 @@ export class Workspace {
       index: receipt.index,
       changeReceipt: receipt,
       change: this.state.change
-        ? { ...this.state.change, state: receipt.state, reviewed_hash: '' }
+        ? {
+            ...this.state.change,
+            state: receipt.state,
+            commit: receipt.commit || this.state.change.commit,
+            reviewed_hash: '',
+          }
         : undefined,
       fileStale: true,
       results: {},
@@ -2787,6 +2962,13 @@ export class Workspace {
     });
     await this.refreshProject();
     await this.loadChangeHistory();
+    if (this.parent) {
+      await this.parent.loadGitWorkspace();
+    } else if (this.state.run) {
+      await Promise.all(
+        (['bugs', 'security', 'performance'] as const).map((cat) => this.loadResults(cat)),
+      );
+    }
   }
   async openTerminal() {
     await this.act('Start terminal', async () => {
