@@ -93,7 +93,7 @@ try {
   });
 
   await test('Unified Code & Diff supports Direct Edit with line gutter, Split/Unified Diff Review, Inspector, and Multi-File Docked AI Composer', async () => {
-    const { page, close } = await pageFor({ proposalReady: true });
+    const { page, close } = await pageFor({ trusted: true });
     try {
       await nav(page, 'Code & Diff');
       await idle(page);
@@ -103,16 +103,23 @@ try {
       await page.locator('.explorer-file-btn').first().click();
       await idle(page);
 
+      // Generate a diff proposal from the docked AI composer
+      await page
+        .getByLabel('Ask about this file', { exact: true })
+        .fill('Add context cancellation check');
+      await page.getByRole('button', { name: 'Generate Diff', exact: true }).click();
+      await idle(page);
+
       // Verify Hunk-by-Hunk Diff Review controls & Split/Unified diff layout switcher
-      await page.getByRole('tab', { name: 'Diff Review', exact: true }).click();
+      await page.getByRole('tab', { name: /^Diff Review/ }).click();
       const diffLayoutGroup = page.getByRole('group', { name: 'Diff layout', exact: true });
       await diffLayoutGroup.waitFor();
       await diffLayoutGroup.getByRole('button', { name: 'Split', exact: true }).click();
       await diffLayoutGroup.getByRole('button', { name: 'Unified', exact: true }).click();
       const acceptHunk = page.getByRole('button', { name: 'Accept Hunk', exact: true }).first();
-      if ((await acceptHunk.count()) > 0) {
-        await acceptHunk.click();
-      }
+      await acceptHunk.waitFor();
+      await acceptHunk.click();
+      await page.getByRole('button', { name: 'Accepted', exact: true }).first().waitFor();
 
       // Switch to Direct Edit mode, verify line-number gutter, and edit inline
       await page.getByRole('tab', { name: 'Direct Edit', exact: true }).click();
@@ -522,6 +529,19 @@ try {
       await page.getByText('Human Precision Gate', { exact: true }).waitFor();
       await page.getByText('Clean-Software Precision Gate', { exact: true }).waitFor();
       await page.getByText('Critic Agent Verdict', { exact: true }).waitFor();
+
+      // Verify inline diff and direct Accept & Apply Fix right on the Fix/Agents page
+      await page
+        .getByLabel('Read-only diff for internal/worker/process.go', { exact: true })
+        .waitFor();
+      const applyBtn = page
+        .getByRole('button', { name: 'Accept & Apply Fix', exact: true })
+        .first();
+      await applyBtn.waitFor();
+      assert.equal(await applyBtn.isEnabled(), true);
+      await applyBtn.click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
 
       // 2. Switch to live Terminal UI (TUI) mode
       await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
