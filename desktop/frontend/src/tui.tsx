@@ -7,13 +7,13 @@ import {
   changeChecksPassed,
   findingCategory,
   isModelPresetActive,
-  isTestFilePath,
   workflowSeed,
   workflowSetupModels,
   workspace as w,
   type Page,
   type State,
 } from './workspace';
+import { collectAgentDashboardItems } from './agents';
 import { findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine } from './change-shared';
 import { human } from './ui';
@@ -58,9 +58,25 @@ interface TuiIssueRow {
 }
 
 function collectTuiIssues(s: State): TuiIssueRow[] {
+  const isCompletedTarget = (target: M.FindingTarget) =>
+    !!s.completedFindings?.some(
+      (c) =>
+        c.project_id === target.project_id &&
+        c.kind === target.kind &&
+        c.id === target.id &&
+        c.path === target.path &&
+        (c.source || '') === (target.source || ''),
+    );
   const rows: TuiIssueRow[] = [];
   for (const f of s.findings || []) {
-    if (f.status === 'fixed') continue;
+    if (f.status === 'fixed' || f.status === 'retired' || f.status === 'dismissed') continue;
+    const target: M.FindingTarget = {
+      project_id: f.project_id,
+      kind: 'semantic',
+      id: f.id,
+      path: f.location.path,
+    };
+    if (isCompletedTarget(target)) continue;
     rows.push({
       id: `semantic:${f.id}`,
       title: findingTitle(f.title, f.message),
@@ -74,14 +90,27 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
       solution:
         f.task_spec?.acceptance_criteria.join('\n') ||
         'Synthesize a minimal, verified fix and unit test.',
-      target: { project_id: f.project_id, kind: 'semantic', id: f.id, path: f.location.path },
+      target,
       acceptance_criteria: f.task_spec?.acceptance_criteria || [],
     });
   }
   for (const cat of ['bugs', 'security', 'performance'] as const) {
     const res = s.results[cat];
     for (const f of res?.semantic || []) {
-      if (f.status === 'fixed' || rows.some((r) => r.id === `semantic:${f.id}`)) continue;
+      if (
+        f.status === 'fixed' ||
+        f.status === 'retired' ||
+        f.status === 'dismissed' ||
+        rows.some((r) => r.id === `semantic:${f.id}`)
+      )
+        continue;
+      const target: M.FindingTarget = {
+        project_id: f.project_id,
+        kind: 'semantic',
+        id: f.id,
+        path: f.location.path,
+      };
+      if (isCompletedTarget(target)) continue;
       rows.push({
         id: `semantic:${f.id}`,
         title: findingTitle(f.title, f.message),
@@ -95,7 +124,7 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
         solution:
           f.task_spec?.acceptance_criteria.join('\n') ||
           'Synthesize a minimal, verified fix and unit test.',
-        target: { project_id: f.project_id, kind: 'semantic', id: f.id, path: f.location.path },
+        target,
         acceptance_criteria: f.task_spec?.acceptance_criteria || [],
       });
     }
@@ -121,11 +150,18 @@ export function TuiApp({
   const [cmdOutput, setCmdOutput] = useState(
     'Type a command (help, analyze, test, fix, apply, undo, gui) or press 1-0 to switch views.',
   );
-  const [missionTitle, setMissionTitle] = useState(s.changeSeed?.title || '');
+  const selectedChild = s.selectedAgentPath
+    ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
+    : undefined;
+  const agentW = selectedChild || w;
+  const agentS = selectedChild ? selectedChild.state : s;
+  const agentItems = collectAgentDashboardItems(s);
+
+  const [missionTitle, setMissionTitle] = useState(agentS.changeSeed?.title || '');
   const [missionPaths, setMissionPaths] = useState(
-    s.changeSeed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
+    agentS.changeSeed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
   );
-  const [missionPrompt, setMissionPrompt] = useState(s.changeSeed?.message || '');
+  const [missionPrompt, setMissionPrompt] = useState(agentS.changeSeed?.message || '');
   const cmdRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -133,18 +169,18 @@ export function TuiApp({
   }, [palette]);
 
   useEffect(() => {
-    if (s.changeSeed) {
-      setMissionTitle(s.changeSeed.title);
-      setMissionPaths(s.changeSeed.paths.join(', '));
-      setMissionPrompt(s.changeSeed.message);
+    if (agentS.changeSeed) {
+      setMissionTitle(agentS.changeSeed.title);
+      setMissionPaths(agentS.changeSeed.paths.join(', '));
+      setMissionPrompt(agentS.changeSeed.message);
     }
-  }, [s.changeSeed?.title, s.changeSeed?.message]);
+  }, [agentS.changeSeed?.title, agentS.changeSeed?.message, s.selectedAgentPath]);
 
   const issues = collectTuiIssues(s);
   const clampedIdx = Math.min(selectedIdx, Math.max(0, issues.length - 1));
   const selectedIssue = issues[clampedIdx];
   const models = workflowSetupModels(s);
-  const change = s.change;
+  const change = agentS.change;
   const workflow = change?.workflow;
   const running = activeChangeWorkflow(change);
 
@@ -162,20 +198,8 @@ export function TuiApp({
       message: `Address this finding: ${issue.title}\nLocation: ${issue.path}${issue.line ? `:${issue.line}` : ''}\nCause: ${issue.cause}\nProposed solution: ${issue.solution}`,
       acceptance_criteria: issue.acceptance_criteria,
     });
-    w.seedChange(seed, 'agents');
     setCmdOutput(`Dispatched Fix with Agent for ${issue.name} (${issue.path})`);
-    void (async () => {
-      try {
-        const context = await w.readFixPreparation();
-        if (seed.paths.some(isTestFilePath)) {
-          await w.startChangeWorkflow(seed, models, context, 'agents');
-        } else {
-          await w.prepareChange(seed, true, models.create, context, 'agents');
-        }
-      } catch (err) {
-        w.fail(err);
-      }
-    })();
+    void w.startAgentFix(seed);
   };
 
   const dispatchCustomMission = () => {
@@ -189,6 +213,7 @@ export function TuiApp({
       return;
     }
     const seed = workflowSeed({
+      finding_targets: agentS.changeSeed?.finding_targets,
       title: missionTitle.trim() || 'Clean-code agent mission',
       kind: 'fix',
       paths: rawPaths,
@@ -198,20 +223,8 @@ export function TuiApp({
         'Ensure all unit tests and static checks pass.',
       ],
     });
-    w.seedChange(seed, 'agents');
     setCmdOutput(`Dispatched custom agent mission on ${seed.paths.join(', ')}`);
-    void (async () => {
-      try {
-        const context = await w.readFixPreparation();
-        if (seed.paths.some(isTestFilePath)) {
-          await w.startChangeWorkflow(seed, models, context, 'agents');
-        } else {
-          await w.prepareChange(seed, true, models.create, context, 'agents');
-        }
-      } catch (err) {
-        w.fail(err);
-      }
-    })();
+    void w.startAgentFix(seed);
   };
 
   useEffect(() => {
@@ -296,12 +309,24 @@ export function TuiApp({
     }
     if (cmd === 'apply') {
       setCmdOutput('Applying verified proposal...');
-      void w.applyProposalNow();
+      void agentW.applyProposalNow();
+      return;
+    }
+    if (cmd === 'merge' && selectedChild?.worktreePath) {
+      setCmdOutput(
+        `Merging ${selectedChild.worktreePath} into ${s.repository?.branch || 'main'}...`,
+      );
+      void w.mergeAgentWorktree(selectedChild.worktreePath);
+      return;
+    }
+    if (cmd === 'done' && selectedIssue) {
+      setCmdOutput(`Marking ${selectedIssue.name} as Done...`);
+      void w.triage(selectedIssue.target, 'fixed');
       return;
     }
     if (cmd === 'undo') {
       setCmdOutput('Requesting guarded Undo...');
-      void w.undoChange();
+      void agentW.undoChange();
       return;
     }
     const tabMatch = TUI_TABS.find(
@@ -667,17 +692,28 @@ export function TuiApp({
                           {iss.path}
                           {iss.line ? `:${iss.line}` : ''}
                         </td>
-                        <td>
+                        <td style={{ display: 'flex', gap: '4px' }}>
                           <button
                             type="button"
                             className="tui-btn primary"
-                            disabled={!!s.busy || running}
+                            disabled={!!s.busy}
                             onClick={(e) => {
                               e.stopPropagation();
                               dispatchIssueToAgent(iss);
                             }}
                           >
                             [Fix with Agent]
+                          </button>
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!s.busy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void w.triage(iss.target, 'fixed');
+                            }}
+                          >
+                            [Done]
                           </button>
                         </td>
                       </tr>
@@ -712,10 +748,18 @@ export function TuiApp({
                     <button
                       type="button"
                       className="tui-btn primary"
-                      disabled={!!s.busy || running}
+                      disabled={!!s.busy}
                       onClick={() => dispatchIssueToAgent(selectedIssue)}
                     >
                       [a] Fix with Agent
+                    </button>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      disabled={!!s.busy}
+                      onClick={() => void w.triage(selectedIssue.target, 'fixed')}
+                    >
+                      [Mark as Done]
                     </button>
                     <button
                       type="button"
@@ -736,6 +780,67 @@ export function TuiApp({
         {/* [7] AGENTS — TUI AGENT MISSION CONTROL */}
         {currentTabPage === 'agents' && (
           <>
+            {agentItems.length > 0 && (
+              <div className="tui-box" style={{ marginBottom: '8px' }}>
+                <span className="tui-box-title">RUNNING &amp; ACTIVE AGENTS DASHBOARD</span>
+                <span className="tui-box-meta">{agentItems.length} agents</span>
+                <table className="tui-table">
+                  <thead>
+                    <tr>
+                      <th>BRANCH</th>
+                      <th>MISSION</th>
+                      <th>STAGE</th>
+                      <th>STATUS</th>
+                      <th>ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {agentItems.map((item) => {
+                      const isSelected = (item.path || '') === (s.selectedAgentPath || '');
+                      return (
+                        <tr
+                          key={item.key}
+                          className={`tui-selectable${isSelected ? ' tui-selected' : ''}`}
+                          onClick={() => void w.selectAgent(item.path)}
+                        >
+                          <td className="tui-c-accent">{item.branch}</td>
+                          <td>{item.title}</td>
+                          <td className="tui-c-muted">{item.stageLabel}</td>
+                          <td>
+                            <span
+                              className={`tui-badge ${
+                                item.status === 'committed'
+                                  ? 'tui-c-green'
+                                  : item.status === 'running'
+                                    ? 'tui-c-purple'
+                                    : item.status === 'failed'
+                                      ? 'tui-c-red'
+                                      : 'tui-c-amber'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="tui-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void w.selectAgent(item.path);
+                              }}
+                            >
+                              [Inspect]
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <div className="tui-box focused">
               <span className="tui-box-title">4-STAGE AUTONOMOUS CLEAN-CODE PIPELINE</span>
               <span className="tui-box-meta">
@@ -752,7 +857,7 @@ export function TuiApp({
                 ).map(([stageId, label, modelName]) => {
                   const st =
                     workflow?.stages.find((x) => x.name === stageId)?.status ||
-                    (change ? 'completed' : s.changeSeed ? 'staged' : 'idle');
+                    (change ? 'completed' : agentS.changeSeed ? 'staged' : 'idle');
                   return (
                     <div key={stageId} className="tui-box">
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -821,9 +926,29 @@ export function TuiApp({
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {change.state !== 'applied' && changedFiles.length > 0 && (
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          disabled={!!agentS.busy || running || !allChecksPassed}
+                          onClick={() => void agentW.applyProposalNow()}
+                        >
+                          [Accept &amp; Commit]
+                        </button>
+                      )}
+                      {change.state === 'applied' && selectedChild?.worktreePath && (
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          disabled={!!s.busy}
+                          onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
+                        >
+                          [Merge into {s.repository?.branch || 'main'} &amp; Close Issue]
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className="tui-btn primary"
+                        className="tui-btn"
                         onClick={() => void w.navigate('editor')}
                       >
                         [4: Inspect Diff &amp; Apply]
@@ -831,8 +956,8 @@ export function TuiApp({
                       <button
                         type="button"
                         className="tui-btn"
-                        disabled={!!s.busy || running}
-                        onClick={() => void w.checkChange(true)}
+                        disabled={!!agentS.busy || running}
+                        onClick={() => void agentW.checkChange(true)}
                       >
                         [Re-run Checks]
                       </button>
@@ -840,8 +965,8 @@ export function TuiApp({
                         <button
                           type="button"
                           className="tui-btn"
-                          disabled={!!s.busy || running}
-                          onClick={() => void w.repairChange()}
+                          disabled={!!agentS.busy || running}
+                          onClick={() => void agentW.repairChange()}
                         >
                           [Self-Repair]
                         </button>
@@ -850,7 +975,7 @@ export function TuiApp({
                         <button
                           type="button"
                           className="tui-btn"
-                          onClick={() => void w.cancelChangeWorkflow()}
+                          onClick={() => void agentW.cancelChangeWorkflow()}
                         >
                           [Cancel Workflow]
                         </button>
@@ -903,7 +1028,7 @@ export function TuiApp({
                   <button
                     type="button"
                     className="tui-btn primary"
-                    disabled={!!s.busy || running}
+                    disabled={!!s.busy}
                     onClick={dispatchCustomMission}
                   >
                     [Dispatch 4-Stage Agent Pipeline]
@@ -983,17 +1108,17 @@ export function TuiApp({
                     <button
                       type="button"
                       className="tui-btn primary"
-                      disabled={!!s.busy || !canAcceptChange(s)}
-                      onClick={() => void w.applyProposalNow()}
+                      disabled={!!agentS.busy || !canAcceptChange(agentS)}
+                      onClick={() => void agentW.applyProposalNow()}
                     >
                       [Apply Verified Proposal]
                     </button>
-                    {s.changeReceipt?.undo_available && (
+                    {agentS.changeReceipt?.undo_available && (
                       <button
                         type="button"
                         className="tui-btn"
-                        disabled={!!s.busy}
-                        onClick={() => void w.undoChange()}
+                        disabled={!!agentS.busy}
+                        onClick={() => void agentW.undoChange()}
                       >
                         [Undo Last Change]
                       </button>
@@ -1134,7 +1259,9 @@ export function TuiApp({
             <span className="tui-box-meta">{s.repository?.branch || 'main'}</span>
             <div className="tui-sub" style={{ marginBottom: '8px' }}>
               HEAD: <code>{s.repository?.head || '—'}</code> · Worktrees:{' '}
-              <strong>{s.gitWorkspace?.worktrees.length || 0}</strong>
+              <strong>
+                {(s.gitWorkspace?.worktrees || []).filter((wt) => !wt.current).length}
+              </strong>
             </div>
             <table className="tui-table">
               <thead>
@@ -1142,6 +1269,7 @@ export function TuiApp({
                   <th>BRANCH</th>
                   <th>PATH</th>
                   <th>STATE</th>
+                  <th>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -1149,7 +1277,47 @@ export function TuiApp({
                   <tr key={wt.path}>
                     <td className="tui-c-accent">{wt.branch || 'detached'}</td>
                     <td>{wt.path}</td>
-                    <td className="tui-c-green">{wt.current ? 'CURRENT' : 'WORKTREE'}</td>
+                    <td>
+                      <span
+                        className={`tui-badge ${
+                          wt.current ? 'tui-c-green' : wt.mergeable ? 'tui-c-green' : 'tui-c-amber'
+                        }`}
+                      >
+                        {wt.current ? 'CURRENT' : wt.mergeable ? 'READY TO MERGE' : 'IN PROGRESS'}
+                      </span>
+                    </td>
+                    <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      {!wt.current && (
+                        <>
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!s.busy}
+                            onClick={() => void w.selectAgent(wt.path)}
+                          >
+                            [Open in Agents]
+                          </button>
+                          {wt.mergeable && (
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              disabled={!!s.busy}
+                              onClick={() => void w.mergeAgentWorktree(wt.path)}
+                            >
+                              [Merge]
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!s.busy || wt.dirty || wt.locked}
+                            onClick={() => void w.discardWorktree(wt)}
+                          >
+                            [Discard]
+                          </button>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

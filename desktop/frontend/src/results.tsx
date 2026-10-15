@@ -34,6 +34,7 @@ import {
   StatusDot,
   human,
 } from './ui';
+import { collectAgentDashboardItems, type AgentDashboardItem } from './agents';
 
 interface ResultRow {
   key: string;
@@ -48,6 +49,7 @@ interface ResultRow {
   confidence: string;
   freshness: string;
   status: string;
+  commitOid?: string;
   verification?: string;
   kind: string;
   insight?: M.Insight;
@@ -57,6 +59,38 @@ interface ResultRow {
   cause: string;
   solution: string;
   target: M.FindingTarget;
+}
+
+function isClosedStatus(status: string): boolean {
+  return status === 'fixed' || status === 'dismissed' || status === 'retired';
+}
+
+function findAgentForRow(s: State, row: ResultRow): AgentDashboardItem | undefined {
+  const items = collectAgentDashboardItems(s);
+  const rowTitle = row.name.trim().toLowerCase();
+  const fullTitle = row.title.trim().toLowerCase();
+  return items.find((item) => {
+    const impl = item.path
+      ? s.implementations.find((x) => x.worktreePath === item.path)
+      : undefined;
+    const targets =
+      (item.path
+        ? impl?.state.change?.finding_targets || impl?.state.changeSeed?.finding_targets
+        : s.change?.finding_targets || s.changeSeed?.finding_targets) || [];
+    if (
+      targets.some(
+        (t) =>
+          t.kind === row.target.kind &&
+          t.id === row.target.id &&
+          t.path === row.target.path &&
+          (t.source || '') === (row.target.source || ''),
+      )
+    ) {
+      return true;
+    }
+    const itemTitle = item.title.trim().toLowerCase();
+    return itemTitle === rowTitle || itemTitle === fullTitle;
+  });
 }
 function semantic(f: M.Finding): ResultRow {
   return {
@@ -150,20 +184,22 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
       ]
     : (s.findings || []).filter((f) => f.category === category).map(semantic);
   if (category === 'security' && s.securityReport) rows.push(...security(s.securityReport));
-  return [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => ({
-    ...row,
-    category,
-    status: s.completedFindings?.some(
+  return [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => {
+    const completion = s.completedFindings?.find(
       (target) =>
         target.project_id === row.target.project_id &&
         target.kind === row.target.kind &&
         target.id === row.target.id &&
         target.path === row.target.path &&
         (target.source || '') === (row.target.source || ''),
-    )
-      ? 'fixed'
-      : row.status,
-  }));
+    );
+    return {
+      ...row,
+      category,
+      commitOid: completion?.commit_oid,
+      status: completion ? 'fixed' : row.status,
+    };
+  });
 }
 export function selectedResult(s: State) {
   const selected = s.selectedFinding;
@@ -238,12 +274,16 @@ export function Results({ s }: { s: State }) {
   const bugRows = resultRows(s, 'bugs');
   const secRows = resultRows(s, 'security');
   const perfRows = resultRows(s, 'performance');
-  const countBugs = bugRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
-  const countSec = secRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
-  const countPerf = perfRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
-  const countAll = [...new Map(allRows.map((r) => [r.key, r])).values()].filter((row) =>
-    showDone ? true : row.status !== 'fixed',
+  const countBugs = bugRows.filter((row) => (showDone ? true : !isClosedStatus(row.status))).length;
+  const countSec = secRows.filter((row) => (showDone ? true : !isClosedStatus(row.status))).length;
+  const countPerf = perfRows.filter((row) =>
+    showDone ? true : !isClosedStatus(row.status),
   ).length;
+  const uniqueAllRows = [...new Map(allRows.map((r) => [r.key, r])).values()];
+  const countAll = uniqueAllRows.filter((row) =>
+    showDone ? true : !isClosedStatus(row.status),
+  ).length;
+  const closedCount = uniqueAllRows.filter((row) => isClosedStatus(row.status)).length;
   const categoryCounts: Record<'all' | FindingCategory, number> = {
     all: countAll,
     bugs: countBugs,
@@ -252,7 +292,7 @@ export function Results({ s }: { s: State }) {
   };
   const unique =
     categoryFilter === 'all' || categoryFilter === 'features'
-      ? [...new Map(allRows.map((row) => [row.key, row])).values()]
+      ? uniqueAllRows
       : resultRows(s, categoryFilter);
   const severityRank: Record<string, number> = {
     critical: 0,
@@ -264,7 +304,7 @@ export function Results({ s }: { s: State }) {
   const filtered = unique
     .filter(
       (row) =>
-        (!showDone ? row.status !== 'fixed' : true) &&
+        (!showDone ? !isClosedStatus(row.status) : true) &&
         `${row.name} ${row.title} ${row.path} ${row.symbol}`
           .toLowerCase()
           .includes(query.toLowerCase()) &&
@@ -342,6 +382,10 @@ export function Results({ s }: { s: State }) {
   });
   const triggerFix = (row: ResultRow, targetPage: 'agents' | 'changes' = 'agents') => {
     const preparedSeed = workflowSeed(fixSeed(row));
+    if (targetPage === 'agents') {
+      void w.startAgentFix(preparedSeed);
+      return;
+    }
     w.seedChange(preparedSeed, targetPage);
     void (async () => {
       try {
@@ -398,21 +442,7 @@ export function Results({ s }: { s: State }) {
     if (!rows.length) return;
     const preparedSeed = workflowSeed(batchFixSeed(rows));
     setSelectedKeys([]);
-    w.seedChange(preparedSeed, 'agents');
-    void (async () => {
-      try {
-        const context = await w.readFixPreparation();
-        const useAgents = preparedSeed.paths.some(isTestFilePath);
-        const models = workflowSetupModels(s);
-        if (useAgents) {
-          await w.startChangeWorkflow(preparedSeed, models, context, 'agents');
-        } else {
-          await w.prepareChange(preparedSeed, true, models.create, context, 'agents');
-        }
-      } catch (error) {
-        w.fail(error);
-      }
-    })();
+    void w.startAgentFix(preparedSeed);
   };
   const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
   const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
@@ -422,14 +452,17 @@ export function Results({ s }: { s: State }) {
         <Button icon="back" onClick={() => void w.navigate(category)}>
           All findings
         </Button>
-        {detail.finding && (
+        {!detail.featureId && (
           <div className="actions finding-actions">
             <Button
               icon={detail.status === 'dismissed' ? 'undo' : 'trash'}
               tone={detail.status === 'dismissed' ? 'default' : 'danger'}
               disabled={!!s.busy}
               onClick={() =>
-                void w.triage(detail.finding!, detail.status === 'dismissed' ? 'open' : 'dismissed')
+                void w.triage(
+                  detail.finding || detail.target,
+                  detail.status === 'dismissed' ? 'open' : 'dismissed',
+                )
               }
             >
               {detail.status === 'dismissed' ? 'Reopen' : 'Delete'}
@@ -437,7 +470,7 @@ export function Results({ s }: { s: State }) {
             <Button
               icon="check"
               disabled={!!s.busy || detail.status === 'fixed'}
-              onClick={() => void w.triage(detail.finding!, 'fixed')}
+              onClick={() => void w.triage(detail.finding || detail.target, 'fixed')}
             >
               Mark as Done
             </Button>
@@ -978,7 +1011,7 @@ export function Results({ s }: { s: State }) {
                   updateView({ page: 1 });
                 }}
               />
-              <span>Show Done</span>
+              <span>Show Done{closedCount > 0 ? ` (${closedCount})` : ''}</span>
             </label>
           </div>
           {!showFeatures && selectedRows.length > 0 && (
@@ -1003,47 +1036,35 @@ export function Results({ s }: { s: State }) {
                 <Button
                   tone="primary small"
                   icon="sparkles"
-                  disabled={
-                    !!s.busy ||
-                    activeChangeWorkflow(s.change) ||
-                    selectedRows.some((r) => r.freshness === 'stale')
-                  }
+                  disabled={!!s.busy || selectedRows.some((r) => r.freshness === 'stale')}
                   onClick={() => triggerBatchFix(selectedRows)}
                 >
                   Fix Selected ({selectedRows.length})
                 </Button>
-                {selectedRows.some((r) => r.finding) && (
-                  <>
-                    <Button
-                      tone="ghost small"
-                      icon="check"
-                      disabled={!!s.busy}
-                      onClick={() => {
-                        const findings = selectedRows
-                          .map((r) => r.finding)
-                          .filter((f): f is M.Finding => !!f);
-                        setSelectedKeys([]);
-                        void w.batchTriage(findings, 'fixed');
-                      }}
-                    >
-                      Mark Done
-                    </Button>
-                    <Button
-                      tone="danger small"
-                      icon="trash"
-                      disabled={!!s.busy}
-                      onClick={() => {
-                        const findings = selectedRows
-                          .map((r) => r.finding)
-                          .filter((f): f is M.Finding => !!f);
-                        setSelectedKeys([]);
-                        void w.batchTriage(findings, 'dismissed');
-                      }}
-                    >
-                      Dismiss
-                    </Button>
-                  </>
-                )}
+                <Button
+                  tone="ghost small"
+                  icon="check"
+                  disabled={!!s.busy}
+                  onClick={() => {
+                    const targets = selectedRows.map((r) => r.finding || r.target);
+                    setSelectedKeys([]);
+                    void w.batchTriage(targets, 'fixed');
+                  }}
+                >
+                  Mark Done
+                </Button>
+                <Button
+                  tone="danger small"
+                  icon="trash"
+                  disabled={!!s.busy}
+                  onClick={() => {
+                    const targets = selectedRows.map((r) => r.finding || r.target);
+                    setSelectedKeys([]);
+                    void w.batchTriage(targets, 'dismissed');
+                  }}
+                >
+                  Dismiss
+                </Button>
                 <Button tone="ghost small" onClick={() => setSelectedKeys([])}>
                   Clear
                 </Button>
@@ -1083,6 +1104,7 @@ export function Results({ s }: { s: State }) {
           <div className="result-list">
             {pageRows.map((row) => {
               const rowCategory = row.category || category;
+              const rowAgent = !showFeatures ? findAgentForRow(s, row) : undefined;
               return (
                 <div
                   className={`result-row ${inspectorRow?.key === row.key ? 'active' : ''}`}
@@ -1125,7 +1147,7 @@ export function Results({ s }: { s: State }) {
                     />
                   </span>
                   <span className="list-copy">
-                    <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                    <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
                       <span
                         className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
                       >
@@ -1138,6 +1160,33 @@ export function Results({ s }: { s: State }) {
                               : 'LOW'}
                       </span>
                       <strong>{row.name}</strong>
+                      {row.status === 'fixed' && (
+                        <Badge
+                          value={row.commitOid ? `Done · #${row.commitOid.slice(0, 7)}` : 'Done'}
+                          tone="green"
+                        />
+                      )}
+                      {row.status === 'dismissed' && <Badge value="Dismissed" />}
+                      {row.status !== 'fixed' && rowAgent && (
+                        <Badge
+                          value={
+                            rowAgent.status === 'committed'
+                              ? `Committed in ${rowAgent.branch}`
+                              : rowAgent.status === 'running'
+                                ? 'Agent Running'
+                                : rowAgent.status === 'review'
+                                  ? 'Diff Ready'
+                                  : rowAgent.stageLabel
+                          }
+                          tone={
+                            rowAgent.status === 'committed'
+                              ? 'green'
+                              : rowAgent.status === 'running'
+                                ? 'violet'
+                                : 'amber'
+                          }
+                        />
+                      )}
                     </span>
                     <small>
                       <span className="path font-mono">
@@ -1146,27 +1195,54 @@ export function Results({ s }: { s: State }) {
                       </span>
                     </small>
                   </span>
-                  <div className="finding-inline-actions">
-                    <Button
-                      tone="primary small"
-                      icon="sparkles"
-                      disabled={
-                        !!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (showFeatures) {
-                          const idea = s.features?.suggestions.find(
-                            (item) => `feature:${item.id}` === row.key,
-                          );
-                          if (idea) w.discussFeature(idea, false);
-                        } else {
-                          triggerFix(row, 'agents');
-                        }
-                      }}
-                    >
-                      Fix with Agent
-                    </Button>
+                  <div className="finding-inline-actions" style={{ display: 'flex', gap: '6px' }}>
+                    {!showFeatures && row.status !== 'fixed' && (
+                      <Button
+                        tone="ghost small"
+                        icon="check"
+                        title="Mark issue as Done"
+                        disabled={!!s.busy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void w.triage(row.finding || row.target, 'fixed');
+                        }}
+                      >
+                        Done
+                      </Button>
+                    )}
+                    {!showFeatures &&
+                    rowAgent &&
+                    ['running', 'review', 'committed'].includes(rowAgent.status) ? (
+                      <Button
+                        tone="primary small"
+                        icon="sparkles"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void w.selectAgent(rowAgent.path);
+                        }}
+                      >
+                        Open Agent
+                      </Button>
+                    ) : (
+                      <Button
+                        tone="primary small"
+                        icon="sparkles"
+                        disabled={!!s.busy || row.freshness === 'stale'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (showFeatures) {
+                            const idea = s.features?.suggestions.find(
+                              (item) => `feature:${item.id}` === row.key,
+                            );
+                            if (idea) w.discussFeature(idea, false);
+                          } else {
+                            triggerFix(row, 'agents');
+                          }
+                        }}
+                      >
+                        Fix with Agent
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -1254,12 +1330,18 @@ export function Results({ s }: { s: State }) {
                   <Badge value={inspectorRow.kind} tone="violet" />
                   {inspectorRow.status && (
                     <Badge
-                      value={inspectorRow.status === 'fixed' ? 'Done' : inspectorRow.status}
+                      value={
+                        inspectorRow.status === 'fixed'
+                          ? inspectorRow.commitOid
+                            ? `Done · #${inspectorRow.commitOid.slice(0, 7)}`
+                            : 'Done'
+                          : inspectorRow.status
+                      }
                       tone={inspectorRow.status === 'fixed' ? 'green' : undefined}
                     />
                   )}
                 </div>
-                {inspectorRow.finding && (
+                {!inspectorRow.featureId && (
                   <div className="actions finding-actions">
                     <Button
                       tone={inspectorRow.status === 'dismissed' ? 'ghost small' : 'danger small'}
@@ -1267,7 +1349,7 @@ export function Results({ s }: { s: State }) {
                       disabled={!!s.busy}
                       onClick={() =>
                         void w.triage(
-                          inspectorRow.finding!,
+                          inspectorRow.finding || inspectorRow.target,
                           inspectorRow.status === 'dismissed' ? 'open' : 'dismissed',
                         )
                       }
@@ -1278,7 +1360,9 @@ export function Results({ s }: { s: State }) {
                       tone="ghost small"
                       icon="check"
                       disabled={!!s.busy || inspectorRow.status === 'fixed'}
-                      onClick={() => void w.triage(inspectorRow.finding!, 'fixed')}
+                      onClick={() =>
+                        void w.triage(inspectorRow.finding || inspectorRow.target, 'fixed')
+                      }
                     >
                       Mark as Done
                     </Button>
@@ -1312,6 +1396,60 @@ export function Results({ s }: { s: State }) {
                   {inspectorRow.line ? `:${inspectorRow.line}` : ''}
                 </p>
               </div>
+              {(() => {
+                const inspectorAgent = !showFeatures ? findAgentForRow(s, inspectorRow) : undefined;
+                if (!inspectorAgent) return null;
+                return (
+                  <div
+                    className="row between wrap"
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--accent)',
+                      background: 'var(--bg-elevated)',
+                      gap: '8px',
+                    }}
+                  >
+                    <div className="stack" style={{ gap: '2px' }}>
+                      <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
+                        <Badge value={inspectorAgent.branch} tone="violet" />
+                        <span className="small">
+                          <strong>{inspectorAgent.stageLabel}</strong>
+                        </span>
+                        {inspectorAgent.commitOid && (
+                          <span className="small font-mono muted">
+                            #{inspectorAgent.commitOid.slice(0, 7)}
+                          </span>
+                        )}
+                      </div>
+                      <span className="small muted">
+                        {inspectorAgent.status === 'committed'
+                          ? `Committed on worktree branch ${inspectorAgent.branch}. Merge into ${s.repository?.branch || 'main'} to close this issue.`
+                          : 'An agent is assigned to this issue.'}
+                      </span>
+                    </div>
+                    <div className="actions" style={{ gap: '6px' }}>
+                      <Button
+                        tone="ghost small"
+                        icon="sparkles"
+                        onClick={() => void w.selectAgent(inspectorAgent.path)}
+                      >
+                        Open Agent
+                      </Button>
+                      {inspectorAgent.mergeable && inspectorAgent.path && (
+                        <Button
+                          tone="primary small"
+                          icon="check"
+                          disabled={!!s.busy}
+                          onClick={() => void w.mergeAgentWorktree(inspectorAgent.path!)}
+                        >
+                          Merge &amp; Close
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <div>
                 <strong className="small uppercase muted">Cause / Context</strong>
                 <Prose text={inspectorRow.cause || 'No cause recorded.'} />
@@ -1340,7 +1478,7 @@ export function Results({ s }: { s: State }) {
                   <Button
                     tone="primary"
                     icon="sparkles"
-                    disabled={!!s.busy || activeChangeWorkflow(s.change)}
+                    disabled={!!s.busy}
                     onClick={() => triggerFix(inspectorRow, 'agents')}
                   >
                     Fix with Agent
@@ -1349,7 +1487,7 @@ export function Results({ s }: { s: State }) {
                   <Button
                     tone="primary"
                     icon="sparkles"
-                    disabled={!!s.busy || activeChangeWorkflow(s.change)}
+                    disabled={!!s.busy}
                     onClick={() => {
                       const idea = s.features?.suggestions.find(
                         (item) => `feature:${item.id}` === inspectorRow.key,

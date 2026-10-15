@@ -452,17 +452,31 @@ function App() {
           </aside>
           <div className="app-body">
             <main id="main" ref={main} tabIndex={-1} className={`studio-main studio-${s.page}`}>
-              {s.busy && (
-                <div className="busy-strip" role="status">
-                  <Spinner />
-                  {s.busy}…
-                  {canCancelOperation(s.busy) && (
-                    <Button tone="ghost small" onClick={() => void w.cancel()}>
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const selectedAgentImpl =
+                  s.page === 'agents' && s.selectedAgentPath
+                    ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
+                    : undefined;
+                const effectiveBusy = s.busy || selectedAgentImpl?.state.busy;
+                return (
+                  effectiveBusy && (
+                    <div className="busy-strip" role="status">
+                      <Spinner />
+                      {effectiveBusy}…
+                      {canCancelOperation(effectiveBusy) && (
+                        <Button
+                          tone="ghost small"
+                          onClick={() =>
+                            void (selectedAgentImpl ? selectedAgentImpl.cancel() : w.cancel())
+                          }
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  )
+                );
+              })()}
               <div className="page" data-accent={s.page}>
                 {s.error && <Notice error>{s.error}</Notice>}
                 {s.notice && <Notice>{s.notice}</Notice>}

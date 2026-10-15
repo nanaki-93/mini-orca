@@ -1028,7 +1028,8 @@ export class Workspace {
         !context.repository.operation;
       if (canCreateWorktree) {
         const target = worktreeDefaultTarget(preparedSeed.title);
-        let created: string | undefined;
+        let child: Workspace | undefined;
+        let fresh: FixPreparationContext | undefined;
         await this.act('Create worktree', async () => {
           const epoch = this.epoch;
           const profiles = preparedSeed.paths.some(isTestFilePath)
@@ -1055,25 +1056,32 @@ export class Workspace {
             throw new Error(
               `${result.error || 'Worktree creation failed.'}${result.path ? ` Path: ${result.path}` : ''}`,
             );
-          created = result.path;
+          await this.loadGitWorkspace();
+          child = await this.ensureAgentWorktree(result.path);
+          if (!child || epoch !== this.epoch) return;
+          fresh = await child.readFixPreparation();
+          child.seedChange(preparedSeed, 'agents');
+          this.set({ selectedAgentPath: result.path, page: 'agents', error: '' });
         });
-        if (!created) return;
-        await this.loadGitWorkspace();
-        const child = await this.ensureAgentWorktree(created);
-        if (!child) return;
-        child.seedChange(preparedSeed, 'agents');
-        this.set({ selectedAgentPath: created, page: 'agents', error: '' });
+        if (!child || !fresh) return;
+        const activeChild = child;
+        const activeFresh = fresh;
         void (async () => {
           try {
-            const fresh = await child.readFixPreparation();
             if (preparedSeed.paths.some(isTestFilePath)) {
-              await child.startChangeWorkflow(preparedSeed, models, fresh, 'agents');
+              await activeChild.startChangeWorkflow(preparedSeed, models, activeFresh, 'agents');
             } else {
-              await child.prepareChange(preparedSeed, true, models.create, fresh, 'agents');
+              await activeChild.prepareChange(
+                preparedSeed,
+                true,
+                models.create,
+                activeFresh,
+                'agents',
+              );
             }
             await this.loadGitWorkspace();
           } catch (error) {
-            child.fail(error);
+            activeChild.fail(error);
           }
         })();
         return;
