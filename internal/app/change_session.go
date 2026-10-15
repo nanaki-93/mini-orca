@@ -357,7 +357,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	if err != nil {
 		return nil, err
 	}
-	if runtime.effective.ContextMaxTokens > 0 && len(messages[0].Content)+len(messages[1].Content) > runtime.effective.ContextMaxTokens*4 {
+	if limit := changeContextByteLimit(runtime); limit > 0 && len(messages[0].Content)+len(messages[1].Content) > limit {
 		return nil, fmt.Errorf("selected context exceeds configured %s token limit", runtime.effective.Profile)
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
@@ -376,6 +376,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	if _, _, err := s.loadChangeForAction(timed, session.ID, request.ChangeIdentity); err != nil {
 		return nil, err
 	}
+	edits = preservePinnedTests(edits, session.PinnedTests)
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
 	session.Checks, session.ReviewedHash = []CheckResult{}, ""
@@ -391,6 +392,22 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		return nil, err
 	}
 	return session, nil
+}
+
+func preservePinnedTests(edits, pinned []ChangeEdit) []ChangeEdit {
+	for _, test := range pinned {
+		found := false
+		for _, edit := range edits {
+			if edit.Path == test.Path {
+				found = true
+				break
+			}
+		}
+		if !found {
+			edits = append(edits, test)
+		}
+	}
+	return edits
 }
 
 func validateDirectProposal(request InstructionProposalRequest) error {

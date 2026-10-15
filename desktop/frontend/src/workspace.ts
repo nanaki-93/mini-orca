@@ -2426,7 +2426,12 @@ export class Workspace {
       if (profiles === null || (!preparation && !(await this.trust()))) return;
       if (epoch !== this.epoch || operation !== this.operation) return;
       let change = this.state.change;
-      if (!change) {
+      if (
+        !change ||
+        change.state !== 'draft' ||
+        change.freshness !== 'current' ||
+        change.messages.length > 28
+      ) {
         change = await this.api.post<M.ChangeSession>(`${current}/changes`, {
           ...this.identity(),
           kind: seed.kind,
@@ -2486,15 +2491,34 @@ export class Workspace {
   }
   async rerunChangeWorkflow(targetPage?: Page) {
     const change = this.state.change;
+    const baseMessage =
+      change?.messages.find(
+        (m) =>
+          m.role === 'user' &&
+          !m.content.startsWith('Write meaningful regression and boundary tests'),
+      )?.content ||
+      this.state.changeSeed?.message ||
+      (change ? `Fix ${change.title}` : '');
+    const review = change?.workflow?.review;
+    const criticFeedback =
+      review?.verdict === 'changes_requested'
+        ? `\n\nCritic review feedback:\n${review.summary}${
+            review.findings?.length ? '\n' + review.findings.map((f) => `- ${f}`).join('\n') : ''
+          }`
+        : '';
+    const failedChecks = (change?.checks || []).filter((c) => c.required && c.state !== 'passed');
+    const checkFeedback =
+      !criticFeedback && failedChecks.length
+        ? `\n\nPrevious check failures to resolve:\n${failedChecks
+            .map((c) => `${c.name}: ${(c.output || c.state).slice(0, 600)}`)
+            .join('\n')}`
+        : '';
     const seed: M.ChangeSeed | undefined = change
       ? workflowSeed({
           title: change.title,
           kind: change.kind,
           paths: change.targets.map((t) => t.path),
-          message:
-            change.messages.filter((m) => m.role === 'user').at(-1)?.content ||
-            this.state.changeSeed?.message ||
-            `Fix ${change.title}`,
+          message: (baseMessage + criticFeedback + checkFeedback).slice(0, 8000),
           acceptance_criteria: change.acceptance_criteria,
           finding_targets: change.finding_targets,
         })
@@ -2598,7 +2622,12 @@ export class Workspace {
     await this.act('Prepare change', async () => {
       if (!seed.message.trim()) throw new Error('Describe the change.');
       if (preparation && !(await this.authorizeFix([profile], preparation))) return;
-      if (!this.state.change) {
+      if (
+        !this.state.change ||
+        this.state.change.state !== 'draft' ||
+        this.state.change.freshness !== 'current' ||
+        this.state.change.messages.length >= 32
+      ) {
         const identity = this.identity();
         const epoch = this.epoch;
         const operation = this.operation;

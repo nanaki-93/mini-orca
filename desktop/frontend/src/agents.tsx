@@ -676,7 +676,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
       : changedFiles.filter((f) => f.path === selectedDiffPath);
 
   const userPrompt =
-    change?.messages.filter((m) => m.role === 'user').at(-1)?.content ||
+    change?.messages.find(
+      (m) =>
+        m.role === 'user' &&
+        !m.content.startsWith('Write meaningful regression and boundary tests'),
+    )?.content ||
     seed?.message ||
     missionPrompt;
 

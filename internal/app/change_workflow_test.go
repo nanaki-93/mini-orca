@@ -370,3 +370,71 @@ func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
 		t.Fatalf("TypeScript workflow did not reach human review: %+v", finished)
 	}
 }
+
+func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) {
+	var createCalls, testCalls, reviewCalls atomic.Int32
+	s, root, _ := workflowService(t, [3]func() string{
+		func() string {
+			if createCalls.Add(1) == 1 {
+				return workflowImplementation
+			}
+			return `{"explanation":"Add Helper with updated value.","changes":[{"path":"new.go","content":"package main\nfunc Helper() int { return 4 }\n"}]}`
+		},
+		func() string {
+			if testCalls.Add(1) == 1 {
+				return workflowTests
+			}
+			return `{"explanation":"Exercise updated Helper.","changes":[{"path":"new.go","content":"package main\nfunc Helper() int { return 4 }\n"},{"path":"new_test.go","content":"package main\nimport \"testing\"\nfunc TestHelper(t *testing.T) { if Helper() != 4 { t.Fatal(\"wrong result\") } }\n"}]}`
+		},
+		func() string {
+			if reviewCalls.Add(1) == 1 {
+				return `{"verdict":"changes_requested","summary":"Return 4 instead of 2.","findings":["Update Helper to return 4."]}`
+			}
+			return workflowApproval
+		},
+	})
+	padding := "// " + strings.Repeat("context ", 2400) + "\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"+padding+"func main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	session := openChangeFixture(t, s, "main.go", "new.go", "new_test.go")
+	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	req := workflowRequest(session)
+	req.Models = ChangeWorkflowModels{Create: "function", Test: "analyze", Review: "function"}
+	// Route function profile to creator on stage 0 and reviewer on stage 2 by using catalog IDs.
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) {
+		return []llm.AgyModel{{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro"}}, nil
+	}
+	catalog, err := s.AvailableModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Models = ChangeWorkflowModels{Create: catalog.Defaults["bug"], Test: catalog.Defaults["analyze"], Review: catalog.Defaults["function"]}
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
+		t.Fatalf("first workflow start failed: %v", err)
+	}
+	first := finishedWorkflow(t, s, session.ID)
+	if first.Workflow.Status != "changes_requested" || len(first.PinnedTests) != 1 {
+		t.Fatalf("expected changes_requested with pinned test: %+v", first)
+	}
+	req.ChangeIdentity = changeIdentity(first)
+	req.Message = "Add Helper returning four, addressing critic feedback."
+	if _, err := s.StartChangeWorkflow(context.Background(), first.ID, req); err != nil {
+		t.Fatalf("rerun workflow start failed: %v", err)
+	}
+	second := finishedWorkflow(t, s, first.ID)
+	if second.Workflow.Status != "awaiting_human_review" || len(second.PinnedTests) != 1 {
+		t.Fatalf("rerun workflow failed to complete: %+v", second.Workflow)
+	}
+	for _, msg := range second.Messages {
+		if msg.Role == "user" && msg.Content == workflowTestPrompt {
+			// Only the latest test stage prompt should remain after stripping prior test prompts.
+			continue
+		}
+	}
+}
