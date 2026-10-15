@@ -576,6 +576,9 @@ export function installFixture(options = {}) {
                   : {
                       ...tree,
                       current: false,
+                      sessions: worktreeStates[tree.path]
+                        ? Object.values(worktreeStates[tree.path].changes)
+                        : tree.completed || [],
                       mergeable:
                         !!tree.mergeable &&
                         tree.head !== state.git.head &&
@@ -609,14 +612,16 @@ export function installFixture(options = {}) {
               warnings: [],
             });
           }
-          if (path === '/api/projects/current/git/merge-preview')
+          if (path === '/api/projects/current/git/merge-preview') {
+            const tree = state.gitWorktrees.find((item) => item.path === body.path);
             return response({
               target: { head: body.head, branch: body.branch },
-              source: { head: body.source_head, branch: 'codex/fix' },
+              source: { head: body.source_head, branch: tree?.branch || 'codex/fix' },
               path: body.path,
               commits: 'a1b2c3d Handle cancellation',
               diff: 'diff --git a/internal/worker/process.go b/internal/worker/process.go\n- return nil\n+ return ctx.Err()\n',
             });
+          }
           if (path === '/api/projects/current/git/discard-worktree') {
             const tree = state.gitWorktrees.find((tree) => tree.path === body.path);
             if (
@@ -664,7 +669,22 @@ export function installFixture(options = {}) {
                 state.git.dirty = true;
               } else {
                 state.git.head = body.source_head;
-                state.completedFindings = options.gitFindingCompletions || [];
+                const childState = worktreeStates[body.path];
+                const childTargets = childState
+                  ? Object.values(childState.changes)
+                      .filter((c) => c.state === 'applied')
+                      .flatMap((c) => c.finding_targets || [])
+                      .map((t) => ({
+                        ...t,
+                        project_id: state.project.project_id,
+                        commit_oid: body.source_head,
+                      }))
+                  : [];
+                state.completedFindings = [
+                  ...(state.completedFindings || []),
+                  ...(options.gitFindingCompletions || []),
+                  ...childTargets,
+                ];
                 if (options.gitCleanupFailure)
                   warnings.push(
                     `Merge completed, but worktree ${body.path} was not removed: checkout is locked.`,
@@ -1135,7 +1155,36 @@ export function installFixture(options = {}) {
                     ? { error: 'Configure a Git author before retrying.' }
                     : { oid: 'commit-applied' }),
                 };
-                if (!options.gitCommitFailure) state.git.head = 'commit-applied';
+                if (!options.gitCommitFailure) {
+                  state.git.head = 'commit-applied';
+                  const wtPath = url.searchParams.get('worktree_path');
+                  if (wtPath) {
+                    const tree = rootState.gitWorktrees.find((item) => item.path === wtPath);
+                    if (tree) {
+                      tree.head = 'commit-applied';
+                      tree.mergeable = true;
+                      tree.completed = [
+                        {
+                          id: change.id,
+                          title: change.title,
+                          state: 'applied',
+                          commit: state.changeReceipt.commit,
+                          paths: change.targets.map((t) => t.path),
+                        },
+                      ];
+                    }
+                  }
+                }
+              }
+              if (action === 'apply' && change.finding_targets?.length) {
+                state.completedFindings = [
+                  ...(state.completedFindings || []),
+                  ...change.finding_targets.map((t) => ({
+                    ...t,
+                    project_id: state.project.project_id,
+                    commit_oid: state.changeReceipt.commit?.oid || 'commit-applied',
+                  })),
+                ];
               }
               if (action === 'apply' && options.changeMutationResponseLost)
                 throw new Error('Apply response lost after source mutation');
@@ -1245,7 +1294,30 @@ export function installFixture(options = {}) {
               completed: state.completedFindings,
             });
           if (path.includes('/findings/')) {
-            state.finding.status = body.status;
+            const target = body.target || {
+              project_id: state.project.project_id,
+              kind: 'semantic',
+              id: path.split('/')[5] || state.finding.id,
+              path: state.finding.location.path,
+            };
+            if (target.id === state.finding.id) state.finding.status = body.status;
+            for (const cat of ['bugs', 'security', 'performance']) {
+              for (const item of state.results[cat]?.semantic || []) {
+                if (item.id === target.id) item.status = body.status;
+              }
+            }
+            if (body.status === 'fixed') {
+              state.completedFindings = [
+                ...(state.completedFindings || []).filter(
+                  (c) => !(c.kind === target.kind && c.id === target.id && c.path === target.path),
+                ),
+                { ...target, project_id: state.project.project_id },
+              ];
+            } else {
+              state.completedFindings = (state.completedFindings || []).filter(
+                (c) => !(c.kind === target.kind && c.id === target.id && c.path === target.path),
+              );
+            }
             return response(null);
           }
           if (path.endsWith('/analysis/selection')) {
