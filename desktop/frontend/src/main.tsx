@@ -1,5 +1,4 @@
 import { GitWorkspace } from './git-workspace';
-import { WorktreeImplementation } from './worktree-implementation';
 import {
   Component,
   useEffect,
@@ -119,7 +118,7 @@ function App() {
               ? 'docs'
               : ['editor', 'chat', 'changes', 'history'].includes(s.page)
                 ? 'editor'
-                : ['git', 'worktree'].includes(s.page)
+                : s.page === 'git'
                   ? 'git'
                   : s.page === 'models'
                     ? 'models'
@@ -250,8 +249,6 @@ function App() {
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
     content = <ProjectPage s={s} />;
   else if (s.page === 'git') content = <GitWorkspace s={s} />;
-  else if (s.page === 'worktree' && s.implementation)
-    content = <WorktreeImplementation child={s.implementation} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'docs') content = <DocsWorkspace s={s} />;
   else if (s.page === 'agents') content = <AgentsWorkspace s={s} />;

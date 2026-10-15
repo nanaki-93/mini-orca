@@ -8,7 +8,6 @@ export type Page =
   | 'changes'
   | 'history'
   | 'git'
-  | 'worktree'
   | 'welcome'
   | 'summary'
   | 'project'
@@ -53,7 +52,6 @@ export interface FixPreparationContext {
 }
 export interface State {
   implementations: Workspace[];
-  implementation?: Workspace;
   selectedAgentPath?: string;
   agentDetailOpen?: boolean;
   page: Page;
@@ -953,11 +951,18 @@ export class Workspace {
           `${result.error || 'Worktree creation failed.'}${result.path ? ` Path: ${result.path}` : ''}`,
         );
       created = result.path;
+      await this.loadGitWorkspace();
     });
     if (!created || projectKey(this.state.project) !== originalProject || this.state.busy) return;
-    const child = await this.openWorktree(created);
+    const child = await this.ensureAgentWorktree(created);
     if (!child || projectKey(this.state.project) !== originalProject) return;
-    child.seedChange(seed);
+    child.seedChange(seed, 'agents');
+    this.set({
+      selectedAgentPath: created,
+      agentDetailOpen: true,
+      page: 'agents',
+      error: '',
+    });
     let fresh: FixPreparationContext;
     try {
       fresh = await child.readFixPreparation();
@@ -976,8 +981,9 @@ export class Workspace {
       return;
     }
     if (originalEpoch !== this.epoch) return;
-    if (seed.paths.some(isTestFilePath)) await child.startChangeWorkflow(seed, models, fresh);
-    else await child.prepareChange(seed, tests, models.create, fresh);
+    if (seed.paths.some(isTestFilePath))
+      await child.startChangeWorkflow(seed, models, fresh, 'agents');
+    else await child.prepareChange(seed, tests, models.create, fresh, 'agents');
   }
   async ensureAgentWorktree(path: string): Promise<Workspace | undefined> {
     let child = this.state.implementations.find((item) => item.worktreePath === path);
@@ -1140,35 +1146,6 @@ export class Workspace {
       );
     }
   }
-  async openWorktree(path: string) {
-    let child = this.state.implementations.find((item) => item.worktreePath === path);
-    await this.act('Open implementation', async () => {
-      const epoch = this.epoch;
-      const operation = this.operation;
-      const navigation = this.navigation;
-      if (!child) {
-        child = new Workspace(path, this);
-        const project = await child.api.get<M.Project>(current);
-        if (epoch !== this.epoch || operation !== this.operation) return;
-        child.set({
-          project,
-          connected: true,
-          models: this.state.models,
-          availableModels: this.state.availableModels,
-          workflowModels: this.state.workflowModels,
-          page: 'history',
-        });
-        await child.refreshProject();
-        if (epoch !== this.epoch || operation !== this.operation) return;
-        this.set({ implementations: [...this.state.implementations, child] });
-        child.subscribe(() => this.set({}));
-        child.schedule();
-      }
-      if (epoch === this.epoch && operation === this.operation && navigation === this.navigation)
-        this.set({ implementation: child, page: 'worktree' });
-    });
-    return this.state.implementation === child ? child : undefined;
-  }
   private closeWorktree(path: string) {
     const child = this.state.implementations.find((item) => item.worktreePath === path);
     if (child) child.stop();
@@ -1176,9 +1153,6 @@ export class Workspace {
       implementations: this.state.implementations.filter((item) => item !== child),
       ...(this.state.selectedAgentPath === path
         ? { selectedAgentPath: undefined, agentDetailOpen: false }
-        : {}),
-      ...(this.state.implementation === child
-        ? { implementation: undefined, ...(this.state.page === 'worktree' ? { page: 'git' } : {}) }
         : {}),
     });
   }
