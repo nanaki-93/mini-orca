@@ -2276,6 +2276,40 @@ export class Workspace {
         this.set({ change: next });
     });
   }
+  async rerunChangeWorkflow(targetPage?: Page) {
+    const change = this.state.change;
+    const seed: M.ChangeSeed | undefined = change
+      ? workflowSeed({
+          title: change.title,
+          kind: change.kind,
+          paths: change.targets.map((t) => t.path),
+          message:
+            change.messages.filter((m) => m.role === 'user').at(-1)?.content ||
+            this.state.changeSeed?.message ||
+            `Fix ${change.title}`,
+          acceptance_criteria: change.acceptance_criteria,
+          finding_targets: change.finding_targets,
+        })
+      : this.state.changeSeed
+        ? workflowSeed(this.state.changeSeed)
+        : undefined;
+    if (!seed) return;
+    try {
+      const models = workflowSetupModels(this.state);
+      const page = targetPage || this.state.page;
+      const context = await this.readFixPreparation();
+      const hasTestTarget = change
+        ? change.targets.some((t) => isTestFilePath(t.path))
+        : seed.paths.some(isTestFilePath);
+      if (hasTestTarget) {
+        await this.startChangeWorkflow(seed, models, context, page);
+      } else {
+        await this.prepareChange(seed, true, models.create, context, page);
+      }
+    } catch (error) {
+      this.fail(error);
+    }
+  }
   private async requestChangeMessage(
     message: string,
     repair = false,
@@ -2433,7 +2467,7 @@ export class Workspace {
       const change = this.state.change;
       if (
         !change ||
-        !['editor', 'chat', 'changes'].includes(this.state.page) ||
+        !['editor', 'chat', 'changes', 'agents', 'finding'].includes(this.state.page) ||
         !canAcceptChange(this.state)
       )
         throw new Error('The displayed proposal needs current passing checks and model review.');
@@ -2455,7 +2489,7 @@ export class Workspace {
         epoch !== this.epoch ||
         operation !== this.operation ||
         navigation !== this.navigation ||
-        !['editor', 'chat', 'changes'].includes(this.state.page) ||
+        !['editor', 'chat', 'changes', 'agents', 'finding'].includes(this.state.page) ||
         this.state.change?.id !== change.id ||
         this.state.change.revision !== change.revision ||
         this.state.change.hash !== change.hash
@@ -2487,7 +2521,7 @@ export class Workspace {
     if (this.state.change && !changeChecksPassed(this.state.change)) {
       await this.checkChange(false);
     }
-    if (this.state.change && canAcceptChange(this.state)) {
+    if (this.state.change) {
       await this.acceptChange(commitMessage);
     }
   }

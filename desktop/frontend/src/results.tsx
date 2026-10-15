@@ -1336,33 +1336,30 @@ export function Results({ s }: { s: State }) {
                 </Disclosure>
               )}
               <div className="actions">
-                {!showFeatures && (
+                {!showFeatures ? (
                   <Button
                     tone="primary"
                     icon="sparkles"
                     disabled={!!s.busy || activeChangeWorkflow(s.change)}
                     onClick={() => triggerFix(inspectorRow, 'agents')}
                   >
-                    Dispatch Agent Fix
+                    Fix with Agent
                   </Button>
-                )}
-                <Button
-                  tone={showFeatures ? 'primary' : 'ghost'}
-                  icon={showFeatures ? 'sparkles' : 'code'}
-                  disabled={!!s.busy || activeChangeWorkflow(s.change)}
-                  onClick={() => {
-                    if (showFeatures) {
+                ) : (
+                  <Button
+                    tone="primary"
+                    icon="sparkles"
+                    disabled={!!s.busy || activeChangeWorkflow(s.change)}
+                    onClick={() => {
                       const idea = s.features?.suggestions.find(
                         (item) => `feature:${item.id}` === inspectorRow.key,
                       );
                       if (idea) w.discussFeature(idea, false);
-                    } else {
-                      triggerFix(inspectorRow, 'changes');
-                    }
-                  }}
-                >
-                  Generate & Review Diff
-                </Button>
+                    }}
+                  >
+                    Generate &amp; Review Diff
+                  </Button>
+                )}
                 {inspectorRow.path && (
                   <Button
                     tone="ghost"
