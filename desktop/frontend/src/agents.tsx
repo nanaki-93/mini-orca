@@ -3,13 +3,14 @@ import {
   activeChangeWorkflow,
   canAcceptChange,
   changeChecksPassed,
-  isTestFilePath,
   workflowSeed,
   workflowSetupModels,
   workspace as w,
+  type FindingCategory,
   type State,
 } from './workspace';
 import { ChangeOutcome, ProposalDiff, isAddedLine, isRemovedLine } from './change-shared';
+import { findingName, findingTitle } from './finding-name';
 import {
   Badge,
   BulletContent,
@@ -27,7 +28,7 @@ import {
 } from './ui';
 import type * as M from './models';
 
-type StageId = 'create' | 'test' | 'review' | 'human_review';
+export type StageId = 'create' | 'test' | 'review' | 'human_review';
 
 interface StageSpec {
   id: StageId;
@@ -38,7 +39,7 @@ interface StageSpec {
   modelKey?: keyof M.ChangeWorkflowModels;
 }
 
-const PIPELINE_STAGES: StageSpec[] = [
+export const PIPELINE_STAGES: StageSpec[] = [
   {
     id: 'create',
     step: 'Step 1',
@@ -68,57 +69,378 @@ const PIPELINE_STAGES: StageSpec[] = [
     step: 'Step 4',
     shortTitle: 'Review & Commit',
     title: 'Human Precision Gate',
-    role: 'Inspect proposed diffs and commit the fix.',
+    role: 'Inspect proposed diffs, commit, and merge.',
   },
 ];
+
+export interface AgentLinkedIssue {
+  key: string;
+  id: string;
+  kind: string;
+  category: FindingCategory;
+  title: string;
+  name: string;
+  path: string;
+  line?: number;
+  severity?: string;
+  cause?: string;
+  solution?: string;
+  target: M.FindingTarget;
+}
 
 export interface AgentDashboardItem {
   key: string;
   path?: string;
   title: string;
   branch: string;
+  stepNumber: 1 | 2 | 3 | 4;
+  stageId: StageId;
   stageLabel: string;
   status: string;
   tone?: 'green' | 'violet' | 'amber';
+  hasProblem: boolean;
+  problemSummary?: string;
   mergeable?: boolean;
   commitOid?: string;
+  findingTargets: M.FindingTarget[];
+  linkedIssues: AgentLinkedIssue[];
+}
+
+function collectKnownIssues(s: State): AgentLinkedIssue[] {
+  const map = new Map<string, AgentLinkedIssue>();
+  const addSemantic = (f: M.Finding, category: FindingCategory = 'bugs') => {
+    const key = `semantic:${f.id}`;
+    if (map.has(key)) return;
+    map.set(key, {
+      key,
+      id: f.id,
+      kind: 'semantic',
+      category: (f.category as FindingCategory) || category,
+      title: findingTitle(f.title, f.message),
+      name: findingName(f.title, f.message),
+      path: f.location.path,
+      line: f.location.start_line,
+      severity: f.severity,
+      cause: f.message || f.evidence || '',
+      solution: f.task_spec?.acceptance_criteria.join('\n') || '',
+      target: {
+        project_id: f.project_id,
+        kind: 'semantic',
+        id: f.id,
+        path: f.location.path,
+      },
+    });
+  };
+  for (const f of s.findings || []) {
+    addSemantic(f, (f.category as FindingCategory) || 'bugs');
+  }
+  for (const cat of ['bugs', 'performance', 'security'] as const) {
+    const res = s.results[cat];
+    for (const f of res?.semantic || []) addSemantic(f, cat);
+    for (const r of res?.performance || []) {
+      for (const f of r.findings || []) {
+        const key = `performance:${r.path}:${f.id}`;
+        if (map.has(key)) continue;
+        map.set(key, {
+          key,
+          id: f.id,
+          kind: 'performance',
+          category: 'performance',
+          title: f.title,
+          name: findingName(f.title, f.observed_pattern),
+          path: r.path,
+          line: f.start_line,
+          severity: f.potential_impact,
+          cause: f.observed_pattern,
+          solution: f.recommendation,
+          target: {
+            project_id: r.project_id,
+            kind: 'performance',
+            id: f.id,
+            path: r.path,
+          },
+        });
+      }
+    }
+    for (const r of [
+      ...(res?.security || []),
+      ...(cat === 'security' && s.securityReport ? [s.securityReport] : []),
+    ]) {
+      for (const f of r.findings || []) {
+        const path = f.source_anchor.path || r.path;
+        const key = `security:${r.path}:${r.source}:${f.id}`;
+        if (map.has(key)) continue;
+        map.set(key, {
+          key,
+          id: f.id,
+          kind: 'security',
+          category: 'security',
+          title: f.title,
+          name: findingName(f.title, f.observed_condition),
+          path,
+          line: f.source_anchor.start_line,
+          severity: f.severity,
+          cause: f.observed_condition,
+          solution: f.remediation,
+          target: {
+            project_id: r.project_id,
+            kind: 'security',
+            id: f.id,
+            path,
+            source: r.source,
+          },
+        });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+function resolveLinkedIssues(
+  known: AgentLinkedIssue[],
+  targets: M.FindingTarget[],
+  fallbackTitle: string,
+): AgentLinkedIssue[] {
+  const matched: AgentLinkedIssue[] = [];
+  for (const target of targets) {
+    const found = known.find(
+      (item) =>
+        item.target.kind === target.kind &&
+        item.target.id === target.id &&
+        item.target.path === target.path &&
+        (item.target.source || '') === (target.source || ''),
+    );
+    if (found) {
+      matched.push(found);
+    } else {
+      matched.push({
+        key: `${target.kind}:${target.id}`,
+        id: target.id,
+        kind: target.kind,
+        category:
+          target.kind === 'performance'
+            ? 'performance'
+            : target.kind === 'security'
+              ? 'security'
+              : 'bugs',
+        title: fallbackTitle || target.id,
+        name: fallbackTitle || target.id,
+        path: target.path,
+        target,
+      });
+    }
+  }
+  if (matched.length === 0 && fallbackTitle) {
+    const normalized = fallbackTitle.trim().toLowerCase();
+    const byTitle = known.find(
+      (item) =>
+        item.name.trim().toLowerCase() === normalized ||
+        item.title.trim().toLowerCase() === normalized,
+    );
+    if (byTitle) matched.push(byTitle);
+  }
+  return matched;
+}
+
+function buildAgentItemState(params: {
+  key: string;
+  path?: string;
+  title: string;
+  branch: string;
+  change?: M.ChangeSession;
+  seed?: M.ChangeSeed;
+  latest?: M.ChangeHistoryEntry;
+  tree?: M.GitWorktree;
+  agentState?: State;
+  knownIssues: AgentLinkedIssue[];
+}): AgentDashboardItem {
+  const {
+    key,
+    path,
+    title,
+    branch,
+    change: c,
+    seed,
+    latest,
+    tree,
+    agentState,
+    knownIssues,
+  } = params;
+  const running =
+    activeChangeWorkflow(c) ||
+    latest?.workflow_status === 'running' ||
+    latest?.workflow_status === 'canceling';
+  const committed = c?.state === 'applied' || latest?.state === 'applied' || !!tree?.mergeable;
+  const ready =
+    (agentState ? canAcceptChange(agentState) : false) ||
+    (c?.changes?.length || 0) > 0 ||
+    latest?.workflow_status === 'awaiting_human_review';
+
+  const checks = c?.checks || [];
+  const checksFailed = !running && checks.length > 0 && !changeChecksPassed(c!);
+  const changesRequested =
+    c?.workflow?.status === 'changes_requested' ||
+    c?.workflow?.review?.verdict === 'changes_requested' ||
+    latest?.workflow_status === 'changes_requested';
+  const workflowFailed = c?.workflow?.status === 'failed' || latest?.workflow_status === 'failed';
+  const commitFailed =
+    agentState?.changeReceipt?.commit?.state === 'failed' || c?.commit?.state === 'failed';
+  const hasProblem =
+    !!tree?.error || workflowFailed || changesRequested || checksFailed || commitFailed;
+
+  let problemSummary: string | undefined;
+  if (tree?.error) {
+    problemSummary = tree.error;
+  } else if (commitFailed) {
+    problemSummary =
+      agentState?.changeReceipt?.commit?.error || c?.commit?.error || 'Git commit failed';
+  } else if (checksFailed) {
+    const failedCheck = checks.find((chk) => chk.state !== 'passed');
+    problemSummary =
+      c?.workflow?.reason ||
+      (failedCheck ? `Check failed: ${human(failedCheck.name)}` : 'Verification checks failed');
+  } else if (changesRequested) {
+    problemSummary = c?.workflow?.review?.summary || 'Critic requested changes';
+  } else if (workflowFailed) {
+    problemSummary = c?.workflow?.reason || 'Agent workflow failed · Needs attention';
+  }
+
+  let stepNumber: 1 | 2 | 3 | 4 = 1;
+  let stageId: StageId = 'create';
+  let stageLabel = 'Step 1/4 · Create Fix';
+
+  if (running) {
+    const runningStage = c?.workflow?.stages.find((st) => st.status === 'running')?.name;
+    if (runningStage === 'test') {
+      stepNumber = 2;
+      stageId = 'test';
+      stageLabel = 'Step 2/4 · Verify & Test';
+    } else if (runningStage === 'review') {
+      stepNumber = 3;
+      stageId = 'review';
+      stageLabel = 'Step 3/4 · Critic Review';
+    } else {
+      stepNumber = 1;
+      stageId = 'create';
+      stageLabel = 'Step 1/4 · Create Fix';
+    }
+  } else if (checksFailed) {
+    stepNumber = 2;
+    stageId = 'test';
+    stageLabel = 'Step 2/4 · Checks Failed';
+  } else if (changesRequested) {
+    stepNumber = 3;
+    stageId = 'review';
+    stageLabel = 'Step 3/4 · Changes Requested';
+  } else if (workflowFailed) {
+    const failedTest = c?.workflow?.stages.find((st) => st.name === 'test')?.status === 'failed';
+    const failedReview =
+      c?.workflow?.stages.find((st) => st.name === 'review')?.status === 'failed';
+    if (failedTest) {
+      stepNumber = 2;
+      stageId = 'test';
+      stageLabel = 'Step 2/4 · Test Failed';
+    } else if (failedReview) {
+      stepNumber = 3;
+      stageId = 'review';
+      stageLabel = 'Step 3/4 · Review Failed';
+    } else {
+      stepNumber = 1;
+      stageId = 'create';
+      stageLabel = 'Step 1/4 · Workflow Failed';
+    }
+  } else if (tree?.mergeable) {
+    stepNumber = 4;
+    stageId = 'human_review';
+    stageLabel = 'Step 4/4 · Ready to Merge';
+  } else if (committed) {
+    stepNumber = 4;
+    stageId = 'human_review';
+    stageLabel = 'Step 4/4 · Committed';
+  } else if (ready) {
+    stepNumber = 4;
+    stageId = 'human_review';
+    stageLabel = 'Step 4/4 · Ready to Commit';
+  } else if (seed && !c) {
+    stepNumber = 1;
+    stageId = 'create';
+    stageLabel = 'Step 1/4 · Staged';
+  }
+
+  const status = hasProblem
+    ? 'failed'
+    : tree?.mergeable || committed
+      ? 'completed'
+      : running
+        ? 'running'
+        : ready
+          ? 'awaiting_human_review'
+          : c?.workflow?.status ||
+            latest?.workflow_status ||
+            c?.state ||
+            latest?.state ||
+            'pending';
+
+  const rawTargets = [
+    ...(c?.finding_targets || []),
+    ...(seed?.finding_targets || []),
+    ...[...(tree?.sessions || []), ...(tree?.completed || [])].flatMap(
+      (entry) => entry.finding_targets || [],
+    ),
+  ];
+  const seenTargetKeys = new Set<string>();
+  const findingTargets = rawTargets.filter((t) => {
+    const k = `${t.project_id}:${t.kind}:${t.source || ''}:${t.id}:${t.path}`;
+    if (seenTargetKeys.has(k)) return false;
+    seenTargetKeys.add(k);
+    return true;
+  });
+  const linkedIssues = resolveLinkedIssues(knownIssues, findingTargets, title);
+
+  return {
+    key,
+    path,
+    title,
+    branch,
+    stepNumber,
+    stageId,
+    stageLabel,
+    status,
+    tone: hasProblem
+      ? 'amber'
+      : tree?.mergeable || committed || ready
+        ? 'green'
+        : running
+          ? 'violet'
+          : undefined,
+    hasProblem,
+    problemSummary,
+    mergeable: tree?.mergeable,
+    commitOid: c?.commit?.oid || agentState?.changeReceipt?.commit?.oid || latest?.commit?.oid,
+    findingTargets:
+      findingTargets.length > 0 ? findingTargets : linkedIssues.map((iss) => iss.target),
+    linkedIssues,
+  };
 }
 
 export function collectAgentDashboardItems(s: State): AgentDashboardItem[] {
   const items: AgentDashboardItem[] = [];
+  const knownIssues = collectKnownIssues(s);
   const mainBranch = s.repository?.branch || 'main';
-  if (s.change || s.changeSeed || !s.selectedAgentPath) {
-    const c = s.change;
-    const running = activeChangeWorkflow(c);
-    const ready = canAcceptChange(s);
-    const committed = c?.state === 'applied';
-    const runningStage = c?.workflow?.stages.find((st) => st.status === 'running')?.name;
-    const stageLabel = running
-      ? `Running · ${runningStage ? human(runningStage) : 'Pipeline'}`
-      : committed
-        ? 'Committed on branch'
-        : ready || (c?.changes.length || 0) > 0
-          ? 'Step 4 · Review & Commit'
-          : s.changeSeed
-            ? 'Step 1 · Staged'
-            : 'New Mission';
-    const status = running
-      ? 'running'
-      : committed
-        ? 'completed'
-        : ready
-          ? 'awaiting_human_review'
-          : c?.workflow?.status || c?.state || 'idle';
-    items.push({
-      key: 'main',
-      path: undefined,
-      title: c?.title || s.changeSeed?.title || 'Main Workspace Mission',
-      branch: mainBranch,
-      stageLabel,
-      status,
-      tone: committed || ready ? 'green' : running ? 'violet' : undefined,
-      commitOid: c?.commit?.oid || s.changeReceipt?.commit?.oid,
-    });
+
+  if (s.change || s.changeSeed) {
+    items.push(
+      buildAgentItemState({
+        key: 'main',
+        path: undefined,
+        title: s.change?.title || s.changeSeed?.title || 'Main Workspace Agent',
+        branch: mainBranch,
+        change: s.change,
+        seed: s.changeSeed,
+        agentState: s,
+        knownIssues,
+      }),
+    );
   }
 
   const worktrees = s.gitWorkspace?.worktrees.filter((t) => !t.current) || [];
@@ -137,42 +459,20 @@ export function collectAgentDashboardItems(s: State): AgentDashboardItem[] {
       seed?.title ||
       latest?.title ||
       cleanBranchTitle[0]?.toUpperCase() + cleanBranchTitle.slice(1);
-    const running =
-      activeChangeWorkflow(c) ||
-      latest?.workflow_status === 'running' ||
-      latest?.workflow_status === 'canceling';
-    const committed = c?.state === 'applied' || latest?.state === 'applied' || tree.mergeable;
-    const ready = (child ? canAcceptChange(child.state) : false) || (c?.changes.length || 0) > 0;
-    const runningStage = c?.workflow?.stages.find((st) => st.status === 'running')?.name;
-    const stageLabel = tree.mergeable
-      ? 'Step 4 · Committed (Ready to Merge)'
-      : running
-        ? `Running · ${runningStage ? human(runningStage) : 'Pipeline'}`
-        : committed
-          ? 'Step 4 · Committed'
-          : ready
-            ? 'Step 4 · Review & Commit'
-            : latest?.workflow_status === 'failed'
-              ? 'Failed · Needs Attention'
-              : 'Step 1 · In Progress';
-    const status = tree.mergeable
-      ? 'completed'
-      : running
-        ? 'running'
-        : ready
-          ? 'awaiting_human_review'
-          : c?.workflow?.status || latest?.workflow_status || latest?.state || 'pending';
-    items.push({
-      key: tree.path,
-      path: tree.path,
-      title,
-      branch: tree.branch,
-      stageLabel,
-      status,
-      tone: tree.mergeable || ready ? 'green' : running ? 'violet' : 'amber',
-      mergeable: tree.mergeable,
-      commitOid: c?.commit?.oid || child?.state.changeReceipt?.commit?.oid || latest?.commit?.oid,
-    });
+    items.push(
+      buildAgentItemState({
+        key: tree.path,
+        path: tree.path,
+        title,
+        branch: tree.branch,
+        change: c,
+        seed,
+        latest,
+        tree,
+        agentState: child?.state,
+        knownIssues,
+      }),
+    );
   }
   return items;
 }
@@ -194,6 +494,8 @@ export function AgentsWorkspace({ s }: { s: State }) {
   const models = workflowSetupModels(s);
   const running = activeChangeWorkflow(change);
   const busy = !!s.busy || !!agentState.busy;
+
+  const [showNewForm, setShowNewForm] = useState(false);
   const [missionTitle, setMissionTitle] = useState(seed?.title || '');
   const [missionPaths, setMissionPaths] = useState(
     seed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
@@ -203,9 +505,15 @@ export function AgentsWorkspace({ s }: { s: State }) {
 
   useEffect(() => {
     if (s.selectedAgentPath && !selectedChild && !s.busy) {
-      void w.selectAgent(s.selectedAgentPath);
+      void w.ensureAgentWorktree(s.selectedAgentPath);
     }
   }, [s.selectedAgentPath, selectedChild, s.busy]);
+
+  useEffect(() => {
+    if (s.agentDetailOpen) {
+      setShowNewForm(false);
+    }
+  }, [s.agentDetailOpen]);
 
   const changedFiles = change?.changes || [];
   let addedLines = 0;
@@ -269,6 +577,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
     setSelectedStage(autoStage);
   }, [
     s.selectedAgentPath,
+    s.agentDetailOpen,
     autoStage,
     change?.id,
     change?.revision,
@@ -330,58 +639,37 @@ export function AgentsWorkspace({ s }: { s: State }) {
       .filter(Boolean)
       .slice(0, 8);
     if (!rawPaths.length || !missionPrompt.trim()) {
-      agentW.fail('Specify at least one target file path and a fix objective.');
+      w.fail('Specify at least one target file path and a fix objective.');
       return;
     }
     const prepared = workflowSeed({
-      finding_targets: seed?.finding_targets,
-      finding: seed?.finding,
-      title: missionTitle.trim() || seed?.title || 'Agent fix mission',
-      kind: seed?.kind || 'fix',
+      title: missionTitle.trim() || 'Agent fix mission',
+      kind: 'fix',
       paths: rawPaths,
       message: missionPrompt.trim(),
-      acceptance_criteria: seed?.acceptance_criteria?.length
-        ? seed.acceptance_criteria
-        : [
-            'Keep the diff minimal and limited to the requested behavior.',
-            'Ensure all unit tests and static checks pass.',
-          ],
+      acceptance_criteria: [
+        'Keep the diff minimal and limited to the requested behavior.',
+        'Ensure all unit tests and static checks pass.',
+      ],
     });
-    if (isWorktreeAgent) {
-      agentW.seedChange(prepared, 'agents');
-      void (async () => {
-        try {
-          const context = await agentW.readFixPreparation();
-          const useAgents = prepared.paths.some(isTestFilePath);
-          if (useAgents) {
-            await agentW.startChangeWorkflow(prepared, models, context, 'agents');
-          } else {
-            await agentW.prepareChange(prepared, true, models.create, context, 'agents');
-          }
-          await w.loadGitWorkspace();
-        } catch (error) {
-          agentW.fail(error);
-        }
-      })();
-      return;
-    }
+    setShowNewForm(false);
     void w.startAgentFix(prepared);
   };
 
-  const startFreshAgentMission = () => {
-    w.set({
-      selectedAgentPath: undefined,
-      change: undefined,
-      changeSeed: undefined,
-      changeReceipt: undefined,
-      error: '',
-    });
+  const openNewAgentForm = () => {
     setMissionTitle('');
+    setMissionPaths(s.file?.path || s.index?.files[0]?.path || '');
     setMissionPrompt('');
-    setSelectedStage('create');
+    w.set({ agentDetailOpen: false, error: '' });
+    setShowNewForm(true);
   };
 
   const dashboardItems = collectAgentDashboardItems(s);
+  const currentAgentItem =
+    dashboardItems.find((item) => (item.path || '') === (s.selectedAgentPath || '')) ||
+    dashboardItems[0];
+  const linkedIssues = currentAgentItem?.linkedIssues || [];
+
   const visibleDiffFiles =
     selectedDiffPath === 'all'
       ? changedFiles
@@ -400,87 +688,420 @@ export function AgentsWorkspace({ s }: { s: State }) {
     change?.commit?.branch || activeWorktree?.branch || agentState.repository?.branch || 'main';
   const mainBranch = s.repository?.branch || 'main';
 
+  // PAGE 1: NEW CUSTOM AGENT FORM
+  if (!s.agentDetailOpen && showNewForm) {
+    return (
+      <div className="workspace-page agents-page">
+        <Heading
+          variant="intro"
+          title="New Agent Fix"
+          detail="Start an isolated agent pipeline on up to 8 files."
+        >
+          <Button icon="back" tone="ghost" onClick={() => setShowNewForm(false)}>
+            Back to Agents Dashboard
+          </Button>
+        </Heading>
+        <Panel title="Agent Mission Specification">
+          <div className="stack" style={{ gap: '12px' }}>
+            <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <label className="block">
+                <span className="small muted">Fix Title</span>
+                <input
+                  aria-label="Agent mission title"
+                  className="field"
+                  value={missionTitle}
+                  onChange={(e) => setMissionTitle(e.target.value)}
+                  placeholder="e.g., Enforce bounded retry in worker queue"
+                />
+              </label>
+              <label className="block">
+                <span className="small muted">Target Files (comma-separated, max 8)</span>
+                <input
+                  aria-label="Agent target files"
+                  className="field font-mono"
+                  value={missionPaths}
+                  onChange={(e) => setMissionPaths(e.target.value)}
+                  placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="small muted">Fix Instructions &amp; Constraints</span>
+              <textarea
+                aria-label="Agent mission specification"
+                rows={4}
+                value={missionPrompt}
+                onChange={(e) => setMissionPrompt(e.target.value)}
+                placeholder="Describe the exact behavior to fix, invariants to preserve, and edge cases to test…"
+              />
+            </label>
+            <div className="row between wrap">
+              <span className="small muted">
+                Models: <code>{models.create}</code> (Create) → <code>{models.test}</code> (Test) →{' '}
+                <code>{models.review}</code> (Critic).
+              </span>
+              <Button
+                tone="primary"
+                icon="sparkles"
+                disabled={busy}
+                onClick={dispatchCustomMission}
+              >
+                Dispatch Agent Pipeline
+              </Button>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  // PAGE 2: AGENTS IN PROGRESS DASHBOARD
+  if (!s.agentDetailOpen) {
+    const runningCount = dashboardItems.filter((i) => i.status === 'running').length;
+    const problemCount = dashboardItems.filter((i) => i.hasProblem).length;
+    const readyCount = dashboardItems.filter(
+      (i) => i.status === 'awaiting_human_review' || i.mergeable || i.status === 'completed',
+    ).length;
+
+    return (
+      <div className="workspace-page agents-page">
+        <Heading
+          variant="intro"
+          title="Agent Mission Control"
+          detail={
+            dashboardItems.length > 0
+              ? `${dashboardItems.length} active ${dashboardItems.length === 1 ? 'agent' : 'agents'} · ${runningCount} running · ${readyCount} ready${problemCount > 0 ? ` · ${problemCount} need attention` : ''}`
+              : 'Dashboard of agents in progress. Click an agent to inspect its step and grouped issues.'
+          }
+        >
+          <Go page="bugs" tone="ghost" icon="bug">
+            Browse Issues
+          </Go>
+          <Go page="git" tone="ghost" icon="git">
+            Git &amp; Worktrees
+          </Go>
+          <Button tone="primary" icon="plus" disabled={!!s.busy} onClick={openNewAgentForm}>
+            New Fix
+          </Button>
+        </Heading>
+
+        {dashboardItems.length === 0 ? (
+          <Empty
+            title="No agents in progress"
+            detail="Select one or more issues in Issues & Ideas to fix with an agent, or start a custom agent fix."
+            icon="sparkles"
+          >
+            <Go page="bugs" tone="primary" icon="bug">
+              Browse Issues
+            </Go>
+            <Button tone="ghost" icon="plus" onClick={openNewAgentForm}>
+              New Fix
+            </Button>
+          </Empty>
+        ) : (
+          <Panel
+            title={`Agents in Progress (${dashboardItems.length})`}
+            actions={
+              <span className="small muted">
+                Click an agent to open its step and grouped issue detail
+              </span>
+            }
+          >
+            <div
+              className="stack"
+              style={{ gap: '12px' }}
+              role="tablist"
+              aria-label="Active agents"
+            >
+              {dashboardItems.map((item) => {
+                const issueCount = item.linkedIssues.length;
+                return (
+                  <div
+                    key={item.key}
+                    role="tab"
+                    tabIndex={0}
+                    aria-selected={(s.selectedAgentPath || undefined) === item.path}
+                    onClick={() => void w.selectAgent(item.path)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void w.selectAgent(item.path);
+                      }
+                    }}
+                    className="kpi-pulse-card card-kpi box-card agent-dashboard-card"
+                    style={{
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      padding: '14px 16px',
+                      borderColor: item.hasProblem
+                        ? 'var(--red, #e5534b)'
+                        : item.status === 'running'
+                          ? 'var(--accent)'
+                          : undefined,
+                      boxShadow: item.hasProblem ? '0 0 0 1px var(--red, #e5534b)' : undefined,
+                    }}
+                  >
+                    <div className="row between wrap" style={{ gap: '10px' }}>
+                      <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                        <StatusDot value={item.status} label={item.title} />
+                        <strong style={{ fontSize: '0.98rem' }}>{item.title}</strong>
+                        <Badge value={item.branch} />
+                        {issueCount > 0 && (
+                          <Badge
+                            value={`${issueCount} ${issueCount === 1 ? 'issue' : 'issues'}`}
+                            tone="violet"
+                          />
+                        )}
+                        {item.commitOid && (
+                          <span className="small font-mono muted">
+                            #{item.commitOid.slice(0, 7)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                        {item.hasProblem && <Badge value="Needs Attention" tone="amber" />}
+                        <Badge value={item.stageLabel} tone={item.tone} />
+                      </div>
+                    </div>
+
+                    {/* Simple 4-Step Progress Strip */}
+                    <div
+                      className="row wrap"
+                      style={{
+                        gap: '6px',
+                        marginTop: '10px',
+                        paddingTop: '8px',
+                        borderTop: '1px solid var(--line)',
+                      }}
+                    >
+                      {PIPELINE_STAGES.map((st, idx) => {
+                        const stepNum = idx + 1;
+                        const isDone =
+                          item.stepNumber > stepNum ||
+                          (item.stepNumber === 4 &&
+                            (item.mergeable || item.status === 'completed'));
+                        const isCurrent = item.stepNumber === stepNum && !isDone;
+                        const isProblemStep = isCurrent && item.hasProblem;
+                        return (
+                          <span
+                            key={st.id}
+                            className="small font-mono"
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              background: isProblemStep
+                                ? 'rgba(229, 83, 75, 0.16)'
+                                : isCurrent
+                                  ? 'var(--bg-elevated)'
+                                  : 'transparent',
+                              border: isProblemStep
+                                ? '1px solid var(--red, #e5534b)'
+                                : isCurrent
+                                  ? '1px solid var(--accent)'
+                                  : '1px solid var(--line)',
+                              color: isProblemStep
+                                ? 'var(--red, #e5534b)'
+                                : isDone
+                                  ? 'var(--green)'
+                                  : isCurrent
+                                    ? 'var(--fg)'
+                                    : 'var(--muted)',
+                              fontWeight: isCurrent ? 600 : 400,
+                            }}
+                          >
+                            {isProblemStep ? '⚠ ' : isDone ? '✓ ' : isCurrent ? '● ' : ''}
+                            {stepNum}. {st.shortTitle}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Grouped Issues Preview */}
+                    {item.linkedIssues.length > 0 && (
+                      <div
+                        className="row wrap small muted"
+                        style={{ gap: '8px', marginTop: '8px' }}
+                      >
+                        <span>Fixing:</span>
+                        {item.linkedIssues.map((iss) => (
+                          <span key={iss.key} className="font-mono">
+                            {iss.name} ({iss.path}
+                            {iss.line ? `:${iss.line}` : ''})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Highlighted Problem Callout */}
+                    {item.hasProblem && item.problemSummary && (
+                      <div
+                        role="alert"
+                        style={{
+                          marginTop: '10px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(229, 83, 75, 0.12)',
+                          border: '1px solid var(--red, #e5534b)',
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        <strong>Problem: </strong>
+                        <span>{item.problemSummary}</span>
+                      </div>
+                    )}
+
+                    {item.mergeable && item.path && (
+                      <div
+                        className="row end"
+                        style={{ marginTop: '10px' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          tone="primary small"
+                          icon="git"
+                          disabled={busy}
+                          onClick={() => void w.mergeAgentWorktree(item.path!)}
+                        >
+                          Merge into {mainBranch} &amp; Close{' '}
+                          {issueCount > 1 ? `${issueCount} Issues` : 'Issue'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
+      </div>
+    );
+  }
+
+  // PAGE 3: AGENT & GROUPED ISSUE DETAIL PAGE
   return (
     <div className="workspace-page agents-page">
+      <div className="row between wrap" style={{ marginBottom: '8px' }}>
+        <Button icon="back" tone="ghost" onClick={() => w.openAgentsDashboard()}>
+          All Agents ({dashboardItems.length})
+        </Button>
+        <div className="row wrap" style={{ gap: '8px' }}>
+          {agentState.changeReceipt?.undo_available && (
+            <Button
+              tone="ghost"
+              icon="undo"
+              disabled={busy}
+              onClick={() => void agentW.undoChange()}
+            >
+              Undo Last Change
+            </Button>
+          )}
+          {activeStage !== 'human_review' &&
+            change?.state === 'draft' &&
+            changedFiles.length > 0 && (
+              <Button
+                tone="primary"
+                icon="check"
+                disabled={busy || running}
+                onClick={() => void agentW.applyProposalNow(change.title)}
+              >
+                Accept &amp; Commit
+              </Button>
+            )}
+          {activeStage !== 'human_review' &&
+            change?.state === 'applied' &&
+            isWorktreeAgent &&
+            selectedChild?.worktreePath && (
+              <Button
+                tone="primary"
+                icon="git"
+                disabled={busy}
+                onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
+              >
+                Merge into {mainBranch} &amp; Close{' '}
+                {linkedIssues.length > 1 ? `${linkedIssues.length} Issues` : 'Issue'}
+              </Button>
+            )}
+        </div>
+      </div>
+
       <Heading
         variant="intro"
         title="Agent Mission Control"
-        detail="Run multiple agents in parallel worktrees, click any agent to inspect its live workflow stage, then Accept & Commit and Merge."
-      >
-        <Go page="bugs" tone="ghost" icon="bug">
-          Browse Issues
-        </Go>
-        <Go page="git" tone="ghost" icon="git">
-          Git &amp; Worktrees
-        </Go>
-        <Go page="models" tone="ghost" icon="compass">
-          Configure Models
-        </Go>
-        {agentState.changeReceipt?.undo_available && (
-          <Button tone="ghost" icon="undo" disabled={busy} onClick={() => void agentW.undoChange()}>
-            Undo Last Change
-          </Button>
-        )}
-        <Button tone="ghost" icon="plus" disabled={!!s.busy} onClick={startFreshAgentMission}>
-          New Fix
-        </Button>
-      </Heading>
+        detail={
+          <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+            <strong>{change?.title || seed?.title || currentAgentItem?.title || 'Agent'}</strong>
+            <Badge value={`Branch: ${commitBranch}`} />
+            {currentAgentItem && (
+              <Badge value={currentAgentItem.stageLabel} tone={currentAgentItem.tone} />
+            )}
+            {commitOid && <Badge value={`#${commitOid.slice(0, 7)}`} tone="green" />}
+          </span>
+        }
+      />
 
       {agentState.error && <Notice error>{agentState.error}</Notice>}
+      {currentAgentItem?.hasProblem && currentAgentItem.problemSummary && (
+        <Notice error>
+          <div className="row between wrap" style={{ gap: '10px', alignItems: 'center' }}>
+            <span>
+              <strong>Problem detected: </strong>
+              {currentAgentItem.problemSummary}
+            </span>
+            {!running && checks.length > 0 && !allChecksPassed && (
+              <Button
+                tone="primary small"
+                icon="sparkles"
+                disabled={busy}
+                onClick={() => void agentW.repairChange()}
+              >
+                Repair Failed Checks
+              </Button>
+            )}
+          </div>
+        </Notice>
+      )}
       <ChangeOutcome s={agentState} />
 
-      {/* Multi-Agent Dashboard Strip */}
-      {(dashboardItems.length > 1 ||
-        (s.gitWorkspace?.worktrees.filter((t) => !t.current).length || 0) > 0) && (
+      {/* Grouped Issues Panel */}
+      {linkedIssues.length > 0 && (
         <Panel
-          title={`Running & Active Agents (${dashboardItems.length})`}
+          title={`Grouped Issues in this Agent (${linkedIssues.length})`}
           actions={
-            <span className="small muted">Click any agent to inspect its 4-stage workflow</span>
+            <span className="small muted">
+              Marked Done automatically when merged into {mainBranch}
+            </span>
           }
         >
-          <div
-            className="row wrap"
-            style={{ gap: '8px' }}
-            role="tablist"
-            aria-label="Active agents"
-          >
-            {dashboardItems.map((item) => {
-              const isSelected = (s.selectedAgentPath || undefined) === item.path;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  onClick={() => void w.selectAgent(item.path)}
-                  className={`kpi-pulse-card card-kpi box-card ${isSelected ? 'active' : ''}`}
-                  style={{
-                    flex: '1 1 240px',
-                    maxWidth: '360px',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    padding: '10px 12px',
-                    borderColor: isSelected ? 'var(--accent)' : undefined,
-                    boxShadow: isSelected ? '0 0 0 1px var(--accent)' : undefined,
-                  }}
-                >
-                  <div className="row between wrap" style={{ gap: '6px' }}>
-                    <span className="row" style={{ gap: '6px', alignItems: 'center' }}>
-                      <StatusDot value={item.status} label={item.title} />
-                      <strong className="small">{item.title}</strong>
+          <div className="stack" style={{ gap: '8px' }}>
+            {linkedIssues.map((iss) => (
+              <div
+                key={iss.key}
+                className="list-row"
+                style={{ alignItems: 'flex-start', padding: '8px 10px' }}
+              >
+                <div className="list-copy" style={{ flex: 1 }}>
+                  <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                    {iss.severity && <Badge value={iss.severity} />}
+                    <strong>{iss.name}</strong>
+                    <span className="small font-mono muted">
+                      {iss.path}
+                      {iss.line ? `:${iss.line}` : ''}
                     </span>
-                    <Badge value={item.stageLabel} tone={item.tone} />
                   </div>
-                  <div
-                    className="row between wrap small muted font-mono"
-                    style={{ marginTop: '6px', gap: '6px' }}
-                  >
-                    <span>{item.branch}</span>
-                    {item.commitOid && <span>#{item.commitOid.slice(0, 7)}</span>}
-                  </div>
-                </button>
-              );
-            })}
+                  {iss.cause && (
+                    <p className="small muted" style={{ marginTop: '4px', marginBottom: 0 }}>
+                      {iss.cause}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  tone="ghost small"
+                  onClick={() => void w.openFinding(iss.category, iss.key)}
+                >
+                  Issue Detail
+                </Button>
+              </div>
+            ))}
           </div>
         </Panel>
       )}
@@ -513,9 +1134,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 opacity: visitable ? 1 : 0.55,
                 borderColor: isSelected
                   ? 'var(--accent)'
-                  : status === 'running' || status === 'awaiting_human_review'
-                    ? 'var(--accent)'
-                    : undefined,
+                  : status === 'failed'
+                    ? 'var(--red, #e5534b)'
+                    : status === 'running' || status === 'awaiting_human_review'
+                      ? 'var(--accent)'
+                      : undefined,
                 boxShadow: isSelected ? '0 0 0 1px var(--accent)' : undefined,
               }}
             >
@@ -530,9 +1153,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     tone={
                       status === 'completed'
                         ? 'green'
-                        : status === 'running' || status === 'awaiting_human_review'
-                          ? 'violet'
-                          : undefined
+                        : status === 'failed'
+                          ? 'amber'
+                          : status === 'running' || status === 'awaiting_human_review'
+                            ? 'violet'
+                            : undefined
                     }
                   />
                 </span>
@@ -540,10 +1165,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <div className="box-value" style={{ fontSize: '0.96rem', marginTop: '4px' }}>
                 {stage.title}
               </div>
-              <p className="small muted" style={{ margin: '4px 0' }}>
-                {stage.role}
-              </p>
-              <div className="box-meta">
+              <div className="box-meta" style={{ marginTop: '4px' }}>
                 <span className="font-mono small">{stageModel}</span>
               </div>
             </button>
@@ -551,7 +1173,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
         })}
       </div>
 
-      {/* Center Stage Content: Render ONLY the currently selected stage */}
+      {/* Stage Content: Render ONLY the currently selected stage */}
       {activeStage === 'create' && (
         <Panel
           title={
@@ -559,18 +1181,13 @@ export function AgentsWorkspace({ s }: { s: State }) {
               ? `Step 1 · Architect & Code Agent (${change.title})`
               : seed
                 ? `Step 1 · Staged Fix (${seed.title})`
-                : 'Step 1 · Start a Fix Mission'
+                : 'Step 1 · Create Fix'
           }
           actions={
-            <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
-              {isWorktreeAgent && activeWorktree && (
-                <Badge value={`Worktree: ${activeWorktree.branch}`} tone="violet" />
-              )}
-              <Badge
-                value={human(stageStatus('create'))}
-                tone={stageStatus('create') === 'completed' ? 'green' : 'violet'}
-              />
-            </div>
+            <Badge
+              value={human(stageStatus('create'))}
+              tone={stageStatus('create') === 'completed' ? 'green' : 'violet'}
+            />
           }
         >
           {running ? (
@@ -642,80 +1259,20 @@ export function AgentsWorkspace({ s }: { s: State }) {
             </div>
           ) : (
             <div className="stack" style={{ gap: '12px' }}>
-              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <label className="block">
-                  <span className="small muted">Fix Title</span>
-                  <input
-                    aria-label="Agent mission title"
-                    className="field"
-                    value={missionTitle}
-                    onChange={(e) => setMissionTitle(e.target.value)}
-                    placeholder="e.g., Enforce bounded retry in worker queue"
-                  />
-                </label>
-                <label className="block">
-                  <span className="small muted">Target Files (comma-separated, max 8)</span>
-                  <input
-                    aria-label="Agent target files"
-                    className="field font-mono"
-                    value={missionPaths}
-                    onChange={(e) => setMissionPaths(e.target.value)}
-                    placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
-                  />
-                </label>
-              </div>
-              <label className="block">
-                <span className="small muted">Fix Instructions &amp; Constraints</span>
-                <textarea
-                  aria-label="Agent mission specification"
-                  rows={3}
-                  value={missionPrompt}
-                  onChange={(e) => setMissionPrompt(e.target.value)}
-                  placeholder="Describe the exact behavior to fix, invariants to preserve, and edge cases to test…"
-                />
-              </label>
-              <div className="row between wrap">
-                <span className="small muted">
-                  Models: <code>{models.create}</code> (Create) → <code>{models.test}</code> (Test)
-                  → <code>{models.review}</code> (Critic).
-                </span>
+              <p className="small muted">
+                Target files: <code>{seed?.paths.join(', ') || missionPaths}</code>
+              </p>
+              {userPrompt && <Prose text={userPrompt} />}
+              <div className="row end">
                 <Button
                   tone="primary"
                   icon="sparkles"
-                  disabled={busy || running}
-                  onClick={dispatchCustomMission}
+                  disabled={busy}
+                  onClick={() => void agentW.rerunChangeWorkflow('agents')}
                 >
-                  Dispatch Agent Pipeline
+                  Start Agent Pipeline
                 </Button>
               </div>
-
-              {(agentState.changeHistory?.length || 0) > 0 && (
-                <Disclosure title={`Recent Fixes (${agentState.changeHistory?.length || 0})`}>
-                  <div className="stack" style={{ gap: '6px', paddingTop: '6px' }}>
-                    {agentState.changeHistory!.slice(0, 8).map((entry) => (
-                      <div className="list-row" key={entry.id}>
-                        <div className="list-copy">
-                          <strong>{entry.title}</strong>
-                          <small className="muted">
-                            Revision {entry.revision} · {human(entry.kind)}
-                            {entry.commit?.oid ? ` · #${entry.commit.oid.slice(0, 7)}` : ''}
-                          </small>
-                        </div>
-                        <div className="row" style={{ gap: '8px' }}>
-                          <Badge value={entry.workflow_status || entry.state} />
-                          <Button
-                            tone="ghost small"
-                            disabled={busy || running}
-                            onClick={() => void agentW.viewChange(entry.id, 'agents')}
-                          >
-                            Open Fix
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Disclosure>
-              )}
             </div>
           )}
         </Panel>
@@ -733,7 +1290,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     ? 'Checks Need Attention'
                     : 'Pending'
               }
-              tone={allChecksPassed ? 'green' : 'violet'}
+              tone={allChecksPassed ? 'green' : 'amber'}
             />
           }
         >
@@ -759,7 +1316,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                         </span>
                         <Badge
                           value={check.state}
-                          tone={check.state === 'passed' ? 'green' : undefined}
+                          tone={check.state === 'passed' ? 'green' : 'amber'}
                         />
                       </span>
                     }
@@ -829,7 +1386,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   <strong className="small uppercase muted">Critic Agent Verdict</strong>
                   <Badge
                     value={workflow.review.verdict}
-                    tone={workflow.review.verdict === 'approve' ? 'green' : 'violet'}
+                    tone={workflow.review.verdict === 'approve' ? 'green' : 'amber'}
                   />
                 </div>
                 <Prose text={workflow.review.summary} />
@@ -903,7 +1460,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
             )}
 
-            {/* Single Focused Action Bar for Step 4 */}
             <div
               className="proposal-action-banner"
               style={{
@@ -926,7 +1482,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 {workflow?.review && (
                   <Badge
                     value={`Critic: ${workflow.review.verdict}`}
-                    tone={workflow.review.verdict === 'approve' ? 'green' : 'violet'}
+                    tone={workflow.review.verdict === 'approve' ? 'green' : 'amber'}
                   />
                 )}
                 {change.state === 'applied' && (
@@ -959,18 +1515,13 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     disabled={busy}
                     onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
                   >
-                    Merge into {mainBranch} &amp; Close Issue
-                  </Button>
-                )}
-                {change.state === 'applied' && !isWorktreeAgent && (
-                  <Button tone="primary" icon="check" onClick={() => void w.navigate('bugs')}>
-                    Issue Closed · Back to Issues
+                    Merge into {mainBranch} &amp; Close{' '}
+                    {linkedIssues.length > 1 ? `${linkedIssues.length} Issues` : 'Issue'}
                   </Button>
                 )}
               </div>
             </div>
 
-            {/* File Filter Tabs + Proposed Diffs */}
             {changedFiles.length > 0 ? (
               <div className="stack" style={{ gap: '10px' }}>
                 {changedFiles.length > 1 && (

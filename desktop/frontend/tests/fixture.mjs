@@ -1170,21 +1170,12 @@ export function installFixture(options = {}) {
                           state: 'applied',
                           commit: state.changeReceipt.commit,
                           paths: change.targets.map((t) => t.path),
+                          finding_targets: change.finding_targets,
                         },
                       ];
                     }
                   }
                 }
-              }
-              if (action === 'apply' && change.finding_targets?.length) {
-                state.completedFindings = [
-                  ...(state.completedFindings || []),
-                  ...change.finding_targets.map((t) => ({
-                    ...t,
-                    project_id: state.project.project_id,
-                    commit_oid: state.changeReceipt.commit?.oid || 'commit-applied',
-                  })),
-                ];
               }
               if (action === 'apply' && options.changeMutationResponseLost)
                 throw new Error('Apply response lost after source mutation');

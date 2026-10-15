@@ -393,14 +393,23 @@ try {
       await searchInput.fill('Preset: Deep Audit');
       await page.getByRole('button', { name: 'Preset: Deep Audit', exact: true }).click();
 
-      // 2. Batch Multi-Finding Selection & Action Bar in Issues & Ideas
+      // 2. Batch Multi-Finding Selection & Action Bar in Issues & Ideas (no manual Mark Done button)
       await nav(page, 'Issues & Ideas');
       await idle(page);
+      assert.equal(await page.getByRole('button', { name: 'Done', exact: true }).count(), 0);
+      assert.equal(
+        await page.getByRole('button', { name: 'Mark as Done', exact: true }).count(),
+        0,
+      );
       const firstCheckbox = page.locator('.result-row input[type="checkbox"]').first();
       await firstCheckbox.check();
       const batchBar = page.getByRole('region', { name: 'Batch issue actions', exact: true });
       await batchBar.waitFor();
       await batchBar.getByRole('button', { name: 'Fix Selected (1)', exact: true }).waitFor();
+      assert.equal(
+        await batchBar.getByRole('button', { name: 'Mark Done', exact: true }).count(),
+        0,
+      );
       await batchBar.getByRole('button', { name: 'Clear', exact: true }).click();
 
       // 3. Interactive Symbols & Blast Radius Explorer in Code & Diff
@@ -513,16 +522,27 @@ try {
     }
   });
 
-  await test('Agent Mission Control 4-stage pipeline and interactive Terminal UI (TUI) mode', async () => {
+  await test('Agents in Progress Dashboard, Agent/Issue Detail page, and interactive Terminal UI (TUI) mode', async () => {
     const { page, close } = await pageFor({ trusted: true, featuresReady: true });
     try {
-      // 1. Dispatch Fix with Agent from Issues & Ideas and inspect Agent Mission Control
+      // 1. Dispatch Fix with Agent from Issues & Ideas -> lands on Agents in Progress Dashboard
       await nav(page, 'Issues & Ideas');
       await idle(page);
       await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
       await idle(page);
 
       await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
+      const dashboard = page.getByRole('tablist', {
+        name: 'Active agents',
+        exact: true,
+      });
+      await dashboard.waitFor();
+
+      // Click the agent card on the dashboard to navigate to the Agent & Issue Detail page
+      await dashboard.getByRole('tab').first().click();
+      await idle(page);
+
+      await page.getByRole('button', { name: /^All Agents/ }).waitFor();
       await page.getByText('Architect & Code Agent', { exact: true }).waitFor();
       await page.getByText('Verification & Test Agent', { exact: true }).waitFor();
       await page.getByText('Clean-Code Critic Agent', { exact: true }).waitFor();
@@ -559,6 +579,10 @@ try {
       await page.getByText('4-STAGE AUTONOMOUS CLEAN-CODE PIPELINE', { exact: true }).waitFor();
       await page.getByText('CLEAN-SOFTWARE PRECISION SCORECARD', { exact: true }).waitFor();
 
+      // Return to TUI Agents Dashboard via [← All Agents]
+      await page.getByRole('button', { name: '[← All Agents]', exact: true }).click();
+      await page.getByText('AGENTS IN PROGRESS DASHBOARD', { exact: true }).waitFor();
+
       // Switch TUI palette to CRT Green
       await page.getByRole('button', { name: 'CRT Green', exact: true }).click();
       assert.equal(await tui.getAttribute('data-tui-palette'), 'crt');
@@ -568,6 +592,12 @@ try {
       await page.getByText('SOURCE FILES', { exact: true }).waitFor();
       await page.getByRole('button', { name: /\[5\] Issues/ }).click();
       await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '[Done]', exact: true }).count(), 0);
+      assert.equal(
+        await page.getByRole('button', { name: '[Mark as Done]', exact: true }).count(),
+        0,
+      );
+      await page.getByRole('button', { name: /\[In Progress \(/ }).click();
 
       // Use orca> command prompt to return to GUI mode
       const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
@@ -579,10 +609,10 @@ try {
     }
   });
 
-  await test('Multi-agent worktree dashboard, Git & Worktrees active worktree visibility, and post-commit merge issue closing', async () => {
+  await test('Grouped issues in one agent, In Progress issues view, problem highlight on dashboard, and Done only on merge', async () => {
     const { page, close } = await pageFor({ git: true, trusted: true, featuresReady: true });
     try {
-      // 1. Verify Git & Worktrees sidebar badge counts only non-current worktrees and shows in-progress worktrees too
+      // 1. Verify Git & Worktrees shows in-progress worktrees
       await page.evaluate(() => {
         window.fixture.state.gitWorktrees.push({
           path: '/fixture/harbor/.worktrees/in-progress-agent',
@@ -600,48 +630,74 @@ try {
       await page.getByText('codex/in-progress-agent', { exact: true }).waitFor();
       assert.equal(await page.locator('.git-worktree').count(), 2);
 
-      // 2. Dispatch Fix with Agent from Issues & Ideas -> creates an isolated worktree agent
+      // 2. Select 2 issues in Issues & Ideas and dispatch a single grouped agent fix
       await nav(page, 'Issues & Ideas');
       await idle(page);
       await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      const checkboxes = page.locator('.result-row input[type="checkbox"]');
+      await checkboxes.nth(0).check();
+      await checkboxes.nth(1).check();
+      await page.getByRole('button', { name: 'Fix Selected (2)', exact: true }).click();
       await idle(page);
 
+      // Lands on Agents in Progress Dashboard showing the grouped agent (2 issues)
       await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
       const dashboard = page.getByRole('tablist', {
         name: 'Active agents',
         exact: true,
       });
       await dashboard.waitFor();
+      await dashboard.getByText('2 issues', { exact: true }).waitFor();
 
-      // Verify a worktree was created for this agent fix
+      // Verify a worktree was created for this grouped agent fix
       const worktreeCreateReq = await page.evaluate(() =>
         window.fixture.requests.find(
           (r) => r.method === 'POST' && r.path.endsWith('/git/worktrees'),
         ),
       );
-      assert.ok(worktreeCreateReq, 'Fix with Agent creates an isolated Git worktree');
+      assert.ok(worktreeCreateReq, 'Fix Selected creates an isolated Git worktree');
 
-      // 3. Accept & Commit inside the worktree, then Merge into main & Close Issue
+      // 3. Check the "In Progress (2)" view in Issues & Ideas
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      const inProgressBtn = page.getByRole('button', { name: 'In Progress (2)', exact: true });
+      await inProgressBtn.waitFor();
+      await inProgressBtn.click();
+      assert.equal(await page.locator('.result-row').count(), 2);
+
+      // Clicking "Open Agent" on an in-progress issue opens the Agent & Issue Detail page
+      await page.getByRole('button', { name: 'Open Agent', exact: true }).first().click();
+      await idle(page);
+      await page.getByText('Grouped Issues in this Agent (2)', { exact: true }).waitFor();
+
+      // 4. Accept & Commit inside the worktree -> issues remain Open/In Progress (NOT Done yet)
       const applyBtn = page.getByRole('button', { name: 'Accept & Commit', exact: true });
       await applyBtn.waitFor();
       await applyBtn.click();
       await idle(page);
       await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
 
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByRole('button', { name: /^All \(3\)/ }).click();
+      await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
+
+      // 5. Return to Agent Detail and click Merge into main & Close 2 Issues -> marks both grouped issues Done
+      await page.getByRole('button', { name: 'Open Agent', exact: true }).first().click();
+      await idle(page);
       const mergeBtn = page.getByRole('button', {
-        name: 'Merge into main & Close Issue',
+        name: 'Merge into main & Close 2 Issues',
         exact: true,
       });
       await mergeBtn.waitFor();
       await mergeBtn.click();
       await idle(page);
 
-      // Verify the issue was closed after merging into main and can be inspected via Show Done
+      // Verify both grouped issues are now marked Done after merging into main
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByText('2 issues · 1 feature ideas', { exact: true }).waitFor();
-      await page.getByText('Show Done (1)', { exact: true }).waitFor();
+      await page.getByText('1 issue · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByText('Show Done (2)', { exact: true }).waitFor();
     } finally {
       await close();
     }

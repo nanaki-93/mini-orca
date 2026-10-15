@@ -70,15 +70,8 @@ function findAgentForRow(s: State, row: ResultRow): AgentDashboardItem | undefin
   const rowTitle = row.name.trim().toLowerCase();
   const fullTitle = row.title.trim().toLowerCase();
   return items.find((item) => {
-    const impl = item.path
-      ? s.implementations.find((x) => x.worktreePath === item.path)
-      : undefined;
-    const targets =
-      (item.path
-        ? impl?.state.change?.finding_targets || impl?.state.changeSeed?.finding_targets
-        : s.change?.finding_targets || s.changeSeed?.finding_targets) || [];
     if (
-      targets.some(
+      item.findingTargets.some(
         (t) =>
           t.kind === row.target.kind &&
           t.id === row.target.id &&
@@ -86,6 +79,9 @@ function findAgentForRow(s: State, row: ResultRow): AgentDashboardItem | undefin
           (t.source || '') === (row.target.source || ''),
       )
     ) {
+      return true;
+    }
+    if (item.linkedIssues.some((issue) => issue.key === row.key)) {
       return true;
     }
     const itemTitle = item.title.trim().toLowerCase();
@@ -230,6 +226,7 @@ export function Results({ s }: { s: State }) {
     }
   }, [s.page]);
   const [showDone, setShowDone] = useState(false);
+  const [inProgressOnly, setInProgressOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'default' | 'severity' | 'path' | 'category'>('default');
   const [goals, setGoals] = useState(s.features?.goals || '');
   useEffect(() => {
@@ -283,6 +280,9 @@ export function Results({ s }: { s: State }) {
   const countAll = uniqueAllRows.filter((row) =>
     showDone ? true : !isClosedStatus(row.status),
   ).length;
+  const inProgressCount = uniqueAllRows.filter(
+    (row) => !isClosedStatus(row.status) && !!findAgentForRow(s, row),
+  ).length;
   const closedCount = uniqueAllRows.filter((row) => isClosedStatus(row.status)).length;
   const categoryCounts: Record<'all' | FindingCategory, number> = {
     all: countAll,
@@ -304,7 +304,11 @@ export function Results({ s }: { s: State }) {
   const filtered = unique
     .filter(
       (row) =>
-        (!showDone ? !isClosedStatus(row.status) : true) &&
+        (inProgressOnly
+          ? !isClosedStatus(row.status) && !!findAgentForRow(s, row)
+          : !showDone
+            ? !isClosedStatus(row.status)
+            : true) &&
         `${row.name} ${row.title} ${row.path} ${row.symbol}`
           .toLowerCase()
           .includes(query.toLowerCase()) &&
@@ -411,30 +415,33 @@ export function Results({ s }: { s: State }) {
   const selectedRows = unique.filter((row) => selectedKeys.includes(row.key));
   const batchFixSeed = (rows: ResultRow[]): M.ChangeSeed => {
     if (rows.length === 1) return fixSeed(rows[0]);
-    const paths = [...new Set(rows.map((r) => r.path).filter(Boolean))].slice(0, 8);
+    const hasTest = rows.some((r) => isTestFilePath(r.path));
+    const maxPaths = hasTest ? 8 : 7;
+    const paths = [...new Set(rows.map((r) => r.path).filter(Boolean))].slice(0, maxPaths);
+    const capturedRows = rows.filter((r) => !r.path || paths.includes(r.path));
     const acceptance_criteria = [
-      ...new Set(rows.flatMap((r) => r.task?.acceptance_criteria || [])),
+      ...new Set(capturedRows.flatMap((r) => r.task?.acceptance_criteria || [])),
     ];
-    const itemsText = rows
+    const itemsText = capturedRows
       .map(
         (row, idx) =>
           `${idx + 1}. ${row.title} (${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` · ${row.symbol}` : ''})\n   Cause: ${row.cause}\n   Proposed solution: ${row.solution}`,
       )
       .join('\n\n');
     return {
-      finding_targets: rows.map((r) => r.target),
-      title: `Batch fix (${rows.length} issues)`,
+      finding_targets: capturedRows.map((r) => r.target),
+      title: `Batch fix (${capturedRows.length} issues)`,
       paths,
       kind,
-      message: `Address these ${rows.length} findings across the selected files:\n\n${itemsText}\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.`,
+      message: `Address these ${capturedRows.length} findings across the selected files:\n\n${itemsText}\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.`,
       acceptance_criteria,
       finding: {
-        path: rows[0].path,
-        symbol: rows[0].symbol,
-        line: rows[0].line,
-        cause: rows.map((r) => `${r.name}: ${r.cause}`).join('\n\n'),
-        solution: rows.map((r) => `${r.name}: ${r.solution}`).join('\n\n'),
-        confidence: rows[0].confidence,
+        path: capturedRows[0].path,
+        symbol: capturedRows[0].symbol,
+        line: capturedRows[0].line,
+        cause: capturedRows.map((r) => `${r.name}: ${r.cause}`).join('\n\n'),
+        solution: capturedRows.map((r) => `${r.name}: ${r.solution}`).join('\n\n'),
+        confidence: capturedRows[0].confidence,
       },
     };
   };
@@ -466,13 +473,6 @@ export function Results({ s }: { s: State }) {
               }
             >
               {detail.status === 'dismissed' ? 'Reopen' : 'Delete'}
-            </Button>
-            <Button
-              icon="check"
-              disabled={!!s.busy || detail.status === 'fixed'}
-              onClick={() => void w.triage(detail.finding || detail.target, 'fixed')}
-            >
-              Mark as Done
             </Button>
           </div>
         )}
@@ -898,9 +898,14 @@ export function Results({ s }: { s: State }) {
               {(['all', 'bugs', 'security', 'performance'] as const).map((cat) => (
                 <Button
                   key={cat}
-                  tone={!showFeatures && categoryFilter === cat ? 'primary small' : 'ghost small'}
+                  tone={
+                    !showFeatures && !inProgressOnly && categoryFilter === cat
+                      ? 'primary small'
+                      : 'ghost small'
+                  }
                   onClick={() => {
                     if (s.page === 'features') void w.navigate('bugs');
+                    setInProgressOnly(false);
                     setCategoryFilter(cat);
                     updateView({ page: 1 });
                   }}
@@ -912,7 +917,7 @@ export function Results({ s }: { s: State }) {
                     style={{
                       marginLeft: '4px',
                       fontSize: '11px',
-                      opacity: categoryFilter === cat ? 0.9 : 0.6,
+                      opacity: !inProgressOnly && categoryFilter === cat ? 0.9 : 0.6,
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
@@ -921,8 +926,24 @@ export function Results({ s }: { s: State }) {
                 </Button>
               ))}
               <Button
+                tone={!showFeatures && inProgressOnly ? 'primary small' : 'ghost small'}
+                aria-pressed={!showFeatures && inProgressOnly}
+                onClick={() => {
+                  if (s.page === 'features') void w.navigate('bugs');
+                  setCategoryFilter('all');
+                  setShowDone(false);
+                  setInProgressOnly((prev) => !prev);
+                  updateView({ page: 1 });
+                }}
+              >
+                <span>In Progress ({inProgressCount})</span>
+              </Button>
+              <Button
                 tone={showFeatures ? 'primary small' : 'ghost small'}
-                onClick={() => setCategoryFilter('features')}
+                onClick={() => {
+                  setInProgressOnly(false);
+                  setCategoryFilter('features');
+                }}
               >
                 <span>Features ({featureRows.length})</span>
               </Button>
@@ -1007,6 +1028,7 @@ export function Results({ s }: { s: State }) {
                 type="checkbox"
                 checked={showDone}
                 onChange={(e) => {
+                  if (e.target.checked) setInProgressOnly(false);
                   setShowDone(e.target.checked);
                   updateView({ page: 1 });
                 }}
@@ -1040,18 +1062,6 @@ export function Results({ s }: { s: State }) {
                   onClick={() => triggerBatchFix(selectedRows)}
                 >
                   Fix Selected ({selectedRows.length})
-                </Button>
-                <Button
-                  tone="ghost small"
-                  icon="check"
-                  disabled={!!s.busy}
-                  onClick={() => {
-                    const targets = selectedRows.map((r) => r.finding || r.target);
-                    setSelectedKeys([]);
-                    void w.batchTriage(targets, 'fixed');
-                  }}
-                >
-                  Mark Done
                 </Button>
                 <Button
                   tone="danger small"
@@ -1168,24 +1178,23 @@ export function Results({ s }: { s: State }) {
                       )}
                       {row.status === 'dismissed' && <Badge value="Dismissed" />}
                       {row.status !== 'fixed' && rowAgent && (
-                        <Badge
-                          value={
-                            rowAgent.status === 'committed'
-                              ? `Committed in ${rowAgent.branch}`
-                              : rowAgent.status === 'running'
-                                ? 'Agent Running'
-                                : rowAgent.status === 'review'
-                                  ? 'Diff Ready'
-                                  : rowAgent.stageLabel
-                          }
-                          tone={
-                            rowAgent.status === 'committed'
-                              ? 'green'
-                              : rowAgent.status === 'running'
-                                ? 'violet'
-                                : 'amber'
-                          }
-                        />
+                        <>
+                          <Badge
+                            value={
+                              rowAgent.status === 'committed'
+                                ? `Committed in ${rowAgent.branch}`
+                                : `Step ${rowAgent.stepNumber}/4 · ${rowAgent.stageLabel}`
+                            }
+                            tone={
+                              rowAgent.status === 'committed'
+                                ? 'green'
+                                : rowAgent.status === 'running'
+                                  ? 'violet'
+                                  : 'amber'
+                            }
+                          />
+                          {rowAgent.hasProblem && <Badge value="Needs Attention" tone="red" />}
+                        </>
                       )}
                     </span>
                     <small>
@@ -1196,20 +1205,6 @@ export function Results({ s }: { s: State }) {
                     </small>
                   </span>
                   <div className="finding-inline-actions" style={{ display: 'flex', gap: '6px' }}>
-                    {!showFeatures && row.status !== 'fixed' && (
-                      <Button
-                        tone="ghost small"
-                        icon="check"
-                        title="Mark issue as Done"
-                        disabled={!!s.busy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void w.triage(row.finding || row.target, 'fixed');
-                        }}
-                      >
-                        Done
-                      </Button>
-                    )}
                     {!showFeatures &&
                     rowAgent &&
                     ['running', 'review', 'committed'].includes(rowAgent.status) ? (
@@ -1251,21 +1246,29 @@ export function Results({ s }: { s: State }) {
           {!showFeatures && !filtered.length && (
             <Empty
               title={
-                unique.length
-                  ? 'No matching issues'
-                  : s.run && !results
-                    ? 'Results not loaded'
-                    : 'No issues found'
+                inProgressOnly
+                  ? 'No issues in progress'
+                  : unique.length
+                    ? 'No matching issues'
+                    : s.run && !results
+                      ? 'Results not loaded'
+                      : 'No issues found'
               }
               detail={
-                unique.length
-                  ? 'Try clearing the search or priority filter.'
-                  : results
-                    ? `Run state: ${human(results.progress.status)}. All analyzed files healthy.`
-                    : 'Run an analysis to scan the project.'
+                inProgressOnly
+                  ? 'Select one or more open issues and click Fix with Agent to dispatch an agent.'
+                  : unique.length
+                    ? 'Try clearing the search or priority filter.'
+                    : results
+                      ? `Run state: ${human(results.progress.status)}. All analyzed files healthy.`
+                      : 'Run an analysis to scan the project.'
               }
             >
-              {unique.length ? (
+              {inProgressOnly ? (
+                <Button tone="ghost" icon="undo" onClick={() => setInProgressOnly(false)}>
+                  Show Open Issues
+                </Button>
+              ) : unique.length ? (
                 <Button tone="ghost" icon="undo" onClick={clearSearch}>
                   Clear filters
                 </Button>
@@ -1356,16 +1359,6 @@ export function Results({ s }: { s: State }) {
                     >
                       {inspectorRow.status === 'dismissed' ? 'Reopen' : 'Delete'}
                     </Button>
-                    <Button
-                      tone="ghost small"
-                      icon="check"
-                      disabled={!!s.busy || inspectorRow.status === 'fixed'}
-                      onClick={() =>
-                        void w.triage(inspectorRow.finding || inspectorRow.target, 'fixed')
-                      }
-                    >
-                      Mark as Done
-                    </Button>
                   </div>
                 )}
                 {inspectorRow.featureId && (
@@ -1405,7 +1398,7 @@ export function Results({ s }: { s: State }) {
                     style={{
                       padding: '10px 12px',
                       borderRadius: '8px',
-                      border: '1px solid var(--accent)',
+                      border: `1px solid ${inspectorAgent.hasProblem ? 'var(--red, #e5534b)' : 'var(--accent)'}`,
                       background: 'var(--bg-elevated)',
                       gap: '8px',
                     }}
@@ -1414,8 +1407,11 @@ export function Results({ s }: { s: State }) {
                       <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
                         <Badge value={inspectorAgent.branch} tone="violet" />
                         <span className="small">
-                          <strong>{inspectorAgent.stageLabel}</strong>
+                          <strong>
+                            Step {inspectorAgent.stepNumber}/4 · {inspectorAgent.stageLabel}
+                          </strong>
                         </span>
+                        {inspectorAgent.hasProblem && <Badge value="Needs Attention" tone="red" />}
                         {inspectorAgent.commitOid && (
                           <span className="small font-mono muted">
                             #{inspectorAgent.commitOid.slice(0, 7)}
@@ -1423,9 +1419,11 @@ export function Results({ s }: { s: State }) {
                         )}
                       </div>
                       <span className="small muted">
-                        {inspectorAgent.status === 'committed'
-                          ? `Committed on worktree branch ${inspectorAgent.branch}. Merge into ${s.repository?.branch || 'main'} to close this issue.`
-                          : 'An agent is assigned to this issue.'}
+                        {inspectorAgent.hasProblem
+                          ? inspectorAgent.problemSummary
+                          : inspectorAgent.status === 'committed'
+                            ? `Committed on worktree branch ${inspectorAgent.branch}. Merge into ${s.repository?.branch || 'main'} to mark Done.`
+                            : 'An agent is working on this issue.'}
                       </span>
                     </div>
                     <div className="actions" style={{ gap: '6px' }}>
