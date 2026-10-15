@@ -2,15 +2,28 @@ import { useWorkspace } from './workspace-context';
 import { useState } from 'react';
 import { CommitMessage } from './git-controls';
 import { activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
-import type { ChangeSession } from './models';
+import type { ChangeMutation, ChangeSession } from './models';
 import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
+
+export function receiptNeedsAttention(receipt?: ChangeMutation | null): boolean {
+  if (!receipt) return false;
+  if (receipt.state !== 'applied' && receipt.state !== 'undone') return true;
+  if (receipt.commit && (receipt.commit.state !== 'committed' || !!receipt.commit.error))
+    return true;
+  if ((receipt.warnings?.length || 0) > 0) return true;
+  if (receipt.verification?.status === 'failed') return true;
+  return false;
+}
 
 export function ChangeOutcome({ s }: { s: State }) {
   const w = useWorkspace();
   const change = s.change;
+  const needsAttention = receiptNeedsAttention(s.changeReceipt);
+  const showReceipt =
+    !!s.changeReceipt && (needsAttention || change?.id === s.changeReceipt.session_id);
   return (
     <>
-      {(s.uncertain || s.changeReceipt) && (
+      {(s.uncertain || showReceipt) && (
         <section className="workspace-page chat-outcome" aria-label="Change outcome">
           {s.uncertain && (
             <Notice error>
@@ -25,7 +38,7 @@ export function ChangeOutcome({ s }: { s: State }) {
               </div>
             </Notice>
           )}
-          {s.changeReceipt && (
+          {showReceipt && s.changeReceipt && (
             <Panel
               className="chat-receipt"
               title={
@@ -33,7 +46,16 @@ export function ChangeOutcome({ s }: { s: State }) {
                   ? 'Change applied'
                   : `Change ${s.changeReceipt.state.replaceAll('_', ' ')}`
               }
-              actions={<Badge value={s.changeReceipt.state} />}
+              actions={
+                <div className="row" style={{ gap: '8px' }}>
+                  <Badge value={s.changeReceipt.state} />
+                  {!needsAttention && (
+                    <Button tone="ghost small" onClick={() => w.set({ changeReceipt: undefined })}>
+                      Dismiss
+                    </Button>
+                  )}
+                </div>
+              }
             >
               {s.changeReceipt.commit && (
                 <Notice

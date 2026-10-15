@@ -199,11 +199,12 @@ function App() {
   const runningAgentsCount =
     (activeChangeWorkflow(s.change) ? 1 : 0) +
     s.implementations.filter((impl) => activeChangeWorkflow(impl.state.change)).length;
+  const draftChange = s.change?.state === 'draft' ? s.change : undefined;
   const activeAgentsCount =
-    (s.change || s.changeSeed ? 1 : 0) +
+    (draftChange || s.changeSeed ? 1 : 0) +
     nonCurrentWorktrees.filter((t) => (t.sessions?.length || 0) > 0 || t.completed.length > 0)
       .length;
-  const changeCount = s.change?.changes?.length || 0;
+  const changeCount = draftChange?.changes?.length || 0;
   const nav = (items: typeof mainNav) =>
     items.map(([page, label, icon]) => {
       const count =
