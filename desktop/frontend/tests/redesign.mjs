@@ -527,17 +527,25 @@ try {
       await page.getByText('Verification & Test Agent', { exact: true }).waitFor();
       await page.getByText('Clean-Code Critic Agent', { exact: true }).waitFor();
       await page.getByText('Human Precision Gate', { exact: true }).waitFor();
-      await page.getByText('Clean-Software Precision Gate', { exact: true }).waitFor();
-      await page.getByText('Critic Agent Verdict', { exact: true }).waitFor();
 
-      // Verify inline diff and direct Accept & Apply Fix right on the Fix/Agents page
+      // Revisit finished Step 3 (Critic Review) via the top clickable stage bar
+      await page.getByRole('tab', { name: /Step 3 · Critic Review/ }).click();
+      await page.getByText('Critic Agent Verdict', { exact: true }).waitFor();
+      assert.equal(
+        await page
+          .getByLabel('Read-only diff for internal/worker/process.go', { exact: true })
+          .count(),
+        0,
+      );
+
+      // Advance back to Step 4 (Review & Commit) and verify single-action Accept & Commit
+      await page.getByRole('button', { name: 'Next: Review & Commit', exact: true }).click();
       await page
         .getByLabel('Read-only diff for internal/worker/process.go', { exact: true })
         .waitFor();
-      const applyBtn = page
-        .getByRole('button', { name: 'Accept & Apply Fix', exact: true })
-        .first();
+      const applyBtn = page.getByRole('button', { name: 'Accept & Commit', exact: true });
       await applyBtn.waitFor();
+      assert.equal(await applyBtn.count(), 1);
       assert.equal(await applyBtn.isEnabled(), true);
       await applyBtn.click();
       await idle(page);
