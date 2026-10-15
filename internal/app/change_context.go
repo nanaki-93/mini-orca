@@ -11,9 +11,21 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
+
+func changeContextByteLimit(runtime modelRuntime) int {
+	if runtime.effective.ContextMaxTokens <= 0 {
+		return 0
+	}
+	limit := runtime.effective.ContextMaxTokens * 4
+	if runtime.effective.Scope == string(config.FunctionModelScope) && runtime.effective.ContextMaxTokens >= 4000 && limit < maxChangeBytes {
+		return maxChangeBytes
+	}
+	return limit
+}
 
 func captureChangeTarget(root, path string) (ChangeTarget, error) {
 	target := ChangeTarget{Path: path, Mode: 0644}
@@ -85,12 +97,16 @@ func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMes
 	if session.Kind == "fix" || session.Kind == "performance" || session.Kind == "security" {
 		explanationGuidance = " The explanation field is displayed under Proposed solution. Describe only the correction and how each changed file implements it. Do not repeat the cause or diagnostic background; they are displayed separately. Include unresolved failures, limitations and uncertainty affecting the solution."
 	}
+	previous := make([]ChangeEditInput, 0, len(session.Changes))
+	for _, edit := range session.Changes {
+		previous = append(previous, ChangeEditInput{Path: edit.Path, Content: edit.Content})
+	}
 	input, err := json.Marshal(struct {
-		Request      string          `json:"request"`
-		Criteria     []string        `json:"acceptance_criteria"`
-		Conversation []ChangeMessage `json:"conversation"`
-		Previous     []ChangeEdit    `json:"previous_proposal"`
-	}{message, session.AcceptanceCriteria, session.Messages, session.Changes})
+		Request      string            `json:"request"`
+		Criteria     []string          `json:"acceptance_criteria"`
+		Conversation []ChangeMessage   `json:"conversation"`
+		Previous     []ChangeEditInput `json:"previous_proposal"`
+	}{message, session.AcceptanceCriteria, session.Messages, previous})
 	if err != nil {
 		return nil, err
 	}

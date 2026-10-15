@@ -12,12 +12,31 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
+const workflowTestPrompt = "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured test file paths (such as _test.go, .test.ts, test_*.py, or tests/ files). Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
+
+func stripWorkflowTestMessages(messages []ChangeMessage) []ChangeMessage {
+	if len(messages) == 0 {
+		return messages
+	}
+	cleaned := make([]ChangeMessage, 0, len(messages))
+	for i := 0; i < len(messages); i++ {
+		if messages[i].Role == "user" && messages[i].Content == workflowTestPrompt {
+			if i+1 < len(messages) && messages[i+1].Role == "assistant" {
+				i++
+			}
+			continue
+		}
+		cleaned = append(cleaned, messages[i])
+	}
+	return cleaned
+}
+
 func (s *Service) generateWorkflowTests(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime) (*ChangeSession, error) {
 	text, _, err := changeContext(root, session)
 	if err != nil {
 		return nil, err
 	}
-	message := "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured test file paths (such as _test.go, .test.ts, test_*.py, or tests/ files). Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
+	message := workflowTestPrompt
 	messages, err := changeMessages(session, message, text)
 	if err != nil {
 		return nil, err
@@ -32,10 +51,18 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
+	testEdits := make([]ChangeEdit, 0, len(edits))
 	for _, edit := range edits {
-		if !isTestFilePath(edit.Path) {
+		if isTestFilePath(edit.Path) {
+			testEdits = append(testEdits, edit)
+			continue
+		}
+		if !sameProposedEdit(session.Changes, edit) {
 			return nil, fmt.Errorf("testing agent attempted to change implementation")
 		}
+	}
+	if len(testEdits) == 0 {
+		return nil, fmt.Errorf("testing agent attempted to change implementation")
 	}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
@@ -43,13 +70,22 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
-	current.Changes = mergeWorkflowTests(current.Changes, edits)
+	current.Changes = mergeWorkflowTests(current.Changes, testEdits)
 	current.Hash, current.Revision = changeProposalHash(current.Changes), current.Revision+1
 	current.Checks, current.ReviewedHash = []CheckResult{}, ""
 	now := time.Now().UTC()
 	current.Messages = append(current.Messages, ChangeMessage{Role: "user", Content: message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	current.UpdatedAt = now
 	return current, writeChangeSession(root, current)
+}
+
+func sameProposedEdit(changes []ChangeEdit, candidate ChangeEdit) bool {
+	for _, existing := range changes {
+		if existing.Path == candidate.Path {
+			return existing.Hash == candidate.Hash
+		}
+	}
+	return false
 }
 
 func mergeWorkflowTests(changes, tests []ChangeEdit) []ChangeEdit {
@@ -69,7 +105,7 @@ func mergeWorkflowTests(changes, tests []ChangeEdit) []ChangeEdit {
 }
 
 func (s *Service) requestWorkflowModel(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime, messages []llm.ChatMessage, schema llm.JSONSchema) (modelOutput, error) {
-	if runtime.effective.ContextMaxTokens > 0 && len(messages[0].Content)+len(messages[1].Content) > runtime.effective.ContextMaxTokens*4 {
+	if limit := changeContextByteLimit(runtime); limit > 0 && len(messages[0].Content)+len(messages[1].Content) > limit {
 		return modelOutput{}, fmt.Errorf("selected context exceeds configured %s token limit", runtime.effective.Profile)
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
