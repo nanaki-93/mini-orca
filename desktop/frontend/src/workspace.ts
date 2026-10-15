@@ -1096,7 +1096,7 @@ export class Workspace {
       await this.loadAvailableModels();
     if (page === 'git') await this.loadGitWorkspace();
     if (page === 'editor') await this.refreshFile();
-    if (['chat', 'changes', 'history'].includes(page)) await this.loadChangeHistory();
+    if (['chat', 'changes', 'history', 'agents'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
       await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
@@ -2042,7 +2042,7 @@ export class Workspace {
   setWorkflowModels(workflowModels: M.ChangeWorkflowModels) {
     this.set({ workflowModels });
   }
-  async viewChange(id: string) {
+  async viewChange(id: string, targetPage?: Page) {
     const epoch = this.epoch;
     const previous = this.state.change?.id,
       operation = this.operation;
@@ -2056,7 +2056,7 @@ export class Workspace {
       (change) => {
         if (change.id !== id || projectKey(change) !== projectKey(this.state.project))
           throw new Error('Workflow belongs to another project revision.');
-        this.set({ change, changeSeed: undefined, page: changePage(change.kind) });
+        this.set({ change, changeSeed: undefined, page: targetPage || changePage(change.kind) });
       },
       () =>
         epoch === this.epoch &&
@@ -2464,27 +2464,60 @@ export class Workspace {
   }
   async acceptChange(commitMessage?: string) {
     await this.act('Apply change', async () => {
-      const change = this.state.change;
+      if (
+        this.state.change &&
+        this.state.change.state === 'draft' &&
+        this.state.change.freshness === 'current' &&
+        this.state.change.changes.length > 0 &&
+        !activeChangeWorkflow(this.state.change) &&
+        !canAcceptChange(this.state)
+      ) {
+        if (!(await this.requestChangeChecks(!!this.state.change.check_options?.run_tests))) return;
+      }
+      let change = this.state.change;
       if (
         !change ||
         !['editor', 'chat', 'changes', 'agents', 'finding'].includes(this.state.page) ||
         !canAcceptChange(this.state)
       )
         throw new Error('The displayed proposal needs current passing checks and model review.');
+      if (!this.state.repository || this.state.resourceErrors.Git) {
+        await this.refreshRepository();
+      }
       const epoch = this.epoch;
       const operation = this.operation;
       const navigation = this.navigation;
-      const identity = this.changeIdentity(change);
       const repository = this.state.repository;
       const message = (commitMessage ?? change.title).trim();
       if (!repository || this.state.resourceErrors.Git)
         throw new Error('Refresh Git status before applying.');
       if (repository.available && !message) throw new Error('Enter a commit message.');
       // One explicit acceptance records review and applies only the displayed revision.
-      const reviewed = await this.api.post<M.ChangeSession>(
-        `${current}/changes/${encodeURIComponent(change.id)}/review`,
-        identity,
-      );
+      let identity = this.changeIdentity(change);
+      let reviewed: M.ChangeSession;
+      try {
+        reviewed = await this.api.post<M.ChangeSession>(
+          `${current}/changes/${encodeURIComponent(change.id)}/review`,
+          identity,
+        );
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.status === 400 &&
+          (await this.requestChangeChecks(!!change.check_options?.run_tests)) &&
+          this.state.change &&
+          canAcceptChange(this.state)
+        ) {
+          change = this.state.change;
+          identity = this.changeIdentity(change);
+          reviewed = await this.api.post<M.ChangeSession>(
+            `${current}/changes/${encodeURIComponent(change.id)}/review`,
+            identity,
+          );
+        } else {
+          throw error;
+        }
+      }
       if (
         epoch !== this.epoch ||
         operation !== this.operation ||
@@ -2518,12 +2551,7 @@ export class Workspace {
     });
   }
   async applyProposalNow(commitMessage?: string) {
-    if (this.state.change && !changeChecksPassed(this.state.change)) {
-      await this.checkChange(false);
-    }
-    if (this.state.change) {
-      await this.acceptChange(commitMessage);
-    }
+    await this.acceptChange(commitMessage);
   }
   async updateProposalFileContent(path: string, content: string, note = 'Updated diff hunks.') {
     await this.act('Update proposal', async () => {
