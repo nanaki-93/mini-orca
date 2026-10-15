@@ -578,6 +578,74 @@ try {
       await close();
     }
   });
+
+  await test('Multi-agent worktree dashboard, Git & Worktrees active worktree visibility, and post-commit merge issue closing', async () => {
+    const { page, close } = await pageFor({ git: true, trusted: true, featuresReady: true });
+    try {
+      // 1. Verify Git & Worktrees sidebar badge counts only non-current worktrees and shows in-progress worktrees too
+      await page.evaluate(() => {
+        window.fixture.state.gitWorktrees.push({
+          path: '/fixture/harbor/.worktrees/in-progress-agent',
+          branch: 'codex/in-progress-agent',
+          head: 'head-1',
+          current: false,
+          mergeable: false,
+          dirty: false,
+          completed: [],
+        });
+      });
+      await nav(page, 'Git & Worktrees');
+      await idle(page);
+      await page.getByText('codex/fix', { exact: true }).waitFor();
+      await page.getByText('codex/in-progress-agent', { exact: true }).waitFor();
+      assert.equal(await page.locator('.git-worktree').count(), 2);
+
+      // 2. Dispatch Fix with Agent from Issues & Ideas -> creates an isolated worktree agent
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await idle(page);
+
+      await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
+      const dashboard = page.getByRole('tablist', {
+        name: 'Active agents',
+        exact: true,
+      });
+      await dashboard.waitFor();
+
+      // Verify a worktree was created for this agent fix
+      const worktreeCreateReq = await page.evaluate(() =>
+        window.fixture.requests.find(
+          (r) => r.method === 'POST' && r.path.endsWith('/git/worktrees'),
+        ),
+      );
+      assert.ok(worktreeCreateReq, 'Fix with Agent creates an isolated Git worktree');
+
+      // 3. Accept & Commit inside the worktree, then Merge into main & Close Issue
+      const applyBtn = page.getByRole('button', { name: 'Accept & Commit', exact: true });
+      await applyBtn.waitFor();
+      await applyBtn.click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+
+      const mergeBtn = page.getByRole('button', {
+        name: 'Merge into main & Close Issue',
+        exact: true,
+      });
+      await mergeBtn.waitFor();
+      await mergeBtn.click();
+      await idle(page);
+
+      // Verify the issue was closed after merging into main and can be inspected via Show Done
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByText('2 issues · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByText('Show Done (1)', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();
