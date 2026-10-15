@@ -496,6 +496,7 @@ export interface GitWorktree extends GitIdentity {
   dirty?: boolean;
   mergeable: boolean;
   completed: ChangeHistoryEntry[];
+  sessions?: ChangeHistoryEntry[];
   error?: string;
 }
 export interface GitWorkspace extends GitRepository {
@@ -582,8 +583,9 @@ export type ChangeHistoryEntry = Pick<
   | 'state'
   | 'freshness'
   | 'finding_targets'
+  | 'commit'
   | 'updated_at'
-> & { workflow_status?: string };
+> & { paths?: string[]; workflow_status?: string };
 export interface ChangeWorkflowModels {
   create: string;
   test: string;
