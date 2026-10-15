@@ -242,6 +242,20 @@ function resolveLinkedIssues(
   return matched;
 }
 
+function extractCheckFailureSnippet(output?: string): string | undefined {
+  if (!output) return undefined;
+  const lines = output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const priority = lines.find((line) =>
+    /--- FAIL:|FAIL\s|Error:|panic:|undefined:|cannot |expected /i.test(line),
+  );
+  const chosen = priority || lines[0];
+  if (!chosen) return undefined;
+  return chosen.length > 140 ? `${chosen.slice(0, 140)}…` : chosen;
+}
+
 function buildAgentItemState(params: {
   key: string;
   path?: string;
@@ -282,11 +296,19 @@ function buildAgentItemState(params: {
     c?.workflow?.status === 'changes_requested' ||
     c?.workflow?.review?.verdict === 'changes_requested' ||
     latest?.workflow_status === 'changes_requested';
-  const workflowFailed = c?.workflow?.status === 'failed' || latest?.workflow_status === 'failed';
+  const workflowFailed =
+    ['failed', 'interrupted', 'stale'].includes(c?.workflow?.status || '') ||
+    ['failed', 'interrupted', 'stale'].includes(latest?.workflow_status || '') ||
+    !!agentState?.error;
   const commitFailed =
     agentState?.changeReceipt?.commit?.state === 'failed' || c?.commit?.state === 'failed';
   const hasProblem =
     !!tree?.error || workflowFailed || changesRequested || checksFailed || commitFailed;
+
+  const failedCheck =
+    checks.find((chk) => chk.required && chk.state !== 'passed') ||
+    checks.find((chk) => chk.state !== 'passed');
+  const checkSnippet = extractCheckFailureSnippet(failedCheck?.output);
 
   let problemSummary: string | undefined;
   if (tree?.error) {
@@ -295,14 +317,39 @@ function buildAgentItemState(params: {
     problemSummary =
       agentState?.changeReceipt?.commit?.error || c?.commit?.error || 'Git commit failed';
   } else if (checksFailed) {
-    const failedCheck = checks.find((chk) => chk.state !== 'passed');
-    problemSummary =
-      c?.workflow?.reason ||
-      (failedCheck ? `Check failed: ${human(failedCheck.name)}` : 'Verification checks failed');
+    const baseReason = c?.workflow?.reason || latest?.workflow_reason;
+    const checkDetail = failedCheck
+      ? `${human(failedCheck.name)}${checkSnippet ? ` — ${checkSnippet}` : ''}`
+      : '';
+    problemSummary = baseReason
+      ? checkDetail && !baseReason.includes(failedCheck!.name)
+        ? `${baseReason} (${checkDetail})`
+        : baseReason
+      : checkDetail
+        ? `Check failed: ${checkDetail}`
+        : 'Verification checks failed';
   } else if (changesRequested) {
-    problemSummary = c?.workflow?.review?.summary || 'Critic requested changes';
+    const findingNote = c?.workflow?.review?.findings?.[0];
+    problemSummary = c?.workflow?.review?.summary
+      ? findingNote && !c.workflow.review.summary.includes(findingNote)
+        ? `${c.workflow.review.summary} (${findingNote})`
+        : c.workflow.review.summary
+      : latest?.workflow_reason || 'Critic requested changes';
   } else if (workflowFailed) {
-    problemSummary = c?.workflow?.reason || 'Agent workflow failed · Needs attention';
+    const failedStage = c?.workflow?.stages.find((st) =>
+      ['failed', 'interrupted', 'stale'].includes(st.status),
+    );
+    const stagePrefix = failedStage ? `[${human(failedStage.name)} stage] ` : '';
+    const detailReason =
+      c?.workflow?.reason ||
+      latest?.workflow_reason ||
+      agentState?.error ||
+      (failedCheck
+        ? `Check failed: ${human(failedCheck.name)}${checkSnippet ? ` — ${checkSnippet}` : ''}`
+        : '');
+    problemSummary = detailReason
+      ? `${stagePrefix}${detailReason}`
+      : `${stagePrefix}Agent workflow failed · Click Re-run Fix to retry`;
   }
 
   let stepNumber: 1 | 2 | 3 | 4 = 1;
@@ -333,9 +380,12 @@ function buildAgentItemState(params: {
     stageId = 'review';
     stageLabel = 'Step 3/4 · Changes Requested';
   } else if (workflowFailed) {
-    const failedTest = c?.workflow?.stages.find((st) => st.name === 'test')?.status === 'failed';
-    const failedReview =
-      c?.workflow?.stages.find((st) => st.name === 'review')?.status === 'failed';
+    const failedTest = ['failed', 'interrupted', 'stale'].includes(
+      c?.workflow?.stages.find((st) => st.name === 'test')?.status || '',
+    );
+    const failedReview = ['failed', 'interrupted', 'stale'].includes(
+      c?.workflow?.stages.find((st) => st.name === 'review')?.status || '',
+    );
     if (failedTest) {
       stepNumber = 2;
       stageId = 'test';
@@ -507,7 +557,19 @@ export function AgentsWorkspace({ s }: { s: State }) {
     if (s.selectedAgentPath && !selectedChild && !s.busy) {
       void w.ensureAgentWorktree(s.selectedAgentPath);
     }
-  }, [s.selectedAgentPath, selectedChild, s.busy]);
+    const worktrees = s.gitWorkspace?.worktrees.filter((t) => !t.current) || [];
+    for (const tree of worktrees) {
+      if (!s.implementations.some((impl) => impl.worktreePath === tree.path) && !s.busy) {
+        void w.ensureAgentWorktree(tree.path);
+      }
+    }
+  }, [
+    s.selectedAgentPath,
+    selectedChild,
+    s.busy,
+    s.gitWorkspace?.worktrees,
+    s.implementations.length,
+  ]);
 
   useEffect(() => {
     if (s.agentDetailOpen) {
@@ -564,6 +626,12 @@ export function AgentsWorkspace({ s }: { s: State }) {
     }
     if (checks.length > 0 && !allChecksPassed) return 'test';
     if (workflow?.status === 'changes_requested') return 'review';
+    if (['failed', 'interrupted', 'stale'].includes(workflow?.status || '')) {
+      const failedStage = PIPELINE_STAGES.find((st) =>
+        ['failed', 'interrupted', 'stale'].includes(stageStatus(st.id)),
+      );
+      if (failedStage) return failedStage.id;
+    }
     if (changedFiles.length > 0 || change.state === 'applied' || readyToApply) {
       return 'human_review';
     }
@@ -1043,7 +1111,9 @@ export function AgentsWorkspace({ s }: { s: State }) {
         }
       />
 
-      {agentState.error && <Notice error>{agentState.error}</Notice>}
+      {agentState.error && !currentAgentItem?.hasProblem && (
+        <Notice error>{agentState.error}</Notice>
+      )}
       {currentAgentItem?.hasProblem && currentAgentItem.problemSummary && (
         <Notice error>
           <div className="row between wrap" style={{ gap: '10px', alignItems: 'center' }}>
@@ -1051,15 +1121,27 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <strong>Problem detected: </strong>
               {currentAgentItem.problemSummary}
             </span>
-            {!running && checks.length > 0 && !allChecksPassed && (
-              <Button
-                tone="primary small"
-                icon="sparkles"
-                disabled={busy}
-                onClick={() => void agentW.repairChange()}
-              >
-                Repair Failed Checks
-              </Button>
+            {!running && (
+              <div className="row wrap" style={{ gap: '8px' }}>
+                {checks.length > 0 && !allChecksPassed && (
+                  <Button
+                    tone="primary small"
+                    icon="sparkles"
+                    disabled={busy}
+                    onClick={() => void agentW.repairChange()}
+                  >
+                    Repair Failed Checks
+                  </Button>
+                )}
+                <Button
+                  tone={checks.length > 0 && !allChecksPassed ? 'ghost small' : 'primary small'}
+                  icon="refresh"
+                  disabled={busy}
+                  onClick={() => void agentW.rerunChangeWorkflow('agents')}
+                >
+                  Re-run Fix
+                </Button>
+              </div>
             )}
           </div>
         </Notice>

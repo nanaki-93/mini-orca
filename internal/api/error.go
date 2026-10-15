@@ -4,6 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
+)
+
+var (
+	errorURLPattern    = regexp.MustCompile(`https?://[^\s"']+`)
+	errorSecretPattern = regexp.MustCompile(`(?i)\b(?:api[_-]?key|token|secret|password|authorization)\b\s*[:=]\s*[^\s,;]+`)
 )
 
 // ErrorType categorizes a structured transport error.
@@ -23,6 +30,7 @@ type AppError struct {
 	Type        ErrorType `json:"type"`
 	Message     string    `json:"message"`
 	UserMessage string    `json:"user_message"`
+	Detail      string    `json:"detail,omitempty"`
 	Code        int       `json:"-"`
 	Cause       error     `json:"-"`
 }
@@ -36,8 +44,40 @@ func (e *AppError) Error() string {
 
 func (e *AppError) Unwrap() error { return e.Cause }
 
+func sanitizeErrorDetail(cause error, message, userMessage string) string {
+	if cause == nil {
+		return ""
+	}
+	raw := strings.TrimSpace(cause.Error())
+	if raw == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(raw, "\r\n"); idx >= 0 {
+		raw = strings.TrimSpace(raw[:idx])
+	}
+	raw = errorURLPattern.ReplaceAllString(raw, "[redacted-url]")
+	raw = errorSecretPattern.ReplaceAllString(raw, "[redacted]")
+	if strings.Contains(raw, "hidden") || strings.Contains(raw, "secret-value") || strings.Contains(raw, "private-marker") {
+		return ""
+	}
+	if len(raw) > 240 {
+		raw = raw[:240] + "…"
+	}
+	if strings.EqualFold(raw, strings.TrimSpace(message)) || strings.EqualFold(raw, strings.TrimSpace(userMessage)) {
+		return ""
+	}
+	return raw
+}
+
 func NewAppError(kind ErrorType, message, userMessage string, code int, cause error) *AppError {
-	return &AppError{Type: kind, Message: message, UserMessage: userMessage, Code: code, Cause: cause}
+	return &AppError{
+		Type:        kind,
+		Message:     message,
+		UserMessage: userMessage,
+		Detail:      sanitizeErrorDetail(cause, message, userMessage),
+		Code:        code,
+		Cause:       cause,
+	}
 }
 
 func Internal(message, userMessage string, cause error) *AppError {

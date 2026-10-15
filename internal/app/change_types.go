@@ -74,6 +74,7 @@ type ChangeHistoryEntry struct {
 	State           string                  `json:"state"`
 	Freshness       string                  `json:"freshness"`
 	WorkflowStatus  string                  `json:"workflow_status,omitempty"`
+	WorkflowReason  string                  `json:"workflow_reason,omitempty"`
 	Commit          *ChangeCommit           `json:"commit,omitempty"`
 	FindingTargets  []project.FindingTarget `json:"finding_targets,omitempty"`
 	UpdatedAt       time.Time               `json:"updated_at"`

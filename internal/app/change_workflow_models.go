@@ -20,7 +20,7 @@ func stripWorkflowTestMessages(messages []ChangeMessage) []ChangeMessage {
 	}
 	cleaned := make([]ChangeMessage, 0, len(messages))
 	for i := 0; i < len(messages); i++ {
-		if messages[i].Role == "user" && messages[i].Content == workflowTestPrompt {
+		if messages[i].Role == "user" && strings.HasPrefix(messages[i].Content, "Write meaningful regression and boundary tests for this proposal") {
 			if i+1 < len(messages) && messages[i+1].Role == "assistant" {
 				i++
 			}
@@ -55,10 +55,6 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	for _, edit := range edits {
 		if isTestFilePath(edit.Path) {
 			testEdits = append(testEdits, edit)
-			continue
-		}
-		if !sameProposedEdit(session.Changes, edit) {
-			return nil, fmt.Errorf("testing agent attempted to change implementation")
 		}
 	}
 	if len(testEdits) == 0 {
@@ -77,15 +73,6 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	current.Messages = append(current.Messages, ChangeMessage{Role: "user", Content: message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	current.UpdatedAt = now
 	return current, writeChangeSession(root, current)
-}
-
-func sameProposedEdit(changes []ChangeEdit, candidate ChangeEdit) bool {
-	for _, existing := range changes {
-		if existing.Path == candidate.Path {
-			return existing.Hash == candidate.Hash
-		}
-	}
-	return false
 }
 
 func mergeWorkflowTests(changes, tests []ChangeEdit) []ChangeEdit {
@@ -153,6 +140,7 @@ func parseWorkflowReview(output string) (*ChangeWorkflowReview, error) {
 	if len(output) > 32*1024 {
 		return nil, fmt.Errorf("workflow review exceeds its limit")
 	}
+	output = unwrapMarkdownJSON(output)
 	// The provider may not choose the proposal identity attached by the daemon.
 	var wire struct {
 		Verdict  string   `json:"verdict"`

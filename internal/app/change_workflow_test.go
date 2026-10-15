@@ -438,3 +438,51 @@ func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) 
 		}
 	}
 }
+
+func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing.T) {
+	s, root, _ := workflowService(t, [3]func() string{
+		func() string {
+			return "```json\n" + `{"explanation":"Optimize Existing.","changes":[{"path":"existing.go","content":"package main\n// optimized\nfunc Existing() int { return 1 }\n"}]}` + "\n```"
+		},
+		func() string {
+			return "```json\n" + `{"explanation":"Add unit test for Existing.","changes":[{"path":"existing_test.go","content":"package main\nimport \"testing\"\nfunc TestExisting(t *testing.T) { if Existing() != 1 { t.Fatal(\"bad\") } }\n"}]}` + "\n```"
+		},
+		func() string {
+			return "```json\n" + workflowApproval + "\n```"
+		},
+	})
+	if err := os.WriteFile(filepath.Join(root, "existing.go"), []byte("package main\nfunc Existing() int { return 1 }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	session := openChangeFixture(t, s, "existing.go", "existing_test.go")
+	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {
+		t.Fatal(err)
+	}
+	finished := finishedWorkflow(t, s, session.ID)
+	if finished.Workflow.Status != "awaiting_human_review" {
+		t.Fatalf("expected new test passing against baseline to succeed, got %+v (checks: %+v)", finished.Workflow, finished.Checks)
+	}
+
+	failS, _, failSession := workflowService(t, [3]func() string{
+		func() string { return workflowImplementation },
+		func() string { return strings.ReplaceAll(workflowTests, "Helper() != 2", "Helper() != 99") },
+		func() string { return workflowApproval },
+	})
+	if _, err := failS.StartChangeWorkflow(context.Background(), failSession.ID, workflowRequest(failSession)); err != nil {
+		t.Fatal(err)
+	}
+	failed := finishedWorkflow(t, failS, failSession.ID)
+	if failed.Workflow.Status != "failed" || !strings.Contains(failed.Workflow.Reason, "--- FAIL: TestHelper") {
+		t.Fatalf("expected detailed check failure reason, got %+v", failed.Workflow)
+	}
+	history, err := failS.ChangeHistory(context.Background())
+	if err != nil || len(history) == 0 || history[0].WorkflowReason != failed.Workflow.Reason {
+		t.Fatalf("expected history entry to include workflow_reason, got %+v, err=%v", history, err)
+	}
+}

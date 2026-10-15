@@ -585,7 +585,7 @@ export type ChangeHistoryEntry = Pick<
   | 'finding_targets'
   | 'commit'
   | 'updated_at'
-> & { paths?: string[]; workflow_status?: string };
+> & { paths?: string[]; workflow_status?: string; workflow_reason?: string };
 export interface ChangeWorkflowModels {
   create: string;
   test: string;

@@ -75,7 +75,7 @@ export class API {
         throw new ApiError(
           response.status,
           data.user_message || data.message || data.error || `Request failed (${response.status})`,
-          data.message || '',
+          data.detail || '',
         );
       return data as T;
     } finally {
@@ -98,5 +98,17 @@ export class API {
 }
 export const current = '/api/projects/current';
 export function errorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    const base = error.message;
+    const detail = error.detail?.trim();
+    if (
+      detail &&
+      detail.toLowerCase() !== base.toLowerCase() &&
+      !base.toLowerCase().includes(detail.toLowerCase())
+    ) {
+      return `${base} (${detail})`;
+    }
+    return base;
+  }
   return error instanceof Error ? error.message : String(error);
 }

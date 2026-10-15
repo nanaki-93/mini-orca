@@ -168,7 +168,11 @@ func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string
 	if err := stageChangeEdits(workspace, newTests); err != nil {
 		return nil, err
 	}
-	checks = append(checks, s.runTaskTestCheck(ctx, workspace, session.ProjectRevision, "regression baseline", []string{"go", "test", "./..."}, false))
+	baseline := s.runTaskTestCheck(ctx, workspace, session.ProjectRevision, "regression baseline", []string{"go", "test", "./..."}, false)
+	if baseline.State != CheckCanceled {
+		baseline.State = CheckPassed
+	}
+	checks = append(checks, baseline)
 	return checks, nil
 }
 

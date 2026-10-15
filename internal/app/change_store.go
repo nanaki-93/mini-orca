@@ -167,6 +167,7 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 		entry.FindingTargets = session.FindingTargets
 		if session.Workflow != nil {
 			entry.WorkflowStatus = session.Workflow.Status
+			entry.WorkflowReason = session.Workflow.Reason
 		}
 		result = append(result, entry)
 		if len(result) > 200 {
