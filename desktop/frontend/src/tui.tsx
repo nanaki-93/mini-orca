@@ -51,6 +51,9 @@ interface TuiIssueRow {
   line: number;
   severity: string;
   category: 'bugs' | 'security' | 'performance';
+  status: 'open' | 'in_progress' | 'done';
+  commitOid?: string;
+  agent?: ReturnType<typeof collectAgentDashboardItems>[number];
   cause: string;
   solution: string;
   target: M.FindingTarget;
@@ -58,8 +61,9 @@ interface TuiIssueRow {
 }
 
 function collectTuiIssues(s: State): TuiIssueRow[] {
-  const isCompletedTarget = (target: M.FindingTarget) =>
-    !!s.completedFindings?.some(
+  const agentItems = collectAgentDashboardItems(s);
+  const findCompletion = (target: M.FindingTarget) =>
+    s.completedFindings?.find(
       (c) =>
         c.project_id === target.project_id &&
         c.kind === target.kind &&
@@ -67,25 +71,57 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
         c.path === target.path &&
         (c.source || '') === (target.source || ''),
     );
+  const findAgent = (target: M.FindingTarget, id: string, name: string, title: string) => {
+    const rowTitle = name.trim().toLowerCase();
+    const fullTitle = title.trim().toLowerCase();
+    return agentItems.find((item) => {
+      if (
+        item.findingTargets.some(
+          (t) =>
+            t.kind === target.kind &&
+            t.id === target.id &&
+            t.path === target.path &&
+            (t.source || '') === (target.source || ''),
+        )
+      ) {
+        return true;
+      }
+      if (item.linkedIssues.some((iss) => iss.key === id)) {
+        return true;
+      }
+      const itemTitle = item.title.trim().toLowerCase();
+      return itemTitle === rowTitle || itemTitle === fullTitle;
+    });
+  };
+
   const rows: TuiIssueRow[] = [];
-  for (const f of s.findings || []) {
-    if (f.status === 'fixed' || f.status === 'retired' || f.status === 'dismissed') continue;
+  const pushSemantic = (f: M.Finding, cat: 'bugs' | 'security' | 'performance') => {
+    if (f.status === 'retired' || f.status === 'dismissed') return;
+    const id = `semantic:${f.id}`;
+    if (rows.some((r) => r.id === id)) return;
     const target: M.FindingTarget = {
       project_id: f.project_id,
       kind: 'semantic',
       id: f.id,
       path: f.location.path,
     };
-    if (isCompletedTarget(target)) continue;
+    const title = findingTitle(f.title, f.message);
+    const name = findingName(f.title, f.message);
+    const completion = findCompletion(target);
+    const isDone = f.status === 'fixed' || !!completion;
+    const agent = !isDone ? findAgent(target, id, name, title) : undefined;
     rows.push({
-      id: `semantic:${f.id}`,
-      title: findingTitle(f.title, f.message),
-      name: findingName(f.title, f.message),
+      id,
+      title,
+      name,
       path: f.location.path,
       symbol: f.location.symbol,
       line: f.location.start_line,
       severity: f.severity,
-      category: 'bugs',
+      category: cat,
+      status: isDone ? 'done' : agent ? 'in_progress' : 'open',
+      commitOid: completion?.commit_oid,
+      agent,
       cause: f.message || f.evidence || 'No cause recorded.',
       solution:
         f.task_spec?.acceptance_criteria.join('\n') ||
@@ -93,40 +129,86 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
       target,
       acceptance_criteria: f.task_spec?.acceptance_criteria || [],
     });
+  };
+
+  for (const f of s.findings || []) {
+    pushSemantic(f, (f.category as 'bugs' | 'security' | 'performance') || 'bugs');
   }
   for (const cat of ['bugs', 'security', 'performance'] as const) {
     const res = s.results[cat];
     for (const f of res?.semantic || []) {
-      if (
-        f.status === 'fixed' ||
-        f.status === 'retired' ||
-        f.status === 'dismissed' ||
-        rows.some((r) => r.id === `semantic:${f.id}`)
-      )
-        continue;
-      const target: M.FindingTarget = {
-        project_id: f.project_id,
-        kind: 'semantic',
-        id: f.id,
-        path: f.location.path,
-      };
-      if (isCompletedTarget(target)) continue;
-      rows.push({
-        id: `semantic:${f.id}`,
-        title: findingTitle(f.title, f.message),
-        name: findingName(f.title, f.message),
-        path: f.location.path,
-        symbol: f.location.symbol,
-        line: f.location.start_line,
-        severity: f.severity,
-        category: cat,
-        cause: f.message || f.evidence || 'No cause recorded.',
-        solution:
-          f.task_spec?.acceptance_criteria.join('\n') ||
-          'Synthesize a minimal, verified fix and unit test.',
-        target,
-        acceptance_criteria: f.task_spec?.acceptance_criteria || [],
-      });
+      pushSemantic(f, cat);
+    }
+    for (const rep of res?.performance || []) {
+      for (const f of rep.findings || []) {
+        const id = `performance:${rep.path}:${f.id}`;
+        if (rows.some((r) => r.id === id)) continue;
+        const target: M.FindingTarget = {
+          project_id: rep.project_id,
+          kind: 'performance',
+          id: f.id,
+          path: rep.path,
+        };
+        const title = f.title;
+        const name = findingName(f.title, f.observed_pattern);
+        const completion = findCompletion(target);
+        const isDone = !!completion;
+        const agent = !isDone ? findAgent(target, id, name, title) : undefined;
+        rows.push({
+          id,
+          title,
+          name,
+          path: rep.path,
+          symbol: f.symbol,
+          line: f.start_line,
+          severity: f.potential_impact,
+          category: 'performance',
+          status: isDone ? 'done' : agent ? 'in_progress' : 'open',
+          commitOid: completion?.commit_oid,
+          agent,
+          cause: f.observed_pattern || 'No cause recorded.',
+          solution: f.recommendation || 'Synthesize a minimal, verified fix and unit test.',
+          target,
+          acceptance_criteria: [],
+        });
+      }
+    }
+    for (const rep of res?.security || []) {
+      for (const f of rep.findings || []) {
+        if (f.triage === 'dismissed') continue;
+        const path = f.source_anchor.path || rep.path;
+        const id = `security:${rep.path}:${rep.source}:${f.id}`;
+        if (rows.some((r) => r.id === id)) continue;
+        const target: M.FindingTarget = {
+          project_id: rep.project_id,
+          kind: 'security',
+          id: f.id,
+          path,
+          source: rep.source,
+        };
+        const title = f.title;
+        const name = findingName(f.title, f.observed_condition);
+        const completion = findCompletion(target);
+        const isDone = f.triage === 'fixed' || !!completion;
+        const agent = !isDone ? findAgent(target, id, name, title) : undefined;
+        rows.push({
+          id,
+          title,
+          name,
+          path,
+          symbol: f.source_anchor.symbol,
+          line: f.source_anchor.start_line,
+          severity: f.severity,
+          category: 'security',
+          status: isDone ? 'done' : agent ? 'in_progress' : 'open',
+          commitOid: completion?.commit_oid,
+          agent,
+          cause: f.observed_condition || 'No cause recorded.',
+          solution: f.remediation || 'Synthesize a minimal, verified fix and unit test.',
+          target,
+          acceptance_criteria: [],
+        });
+      }
     }
   }
   return rows;
@@ -146,9 +228,12 @@ export function TuiApp({
     return PALETTES.some((p) => p.id === saved) ? saved! : 'tokyo';
   });
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [issueView, setIssueView] = useState<'open' | 'in_progress' | 'done'>('open');
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [showNewMissionForm, setShowNewMissionForm] = useState(false);
   const [cmdInput, setCmdInput] = useState('');
   const [cmdOutput, setCmdOutput] = useState(
-    'Type a command (help, analyze, test, fix, apply, undo, gui) or press 1-0 to switch views.',
+    'Type a command (help, analyze, test, fix, apply, merge, undo, gui) or press 1-0 to switch views.',
   );
   const selectedChild = s.selectedAgentPath
     ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
@@ -156,6 +241,8 @@ export function TuiApp({
   const agentW = selectedChild || w;
   const agentS = selectedChild ? selectedChild.state : s;
   const agentItems = collectAgentDashboardItems(s);
+  const selectedAgentItem =
+    agentItems.find((item) => (item.path || '') === (s.selectedAgentPath || '')) || agentItems[0];
 
   const [missionTitle, setMissionTitle] = useState(agentS.changeSeed?.title || '');
   const [missionPaths, setMissionPaths] = useState(
@@ -176,13 +263,24 @@ export function TuiApp({
     }
   }, [agentS.changeSeed?.title, agentS.changeSeed?.message, s.selectedAgentPath]);
 
-  const issues = collectTuiIssues(s);
+  const allIssues = collectTuiIssues(s);
+  const openIssues = allIssues.filter((i) => i.status !== 'done');
+  const inProgressIssues = allIssues.filter((i) => i.status === 'in_progress');
+  const doneIssues = allIssues.filter((i) => i.status === 'done');
+  const issues =
+    issueView === 'in_progress' ? inProgressIssues : issueView === 'done' ? doneIssues : openIssues;
   const clampedIdx = Math.min(selectedIdx, Math.max(0, issues.length - 1));
   const selectedIssue = issues[clampedIdx];
   const models = workflowSetupModels(s);
   const change = agentS.change;
   const workflow = change?.workflow;
   const running = activeChangeWorkflow(change);
+
+  const toggleIssueSelection = (id: string) => {
+    setSelectedIssueIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
 
   const dispatchIssueToAgent = (issue: TuiIssueRow) => {
     const seed = workflowSeed({
@@ -199,6 +297,34 @@ export function TuiApp({
       acceptance_criteria: issue.acceptance_criteria,
     });
     setCmdOutput(`Dispatched Fix with Agent for ${issue.name} (${issue.path})`);
+    void w.startAgentFix(seed);
+  };
+
+  const dispatchBatchIssuesToAgent = (batch: TuiIssueRow[]) => {
+    if (!batch.length) return;
+    if (batch.length === 1) {
+      setSelectedIssueIds([]);
+      dispatchIssueToAgent(batch[0]);
+      return;
+    }
+    const paths = [...new Set(batch.map((r) => r.path).filter(Boolean))].slice(0, 7);
+    const captured = batch.filter((r) => !r.path || paths.includes(r.path));
+    const itemsText = captured
+      .map(
+        (row, idx) =>
+          `${idx + 1}. ${row.title} (${row.path}${row.line ? `:${row.line}` : ''})\n   Cause: ${row.cause}\n   Proposed solution: ${row.solution}`,
+      )
+      .join('\n\n');
+    const seed = workflowSeed({
+      finding_targets: captured.map((r) => r.target),
+      title: `Batch fix (${captured.length} issues)`,
+      paths,
+      kind: 'fix',
+      message: `Address these ${captured.length} findings across the selected files:\n\n${itemsText}\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.`,
+      acceptance_criteria: [...new Set(captured.flatMap((r) => r.acceptance_criteria))],
+    });
+    setSelectedIssueIds([]);
+    setCmdOutput(`Dispatched grouped agent fix for ${captured.length} issues`);
     void w.startAgentFix(seed);
   };
 
@@ -223,6 +349,7 @@ export function TuiApp({
         'Ensure all unit tests and static checks pass.',
       ],
     });
+    setShowNewMissionForm(false);
     setCmdOutput(`Dispatched custom agent mission on ${seed.paths.join(', ')}`);
     void w.startAgentFix(seed);
   };
@@ -250,9 +377,16 @@ export function TuiApp({
       } else if (e.key === 'k') {
         e.preventDefault();
         setSelectedIdx((i) => Math.max(0, i - 1));
+      } else if (e.key === 'x' && selectedIssue && selectedIssue.status !== 'done') {
+        e.preventDefault();
+        toggleIssueSelection(selectedIssue.id);
       } else if (e.key === 'a' && selectedIssue) {
         e.preventDefault();
-        dispatchIssueToAgent(selectedIssue);
+        if (selectedIssue.agent) {
+          void w.selectAgent(selectedIssue.agent.path);
+        } else if (selectedIssue.status !== 'done') {
+          dispatchIssueToAgent(selectedIssue);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -271,7 +405,7 @@ export function TuiApp({
     }
     if (cmd === 'help' || cmd === '?') {
       setCmdOutput(
-        'Commands: [1-0] view | analyze | test | fix | agent <prompt> | open <file> | apply | undo | gui',
+        'Commands: [1-0] view | analyze | test | fix | agent <prompt> | open <file> | apply | merge | undo | gui',
       );
       return;
     }
@@ -286,20 +420,24 @@ export function TuiApp({
       return;
     }
     if (cmd === 'fix') {
-      if (selectedIssue) {
+      const chosen = openIssues.filter((i) => selectedIssueIds.includes(i.id));
+      if (chosen.length > 0) {
+        dispatchBatchIssuesToAgent(chosen);
+      } else if (selectedIssue && selectedIssue.status !== 'done') {
         dispatchIssueToAgent(selectedIssue);
       } else {
         void w.navigate('agents');
-        setCmdOutput('Opened Agent Mission Control.');
+        setCmdOutput('Opened Agents in Progress Dashboard.');
       }
       return;
     }
     if (cmd === 'agent' || cmd === 'agents') {
       if (arg) {
         setMissionPrompt(arg);
+        setShowNewMissionForm(true);
       }
       void w.navigate('agents');
-      setCmdOutput('Switched to [7] Agent Mission Control.');
+      setCmdOutput('Switched to [7] Agents in Progress.');
       return;
     }
     if (cmd === 'open' && arg) {
@@ -317,11 +455,6 @@ export function TuiApp({
         `Merging ${selectedChild.worktreePath} into ${s.repository?.branch || 'main'}...`,
       );
       void w.mergeAgentWorktree(selectedChild.worktreePath);
-      return;
-    }
-    if (cmd === 'done' && selectedIssue) {
-      setCmdOutput(`Marking ${selectedIssue.name} as Done...`);
-      void w.triage(selectedIssue.target, 'fixed');
       return;
     }
     if (cmd === 'undo') {
@@ -653,18 +786,107 @@ export function TuiApp({
         {currentTabPage === 'bugs' && (
           <div className="tui-split-main">
             <div className="tui-box focused">
-              <span className="tui-box-title">ISSUES QUEUE (j/k move · a dispatch agent)</span>
-              <span className="tui-box-meta">{issues.length} open</span>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginBottom: '8px',
+                }}
+              >
+                <span className="tui-box-title">
+                  ISSUES QUEUE (j/k move · x select · a agent fix)
+                </span>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`tui-btn${issueView === 'open' ? ' primary' : ''}`}
+                    onClick={() => {
+                      setIssueView('open');
+                      setSelectedIdx(0);
+                    }}
+                  >
+                    [Open ({openIssues.length})]
+                  </button>
+                  <button
+                    type="button"
+                    className={`tui-btn${issueView === 'in_progress' ? ' primary' : ''}`}
+                    onClick={() => {
+                      setIssueView('in_progress');
+                      setSelectedIdx(0);
+                    }}
+                  >
+                    [In Progress ({inProgressIssues.length})]
+                  </button>
+                  <button
+                    type="button"
+                    className={`tui-btn${issueView === 'done' ? ' primary' : ''}`}
+                    onClick={() => {
+                      setIssueView('done');
+                      setSelectedIdx(0);
+                    }}
+                  >
+                    [Done ({doneIssues.length})]
+                  </button>
+                </div>
+              </div>
+              {selectedIssueIds.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '4px 8px',
+                    marginBottom: '8px',
+                    border: '1px solid var(--tui-accent)',
+                  }}
+                >
+                  <span>
+                    <strong>{selectedIssueIds.length}</strong> issue(s) selected for grouped agent
+                    fix
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="tui-btn primary"
+                      disabled={!!s.busy}
+                      onClick={() =>
+                        dispatchBatchIssuesToAgent(
+                          openIssues.filter((i) => selectedIssueIds.includes(i.id)),
+                        )
+                      }
+                    >
+                      [Fix Selected with Agent ({selectedIssueIds.length})]
+                    </button>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      onClick={() => setSelectedIssueIds([])}
+                    >
+                      [Clear]
+                    </button>
+                  </div>
+                </div>
+              )}
               {issues.length === 0 ? (
-                <p className="tui-sub">No open findings.</p>
+                <p className="tui-sub">
+                  {issueView === 'in_progress'
+                    ? 'No issues in progress. Select open issues and click [Fix with Agent].'
+                    : issueView === 'done'
+                      ? 'No merged issues yet. Issues are marked Done when their agent branch is merged.'
+                      : 'No open findings.'}
+                </p>
               ) : (
                 <table className="tui-table">
                   <thead>
                     <tr>
+                      <th>SEL</th>
                       <th>SEV</th>
-                      <th>CAT</th>
                       <th>TITLE</th>
                       <th>FILE</th>
+                      <th>STEP / STATUS</th>
                       <th>ACTION</th>
                     </tr>
                   </thead>
@@ -676,6 +898,23 @@ export function TuiApp({
                         onClick={() => setSelectedIdx(idx)}
                       >
                         <td>
+                          {iss.status !== 'done' ? (
+                            <button
+                              type="button"
+                              className="tui-btn"
+                              aria-label={`Select ${iss.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleIssueSelection(iss.id);
+                              }}
+                            >
+                              [{selectedIssueIds.includes(iss.id) ? 'x' : ' '}]
+                            </button>
+                          ) : (
+                            <span className="tui-c-green">✓</span>
+                          )}
+                        </td>
+                        <td>
                           <span
                             className={`tui-badge ${
                               ['critical', 'high'].includes(iss.severity)
@@ -686,35 +925,54 @@ export function TuiApp({
                             {iss.severity}
                           </span>
                         </td>
-                        <td className="tui-c-purple">{iss.category}</td>
                         <td>{iss.name}</td>
                         <td className="tui-c-muted">
                           {iss.path}
                           {iss.line ? `:${iss.line}` : ''}
                         </td>
+                        <td>
+                          {iss.status === 'done' ? (
+                            <span className="tui-badge tui-c-green">
+                              {iss.commitOid ? `Done · #${iss.commitOid.slice(0, 7)}` : 'Done'}
+                            </span>
+                          ) : iss.agent ? (
+                            <span style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
+                              <span className="tui-badge tui-c-purple">
+                                Step {iss.agent.stepNumber}/4 · {iss.agent.stageLabel}
+                              </span>
+                              {iss.agent.hasProblem && (
+                                <span className="tui-badge tui-c-red">PROBLEM</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="tui-c-muted">open</span>
+                          )}
+                        </td>
                         <td style={{ display: 'flex', gap: '4px' }}>
-                          <button
-                            type="button"
-                            className="tui-btn primary"
-                            disabled={!!s.busy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              dispatchIssueToAgent(iss);
-                            }}
-                          >
-                            [Fix with Agent]
-                          </button>
-                          <button
-                            type="button"
-                            className="tui-btn"
-                            disabled={!!s.busy}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void w.triage(iss.target, 'fixed');
-                            }}
-                          >
-                            [Done]
-                          </button>
+                          {iss.agent ? (
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void w.selectAgent(iss.agent!.path);
+                              }}
+                            >
+                              [Open Agent]
+                            </button>
+                          ) : iss.status !== 'done' ? (
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              disabled={!!s.busy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                dispatchIssueToAgent(iss);
+                              }}
+                            >
+                              [Fix with Agent]
+                            </button>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -736,6 +994,26 @@ export function TuiApp({
                       {selectedIssue.symbol ? `· ${selectedIssue.symbol}` : ''}
                     </div>
                   </div>
+                  {selectedIssue.agent && (
+                    <div
+                      style={{
+                        padding: '6px 8px',
+                        border: `1px solid ${selectedIssue.agent.hasProblem ? 'var(--tui-red, #ff5f56)' : 'var(--tui-accent)'}`,
+                      }}
+                    >
+                      <div>
+                        <strong className="tui-c-purple">{selectedIssue.agent.branch}</strong> ·{' '}
+                        <span>
+                          Step {selectedIssue.agent.stepNumber}/4 · {selectedIssue.agent.stageLabel}
+                        </span>
+                      </div>
+                      {selectedIssue.agent.hasProblem && (
+                        <div className="tui-c-red">
+                          [PROBLEM] {selectedIssue.agent.problemSummary}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <div className="tui-c-amber">ROOT CAUSE:</div>
                     <pre className="tui-pre">{selectedIssue.cause}</pre>
@@ -745,22 +1023,24 @@ export function TuiApp({
                     <pre className="tui-pre">{selectedIssue.solution}</pre>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="tui-btn primary"
-                      disabled={!!s.busy}
-                      onClick={() => dispatchIssueToAgent(selectedIssue)}
-                    >
-                      [a] Fix with Agent
-                    </button>
-                    <button
-                      type="button"
-                      className="tui-btn"
-                      disabled={!!s.busy}
-                      onClick={() => void w.triage(selectedIssue.target, 'fixed')}
-                    >
-                      [Mark as Done]
-                    </button>
+                    {selectedIssue.agent ? (
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        onClick={() => void w.selectAgent(selectedIssue.agent!.path)}
+                      >
+                        [a] Open Agent Detail
+                      </button>
+                    ) : selectedIssue.status !== 'done' ? (
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        disabled={!!s.busy}
+                        onClick={() => dispatchIssueToAgent(selectedIssue)}
+                      >
+                        [a] Fix with Agent
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="tui-btn"
@@ -777,67 +1057,223 @@ export function TuiApp({
           </div>
         )}
 
-        {/* [7] AGENTS — TUI AGENT MISSION CONTROL */}
-        {currentTabPage === 'agents' && (
-          <>
-            {agentItems.length > 0 && (
-              <div className="tui-box" style={{ marginBottom: '8px' }}>
-                <span className="tui-box-title">RUNNING &amp; ACTIVE AGENTS DASHBOARD</span>
-                <span className="tui-box-meta">{agentItems.length} agents</span>
-                <table className="tui-table">
-                  <thead>
-                    <tr>
-                      <th>BRANCH</th>
-                      <th>MISSION</th>
-                      <th>STAGE</th>
-                      <th>STATUS</th>
-                      <th>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {agentItems.map((item) => {
-                      const isSelected = (item.path || '') === (s.selectedAgentPath || '');
-                      return (
-                        <tr
-                          key={item.key}
-                          className={`tui-selectable${isSelected ? ' tui-selected' : ''}`}
-                          onClick={() => void w.selectAgent(item.path)}
+        {/* [7] AGENTS — DASHBOARD vs AGENT & ISSUE DETAIL vs NEW MISSION */}
+        {currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm && (
+          <div className="tui-box focused">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px',
+              }}
+            >
+              <span className="tui-box-title">AGENTS IN PROGRESS DASHBOARD</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button type="button" className="tui-btn" onClick={() => void w.navigate('bugs')}>
+                  [5: Select Issues]
+                </button>
+                <button
+                  type="button"
+                  className="tui-btn primary"
+                  onClick={() => setShowNewMissionForm(true)}
+                >
+                  [+ New Agent Fix]
+                </button>
+              </div>
+            </div>
+            {agentItems.length === 0 ? (
+              <p className="tui-sub">
+                No agents in progress. Select one or more issues in [5] Issues and click [Fix with
+                Agent], or click [+ New Agent Fix].
+              </p>
+            ) : (
+              <table className="tui-table" aria-label="Agents in progress">
+                <thead>
+                  <tr>
+                    <th>AGENT / BRANCH</th>
+                    <th>GROUPED ISSUES</th>
+                    <th>CURRENT STEP</th>
+                    <th>STATUS / PROBLEM</th>
+                    <th>DETAIL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentItems.map((item) => (
+                    <tr
+                      key={item.key}
+                      className="tui-selectable"
+                      onClick={() => void w.selectAgent(item.path)}
+                    >
+                      <td>
+                        <strong className="tui-c-accent">{item.title}</strong>
+                        <div className="tui-c-muted">{item.branch}</div>
+                      </td>
+                      <td>
+                        <strong>
+                          {item.linkedIssues.length > 0
+                            ? `${item.linkedIssues.length} issue(s)`
+                            : `${item.findingTargets.length || 1} issue(s)`}
+                        </strong>
+                        {item.linkedIssues.length > 0 && (
+                          <div className="tui-c-muted">
+                            {item.linkedIssues.map((iss) => iss.name).join(', ')}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className="tui-badge tui-c-purple">
+                          Step {item.stepNumber}/4 · {item.stageLabel}
+                        </span>
+                      </td>
+                      <td>
+                        {item.hasProblem ? (
+                          <span className="tui-badge tui-c-red">
+                            PROBLEM: {item.problemSummary || 'Check failed'}
+                          </span>
+                        ) : (
+                          <span
+                            className={`tui-badge ${
+                              item.status === 'committed'
+                                ? 'tui-c-green'
+                                : item.status === 'running'
+                                  ? 'tui-c-purple'
+                                  : 'tui-c-amber'
+                            }`}
+                          >
+                            {item.status === 'committed' ? 'Ready to Merge' : item.status}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void w.selectAgent(item.path);
+                          }}
                         >
-                          <td className="tui-c-accent">{item.branch}</td>
-                          <td>{item.title}</td>
-                          <td className="tui-c-muted">{item.stageLabel}</td>
-                          <td>
-                            <span
-                              className={`tui-badge ${
-                                item.status === 'committed'
-                                  ? 'tui-c-green'
-                                  : item.status === 'running'
-                                    ? 'tui-c-purple'
-                                    : item.status === 'failed'
-                                      ? 'tui-c-red'
-                                      : 'tui-c-amber'
-                              }`}
-                            >
-                              {item.status}
-                            </span>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="tui-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void w.selectAgent(item.path);
-                              }}
-                            >
-                              [Inspect]
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          [Open Agent Detail]
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {currentTabPage === 'agents' && !s.agentDetailOpen && showNewMissionForm && (
+          <div className="tui-box focused">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px',
+              }}
+            >
+              <span className="tui-box-title">DISPATCH PRECISION AGENT MISSION</span>
+              <button
+                type="button"
+                className="tui-btn"
+                onClick={() => setShowNewMissionForm(false)}
+              >
+                [← Back to Agents Dashboard]
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label>
+                <div className="tui-sub">Mission Title</div>
+                <input
+                  aria-label="TUI agent mission title"
+                  className="tui-input"
+                  value={missionTitle}
+                  onChange={(e) => setMissionTitle(e.target.value)}
+                  placeholder="Enforce context cancellation on worker shutdown"
+                />
+              </label>
+              <label>
+                <div className="tui-sub">Target Files (comma-separated, max 8)</div>
+                <input
+                  aria-label="TUI agent target files"
+                  className="tui-input"
+                  value={missionPaths}
+                  onChange={(e) => setMissionPaths(e.target.value)}
+                  placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
+                />
+              </label>
+              <label>
+                <div className="tui-sub">Clean-Code Specification</div>
+                <textarea
+                  aria-label="TUI agent specification"
+                  className="tui-textarea"
+                  rows={3}
+                  value={missionPrompt}
+                  onChange={(e) => setMissionPrompt(e.target.value)}
+                  placeholder="Specify invariants, edge cases, and test expectations..."
+                />
+              </label>
+              <button
+                type="button"
+                className="tui-btn primary"
+                disabled={!!s.busy}
+                onClick={dispatchCustomMission}
+              >
+                [Dispatch 4-Stage Agent Pipeline]
+              </button>
+            </div>
+          </div>
+        )}
+
+        {currentTabPage === 'agents' && s.agentDetailOpen && (
+          <>
+            <div
+              className="tui-box"
+              style={{
+                marginBottom: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <div>
+                <button type="button" className="tui-btn" onClick={() => w.openAgentsDashboard()}>
+                  [← All Agents]
+                </button>{' '}
+                <strong className="tui-c-accent">
+                  {selectedAgentItem?.title || change?.title || 'Agent Detail'}
+                </strong>{' '}
+                {selectedAgentItem && (
+                  <span className="tui-c-muted">
+                    ({selectedAgentItem.branch} · Step {selectedAgentItem.stepNumber}/4 ·{' '}
+                    {selectedAgentItem.stageLabel})
+                  </span>
+                )}
+              </div>
+              {selectedAgentItem?.hasProblem && (
+                <span className="tui-badge tui-c-red">
+                  [PROBLEM: {selectedAgentItem.problemSummary}]
+                </span>
+              )}
+            </div>
+
+            {selectedAgentItem && selectedAgentItem.linkedIssues.length > 0 && (
+              <div className="tui-box" style={{ marginBottom: '8px' }}>
+                <span className="tui-box-title">
+                  GROUPED ISSUES IN THIS AGENT ({selectedAgentItem.linkedIssues.length})
+                </span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  {selectedAgentItem.linkedIssues.map((iss) => (
+                    <span key={iss.key} className="tui-pill">
+                      <strong>{iss.name}</strong> <span className="tui-c-muted">({iss.path})</span>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -885,156 +1321,107 @@ export function TuiApp({
               </div>
             </div>
 
-            <div className="tui-split-main">
-              <div className="tui-box">
-                <span className="tui-box-title">CLEAN-SOFTWARE PRECISION SCORECARD</span>
-                <span className="tui-box-meta">SCOPE: {scopeBadge}</span>
-                {change ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="tui-box" style={{ marginTop: '8px' }}>
+              <span className="tui-box-title">CLEAN-SOFTWARE PRECISION SCORECARD</span>
+              <span className="tui-box-meta">SCOPE: {scopeBadge}</span>
+              {change ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <strong>Mission:</strong> {change.title}
+                  </div>
+                  <div className="tui-sub">
+                    Files: <strong>{changedFiles.length || change.targets.length}/8 max</strong> ·
+                    Delta:{' '}
+                    <span className="tui-c-green">
+                      +{addedLines} / -{removedLines} lines
+                    </span>{' '}
+                    · Self-repairs: <strong>{change.repair_attempts}/3</strong>
+                  </div>
+                  {workflow?.review && (
                     <div>
-                      <strong>Mission:</strong> {change.title}
+                      <div className="tui-c-purple">
+                        CRITIC VERDICT: [{workflow.review.verdict.toUpperCase()}]
+                      </div>
+                      <pre className="tui-pre">{workflow.review.summary}</pre>
                     </div>
-                    <div className="tui-sub">
-                      Files: <strong>{changedFiles.length || change.targets.length}/8 max</strong> ·
-                      Delta:{' '}
-                      <span className="tui-c-green">
-                        +{addedLines} / -{removedLines} lines
-                      </span>{' '}
-                      · Self-repairs: <strong>{change.repair_attempts}/3</strong>
+                  )}
+                  <div>
+                    <div className="tui-c-green">
+                      DETERMINISTIC CHECKS ({passedChecks}/{checks.length}):
                     </div>
-                    {workflow?.review && (
-                      <div>
-                        <div className="tui-c-purple">
-                          CRITIC VERDICT: [{workflow.review.verdict.toUpperCase()}]
+                    {checks.length === 0 ? (
+                      <div className="tui-sub">No check runs recorded yet.</div>
+                    ) : (
+                      checks.map((chk) => (
+                        <div key={chk.name} className="tui-sub">
+                          [{chk.state.toUpperCase()}] <strong>{chk.name}</strong>{' '}
+                          {chk.output ? `— ${chk.output}` : ''}
                         </div>
-                        <pre className="tui-pre">{workflow.review.summary}</pre>
-                      </div>
+                      ))
                     )}
-                    <div>
-                      <div className="tui-c-green">
-                        DETERMINISTIC CHECKS ({passedChecks}/{checks.length}):
-                      </div>
-                      {checks.length === 0 ? (
-                        <div className="tui-sub">No check runs recorded yet.</div>
-                      ) : (
-                        checks.map((chk) => (
-                          <div key={chk.name} className="tui-sub">
-                            [{chk.state.toUpperCase()}] <strong>{chk.name}</strong>{' '}
-                            {chk.output ? `— ${chk.output}` : ''}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {change.state !== 'applied' && changedFiles.length > 0 && (
-                        <button
-                          type="button"
-                          className="tui-btn primary"
-                          disabled={!!agentS.busy || running || !allChecksPassed}
-                          onClick={() => void agentW.applyProposalNow()}
-                        >
-                          [Accept &amp; Commit]
-                        </button>
-                      )}
-                      {change.state === 'applied' && selectedChild?.worktreePath && (
-                        <button
-                          type="button"
-                          className="tui-btn primary"
-                          disabled={!!s.busy}
-                          onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
-                        >
-                          [Merge into {s.repository?.branch || 'main'} &amp; Close Issue]
-                        </button>
-                      )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {change.state !== 'applied' && changedFiles.length > 0 && (
                       <button
                         type="button"
-                        className="tui-btn"
-                        onClick={() => void w.navigate('editor')}
+                        className="tui-btn primary"
+                        disabled={!!agentS.busy || running || !allChecksPassed}
+                        onClick={() => void agentW.applyProposalNow()}
                       >
-                        [4: Inspect Diff &amp; Apply]
+                        [Accept &amp; Commit]
                       </button>
+                    )}
+                    {change.state === 'applied' && selectedChild?.worktreePath && (
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        disabled={!!s.busy}
+                        onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
+                      >
+                        [Merge into {s.repository?.branch || 'main'} &amp; Close Issue]
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      onClick={() => void w.navigate('editor')}
+                    >
+                      [4: Inspect Diff &amp; Apply]
+                    </button>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      disabled={!!agentS.busy || running}
+                      onClick={() => void agentW.checkChange(true)}
+                    >
+                      [Re-run Checks]
+                    </button>
+                    {!allChecksPassed && checks.length > 0 && (
                       <button
                         type="button"
                         className="tui-btn"
                         disabled={!!agentS.busy || running}
-                        onClick={() => void agentW.checkChange(true)}
+                        onClick={() => void agentW.repairChange()}
                       >
-                        [Re-run Checks]
+                        [Self-Repair]
                       </button>
-                      {!allChecksPassed && checks.length > 0 && (
-                        <button
-                          type="button"
-                          className="tui-btn"
-                          disabled={!!agentS.busy || running}
-                          onClick={() => void agentW.repairChange()}
-                        >
-                          [Self-Repair]
-                        </button>
-                      )}
-                      {running && (
-                        <button
-                          type="button"
-                          className="tui-btn"
-                          onClick={() => void agentW.cancelChangeWorkflow()}
-                        >
-                          [Cancel Workflow]
-                        </button>
-                      )}
-                    </div>
+                    )}
+                    {running && (
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        onClick={() => void agentW.cancelChangeWorkflow()}
+                      >
+                        [Cancel Workflow]
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <p className="tui-sub">
-                    No active agent mission. Select a finding in [5] Issues and press [a] Fix with
-                    Agent, or dispatch a custom mission on the right.
-                  </p>
-                )}
-              </div>
-
-              <div className="tui-box">
-                <span className="tui-box-title">DISPATCH PRECISION AGENT MISSION</span>
-                <span className="tui-box-meta">MAX 8 FILES</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label>
-                    <div className="tui-sub">Mission Title</div>
-                    <input
-                      aria-label="TUI agent mission title"
-                      className="tui-input"
-                      value={missionTitle}
-                      onChange={(e) => setMissionTitle(e.target.value)}
-                      placeholder="Enforce context cancellation on worker shutdown"
-                    />
-                  </label>
-                  <label>
-                    <div className="tui-sub">Target Files (comma-separated)</div>
-                    <input
-                      aria-label="TUI agent target files"
-                      className="tui-input"
-                      value={missionPaths}
-                      onChange={(e) => setMissionPaths(e.target.value)}
-                      placeholder="internal/worker/worker.go, internal/worker/worker_test.go"
-                    />
-                  </label>
-                  <label>
-                    <div className="tui-sub">Clean-Code Specification</div>
-                    <textarea
-                      aria-label="TUI agent specification"
-                      className="tui-textarea"
-                      rows={3}
-                      value={missionPrompt}
-                      onChange={(e) => setMissionPrompt(e.target.value)}
-                      placeholder="Specify invariants, edge cases, and test expectations..."
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="tui-btn primary"
-                    disabled={!!s.busy}
-                    onClick={dispatchCustomMission}
-                  >
-                    [Dispatch 4-Stage Agent Pipeline]
-                  </button>
                 </div>
-              </div>
+              ) : (
+                <p className="tui-sub">
+                  Agent is preparing changes. Return to [← All Agents] or wait for completion.
+                </p>
+              )}
             </div>
           </>
         )}

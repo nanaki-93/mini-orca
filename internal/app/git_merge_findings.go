@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -71,57 +70,6 @@ func completeMergedFindings(ctx context.Context, root, head string, completions 
 		return err
 	}
 	return store.Complete(completions)
-}
-
-func completeAppliedChangeFindings(root string, session *ChangeSession) {
-	if !isCommittedChangeSession(session) {
-		return
-	}
-	store, err := project.NewFindingStore(root)
-	if err != nil {
-		return
-	}
-	completions := linkedChangeFindingCompletions(session)
-	if len(completions) == 0 {
-		completions = titleMatchedChangeFindingCompletions(store, session)
-	}
-	_ = store.Complete(completions)
-}
-
-func isCommittedChangeSession(session *ChangeSession) bool {
-	return session != nil && session.State == "applied" && session.Commit != nil &&
-		session.Commit.State == "committed" && commitOIDPattern.MatchString(session.Commit.OID)
-}
-
-func linkedChangeFindingCompletions(session *ChangeSession) []project.FindingCompletion {
-	completions := make([]project.FindingCompletion, 0, len(session.FindingTargets))
-	for _, target := range session.FindingTargets {
-		if target.ProjectID == session.ProjectID {
-			completions = append(completions, project.FindingCompletion{FindingTarget: target, CommitOID: session.Commit.OID})
-		}
-	}
-	return completions
-}
-
-func titleMatchedChangeFindingCompletions(store *project.FindingStore, session *ChangeSession) []project.FindingCompletion {
-	title := strings.TrimSpace(session.Title)
-	if title == "" {
-		return nil
-	}
-	findings, err := store.Load(project.FindingInput{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision})
-	if err != nil {
-		return nil
-	}
-	var completions []project.FindingCompletion
-	for _, finding := range findings {
-		if finding.ProjectID == session.ProjectID && finding.Location.Path != "" && changeTarget(session, finding.Location.Path) != nil && strings.EqualFold(strings.TrimSpace(finding.Title), title) {
-			completions = append(completions, project.FindingCompletion{
-				FindingTarget: project.FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path},
-				CommitOID:     session.Commit.OID,
-			})
-		}
-	}
-	return completions
 }
 
 func (s *Service) FindingCompletions() ([]project.FindingCompletion, error) {

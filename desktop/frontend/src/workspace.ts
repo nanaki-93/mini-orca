@@ -55,6 +55,7 @@ export interface State {
   implementations: Workspace[];
   implementation?: Workspace;
   selectedAgentPath?: string;
+  agentDetailOpen?: boolean;
   page: Page;
   busy: string;
   error: string;
@@ -422,7 +423,7 @@ export function inferTestPath(path: string): string | undefined {
 }
 
 export function workflowSeed(seed: M.ChangeSeed): M.ChangeSeed {
-  const paths = [...seed.paths];
+  const paths = [...new Set(seed.paths.filter(Boolean))].slice(0, 8);
   if (paths.length < 8 && !paths.some(isTestFilePath)) {
     for (const path of paths) {
       const testPath = inferTestPath(path);
@@ -432,7 +433,16 @@ export function workflowSeed(seed: M.ChangeSeed): M.ChangeSeed {
       }
     }
   }
-  return { ...seed, paths };
+  const seenTargets = new Set<string>();
+  const finding_targets = seed.finding_targets
+    ?.filter((t) => {
+      const key = `${t.project_id}:${t.kind}:${t.source || ''}:${t.id}:${t.path}`;
+      if (!paths.includes(t.path) || seenTargets.has(key)) return false;
+      seenTargets.add(key);
+      return true;
+    })
+    .slice(0, 16);
+  return { ...seed, paths, ...(finding_targets ? { finding_targets } : {}) };
 }
 export function workflowReviewable(change: M.ChangeSession) {
   const flow = change.workflow;
@@ -996,9 +1006,17 @@ export class Workspace {
     child.schedule();
     return child;
   }
+  openAgentsDashboard() {
+    this.set({ agentDetailOpen: false, page: 'agents', error: '' });
+  }
   async selectAgent(worktreePath?: string) {
     if (!worktreePath) {
-      this.set({ selectedAgentPath: undefined, page: 'agents', error: '' });
+      this.set({
+        selectedAgentPath: undefined,
+        agentDetailOpen: true,
+        page: 'agents',
+        error: '',
+      });
       return;
     }
     await this.act('Open agent workspace', async () => {
@@ -1007,7 +1025,12 @@ export class Workspace {
       if (!child.state.change && child.state.changeHistory?.length) {
         await child.viewChange(child.state.changeHistory[0].id, 'agents');
       }
-      this.set({ selectedAgentPath: worktreePath, page: 'agents', error: '' });
+      this.set({
+        selectedAgentPath: worktreePath,
+        agentDetailOpen: true,
+        page: 'agents',
+        error: '',
+      });
     });
   }
   async startAgentFix(rawSeed: M.ChangeSeed, options?: { preferWorktree?: boolean }) {
@@ -1061,7 +1084,12 @@ export class Workspace {
           if (!child || epoch !== this.epoch) return;
           fresh = await child.readFixPreparation();
           child.seedChange(preparedSeed, 'agents');
-          this.set({ selectedAgentPath: result.path, page: 'agents', error: '' });
+          this.set({
+            selectedAgentPath: result.path,
+            agentDetailOpen: false,
+            page: 'agents',
+            error: '',
+          });
         });
         if (!child || !fresh) return;
         const activeChild = child;
@@ -1087,7 +1115,7 @@ export class Workspace {
         return;
       }
       this.seedChange(preparedSeed, 'agents');
-      this.set({ selectedAgentPath: undefined, page: 'agents' });
+      this.set({ selectedAgentPath: undefined, agentDetailOpen: false, page: 'agents' });
       const useAgents = preparedSeed.paths.some(isTestFilePath);
       if (useAgents) {
         await this.startChangeWorkflow(preparedSeed, models, context, 'agents');
@@ -1143,11 +1171,12 @@ export class Workspace {
   }
   private closeWorktree(path: string) {
     const child = this.state.implementations.find((item) => item.worktreePath === path);
-    if (!child) return;
-    child.stop();
+    if (child) child.stop();
     this.set({
       implementations: this.state.implementations.filter((item) => item !== child),
-      ...(this.state.selectedAgentPath === path ? { selectedAgentPath: undefined } : {}),
+      ...(this.state.selectedAgentPath === path
+        ? { selectedAgentPath: undefined, agentDetailOpen: false }
+        : {}),
       ...(this.state.implementation === child
         ? { implementation: undefined, ...(this.state.page === 'worktree' ? { page: 'git' } : {}) }
         : {}),
@@ -1235,6 +1264,7 @@ export class Workspace {
     this.navigation++;
     this.set({
       page,
+      ...(page === 'agents' ? { agentDetailOpen: false } : {}),
       error: '',
       modelsReturn:
         page === 'models' && this.state.page !== 'models'

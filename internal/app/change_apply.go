@@ -293,7 +293,6 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 		result.Warnings = append(result.Warnings, "Source changed; workspace identity could not be captured: "+err.Error())
 	}
 	journal.Session.State = journal.State
-	completeAppliedChangeFindings(root, &journal.Session)
 	journal.Warnings = append([]string{}, result.Warnings...)
 	if err := writeChangeJournal(root, journal); err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; the prepared recovery journal was retained: "+err.Error())
