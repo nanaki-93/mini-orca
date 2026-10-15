@@ -231,9 +231,12 @@ export function TuiApp({
   const [issueView, setIssueView] = useState<'open' | 'in_progress' | 'done'>('open');
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
   const [showNewMissionForm, setShowNewMissionForm] = useState(false);
+  const [showKeybindsModal, setShowKeybindsModal] = useState(false);
   const [cmdInput, setCmdInput] = useState('');
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1);
   const [cmdOutput, setCmdOutput] = useState(
-    'Type a command (help, analyze, test, fix, apply, merge, undo, gui) or press 1-0 to switch views.',
+    'Press [?] or type :keys for keyboard shortcuts · [1-0] switch views · [j/k] move · [Enter] select · [:gui] exit',
   );
   const selectedChild = s.selectedAgentPath
     ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
@@ -256,6 +259,10 @@ export function TuiApp({
   }, [palette]);
 
   useEffect(() => {
+    setSelectedIdx(0);
+  }, [activePage, s.agentDetailOpen, issueView]);
+
+  useEffect(() => {
     if (agentS.changeSeed) {
       setMissionTitle(agentS.changeSeed.title);
       setMissionPaths(agentS.changeSeed.paths.join(', '));
@@ -263,18 +270,58 @@ export function TuiApp({
     }
   }, [agentS.changeSeed?.title, agentS.changeSeed?.message, s.selectedAgentPath]);
 
+  const currentTabPage: Page =
+    findingCategory(s) || s.page === 'finding'
+      ? 'bugs'
+      : ['models', 'instructions', 'analysis-files', 'context'].includes(activePage)
+        ? 'instructions'
+        : activePage;
+
   const allIssues = collectTuiIssues(s);
   const openIssues = allIssues.filter((i) => i.status !== 'done');
   const inProgressIssues = allIssues.filter((i) => i.status === 'in_progress');
   const doneIssues = allIssues.filter((i) => i.status === 'done');
   const issues =
     issueView === 'in_progress' ? inProgressIssues : issueView === 'done' ? doneIssues : openIssues;
-  const clampedIdx = Math.min(selectedIdx, Math.max(0, issues.length - 1));
-  const selectedIssue = issues[clampedIdx];
+  const overviewIssues = issues.slice(0, 8);
+  const archComponents = s.overview?.docs?.components || [];
+  const editorFiles = (s.index?.files || []).slice(0, 18);
+  const featureSuggestions = s.features?.suggestions || [];
+  const runSections = s.run?.sections || [];
+  const gitWorktrees = s.gitWorkspace?.worktrees || [];
+  const modelPresets = allModelPresets(s);
+
+  const activeListLength =
+    currentTabPage === 'summary'
+      ? overviewIssues.length
+      : currentTabPage === 'diagrams'
+        ? archComponents.length
+        : currentTabPage === 'editor'
+          ? editorFiles.length
+          : currentTabPage === 'bugs'
+            ? issues.length
+            : currentTabPage === 'features'
+              ? featureSuggestions.length
+              : currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm
+                ? agentItems.length
+                : currentTabPage === 'analysis-run'
+                  ? runSections.length
+                  : currentTabPage === 'git'
+                    ? gitWorktrees.length
+                    : currentTabPage === 'instructions'
+                      ? modelPresets.length
+                      : 0;
+
+  const clampedIdx = Math.min(selectedIdx, Math.max(0, activeListLength - 1));
+  const selectedIssue =
+    currentTabPage === 'summary' ? overviewIssues[clampedIdx] : issues[clampedIdx];
   const models = workflowSetupModels(s);
   const change = agentS.change;
   const workflow = change?.workflow;
   const running = activeChangeWorkflow(change);
+  const checks = change?.checks || [];
+  const passedChecks = checks.filter((c) => c.state === 'passed').length;
+  const allChecksPassed = change ? changeChecksPassed(change) : false;
 
   const toggleIssueSelection = (id: string) => {
     setSelectedIssueIds((prev) =>
@@ -354,64 +401,322 @@ export function TuiApp({
     void w.startAgentFix(seed);
   };
 
+  const cyclePalette = () => {
+    const idx = PALETTES.findIndex((p) => p.id === palette);
+    const next = PALETTES[(idx + 1) % PALETTES.length];
+    setPalette(next.id);
+    setCmdOutput(`Switched TUI palette to ${next.label}`);
+  };
+
+  const activateCurrentRow = () => {
+    if (currentTabPage === 'summary' || currentTabPage === 'bugs') {
+      if (!selectedIssue) return;
+      if (selectedIssue.agent) {
+        void w.selectAgent(selectedIssue.agent.path);
+      } else if (selectedIssue.status !== 'done') {
+        dispatchIssueToAgent(selectedIssue);
+      } else {
+        void w.openFile(selectedIssue.path, selectedIssue.symbol);
+      }
+      return;
+    }
+    if (currentTabPage === 'editor') {
+      const file = editorFiles[clampedIdx];
+      if (file) {
+        setCmdOutput(`Opened ${file.path}`);
+        void w.openFile(file.path);
+      }
+      return;
+    }
+    if (currentTabPage === 'features') {
+      const idea = featureSuggestions[clampedIdx];
+      if (idea) {
+        w.seedWorkflow(
+          {
+            title: idea.title,
+            kind: 'feature',
+            paths: idea.paths,
+            acceptance_criteria: idea.acceptance_criteria,
+            message: `${idea.title}\n\nBenefit: ${idea.benefit}`,
+          },
+          'agents',
+        );
+        setCmdOutput(`Staged feature idea "${idea.title}" in Agents`);
+      }
+      return;
+    }
+    if (currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm) {
+      const item = agentItems[clampedIdx];
+      if (item) {
+        setCmdOutput(`Opened agent ${item.title} (${item.branch})`);
+        void w.selectAgent(item.path);
+      }
+      return;
+    }
+    if (currentTabPage === 'analysis-run') {
+      const sec = runSections[clampedIdx];
+      if (sec) {
+        void w.navigate(sec.category as Page);
+      }
+      return;
+    }
+    if (currentTabPage === 'git') {
+      const wt = gitWorktrees[clampedIdx];
+      if (wt && !wt.current) {
+        void w.selectAgent(wt.path);
+      }
+      return;
+    }
+    if (currentTabPage === 'instructions') {
+      const preset = modelPresets[clampedIdx];
+      if (preset) {
+        w.applyModelPreset(preset);
+        setCmdOutput(`Applied model preset: ${preset.name}`);
+      }
+    }
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        if (e.key === 'Escape') (e.target as HTMLElement).blur();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          (e.target as HTMLElement).blur();
+        }
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (showKeybindsModal) {
+        if (e.key === 'Escape' || e.key === '?' || e.key === 'Enter' || e.key === 'q') {
+          e.preventDefault();
+          setShowKeybindsModal(false);
+        }
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowKeybindsModal((prev) => !prev);
+        return;
+      }
+
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (showNewMissionForm) {
+          e.preventDefault();
+          setShowNewMissionForm(false);
+          return;
+        }
+        if (currentTabPage === 'agents' && s.agentDetailOpen) {
+          e.preventDefault();
+          w.openAgentsDashboard();
+          setCmdOutput('Returned to Agents in Progress Dashboard');
+          return;
+        }
+      }
+
       const tab = TUI_TABS.find((t) => t.key === e.key);
       if (tab) {
         e.preventDefault();
         void w.navigate(tab.page);
         return;
       }
+
+      if (e.key === '[' || e.key === ']') {
+        e.preventDefault();
+        const curIdx = Math.max(
+          0,
+          TUI_TABS.findIndex((t) => t.page === currentTabPage),
+        );
+        const nextIdx =
+          e.key === ']'
+            ? (curIdx + 1) % TUI_TABS.length
+            : (curIdx - 1 + TUI_TABS.length) % TUI_TABS.length;
+        const nextTab = TUI_TABS[nextIdx];
+        if (nextTab) {
+          void w.navigate(nextTab.page);
+          setCmdOutput(`Switched to [${nextTab.key}] ${nextTab.label}`);
+        }
+        return;
+      }
+
       if (e.key === '/' || e.key === ':') {
         e.preventDefault();
         cmdRef.current?.focus();
-      } else if (e.key === 'j') {
+      } else if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIdx((i) => Math.min(Math.max(0, issues.length - 1), i + 1));
-      } else if (e.key === 'k') {
+        setSelectedIdx((i) => Math.min(Math.max(0, activeListLength - 1), i + 1));
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIdx((i) => Math.max(0, i - 1));
-      } else if (e.key === 'x' && selectedIssue && selectedIssue.status !== 'done') {
+      } else if (
+        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
+        currentTabPage === 'bugs'
+      ) {
+        e.preventDefault();
+        const views: ('open' | 'in_progress' | 'done')[] = ['open', 'in_progress', 'done'];
+        const cur = views.indexOf(issueView);
+        const next =
+          e.key === 'l' || e.key === 'ArrowRight'
+            ? views[(cur + 1) % views.length]
+            : views[(cur - 1 + views.length) % views.length];
+        setIssueView(next);
+        setSelectedIdx(0);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        activateCurrentRow();
+      } else if (
+        (e.key === 'x' || e.key === ' ') &&
+        currentTabPage === 'bugs' &&
+        selectedIssue &&
+        selectedIssue.status !== 'done'
+      ) {
         e.preventDefault();
         toggleIssueSelection(selectedIssue.id);
-      } else if (e.key === 'a' && selectedIssue) {
+      } else if (e.key === 'a') {
         e.preventDefault();
-        if (selectedIssue.agent) {
-          void w.selectAgent(selectedIssue.agent.path);
-        } else if (selectedIssue.status !== 'done') {
-          dispatchIssueToAgent(selectedIssue);
+        const chosen = openIssues.filter((i) => selectedIssueIds.includes(i.id));
+        if (chosen.length > 0) {
+          dispatchBatchIssuesToAgent(chosen);
+        } else if (selectedIssue) {
+          if (selectedIssue.agent) {
+            void w.selectAgent(selectedIssue.agent.path);
+          } else if (selectedIssue.status !== 'done') {
+            dispatchIssueToAgent(selectedIssue);
+          }
         }
+      } else if (e.key === 'n') {
+        e.preventDefault();
+        setShowNewMissionForm(true);
+        void w.navigate('agents');
+        setCmdOutput('Opened Dispatch Precision Agent Mission form');
+      } else if (e.key === 'c') {
+        if (change && change.state !== 'applied' && allChecksPassed) {
+          e.preventDefault();
+          setCmdOutput('Applying and committing verified proposal...');
+          void agentW.applyProposalNow();
+        }
+      } else if (e.key === 'm') {
+        if (currentTabPage === 'git') {
+          const wt = gitWorktrees[clampedIdx];
+          if (wt && !wt.current && wt.mergeable) {
+            e.preventDefault();
+            void w.mergeAgentWorktree(wt.path);
+          }
+        } else if (selectedChild?.worktreePath) {
+          e.preventDefault();
+          void w.mergeAgentWorktree(selectedChild.worktreePath);
+        }
+      } else if (e.key === 'r') {
+        e.preventDefault();
+        if (currentTabPage === 'agents' && s.agentDetailOpen && change) {
+          if (!allChecksPassed && checks.length > 0) {
+            setCmdOutput('Triggering agent self-repair...');
+            void agentW.repairChange();
+          } else {
+            setCmdOutput('Re-running deterministic verification checks...');
+            void agentW.checkChange(true);
+          }
+        } else if (s.run && ['paused', 'interrupted'].includes(s.run.status)) {
+          setCmdOutput('Resuming project analysis...');
+          void w.resumeAnalysisDirect();
+        } else {
+          setCmdOutput('Starting project analysis...');
+          void w.runAnalysisDirect(false);
+        }
+      } else if (e.key === 't') {
+        e.preventDefault();
+        if (currentTabPage === 'instructions') {
+          void w.setWorkspaceTrust(s.workspaceTrust === false);
+          setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}`);
+        } else {
+          setCmdOutput('Running project tests and checks...');
+          void w.scanProject(false);
+        }
+      } else if (e.key === 'u') {
+        e.preventDefault();
+        setCmdOutput('Requesting guarded Undo...');
+        void agentW.undoChange();
+      } else if (e.key === 'p') {
+        e.preventDefault();
+        cyclePalette();
+      } else if (e.key === 'g') {
+        e.preventDefault();
+        onExitTui();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [issues.length, selectedIssue]);
+  }, [
+    activeListLength,
+    clampedIdx,
+    currentTabPage,
+    issueView,
+    openIssues,
+    selectedIssue,
+    selectedIssueIds,
+    showKeybindsModal,
+    showNewMissionForm,
+    s.agentDetailOpen,
+    s.run,
+    s.workspaceTrust,
+    change,
+    allChecksPassed,
+    checks.length,
+    palette,
+  ]);
 
   const executeCommand = (raw: string) => {
     const trimmed = raw.trim().replace(/^:/, '');
     if (!trimmed) return;
+    setCmdHistory((prev) =>
+      [raw.trim(), ...prev.filter((item) => item !== raw.trim())].slice(0, 30),
+    );
+    setCmdHistoryIdx(-1);
     const [verb, ...rest] = trimmed.split(/\s+/);
     const arg = rest.join(' ');
     const cmd = verb.toLowerCase();
-    if (cmd === 'gui' || cmd === 'exit') {
+    if (cmd === 'gui' || cmd === 'exit' || cmd === 'q' || cmd === 'quit') {
       onExitTui();
       return;
     }
-    if (cmd === 'help' || cmd === '?') {
+    if (
+      cmd === 'help' ||
+      cmd === '?' ||
+      cmd === 'keys' ||
+      cmd === 'keybinds' ||
+      cmd === 'keybind' ||
+      cmd === 'shortcuts'
+    ) {
+      setShowKeybindsModal(true);
       setCmdOutput(
-        'Commands: [1-0] view | analyze | test | fix | agent <prompt> | open <file> | apply | merge | undo | gui',
+        'Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | agent <prompt> | open <file> | apply | merge | undo | palette | gui',
       );
+      return;
+    }
+    if (cmd === 'palette' || cmd === 'theme') {
+      cyclePalette();
+      return;
+    }
+    if (cmd === 'trust') {
+      void w.setWorkspaceTrust(s.workspaceTrust === false);
+      setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}.`);
       return;
     }
     if (cmd === 'analyze' || cmd === 'run') {
       setCmdOutput('Starting project analysis...');
       void w.runAnalysisDirect(false);
+      return;
+    }
+    if (cmd === 'new-analysis' || cmd === 'reanalyze') {
+      setCmdOutput('Starting fresh project analysis (preserving in-progress issues)...');
+      void w.runAnalysisDirect(true);
+      return;
+    }
+    if (cmd === 'resume') {
+      setCmdOutput('Resuming paused analysis...');
+      void w.resumeAnalysisDirect();
       return;
     }
     if (cmd === 'test' || cmd === 'scan') {
@@ -445,9 +750,14 @@ export function TuiApp({
       void w.openFile(arg);
       return;
     }
-    if (cmd === 'apply') {
+    if (cmd === 'apply' || cmd === 'commit') {
       setCmdOutput('Applying verified proposal...');
       void agentW.applyProposalNow();
+      return;
+    }
+    if (cmd === 'repair') {
+      setCmdOutput('Triggering agent self-repair...');
+      void agentW.repairChange();
       return;
     }
     if (cmd === 'merge' && selectedChild?.worktreePath) {
@@ -470,7 +780,7 @@ export function TuiApp({
       setCmdOutput(`Switched to [${tabMatch.key}] ${tabMatch.label}.`);
       return;
     }
-    setCmdOutput(`Unknown command "${trimmed}". Type "help" for available commands.`);
+    setCmdOutput(`Unknown command "${trimmed}". Type ":keys" or "help" for available commands.`);
   };
 
   // Compute diff lines & precision metrics
@@ -492,16 +802,6 @@ export function TuiApp({
         : totalDelta <= 200
           ? 'FOCUSED'
           : 'BROAD';
-  const checks = change?.checks || [];
-  const passedChecks = checks.filter((c) => c.state === 'passed').length;
-  const allChecksPassed = change ? changeChecksPassed(change) : false;
-
-  const currentTabPage: Page =
-    findingCategory(s) || s.page === 'finding'
-      ? 'bugs'
-      : ['models', 'instructions', 'analysis-files', 'context'].includes(activePage)
-        ? 'instructions'
-        : activePage;
 
   return (
     <div
@@ -536,6 +836,14 @@ export function TuiApp({
           </span>
         </div>
         <div className="tui-statusbar-right">
+          <button
+            type="button"
+            className={`tui-btn${showKeybindsModal ? ' active' : ''}`}
+            aria-label="Open TUI keybindings reference"
+            onClick={() => setShowKeybindsModal((prev) => !prev)}
+          >
+            [?] Keys
+          </button>
           <div role="group" aria-label="TUI Palette" style={{ display: 'flex', gap: '4px' }}>
             {PALETTES.map((p) => (
               <button
@@ -644,7 +952,7 @@ export function TuiApp({
               </div>
               <div className="tui-box">
                 <span className="tui-box-title">TESTS &amp; CHECKS</span>
-                <span className="tui-box-meta">GATE</span>
+                <span className="tui-box-meta">[t] GATE</span>
                 <div className="tui-stat tui-c-green">
                   {s.scan ? human(s.scan.status) : 'Ready'}
                 </div>
@@ -679,11 +987,13 @@ export function TuiApp({
 
             <div className="tui-split-main">
               <div className="tui-box focused">
-                <span className="tui-box-title">PRIORITY FINDINGS (j/k select, a = Agent Fix)</span>
+                <span className="tui-box-title">
+                  PRIORITY FINDINGS (j/k move · Enter/a = Agent Fix)
+                </span>
                 <span className="tui-box-meta">{issues.length} total</span>
-                {issues.length === 0 ? (
+                {overviewIssues.length === 0 ? (
                   <p className="tui-sub">
-                    No open issues. Run <code>analyze</code> or click [Run Analysis].
+                    No open issues. Press <code>r</code> or type <code>analyze</code> to scan.
                   </p>
                 ) : (
                   <table className="tui-table">
@@ -696,13 +1006,18 @@ export function TuiApp({
                       </tr>
                     </thead>
                     <tbody>
-                      {issues.slice(0, 8).map((iss, idx) => (
+                      {overviewIssues.map((iss, idx) => (
                         <tr
                           key={iss.id}
                           className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
                           onClick={() => setSelectedIdx(idx)}
                         >
                           <td>
+                            {idx === clampedIdx && (
+                              <span className="tui-cursor-indicator" aria-hidden="true">
+                                &gt;
+                              </span>
+                            )}
                             <span
                               className={`tui-badge ${
                                 ['critical', 'high'].includes(iss.severity)
@@ -748,7 +1063,7 @@ export function TuiApp({
                     disabled={!!s.busy || activeRun(s.run)}
                     onClick={() => void w.runAnalysisDirect(false)}
                   >
-                    [Run Analysis]
+                    [r: Run Analysis]
                   </button>
                   <button
                     type="button"
@@ -756,7 +1071,7 @@ export function TuiApp({
                     disabled={!!s.busy}
                     onClick={() => void w.scanProject(false)}
                   >
-                    [Run Tests]
+                    [t: Run Tests]
                   </button>
                   <button
                     type="button"
@@ -764,6 +1079,13 @@ export function TuiApp({
                     onClick={() => void w.navigate('agents')}
                   >
                     [7: Agent Mission Control]
+                  </button>
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    onClick={() => setShowKeybindsModal(true)}
+                  >
+                    [?: Keybindings]
                   </button>
                 </div>
                 <pre className="tui-pre">
@@ -797,7 +1119,7 @@ export function TuiApp({
                 }}
               >
                 <span className="tui-box-title">
-                  ISSUES QUEUE (j/k move · x select · a agent fix)
+                  ISSUES QUEUE (j/k move · h/l filter · x select · Enter/a agent fix)
                 </span>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   <button
@@ -873,7 +1195,7 @@ export function TuiApp({
               {issues.length === 0 ? (
                 <p className="tui-sub">
                   {issueView === 'in_progress'
-                    ? 'No issues in progress. Select open issues and click [Fix with Agent].'
+                    ? 'No issues in progress. Select open issues and press [a] or click [Fix with Agent].'
                     : issueView === 'done'
                       ? 'No merged issues yet. Issues are marked Done when their agent branch is merged.'
                       : 'No open findings.'}
@@ -898,6 +1220,11 @@ export function TuiApp({
                         onClick={() => setSelectedIdx(idx)}
                       >
                         <td>
+                          {idx === clampedIdx && (
+                            <span className="tui-cursor-indicator" aria-hidden="true">
+                              &gt;
+                            </span>
+                          )}
                           {iss.status !== 'done' ? (
                             <button
                               type="button"
@@ -1084,8 +1411,8 @@ export function TuiApp({
             </div>
             {agentItems.length === 0 ? (
               <p className="tui-sub">
-                No agents in progress. Select one or more issues in [5] Issues and click [Fix with
-                Agent], or click [+ New Agent Fix].
+                No agents in progress. Select one or more issues in [5] Issues and press [a], or
+                press [n] for [+ New Agent Fix].
               </p>
             ) : (
               <table className="tui-table" aria-label="Agents in progress">
@@ -1099,13 +1426,21 @@ export function TuiApp({
                   </tr>
                 </thead>
                 <tbody>
-                  {agentItems.map((item) => (
+                  {agentItems.map((item, idx) => (
                     <tr
                       key={item.key}
-                      className="tui-selectable"
-                      onClick={() => void w.selectAgent(item.path)}
+                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                      onClick={() => {
+                        setSelectedIdx(idx);
+                        void w.selectAgent(item.path);
+                      }}
                     >
                       <td>
+                        {idx === clampedIdx && (
+                          <span className="tui-cursor-indicator" aria-hidden="true">
+                            &gt;
+                          </span>
+                        )}
                         <strong className="tui-c-accent">{item.title}</strong>
                         <div className="tui-c-muted">{item.branch}</div>
                       </td>
@@ -1419,7 +1754,7 @@ export function TuiApp({
                 </div>
               ) : (
                 <p className="tui-sub">
-                  Agent is preparing changes. Return to [← All Agents] or wait for completion.
+                  Agent is preparing changes. Press [Esc] or click [← All Agents] to return.
                 </p>
               )}
             </div>
@@ -1430,7 +1765,7 @@ export function TuiApp({
         {currentTabPage === 'editor' && (
           <div className="tui-split-main">
             <div className="tui-box">
-              <span className="tui-box-title">PROJECT FILES</span>
+              <span className="tui-box-title">PROJECT FILES (j/k move · Enter open)</span>
               <span className="tui-box-meta">{s.index?.files.length || 0} files</span>
               <table className="tui-table">
                 <thead>
@@ -1440,13 +1775,23 @@ export function TuiApp({
                   </tr>
                 </thead>
                 <tbody>
-                  {(s.index?.files || []).slice(0, 18).map((f) => (
+                  {editorFiles.map((f, idx) => (
                     <tr
                       key={f.path}
-                      className={`tui-selectable${s.file?.path === f.path ? ' tui-selected' : ''}`}
-                      onClick={() => void w.openFile(f.path)}
+                      className={`tui-selectable${idx === clampedIdx || s.file?.path === f.path ? ' tui-selected' : ''}`}
+                      onClick={() => {
+                        setSelectedIdx(idx);
+                        void w.openFile(f.path);
+                      }}
                     >
-                      <td>{f.path}</td>
+                      <td>
+                        {idx === clampedIdx && (
+                          <span className="tui-cursor-indicator" aria-hidden="true">
+                            &gt;
+                          </span>
+                        )}
+                        {f.path}
+                      </td>
                       <td className="tui-c-muted">{f.language || '—'}</td>
                     </tr>
                   ))}
@@ -1522,10 +1867,8 @@ export function TuiApp({
         {/* [2] ARCH, [3] DOCS, [6] FEATURES, [8] LAST RUN, [9] GIT, [0] RULES/MODELS */}
         {currentTabPage === 'diagrams' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">ARCHITECTURE &amp; SUBSYSTEMS</span>
-            <span className="tui-box-meta">
-              {s.overview?.docs?.components?.length || 0} components
-            </span>
+            <span className="tui-box-title">ARCHITECTURE &amp; SUBSYSTEMS (j/k navigate)</span>
+            <span className="tui-box-meta">{archComponents.length} components</span>
             <table className="tui-table">
               <thead>
                 <tr>
@@ -1535,9 +1878,20 @@ export function TuiApp({
                 </tr>
               </thead>
               <tbody>
-                {(s.overview?.docs?.components || []).map((comp) => (
-                  <tr key={comp.path || comp.name}>
-                    <td className="tui-c-accent">{comp.name}</td>
+                {archComponents.map((comp, idx) => (
+                  <tr
+                    key={comp.path || comp.name}
+                    className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                    onClick={() => setSelectedIdx(idx)}
+                  >
+                    <td className="tui-c-accent">
+                      {idx === clampedIdx && (
+                        <span className="tui-cursor-indicator" aria-hidden="true">
+                          &gt;
+                        </span>
+                      )}
+                      {comp.name}
+                    </td>
                     <td>{comp.layer}</td>
                     <td className="tui-c-muted">{comp.summary || 'Core module'}</td>
                   </tr>
@@ -1561,8 +1915,8 @@ export function TuiApp({
 
         {currentTabPage === 'features' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">FEATURE IDEAS</span>
-            <span className="tui-box-meta">{s.features?.suggestions.length || 0} suggestions</span>
+            <span className="tui-box-title">FEATURE IDEAS (j/k move · Enter stage in Agents)</span>
+            <span className="tui-box-meta">{featureSuggestions.length} suggestions</span>
             <table className="tui-table">
               <thead>
                 <tr>
@@ -1573,9 +1927,18 @@ export function TuiApp({
                 </tr>
               </thead>
               <tbody>
-                {(s.features?.suggestions || []).map((idea) => (
-                  <tr key={idea.id}>
+                {featureSuggestions.map((idea, idx) => (
+                  <tr
+                    key={idea.id}
+                    className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                    onClick={() => setSelectedIdx(idx)}
+                  >
                     <td>
+                      {idx === clampedIdx && (
+                        <span className="tui-cursor-indicator" aria-hidden="true">
+                          &gt;
+                        </span>
+                      )}
                       <span className="tui-badge tui-c-purple">{idea.effort || 'medium'}</span>
                     </td>
                     <td>{idea.title}</td>
@@ -1609,7 +1972,9 @@ export function TuiApp({
 
         {currentTabPage === 'analysis-run' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">LAST ANALYSIS RUN</span>
+            <span className="tui-box-title">
+              LAST ANALYSIS RUN (j/k move · Enter open category · r run/resume)
+            </span>
             <span className="tui-box-meta">{s.run?.status || 'idle'}</span>
             {s.run ? (
               <table className="tui-table">
@@ -1622,9 +1987,23 @@ export function TuiApp({
                   </tr>
                 </thead>
                 <tbody>
-                  {s.run.sections.map((sec) => (
-                    <tr key={sec.category}>
-                      <td className="tui-c-accent">{human(sec.category)}</td>
+                  {runSections.map((sec, idx) => (
+                    <tr
+                      key={sec.category}
+                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                      onClick={() => {
+                        setSelectedIdx(idx);
+                        void w.navigate(sec.category as Page);
+                      }}
+                    >
+                      <td className="tui-c-accent">
+                        {idx === clampedIdx && (
+                          <span className="tui-cursor-indicator" aria-hidden="true">
+                            &gt;
+                          </span>
+                        )}
+                        {human(sec.category)}
+                      </td>
                       <td>{sec.status}</td>
                       <td>{sec.finding_count}</td>
                       <td className="tui-c-muted">
@@ -1642,13 +2021,13 @@ export function TuiApp({
 
         {currentTabPage === 'git' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">GIT &amp; WORKTREES</span>
+            <span className="tui-box-title">
+              GIT &amp; WORKTREES (j/k move · Enter open · m merge)
+            </span>
             <span className="tui-box-meta">{s.repository?.branch || 'main'}</span>
             <div className="tui-sub" style={{ marginBottom: '8px' }}>
               HEAD: <code>{s.repository?.head || '—'}</code> · Worktrees:{' '}
-              <strong>
-                {(s.gitWorkspace?.worktrees || []).filter((wt) => !wt.current).length}
-              </strong>
+              <strong>{gitWorktrees.filter((wt) => !wt.current).length}</strong>
             </div>
             <table className="tui-table">
               <thead>
@@ -1660,9 +2039,20 @@ export function TuiApp({
                 </tr>
               </thead>
               <tbody>
-                {(s.gitWorkspace?.worktrees || []).map((wt) => (
-                  <tr key={wt.path}>
-                    <td className="tui-c-accent">{wt.branch || 'detached'}</td>
+                {gitWorktrees.map((wt, idx) => (
+                  <tr
+                    key={wt.path}
+                    className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                    onClick={() => setSelectedIdx(idx)}
+                  >
+                    <td className="tui-c-accent">
+                      {idx === clampedIdx && (
+                        <span className="tui-cursor-indicator" aria-hidden="true">
+                          &gt;
+                        </span>
+                      )}
+                      {wt.branch || 'detached'}
+                    </td>
                     <td>{wt.path}</td>
                     <td>
                       <span
@@ -1715,7 +2105,9 @@ export function TuiApp({
         {currentTabPage === 'instructions' && (
           <div className="tui-split-main">
             <div className="tui-box focused">
-              <span className="tui-box-title">WORKSPACE TRUST &amp; AGENTS.MD</span>
+              <span className="tui-box-title">
+                WORKSPACE TRUST &amp; AGENTS.MD (t toggle trust)
+              </span>
               <span className="tui-box-meta">BOUNDARIES</span>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                 <button
@@ -1733,7 +2125,9 @@ export function TuiApp({
               </pre>
             </div>
             <div className="tui-box">
-              <span className="tui-box-title">4-STAGE AGENT MODEL ROUTING</span>
+              <span className="tui-box-title">
+                4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)
+              </span>
               <span className="tui-box-meta">MODELS</span>
               <div className="tui-sub">
                 Stage 1 (Create): <code className="tui-c-accent">{models.create}</code>
@@ -1741,13 +2135,270 @@ export function TuiApp({
               <div className="tui-sub">
                 Stage 2 (Test): <code className="tui-c-green">{models.test}</code>
               </div>
-              <div className="tui-sub">
+              <div className="tui-sub" style={{ marginBottom: '8px' }}>
                 Stage 3 (Critic): <code className="tui-c-purple">{models.review}</code>
               </div>
+              <table className="tui-table" aria-label="Model presets">
+                <thead>
+                  <tr>
+                    <th>PRESET</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelPresets.map((preset, idx) => {
+                    const active = isModelPresetActive(s, preset);
+                    return (
+                      <tr
+                        key={preset.id}
+                        className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                        onClick={() => {
+                          setSelectedIdx(idx);
+                          w.applyModelPreset(preset);
+                        }}
+                      >
+                        <td>
+                          {idx === clampedIdx && (
+                            <span className="tui-cursor-indicator" aria-hidden="true">
+                              &gt;
+                            </span>
+                          )}
+                          {preset.name}
+                        </td>
+                        <td>
+                          {active ? (
+                            <span className="tui-badge tui-c-green">ACTIVE</span>
+                          ) : (
+                            <span className="tui-c-muted">Enter to apply</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </main>
+
+      {/* Interactive Keybindings & Commands Reference Modal */}
+      {showKeybindsModal && (
+        <div
+          className="tui-modal-backdrop"
+          onClick={() => setShowKeybindsModal(false)}
+          role="presentation"
+        >
+          <div
+            className="tui-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="TUI Keybindings Reference"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid var(--tui-border)',
+                paddingBottom: '8px',
+              }}
+            >
+              <div>
+                <strong className="tui-c-accent">
+                  MINI-ORCA TUI // KEYBOARD SHORTCUTS &amp; COMMANDS REFERENCE
+                </strong>
+                <div className="tui-sub">
+                  100% keyboard-driven navigation — press [?] or [Esc] to close
+                </div>
+              </div>
+              <button
+                type="button"
+                className="tui-btn primary"
+                aria-label="Close keybindings reference"
+                onClick={() => setShowKeybindsModal(false)}
+              >
+                [Esc / Close]
+              </button>
+            </div>
+
+            <div className="tui-keybind-grid">
+              <div className="tui-box">
+                <span className="tui-box-title">GLOBAL NAVIGATION</span>
+                <table className="tui-table">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">[1]–[9], [0]</strong>
+                      </td>
+                      <td>Jump to TUI workspace tab</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">[ / ]</strong>
+                      </td>
+                      <td>Previous / Next workspace tab</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">j / k / ↓ / ↑</strong>
+                      </td>
+                      <td>Move row cursor down / up</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">h / l / ← / →</strong>
+                      </td>
+                      <td>Cycle Open / In Progress / Done</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">Enter</strong>
+                      </td>
+                      <td>Open / Execute highlighted item</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">Esc / Backspace</strong>
+                      </td>
+                      <td>Back to All Agents / Close modal</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">?</strong>
+                      </td>
+                      <td>Toggle Keybindings Reference</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">/ or :</strong>
+                      </td>
+                      <td>Focus orca&gt; command prompt</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="tui-box">
+                <span className="tui-box-title">WORKFLOW &amp; ACTIONS</span>
+                <table className="tui-table">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">a</strong>
+                      </td>
+                      <td>Dispatch Fix with Agent / Open Agent</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">x / Space</strong>
+                      </td>
+                      <td>Toggle issue for batch agent fix</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">n</strong>
+                      </td>
+                      <td>New custom agent mission form</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">c</strong>
+                      </td>
+                      <td>Accept &amp; Commit verified proposal</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">m</strong>
+                      </td>
+                      <td>Merge agent worktree into main</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">r</strong>
+                      </td>
+                      <td>Run/Resume analysis or Self-Repair</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">t</strong>
+                      </td>
+                      <td>Run tests (or toggle Trust on [0])</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">u / p / g</strong>
+                      </td>
+                      <td>Undo / Cycle Palette / GUI mode</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="tui-box">
+                <span className="tui-box-title">ORCA&gt; COLON COMMANDS</span>
+                <table className="tui-table">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:keys</code> /{' '}
+                        <code className="tui-c-green">:help</code>
+                      </td>
+                      <td>Show this keybind reference</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:analyze</code> /{' '}
+                        <code className="tui-c-green">:resume</code>
+                      </td>
+                      <td>Run or resume project analysis</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:test</code>
+                      </td>
+                      <td>Run verification test suite</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:fix</code>
+                      </td>
+                      <td>Dispatch selected issue(s) to agent</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:agent &lt;prompt&gt;</code>
+                      </td>
+                      <td>Stage custom agent mission</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:open &lt;path&gt;</code>
+                      </td>
+                      <td>Open file in [4] Code/Diff</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:apply</code> /{' '}
+                        <code className="tui-c-green">:merge</code>
+                      </td>
+                      <td>Commit proposal or merge branch</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:undo</code> /{' '}
+                        <code className="tui-c-green">:gui</code>
+                      </td>
+                      <td>Guarded Undo or exit to GUI</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Command Prompt Bar */}
       <footer className="tui-cmdbar">
@@ -1766,21 +2417,37 @@ export function TuiApp({
             className="tui-cmd-input"
             value={cmdInput}
             onChange={(e) => setCmdInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowUp' && cmdHistory.length > 0) {
+                e.preventDefault();
+                const nextIdx = Math.min(cmdHistory.length - 1, cmdHistoryIdx + 1);
+                setCmdHistoryIdx(nextIdx);
+                setCmdInput(cmdHistory[nextIdx] || '');
+              } else if (e.key === 'ArrowDown' && cmdHistoryIdx >= 0) {
+                e.preventDefault();
+                const nextIdx = cmdHistoryIdx - 1;
+                setCmdHistoryIdx(nextIdx);
+                setCmdInput(nextIdx >= 0 ? cmdHistory[nextIdx] || '' : '');
+              }
+            }}
             placeholder={cmdOutput}
           />
         </form>
         <div className="tui-hints">
           <span>
-            <strong className="tui-key">[1-0]</strong> view
+            <strong className="tui-key">[1-0 / [/]]</strong> view
           </span>
           <span>
-            <strong className="tui-key">[j/k]</strong> select
+            <strong className="tui-key">[j/k]</strong> move
+          </span>
+          <span>
+            <strong className="tui-key">[Enter]</strong> open
           </span>
           <span>
             <strong className="tui-key">[a]</strong> agent fix
           </span>
           <span>
-            <strong className="tui-key">[/]</strong> command
+            <strong className="tui-key">[?]</strong> keys
           </span>
           <span>
             <strong className="tui-key">[:gui]</strong> GUI mode
