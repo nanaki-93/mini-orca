@@ -229,6 +229,7 @@ func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, erro
 			job := s.changeWorkflow.job
 			if job == nil || job.finished || job.sessionID != entry.ID || job.root != s.manager.Root() {
 				entry.WorkflowStatus = "interrupted"
+				entry.WorkflowReason = "The workflow stopped before completion. Restore the conversation to run again."
 			}
 		}
 	}
@@ -375,6 +376,9 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	defer s.changesMu.Unlock()
 	if _, _, err := s.loadChangeForAction(timed, session.ID, request.ChangeIdentity); err != nil {
 		return nil, err
+	}
+	if request.Repair && len(session.Changes) > 0 {
+		edits = mergeWorkflowTests(append([]ChangeEdit(nil), session.Changes...), edits)
 	}
 	edits = preservePinnedTests(edits, session.PinnedTests)
 	session.Revision++

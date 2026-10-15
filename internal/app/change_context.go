@@ -123,10 +123,22 @@ func changeResponseSchema() llm.JSONSchema {
 	return llm.JSONSchema{Name: "change_proposal", Schema: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["explanation","changes"],"properties":{"explanation":{"type":"string","minLength":1,"maxLength":4096},"changes":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","additionalProperties":false,"required":["path","content"],"properties":{"path":{"type":"string"},"content":{"type":"string"}}}}}}`)}
 }
 
+func unwrapMarkdownJSON(output string) string {
+	trimmed := strings.TrimSpace(output)
+	if strings.HasPrefix(trimmed, "```") && strings.HasSuffix(trimmed, "```") {
+		if newline := strings.IndexByte(trimmed, '\n'); newline >= 0 {
+			inner := strings.TrimSuffix(trimmed[newline+1:], "```")
+			return strings.TrimSpace(inner)
+		}
+	}
+	return output
+}
+
 func parseChangeResponse(output string, session *ChangeSession) (string, []ChangeEdit, error) {
 	if len(output) > maxChangeBytes {
 		return "", nil, fmt.Errorf("proposal response exceeds 256 KiB")
 	}
+	output = unwrapMarkdownJSON(output)
 	var response struct {
 		Explanation string            `json:"explanation"`
 		Changes     []ChangeEditInput `json:"changes"`

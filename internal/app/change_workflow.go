@@ -190,7 +190,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 				w.Status, w.Stages[3].Status = "awaiting_human_review", "waiting"
 			}
 		} else {
-			w.Status, w.Reason = workflowFailure(runErr)
+			w.Status, w.Reason = workflowFailure(runErr, session.Checks)
 			stopChangeWorkflowStages(w)
 			delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 		}
@@ -206,7 +206,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 	s.notifyEvent("workflow")
 }
 
-func workflowFailure(err error) (string, string) {
+func workflowFailure(err error, checks []CheckResult) (string, string) {
 	switch {
 	case errors.Is(err, context.Canceled):
 		return "canceled", "Workflow canceled. No source was applied."
@@ -215,8 +215,66 @@ func workflowFailure(err error) (string, string) {
 	case errors.Is(err, project.ErrRevisionConflict), errors.Is(err, project.ErrExcludedFile):
 		return "stale", "Project source or instructions changed. Start a fresh conversation."
 	case errors.Is(err, errWorkflowChecksFailed):
-		return "failed", "Tests or source checks failed. Inspect the check evidence before running again."
+		base := "Tests or source checks failed. Inspect the check evidence before running again."
+		if detail := summarizeFailedChecks(checks); detail != "" {
+			return "failed", base + " (" + detail + ")"
+		}
+		return "failed", base
 	default:
-		return "failed", "The stage could not complete or returned an invalid response. Check its model and captured scope, then run again."
+		base := "The stage could not complete or returned an invalid response. Check its model and captured scope, then run again."
+		if detail := sanitizeWorkflowError(err); detail != "" {
+			return "failed", base + " (" + detail + ")"
+		}
+		return "failed", base
 	}
+}
+
+func summarizeFailedChecks(checks []CheckResult) string {
+	for _, check := range checks {
+		if !check.Required || check.State == CheckPassed {
+			continue
+		}
+		line := firstCheckFailureLine(check.Output)
+		if line != "" {
+			return check.Name + ": " + line
+		}
+		return check.Name + ": " + check.State
+	}
+	return ""
+}
+
+func firstCheckFailureLine(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, raw := range lines {
+		trimmed := strings.TrimSpace(raw)
+		if strings.Contains(trimmed, "--- FAIL:") || strings.HasPrefix(trimmed, "FAIL") || strings.Contains(trimmed, "Error:") || strings.Contains(trimmed, "undefined:") {
+			if len(trimmed) > 140 {
+				return trimmed[:140] + "…"
+			}
+			return trimmed
+		}
+	}
+	for _, raw := range lines {
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			if len(trimmed) > 140 {
+				return trimmed[:140] + "…"
+			}
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func sanitizeWorkflowError(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := strings.TrimSpace(err.Error())
+	if idx := strings.IndexAny(text, "\r\n"); idx >= 0 {
+		text = strings.TrimSpace(text[:idx])
+	}
+	if len(text) > 160 {
+		text = text[:160] + "…"
+	}
+	return text
 }

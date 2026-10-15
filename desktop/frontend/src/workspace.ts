@@ -2264,7 +2264,11 @@ export class Workspace {
           next.workflow?.id !== change.workflow?.id
         )
           throw new Error('Workflow identity changed.');
+        const wasRunning = activeChangeWorkflow(this.state.change);
         if (next.revision >= (this.state.change?.revision || 0)) this.set({ change: next });
+        if (wasRunning && !activeChangeWorkflow(next) && this.parent) {
+          void this.parent.loadGitWorkspace();
+        }
       },
       () =>
         this.state.change?.id === change.id &&
@@ -2484,7 +2488,15 @@ export class Workspace {
     const checkFeedback =
       !criticFeedback && failedChecks.length
         ? `\n\nPrevious check failures to resolve:\n${failedChecks
-            .map((c) => `${c.name}: ${(c.output || c.state).slice(0, 600)}`)
+            .map((c) => {
+              const raw = (c.output || c.state).trim();
+              const relevant = raw
+                .split('\n')
+                .filter((line) => /FAIL|Error:|panic:|undefined:|cannot |expected/i.test(line))
+                .join('\n');
+              const snippet = relevant ? relevant.slice(-800) : raw.slice(-800);
+              return `${c.name}: ${snippet}`;
+            })
             .join('\n')}`
         : '';
     const seed: M.ChangeSeed | undefined = change
