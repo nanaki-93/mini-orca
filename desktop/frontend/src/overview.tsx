@@ -517,6 +517,7 @@ export function Summary({ s }: { s: State }) {
 }
 export function Models({ s }: { s: State }) {
   const w = useWorkspace();
+  const [modelTab, setModelTab] = useState<'all' | 'routing' | 'presets'>('all');
   const [presetName, setPresetName] = useState('');
   const presets = allModelPresets(s);
   return (
@@ -544,194 +545,244 @@ export function Models({ s }: { s: State }) {
           </Go>
         </div>
       )}
-      <Panel title="Saved model presets" className="model-presets-panel">
-        <div className="stack">
-          <div className="grid models-grid">
-            {presets.map((preset) => {
-              const active = isModelPresetActive(s, preset);
-              return (
-                <div
-                  key={preset.id}
-                  className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '6px',
-                    border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '8px',
-                  }}
-                >
-                  <div>
-                    <div
-                      className="row"
-                      style={{ justifyContent: 'space-between', alignItems: 'center' }}
-                    >
-                      <strong>{preset.name}</strong>
-                      {active && <span className="pill">Active</span>}
-                    </div>
-                    <p className="small muted" style={{ marginTop: '4px' }}>
-                      {preset.description}
-                    </p>
-                  </div>
-                  <div className="actions">
-                    <Button
-                      tone={active ? undefined : 'primary'}
-                      disabled={!!s.busy}
-                      onClick={() => w.applyModelPreset(preset)}
-                    >
-                      {active ? 'Reapply preset' : 'Apply preset'}
-                    </Button>
-                    {!preset.builtIn && (
-                      <Button
-                        disabled={!!s.busy}
-                        onClick={() => w.deleteCustomModelPreset(preset.id)}
+      <div className="toolbar">
+        <div className="mode-switch-group" role="tablist" aria-label="Model routing views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={modelTab === 'all'}
+            className={`mode-switch-btn ${modelTab === 'all' ? 'active' : ''}`}
+            onClick={() => setModelTab('all')}
+          >
+            1. All Routing &amp; Presets
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={modelTab === 'routing'}
+            className={`mode-switch-btn ${modelTab === 'routing' ? 'active' : ''}`}
+            onClick={() => setModelTab('routing')}
+          >
+            2. Model Routing Only
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={modelTab === 'presets'}
+            className={`mode-switch-btn ${modelTab === 'presets' ? 'active' : ''}`}
+            onClick={() => setModelTab('presets')}
+          >
+            3. Presets &amp; Batch Limits ({presets.length})
+          </button>
+        </div>
+      </div>
+      {(modelTab === 'all' || modelTab === 'presets') && (
+        <Panel title="Saved model presets" className="model-presets-panel">
+          <div className="stack">
+            <div className="grid models-grid">
+              {presets.map((preset) => {
+                const active = isModelPresetActive(s, preset);
+                return (
+                  <div
+                    key={preset.id}
+                    className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                    }}
+                  >
+                    <div>
+                      <div
+                        className="row"
+                        style={{ justifyContent: 'space-between', alignItems: 'center' }}
                       >
-                        Delete
+                        <strong>{preset.name}</strong>
+                        {active && <span className="pill">Active</span>}
+                      </div>
+                      <p className="small muted" style={{ marginTop: '4px' }}>
+                        {preset.description}
+                      </p>
+                    </div>
+                    <div className="actions">
+                      <Button
+                        tone={active ? undefined : 'primary'}
+                        disabled={!!s.busy}
+                        onClick={() => w.applyModelPreset(preset)}
+                      >
+                        {active ? 'Reapply preset' : 'Apply preset'}
                       </Button>
-                    )}
+                      {!preset.builtIn && (
+                        <Button
+                          disabled={!!s.busy}
+                          onClick={() => w.deleteCustomModelPreset(preset.id)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            <div className="row" style={{ gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+              <input
+                aria-label="Custom preset name"
+                placeholder="Save current routing as preset (e.g. Offline Ollama)…"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                style={{ maxWidth: '320px' }}
+              />
+              <Button
+                disabled={!!s.busy || !presetName.trim()}
+                onClick={() => {
+                  w.saveCustomModelPreset(presetName);
+                  setPresetName('');
+                }}
+              >
+                Save preset
+              </Button>
+            </div>
           </div>
-          <div className="row" style={{ gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-            <input
-              aria-label="Custom preset name"
-              placeholder="Save current routing as preset (e.g. Offline Ollama)…"
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              style={{ maxWidth: '320px' }}
+        </Panel>
+      )}
+      {(modelTab === 'all' || modelTab === 'routing') && (
+        <div className="grid two-columns">
+          <Panel title="Analysis models" className="analysis-model-settings">
+            <ModelSelectors
+              s={s}
+              value={analysisSetupModels(s)}
+              disabled={!!s.busy}
+              onChange={(models) => w.setAnalysisSetup(models)}
             />
-            <Button
-              disabled={!!s.busy || !presetName.trim()}
-              onClick={() => {
-                w.saveCustomModelPreset(presetName);
-                setPresetName('');
+          </Panel>
+          <Panel title="Workflow models" className="fix-models">
+            <WorkflowModels
+              s={s}
+              value={workflowSetupModels(s)}
+              disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
+            />
+          </Panel>
+        </div>
+      )}
+      {(modelTab === 'all' || modelTab === 'presets') && (
+        <>
+          <Panel title="Analysis & batch settings" className="analysis-batch-settings">
+            <div className="form-grid analysis-settings-fields">
+              {(
+                [
+                  ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
+                  [
+                    'budget_seconds',
+                    'Time budget · seconds',
+                    1,
+                    3600,
+                    'File-analysis time per batch.',
+                  ],
+                  [
+                    'max_attempts_per_stage',
+                    'Attempts per stage',
+                    1,
+                    4,
+                    'Includes the first attempt and retries.',
+                  ],
+                ] as const
+              ).map(([key, label, min, max, hint]) => {
+                const limits = s.analysisLimits || {
+                  batch_files: 20,
+                  budget_seconds: 1800,
+                  max_attempts_per_stage: 2,
+                };
+                return (
+                  <div
+                    className="analysis-setting"
+                    key={key}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+                  >
+                    <label
+                      htmlFor={`settings-${key}`}
+                      style={{ fontSize: '0.85rem', fontWeight: 600 }}
+                    >
+                      {label}
+                    </label>
+                    <input
+                      id={`settings-${key}`}
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={limits[key]}
+                      style={{
+                        maxWidth: '140px',
+                        padding: '6px 8px',
+                        borderRadius: '5px',
+                        border: '1px solid var(--line)',
+                        background: 'var(--canvas)',
+                        color: 'var(--text)',
+                      }}
+                      onChange={(e) =>
+                        w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+                      }
+                    />
+                    <small className="muted" style={{ fontSize: '0.75rem' }}>
+                      {hint}
+                    </small>
+                  </div>
+                );
+              })}
+            </div>
+            <label
+              className="checkbox-line"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '14px',
+                cursor: 'pointer',
               }}
             >
-              Save preset
-            </Button>
-          </div>
-        </div>
-      </Panel>
-      <div className="grid two-columns">
-        <Panel title="Analysis models" className="analysis-model-settings">
-          <ModelSelectors
-            s={s}
-            value={analysisSetupModels(s)}
-            disabled={!!s.busy}
-            onChange={(models) => w.setAnalysisSetup(models)}
-          />
-        </Panel>
-        <Panel title="Workflow models" className="fix-models">
-          <WorkflowModels
-            s={s}
-            value={workflowSetupModels(s)}
-            disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
-          />
-        </Panel>
-      </div>
-      <Panel title="Analysis & batch settings" className="analysis-batch-settings">
-        <div className="form-grid analysis-settings-fields">
-          {(
-            [
-              ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
-              ['budget_seconds', 'Time budget · seconds', 1, 3600, 'File-analysis time per batch.'],
-              [
-                'max_attempts_per_stage',
-                'Attempts per stage',
-                1,
-                4,
-                'Includes the first attempt and retries.',
-              ],
-            ] as const
-          ).map(([key, label, min, max, hint]) => {
-            const limits = s.analysisLimits || {
-              batch_files: 20,
-              budget_seconds: 1800,
-              max_attempts_per_stage: 2,
-            };
-            return (
-              <div
-                className="analysis-setting"
-                key={key}
-                style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-              >
-                <label htmlFor={`settings-${key}`} style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                  {label}
-                </label>
-                <input
-                  id={`settings-${key}`}
-                  type="number"
-                  min={min}
-                  max={max}
-                  value={limits[key]}
-                  style={{
-                    maxWidth: '140px',
-                    padding: '6px 8px',
-                    borderRadius: '5px',
-                    border: '1px solid var(--line)',
-                    background: 'var(--canvas)',
-                    color: 'var(--text)',
-                  }}
-                  onChange={(e) =>
-                    w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+              <input
+                type="checkbox"
+                checked={s.analysisRefresh || false}
+                onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
+              />
+              <span style={{ fontSize: '0.85rem' }}>
+                Refresh previously analyzed files on next run
+              </span>
+            </label>
+          </Panel>
+          <Disclosure title="Configured profiles & daemon config">
+            <div className="grid models-grid">
+              {Object.values(s.models?.scopes || {}).map((model) => (
+                <Panel
+                  key={model.scope}
+                  title={
+                    {
+                      analyze: 'Project analysis',
+                      bug: 'File & Security',
+                      function: 'Creation & explanations',
+                    }[model.scope] || model.scope
                   }
-                />
-                <small className="muted" style={{ fontSize: '0.75rem' }}>
-                  {hint}
-                </small>
-              </div>
-            );
-          })}
-        </div>
-        <label
-          className="checkbox-line"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginTop: '14px',
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={s.analysisRefresh || false}
-            onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
-          />
-          <span style={{ fontSize: '0.85rem' }}>Refresh previously analyzed files on next run</span>
-        </label>
-      </Panel>
-      <Disclosure title="Configured profiles & daemon config">
-        <div className="grid models-grid">
-          {Object.values(s.models?.scopes || {}).map((model) => (
-            <Panel
-              key={model.scope}
-              title={
-                {
-                  analyze: 'Project analysis',
-                  bug: 'File & Security',
-                  function: 'Creation & explanations',
-                }[model.scope] || model.scope
-              }
-            >
-              <div className="stack model-configuration">
-                <div className="row model-identity">
-                  <ModelIcon model={model} />
-                  <h3>{model.model}</h3>
-                </div>
-                <p className="small muted">Thinking: {model.reasoning_effort || 'Default'}</p>
-              </div>
-            </Panel>
-          ))}
-        </div>
-        <p className="small muted" style={{ marginTop: '8px' }}>
-          Edit config.yaml, then restart the daemon.
-        </p>
-      </Disclosure>
+                >
+                  <div className="stack model-configuration">
+                    <div className="row model-identity">
+                      <ModelIcon model={model} />
+                      <h3>{model.model}</h3>
+                    </div>
+                    <p className="small muted">Thinking: {model.reasoning_effort || 'Default'}</p>
+                  </div>
+                </Panel>
+              ))}
+            </div>
+            <p className="small muted" style={{ marginTop: '8px' }}>
+              Edit config.yaml, then restart the daemon.
+            </p>
+          </Disclosure>
+        </>
+      )}
       {!s.models ? (
         <Empty title="Model configuration unavailable" />
       ) : (
@@ -741,7 +792,9 @@ export function Models({ s }: { s: State }) {
   );
 }
 export function Diagrams({ s }: { s: State }) {
+  const [tab, setTab] = useState<'topology' | 'flows'>('topology');
   const entryFiles = (s.index?.files || []).slice(0, 6);
+  const flows = s.overview?.analysis.flows || [];
   return (
     <div className="workspace-page">
       <Heading
@@ -756,54 +809,82 @@ export function Diagrams({ s }: { s: State }) {
           Explore source
         </Go>
       </Heading>
-      <div className="architecture-layout">
-        <section className="architecture-canvas">
-          <Panel title="Architecture">
-            <Prose text={s.overview?.analysis.architecture} diagramLabel="Architecture diagram" />
-            {!s.overview?.analysis.architecture && (
-              <p className="muted">No architecture overview saved.</p>
-            )}
-            {!!s.overview?.analysis.entry_points?.length && (
-              <BulletContent title="Entry points" items={s.overview.analysis.entry_points} />
-            )}
-          </Panel>
-          {entryFiles.length > 0 && (
-            <Panel title="Quick Entry Files">
-              <div className="row wrap" style={{ gap: '8px' }}>
-                {entryFiles.map((file) => (
-                  <Button
-                    key={file.path}
-                    tone="ghost small"
-                    icon="file"
-                    onClick={() => void w.openFile(file.path)}
-                  >
-                    <span className="font-mono">{file.path}</span>
-                  </Button>
-                ))}
-              </div>
+      <div className="toolbar">
+        <div className="mode-switch-group" role="tablist" aria-label="Architecture views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'topology'}
+            className={`mode-switch-btn ${tab === 'topology' ? 'active' : ''}`}
+            onClick={() => setTab('topology')}
+          >
+            1. Topology &amp; Entry Points
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'flows'}
+            className={`mode-switch-btn ${tab === 'flows' ? 'active' : ''}`}
+            onClick={() => setTab('flows')}
+          >
+            2. Runtime Flows ({flows.length})
+          </button>
+        </div>
+      </div>
+      {tab === 'topology' ? (
+        <div className="architecture-layout">
+          <section className="architecture-canvas">
+            <Panel title="Architecture">
+              <Prose text={s.overview?.analysis.architecture} diagramLabel="Architecture diagram" />
+              {!s.overview?.analysis.architecture && (
+                <p className="muted">No architecture overview saved.</p>
+              )}
+              {!!s.overview?.analysis.entry_points?.length && (
+                <BulletContent title="Entry points" items={s.overview.analysis.entry_points} />
+              )}
             </Panel>
-          )}
-          {!!s.overview?.analysis.flows?.length && (
-            <Disclosure title={`Runtime flows (${s.overview.analysis.flows.length})`}>
-              <div className="stack">
-                {s.overview.analysis.flows.map((flow, i) => (
-                  <Panel title={`Flow ${i + 1}`} key={i}>
-                    <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
-                  </Panel>
-                ))}
-              </div>
-            </Disclosure>
+            {entryFiles.length > 0 && (
+              <Panel title="Quick Entry Files">
+                <div className="row wrap" style={{ gap: '8px' }}>
+                  {entryFiles.map((file) => (
+                    <Button
+                      key={file.path}
+                      tone="ghost small"
+                      icon="file"
+                      onClick={() => void w.openFile(file.path)}
+                    >
+                      <span className="font-mono">{file.path}</span>
+                    </Button>
+                  ))}
+                </div>
+              </Panel>
+            )}
+          </section>
+          <aside className="architecture-notes">
+            {!!s.overview?.analysis.components?.length && (
+              <Panel title="Components">
+                <BulletContent title="" items={s.overview.analysis.components} />
+              </Panel>
+            )}
+            <InsightCard insight={s.overview?.analysis.engineering_insight} />
+          </aside>
+        </div>
+      ) : (
+        <section className="stack" aria-label="Runtime flows">
+          {flows.length === 0 ? (
+            <Empty
+              title="No runtime flows saved"
+              detail="Run project analysis to generate runtime execution flow diagrams."
+            />
+          ) : (
+            flows.map((flow, i) => (
+              <Panel title={`Flow ${i + 1}`} key={i}>
+                <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+              </Panel>
+            ))
           )}
         </section>
-        <aside className="architecture-notes">
-          {!!s.overview?.analysis.components?.length && (
-            <Panel title="Components">
-              <BulletContent title="" items={s.overview.analysis.components} />
-            </Panel>
-          )}
-          <InsightCard insight={s.overview?.analysis.engineering_insight} />
-        </aside>
-      </div>
+      )}
     </div>
   );
 }
