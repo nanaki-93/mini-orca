@@ -545,6 +545,10 @@ export function AnalysisRun({ s }: { s: State }) {
   const failedFiles = run.files.filter((file) =>
     file.stages.some((stage) => stage.status === 'failed'),
   );
+  const totalFindings = run.sections.reduce(
+    (sum, section) => sum + (section.finding_count || 0),
+    0,
+  );
   const elapsed =
     run.elapsed_seconds < 60
       ? `${run.elapsed_seconds}s`
@@ -573,14 +577,22 @@ export function AnalysisRun({ s }: { s: State }) {
         variant="intro"
         title="Last Run"
         detail={
-          <span className="analysis-run-status">
-            <StatusDot value={run.status} label="Analysis" />
-            <span>{human(run.status)}</span>
+          <span className="row wrap" style={{ gap: '10px', alignItems: 'center' }}>
+            <span className="analysis-run-status">
+              <StatusDot value={run.status} label="Analysis" />
+              <span>{human(run.status)}</span>
+            </span>
+            <span className="small muted">
+              {run.files.length} files in scope · {totalFindings} findings · {elapsed} elapsed
+            </span>
           </span>
         }
       >
         <Go page="bugs" icon="bug">
-          Issues & Ideas
+          Issues &amp; Ideas ({totalFindings})
+        </Go>
+        <Go page="agents" icon="sparkles" tone="ghost">
+          Fix Pipeline
         </Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
@@ -655,7 +667,10 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
         <div className="analysis-progress-meta small muted">
           <span>{run.window_files_completed} files completed this batch</span>
-          <span>{elapsed} elapsed</span>
+          <span>
+            {failedFiles.length > 0 ? `${failedFiles.length} failed · ` : ''}
+            {elapsed} elapsed
+          </span>
         </div>
         {activeRun(run) && (
           <div className="analysis-current-step" role="status" aria-label="Current analysis step">
@@ -695,7 +710,12 @@ export function AnalysisRun({ s }: { s: State }) {
         </div>
       </Panel>
       <section className="stack analysis-run-details" aria-labelledby="analysis-run-details-title">
-        <h2 id="analysis-run-details-title">Run details</h2>
+        <div className="row between wrap">
+          <h2 id="analysis-run-details-title">Run details</h2>
+          <span className="small muted">
+            Select any category below to inspect findings or start a fix
+          </span>
+        </div>
         <div className="grid analysis-run-categories">
           {run.sections.map((section) => (
             <Panel
@@ -709,12 +729,28 @@ export function AnalysisRun({ s }: { s: State }) {
                 <span>{human(section.status)}</span>
               </div>
               <p className="small muted">
+                {section.coverage.succeeded}/{section.coverage.total} files succeeded ·{' '}
                 {section.finding_count === null
-                  ? 'No successful evidence yet'
+                  ? 'No evidence yet'
                   : section.category === 'performance'
-                    ? 'Hypotheses · unmeasured'
+                    ? 'Hypotheses'
                     : 'Saved findings'}
               </p>
+              <div className="row between wrap" style={{ marginTop: '6px' }}>
+                <Go
+                  page={section.category as 'bugs' | 'security' | 'performance'}
+                  icon={
+                    section.category === 'security'
+                      ? 'shield'
+                      : section.category === 'performance'
+                        ? 'gauge'
+                        : 'bug'
+                  }
+                  tone="ghost small"
+                >
+                  Open {human(section.category)} →
+                </Go>
+              </div>
               <Disclosure title="Coverage details">
                 <KeyValues
                   values={[
@@ -740,6 +776,11 @@ export function AnalysisRun({ s }: { s: State }) {
                 <span>{human(run.features.status)}</span>
               </div>
               <p className="small muted">Advisory ideas</p>
+              <div className="row between wrap" style={{ marginTop: '6px' }}>
+                <Go page="features" icon="sparkles" tone="ghost small">
+                  Open Features →
+                </Go>
+              </div>
               <Disclosure title="Attempt details">
                 <p>
                   {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts used
@@ -757,57 +798,94 @@ export function AnalysisRun({ s }: { s: State }) {
               <span>Subsystems</span>
             </div>
             <p className="small muted">C4 Context · Contracts · Scenarios · ADRs</p>
-            <Go page="docs" icon="book">
+            <Go page="docs" icon="book" tone="ghost small">
               Open Engineering Spec →
             </Go>
           </Panel>
         </div>
-        <Disclosure
-          title={`Captured models & failure diagnostics (${failedFiles.length} failed files)`}
-        >
+
+        {failedFiles.length > 0 && (
+          <Panel
+            title={`Files with failures (${failedFiles.length})`}
+            className="analysis-failed-files"
+          >
+            <div className="scroll-list">
+              {failedFiles.map((file) => (
+                <Disclosure
+                  title={
+                    <span className="row between wrap">
+                      <span className="mono small analysis-file-path">{file.path}</span>
+                      <span className="row wrap analysis-file-statuses">
+                        {file.stages.map((stage) => (
+                          <span key={stage.stage} title={stageNames[stage.stage]}>
+                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  }
+                  key={file.path}
+                >
+                  {file.stages.map((stage) => (
+                    <div className="list-row" key={stage.stage}>
+                      <span className="list-copy">
+                        <strong>{stageNames[stage.stage]}</strong>
+                        <small>
+                          {stage.reason ||
+                            `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
+                        </small>
+                      </span>
+                      <span className="analysis-run-status small">
+                        <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                        <span>{human(stage.status)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </Disclosure>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        <Disclosure title={`Analyzed files (${run.files.length}) & Captured models`}>
           <div className="stack" style={{ gap: '12px', paddingTop: '8px' }}>
             <Panel title="Captured models" className="analysis-run-models">
               <CapturedModels plan={run.plan} compact />
             </Panel>
-            <Panel title="Files with failures" className="analysis-failed-files">
-              {failedFiles.length === 0 && (
-                <p className="small muted">No file failures reported.</p>
-              )}
-              <div className="scroll-list">
-                {failedFiles.map((file) => (
-                  <Disclosure
-                    title={
-                      <span className="row between wrap">
-                        <span className="mono small analysis-file-path">{file.path}</span>
-                        <span className="row wrap analysis-file-statuses">
-                          {file.stages.map((stage) => (
-                            <span key={stage.stage} title={stageNames[stage.stage]}>
-                              <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                            </span>
-                          ))}
-                        </span>
+            <Panel title={`Files in this run (${run.files.length})`}>
+              {run.files.length === 0 ? (
+                <p className="small muted">No files recorded in this run.</p>
+              ) : (
+                <div className="scroll-list">
+                  {run.files.map((file) => (
+                    <div className="list-row" key={file.path}>
+                      <span className="list-copy">
+                        <strong className="font-mono small">{file.path}</strong>
                       </span>
-                    }
-                    key={file.path}
-                  >
-                    {file.stages.map((stage) => (
-                      <div className="list-row" key={stage.stage}>
-                        <span className="list-copy">
-                          <strong>{stageNames[stage.stage]}</strong>
-                          <small>
-                            {stage.reason ||
-                              `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
-                          </small>
-                        </span>
-                        <span className="analysis-run-status small">
-                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                          <span>{human(stage.status)}</span>
-                        </span>
-                      </div>
-                    ))}
-                  </Disclosure>
-                ))}
-              </div>
+                      <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                        {file.stages.map((stage) => (
+                          <span
+                            key={stage.stage}
+                            className="row"
+                            style={{ gap: '4px', fontSize: '0.75rem' }}
+                            title={`${stageNames[stage.stage]}: ${human(stage.status)}`}
+                          >
+                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                            <span className="muted">{stageNames[stage.stage]}</span>
+                          </span>
+                        ))}
+                        <Button
+                          tone="ghost small"
+                          icon="code"
+                          onClick={() => void w.openFile(file.path)}
+                        >
+                          Open
+                        </Button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Panel>
           </div>
         </Disclosure>
