@@ -240,6 +240,14 @@ export function ChangeChecks({ s, tests = true }: { s: State; tests?: boolean })
   );
 }
 
+export function isAddedLine(kind?: string): boolean {
+  return kind === 'added' || kind === 'add';
+}
+
+export function isRemovedLine(kind?: string): boolean {
+  return kind === 'removed' || kind === 'remove' || kind === 'delete' || kind === 'del';
+}
+
 export function ProposalDiff({
   edit,
   index,
@@ -259,8 +267,11 @@ export function ProposalDiff({
       </div>
       <pre tabIndex={0} aria-label={`Changes in ${edit.path}`}>
         {edit.diff.lines.map((line, i) => {
-          const kind =
-            line.kind === 'add' ? 'added' : line.kind === 'remove' ? 'removed' : line.kind;
+          const kind = isAddedLine(line.kind)
+            ? 'added'
+            : isRemovedLine(line.kind)
+              ? 'removed'
+              : line.kind;
           return (
             <span className={`diff-line ${kind}`} key={i}>
               <span className="line-number" aria-hidden="true">

@@ -15,6 +15,7 @@ import {
   type State,
 } from './workspace';
 import { findingName, findingTitle } from './finding-name';
+import { isAddedLine, isRemovedLine } from './change-shared';
 import { human } from './ui';
 import type * as M from './models';
 import './tui.css';
@@ -320,8 +321,8 @@ export function TuiApp({
   let removedLines = 0;
   for (const fc of changedFiles) {
     for (const line of fc.diff?.lines || []) {
-      if (line.kind === 'add') addedLines++;
-      else if (line.kind === 'del' || line.kind === 'remove') removedLines++;
+      if (isAddedLine(line.kind)) addedLines++;
+      else if (isRemovedLine(line.kind)) removedLines++;
     }
   }
   const totalDelta = addedLines + removedLines;
@@ -960,16 +961,16 @@ export function TuiApp({
                           <span
                             key={idx}
                             className={
-                              ln.kind === 'add'
+                              isAddedLine(ln.kind)
                                 ? 'tui-diff-add'
-                                : ln.kind === 'del' || ln.kind === 'remove'
+                                : isRemovedLine(ln.kind)
                                   ? 'tui-diff-del'
                                   : undefined
                             }
                           >
-                            {ln.kind === 'add'
+                            {isAddedLine(ln.kind)
                               ? `+ ${ln.text}`
-                              : ln.kind === 'del' || ln.kind === 'remove'
+                              : isRemovedLine(ln.kind)
                                 ? `- ${ln.text}`
                                 : `  ${ln.text}`}
                             {'\n'}
