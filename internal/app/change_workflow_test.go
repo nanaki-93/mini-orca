@@ -469,8 +469,14 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 		t.Fatalf("expected new test passing against baseline to succeed, got %+v (checks: %+v)", finished.Workflow, finished.Checks)
 	}
 
+	var failCreateCalls atomic.Int32
 	failS, _, failSession := workflowService(t, [3]func() string{
-		func() string { return workflowImplementation },
+		func() string {
+			if failCreateCalls.Add(1) == 1 {
+				return workflowImplementation
+			}
+			return workflowTests
+		},
 		func() string { return strings.ReplaceAll(workflowTests, "Helper() != 2", "Helper() != 99") },
 		func() string { return workflowApproval },
 	})
@@ -481,8 +487,30 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 	if failed.Workflow.Status != "failed" || !strings.Contains(failed.Workflow.Reason, "--- FAIL: TestHelper") {
 		t.Fatalf("expected detailed check failure reason, got %+v", failed.Workflow)
 	}
+	if len(failed.PinnedTests) != 0 {
+		t.Fatalf("failed test stage should not pin broken tests: %+v", failed.PinnedTests)
+	}
 	history, err := failS.ChangeHistory(context.Background())
 	if err != nil || len(history) == 0 || history[0].WorkflowReason != failed.Workflow.Reason {
 		t.Fatalf("expected history entry to include workflow_reason, got %+v, err=%v", history, err)
+	}
+
+	repaired, err := failS.RepairChangeMessage(context.Background(), failed.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(failed),
+		Repair:         true,
+		Profile:        "bug",
+	})
+	if err != nil || len(repaired.Changes) != 2 {
+		t.Fatalf("repair after workflow test failure failed: %+v, %v", repaired, err)
+	}
+	checked, err := failS.CheckChange(context.Background(), repaired.ID, ChangeCheckRequest{
+		ChangeIdentity: changeIdentity(repaired),
+		CheckOptions:   CheckOptions{RunTests: true},
+	})
+	if err != nil || !requiredChecksPassed(checked.Checks) || checked.Workflow.Status != "awaiting_human_review" || checked.Workflow.Stages[1].Status != "completed" || checked.Workflow.Stages[3].Status != "waiting" || len(checked.PinnedTests) != 1 {
+		t.Fatalf("repaired workflow checks did not transition to awaiting_human_review: %+v, err=%v", checked, err)
+	}
+	if _, err := failS.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err != nil {
+		t.Fatalf("human review after repaired workflow checks failed: %v", err)
 	}
 }

@@ -1123,7 +1123,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
             </span>
             {!running && (
               <div className="row wrap" style={{ gap: '8px' }}>
-                {checks.length > 0 && !allChecksPassed && (
+                {((checks.length > 0 && !allChecksPassed) || stageStatus('test') === 'failed') && (
                   <Button
                     tone="primary small"
                     icon="sparkles"
@@ -1134,7 +1134,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   </Button>
                 )}
                 <Button
-                  tone={checks.length > 0 && !allChecksPassed ? 'ghost small' : 'primary small'}
+                  tone={
+                    (checks.length > 0 && !allChecksPassed) || stageStatus('test') === 'failed'
+                      ? 'ghost small'
+                      : 'primary small'
+                  }
                   icon="refresh"
                   disabled={busy}
                   onClick={() => void agentW.rerunChangeWorkflow('agents')}
@@ -1432,7 +1436,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 >
                   Cancel Agent Run
                 </Button>
-              ) : !allChecksPassed && checks.length > 0 ? (
+              ) : (!allChecksPassed && checks.length > 0) || stageStatus('test') === 'failed' ? (
                 <Button
                   tone="primary"
                   icon="sparkles"

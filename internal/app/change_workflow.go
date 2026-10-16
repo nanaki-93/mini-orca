@@ -192,7 +192,9 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 		} else {
 			w.Status, w.Reason = workflowFailure(runErr, session.Checks)
 			stopChangeWorkflowStages(w)
-			delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
+			if !errors.Is(runErr, errWorkflowChecksFailed) {
+				delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
+			}
 		}
 		w.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 		err = writeChangeSession(job.root, session)

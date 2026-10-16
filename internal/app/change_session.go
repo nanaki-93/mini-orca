@@ -378,9 +378,11 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		return nil, err
 	}
 	if request.Repair && len(session.Changes) > 0 {
-		edits = mergeWorkflowTests(append([]ChangeEdit(nil), session.Changes...), edits)
+		edits = preservePinnedTests(edits, session.Changes)
+		session.PinnedTests = nil
+	} else {
+		edits = preservePinnedTests(edits, session.PinnedTests)
 	}
-	edits = preservePinnedTests(edits, session.PinnedTests)
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
 	session.Checks, session.ReviewedHash = []CheckResult{}, ""

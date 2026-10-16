@@ -535,6 +535,7 @@ export class Workspace {
     this.set({ error: errorMessage(error) });
   }
   private confirm(value: Confirmation): Promise<boolean> {
+    if (this.parent) return this.parent.confirm(value);
     return new Promise((resolve) => {
       this.answer = resolve;
       this.set({ confirmation: value });
@@ -1838,7 +1839,7 @@ export class Workspace {
     if (!model)
       throw new Error('The selected model is unavailable. Refresh models and choose again.');
     if (!model.remote_provider && !explicit) return false;
-    if (this.state.workspaceTrust) return model.remote_provider;
+    if (this.state.workspaceTrust || this.parent?.state.workspaceTrust) return model.remote_provider;
     const accepted = await this.confirm({
       title,
       message: model.remote_provider
@@ -1939,6 +1940,9 @@ export class Workspace {
         ? 'Consolidated Workspace Trust enabled.'
         : 'Consolidated Workspace Trust disabled; explicit confirmations restored.',
     });
+    for (const child of this.state.implementations) {
+      child.set({ workspaceTrust: trusted });
+    }
     if (trusted && this.state.project) {
       try {
         await this.api.post(`${current}/execution-trust`, {
@@ -1958,6 +1962,7 @@ export class Workspace {
     if (trust.trusted) return true;
     if (
       !this.state.workspaceTrust &&
+      !this.parent?.state.workspaceTrust &&
       !(await this.confirm({
         title: 'Allow project code to run?',
         message: 'Checks run in an isolated copy. Project code can still access this computer.',
@@ -2696,8 +2701,16 @@ export class Workspace {
   }
   async repairChange(message = 'Repair failed checks.') {
     await this.act('Repair proposal', async () => {
+      const runTests =
+        this.state.change?.check_options?.run_tests ||
+        !!this.state.change?.workflow ||
+        (this.state.change?.targets || []).some((t) => isTestFilePath(t.path));
+      if (this.state.change && this.state.change.checks.length === 0) {
+        if (!(await this.requestChangeChecks(runTests))) return;
+        if (this.state.change && changeChecksPassed(this.state.change)) return;
+      }
       if (await this.requestChangeMessage(message, true, workflowSetupModels(this.state).create))
-        await this.requestChangeChecks(!!this.state.change?.check_options?.run_tests);
+        await this.requestChangeChecks(runTests);
     });
   }
   async resumeChange(id: string) {
