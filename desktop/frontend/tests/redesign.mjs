@@ -772,6 +772,115 @@ try {
       await close();
     }
   });
+
+  await test('Deduplicates overlapping file-level semantic and line-anchored stage findings', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await page.evaluate(() => {
+        const state = window.fixture.state;
+        state.results.security = {
+          semantic: [
+            {
+              ...state.finding,
+              id: 'sem-master-1',
+              category: 'security',
+              title: 'Empty input bypasses password check',
+              message: 'Empty input bypasses password check.',
+              severity: 'high',
+              location: { path: 'cmd/master.go', symbol: '', start_line: 0, end_line: 0 },
+            },
+            {
+              ...state.finding,
+              id: 'sem-master-2',
+              category: 'security',
+              title: 'Zero-filled key written on RNG error',
+              message: 'Zero-filled key written on RNG error.',
+              severity: 'high',
+              location: { path: 'cmd/master.go', symbol: '', start_line: 0, end_line: 0 },
+            },
+            {
+              ...state.finding,
+              id: 'sem-utils-1',
+              category: 'security',
+              title: 'Disabled master password verification',
+              message: 'Disabled master password verification.',
+              severity: 'high',
+              location: { path: 'internal/utils/utils.go', symbol: '', start_line: 0, end_line: 0 },
+            },
+          ],
+          performance: [],
+          security: [
+            {
+              ...state.security,
+              path: 'cmd/master.go',
+              source: 'ai',
+              findings: [
+                {
+                  ...state.security.findings[0],
+                  id: 'sec-master-1',
+                  title: 'Empty input bypasses password check',
+                  severity: 'high',
+                  source_anchor: {
+                    path: 'cmd/master.go',
+                    symbol: 'VerifyMaster',
+                    start_line: 47,
+                    end_line: 55,
+                  },
+                },
+                {
+                  ...state.security.findings[0],
+                  id: 'sec-master-2',
+                  title: 'Key generation ignores randomness failure',
+                  severity: 'high',
+                  source_anchor: {
+                    path: 'cmd/master.go',
+                    symbol: 'GenerateKey',
+                    start_line: 64,
+                    end_line: 72,
+                  },
+                },
+              ],
+            },
+            {
+              ...state.security,
+              path: 'internal/utils/utils.go',
+              source: 'ai',
+              findings: [
+                {
+                  ...state.security.findings[0],
+                  id: 'sec-utils-1',
+                  title: 'Disabled master password verification',
+                  severity: 'high',
+                  source_anchor: {
+                    path: 'internal/utils/utils.go',
+                    symbol: 'CheckPassword',
+                    start_line: 146,
+                    end_line: 152,
+                  },
+                },
+              ],
+            },
+          ],
+          saved_finding_count: 6,
+        };
+      });
+
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByRole('button', { name: /^Security \(/ }).click();
+
+      const rows = page.locator('.result-row');
+      assert.equal(await rows.count(), 3);
+      const paths = await rows.locator('.path').allInnerTexts();
+      assert.deepEqual(paths, [
+        'cmd/master.go:47',
+        'cmd/master.go:64',
+        'internal/utils/utils.go:146',
+      ]);
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

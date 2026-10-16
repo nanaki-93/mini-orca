@@ -17,7 +17,7 @@ import { FixPreparation } from './fix-preparation';
 import { FixHeading } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
 import { StaleAnalysisButton } from './analysis';
-import { findingName, findingTitle } from './finding-name';
+import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import {
   Badge,
   Button,
@@ -190,7 +190,7 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
       ]
     : (s.findings || []).filter((f) => f.category === category).map(semantic);
   if (category === 'security' && s.securityReport) rows.push(...security(s.securityReport));
-  return [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => {
+  const mapped = [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => {
     const completion = s.completedFindings?.find(
       (target) =>
         target.project_id === row.target.project_id &&
@@ -206,6 +206,7 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
       status: completion ? 'fixed' : row.status,
     };
   });
+  return dedupeFindingItems(mapped);
 }
 export function selectedResult(s: State) {
   const selected = s.selectedFinding;
