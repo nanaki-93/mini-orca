@@ -380,8 +380,10 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	if request.Repair && len(session.Changes) > 0 {
 		edits = preservePinnedTests(edits, session.Changes)
 		session.PinnedTests = nil
-	} else {
+	} else if len(session.PinnedTests) > 0 {
 		edits = preservePinnedTests(edits, session.PinnedTests)
+	} else {
+		edits = preservePinnedTests(edits, changeTestEdits(session.Changes))
 	}
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)

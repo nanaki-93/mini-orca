@@ -107,6 +107,10 @@ export function FixWorkspace({ s }: { s: State }) {
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
 
   const resetAndRetry = () => {
+    if (change) {
+      void w.rerunChangeWorkflow();
+      return;
+    }
     const preparedSeed = workflowSeed(seed);
     w.seedChange(preparedSeed);
     void (async () => {

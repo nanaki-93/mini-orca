@@ -2452,7 +2452,7 @@ export class Workspace {
         !change ||
         change.state !== 'draft' ||
         change.freshness !== 'current' ||
-        change.messages.length > 28
+        change.messages.length > 36
       ) {
         change = await this.api.post<M.ChangeSession>(`${current}/changes`, {
           ...this.identity(),
@@ -2511,14 +2511,14 @@ export class Workspace {
         this.set({ change: next });
     });
   }
-  async rerunChangeWorkflow(targetPage?: Page) {
+  async rerunChangeWorkflow(targetPage?: Page, retryInstructions?: string) {
     const change = this.state.change;
     const page = targetPage || this.state.page;
     if (!change && !this.worktreePath && page === 'agents' && this.state.changeSeed) {
       await this.startAgentFix(this.state.changeSeed);
       return;
     }
-    const baseMessage =
+    const rawBase =
       change?.messages.find(
         (m) =>
           m.role === 'user' &&
@@ -2526,6 +2526,12 @@ export class Workspace {
       )?.content ||
       this.state.changeSeed?.message ||
       (change ? `Fix ${change.title}` : '');
+    const baseMessage = rawBase
+      .replace(
+        /\n\n(?:Critic review feedback|Previous check failures to resolve|Previous workflow failure to resolve|Additional retry instructions):[\s\S]*$/,
+        '',
+      )
+      .trim();
     const review = change?.workflow?.review;
     const criticFeedback =
       review?.verdict === 'changes_requested'
@@ -2533,32 +2539,37 @@ export class Workspace {
             review.findings?.length ? '\n' + review.findings.map((f) => `- ${f}`).join('\n') : ''
           }`
         : '';
-    const failedChecks = (change?.checks || []).filter((c) => c.required && c.state !== 'passed');
-    const checkFeedback =
-      !criticFeedback && failedChecks.length
-        ? `\n\nPrevious check failures to resolve:\n${failedChecks
-            .map((c) => {
-              const raw = (c.output || c.state).trim();
-              const relevant = raw
-                .split('\n')
-                .filter((line) => /FAIL|Error:|panic:|undefined:|cannot |expected/i.test(line))
-                .join('\n');
-              const snippet = relevant ? relevant.slice(-800) : raw.slice(-800);
-              return `${c.name}: ${snippet}`;
-            })
-            .join('\n')}`
+    const failedChecks = (change?.checks || []).filter(
+      (c) => c.state !== 'passed' && c.state !== 'skipped',
+    );
+    const checkFeedback = failedChecks.length
+      ? `\n\nPrevious check failures to resolve:\n${failedChecks
+          .map((c) => {
+            const raw = (c.output || c.state).trim();
+            const snippet = raw.slice(-1500);
+            return `${c.name} (${c.state}):\n${snippet}`;
+          })
+          .join('\n')}`
+      : change?.workflow?.status === 'failed' && change.workflow.reason?.trim()
+        ? `\n\nPrevious workflow failure to resolve:\n${change.workflow.reason.trim()}`
         : '';
+    const noteFeedback = retryInstructions?.trim()
+      ? `\n\nAdditional retry instructions:\n${retryInstructions.trim()}`
+      : '';
     const seed: M.ChangeSeed | undefined = change
       ? workflowSeed({
           title: change.title,
           kind: change.kind,
           paths: change.targets.map((t) => t.path),
-          message: (baseMessage + criticFeedback + checkFeedback).slice(0, 8000),
+          message: (baseMessage + criticFeedback + checkFeedback + noteFeedback).slice(0, 8000),
           acceptance_criteria: change.acceptance_criteria,
           finding_targets: change.finding_targets,
         })
       : this.state.changeSeed
-        ? workflowSeed(this.state.changeSeed)
+        ? workflowSeed({
+            ...this.state.changeSeed,
+            message: (this.state.changeSeed.message + noteFeedback).slice(0, 8000),
+          })
         : undefined;
     if (!seed) return;
     try {

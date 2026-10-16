@@ -994,7 +994,10 @@ export function installFixture(options = {}) {
                     name: 'tests',
                     required: true,
                     state: status === 'failed' ? 'failed' : 'passed',
-                    output: status === 'failed' ? 'Boundary test failed.' : '',
+                    output:
+                      status === 'failed'
+                        ? window.fixture.state.failedTestOutput || 'Boundary test failed.'
+                        : '',
                   },
                 ];
                 change.workflow.status = status;
@@ -1026,7 +1029,9 @@ export function installFixture(options = {}) {
                   };
                 }
               };
-              if (!options.workflowRunning) window.fixture.completeWorkflow(options.workflowStatus);
+              const nextStatus = window.fixture.state.nextWorkflowStatus || options.workflowStatus;
+              window.fixture.state.nextWorkflowStatus = undefined;
+              if (!options.workflowRunning) window.fixture.completeWorkflow(nextStatus);
               return response(change);
             }
             if (action === 'resume') {

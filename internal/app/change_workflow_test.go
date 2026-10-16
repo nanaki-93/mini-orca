@@ -513,4 +513,40 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 	if _, err := failS.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err != nil {
 		t.Fatalf("human review after repaired workflow checks failed: %v", err)
 	}
+
+	var rerunCreateCalls atomic.Int32
+	rerunS, _, rerunSession := workflowService(t, [3]func() string{
+		func() string {
+			if rerunCreateCalls.Add(1) == 1 {
+				return workflowImplementation
+			}
+			return strings.ReplaceAll(workflowImplementation, "return 2", "return 99")
+		},
+		func() string { return strings.ReplaceAll(workflowTests, "Helper() != 2", "Helper() != 99") },
+		func() string { return workflowApproval },
+	})
+	if _, err := rerunS.StartChangeWorkflow(context.Background(), rerunSession.ID, workflowRequest(rerunSession)); err != nil {
+		t.Fatal(err)
+	}
+	failedFirst := finishedWorkflow(t, rerunS, rerunSession.ID)
+	if failedFirst.Workflow.Status != "failed" {
+		t.Fatalf("expected initial workflow test stage to fail, got %+v", failedFirst.Workflow)
+	}
+	rerunReq := workflowRequest(failedFirst)
+	if _, err := rerunS.StartChangeWorkflow(context.Background(), failedFirst.ID, rerunReq); err != nil {
+		t.Fatalf("rerun workflow after failed test stage failed: %v", err)
+	}
+	rerunDone := finishedWorkflow(t, rerunS, failedFirst.ID)
+	if rerunDone.Workflow.Status != "awaiting_human_review" {
+		t.Fatalf("expected rerun workflow to recover after test failure, got %+v", rerunDone.Workflow)
+	}
+	foundFailureContext := false
+	for _, msg := range rerunDone.Messages {
+		if msg.Role == "user" && strings.Contains(msg.Content, "Previous check failures to resolve:") && strings.Contains(msg.Content, "wrong result") {
+			foundFailureContext = true
+		}
+	}
+	if !foundFailureContext {
+		t.Fatalf("expected rerun create message to include failed test error output, got %+v", rerunDone.Messages)
+	}
 }
