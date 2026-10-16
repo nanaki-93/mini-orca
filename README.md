@@ -1,61 +1,56 @@
 # Mini-Orca
 
-A local-first, Go-first coding assistant for analysis and deliberate AI changes:
-describe a task in Chat, inspect checked file diffs, then explicitly Apply.
-The Wails/React desktop client talks to a Go daemon through a native bridge.
+A local-first coding assistant with a dual **GUI / TUI** interface and a loopback Go daemon, built to analyze repositories, surface verified and semantic **Issues**, synthesize structured **Docs**, suggest goal-aligned **Features**, and prepare guarded **AI Changes** with explicit human review.
 
-## Use it
+## Purpose of the Project
 
-1. Open a local project and inspect its summary, files and symbols.
-2. Choose your file scope in **Context → Files & scope** and assign Bug, Performance,
-   Security and feature models on **Models**. Select **Execute analysis** in Analysis
-   to start immediately with those models and scope, without confirmation dialogs.
-   Use **Preview analysis** to inspect request bounds and destinations first.
-   Analysis also checks for new feature suggestions using saved project goals.
-   Overview links category counts to Findings and Features.
-3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
-   eight explicit Go/Markdown paths, including new files. **Generate changes**
-   creates and checks a proposal, with at most three repairs of failed checks.
-   Project tests require execution trust; preparation stops at diff review.
-4. Read all proposed diffs in **Changes**, then select **Accept changes** once to apply the
-   displayed revision. Further chat revisions require fresh checks and acceptance.
-   Guarded **Undo proposal** restores the latest unchanged grouped change.
-5. Use **Features** for goal-aware advisory ideas, with Save/Dismiss and a passive
-   handoff to Chat. Use **Instructions** to load root/directory AGENTS.md guides,
-   add editable presets or custom text, and review the resulting instruction diff.
-6. After Apply, explicitly **Verify applied change** or **Reanalyze changed files**.
-   Applied and verified results stay separate; original findings are not marked
-   fixed automatically. **Source** keeps read-only inspection, explanations and file
-   analysis. **Draft change in Chat** starts a task from the selected file or declaration.
-7. Open **Terminal** from the status bar and select **New terminal** for a local
-   shell in the project.
-   Hiding it preserves the process; closing its tab ends it. **⌘K / Ctrl+K** opens
-   file and command search.
+Mini-Orca helps engineers understand and improve local codebases without surrendering control over source mutations or provider boundaries:
 
-**Findings** groups Bugs, Performance and Security with search and impact filters
-over saved results.
-Pause waits for an active stage; Cancel stops further work. **Execute analysis** resumes
-paused or interrupted runs from Setup or Last run without confirmation dialogs, using
-captured settings and a fresh daemon preview. For completed or canceled runs, start a new
-analysis from Setup. Each run coordinates specialized semantic, Performance,
-Security-rule, advisory Security and project-wide feature
-suggestion stages and can make
-multiple model requests. Security intent is explicit even with a local provider.
-Verified Go scans and proposal checks remain separate trusted
-execution actions. Source hypotheses are not runtime measurements.
+- **Analyze projects to find Issues**: Coordinates deterministic static/security rules alongside scoped semantic, performance, and advisory security analysis.
+- **Create structured Docs**: Synthesizes a language-agnostic engineering specification covering project purpose, how it pursues its goal, layered architecture, main dependencies, runtime scenarios, ADRs, and operational runbooks.
+- **Suggest Features**: Generates goal-aware feature ideas grounded in the repository's indexed architecture and user-defined project goals.
+- **Execute Guarded Changes & Autonomous Agents**: Prepares and verifies changes across up to eight captured Go/Markdown paths (or isolated Git worktrees) through a 4-stage pipeline—**Architect & Code → Verify & Test → Critic Review → Human Review**—with explicit diff Apply and guarded Undo.
 
-Source changes always require approval. Mini-Orca does not automatically run
-scans, commit or push. Shared proposals support Go and Markdown without deletions;
-other languages retain conservative analysis and symbol information. Optimization
-claims remain unmeasured without external benchmark evidence.
+## How It Pursues the Goal
 
-## Run
+1. **Deterministic Indexing & Context Policy**: Indexes repository files, symbols, and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
+2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `function`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
+3. **4-Stage Verified Change & Agent Pipeline**:
+   - **Step 1 · Architect & Code**: Generates a unified proposal or isolated worktree fix from findings, feature ideas, or chat instructions.
+   - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with bounded self-repair (up to 3 repair attempts).
+   - **Step 3 · Critic Review**: Evaluates the checked diff for regressions, boundary violations, and clean-code precision before human sign-off.
+   - **Step 4 · Human Precision Gate**: Presents read-only unified/split diffs for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
+4. **Dual GUI / TUI Parity**: Provides both a Wails/React graphical studio and a full-featured keyboard-driven Terminal UI (`TUI`) backed by the same workspace state and loopback API, enabling a seamless transition to a pure TUI workflow.
 
-Use Go 1.25+, Node.js 22+ and Xcode command-line tools for the macOS arm64 desktop
-application. The daemon itself still targets Go 1.22. Read
-[desktop setup](desktop/README.md#build-and-run) before the first launch.
-Configure all three model scopes using [CONFIG.md](CONFIG.md). Each scope supports
-an OpenAI-compatible HTTP provider, Antigravity CLI (`agy`), or Pi (`pi`).
+## Architecture
+
+Mini-Orca enforces strict layered ownership across the Go daemon and the desktop client:
+
+| Layer / Path | Responsibility |
+| --- | --- |
+| `cmd/daemon`, `cmd/eval` | Startup, configuration wiring, loopback server binding, and CLI evaluation entry points. |
+| `internal/api` | Loopback HTTP decoding, browser-origin protection, local request policy, and structured error responses. |
+| `internal/app` | Workflow orchestration, analysis runs, 4-stage change/agent sessions, Git worktree isolation, and guarded source mutation. |
+| `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
+| `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their persisted schemas. |
+| `internal/llm`, `internal/config` | Provider transport (OpenAI-compatible HTTP, `agy`, `pi`), timeouts, and 3-scope model configuration. |
+| `desktop/` | Wails native bridge (`desktop/internal/bridge`) and React/TypeScript frontend (`desktop/frontend/src`) hosting both the GUI and TUI views. |
+
+## Main Dependencies
+
+| Dependency | Scope | Purpose |
+| --- | --- | --- |
+| **Go 1.22+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon & CLI | Core HTTP daemon, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
+| **Wails v2** (`github.com/wailsapp/wails/v2`) | Desktop Host | Native macOS arm64 window host, loopback bridge, and local PTY terminal management (`github.com/creack/pty`). |
+| **React 18 + TypeScript 5 + Vite 5** | Frontend (`desktop/frontend`) | Unified state machine (`workspace.ts`), GUI studio views, and keyboard-first Terminal UI (`tui.tsx`). |
+| **Model Providers** (`HTTP` / `agy` / `pi`) | AI Transport | Pluggable local or remote LLM execution for `analyze`, `bug`, and `function` scopes. |
+| **Playwright + Go Quality Gates** | Verification | Headless component/workflow verification (`make web-test`) and static/complexity/clone checks (`make quality`). |
+
+## Other Project Info & Persistence
+
+### Run Locally
+
+Use Go 1.25+, Node.js 22+, and Xcode command-line tools for the macOS arm64 desktop application. Read [desktop setup](desktop/README.md#build-and-run) and [CONFIG.md](CONFIG.md) before the first launch.
 
 ```sh
 cp config.example.yaml config.yaml
@@ -64,77 +59,24 @@ go run ./cmd/daemon
 make desktop-run
 ```
 
-The daemon defaults to `127.0.0.1:9090`; the desktop uses
-`http://127.0.0.1:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local.
-Each prompt-bearing request to a non-loopback HTTP or CLI provider needs scope-specific
-consent. Provider keys are not part of API metadata.
+The daemon defaults to `127.0.0.1:9090`; the desktop connects to `http://127.0.0.1:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local. Every prompt-bearing request to a non-loopback HTTP or CLI provider requires scope-specific consent.
 
-## Project intelligence
+### Project Intelligence & Storage (`.mini-orca/`)
 
-The daemon owns indexing, context exclusions, model requests and guarded source
-mutation. The desktop renders state and rejects stale asynchronous results.
-Three configured scopes serve project/Performance/Security analysis (`analyze`), file/bug
-analysis (`bug`) and change proposals/repairs (`function`).
-**Models** assigns these profiles independently for creation, test writing and
-model review in Chat and fixes, followed by human review of the checked diffs.
-Feature ideas and Bug/Performance/Security findings can seed the same workflow.
-
-Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
-`file-analysis/`, `findings.json`, `performance/files/` and unified progress in
-`analysis/run.json`.
-Private `changes/` files retain conversations, captured source and proposals,
-feature goals/ideas, the latest grouped recovery journal and verification evidence.
-AGENTS.md files stay in the project as the instruction source of truth. Restore
-uses local persisted analysis without a model call.
-See the [API guide](docs/api-contract.md) for current contracts and boundaries.
-
-## Existing projects and preferences
-
-No model-scope configuration rename is required. Fresh semantic reports use prompt
-`file-analysis-v16` with short finding titles and explicit Bugs/Performance/Security
-risk categories. The persisted semantic report schema remains `1`; uncategorized
-historical findings
-remain visible as historical/unclassified evidence and never enter new category
-counts. Changed prompt/provider/source identities require fresh analysis; reading
-or restoring history makes no model request.
-
-Unified runs use schema `1` in `.mini-orca/analysis/run.json`. Interrupted runs
-retain their attempt ledger and need a fresh preview before resuming. Retired
-Analyze-all/Performance jobs and declaration drafts are no longer loaded. Start a
-new unified run; existing file reports and shared proposals remain available.
-See [workflow migration](docs/api-contract.md#retired-workflows).
-
-
-The web client remembers the last project path, theme and text size. Terminal
-starts without launching a shell.
-Mini-Orca does not save terminal transcripts or send them to a model. Returning to
-Source rechecks the selected file and invalidates stale evidence; reindex
-explicitly after adding, removing or renaming files in the terminal.
+Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`, `project-docs.json`, `file-analysis/`, `findings.json`, `performance/files/`, and unified progress in `analysis/run.json`. Private `changes/` files retain conversations, captured source and proposals, feature goals/ideas, the latest grouped recovery journal, and verification evidence. `.mini-orca/autopilot/` holds isolated Git worktrees for autonomous agent tasks. Restore uses local persisted analysis without triggering model requests. See the [API guide](docs/api-contract.md) and [workflow migration](docs/api-contract.md#retired-workflows) for current contracts and boundaries.
 
 ## Development and documentation
 
-Follow [AGENTS.md](AGENTS.md). UI contributions follow the
-[UI interaction and accessibility guidelines](desktop/UI_DESIGN_GUIDELINES.md).
-Run focused tests while editing. For a clean checkout,
-install Go 1.25+ and Node.js 22+. The full local gate is:
+Follow [AGENTS.md](AGENTS.md). UI contributions follow the [UI interaction and accessibility guidelines](desktop/UI_DESIGN_GUIDELINES.md). Run focused tests while editing. The full local gate is:
 
 ```sh
 ./scripts/validate.sh
 ```
 
-The checks use fakes and temporary directories, do not start the daemon, and do
-not require a provider, key or project configuration. Browser component tests
-need Playwright Chromium (`npx playwright install chromium` from
-`desktop/frontend`). Native packaging requires macOS arm64 and Xcode
-command-line tools.
+The checks use fakes and temporary directories, do not start the daemon, and do not require a provider, key, or project configuration.
 
-`make check` covers formatting, Go tests/races/vet, Python tooling and desktop
-workflow/bridge tests. `make quality` runs the pinned Go static, reachability,
-complexity and clone checks and reports every failed stage.
-
+- `make check`: Formatting, Go tests/races/vet, Python tooling, and desktop workflow/bridge tests.
+- `make quality`: Pinned Go static, reachability, complexity, and clone checks.
 - [Desktop setup and usage](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
-- [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md)
-
-Documentation describes current use and supported contracts, with one owner per fact.
-MIT licensed; see [LICENSE](LICENSE).
+- [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [LICENSE](LICENSE)

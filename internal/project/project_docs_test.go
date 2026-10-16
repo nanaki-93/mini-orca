@@ -81,8 +81,11 @@ func TestBuildAndPersistProjectDocsSynthesizesC4Arc42AndADRSpec(t *testing.T) {
 	if docs.Status != ProjectAnalysisStatusFresh || docs.Context.Purpose != analysis.Report.Purpose {
 		t.Fatalf("unexpected docs context: %+v", docs.Context)
 	}
-	if docs.Context.ArchitectureDiagram == "" || len(docs.Context.Stack) < 2 {
-		t.Fatalf("missing diagram or stack: %+v", docs.Context)
+	if docs.Context.ArchitectureDiagram == "" || len(docs.Context.Stack) < 2 || len(docs.Context.GoalPursuit) < 2 {
+		t.Fatalf("missing diagram, stack, or goal pursuit: %+v", docs.Context)
+	}
+	if len(docs.Dependencies) < 2 {
+		t.Fatalf("expected dependencies from stack/components, got %+v", docs.Dependencies)
 	}
 	if len(docs.Components) < 3 {
 		t.Fatalf("expected components from report and index, got %+v", docs.Components)

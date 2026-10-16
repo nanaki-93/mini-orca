@@ -3,6 +3,7 @@ import { activeRun, workspace as w, type State } from './workspace';
 import type {
   ProjectDocsComponent,
   ProjectDocsDecision,
+  ProjectDocsDependency,
   ProjectDocsGlossaryItem,
   ProjectDocsReport,
   ProjectDocsRunbookItem,
@@ -23,7 +24,7 @@ function classifyLayer(path: string, name: string): string {
   return 'Domain & Persistence';
 }
 
-function buildFallbackDocs(s: State): ProjectDocsReport {
+export function buildFallbackDocs(s: State): ProjectDocsReport {
   const analysis = s.overview?.analysis;
   const files = s.index?.files || [];
   const rawComponents = analysis?.components || [];
@@ -220,6 +221,73 @@ function buildFallbackDocs(s: State): ProjectDocsReport {
 
   const arch = analysis?.architecture || '';
   const archIsMermaid = /^(flowchart|graph|sequenceDiagram)\b/.test(arch.trim());
+  const topology = archIsMermaid
+    ? `Layered architecture spanning ${components.length} bounded subsystems.`
+    : arch || `Layered architecture spanning ${components.length} bounded subsystems.`;
+
+  const goalPursuit: string[] = [];
+  if (analysis?.engineering_insight?.mechanism) {
+    const why = analysis.engineering_insight.why_it_matters_here;
+    goalPursuit.push(
+      why
+        ? `${analysis.engineering_insight.mechanism} — ${why}`
+        : analysis.engineering_insight.mechanism,
+    );
+  }
+  for (const flow of flows) {
+    if (goalPursuit.length >= 4) break;
+    if (!/^(flowchart|graph|sequenceDiagram)\b/.test(flow.trim())) {
+      goalPursuit.push(flow.trim());
+    }
+  }
+  if (entries.length && goalPursuit.length < 4) {
+    goalPursuit.push(`Admits execution through entry points: ${entries.slice(0, 3).join(', ')}.`);
+  }
+  if (!goalPursuit.length) {
+    goalPursuit.push(topology);
+  }
+
+  const dependencies: ProjectDocsDependency[] = [];
+  const seenDeps = new Set<string>();
+  const addDep = (dep: ProjectDocsDependency) => {
+    const key = dep.name.toLowerCase();
+    if (!key || seenDeps.has(key) || dependencies.length >= 10) return;
+    seenDeps.add(key);
+    dependencies.push(dep);
+  };
+
+  if (s.project?.type && s.project.type !== 'unknown') {
+    addDep({
+      name: s.project.type,
+      kind: 'Runtime / Toolchain',
+      source: s.project.build_file || 'project manifest',
+      purpose: `Primary language runtime and build system (${s.project.build_file || s.project.type}).`,
+    });
+  }
+  for (const file of files) {
+    for (const imp of file.imports || []) {
+      if (dependencies.length >= 8) break;
+      addDep({
+        name: imp,
+        kind:
+          imp.includes('.') || imp.startsWith('@')
+            ? 'External Package'
+            : 'Standard / Internal Package',
+        source: file.path,
+        purpose: `Imported by ${file.path} for ${classifyLayer(file.path, imp).toLowerCase()}.`,
+      });
+    }
+  }
+  for (const comp of components) {
+    for (const dep of comp.dependencies || []) {
+      addDep({
+        name: dep,
+        kind: 'Internal Subsystem',
+        source: comp.path || comp.name,
+        purpose: `Collaborates with ${comp.name} (${comp.layer}).`,
+      });
+    }
+  }
 
   return {
     schema_version: '1',
@@ -231,18 +299,34 @@ function buildFallbackDocs(s: State): ProjectDocsReport {
         analysis?.purpose ||
         s.project?.summary ||
         `${s.project?.name || 'Project'} software system.`,
-      topology: archIsMermaid
-        ? `Layered architecture spanning ${components.length} bounded subsystems.`
-        : arch || `Layered architecture spanning ${components.length} bounded subsystems.`,
+      goal_pursuit: goalPursuit,
+      topology,
       stack: stack.length ? stack : ['Source Repository'],
       architecture_diagram: archIsMermaid ? arch : undefined,
     },
+    dependencies,
     components,
     scenarios,
     decisions,
     runbook,
     glossary,
     updated_at: s.project?.analyzed_at || '',
+  };
+}
+
+export function resolveProjectDocs(s: State): ProjectDocsReport {
+  const fallback = buildFallbackDocs(s);
+  const serverDocs = s.overview?.docs;
+  if (!serverDocs || !serverDocs.components?.length) return fallback;
+  return {
+    ...serverDocs,
+    context: {
+      ...serverDocs.context,
+      goal_pursuit: serverDocs.context.goal_pursuit?.length
+        ? serverDocs.context.goal_pursuit
+        : fallback.context.goal_pursuit,
+    },
+    dependencies: serverDocs.dependencies?.length ? serverDocs.dependencies : fallback.dependencies,
   };
 }
 
@@ -260,11 +344,7 @@ export function DocsWorkspace({ s }: { s: State }) {
   const [query, setQuery] = useState('');
   const [selectedComponent, setSelectedComponent] = useState(0);
 
-  const docs = useMemo(() => {
-    const serverDocs = s.overview?.docs;
-    if (serverDocs && serverDocs.components?.length) return serverDocs;
-    return buildFallbackDocs(s);
-  }, [s.overview, s.project, s.index]);
+  const docs = useMemo(() => resolveProjectDocs(s), [s.overview, s.project, s.index]);
 
   const q = query.trim().toLowerCase();
 
@@ -282,6 +362,19 @@ export function DocsWorkspace({ s }: { s: State }) {
           ),
       ),
     [docs.components, q],
+  );
+
+  const filteredDependencies = useMemo(
+    () =>
+      (docs.dependencies || []).filter(
+        (d) =>
+          !q ||
+          d.name.toLowerCase().includes(q) ||
+          d.kind.toLowerCase().includes(q) ||
+          d.source.toLowerCase().includes(q) ||
+          d.purpose.toLowerCase().includes(q),
+      ),
+    [docs.dependencies, q],
   );
 
   const filteredScenarios = useMemo(
@@ -339,6 +432,9 @@ export function DocsWorkspace({ s }: { s: State }) {
     if (resolved) void w.openFile(resolved);
   };
 
+  const entryPoints = s.overview?.analysis.entry_points || [];
+  const goalPursuit = docs.context.goal_pursuit || [];
+
   return (
     <div className="workspace-page docs-workspace">
       <Heading
@@ -348,7 +444,7 @@ export function DocsWorkspace({ s }: { s: State }) {
           <span className="row wrap" style={{ gap: '8px' }}>
             <StatusDot value={docs.status} label="Specification" />
             <span>
-              C4 System Context · Subsystem Contracts · Runtime Scenarios · ADRs &amp; Runbook
+              Purpose · Goal Pursuit · Architecture · Main Dependencies · Runtime &amp; Ops
             </span>
           </span>
         }
@@ -377,7 +473,7 @@ export function DocsWorkspace({ s }: { s: State }) {
             className={`mode-switch-btn ${tab === 'context' ? 'active' : ''}`}
             onClick={() => setTab('context')}
           >
-            1. System Context ({Math.max(1, layers.length)})
+            1. Overview &amp; Architecture ({Math.max(1, layers.length)})
           </button>
           <button
             type="button"
@@ -417,34 +513,69 @@ export function DocsWorkspace({ s }: { s: State }) {
               setQuery(e.target.value);
               setSelectedComponent(0);
             }}
-            placeholder="Filter components, contracts, runtime scenarios, ADRs, or domain terms…"
+            placeholder="Filter purpose, architecture, dependencies, contracts, scenarios, or ADRs…"
           />
         </div>
       </div>
 
-      {/* TAB 1: SYSTEM CONTEXT & LAYERED TOPOLOGY */}
+      {/* TAB 1: PURPOSE, HOW IT PURSUES THE GOAL, ARCHITECTURE, DEPENDENCIES & OTHER INFO */}
       {tab === 'context' && (
         <div className="stack">
-          <Panel title="System Summary">
-            <div className="stack" style={{ gap: '10px' }}>
-              <p style={{ fontSize: '0.9rem', lineHeight: 1.55 }}>{docs.context.purpose}</p>
-              <p className="small muted" style={{ lineHeight: 1.5 }}>
-                {docs.context.topology}
-              </p>
-              <div className="row wrap" style={{ gap: '6px' }}>
-                {docs.context.stack.map((item) => (
-                  <span key={item} className="pill font-mono">
-                    {item}
-                  </span>
+          <div className="grid two-columns">
+            <Panel title="Purpose of the Project">
+              <div className="stack" style={{ gap: '10px' }}>
+                <p style={{ fontSize: '0.92rem', lineHeight: 1.55 }}>{docs.context.purpose}</p>
+                <div className="row wrap" style={{ gap: '6px' }}>
+                  {docs.context.stack.map((item) => (
+                    <span key={item} className="pill font-mono">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+                {entryPoints.length > 0 && (
+                  <div className="row wrap" style={{ gap: '6px', marginTop: '2px' }}>
+                    <span className="small muted">Entry points:</span>
+                    {entryPoints.map((ep) => (
+                      <button
+                        key={ep}
+                        type="button"
+                        className="pill font-mono"
+                        onClick={() => openPath(ep)}
+                      >
+                        {ep}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel title="How It Pursues the Goal">
+              <div className="stack" style={{ gap: '8px' }}>
+                {goalPursuit.map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="studio-list-row"
+                    style={{ cursor: 'default', alignItems: 'flex-start' }}
+                  >
+                    <span className="pill font-mono" style={{ flexShrink: 0 }}>
+                      0{idx + 1}
+                    </span>
+                    <span className="small" style={{ lineHeight: 1.5 }}>
+                      {step}
+                    </span>
+                  </div>
                 ))}
               </div>
-            </div>
-          </Panel>
+            </Panel>
+          </div>
 
           <Panel
             title="Layered Architecture Map"
             actions={
-              <span className="small muted">Click any subsystem to inspect its contracts</span>
+              <span className="small muted">
+                {docs.context.topology} · Click any subsystem to inspect its contracts
+              </span>
             }
           >
             <div className="arch-diagram-box">
@@ -481,6 +612,65 @@ export function DocsWorkspace({ s }: { s: State }) {
               />
             </Disclosure>
           )}
+
+          <div className="grid two-columns">
+            <Panel title={`Main Dependencies (${filteredDependencies.length})`}>
+              <div className="stack" style={{ gap: '8px' }}>
+                {filteredDependencies.length === 0 && <Empty title="No matching dependencies" />}
+                {filteredDependencies.map((dep, idx) => (
+                  <div
+                    key={`${dep.name}-${idx}`}
+                    className="panel"
+                    style={{ padding: '10px 12px', background: 'var(--raised)' }}
+                  >
+                    <div className="row between wrap" style={{ gap: '8px' }}>
+                      <span className="row wrap" style={{ gap: '6px' }}>
+                        <strong className="font-mono" style={{ fontSize: '0.84rem' }}>
+                          {dep.name}
+                        </strong>
+                        {dep.version && <code className="pill font-mono">{dep.version}</code>}
+                      </span>
+                      <span className="pill">{dep.kind}</span>
+                    </div>
+                    <p className="small muted" style={{ marginTop: '4px', lineHeight: 1.45 }}>
+                      {dep.purpose}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Other Project Info &amp; Operations">
+              <div className="stack" style={{ gap: '8px' }}>
+                {docs.runbook.slice(0, 3).map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="panel"
+                    style={{ padding: '10px 12px', background: 'var(--raised)' }}
+                  >
+                    <div className="row between wrap">
+                      <strong>{item.label}</strong>
+                      <code className="pill font-mono">{item.command}</code>
+                    </div>
+                    <p className="small muted" style={{ marginTop: '4px' }}>
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+                <div className="row wrap" style={{ gap: '8px', marginTop: '4px' }}>
+                  <Button tone="ghost small" onClick={() => setTab('components')}>
+                    Inspect {docs.components.length} Subsystems →
+                  </Button>
+                  <Button tone="ghost small" onClick={() => setTab('scenarios')}>
+                    Inspect {docs.scenarios.length} Scenarios →
+                  </Button>
+                  <Button tone="ghost small" onClick={() => setTab('decisions')}>
+                    Inspect {docs.decisions.length} ADRs &amp; Glossary →
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+          </div>
         </div>
       )}
 

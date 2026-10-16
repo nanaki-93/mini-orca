@@ -99,15 +99,24 @@ export interface ProjectDocsGlossaryItem {
   term: string;
   definition: string;
 }
+export interface ProjectDocsDependency {
+  name: string;
+  version?: string;
+  kind: string;
+  source: string;
+  purpose: string;
+}
 export interface ProjectDocsReport extends ProjectIdentity {
   schema_version: string;
   status: string;
   context: {
     purpose: string;
+    goal_pursuit?: string[];
     topology: string;
     stack: string[];
     architecture_diagram?: string;
   };
+  dependencies?: ProjectDocsDependency[];
   components: ProjectDocsComponent[];
   scenarios: ProjectDocsScenario[];
   decisions: ProjectDocsDecision[];

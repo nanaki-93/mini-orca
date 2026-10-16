@@ -69,7 +69,11 @@ try {
       await nav(page, 'Docs');
       await idle(page);
       await page.getByRole('heading', { name: 'Engineering Specification', exact: true }).waitFor();
+      await page.getByText('Purpose of the Project', { exact: true }).waitFor();
+      await page.getByText('How It Pursues the Goal', { exact: true }).waitFor();
       await page.getByText('Layered Architecture Map', { exact: true }).waitFor();
+      await page.getByText(/^Main Dependencies \(/).waitFor();
+      await page.getByText('Other Project Info & Operations', { exact: true }).waitFor();
 
       // Switch to 2. Components & Contracts
       await page.getByRole('tab', { name: /2\. Components/ }).click();

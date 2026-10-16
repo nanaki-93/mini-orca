@@ -1839,7 +1839,8 @@ export class Workspace {
     if (!model)
       throw new Error('The selected model is unavailable. Refresh models and choose again.');
     if (!model.remote_provider && !explicit) return false;
-    if (this.state.workspaceTrust || this.parent?.state.workspaceTrust) return model.remote_provider;
+    if (this.state.workspaceTrust || this.parent?.state.workspaceTrust)
+      return model.remote_provider;
     const accepted = await this.confirm({
       title,
       message: model.remote_provider

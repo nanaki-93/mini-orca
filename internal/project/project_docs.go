@@ -17,12 +17,22 @@ const (
 	projectDocsReportPath    = ".mini-orca/project-docs.json"
 )
 
-// ProjectDocsContext describes C4 Level 1-2 system context and technology stack.
+// ProjectDocsContext describes C4 Level 1-2 system context, goal pursuit, and technology stack.
 type ProjectDocsContext struct {
 	Purpose             string   `json:"purpose"`
+	GoalPursuit         []string `json:"goal_pursuit,omitempty"`
 	Topology            string   `json:"topology"`
 	Stack               []string `json:"stack"`
 	ArchitectureDiagram string   `json:"architecture_diagram,omitempty"`
+}
+
+// ProjectDocsDependency describes a primary runtime, library, or module dependency.
+type ProjectDocsDependency struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Version string `json:"version,omitempty"`
+	Source  string `json:"source,omitempty"`
+	Summary string `json:"summary"`
 }
 
 // ProjectDocsContract describes an exposed interface or boundary contract of a component.
@@ -91,6 +101,7 @@ type ProjectDocsReport struct {
 	ProjectRevision string                    `json:"project_revision"`
 	Status          string                    `json:"status"`
 	Context         ProjectDocsContext        `json:"context"`
+	Dependencies    []ProjectDocsDependency   `json:"dependencies,omitempty"`
 	Components      []ProjectDocsComponent    `json:"components"`
 	Scenarios       []ProjectDocsScenario     `json:"scenarios"`
 	Decisions       []ProjectDocsDecision     `json:"decisions"`
@@ -108,6 +119,7 @@ func BuildProjectDocs(analysis Analysis, index *ProjectIndex) ProjectDocsReport 
 	}
 	components := buildDocsComponents(analysis, index)
 	contextSpec := buildDocsContext(analysis, components)
+	dependencies := buildDocsDependencies(analysis, index, components)
 	scenarios := buildDocsScenarios(analysis, components)
 	decisions := buildDocsDecisions(analysis, components)
 	runbook := buildDocsRunbook(analysis, index)
@@ -125,6 +137,7 @@ func BuildProjectDocs(analysis Analysis, index *ProjectIndex) ProjectDocsReport 
 		ProjectRevision: analysis.ProjectRevision,
 		Status:          status,
 		Context:         contextSpec,
+		Dependencies:    dependencies,
 		Components:      components,
 		Scenarios:       scenarios,
 		Decisions:       decisions,
@@ -194,12 +207,197 @@ func buildDocsContext(analysis Analysis, components []ProjectDocsComponent) Proj
 		topology = summarizeLayerTopology(components)
 	}
 	stack := buildDocsStack(analysis)
+	goalPursuit := buildDocsGoalPursuit(analysis, components, topology)
 	return ProjectDocsContext{
 		Purpose:             purpose,
+		GoalPursuit:         goalPursuit,
 		Topology:            topology,
 		Stack:               stack,
 		ArchitectureDiagram: diagram,
 	}
+}
+
+func buildDocsGoalPursuit(analysis Analysis, components []ProjectDocsComponent, topology string) []string {
+	steps := make([]string, 0, 4)
+	if insight := analysis.Report.EngineeringInsight; insight != nil && strings.TrimSpace(insight.Mechanism) != "" {
+		why := strings.TrimSpace(insight.WhyItMattersHere)
+		if why != "" {
+			steps = append(steps, fmt.Sprintf("%s — %s", strings.TrimSpace(insight.Mechanism), why))
+		} else {
+			steps = append(steps, strings.TrimSpace(insight.Mechanism))
+		}
+	}
+	if len(analysis.Report.EntryPoints) > 0 {
+		steps = append(steps, fmt.Sprintf("Entry & Admission: Starts from %s and validates inputs before domain execution.", strings.Join(analysis.Report.EntryPoints, ", ")))
+	}
+	for _, comp := range components {
+		if len(steps) >= 4 {
+			break
+		}
+		if comp.Summary != "" {
+			steps = append(steps, fmt.Sprintf("%s (%s): %s", comp.Name, comp.Layer, comp.Summary))
+		}
+	}
+	if len(steps) == 0 && topology != "" {
+		steps = append(steps, topology)
+	}
+	return steps
+}
+
+func buildDocsDependencies(analysis Analysis, index *ProjectIndex, components []ProjectDocsComponent) []ProjectDocsDependency {
+	deps := make([]ProjectDocsDependency, 0, 8)
+	seen := make(map[string]bool)
+	add := func(dep ProjectDocsDependency) {
+		key := strings.ToLower(strings.TrimSpace(dep.Name))
+		if key == "" || seen[key] || len(deps) >= 12 {
+			return
+		}
+		seen[key] = true
+		deps = append(deps, dep)
+	}
+
+	if analysis.Path != "" {
+		for _, dep := range parseGoModDependencies(filepath.Join(analysis.Path, "go.mod")) {
+			add(dep)
+		}
+		for _, relPkg := range []string{"package.json", filepath.Join("desktop", "frontend", "package.json")} {
+			for _, dep := range parsePackageJSONDependencies(filepath.Join(analysis.Path, relPkg), relPkg) {
+				add(dep)
+			}
+		}
+	}
+
+	if analysis.Type != "" && analysis.Type != "unknown" {
+		source := analysis.BuildFile
+		if source == "" {
+			source = "repository root"
+		}
+		add(ProjectDocsDependency{
+			Name:    strings.ToUpper(analysis.Type[:1]) + analysis.Type[1:] + " Runtime & Toolchain",
+			Kind:    "Runtime",
+			Source:  source,
+			Summary: fmt.Sprintf("Primary build and execution environment (%s).", source),
+		})
+	}
+
+	for _, entry := range buildDocsStack(analysis) {
+		add(ProjectDocsDependency{
+			Name:    entry,
+			Kind:    "Language / Stack",
+			Source:  "project index",
+			Summary: "Indexed source language and toolchain footprint in the repository.",
+		})
+	}
+
+	for _, comp := range components {
+		for _, d := range comp.Dependencies {
+			add(ProjectDocsDependency{
+				Name:    d,
+				Kind:    "Module Dependency",
+				Source:  comp.Path,
+				Summary: fmt.Sprintf("Imported by %s (%s).", comp.Name, comp.Layer),
+			})
+		}
+	}
+
+	return deps
+}
+
+func parseGoModDependencies(goModPath string) []ProjectDocsDependency {
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return nil
+	}
+	var out []ProjectDocsDependency
+	inRequire := false
+	for _, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "//") {
+			continue
+		}
+		if strings.HasPrefix(line, "go ") {
+			ver := strings.TrimSpace(strings.TrimPrefix(line, "go "))
+			out = append(out, ProjectDocsDependency{
+				Name:    "Go Standard Library & Runtime",
+				Kind:    "Runtime",
+				Version: "go " + ver,
+				Source:  "go.mod",
+				Summary: "Core Go runtime, concurrency primitives, HTTP/JSON, and standard packages.",
+			})
+			continue
+		}
+		if strings.HasPrefix(line, "require (") {
+			inRequire = true
+			continue
+		}
+		if inRequire && line == ")" {
+			inRequire = false
+			continue
+		}
+		if strings.Contains(line, "// indirect") {
+			continue
+		}
+		reqLine := ""
+		if strings.HasPrefix(line, "require ") {
+			reqLine = strings.TrimSpace(strings.TrimPrefix(line, "require "))
+		} else if inRequire {
+			reqLine = line
+		}
+		if reqLine != "" {
+			fields := strings.Fields(reqLine)
+			if len(fields) >= 2 {
+				out = append(out, ProjectDocsDependency{
+					Name:    fields[0],
+					Kind:    "Go Module",
+					Version: fields[1],
+					Source:  "go.mod",
+					Summary: fmt.Sprintf("Direct Go module dependency declared in go.mod (%s).", fields[1]),
+				})
+			}
+		}
+	}
+	return out
+}
+
+func parsePackageJSONDependencies(pkgPath, sourceLabel string) []ProjectDocsDependency {
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return nil
+	}
+	var parsed struct {
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(parsed.Dependencies)+len(parsed.DevDependencies))
+	versions := make(map[string]string)
+	kinds := make(map[string]string)
+	for k, v := range parsed.Dependencies {
+		names = append(names, k)
+		versions[k] = v
+		kinds[k] = "NPM Package"
+	}
+	for k, v := range parsed.DevDependencies {
+		if _, exists := versions[k]; !exists {
+			names = append(names, k)
+			versions[k] = v
+			kinds[k] = "Dev / Build Tool"
+		}
+	}
+	sort.Strings(names)
+	out := make([]ProjectDocsDependency, 0, len(names))
+	for _, name := range names {
+		out = append(out, ProjectDocsDependency{
+			Name:    name,
+			Kind:    kinds[name],
+			Version: versions[name],
+			Source:  sourceLabel,
+			Summary: fmt.Sprintf("Frontend/Node package declared in %s.", sourceLabel),
+		})
+	}
+	return out
 }
 
 func isMermaidDiagram(text string) bool {
