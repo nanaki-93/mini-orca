@@ -598,11 +598,17 @@ try {
       await page.getByRole('button', { name: 'CRT Green', exact: true }).click();
       assert.equal(await tui.getAttribute('data-tui-palette'), 'crt');
 
-      // Navigate TUI views via numbered tabs ([1] Overview, [5] Issues)
+      // Navigate TUI views via numbered tabs ([1] Overview, [2] Arch, [3] Docs, [5] Issues)
       await page.getByRole('button', { name: /\[1\] Overview/ }).click();
       await page.getByText('SOURCE FILES', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /\[2\] Arch/ }).click();
+      await page.getByText('SUBSYSTEM CONTRACT INSPECTOR', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /\[3\] Docs/ }).click();
+      await page.getByText('1. PURPOSE OF THE PROJECT:', { exact: true }).waitFor();
+      await page.getByText(/4\. MAIN DEPENDENCIES/).waitFor();
       await page.getByRole('button', { name: /\[5\] Issues/ }).click();
       await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /\[d: Dismiss\]/ }).waitFor();
       assert.equal(await page.getByRole('button', { name: '[Done]', exact: true }).count(), 0);
       assert.equal(
         await page.getByRole('button', { name: '[Mark as Done]', exact: true }).count(),
