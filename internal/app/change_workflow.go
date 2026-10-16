@@ -50,9 +50,11 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err != nil {
 		return nil, err
 	}
-	if err := s.admitChangeWorkflow(session, request); err != nil {
+	cleanedMessages := stripWorkflowTestMessages(session.Messages)
+	if err := s.admitChangeWorkflow(session, request, len(cleanedMessages)); err != nil {
 		return nil, err
 	}
+	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	now := time.Now().UTC()
 	session.Revision++ // Invalidates operations admitted before this run.
 	w := &ChangeWorkflow{ID: fmt.Sprintf("%s-%d", id, session.Revision), Status: "running", Models: request.Models, StartedAt: now, UpdatedAt: now}
@@ -62,7 +64,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	}
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
 	session.Workflow, session.Checks, session.ReviewedHash, session.PinnedTests = w, []CheckResult{}, "", nil
-	session.Messages = stripWorkflowTestMessages(session.Messages)
+	session.Messages = cleanedMessages
 	session.UpdatedAt = now
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
@@ -74,18 +76,18 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.job = job
 	s.changeWorkflow.mu.Unlock()
-	go s.runChangeWorkflow(workCtx, job, request.Message)
+	go s.runChangeWorkflow(workCtx, job, retryMessage)
 	return session, nil
 }
 
-func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWorkflowRequest) error {
+func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWorkflowRequest, messageCount int) error {
 	s.changeWorkflow.mu.Lock()
 	busy := s.changeWorkflow.job != nil && !s.changeWorkflow.job.finished
 	s.changeWorkflow.mu.Unlock()
 	if busy {
 		return fmt.Errorf("%w: a change workflow is already active", project.ErrRevisionConflict)
 	}
-	if session.Kind == "instructions" || len(session.Messages) > maxChangeMessages-4 {
+	if session.Kind == "instructions" || messageCount > maxChangeMessages-4 {
 		return fmt.Errorf("start a new feature, fix, performance or security conversation")
 	}
 	if session.Kind == "security" && !request.ConfirmSecurity {

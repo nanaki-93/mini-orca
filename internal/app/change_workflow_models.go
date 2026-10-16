@@ -28,7 +28,69 @@ func stripWorkflowTestMessages(messages []ChangeMessage) []ChangeMessage {
 		}
 		cleaned = append(cleaned, messages[i])
 	}
+	if len(cleaned) > maxChangeMessages-4 {
+		keepTail := maxChangeMessages - 6
+		cleaned = append(cleaned[:2:2], cleaned[len(cleaned)-keepTail:]...)
+	}
 	return cleaned
+}
+
+func workflowRetryMessage(message string, workflow *ChangeWorkflow, checks []CheckResult) string {
+	extra := criticReviewRetryFeedback(message, workflow) + workflowFailureRetryFeedback(message, workflow, checks)
+	if extra == "" {
+		return message
+	}
+	combined := message + extra
+	if len(combined) > 8192 {
+		return combined[:8192]
+	}
+	return combined
+}
+
+func criticReviewRetryFeedback(message string, workflow *ChangeWorkflow) string {
+	if workflow == nil || workflow.Review == nil || workflow.Review.Verdict != "changes_requested" || strings.Contains(message, "Critic review feedback:") {
+		return ""
+	}
+	var out strings.Builder
+	out.WriteString("\n\nCritic review feedback:\n" + strings.TrimSpace(workflow.Review.Summary))
+	for _, finding := range workflow.Review.Findings {
+		out.WriteString("\n- " + strings.TrimSpace(finding))
+	}
+	return out.String()
+}
+
+func workflowFailureRetryFeedback(message string, workflow *ChangeWorkflow, checks []CheckResult) string {
+	if strings.Contains(message, "Previous check failures to resolve:") || strings.Contains(message, "Previous workflow failure to resolve:") {
+		return ""
+	}
+	if evidence := failedWorkflowCheckEvidence(checks); evidence != "" {
+		return "\n\nPrevious check failures to resolve:\n" + evidence
+	}
+	if workflow != nil && workflow.Status == "failed" && strings.TrimSpace(workflow.Reason) != "" && !strings.Contains(message, workflow.Reason) {
+		return "\n\nPrevious workflow failure to resolve:\n" + strings.TrimSpace(workflow.Reason)
+	}
+	return ""
+}
+
+func failedWorkflowCheckEvidence(checks []CheckResult) string {
+	var text strings.Builder
+	for _, check := range checks {
+		if check.State == CheckPassed || check.State == CheckSkipped {
+			continue
+		}
+		if text.Len() >= 2400 {
+			break
+		}
+		output := strings.TrimSpace(sanitizeCheckOutput(check.Output, false, "", ""))
+		if output == "" {
+			output = check.State
+		}
+		if len(output) > 1500 {
+			output = output[len(output)-1500:]
+		}
+		text.WriteString(check.Name + " (" + check.State + "):\n" + output + "\n")
+	}
+	return strings.TrimSpace(text.String())
 }
 
 func (s *Service) generateWorkflowTests(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime) (*ChangeSession, error) {

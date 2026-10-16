@@ -552,6 +552,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
   );
   const [missionPrompt, setMissionPrompt] = useState(seed?.message || '');
   const [selectedDiffPath, setSelectedDiffPath] = useState<string>('all');
+  const [retryNote, setRetryNote] = useState('');
 
   useEffect(() => {
     if (s.selectedAgentPath && !selectedChild && !s.busy) {
@@ -665,6 +666,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
 
   useEffect(() => {
     setSelectedDiffPath('all');
+    setRetryNote('');
   }, [s.selectedAgentPath, change?.id, change?.revision]);
 
   useEffect(() => {
@@ -1122,7 +1124,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     tone="primary small"
                     icon="sparkles"
                     disabled={busy}
-                    onClick={() => void agentW.repairChange()}
+                    onClick={() => void agentW.repairChange(retryNote || undefined)}
                   >
                     Repair Failed Checks
                   </Button>
@@ -1135,7 +1137,11 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   }
                   icon="refresh"
                   disabled={busy}
-                  onClick={() => void agentW.rerunChangeWorkflow('agents')}
+                  onClick={() => {
+                    const note = retryNote;
+                    setRetryNote('');
+                    void agentW.rerunChangeWorkflow('agents', note);
+                  }}
                 >
                   Re-run Fix
                 </Button>
@@ -1368,6 +1374,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 {checks.map((check) => (
                   <Disclosure
                     key={check.name}
+                    open={check.state !== 'passed'}
                     title={
                       <span className="row between wrap" style={{ width: '100%' }}>
                         <span>
@@ -1391,6 +1398,23 @@ export function AgentsWorkspace({ s }: { s: State }) {
               </div>
             )}
 
+            {!running &&
+              ((!allChecksPassed && checks.length > 0) || stageStatus('test') === 'failed') && (
+                <label className="block">
+                  <span className="small muted">
+                    Interactive Correction Loop (failed test output is included automatically when
+                    re-running)
+                  </span>
+                  <input
+                    aria-label="Retry correction instructions"
+                    className="field"
+                    value={retryNote}
+                    onChange={(e) => setRetryNote(e.target.value)}
+                    placeholder="Optional: add guidance for correcting the implementation or test before re-running…"
+                  />
+                </label>
+              )}
+
             <div className="row between wrap">
               <Button
                 tone="ghost"
@@ -1409,14 +1433,28 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   Cancel Agent Run
                 </Button>
               ) : (!allChecksPassed && checks.length > 0) || stageStatus('test') === 'failed' ? (
-                <Button
-                  tone="primary"
-                  icon="sparkles"
-                  disabled={busy}
-                  onClick={() => void agentW.repairChange()}
-                >
-                  Repair Failed Checks
-                </Button>
+                <div className="row wrap" style={{ gap: '8px' }}>
+                  <Button
+                    tone="ghost"
+                    icon="sparkles"
+                    disabled={busy}
+                    onClick={() => void agentW.repairChange(retryNote || undefined)}
+                  >
+                    Repair Failed Checks
+                  </Button>
+                  <Button
+                    tone="primary"
+                    icon="refresh"
+                    disabled={busy}
+                    onClick={() => {
+                      const note = retryNote;
+                      setRetryNote('');
+                      void agentW.rerunChangeWorkflow('agents', note);
+                    }}
+                  >
+                    Re-run Fix
+                  </Button>
+                </div>
               ) : (
                 <Button
                   tone="primary"

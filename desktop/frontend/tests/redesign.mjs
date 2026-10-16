@@ -887,6 +887,75 @@ try {
       await close();
     }
   });
+
+  await test('Re-run Fix after Step 2 test failure includes failed test error output and interactive instructions in context', async () => {
+    const { page, close } = await pageFor({ git: true });
+    try {
+      await page.evaluate(() => {
+        window.fixture.state.nextWorkflowStatus = 'failed';
+        window.fixture.state.failedTestOutput =
+          '--- FAIL: TestRun (0.00s)\n    main_test.go:14: wrong result: got 2, want 3\nFAIL';
+      });
+
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      const selectCheckboxes = page.locator('.result-row input[type="checkbox"]');
+      await selectCheckboxes.first().check();
+      await page.getByRole('button', { name: 'Fix Selected (1)', exact: true }).click();
+      await idle(page);
+
+      // Open the failed agent from the Agents in Progress Dashboard
+      const dashboard = page.getByRole('tablist', { name: 'Active agents', exact: true });
+      await dashboard.waitFor();
+      await dashboard.getByRole('tab').last().click();
+      await idle(page);
+
+      // Should land on Step 2 · Verification & Test Agent with failed test output expanded
+      await page
+        .getByRole('heading', {
+          name: /Step 2 · Verification & Test Agent \(0\/1 Passed\)/,
+        })
+        .waitFor();
+      await page.getByText(/main_test\.go:14: wrong result: got 2, want 3/).waitFor();
+
+      // Provide optional retry guidance and click Re-run Fix in Step 2
+      const retryInput = page.getByRole('textbox', { name: 'Retry correction instructions' });
+      await retryInput.waitFor();
+      await retryInput.fill('Ensure Run returns 3 on cancellation');
+      await page
+        .locator('section.panel')
+        .filter({ hasText: 'Step 2 · Verification & Test Agent' })
+        .getByRole('button', { name: 'Re-run Fix', exact: true })
+        .click();
+      await idle(page);
+
+      // Verify the re-run workflow request included the failed test error output and retry guidance
+      const workflowCalls = await page.evaluate(() =>
+        window.fixture.requests.filter((c) => c.method === 'POST' && c.path.endsWith('/workflow')),
+      );
+      assert.equal(workflowCalls.length, 2);
+      const rerunMessage = workflowCalls[1].body.message;
+      assert.ok(
+        rerunMessage.includes('Previous check failures to resolve:'),
+        `Expected rerun message to include check failures header, got: ${rerunMessage}`,
+      );
+      assert.ok(
+        rerunMessage.includes('main_test.go:14: wrong result: got 2, want 3'),
+        `Expected rerun message to include failed test assertion output, got: ${rerunMessage}`,
+      );
+      assert.ok(
+        rerunMessage.includes(
+          'Additional retry instructions:\nEnsure Run returns 3 on cancellation',
+        ),
+        `Expected rerun message to include user retry instructions, got: ${rerunMessage}`,
+      );
+
+      // After successful retry, agent advances to Step 4 · Review & Commit
+      await page.getByRole('heading', { name: /^Step 4 · Review & Commit/ }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();
