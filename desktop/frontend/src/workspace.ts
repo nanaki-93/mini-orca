@@ -1077,7 +1077,7 @@ export class Workspace {
         !this.worktreePath &&
         context.repository.available &&
         context.repository.at_root &&
-        !context.repository.dirty &&
+        !context.repository.conflicts?.length &&
         !!context.repository.branch &&
         !!context.repository.head &&
         !context.repository.merge_head &&
@@ -1121,6 +1121,7 @@ export class Workspace {
           fresh = await child.readFixPreparation();
           child.seedChange(preparedSeed, 'agents');
           this.set({
+            ...(this.state.change ? {} : { changeSeed: undefined }),
             selectedAgentPath: result.path,
             agentDetailOpen: false,
             page: 'agents',
@@ -2376,7 +2377,9 @@ export class Workspace {
       this.api.get<M.GitRepository>(`${current}/git/repository`, this.identity()),
     ]);
     const setup = workflowSetupModels(this.state);
-    const availableModels = Object.values(setup).every((profile) => models.scopes[profile])
+    const availableModels = Object.values(setup).every((profile) =>
+      effectiveWorkflowModel({ models, availableModels: this.state.availableModels }, profile),
+    )
       ? this.state.availableModels
       : await this.api.get<M.AvailableModels>('/api/models/available');
     if (epoch !== this.epoch || projectKey(trust) !== projectKey(this.state.project))
@@ -2510,6 +2513,11 @@ export class Workspace {
   }
   async rerunChangeWorkflow(targetPage?: Page) {
     const change = this.state.change;
+    const page = targetPage || this.state.page;
+    if (!change && !this.worktreePath && page === 'agents' && this.state.changeSeed) {
+      await this.startAgentFix(this.state.changeSeed);
+      return;
+    }
     const baseMessage =
       change?.messages.find(
         (m) =>
@@ -2555,7 +2563,6 @@ export class Workspace {
     if (!seed) return;
     try {
       const models = workflowSetupModels(this.state);
-      const page = targetPage || this.state.page;
       const context = await this.readFixPreparation();
       const hasTestTarget = change
         ? change.targets.some((t) => isTestFilePath(t.path))

@@ -279,6 +279,9 @@ func TestPassiveGitStatusDoesNotExecuteFilters(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("passive status executed filter")
 	}
+	if gitStatusDirty("?? .mini-orca/index.json\x00?? .worktrees/fix-1/\x00") {
+		t.Fatal("private metadata or worktree paths marked repository dirty")
+	}
 }
 
 func TestGitWorktreeRequiresExecutionTrust(t *testing.T) {

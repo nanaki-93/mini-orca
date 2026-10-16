@@ -242,7 +242,7 @@ export function GitWorkspace({ s }: { s: State }) {
                   title="No active worktrees"
                   detail={
                     repository.dirty
-                      ? 'Commit or stash local changes in the current branch so agents can create isolated worktrees.'
+                      ? 'Click "Fix with Agent" on any issue to launch an isolated worktree from HEAD. Commit or stash local changes before merging a completed worktree back.'
                       : 'Click "Fix with Agent" on any issue to launch an isolated agent worktree.'
                   }
                 />

@@ -4,6 +4,7 @@ import {
   activeChangeWorkflow,
   changeChecksPassed,
   workflowSetupModels,
+  worktreeDefaultTarget,
   type State,
 } from './workspace';
 import {
@@ -374,16 +375,18 @@ export function Editor({ s }: { s: State }) {
     setContextPickerOpen(false);
     if (useWorktree && s.repository?.available && !w.worktreePath) {
       const prep = await w.readFixPreparation();
-      const branch = `orca/${
-        seed.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '')
-          .slice(0, 28) || 'task'
-      }`;
-      const base = (prep.repository.root || s.project?.path || '.').replace(/\/+$/, '');
-      const path = `${base}/.worktrees/${branch.replace('/', '-')}`;
-      await w.prepareFixInWorktree(seed, workflowSetupModels(s), prep, branch, path, true);
+      const target = worktreeDefaultTarget(
+        seed.title,
+        prep.repository.root || s.project?.path || '.',
+      );
+      await w.prepareFixInWorktree(
+        seed,
+        workflowSetupModels(s),
+        prep,
+        target.branch,
+        target.path,
+        true,
+      );
     } else {
       await w.prepareChange(seed, true, workflowSetupModels(s).create);
       w.set({ page: 'editor' });

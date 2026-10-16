@@ -692,7 +692,10 @@ try {
       assert.equal(await page.locator('.git-worktree').count(), 2);
       assert.equal(await page.getByText('Worktree implementations', { exact: true }).count(), 0);
 
-      // 2. Select 2 issues in Issues & Ideas and dispatch a single grouped agent fix
+      // 2. Select 2 issues in Issues & Ideas and dispatch a single grouped agent fix (even when main has uncommitted changes)
+      await page.evaluate(() => {
+        window.fixture.state.git.dirty = true;
+      });
       await nav(page, 'Issues & Ideas');
       await idle(page);
       await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
@@ -711,7 +714,7 @@ try {
       await dashboard.waitFor();
       await dashboard.getByText('2 issues', { exact: true }).waitFor();
 
-      // Verify a worktree was created for this grouped agent fix
+      // Verify a worktree was created for this grouped agent fix even with dirty main
       const worktreeCreateReq = await page.evaluate(() =>
         window.fixture.requests.find(
           (r) => r.method === 'POST' && r.path.endsWith('/git/worktrees'),
@@ -719,6 +722,9 @@ try {
       );
       assert.ok(worktreeCreateReq, 'Fix Selected creates an isolated Git worktree');
       assert.match(worktreeCreateReq.body.path, /^\/fixture\/harbor\/\.worktrees\//);
+      await page.evaluate(() => {
+        window.fixture.state.git.dirty = false;
+      });
 
       // 3. Check the "In Progress (2)" view in Issues & Ideas
       await nav(page, 'Issues & Ideas');
