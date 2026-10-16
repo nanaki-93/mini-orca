@@ -301,27 +301,17 @@ export function Summary({ s }: { s: State }) {
               max={runTotal || 100}
             />
           </div>
-          <div className="actions" style={{ flexShrink: 0 }}>
-            {pausedOrInterrupted ? (
-              <>
-                <Button
-                  tone="primary small"
-                  icon="play"
-                  disabled={!!s.busy}
-                  onClick={() => void w.resumeAnalysisDirect()}
-                >
-                  Resume Analysis
-                </Button>
+          {!pausedOrInterrupted && (
+            <div className="actions" style={{ flexShrink: 0 }}>
+              {['running', 'queued'].includes(s.run?.status || '') && (
                 <Button
                   tone="ghost small"
-                  icon="refresh"
                   disabled={!!s.busy}
-                  onClick={() => void w.runAnalysisDirect(true)}
+                  onClick={() => void w.controlRun('pause')}
                 >
-                  New Analysis
+                  Pause
                 </Button>
-              </>
-            ) : (
+              )}
               <Button
                 tone="ghost small"
                 disabled={!!s.busy || s.run?.status === 'canceling'}
@@ -329,8 +319,8 @@ export function Summary({ s }: { s: State }) {
               >
                 Cancel
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

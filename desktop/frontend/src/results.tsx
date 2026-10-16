@@ -806,61 +806,26 @@ export function Results({ s }: { s: State }) {
               max={runTotal || 100}
             />
           </div>
-          <div className="actions" style={{ flexShrink: 0 }}>
-            {pausedOrInterrupted ? (
-              <>
-                <Button
-                  tone="primary small"
-                  icon="play"
-                  disabled={!!s.busy}
-                  onClick={() => void w.resumeAnalysisDirect()}
-                >
-                  Resume Analysis
-                </Button>
-                <Button
-                  tone="ghost small"
-                  icon="refresh"
-                  disabled={!!s.busy}
-                  onClick={() => void w.runAnalysisDirect(true)}
-                >
-                  New Analysis
-                </Button>
+          {!pausedOrInterrupted && (
+            <div className="actions" style={{ flexShrink: 0 }}>
+              {['running', 'queued'].includes(s.run?.status || '') && (
                 <Button
                   tone="ghost small"
                   disabled={!!s.busy}
-                  onClick={() => void w.navigate('analysis-run')}
+                  onClick={() => void w.controlRun('pause')}
                 >
-                  Last Run
+                  Pause
                 </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  tone="ghost small"
-                  disabled={!!s.busy}
-                  onClick={() => void w.navigate('analysis-run')}
-                >
-                  Last Run
-                </Button>
-                {['running', 'queued'].includes(s.run?.status || '') && (
-                  <Button
-                    tone="ghost small"
-                    disabled={!!s.busy}
-                    onClick={() => void w.controlRun('pause')}
-                  >
-                    Pause
-                  </Button>
-                )}
-                <Button
-                  tone="ghost small"
-                  disabled={!!s.busy || s.run?.status === 'canceling'}
-                  onClick={() => void w.controlRun('cancel')}
-                >
-                  Cancel
-                </Button>
-              </>
-            )}
-          </div>
+              )}
+              <Button
+                tone="ghost small"
+                disabled={!!s.busy || s.run?.status === 'canceling'}
+                onClick={() => void w.controlRun('cancel')}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </div>
       )}
       <div className="issue-split-grid">
