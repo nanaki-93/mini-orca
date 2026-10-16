@@ -102,66 +102,82 @@ func samePackageGoDecls(root string, session *ChangeSession) string {
 	if err != nil {
 		return ""
 	}
-	captured := map[string]bool{}
-	dirs := []string{}
-	seenDirs := map[string]bool{}
-	for _, target := range session.Targets {
-		captured[target.Path] = true
-		if filepath.Ext(target.Path) == ".go" {
-			dir := filepath.ToSlash(filepath.Dir(target.Path))
-			if !seenDirs[dir] {
-				seenDirs[dir] = true
-				dirs = append(dirs, dir)
-			}
-		}
-	}
+	captured, dirs := collectGoTargetDirs(session.Targets)
 	if len(dirs) == 0 {
 		return ""
 	}
 	var out strings.Builder
 	for _, dir := range dirs {
-		absDir := root
-		if dir != "." {
-			absDir = filepath.Join(root, filepath.FromSlash(dir))
-		}
-		entries, err := os.ReadDir(absDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-				continue
-			}
-			rel := entry.Name()
-			if dir != "." {
-				rel = dir + "/" + entry.Name()
-			}
-			if captured[rel] || !policy.Decide(rel).Include {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(absDir, entry.Name()))
-			if err != nil || len(data) > 32768 {
-				continue
-			}
-			var decls []string
-			for _, line := range strings.Split(string(data), "\n") {
-				trimmed := strings.TrimSpace(line)
-				if strings.HasPrefix(trimmed, "var ") || strings.HasPrefix(trimmed, "type ") || strings.HasPrefix(trimmed, "func ") {
-					if idx := strings.Index(trimmed, "{"); idx > 0 {
-						trimmed = strings.TrimSpace(trimmed[:idx])
-					}
-					decls = append(decls, "  "+trimmed)
-				}
-			}
-			if len(decls) > 0 && out.Len() < 2048 {
-				if out.Len() == 0 {
-					out.WriteString("\nSame-package Go declarations (already defined in package; do not redeclare or emit in changes):\n")
-				}
-				out.WriteString("// " + rel + "\n" + strings.Join(decls, "\n") + "\n")
-			}
-		}
+		appendDirGoDecls(root, dir, captured, policy, &out)
 	}
 	return out.String()
+}
+
+func collectGoTargetDirs(targets []ChangeTarget) (map[string]bool, []string) {
+	captured := map[string]bool{}
+	var dirs []string
+	seenDirs := map[string]bool{}
+	for _, target := range targets {
+		captured[target.Path] = true
+		if filepath.Ext(target.Path) != ".go" {
+			continue
+		}
+		dir := filepath.ToSlash(filepath.Dir(target.Path))
+		if !seenDirs[dir] {
+			seenDirs[dir] = true
+			dirs = append(dirs, dir)
+		}
+	}
+	return captured, dirs
+}
+
+func appendDirGoDecls(root, dir string, captured map[string]bool, policy *project.ContextPolicy, out *strings.Builder) {
+	absDir := root
+	if dir != "." {
+		absDir = filepath.Join(root, filepath.FromSlash(dir))
+	}
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		rel := entry.Name()
+		if dir != "." {
+			rel = dir + "/" + entry.Name()
+		}
+		if captured[rel] || !policy.Decide(rel).Include {
+			continue
+		}
+		decls := extractGoFileDecls(filepath.Join(absDir, entry.Name()))
+		if len(decls) > 0 && out.Len() < 2048 {
+			if out.Len() == 0 {
+				out.WriteString("\nSame-package Go declarations (already defined in package; do not redeclare or emit in changes):\n")
+			}
+			out.WriteString("// " + rel + "\n" + strings.Join(decls, "\n") + "\n")
+		}
+	}
+}
+
+func extractGoFileDecls(absPath string) []string {
+	data, err := os.ReadFile(absPath)
+	if err != nil || len(data) > 32768 {
+		return nil
+	}
+	var decls []string
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "var ") && !strings.HasPrefix(trimmed, "type ") && !strings.HasPrefix(trimmed, "func ") {
+			continue
+		}
+		if idx := strings.Index(trimmed, "{"); idx > 0 {
+			trimmed = strings.TrimSpace(trimmed[:idx])
+		}
+		decls = append(decls, "  "+trimmed)
+	}
+	return decls
 }
 
 func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMessage, error) {
