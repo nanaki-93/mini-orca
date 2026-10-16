@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeChangeWorkflow,
   activeRun,
@@ -13,7 +13,8 @@ import {
   type Page,
   type State,
 } from './workspace';
-import { collectAgentDashboardItems } from './agents';
+import { collectAgentDashboardItems, type StageId } from './agents';
+import { resolveProjectDocs } from './docs';
 import { findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine } from './change-shared';
 import { human } from './ui';
@@ -21,6 +22,7 @@ import type * as M from './models';
 import './tui.css';
 
 type TuiPalette = 'tokyo' | 'crt' | 'amber' | 'paper';
+type TuiDocsSection = 'context' | 'components' | 'scenarios' | 'decisions';
 
 const TUI_TABS: { key: string; page: Page; label: string }[] = [
   { key: '1', page: 'summary', label: 'Overview' },
@@ -229,9 +231,17 @@ export function TuiApp({
   });
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [issueView, setIssueView] = useState<'open' | 'in_progress' | 'done'>('open');
+  const [issueCategory, setIssueCategory] = useState<'all' | 'bugs' | 'security' | 'performance'>(
+    'all',
+  );
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
   const [showNewMissionForm, setShowNewMissionForm] = useState(false);
   const [showKeybindsModal, setShowKeybindsModal] = useState(false);
+  const [docsSection, setDocsSection] = useState<TuiDocsSection>('context');
+  const [selectedAgentStage, setSelectedAgentStage] = useState<StageId | 'all'>('all');
+  const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'diff'>('auto');
+  const [editorPrompt, setEditorPrompt] = useState('');
+  const [featureGoalInput, setFeatureGoalInput] = useState('');
   const [cmdInput, setCmdInput] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1);
@@ -260,7 +270,7 @@ export function TuiApp({
 
   useEffect(() => {
     setSelectedIdx(0);
-  }, [activePage, s.agentDetailOpen, issueView]);
+  }, [activePage, s.agentDetailOpen, issueView, issueCategory]);
 
   useEffect(() => {
     if (agentS.changeSeed) {
@@ -277,16 +287,22 @@ export function TuiApp({
         ? 'instructions'
         : activePage;
 
+  const docs = useMemo(() => resolveProjectDocs(s), [s.overview, s.project, s.index]);
   const allIssues = collectTuiIssues(s);
-  const openIssues = allIssues.filter((i) => i.status !== 'done');
-  const inProgressIssues = allIssues.filter((i) => i.status === 'in_progress');
-  const doneIssues = allIssues.filter((i) => i.status === 'done');
+  const categoryFilteredIssues = allIssues.filter(
+    (i) => issueCategory === 'all' || i.category === issueCategory,
+  );
+  const openIssues = categoryFilteredIssues.filter((i) => i.status !== 'done');
+  const inProgressIssues = categoryFilteredIssues.filter((i) => i.status === 'in_progress');
+  const doneIssues = categoryFilteredIssues.filter((i) => i.status === 'done');
   const issues =
     issueView === 'in_progress' ? inProgressIssues : issueView === 'done' ? doneIssues : openIssues;
   const overviewIssues = issues.slice(0, 8);
-  const archComponents = s.overview?.docs?.components || [];
-  const editorFiles = (s.index?.files || []).slice(0, 18);
-  const featureSuggestions = s.features?.suggestions || [];
+  const archComponents = docs.components || [];
+  const editorFiles = (s.index?.files || []).slice(0, 24);
+  const featureSuggestions = (s.features?.suggestions || []).filter(
+    (idea) => idea.status !== 'dismissed',
+  );
   const runSections = s.run?.sections || [];
   const gitWorktrees = s.gitWorkspace?.worktrees || [];
   const modelPresets = allModelPresets(s);
@@ -563,6 +579,19 @@ export function TuiApp({
             : views[(cur - 1 + views.length) % views.length];
         setIssueView(next);
         setSelectedIdx(0);
+      } else if (
+        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
+        currentTabPage === 'docs'
+      ) {
+        e.preventDefault();
+        const sections: TuiDocsSection[] = ['context', 'components', 'scenarios', 'decisions'];
+        const cur = sections.indexOf(docsSection);
+        const next =
+          e.key === 'l' || e.key === 'ArrowRight'
+            ? sections[(cur + 1) % sections.length]
+            : sections[(cur - 1 + sections.length) % sections.length];
+        setDocsSection(next);
+        setSelectedIdx(0);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         activateCurrentRow();
@@ -574,6 +603,19 @@ export function TuiApp({
       ) {
         e.preventDefault();
         toggleIssueSelection(selectedIssue.id);
+      } else if (e.key === 'd') {
+        if (currentTabPage === 'bugs' && selectedIssue && selectedIssue.status !== 'done') {
+          e.preventDefault();
+          setCmdOutput(`Dismissed finding: ${selectedIssue.name}`);
+          void w.triage(selectedIssue.target, 'dismissed');
+        } else if (currentTabPage === 'features') {
+          const idea = featureSuggestions[clampedIdx];
+          if (idea) {
+            e.preventDefault();
+            setCmdOutput(`Dismissed feature idea: ${idea.title}`);
+            void w.setFeatureStatus(idea.id, 'dismissed');
+          }
+        }
       } else if (e.key === 'a') {
         e.preventDefault();
         const chosen = openIssues.filter((i) => selectedIssueIds.includes(i.id));
@@ -652,6 +694,8 @@ export function TuiApp({
     activeListLength,
     clampedIdx,
     currentTabPage,
+    docsSection,
+    featureSuggestions,
     issueView,
     openIssues,
     selectedIssue,
@@ -691,7 +735,7 @@ export function TuiApp({
     ) {
       setShowKeybindsModal(true);
       setCmdOutput(
-        'Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | agent <prompt> | open <file> | apply | merge | undo | palette | gui',
+        'Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | dismiss | agent <prompt> | open <file> | project <path> | apply | merge | undo | palette | gui',
       );
       return;
     }
@@ -702,6 +746,21 @@ export function TuiApp({
     if (cmd === 'trust') {
       void w.setWorkspaceTrust(s.workspaceTrust === false);
       setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}.`);
+      return;
+    }
+    if (cmd === 'project') {
+      if (arg) {
+        setCmdOutput(`Opening project at ${arg}...`);
+        void w.openProject(arg, false);
+      } else {
+        setCmdOutput('Choosing project directory...');
+        void w.chooseProject();
+      }
+      return;
+    }
+    if (cmd === 'reindex') {
+      setCmdOutput('Reindexing repository...');
+      void w.reindex();
       return;
     }
     if (cmd === 'analyze' || cmd === 'run') {
@@ -719,9 +778,19 @@ export function TuiApp({
       void w.resumeAnalysisDirect();
       return;
     }
+    if (cmd === 'pause') {
+      setCmdOutput('Pausing active analysis...');
+      void w.controlRun('pause');
+      return;
+    }
     if (cmd === 'test' || cmd === 'scan') {
       setCmdOutput('Running project tests and checks...');
       void w.scanProject(false);
+      return;
+    }
+    if (cmd === 'dismiss' && selectedIssue && selectedIssue.status === 'open') {
+      setCmdOutput(`Dismissing finding: ${selectedIssue.name}`);
+      void w.triage(selectedIssue.target, 'dismissed');
       return;
     }
     if (cmd === 'fix') {
@@ -803,6 +872,10 @@ export function TuiApp({
           ? 'FOCUSED'
           : 'BROAD';
 
+  const activeError = s.error || agentS.error;
+  const activeBusy = s.busy || agentS.busy;
+  const activeNotice = s.notice || agentS.notice;
+
   return (
     <div
       className="tui-root"
@@ -836,6 +909,14 @@ export function TuiApp({
           </span>
         </div>
         <div className="tui-statusbar-right">
+          <button
+            type="button"
+            className="tui-btn"
+            disabled={!!activeBusy}
+            onClick={() => void w.reindex()}
+          >
+            [Reindex]
+          </button>
           <button
             type="button"
             className={`tui-btn${showKeybindsModal ? ' active' : ''}`}
@@ -875,8 +956,10 @@ export function TuiApp({
           const badge =
             t.page === 'bugs' && issues.length > 0
               ? `(${issues.length})`
-              : t.page === 'agents' && workflow
-                ? `[${workflow.status}]`
+              : t.page === 'agents' && (workflow || agentItems.length > 0)
+                ? workflow
+                  ? `[${workflow.status}]`
+                  : `(${agentItems.length})`
                 : t.page === 'editor' && changedFiles.length > 0
                   ? `(${changedFiles.length}d)`
                   : '';
@@ -896,8 +979,8 @@ export function TuiApp({
         })}
       </nav>
 
-      {/* Notices / Errors */}
-      {(s.error || s.notice || s.busy) && (
+      {/* Notices / Errors (Root + Active Child Worktree) */}
+      {(activeError || activeNotice || activeBusy) && (
         <div
           style={{
             padding: '4px 12px',
@@ -909,16 +992,20 @@ export function TuiApp({
           }}
         >
           <span>
-            {s.error ? (
-              <span className="tui-c-red">[ERROR] {s.error}</span>
-            ) : s.busy ? (
-              <span className="tui-c-accent">[BUSY] {s.busy}…</span>
+            {activeError ? (
+              <span className="tui-c-red">[ERROR] {activeError}</span>
+            ) : activeBusy ? (
+              <span className="tui-c-accent">[BUSY] {activeBusy}…</span>
             ) : (
-              <span className="tui-c-green">[OK] {s.notice}</span>
+              <span className="tui-c-green">[OK] {activeNotice}</span>
             )}
           </span>
-          {s.busy && (
-            <button type="button" className="tui-btn" onClick={() => void w.cancel()}>
+          {activeBusy && (
+            <button
+              type="button"
+              className="tui-btn"
+              onClick={() => void (s.busy ? w : agentW).cancel()}
+            >
               [Cancel]
             </button>
           )}
@@ -1119,7 +1206,7 @@ export function TuiApp({
                 }}
               >
                 <span className="tui-box-title">
-                  ISSUES QUEUE (j/k move · h/l filter · x select · Enter/a agent fix)
+                  ISSUES QUEUE (j/k move · h/l filter · x select · d dismiss · Enter/a agent fix)
                 </span>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   <button
@@ -1153,6 +1240,35 @@ export function TuiApp({
                     [Done ({doneIssues.length})]
                   </button>
                 </div>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '4px',
+                  flexWrap: 'wrap',
+                  marginBottom: '8px',
+                }}
+              >
+                {(
+                  [
+                    ['all', 'All'],
+                    ['bugs', 'Bugs'],
+                    ['security', 'Security'],
+                    ['performance', 'Performance'],
+                  ] as const
+                ).map(([cat, label]) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`tui-btn${issueCategory === cat ? ' active' : ''}`}
+                    onClick={() => {
+                      setIssueCategory(cat);
+                      setSelectedIdx(0);
+                    }}
+                  >
+                    [{label}]
+                  </button>
+                ))}
               </div>
               {selectedIssueIds.length > 0 && (
                 <div
@@ -1375,6 +1491,16 @@ export function TuiApp({
                     >
                       [Inspect File]
                     </button>
+                    {selectedIssue.status !== 'done' && (
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        disabled={!!s.busy}
+                        onClick={() => void w.triage(selectedIssue.target, 'dismissed')}
+                      >
+                        [d: Dismiss]
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1480,7 +1606,7 @@ export function TuiApp({
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           className="tui-btn primary"
@@ -1491,6 +1617,19 @@ export function TuiApp({
                         >
                           [Open Agent Detail]
                         </button>
+                        {item.mergeable && item.path && (
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!activeBusy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void w.mergeAgentWorktree(item.path!);
+                            }}
+                          >
+                            [Merge]
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1590,11 +1729,43 @@ export function TuiApp({
                   </span>
                 )}
               </div>
-              {selectedAgentItem?.hasProblem && (
-                <span className="tui-badge tui-c-red">
-                  [PROBLEM: {selectedAgentItem.problemSummary}]
-                </span>
-              )}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {selectedAgentItem?.hasProblem && (
+                  <span className="tui-badge tui-c-red">
+                    [PROBLEM: {selectedAgentItem.problemSummary}]
+                  </span>
+                )}
+                {agentItems.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      onClick={() => {
+                        const idx = agentItems.findIndex(
+                          (item) => (item.path || '') === (s.selectedAgentPath || ''),
+                        );
+                        const prev = agentItems[(idx - 1 + agentItems.length) % agentItems.length];
+                        if (prev) void w.selectAgent(prev.path);
+                      }}
+                    >
+                      [← Prev Agent]
+                    </button>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      onClick={() => {
+                        const idx = agentItems.findIndex(
+                          (item) => (item.path || '') === (s.selectedAgentPath || ''),
+                        );
+                        const next = agentItems[(idx + 1) % agentItems.length];
+                        if (next) void w.selectAgent(next.path);
+                      }}
+                    >
+                      [Next Agent →]
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {selectedAgentItem && selectedAgentItem.linkedIssues.length > 0 && (
@@ -1629,8 +1800,16 @@ export function TuiApp({
                   const st =
                     workflow?.stages.find((x) => x.name === stageId)?.status ||
                     (change ? 'completed' : agentS.changeSeed ? 'staged' : 'idle');
+                  const isStageSelected = selectedAgentStage === stageId;
                   return (
-                    <div key={stageId} className="tui-box">
+                    <div
+                      key={stageId}
+                      className={`tui-box${isStageSelected ? ' focused' : ''}`}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() =>
+                        setSelectedAgentStage((prev) => (prev === stageId ? 'all' : stageId))
+                      }
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <strong className="tui-c-accent">{label}</strong>
                         <span
@@ -1672,29 +1851,72 @@ export function TuiApp({
                     </span>{' '}
                     · Self-repairs: <strong>{change.repair_attempts}/3</strong>
                   </div>
-                  {workflow?.review && (
-                    <div>
-                      <div className="tui-c-purple">
-                        CRITIC VERDICT: [{workflow.review.verdict.toUpperCase()}]
+                  {(selectedAgentStage === 'all' || selectedAgentStage === 'review') &&
+                    workflow?.review && (
+                      <div>
+                        <div className="tui-c-purple">
+                          CRITIC VERDICT: [{workflow.review.verdict.toUpperCase()}]
+                        </div>
+                        <pre className="tui-pre">{workflow.review.summary}</pre>
                       </div>
-                      <pre className="tui-pre">{workflow.review.summary}</pre>
+                    )}
+                  {(selectedAgentStage === 'all' || selectedAgentStage === 'test') && (
+                    <div>
+                      <div className="tui-c-green">
+                        DETERMINISTIC CHECKS ({passedChecks}/{checks.length}):
+                      </div>
+                      {checks.length === 0 ? (
+                        <div className="tui-sub">No check runs recorded yet.</div>
+                      ) : (
+                        checks.map((chk) => (
+                          <div key={chk.name} className="tui-sub">
+                            [{chk.state.toUpperCase()}] <strong>{chk.name}</strong>{' '}
+                            {chk.output ? `— ${chk.output}` : ''}
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
-                  <div>
-                    <div className="tui-c-green">
-                      DETERMINISTIC CHECKS ({passedChecks}/{checks.length}):
-                    </div>
-                    {checks.length === 0 ? (
-                      <div className="tui-sub">No check runs recorded yet.</div>
-                    ) : (
-                      checks.map((chk) => (
-                        <div key={chk.name} className="tui-sub">
-                          [{chk.state.toUpperCase()}] <strong>{chk.name}</strong>{' '}
-                          {chk.output ? `— ${chk.output}` : ''}
+                  {(selectedAgentStage === 'all' || selectedAgentStage === 'human_review') &&
+                    changedFiles.length > 0 && (
+                      <div>
+                        <div className="tui-c-accent">
+                          PROPOSED DIFF PREVIEW ({changedFiles.length} file
+                          {changedFiles.length === 1 ? '' : 's'}):
                         </div>
-                      ))
+                        {changedFiles.map((fc) => (
+                          <div key={fc.path} style={{ marginTop: '4px' }}>
+                            <div className="tui-sub">
+                              <strong>{fc.path}</strong>
+                            </div>
+                            <pre
+                              className="tui-pre"
+                              style={{ maxHeight: '160px', overflowY: 'auto' }}
+                            >
+                              {(fc.diff?.lines || []).slice(0, 40).map((ln, idx) => (
+                                <span
+                                  key={idx}
+                                  className={
+                                    isAddedLine(ln.kind)
+                                      ? 'tui-diff-add'
+                                      : isRemovedLine(ln.kind)
+                                        ? 'tui-diff-del'
+                                        : undefined
+                                  }
+                                >
+                                  {isAddedLine(ln.kind)
+                                    ? `+ ${ln.text}`
+                                    : isRemovedLine(ln.kind)
+                                      ? `- ${ln.text}`
+                                      : `  ${ln.text}`}
+                                  {'\n'}
+                                </span>
+                              ))}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {change.state !== 'applied' && changedFiles.length > 0 && (
                       <button
@@ -1713,7 +1935,11 @@ export function TuiApp({
                         disabled={!!s.busy}
                         onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
                       >
-                        [Merge into {s.repository?.branch || 'main'} &amp; Close Issue]
+                        [Merge into {s.repository?.branch || 'main'} &amp; Close{' '}
+                        {(selectedAgentItem?.linkedIssues.length || 0) > 1
+                          ? `${selectedAgentItem?.linkedIssues.length} Issues`
+                          : 'Issue'}
+                        ]
                       </button>
                     )}
                     <button
@@ -1731,14 +1957,32 @@ export function TuiApp({
                     >
                       [Re-run Checks]
                     </button>
-                    {!allChecksPassed && checks.length > 0 && (
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      disabled={!!agentS.busy || running}
+                      onClick={() => void agentW.rerunChangeWorkflow('agents')}
+                    >
+                      [Re-run Fix]
+                    </button>
+                    {((!allChecksPassed && checks.length > 0) || selectedAgentItem?.hasProblem) && (
                       <button
                         type="button"
-                        className="tui-btn"
+                        className="tui-btn primary"
                         disabled={!!agentS.busy || running}
                         onClick={() => void agentW.repairChange()}
                       >
                         [Self-Repair]
+                      </button>
+                    )}
+                    {agentS.changeReceipt?.undo_available && (
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        disabled={!!agentS.busy}
+                        onClick={() => void agentW.undoChange()}
+                      >
+                        [u: Undo]
                       </button>
                     )}
                     {running && (
@@ -1753,9 +1997,20 @@ export function TuiApp({
                   </div>
                 </div>
               ) : (
-                <p className="tui-sub">
-                  Agent is preparing changes. Press [Esc] or click [← All Agents] to return.
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                  <p className="tui-sub">
+                    Agent is staged or preparing changes. Press [Esc] or click [← All Agents] to
+                    return.
+                  </p>
+                  <button
+                    type="button"
+                    className="tui-btn primary"
+                    disabled={!!agentS.busy || running}
+                    onClick={() => void agentW.rerunChangeWorkflow('agents')}
+                  >
+                    [Start Agent Pipeline]
+                  </button>
+                </div>
               )}
             </div>
           </>
@@ -1800,13 +2055,41 @@ export function TuiApp({
             </div>
 
             <div className="tui-box focused">
-              <span className="tui-box-title">
-                {changedFiles.length > 0
-                  ? `PROPOSED DIFF (${changedFiles.length} files)`
-                  : `SOURCE: ${s.file?.path || 'none'}`}
-              </span>
-              <span className="tui-box-meta">READ-ONLY / VERIFIED GATE</span>
-              {changedFiles.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginBottom: '6px',
+                }}
+              >
+                <span className="tui-box-title">
+                  {(editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
+                  changedFiles.length > 0
+                    ? `PROPOSED DIFF (${changedFiles.length} files)`
+                    : `SOURCE: ${s.file?.path || 'none'}`}
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    type="button"
+                    className={`tui-btn${editorMode === 'source' || (editorMode === 'auto' && changedFiles.length === 0) ? ' primary' : ''}`}
+                    onClick={() => setEditorMode('source')}
+                  >
+                    [Source]
+                  </button>
+                  <button
+                    type="button"
+                    className={`tui-btn${editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0) ? ' primary' : ''}`}
+                    onClick={() => setEditorMode('diff')}
+                  >
+                    [Diff ({changedFiles.length})]
+                  </button>
+                </div>
+              </div>
+              {(editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
+              changedFiles.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {changedFiles.map((fc) => (
                     <div key={fc.path}>
@@ -1858,124 +2141,515 @@ export function TuiApp({
                   </div>
                 </div>
               ) : (
-                <pre className="tui-pre">{s.file?.content || 'Select a file on the left.'}</pre>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <pre className="tui-pre">{s.file?.content || 'Select a file on the left.'}</pre>
+                  {s.file && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <input
+                        aria-label="TUI file change instruction"
+                        className="tui-input"
+                        style={{ flex: 1 }}
+                        value={editorPrompt}
+                        onChange={(e) => setEditorPrompt(e.target.value)}
+                        placeholder={`Ask AI to change ${s.file.path}…`}
+                      />
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        disabled={!!activeBusy || !editorPrompt.trim()}
+                        onClick={() => {
+                          const seed = workflowSeed({
+                            title: editorPrompt.trim().slice(0, 64),
+                            kind: 'fix',
+                            paths: [s.file!.path],
+                            message: editorPrompt.trim(),
+                            acceptance_criteria: [
+                              'Keep the diff minimal and preserve existing tests.',
+                            ],
+                          });
+                          setEditorPrompt('');
+                          void w.startAgentFix(seed);
+                        }}
+                      >
+                        [Generate Diff with Agent]
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* [2] ARCH, [3] DOCS, [6] FEATURES, [8] LAST RUN, [9] GIT, [0] RULES/MODELS */}
+        {/* [2] ARCH — LAYERED ARCHITECTURE & SUBSYSTEM INSPECTOR */}
         {currentTabPage === 'diagrams' && (
-          <div className="tui-box focused">
-            <span className="tui-box-title">ARCHITECTURE &amp; SUBSYSTEMS (j/k navigate)</span>
-            <span className="tui-box-meta">{archComponents.length} components</span>
-            <table className="tui-table">
-              <thead>
-                <tr>
-                  <th>COMPONENT</th>
-                  <th>LAYER</th>
-                  <th>SUMMARY</th>
-                </tr>
-              </thead>
-              <tbody>
-                {archComponents.map((comp, idx) => (
-                  <tr
-                    key={comp.path || comp.name}
-                    className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
-                    onClick={() => setSelectedIdx(idx)}
-                  >
-                    <td className="tui-c-accent">
-                      {idx === clampedIdx && (
-                        <span className="tui-cursor-indicator" aria-hidden="true">
-                          &gt;
-                        </span>
-                      )}
-                      {comp.name}
-                    </td>
-                    <td>{comp.layer}</td>
-                    <td className="tui-c-muted">{comp.summary || 'Core module'}</td>
+          <div className="tui-split-main">
+            <div className="tui-box focused">
+              <span className="tui-box-title">ARCHITECTURE &amp; SUBSYSTEMS (j/k navigate)</span>
+              <span className="tui-box-meta">{archComponents.length} components</span>
+              <table className="tui-table">
+                <thead>
+                  <tr>
+                    <th>COMPONENT</th>
+                    <th>LAYER</th>
+                    <th>SUMMARY</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {archComponents.map((comp, idx) => (
+                    <tr
+                      key={comp.path || comp.name}
+                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                      onClick={() => setSelectedIdx(idx)}
+                    >
+                      <td className="tui-c-accent">
+                        {idx === clampedIdx && (
+                          <span className="tui-cursor-indicator" aria-hidden="true">
+                            &gt;
+                          </span>
+                        )}
+                        {comp.name}
+                      </td>
+                      <td>{comp.layer}</td>
+                      <td className="tui-c-muted">{comp.summary || 'Core module'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="tui-box">
+              <span className="tui-box-title">SUBSYSTEM CONTRACT INSPECTOR</span>
+              <span className="tui-box-meta">
+                {archComponents[clampedIdx]?.path || 'subsystem'}
+              </span>
+              {archComponents[clampedIdx] ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <strong className="tui-c-accent">{archComponents[clampedIdx].name}</strong> ·{' '}
+                    <span className="tui-badge tui-c-purple">
+                      {archComponents[clampedIdx].layer}
+                    </span>
+                    <div className="tui-sub">{archComponents[clampedIdx].summary}</div>
+                  </div>
+                  <div>
+                    <div className="tui-c-green">DOMAIN RESPONSIBILITIES:</div>
+                    {archComponents[clampedIdx].responsibilities.map((resp, idx) => (
+                      <div key={idx} className="tui-sub">
+                        • {resp}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="tui-c-amber">PUBLIC CONTRACTS &amp; INTERFACES:</div>
+                    {archComponents[clampedIdx].contracts.map((ct, idx) => (
+                      <div key={idx} className="tui-sub">
+                        <strong>{ct.name}</strong> [{ct.kind}] — {ct.summary}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="tui-sub">Select a subsystem on the left to inspect its contracts.</p>
+              )}
+            </div>
           </div>
         )}
 
+        {/* [3] DOCS — PURPOSE, GOAL PURSUIT, ARCHITECTURE, DEPENDENCIES & RUNBOOK */}
         {currentTabPage === 'docs' && (
-          <div className="tui-box focused">
-            <span className="tui-box-title">ENGINEERING SPECIFICATION &amp; DOCS</span>
-            <span className="tui-box-meta">{s.project?.name || 'docs'}</span>
-            <pre className="tui-pre">
-              {s.overview?.docs?.context?.purpose ||
-                s.overview?.analysis?.purpose ||
-                'Run project analysis to synthesize architectural documentation.'}
-            </pre>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="tui-box focused">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginBottom: '8px',
+                }}
+              >
+                <span className="tui-box-title">
+                  ENGINEERING SPECIFICATION &amp; DOCS (h/l switch section)
+                </span>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {(
+                    [
+                      ['context', '1. Purpose & Dependencies'],
+                      ['components', `2. Components (${docs.components.length})`],
+                      ['scenarios', `3. Scenarios (${docs.scenarios.length})`],
+                      ['decisions', `4. ADRs & Runbook (${docs.decisions.length})`],
+                    ] as const
+                  ).map(([secId, label]) => (
+                    <button
+                      key={secId}
+                      type="button"
+                      className={`tui-btn${docsSection === secId ? ' primary' : ''}`}
+                      onClick={() => setDocsSection(secId)}
+                    >
+                      [{label}]
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!activeBusy || activeRun(s.run)}
+                    onClick={() => void w.runAnalysisDirect(true)}
+                  >
+                    [r: Run Analysis]
+                  </button>
+                </div>
+              </div>
+
+              {docsSection === 'context' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <div className="tui-c-accent">1. PURPOSE OF THE PROJECT:</div>
+                    <pre className="tui-pre">{docs.context.purpose}</pre>
+                    <div
+                      style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}
+                    >
+                      {docs.context.stack.map((st) => (
+                        <span key={st} className="tui-pill">
+                          {st}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="tui-c-green">2. HOW IT PURSUES THE GOAL:</div>
+                    {(docs.context.goal_pursuit || []).map((step, idx) => (
+                      <div key={idx} className="tui-sub">
+                        <strong>0{idx + 1}.</strong> {step}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="tui-c-purple">3. ARCHITECTURE TOPOLOGY:</div>
+                    <div className="tui-sub">{docs.context.topology}</div>
+                  </div>
+                  <div>
+                    <div className="tui-c-amber">
+                      4. MAIN DEPENDENCIES ({(docs.dependencies || []).length}):
+                    </div>
+                    <table className="tui-table">
+                      <thead>
+                        <tr>
+                          <th>DEPENDENCY</th>
+                          <th>VERSION</th>
+                          <th>KIND</th>
+                          <th>PURPOSE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(docs.dependencies || []).map((dep, idx) => (
+                          <tr key={`${dep.name}-${idx}`}>
+                            <td className="tui-c-accent">{dep.name}</td>
+                            <td>{dep.version || '—'}</td>
+                            <td>{dep.kind}</td>
+                            <td className="tui-c-muted">{dep.purpose}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {docsSection === 'components' && (
+                <table className="tui-table">
+                  <thead>
+                    <tr>
+                      <th>SUBSYSTEM</th>
+                      <th>LAYER</th>
+                      <th>PATH</th>
+                      <th>CONTRACTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docs.components.map((comp) => (
+                      <tr key={comp.path}>
+                        <td className="tui-c-accent">{comp.name}</td>
+                        <td>{comp.layer}</td>
+                        <td>{comp.path}</td>
+                        <td className="tui-c-muted">
+                          {comp.contracts.map((c) => c.name).join(', ')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {docsSection === 'scenarios' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {docs.scenarios.map((sc, idx) => (
+                    <div key={idx} className="tui-box">
+                      <strong className="tui-c-accent">
+                        Scenario {idx + 1}: {sc.title}
+                      </strong>{' '}
+                      <span className="tui-c-muted">[Trigger: {sc.trigger}]</span>
+                      <div className="tui-sub">{sc.summary}</div>
+                      {sc.steps.map((st, sIdx) => (
+                        <div key={sIdx} className="tui-sub">
+                          Step {sIdx + 1} ({st.phase} · {st.layer}): <strong>{st.title}</strong> —{' '}
+                          {st.detail}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {docsSection === 'decisions' && (
+                <div className="tui-split-main">
+                  <div>
+                    <div className="tui-c-amber">ARCHITECTURAL DECISION RECORDS (ADRs):</div>
+                    {docs.decisions.map((adr, idx) => (
+                      <div key={idx} className="tui-sub" style={{ marginBottom: '6px' }}>
+                        <strong className="tui-c-accent">{adr.title}</strong> [{adr.category}]:{' '}
+                        {adr.decision} (Tradeoff: {adr.tradeoff})
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="tui-c-green">OPERATIONAL RUNBOOK &amp; GLOSSARY:</div>
+                    {docs.runbook.map((rb, idx) => (
+                      <div key={idx} className="tui-sub">
+                        <strong>{rb.label}</strong>: <code>{rb.command}</code> — {rb.description}
+                      </div>
+                    ))}
+                    {docs.glossary.slice(0, 4).map((gl, idx) => (
+                      <div key={idx} className="tui-sub">
+                        <strong className="tui-c-purple">{gl.term}</strong>: {gl.definition}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {/* [6] FEATURES — GOALS, SUGGESTIONS & TRIAGE */}
         {currentTabPage === 'features' && (
-          <div className="tui-box focused">
-            <span className="tui-box-title">FEATURE IDEAS (j/k move · Enter stage in Agents)</span>
-            <span className="tui-box-meta">{featureSuggestions.length} suggestions</span>
-            <table className="tui-table">
-              <thead>
-                <tr>
-                  <th>EFFORT</th>
-                  <th>TITLE</th>
-                  <th>BENEFIT</th>
-                  <th>AGENT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {featureSuggestions.map((idea, idx) => (
-                  <tr
-                    key={idea.id}
-                    className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
-                    onClick={() => setSelectedIdx(idx)}
-                  >
-                    <td>
-                      {idx === clampedIdx && (
-                        <span className="tui-cursor-indicator" aria-hidden="true">
-                          &gt;
-                        </span>
-                      )}
-                      <span className="tui-badge tui-c-purple">{idea.effort || 'medium'}</span>
-                    </td>
-                    <td>{idea.title}</td>
-                    <td className="tui-c-muted">{idea.benefit}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="tui-btn primary"
-                        onClick={() => {
-                          w.seedWorkflow(
-                            {
-                              title: idea.title,
-                              kind: 'feature',
-                              paths: idea.paths,
-                              acceptance_criteria: idea.acceptance_criteria,
-                              message: `${idea.title}\n\nBenefit: ${idea.benefit}`,
-                            },
-                            'agents',
-                          );
-                        }}
-                      >
-                        [Stage in Agents]
-                      </button>
-                    </td>
+          <div className="tui-split-main">
+            <div className="tui-box focused">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginBottom: '8px',
+                }}
+              >
+                <span className="tui-box-title">
+                  FEATURE IDEAS (j/k move · Enter stage in Agents · d dismiss)
+                </span>
+                <span className="tui-box-meta">{featureSuggestions.length} suggestions</span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '6px',
+                  marginBottom: '8px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <input
+                  aria-label="TUI project goals"
+                  className="tui-input"
+                  style={{ flex: 1 }}
+                  value={featureGoalInput || s.features?.goals || ''}
+                  onChange={(e) => setFeatureGoalInput(e.target.value)}
+                  placeholder="Project goals for feature suggestions…"
+                />
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy}
+                  onClick={() => void w.updateFeatures(featureGoalInput || s.features?.goals || '')}
+                >
+                  [Save Goals]
+                </button>
+                <button
+                  type="button"
+                  className="tui-btn primary"
+                  disabled={!!activeBusy}
+                  onClick={() =>
+                    void w.searchFeatures('Features', featureGoalInput || s.features?.goals || '')
+                  }
+                >
+                  [Suggest Features]
+                </button>
+              </div>
+              <table className="tui-table">
+                <thead>
+                  <tr>
+                    <th>EFFORT</th>
+                    <th>TITLE</th>
+                    <th>BENEFIT</th>
+                    <th>ACTIONS</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {featureSuggestions.map((idea, idx) => (
+                    <tr
+                      key={idea.id}
+                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                      onClick={() => setSelectedIdx(idx)}
+                    >
+                      <td>
+                        {idx === clampedIdx && (
+                          <span className="tui-cursor-indicator" aria-hidden="true">
+                            &gt;
+                          </span>
+                        )}
+                        <span className="tui-badge tui-c-purple">{idea.effort || 'medium'}</span>
+                      </td>
+                      <td>{idea.title}</td>
+                      <td className="tui-c-muted">{idea.benefit}</td>
+                      <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          onClick={() => {
+                            w.seedWorkflow(
+                              {
+                                title: idea.title,
+                                kind: 'feature',
+                                paths: idea.paths,
+                                acceptance_criteria: idea.acceptance_criteria,
+                                message: `${idea.title}\n\nBenefit: ${idea.benefit}`,
+                              },
+                              'agents',
+                            );
+                          }}
+                        >
+                          [Stage in Agents]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          onClick={() =>
+                            void w.setFeatureStatus(
+                              idea.id,
+                              idea.status === 'saved' ? 'open' : 'saved',
+                            )
+                          }
+                        >
+                          [{idea.status === 'saved' ? 'Saved ★' : 'Save'}]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          onClick={() => void w.setFeatureStatus(idea.id, 'dismissed')}
+                        >
+                          [Dismiss]
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="tui-box">
+              <span className="tui-box-title">FEATURE IDEA INSPECTOR</span>
+              <span className="tui-box-meta">
+                {featureSuggestions[clampedIdx]?.paths.join(', ') || 'feature'}
+              </span>
+              {featureSuggestions[clampedIdx] ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <strong className="tui-c-accent">{featureSuggestions[clampedIdx].title}</strong>
+                    <div className="tui-sub">{featureSuggestions[clampedIdx].benefit}</div>
+                  </div>
+                  {featureSuggestions[clampedIdx].evidence && (
+                    <div>
+                      <div className="tui-c-amber">ARCHITECTURAL RATIONALE:</div>
+                      <pre className="tui-pre">{featureSuggestions[clampedIdx].evidence}</pre>
+                    </div>
+                  )}
+                  {(featureSuggestions[clampedIdx].acceptance_criteria || []).length > 0 && (
+                    <div>
+                      <div className="tui-c-green">ACCEPTANCE CRITERIA:</div>
+                      {featureSuggestions[clampedIdx].acceptance_criteria.map((ac, i) => (
+                        <div key={i} className="tui-sub">
+                          • {ac}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="tui-sub">
+                  Select a feature idea or click [Suggest Features] to generate ideas.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {currentTabPage === 'analysis-run' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">
-              LAST ANALYSIS RUN (j/k move · Enter open category · r run/resume)
-            </span>
-            <span className="tui-box-meta">{s.run?.status || 'idle'}</span>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '6px',
+                marginBottom: '8px',
+              }}
+            >
+              <span className="tui-box-title">
+                LAST ANALYSIS RUN (j/k move · Enter open category · r run/resume)
+              </span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {s.run && ['paused', 'interrupted'].includes(s.run.status) && (
+                  <button
+                    type="button"
+                    className="tui-btn primary"
+                    disabled={!!activeBusy}
+                    onClick={() => void w.resumeAnalysisDirect()}
+                  >
+                    [Resume Analysis]
+                  </button>
+                )}
+                {activeRun(s.run) && (
+                  <>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      disabled={!!activeBusy}
+                      onClick={() => void w.controlRun('pause')}
+                    >
+                      [Pause]
+                    </button>
+                    <button
+                      type="button"
+                      className="tui-btn"
+                      disabled={!!activeBusy}
+                      onClick={() => void w.controlRun('cancel')}
+                    >
+                      [Cancel]
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy || activeRun(s.run)}
+                  onClick={() => void w.runAnalysisDirect(true)}
+                >
+                  [New Analysis]
+                </button>
+              </div>
+            </div>
             {s.run ? (
               <table className="tui-table">
                 <thead>
@@ -2109,13 +2783,20 @@ export function TuiApp({
                 WORKSPACE TRUST &amp; AGENTS.MD (t toggle trust)
               </span>
               <span className="tui-box-meta">BOUNDARIES</span>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="tui-btn primary"
                   onClick={() => void w.setWorkspaceTrust(s.workspaceTrust === false)}
                 >
                   [{s.workspaceTrust !== false ? 'Revoke Trust' : 'Grant Workspace Trust'}]
+                </button>
+                <button
+                  type="button"
+                  className="tui-btn"
+                  onClick={() => void w.openProjectInstructions()}
+                >
+                  [Reload AGENTS.md]
                 </button>
               </div>
               <pre className="tui-pre">
