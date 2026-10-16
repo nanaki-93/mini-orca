@@ -15,7 +15,7 @@ import {
 } from './workspace';
 import { collectAgentDashboardItems, type StageId } from './agents';
 import { resolveProjectDocs } from './docs';
-import { findingName, findingTitle } from './finding-name';
+import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine } from './change-shared';
 import { classifyNoticeTone, human } from './ui';
 import type * as M from './models';
@@ -134,7 +134,10 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
   };
 
   for (const f of s.findings || []) {
-    pushSemantic(f, (f.category as 'bugs' | 'security' | 'performance') || 'bugs');
+    const cat = (f.category as 'bugs' | 'security' | 'performance') || 'bugs';
+    if (!s.results[cat] || f.status === 'in_progress') {
+      pushSemantic(f, cat);
+    }
   }
   for (const cat of ['bugs', 'security', 'performance'] as const) {
     const res = s.results[cat];
@@ -213,7 +216,7 @@ function collectTuiIssues(s: State): TuiIssueRow[] {
       }
     }
   }
-  return rows;
+  return dedupeFindingItems(rows);
 }
 
 export function TuiApp({

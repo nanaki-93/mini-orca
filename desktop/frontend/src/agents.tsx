@@ -10,7 +10,7 @@ import {
   type State,
 } from './workspace';
 import { ChangeOutcome, ProposalDiff, isAddedLine, isRemovedLine } from './change-shared';
-import { findingName, findingTitle } from './finding-name';
+import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import {
   Badge,
   BulletContent,
@@ -193,7 +193,7 @@ function collectKnownIssues(s: State): AgentLinkedIssue[] {
       }
     }
   }
-  return [...map.values()];
+  return dedupeFindingItems([...map.values()]);
 }
 
 function resolveLinkedIssues(
