@@ -849,9 +849,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
           <Go page="bugs" tone="ghost" icon="bug">
             Browse Issues
           </Go>
-          <Go page="git" tone="ghost" icon="git">
-            Git &amp; Worktrees
-          </Go>
           <Button tone="primary" icon="plus" disabled={!!s.busy} onClick={openNewAgentForm}>
             New Fix
           </Button>
@@ -875,13 +872,13 @@ export function AgentsWorkspace({ s }: { s: State }) {
             title={`Agents in Progress (${dashboardItems.length})`}
             actions={
               <span className="small muted">
-                Click an agent to open its step and grouped issue detail
+                Select an agent to inspect its 4-stage pipeline and diff
               </span>
             }
           >
             <div
               className="stack"
-              style={{ gap: '12px' }}
+              style={{ gap: '10px' }}
               role="tablist"
               aria-label="Active agents"
             >
@@ -904,7 +901,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     style={{
                       textAlign: 'left',
                       cursor: 'pointer',
-                      padding: '14px 16px',
+                      padding: '12px 16px',
                       borderColor: item.hasProblem
                         ? 'var(--red, #e5534b)'
                         : item.status === 'running'
@@ -916,7 +913,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     <div className="row between wrap" style={{ gap: '10px' }}>
                       <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
                         <StatusDot value={item.status} label={item.title} />
-                        <strong style={{ fontSize: '0.98rem' }}>{item.title}</strong>
+                        <strong style={{ fontSize: '0.96rem' }}>{item.title}</strong>
                         <Badge value={item.branch} />
                         {issueCount > 0 && (
                           <Badge
@@ -930,18 +927,15 @@ export function AgentsWorkspace({ s }: { s: State }) {
                           </span>
                         )}
                       </div>
-                      <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                        {item.hasProblem && <Badge value="Needs Attention" tone="amber" />}
-                        <Badge value={item.stageLabel} tone={item.tone} />
-                      </div>
+                      <Badge value={item.stageLabel} tone={item.tone} />
                     </div>
 
-                    {/* Simple 4-Step Progress Strip */}
+                    {/* Compact 4-Step Progress Strip */}
                     <div
                       className="row wrap"
                       style={{
                         gap: '6px',
-                        marginTop: '10px',
+                        marginTop: '8px',
                         paddingTop: '8px',
                         borderTop: '1px solid var(--line)',
                       }}
@@ -959,7 +953,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                             key={st.id}
                             className="small font-mono"
                             style={{
-                              padding: '3px 8px',
+                              padding: '2px 8px',
                               borderRadius: '4px',
                               background: isProblemStep
                                 ? 'rgba(229, 83, 75, 0.16)'
@@ -988,19 +982,22 @@ export function AgentsWorkspace({ s }: { s: State }) {
                       })}
                     </div>
 
-                    {/* Grouped Issues Preview */}
+                    {/* Concise Grouped Issues Preview */}
                     {item.linkedIssues.length > 0 && (
                       <div
                         className="row wrap small muted"
-                        style={{ gap: '8px', marginTop: '8px' }}
+                        style={{ gap: '8px', marginTop: '6px' }}
                       >
                         <span>Fixing:</span>
-                        {item.linkedIssues.map((iss) => (
+                        {item.linkedIssues.slice(0, 3).map((iss) => (
                           <span key={iss.key} className="font-mono">
-                            {iss.name} ({iss.path}
+                            {iss.name} ({iss.path.split('/').at(-1)}
                             {iss.line ? `:${iss.line}` : ''})
                           </span>
                         ))}
+                        {item.linkedIssues.length > 3 && (
+                          <span className="font-mono">+{item.linkedIssues.length - 3} more</span>
+                        )}
                       </div>
                     )}
 
@@ -1009,12 +1006,12 @@ export function AgentsWorkspace({ s }: { s: State }) {
                       <div
                         role="alert"
                         style={{
-                          marginTop: '10px',
-                          padding: '8px 12px',
+                          marginTop: '8px',
+                          padding: '6px 10px',
                           borderRadius: '6px',
                           background: 'rgba(229, 83, 75, 0.12)',
                           border: '1px solid var(--red, #e5534b)',
-                          fontSize: '0.85rem',
+                          fontSize: '0.84rem',
                         }}
                       >
                         <strong>Problem: </strong>
@@ -1025,7 +1022,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                     {item.mergeable && item.path && (
                       <div
                         className="row end"
-                        style={{ marginTop: '10px' }}
+                        style={{ marginTop: '8px' }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Button
@@ -1050,52 +1047,17 @@ export function AgentsWorkspace({ s }: { s: State }) {
   }
 
   // PAGE 3: AGENT & GROUPED ISSUE DETAIL PAGE
+  const currentAgentIdx = dashboardItems.findIndex(
+    (item) => (item.path || '') === (s.selectedAgentPath || ''),
+  );
+  const prevAgent = currentAgentIdx > 0 ? dashboardItems[currentAgentIdx - 1] : undefined;
+  const nextAgent =
+    currentAgentIdx >= 0 && currentAgentIdx < dashboardItems.length - 1
+      ? dashboardItems[currentAgentIdx + 1]
+      : undefined;
+
   return (
     <div className="workspace-page agents-page">
-      <div className="row between wrap" style={{ marginBottom: '8px' }}>
-        <Button icon="back" tone="ghost" onClick={() => w.openAgentsDashboard()}>
-          All Agents ({dashboardItems.length})
-        </Button>
-        <div className="row wrap" style={{ gap: '8px' }}>
-          {agentState.changeReceipt?.undo_available && (
-            <Button
-              tone="ghost"
-              icon="undo"
-              disabled={busy}
-              onClick={() => void agentW.undoChange()}
-            >
-              Undo Last Change
-            </Button>
-          )}
-          {activeStage !== 'human_review' &&
-            change?.state === 'draft' &&
-            changedFiles.length > 0 && (
-              <Button
-                tone="primary"
-                icon="check"
-                disabled={busy || running}
-                onClick={() => void agentW.applyProposalNow(change.title)}
-              >
-                Accept &amp; Commit
-              </Button>
-            )}
-          {activeStage !== 'human_review' &&
-            change?.state === 'applied' &&
-            isWorktreeAgent &&
-            selectedChild?.worktreePath && (
-              <Button
-                tone="primary"
-                icon="git"
-                disabled={busy}
-                onClick={() => void w.mergeAgentWorktree(selectedChild.worktreePath!)}
-              >
-                Merge into {mainBranch} &amp; Close{' '}
-                {linkedIssues.length > 1 ? `${linkedIssues.length} Issues` : 'Issue'}
-              </Button>
-            )}
-        </div>
-      </div>
-
       <Heading
         variant="intro"
         title="Agent Mission Control"
@@ -1109,7 +1071,39 @@ export function AgentsWorkspace({ s }: { s: State }) {
             {commitOid && <Badge value={`#${commitOid.slice(0, 7)}`} tone="green" />}
           </span>
         }
-      />
+      >
+        <Button icon="back" tone="ghost" onClick={() => w.openAgentsDashboard()}>
+          All Agents ({dashboardItems.length})
+        </Button>
+        {dashboardItems.length > 1 && (
+          <div className="row" style={{ gap: '4px' }} role="group" aria-label="Switch active agent">
+            <Button
+              tone="ghost small"
+              disabled={!prevAgent || busy}
+              onClick={() => prevAgent && void w.selectAgent(prevAgent.path)}
+            >
+              ← Prev
+            </Button>
+            <Button
+              tone="ghost small"
+              disabled={!nextAgent || busy}
+              onClick={() => nextAgent && void w.selectAgent(nextAgent.path)}
+            >
+              Next →
+            </Button>
+          </div>
+        )}
+        {isWorktreeAgent && activeWorktree && !running && (
+          <Button
+            tone="ghost"
+            icon="trash"
+            disabled={busy}
+            onClick={() => void w.discardWorktree(activeWorktree)}
+          >
+            Discard Worktree
+          </Button>
+        )}
+      </Heading>
 
       {agentState.error && !currentAgentItem?.hasProblem && (
         <Notice error>{agentState.error}</Notice>
@@ -1152,37 +1146,28 @@ export function AgentsWorkspace({ s }: { s: State }) {
       )}
       <ChangeOutcome s={agentState} />
 
-      {/* Grouped Issues Panel */}
+      {/* Compact Grouped Issues Panel */}
       {linkedIssues.length > 0 && (
         <Panel
           title={`Grouped Issues in this Agent (${linkedIssues.length})`}
           actions={
-            <span className="small muted">
-              Marked Done automatically when merged into {mainBranch}
-            </span>
+            <span className="small muted">Closes automatically when merged into {mainBranch}</span>
           }
         >
-          <div className="stack" style={{ gap: '8px' }}>
+          <div className="stack" style={{ gap: '6px' }}>
             {linkedIssues.map((iss) => (
               <div
                 key={iss.key}
                 className="list-row"
-                style={{ alignItems: 'flex-start', padding: '8px 10px' }}
+                style={{ alignItems: 'center', padding: '6px 10px' }}
               >
-                <div className="list-copy" style={{ flex: 1 }}>
-                  <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                    {iss.severity && <Badge value={iss.severity} />}
-                    <strong>{iss.name}</strong>
-                    <span className="small font-mono muted">
-                      {iss.path}
-                      {iss.line ? `:${iss.line}` : ''}
-                    </span>
-                  </div>
-                  {iss.cause && (
-                    <p className="small muted" style={{ marginTop: '4px', marginBottom: 0 }}>
-                      {iss.cause}
-                    </p>
-                  )}
+                <div className="row wrap" style={{ gap: '8px', alignItems: 'center', flex: 1 }}>
+                  {iss.severity && <Badge value={iss.severity} />}
+                  <strong>{iss.name}</strong>
+                  <span className="small font-mono muted">
+                    {iss.path}
+                    {iss.line ? `:${iss.line}` : ''}
+                  </span>
                 </div>
                 <Button
                   tone="ghost small"
@@ -1236,27 +1221,14 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 <span className="box-eyebrow">
                   {stage.step} · {stage.shortTitle}
                 </span>
-                <span className="row" style={{ gap: '6px', alignItems: 'center' }}>
-                  <StatusDot value={status} label={stage.title} />
-                  <Badge
-                    value={human(status)}
-                    tone={
-                      status === 'completed'
-                        ? 'green'
-                        : status === 'failed'
-                          ? 'amber'
-                          : status === 'running' || status === 'awaiting_human_review'
-                            ? 'violet'
-                            : undefined
-                    }
-                  />
-                </span>
+                <StatusDot value={status} label={stage.title} />
               </div>
-              <div className="box-value" style={{ fontSize: '0.96rem', marginTop: '4px' }}>
+              <div className="box-value" style={{ fontSize: '0.94rem', marginTop: '4px' }}>
                 {stage.title}
               </div>
               <div className="box-meta" style={{ marginTop: '4px' }}>
-                <span className="font-mono small">{stageModel}</span>
+                <span className="small">{human(status)}</span>
+                <span className="font-mono small muted">{stageModel}</span>
               </div>
             </button>
           );
@@ -1472,13 +1444,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
           <div className="stack" style={{ gap: '12px' }}>
             {workflow?.review ? (
               <div className="stack" style={{ gap: '8px' }}>
-                <div className="row between wrap">
-                  <strong className="small uppercase muted">Critic Agent Verdict</strong>
-                  <Badge
-                    value={workflow.review.verdict}
-                    tone={workflow.review.verdict === 'approve' ? 'green' : 'amber'}
-                  />
-                </div>
+                <strong className="small uppercase muted">Critic Agent Verdict</strong>
                 <Prose text={workflow.review.summary} />
                 {(workflow.review.findings || []).length > 0 && (
                   <BulletContent
@@ -1573,12 +1539,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
                   <Badge
                     value={`Critic: ${workflow.review.verdict}`}
                     tone={workflow.review.verdict === 'approve' ? 'green' : 'amber'}
-                  />
-                )}
-                {change.state === 'applied' && (
-                  <Badge
-                    value={`Branch: ${commitBranch}${commitOid ? ` (${commitOid.slice(0, 7)})` : ''}`}
-                    tone="green"
                   />
                 )}
               </div>
