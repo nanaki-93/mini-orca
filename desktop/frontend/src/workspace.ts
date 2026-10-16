@@ -451,7 +451,7 @@ export function workflowReviewable(change: M.ChangeSession) {
       flow.review.proposal_hash === change.hash)
   );
 }
-export function worktreeDefaultTarget(title: string) {
+export function worktreeDefaultTarget(title: string, rootPath?: string) {
   const slug =
     title
       .toLowerCase()
@@ -459,9 +459,10 @@ export function worktreeDefaultTarget(title: string) {
       .replace(/^-|-$/g, '')
       .slice(0, 32) || 'fix';
   const suffix = Math.random().toString(36).slice(2, 8);
+  const base = (rootPath || '').trim().replace(/\/+$/, '');
   return {
     branch: `codex/${slug}-${suffix}`,
-    path: `.worktrees/${slug}-${suffix}`,
+    path: base ? `${base}/.worktrees/${slug}-${suffix}` : `.worktrees/${slug}-${suffix}`,
   };
 }
 
@@ -1082,7 +1083,10 @@ export class Workspace {
         !context.repository.merge_head &&
         !context.repository.operation;
       if (canCreateWorktree) {
-        const target = worktreeDefaultTarget(preparedSeed.title);
+        const target = worktreeDefaultTarget(
+          preparedSeed.title,
+          context.repository.root || this.state.project?.path,
+        );
         let child: Workspace | undefined;
         let fresh: FixPreparationContext | undefined;
         await this.act('Create worktree', async () => {
