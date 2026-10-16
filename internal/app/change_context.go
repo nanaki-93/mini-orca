@@ -86,10 +86,82 @@ func changeContext(root string, session *ChangeSession) (string, project.Context
 		text.WriteString("\nCaptured target " + target.Path + ":\n" + target.Content + "\n")
 		manifest.Included = append(manifest.Included, project.ContextFile{Path: target.Path, Hash: target.Hash, SizeBytes: int64(len(target.Content))})
 	}
+	if text.Len() < 12000 {
+		if siblingDecls := samePackageGoDecls(root, session); siblingDecls != "" && text.Len()+len(siblingDecls) <= maxChangeBytes {
+			text.WriteString(siblingDecls)
+		}
+	}
 	if text.Len() > maxChangeBytes {
 		return "", manifest, fmt.Errorf("selected source and instructions exceed 256 KiB; reduce file scope")
 	}
 	return text.String(), manifest, nil
+}
+
+func samePackageGoDecls(root string, session *ChangeSession) string {
+	policy, err := project.NewContextPolicy(root)
+	if err != nil {
+		return ""
+	}
+	captured := map[string]bool{}
+	dirs := []string{}
+	seenDirs := map[string]bool{}
+	for _, target := range session.Targets {
+		captured[target.Path] = true
+		if filepath.Ext(target.Path) == ".go" {
+			dir := filepath.ToSlash(filepath.Dir(target.Path))
+			if !seenDirs[dir] {
+				seenDirs[dir] = true
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	if len(dirs) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	for _, dir := range dirs {
+		absDir := root
+		if dir != "." {
+			absDir = filepath.Join(root, filepath.FromSlash(dir))
+		}
+		entries, err := os.ReadDir(absDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+			rel := entry.Name()
+			if dir != "." {
+				rel = dir + "/" + entry.Name()
+			}
+			if captured[rel] || !policy.Decide(rel).Include {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(absDir, entry.Name()))
+			if err != nil || len(data) > 32768 {
+				continue
+			}
+			var decls []string
+			for _, line := range strings.Split(string(data), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "var ") || strings.HasPrefix(trimmed, "type ") || strings.HasPrefix(trimmed, "func ") {
+					if idx := strings.Index(trimmed, "{"); idx > 0 {
+						trimmed = strings.TrimSpace(trimmed[:idx])
+					}
+					decls = append(decls, "  "+trimmed)
+				}
+			}
+			if len(decls) > 0 && out.Len() < 2048 {
+				if out.Len() == 0 {
+					out.WriteString("\nSame-package Go declarations (already defined in package; do not redeclare or emit in changes):\n")
+				}
+				out.WriteString("// " + rel + "\n" + strings.Join(decls, "\n") + "\n")
+			}
+		}
+	}
+	return out.String()
 }
 
 func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMessage, error) {

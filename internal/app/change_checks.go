@@ -49,17 +49,32 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.CheckOptions
 	if current.Workflow != nil {
-		if ctx.Value(changeWorkflowContextKey{}) == nil && requiredChecksPassed(checks) && !changeWorkflowReviewable(current) {
-			current.Workflow.Status, current.Workflow.Reason = "awaiting_human_review", ""
-			current.Workflow.Review = &ChangeWorkflowReview{
-				ProposalHash: current.Hash,
-				Verdict:      "approve",
-				Summary:      "Verified by deterministic proposal checks.",
-				Findings:     []string{},
+		if ctx.Value(changeWorkflowContextKey{}) == nil {
+			if requiredChecksPassed(checks) && !changeWorkflowReviewable(current) {
+				current.Workflow.Status, current.Workflow.Reason = "awaiting_human_review", ""
+				for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
+					current.Workflow.Stages[i].Status = "completed"
+				}
+				current.Workflow.Review = &ChangeWorkflowReview{
+					ProposalHash: current.Hash,
+					Verdict:      "approve",
+					Summary:      "Verified by deterministic proposal checks.",
+					Findings:     []string{},
+				}
+			} else if !requiredChecksPassed(checks) {
+				current.Workflow.Status, current.Workflow.Reason = workflowFailure(errWorkflowChecksFailed, checks)
+				if len(current.Workflow.Stages) > 1 {
+					current.Workflow.Stages[1].Status = "failed"
+				}
 			}
 		}
 		if changeWorkflowReviewable(current) {
-			current.Workflow.Stages[3].Status = "waiting"
+			for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
+				current.Workflow.Stages[i].Status = "completed"
+			}
+			if len(current.Workflow.Stages) > 3 {
+				current.Workflow.Stages[3].Status = "waiting"
+			}
 		}
 	}
 	pinChangeRegression(current, checks)
@@ -71,6 +86,9 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 }
 
 func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
+	if !requiredChecksPassed(checks) {
+		return
+	}
 	for _, check := range checks {
 		if check.Name == "regression baseline" && check.State == CheckPassed {
 			session.PinnedTests = changeTestEdits(session.Changes)
@@ -269,7 +287,7 @@ func (s *Service) RepairChangeMessage(ctx context.Context, id string, request Ch
 	if err != nil {
 		return nil, err
 	}
-	request.Message = "Repair the current proposal without changing scope, acceptance criteria or pinned tests. Check evidence:\n" + changeCheckEvidence(session.Checks)
+	request.Message = "Repair the current proposal (including any test compile or assertion errors) without changing scope or acceptance criteria. Check evidence:\n" + changeCheckEvidence(session.Checks)
 	return s.generateChangeWithRuntime(ctx, root, session, request, runtime)
 }
 
@@ -280,7 +298,8 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	if err != nil {
 		return nil, root, err
 	}
-	if session.RepairAttempts >= 3 || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) || s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash {
+	hasFailedChecks := len(session.Checks) > 0 && !requiredChecksPassed(session.Checks) && session.ReviewedHash == ""
+	if session.RepairAttempts >= 3 || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) || (s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash && !hasFailedChecks) {
 		return nil, root, fmt.Errorf("repair requires current failed checks and fewer than three attempts")
 	}
 	session.RepairAttempts++
