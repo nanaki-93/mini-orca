@@ -62,9 +62,14 @@ func TestGitWorktreeCreationIsolationAndGuards(t *testing.T) {
 	if err != nil || len(workspace.Worktrees) != 2 {
 		t.Fatalf("worktrees: %+v %v", workspace, err)
 	}
+	resolvedRel, err := validateNewWorktreePath(context.Background(), root, ".worktrees/rel-fix")
+	if err != nil || resolvedRel != filepath.Join(root, ".worktrees", "rel-fix") {
+		t.Fatalf("expected .worktrees/rel-fix to resolve inside root, got %q (%v)", resolvedRel, err)
+	}
 	for _, invalid := range []GitMutationRequest{
 		{TargetBranch: "../bad", Path: filepath.Join(t.TempDir(), "bad")},
 		{TargetBranch: "codex/inside", Path: filepath.Join(root, "nested")},
+		{TargetBranch: "codex/rel-outside", Path: "nested/fix"},
 		{TargetBranch: "codex/existing", Path: root},
 		{TargetBranch: "codex/fix", Path: filepath.Join(t.TempDir(), "duplicate")},
 	} {

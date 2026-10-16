@@ -106,8 +106,16 @@ func validateNewGitBranch(ctx context.Context, root, branch string) error {
 }
 
 func validateNewWorktreePath(ctx context.Context, root, path string) (string, error) {
-	if !filepath.IsAbs(path) || strings.ContainsRune(path, 0) {
+	if strings.TrimSpace(path) == "" || strings.ContainsRune(path, 0) {
 		return "", fmt.Errorf("choose an absolute path for the new worktree")
+	}
+	if !filepath.IsAbs(path) {
+		cleaned := filepath.Clean(path)
+		if filepath.Dir(cleaned) == ".worktrees" {
+			path = filepath.Join(root, cleaned)
+		} else {
+			return "", fmt.Errorf("choose an absolute path for the new worktree")
+		}
 	}
 	path = filepath.Clean(path)
 	parent := filepath.Join(root, ".worktrees")

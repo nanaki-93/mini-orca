@@ -714,6 +714,7 @@ try {
         ),
       );
       assert.ok(worktreeCreateReq, 'Fix Selected creates an isolated Git worktree');
+      assert.match(worktreeCreateReq.body.path, /^\/fixture\/harbor\/\.worktrees\//);
 
       // 3. Check the "In Progress (2)" view in Issues & Ideas
       await nav(page, 'Issues & Ideas');

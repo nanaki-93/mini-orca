@@ -381,7 +381,8 @@ export function Editor({ s }: { s: State }) {
           .replace(/^-|-$/g, '')
           .slice(0, 28) || 'task'
       }`;
-      const path = `${s.project?.path || '.'}/.worktrees/${branch.replace('/', '-')}`;
+      const base = (prep.repository.root || s.project?.path || '.').replace(/\/+$/, '');
+      const path = `${base}/.worktrees/${branch.replace('/', '-')}`;
       await w.prepareFixInWorktree(seed, workflowSetupModels(s), prep, branch, path, true);
     } else {
       await w.prepareChange(seed, true, workflowSetupModels(s).create);
