@@ -1047,19 +1047,23 @@ pre {
   line-height: 1.5;
   white-space: nowrap;
 }
-.badge.green {
+.badge.green,
+.badge.success {
   background: var(--green-soft);
   color: var(--green);
 }
-.badge.amber {
+.badge.amber,
+.badge.warning {
   background: var(--amber-soft);
   color: var(--amber);
 }
-.badge.red {
+.badge.red,
+.badge.error {
   background: var(--red-soft);
   color: var(--red);
 }
-.badge.blue {
+.badge.blue,
+.badge.info {
   background: var(--blue-soft);
   color: var(--blue);
 }
@@ -1077,6 +1081,9 @@ pre {
 }
 .status-dot.green {
   background: var(--green);
+}
+.status-dot.blue {
+  background: var(--blue);
 }
 .status-dot.yellow {
   background: var(--amber);
@@ -2003,22 +2010,37 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 
-.notice {
+.notice,
+.notice.info {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   padding: 13px 16px;
   border-radius: 7px;
-  background: var(--amber-soft);
-  color: var(--amber);
+  background: var(--blue-soft);
+  color: var(--blue);
   font-size: 0.81rem;
   margin-bottom: 20px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid var(--amber);
+  border: 1px solid var(--blue);
+}
+.notice > svg.icon {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .notice > div {
   min-width: 0;
+}
+.notice.warning {
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-color: var(--amber);
+}
+.notice.success {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: var(--green);
 }
 .notice.error {
   color: var(--red);

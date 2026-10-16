@@ -17,7 +17,7 @@ import { collectAgentDashboardItems, type StageId } from './agents';
 import { resolveProjectDocs } from './docs';
 import { findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine } from './change-shared';
-import { human } from './ui';
+import { classifyNoticeTone, human } from './ui';
 import type * as M from './models';
 import './tui.css';
 
@@ -996,6 +996,10 @@ export function TuiApp({
               <span className="tui-c-red">[ERROR] {activeError}</span>
             ) : activeBusy ? (
               <span className="tui-c-accent">[BUSY] {activeBusy}…</span>
+            ) : classifyNoticeTone(activeNotice) === 'warning' ? (
+              <span className="tui-c-amber">[WARN] {activeNotice}</span>
+            ) : classifyNoticeTone(activeNotice) === 'info' ? (
+              <span className="tui-c-accent">[INFO] {activeNotice}</span>
             ) : (
               <span className="tui-c-green">[OK] {activeNotice}</span>
             )}
@@ -1109,7 +1113,9 @@ export function TuiApp({
                               className={`tui-badge ${
                                 ['critical', 'high'].includes(iss.severity)
                                   ? 'tui-c-red'
-                                  : 'tui-c-amber'
+                                  : iss.severity === 'medium'
+                                    ? 'tui-c-amber'
+                                    : 'tui-c-accent'
                               }`}
                             >
                               {iss.severity}
@@ -1362,7 +1368,9 @@ export function TuiApp({
                             className={`tui-badge ${
                               ['critical', 'high'].includes(iss.severity)
                                 ? 'tui-c-red'
-                                : 'tui-c-amber'
+                                : iss.severity === 'medium'
+                                  ? 'tui-c-amber'
+                                  : 'tui-c-accent'
                             }`}
                           >
                             {iss.severity}
@@ -1595,10 +1603,10 @@ export function TuiApp({
                         ) : (
                           <span
                             className={`tui-badge ${
-                              item.status === 'committed'
+                              item.status === 'committed' || item.status === 'ready_to_apply'
                                 ? 'tui-c-green'
-                                : item.status === 'running'
-                                  ? 'tui-c-purple'
+                                : item.status === 'running' || item.status === 'draft'
+                                  ? 'tui-c-accent'
                                   : 'tui-c-amber'
                             }`}
                           >
@@ -2731,7 +2739,11 @@ export function TuiApp({
                     <td>
                       <span
                         className={`tui-badge ${
-                          wt.current ? 'tui-c-green' : wt.mergeable ? 'tui-c-green' : 'tui-c-amber'
+                          wt.current || wt.mergeable
+                            ? 'tui-c-green'
+                            : wt.dirty || wt.locked || wt.prunable
+                              ? 'tui-c-amber'
+                              : 'tui-c-accent'
                         }`}
                       >
                         {wt.current ? 'CURRENT' : wt.mergeable ? 'READY TO MERGE' : 'IN PROGRESS'}

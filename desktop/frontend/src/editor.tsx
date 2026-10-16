@@ -584,7 +584,7 @@ export function Editor({ s }: { s: State }) {
           <div className="unified-ide-workarea">
             <div className="unified-ide-body">
               {s.fileStale && s.file && (
-                <Notice>
+                <Notice tone="warning">
                   File evidence is outdated.{' '}
                   <Button tone="ghost small" disabled={!!s.busy} onClick={() => void w.reindex()}>
                     Refresh project

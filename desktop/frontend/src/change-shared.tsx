@@ -59,8 +59,10 @@ export function ChangeOutcome({ s }: { s: State }) {
             >
               {s.changeReceipt.commit && (
                 <Notice
-                  error={
+                  tone={
                     s.changeReceipt.commit.state !== 'committed' || !!s.changeReceipt.commit.error
+                      ? 'error'
+                      : 'success'
                   }
                 >
                   <strong>
@@ -113,7 +115,19 @@ export function ChangeOutcome({ s }: { s: State }) {
                         <Badge value={s.changeReceipt.verification.status} />
                       </div>
                       {s.changeReceipt.verification.reason && (
-                        <Notice error={s.changeReceipt.verification.status === 'failed'}>
+                        <Notice
+                          tone={
+                            s.changeReceipt.verification.status === 'failed'
+                              ? 'error'
+                              : s.changeReceipt.verification.status === 'passed' ||
+                                  s.changeReceipt.verification.status === 'verified'
+                                ? 'success'
+                                : s.changeReceipt.verification.status === 'stale' ||
+                                    s.changeReceipt.verification.status === 'partial'
+                                  ? 'warning'
+                                  : 'info'
+                          }
+                        >
                           {s.changeReceipt.verification.reason}
                         </Notice>
                       )}

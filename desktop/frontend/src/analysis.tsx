@@ -139,7 +139,9 @@ export function Analysis({ s }: { s: State }) {
         </Button>
       </Heading>
       {continuation && (
-        <Notice>Analysis {human(continuation.status)}. Resume or cancel in Last run.</Notice>
+        <Notice tone="warning">
+          Analysis {human(continuation.status)}. Resume or cancel in Last run.
+        </Notice>
       )}
       <Panel className="analysis-run-settings">
         <Disclosure title="Advanced settings">
@@ -194,7 +196,7 @@ export function Analysis({ s }: { s: State }) {
         <AnalysisModelSummary s={s} value={models} />
       </Panel>
       {changed && (
-        <Notice>
+        <Notice tone="warning">
           File selection has unsaved changes.{' '}
           <Go page="analysis-files">Save selection in Context</Go>
         </Notice>
@@ -645,8 +647,24 @@ export function AnalysisRun({ s }: { s: State }) {
           </Button>
         )}
       </Heading>
-      {run.reason && <Notice>{run.reason}</Notice>}
-      {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
+      {run.reason && (
+        <Notice
+          tone={
+            ['paused', 'interrupted', 'stale', 'partial', 'failed'].includes(run.status)
+              ? 'warning'
+              : 'info'
+          }
+        >
+          {run.reason}
+        </Notice>
+      )}
+      {run.features?.reason && (
+        <Notice
+          tone={['failed', 'stale', 'partial'].includes(run.features.status) ? 'warning' : 'info'}
+        >
+          Feature discovery: {run.features.reason}
+        </Notice>
+      )}
 
       <div className="toolbar">
         <div className="mode-switch-group" role="tablist" aria-label="Last run views">
