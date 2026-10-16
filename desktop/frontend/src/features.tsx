@@ -122,14 +122,14 @@ export function Features({ s }: { s: State }) {
       </Disclosure>
       <FeatureFailure s={s} />
       {s.featureGenerationRequested && report?.status === 'ready' && outcome && (
-        <Notice>
+        <Notice tone={outcome.added_count > 0 ? 'success' : 'info'}>
           {outcome.added_count > 0
             ? `Added ${outcome.added_count} new ${outcome.added_count === 1 ? 'suggestion' : 'suggestions'}.`
             : 'No new suggestions found.'}
         </Notice>
       )}
       {staleActiveCount > 0 && (
-        <Notice>
+        <Notice tone="warning">
           {staleActiveCount} active {staleActiveCount === 1 ? 'idea is' : 'ideas are'} outdated.
         </Notice>
       )}

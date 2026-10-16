@@ -71,6 +71,36 @@ export function Go({
 }
 export const human = (text?: string) =>
   (text || 'Unavailable').replaceAll('_', ' ').replaceAll('-', ' ');
+export type NoticeTone = 'info' | 'warning' | 'error' | 'success';
+
+export function classifyNoticeTone(text?: string): NoticeTone {
+  const value = (text || '').trim();
+  if (!value) return 'info';
+  if (
+    /\b(failed|failure|error|conflict|conflicts|rejected|blocked|invalid|could not|cannot|unknown)\b/i.test(
+      value,
+    ) &&
+    !/all hunks rejected/i.test(value)
+  ) {
+    return 'error';
+  }
+  if (
+    /\b(stale|outdated|warning|attention|unsaved|paused|interrupted|stopped|changed\.\s*refresh|refresh status|before editing|before preparing|start a new)\b/i.test(
+      value,
+    )
+  ) {
+    return 'warning';
+  }
+  if (
+    /\b(saved|applied|committed|merged|created|restored|completed|passed|ready for your review|trusted workspace:|added \d+ new)\b/i.test(
+      value,
+    )
+  ) {
+    return 'success';
+  }
+  return 'info';
+}
+
 export function StatusDot({ value, label }: { value?: string; label?: string }) {
   const status = label ? `${label}: ${human(value)}` : human(value);
   const tone = [
@@ -81,11 +111,28 @@ export function StatusDot({ value, label }: { value?: string; label?: string }) 
     'success',
     'completed',
     'completed_empty',
+    'applied',
+    'committed',
+    'approve',
+    'ready_to_apply',
+    'verified',
+    'fixed',
   ].includes(value || '')
     ? 'green'
-    : ['failed', 'error'].includes(value || '')
+    : ['failed', 'error', 'conflicts', 'request_changes'].includes(value || '')
       ? 'red'
-      : 'yellow';
+      : [
+            'info',
+            'draft',
+            'open',
+            'saved',
+            'pending',
+            'awaiting_human_review',
+            'not_generated',
+            'skipped',
+          ].includes(value || '')
+        ? 'blue'
+        : 'yellow';
   const active = ['running', 'queued', 'pausing', 'canceling'].includes(value || '');
   return (
     <span
@@ -113,12 +160,19 @@ export function Badge({ value, tone }: { value?: string; tone?: string }) {
       'completed_empty',
       'verified',
       'applied',
+      'committed',
+      'approve',
       'validated',
       'ready_to_apply',
       'fixed',
+      'ready',
+      'current',
+      'done',
     ].includes(value || '')
       ? 'green'
-      : ['failed', 'high', 'critical', 'error'].includes(value || '')
+      : ['failed', 'high', 'critical', 'error', 'conflicts', 'request_changes'].includes(
+            value || '',
+          )
         ? 'red'
         : [
               'stale',
@@ -130,9 +184,28 @@ export function Badge({ value, tone }: { value?: string; tone?: string }) {
               'needs_attention',
               'checks_required',
               'unverified',
+              'outdated',
+              'dirty',
+              'warning',
             ].includes(value || '')
           ? 'amber'
-          : ['running', 'queued', 'pausing', 'canceling'].includes(value || '')
+          : [
+                'running',
+                'queued',
+                'pausing',
+                'canceling',
+                'info',
+                'low',
+                'open',
+                'saved',
+                'draft',
+                'pending',
+                'awaiting_human_review',
+                'in_progress',
+                'included',
+                'existing file',
+                'new file',
+              ].includes(value || '')
             ? 'blue'
             : ['ai_suggestion', 'candidate', 'hypothesis', 'estimated'].includes(value || '')
               ? 'violet'
@@ -226,10 +299,49 @@ export function Empty({
     </div>
   );
 }
-export function Notice({ children, error = false }: { children: ReactNode; error?: boolean }) {
+export function Notice({
+  children,
+  tone,
+  error = false,
+  warning = false,
+  success = false,
+  info = false,
+}: {
+  children: ReactNode;
+  tone?: NoticeTone;
+  error?: boolean;
+  warning?: boolean;
+  success?: boolean;
+  info?: boolean;
+}) {
+  const resolvedTone: NoticeTone =
+    tone ||
+    (error
+      ? 'error'
+      : warning
+        ? 'warning'
+        : success
+          ? 'success'
+          : info
+            ? 'info'
+            : typeof children === 'string'
+              ? classifyNoticeTone(children)
+              : 'info');
+  const iconName =
+    resolvedTone === 'error'
+      ? 'error'
+      : resolvedTone === 'warning'
+        ? 'warning'
+        : resolvedTone === 'success'
+          ? 'circleCheck'
+          : 'info';
   return (
-    <div className={`notice ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>
-      <Icon name="warning" />
+    <div
+      className={`notice ${resolvedTone}`}
+      data-notice-tone={resolvedTone}
+      role={resolvedTone === 'error' ? 'alert' : 'status'}
+    >
+      <Icon name={iconName} />
       <div>{children}</div>
     </div>
   );

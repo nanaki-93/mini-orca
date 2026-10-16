@@ -134,7 +134,17 @@ export function GitWorkspace({ s }: { s: State }) {
             </Notice>
           )}
           {s.gitResult && (
-            <Notice error={!!s.gitResult.error || s.gitResult.state === 'conflicts'}>
+            <Notice
+              tone={
+                s.gitResult.error ||
+                s.gitResult.state === 'conflicts' ||
+                s.gitResult.state === 'failed'
+                  ? 'error'
+                  : s.gitResult.warnings.length > 0
+                    ? 'warning'
+                    : 'success'
+              }
+            >
               <strong>
                 {s.gitResult.state === 'conflicts'
                   ? 'Merge conflicts need review.'

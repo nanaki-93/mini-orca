@@ -642,10 +642,14 @@ try {
       await cmdPrompt.press('Enter');
       await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
 
-      // Verify split sub-view tabs on Settings & Rules
+      // Verify split sub-view tabs on Settings & Rules and info/success notice classification
       await nav(page, 'Settings & Rules');
       await idle(page);
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await idle(page);
       await page.getByRole('tab', { name: /^2\. Guideline Library/ }).click();
+      await page.getByLabel('Find guidelines', { exact: true }).fill('no-matching-guideline-zzz');
+      await page.locator('.notice.info').waitFor();
       await page.getByRole('tab', { name: /^3\. Active Scope/ }).click();
 
       // Navigating to Code & Diff after a clean committed apply does not show a stale Change applied banner
@@ -741,6 +745,7 @@ try {
       await applyBtn.click();
       await idle(page);
       await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+      await page.locator('.chat-receipt .notice.success').waitFor();
 
       await nav(page, 'Issues & Ideas');
       await idle(page);
