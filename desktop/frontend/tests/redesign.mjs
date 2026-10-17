@@ -188,7 +188,10 @@ try {
       await page.getByRole('button', { name: /^Features \(/ }).click();
       await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
       await page.getByRole('button', { name: 'Save idea', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Generate & Review Diff', exact: true }).waitFor();
+      await page
+        .locator('.results-inspector-panel')
+        .getByRole('button', { name: 'Fix with Agent', exact: true })
+        .waitFor();
     } finally {
       await close();
     }

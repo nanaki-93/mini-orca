@@ -875,19 +875,18 @@ export function SearchPage({ s }: { s: State }) {
   );
   const commands: [Page, string, string][] = [
     ['summary', 'Overview', 'grid'],
+    ['diagrams', 'Architecture', 'layers'],
     ['docs', 'Docs', 'book'],
-    ['analysis', 'Analyze project', 'activity'],
+    ['editor', 'Code & Diff', 'code'],
+    ['bugs', 'Issues & Ideas', 'bug'],
+    ['features', 'Features', 'sparkles'],
+    ['agents', 'Agents', 'sparkles'],
     ['analysis-run', 'Last Run', 'activity'],
-    ['editor', 'Source', 'code'],
-    ['chat', 'Chat', 'chat'],
-    ['changes', 'Changes', 'branch'],
-    ['bugs', 'Findings', 'bug'],
-    ['history', 'History', 'clock'],
-    ['analysis-files', 'Context', 'layers'],
-    ['instructions', 'Instructions', 'file'],
-    ['diagrams', 'Architecture', 'branch'],
+    ['git', 'Git & Worktrees', 'branch'],
+    ['instructions', 'Settings & Rules', 'shield'],
+    ['models', 'Model Routing · Models', 'compass'],
+    ['analysis-files', 'File Scope & Exclusions', 'layers'],
     ['terminal', 'Terminal', 'terminal'],
-    ['models', 'Models', 'sparkles'],
     ['project', 'Open project', 'folder'],
   ];
   const visibleFiles = files.slice(0, limit);

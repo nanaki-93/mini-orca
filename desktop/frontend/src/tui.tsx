@@ -460,17 +460,8 @@ export function TuiApp({
     if (currentTabPage === 'features') {
       const idea = featureSuggestions[clampedIdx];
       if (idea) {
-        w.seedWorkflow(
-          {
-            title: idea.title,
-            kind: 'feature',
-            paths: idea.paths,
-            acceptance_criteria: idea.acceptance_criteria,
-            message: `${idea.title}\n\nBenefit: ${idea.benefit}`,
-          },
-          'agents',
-        );
-        setCmdOutput(`Staged feature idea "${idea.title}" in Agents`);
+        setCmdOutput(`Dispatched feature idea "${idea.title}" to isolated Agent`);
+        void w.discussFeature(idea);
       }
       return;
     }
@@ -2572,19 +2563,10 @@ export function TuiApp({
                           type="button"
                           className="tui-btn primary"
                           onClick={() => {
-                            w.seedWorkflow(
-                              {
-                                title: idea.title,
-                                kind: 'feature',
-                                paths: idea.paths,
-                                acceptance_criteria: idea.acceptance_criteria,
-                                message: `${idea.title}\n\nBenefit: ${idea.benefit}`,
-                              },
-                              'agents',
-                            );
+                            void w.discussFeature(idea);
                           }}
                         >
-                          [Stage in Agents]
+                          [Fix with Agent]
                         </button>
                         <button
                           type="button"

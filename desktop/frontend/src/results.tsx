@@ -1245,7 +1245,7 @@ export function Results({ s }: { s: State }) {
                             const idea = s.features?.suggestions.find(
                               (item) => `feature:${item.id}` === row.key,
                             );
-                            if (idea) w.discussFeature(idea, false);
+                            if (idea) void w.discussFeature(idea);
                           } else {
                             triggerFix(row);
                           }
@@ -1499,10 +1499,10 @@ export function Results({ s }: { s: State }) {
                       const idea = s.features?.suggestions.find(
                         (item) => `feature:${item.id}` === inspectorRow.key,
                       );
-                      if (idea) w.discussFeature(idea, false);
+                      if (idea) void w.discussFeature(idea);
                     }}
                   >
-                    Generate &amp; Review Diff
+                    Fix with Agent
                   </Button>
                 )}
                 {inspectorRow.path && (

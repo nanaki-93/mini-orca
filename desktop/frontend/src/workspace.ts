@@ -2288,9 +2288,6 @@ export class Workspace {
     });
     void this.loadChangeHistory();
   }
-  seedWorkflow(seed: M.ChangeSeed, targetPage?: Page) {
-    this.seedChange(workflowSeed(seed), targetPage);
-  }
   async loadFeatures() {
     if (!this.state.project) return;
     const request = ++this.featureRequest;
@@ -2391,16 +2388,15 @@ export class Workspace {
         this.set({ features });
     });
   }
-  discussFeature(idea: M.FeatureSuggestion, workflow = false) {
-    const seed = {
+  async discussFeature(idea: M.FeatureSuggestion) {
+    const seed = workflowSeed({
       title: idea.title,
       kind: 'feature',
       paths: idea.paths,
       acceptance_criteria: idea.acceptance_criteria,
       message: `${idea.title}\n\nBenefit: ${idea.benefit}\nContext: ${idea.evidence}\n\nAcceptance criteria:\n${idea.acceptance_criteria.map((item) => `- ${item}`).join('\n')}`,
-    };
-    if (workflow) this.seedWorkflow(seed);
-    else this.seedChange(seed);
+    });
+    await this.startAgentFix(seed);
   }
   async loadInstructions(path: string) {
     if (!this.state.project) return false;
