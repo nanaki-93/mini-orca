@@ -605,6 +605,8 @@ export interface ChangeWorkflow {
   status: string;
   reason?: string;
   models: ChangeWorkflowModels;
+  auto_repair?: boolean;
+  auto_repair_attempts?: number;
   stages: { name: string; status: string; model?: Model }[];
   review?: { proposal_hash: string; verdict: string; summary: string; findings: string[] };
   started_at: string;

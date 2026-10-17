@@ -34,6 +34,7 @@ type ChangeWorkflowRequest struct {
 	Models            ChangeWorkflowModels `json:"models"`
 	ConfirmedProfiles []string             `json:"confirmed_profiles"`
 	ConfirmSecurity   bool                 `json:"confirm_security"`
+	AutoRepair        bool                 `json:"auto_repair,omitempty"`
 }
 
 type ChangeWorkflowControl struct {
@@ -58,14 +59,16 @@ type ChangeWorkflowReview struct {
 // Workflow reports live in private change history alongside captured source.
 // A model verdict never establishes human approval or measured performance.
 type ChangeWorkflow struct {
-	ID        string                `json:"id"`
-	Status    string                `json:"status"`
-	Reason    string                `json:"reason,omitempty"`
-	Models    ChangeWorkflowModels  `json:"models"`
-	Stages    []ChangeWorkflowStage `json:"stages"`
-	Review    *ChangeWorkflowReview `json:"review,omitempty"`
-	StartedAt time.Time             `json:"started_at"`
-	UpdatedAt time.Time             `json:"updated_at"`
+	ID                 string                `json:"id"`
+	Status             string                `json:"status"`
+	Reason             string                `json:"reason,omitempty"`
+	Models             ChangeWorkflowModels  `json:"models"`
+	AutoRepair         bool                  `json:"auto_repair,omitempty"`
+	AutoRepairAttempts int                   `json:"auto_repair_attempts,omitempty"`
+	Stages             []ChangeWorkflowStage `json:"stages"`
+	Review             *ChangeWorkflowReview `json:"review,omitempty"`
+	StartedAt          time.Time             `json:"started_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
 }
 
 type changeWorkflowContextKey struct{}
@@ -73,6 +76,7 @@ type changeWorkflowContextKey struct{}
 type changeWorkflowJob struct {
 	root, sessionID, id string
 	models              ChangeWorkflowModels
+	autoRepair          bool
 	cancel              context.CancelFunc
 	done                chan struct{}
 	finished            bool
