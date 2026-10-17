@@ -1,0 +1,24 @@
+# Fast parallel pre-commit gates (< 2s on staged files)
+pre-commit:
+  parallel: true
+  commands:
+    gofmt:
+      glob: "*.go"
+      exclude: "testdata/|build/"
+      run: |
+        unformatted=$(gofmt -l {staged_files})
+        if [ -n "$unformatted" ]; then
+          echo "Unformatted Go files (run 'go fmt ./...'):"
+          echo "$unformatted"
+          exit 1
+        fi
+    prettier:
+      glob: "desktop/frontend/{src,tests}/**/*.{ts,tsx,css,mjs,json}"
+      run: npx --prefix desktop/frontend prettier --check {staged_files}
+    whitespace:
+      run: git diff --cached --check
+    gitleaks:
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks protect --staged --no-banner --redact
+        fi
