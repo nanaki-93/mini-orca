@@ -217,7 +217,10 @@ try {
     try {
       await nav(page, 'Git & Worktrees');
       await idle(page);
-      await page.locator('.git-split-grid').waitFor();
+      await page.getByRole('tab', { name: /^1\. Worktrees & Merge/ }).waitFor();
+      await page.getByText(/^Agent Worktrees \(/).waitFor();
+      await page.getByRole('tab', { name: /^2\. Current Branch & Working Tree/ }).click();
+      await page.getByText(/^Current Branch \(/).waitFor();
 
       await nav(page, 'Settings & Rules');
       await idle(page);
@@ -317,6 +320,7 @@ try {
       await dialog.getByRole('option', { name: /Gemini 4 Argon \(High\)/ }).click();
       assert.equal(await testing.getAttribute('value'), 'agy:gemini-4-argon-high');
 
+      await page.getByRole('tab', { name: /^2\. Presets & Batch Limits/ }).click();
       const batchInput = page.locator('#settings-batch_files');
       await batchInput.fill('42');
       await page
@@ -345,6 +349,7 @@ try {
         await page.getByLabel('Testing model', { exact: true }).getAttribute('value'),
         'agy:gemini-4-argon-high',
       );
+      await page.getByRole('tab', { name: /^2\. Presets & Batch Limits/ }).click();
       assert.equal(await page.locator('#settings-batch_files').inputValue(), '42');
       assert.equal(
         await page
@@ -385,6 +390,7 @@ try {
       await idle(page);
       await page.getByRole('button', { name: 'Model Routing', exact: true }).click();
       await idle(page);
+      await page.getByRole('tab', { name: /^2\. Presets & Batch Limits/ }).click();
       await page.getByText('Saved model presets', { exact: true }).waitFor();
       await page.getByText('Fast Local / Speed', { exact: true }).waitFor();
       await page.getByText('Deep Audit', { exact: true }).waitFor();
@@ -529,8 +535,8 @@ try {
       await page.getByRole('heading', { name: 'Models', exact: true }).waitFor();
       await page.getByText('Analysis models', { exact: true }).waitFor();
       await page.getByText('Workflow models', { exact: true }).waitFor();
-      await page.getByRole('tab', { name: /^3\. Presets & Batch Limits/ }).click();
-      await page.getByRole('tab', { name: /^1\. All Routing & Presets/ }).click();
+      await page.getByRole('tab', { name: /^2\. Presets & Batch Limits/ }).click();
+      await page.getByRole('tab', { name: '1. Model Routing', exact: true }).click();
     } finally {
       await close();
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { activeChangeWorkflow, workspace as w, type State } from './workspace';
 import type * as M from './models';
-import { Badge, Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
+import { Badge, Button, Empty, Heading, Icon, Loading, Notice, Panel } from './ui';
 
 function getWorktreeInfo(tree: M.GitWorktree, s: State) {
   const child = s.implementations?.find((item) => item.worktreePath === tree.path);
@@ -75,6 +75,7 @@ function kindIcon(kind: string) {
 
 export function GitWorkspace({ s }: { s: State }) {
   const [pending, setPending] = useState('');
+  const [gitTab, setGitTab] = useState<'worktrees' | 'branch'>('worktrees');
   const run = (key: string, action: () => Promise<void>) => {
     if (w.state.busy) return;
     setPending(key);
@@ -194,150 +195,151 @@ export function GitWorkspace({ s }: { s: State }) {
               ))}
             </Notice>
           )}
+          <div className="toolbar">
+            <div className="mode-switch-group" role="tablist" aria-label="Git workspace views">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gitTab === 'worktrees'}
+                className={`mode-switch-btn ${gitTab === 'worktrees' ? 'active' : ''}`}
+                onClick={() => setGitTab('worktrees')}
+              >
+                1. Worktrees &amp; Merge ({worktrees.length})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gitTab === 'branch'}
+                className={`mode-switch-btn ${gitTab === 'branch' ? 'active' : ''}`}
+                onClick={() => setGitTab('branch')}
+              >
+                2. Current Branch &amp; Working Tree ({repository.branch || 'Detached'})
+              </button>
+            </div>
+          </div>
           <div className="git-split-grid">
-            <Panel title={`Current Branch (${repository.branch || 'Detached HEAD'})`}>
-              <div className="stack">
-                <div className="row between wrap">
-                  <span className="small muted font-mono">HEAD: {repository.head || '—'}</span>
-                  <span
-                    className={`badge ${repository.dirty ? 'amber' : 'green'}`}
-                    style={{ fontWeight: 600 }}
-                  >
-                    {repository.dirty ? 'Uncommitted changes' : 'Working tree clean'}
-                  </span>
-                </div>
-                <p className="small muted">
-                  Agent fixes run in isolated Git worktrees and merge into{' '}
-                  <code>{repository.branch || 'current branch'}</code> after you Accept &amp;
-                  Commit.
-                </p>
-                <div className="actions">
-                  <Button
-                    tone="primary small"
-                    icon="sparkles"
-                    onClick={() => void w.navigate('agents')}
-                  >
-                    Open Agent Dashboard
-                  </Button>
-                  <Button tone="ghost small" icon="code" onClick={() => void w.navigate('editor')}>
-                    Open Code &amp; Diff
-                  </Button>
-                  {s.changeReceipt?.undo_available && (
-                    <Button
-                      tone="ghost small"
-                      icon="undo"
-                      disabled={busy}
-                      onClick={() => void w.undoChange()}
-                    >
-                      Undo Last Change
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Panel>
-
-            <Panel title={`Agent Worktrees (${worktrees.length})`}>
-              {worktrees.length === 0 ? (
-                <Empty
-                  title="No active worktrees"
-                  detail={
-                    repository.dirty
-                      ? 'Click "Fix with Agent" on any issue to launch an isolated worktree from HEAD. Commit or stash local changes before merging a completed worktree back.'
-                      : 'Click "Fix with Agent" on any issue to launch an isolated agent worktree.'
-                  }
-                />
-              ) : (
-                <div className="git-worktrees">
-                  {worktrees.map((tree) => {
-                    const info = getWorktreeInfo(tree, s);
-                    const icon = kindIcon(info.kind);
-                    return (
-                      <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
-                        <span
-                          className={`finding-mark ${info.kind === 'security' ? 'red' : info.kind === 'performance' ? 'blue' : ''}`}
-                        >
-                          <Icon name={icon} />
-                        </span>
-                        <div className="list-copy">
-                          <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                            <strong>{info.title}</strong>
-                            <Badge value={info.statusLabel} tone={info.statusTone} />
-                            {info.commitOid && (
-                              <Badge value={info.commitOid.slice(0, 7)} tone="green" />
-                            )}
+            {gitTab === 'worktrees' ? (
+              <Panel title={`Agent Worktrees (${worktrees.length})`}>
+                {worktrees.length === 0 ? (
+                  <Empty
+                    title="No active worktrees"
+                    detail={
+                      repository.dirty
+                        ? 'Click "Fix with Agent" on any issue to launch an isolated worktree from HEAD. Commit or stash local changes before merging a completed worktree back.'
+                        : 'Click "Fix with Agent" on any issue to launch an isolated agent worktree.'
+                    }
+                  />
+                ) : (
+                  <div className="git-worktrees">
+                    {worktrees.map((tree) => {
+                      const info = getWorktreeInfo(tree, s);
+                      const icon = kindIcon(info.kind);
+                      return (
+                        <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
+                          <span
+                            className={`finding-mark ${info.kind === 'security' ? 'red' : info.kind === 'performance' ? 'blue' : ''}`}
+                          >
+                            <Icon name={icon} />
+                          </span>
+                          <div className="list-copy">
+                            <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                              <strong>{info.title}</strong>
+                              <Badge value={info.statusLabel} tone={info.statusTone} />
+                              {info.commitOid && (
+                                <Badge value={info.commitOid.slice(0, 7)} tone="green" />
+                              )}
+                            </div>
+                            <small>
+                              <span className="path font-mono">{tree.branch}</span>
+                              <span className="muted"> · {tree.path}</span>
+                            </small>
                           </div>
-                          <small>
-                            <span className="path font-mono">{tree.branch}</span>
-                            <span className="muted"> · {tree.path}</span>
-                          </small>
-                        </div>
-                        <div className="git-worktree-actions">
-                          <Button
-                            tone="ghost small"
-                            icon="sparkles"
-                            disabled={blocked}
-                            onClick={() => void w.selectAgent(tree.path)}
-                          >
-                            Open in Agents
-                          </Button>
-                          <Button
-                            tone="danger small"
-                            disabled={blocked}
-                            loading={pending === `discard:${tree.path}`}
-                            onClick={() =>
-                              run(`discard:${tree.path}`, () => w.discardWorktree(tree))
-                            }
-                          >
-                            Discard
-                          </Button>
-                          {tree.mergeable && (
+                          <div className="git-worktree-actions">
                             <Button
-                              tone="primary small"
+                              tone="ghost small"
+                              icon="sparkles"
                               disabled={blocked}
-                              loading={pending === `merge:${tree.path}`}
+                              onClick={() => void w.selectAgent(tree.path)}
+                            >
+                              Open in Agents
+                            </Button>
+                            <Button
+                              tone="danger small"
+                              disabled={blocked}
+                              loading={pending === `discard:${tree.path}`}
                               onClick={() =>
-                                run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
+                                run(`discard:${tree.path}`, () => w.discardWorktree(tree))
                               }
                             >
-                              Merge into {repository.branch || 'branch'}
+                              Discard
                             </Button>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
+                            {tree.mergeable && (
+                              <Button
+                                tone="primary small"
+                                disabled={blocked}
+                                loading={pending === `merge:${tree.path}`}
+                                onClick={() =>
+                                  run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
+                                }
+                              >
+                                Merge into {repository.branch || 'branch'}
+                              </Button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </Panel>
+            ) : (
+              <Panel title={`Current Branch (${repository.branch || 'Detached HEAD'})`}>
+                <div className="stack">
+                  <div className="row between wrap">
+                    <span className="small muted font-mono">HEAD: {repository.head || '—'}</span>
+                    <span
+                      className={`badge ${repository.dirty ? 'amber' : 'green'}`}
+                      style={{ fontWeight: 600 }}
+                    >
+                      {repository.dirty ? 'Uncommitted changes' : 'Working tree clean'}
+                    </span>
+                  </div>
+                  <p className="small muted">
+                    Agent fixes run in isolated Git worktrees and merge into{' '}
+                    <code>{repository.branch || 'current branch'}</code> after you Accept &amp;
+                    Commit.
+                  </p>
+                  <div className="actions">
+                    <Button
+                      tone="primary small"
+                      icon="sparkles"
+                      onClick={() => void w.navigate('agents')}
+                    >
+                      Open Agent Dashboard
+                    </Button>
+                    <Button
+                      tone="ghost small"
+                      icon="code"
+                      onClick={() => void w.navigate('editor')}
+                    >
+                      Open Code &amp; Diff
+                    </Button>
+                    {s.changeReceipt?.undo_available && (
+                      <Button
+                        tone="ghost small"
+                        icon="undo"
+                        disabled={busy}
+                        onClick={() => void w.undoChange()}
+                      >
+                        Undo Last Change
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </Panel>
+              </Panel>
+            )}
           </div>
         </>
-      )}
-      {s.gitPreview && (
-        <Overlay title="Review worktree merge" onClose={() => w.set({ gitPreview: undefined })}>
-          <p>
-            <strong>{s.gitPreview.source.branch}</strong> into{' '}
-            <strong>{s.gitPreview.target.branch}</strong>
-          </p>
-          <h3>Incoming commits</h3>
-          <pre tabIndex={0}>{s.gitPreview.commits || 'No new commits.'}</pre>
-          <h3>Changes to review</h3>
-          <pre className="git-merge-diff" tabIndex={0}>
-            {s.gitPreview.diff || 'No file differences.'}
-          </pre>
-          <div className="actions end">
-            <Button disabled={busy} onClick={() => w.set({ gitPreview: undefined })}>
-              Cancel
-            </Button>
-            <Button
-              tone="primary"
-              loading={s.busy === 'Update Git workspace'}
-              disabled={blocked || !s.gitPreview.commits.trim()}
-              onClick={() => void w.gitAction('merge')}
-            >
-              Merge into current branch
-            </Button>
-          </div>
-        </Overlay>
       )}
     </div>
   );

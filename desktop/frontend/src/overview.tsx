@@ -504,7 +504,7 @@ export function Summary({ s }: { s: State }) {
 }
 export function Models({ s }: { s: State }) {
   const w = useWorkspace();
-  const [modelTab, setModelTab] = useState<'all' | 'routing' | 'presets'>('all');
+  const [modelTab, setModelTab] = useState<'routing' | 'presets'>('routing');
   const [presetName, setPresetName] = useState('');
   const presets = allModelPresets(s);
   return (
@@ -537,20 +537,11 @@ export function Models({ s }: { s: State }) {
           <button
             type="button"
             role="tab"
-            aria-selected={modelTab === 'all'}
-            className={`mode-switch-btn ${modelTab === 'all' ? 'active' : ''}`}
-            onClick={() => setModelTab('all')}
-          >
-            1. All Routing &amp; Presets
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={modelTab === 'routing'}
             className={`mode-switch-btn ${modelTab === 'routing' ? 'active' : ''}`}
             onClick={() => setModelTab('routing')}
           >
-            2. Model Routing Only
+            1. Model Routing
           </button>
           <button
             type="button"
@@ -559,76 +550,11 @@ export function Models({ s }: { s: State }) {
             className={`mode-switch-btn ${modelTab === 'presets' ? 'active' : ''}`}
             onClick={() => setModelTab('presets')}
           >
-            3. Presets &amp; Batch Limits ({presets.length})
+            2. Presets &amp; Batch Limits ({presets.length})
           </button>
         </div>
       </div>
-      {(modelTab === 'all' || modelTab === 'presets') && (
-        <Panel title="Saved model presets" className="model-presets-panel">
-          <div className="stack">
-            <div className="grid models-grid">
-              {presets.map((preset) => {
-                const active = isModelPresetActive(s, preset);
-                return (
-                  <div
-                    key={preset.id}
-                    className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
-                  >
-                    <div>
-                      <div
-                        className="row"
-                        style={{ justifyContent: 'space-between', alignItems: 'center' }}
-                      >
-                        <strong>{preset.name}</strong>
-                        {active && <span className="pill">Active</span>}
-                      </div>
-                      <p className="small muted" style={{ marginTop: '4px' }}>
-                        {preset.description}
-                      </p>
-                    </div>
-                    <div className="actions">
-                      <Button
-                        tone={active ? undefined : 'primary'}
-                        disabled={!!s.busy}
-                        onClick={() => w.applyModelPreset(preset)}
-                      >
-                        {active ? 'Reapply preset' : 'Apply preset'}
-                      </Button>
-                      {!preset.builtIn && (
-                        <Button
-                          disabled={!!s.busy}
-                          onClick={() => w.deleteCustomModelPreset(preset.id)}
-                        >
-                          Delete
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="row" style={{ gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-              <input
-                aria-label="Custom preset name"
-                placeholder="Save current routing as preset (e.g. Offline Ollama)…"
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                style={{ maxWidth: '320px' }}
-              />
-              <Button
-                disabled={!!s.busy || !presetName.trim()}
-                onClick={() => {
-                  w.saveCustomModelPreset(presetName);
-                  setPresetName('');
-                }}
-              >
-                Save preset
-              </Button>
-            </div>
-          </div>
-        </Panel>
-      )}
-      {(modelTab === 'all' || modelTab === 'routing') && (
+      {modelTab === 'routing' && (
         <div className="grid two-columns">
           <Panel title="Analysis models" className="analysis-model-settings">
             <ModelSelectors
@@ -647,8 +573,71 @@ export function Models({ s }: { s: State }) {
           </Panel>
         </div>
       )}
-      {(modelTab === 'all' || modelTab === 'presets') && (
+      {modelTab === 'presets' && (
         <>
+          <Panel title="Saved model presets" className="model-presets-panel">
+            <div className="stack">
+              <div className="grid models-grid">
+                {presets.map((preset) => {
+                  const active = isModelPresetActive(s, preset);
+                  return (
+                    <div
+                      key={preset.id}
+                      className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
+                    >
+                      <div>
+                        <div
+                          className="row"
+                          style={{ justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <strong>{preset.name}</strong>
+                          {active && <span className="pill">Active</span>}
+                        </div>
+                        <p className="small muted" style={{ marginTop: '4px' }}>
+                          {preset.description}
+                        </p>
+                      </div>
+                      <div className="actions">
+                        <Button
+                          tone={active ? undefined : 'primary'}
+                          disabled={!!s.busy}
+                          onClick={() => w.applyModelPreset(preset)}
+                        >
+                          {active ? 'Reapply preset' : 'Apply preset'}
+                        </Button>
+                        {!preset.builtIn && (
+                          <Button
+                            disabled={!!s.busy}
+                            onClick={() => w.deleteCustomModelPreset(preset.id)}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="row" style={{ gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                <input
+                  aria-label="Custom preset name"
+                  placeholder="Save current routing as preset (e.g. Offline Ollama)…"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  style={{ maxWidth: '320px' }}
+                />
+                <Button
+                  disabled={!!s.busy || !presetName.trim()}
+                  onClick={() => {
+                    w.saveCustomModelPreset(presetName);
+                    setPresetName('');
+                  }}
+                >
+                  Save preset
+                </Button>
+              </div>
+            </div>
+          </Panel>
           <Panel title="Analysis & batch settings" className="analysis-batch-settings">
             <div className="form-grid analysis-settings-fields">
               {(
