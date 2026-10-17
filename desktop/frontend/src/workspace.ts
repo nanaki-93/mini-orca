@@ -114,6 +114,7 @@ export interface State {
   modelPresets?: ModelPreset[];
   workspaceTrust?: boolean;
   bootstrapExec?: M.BootstrapExecResult;
+  instructionsTab?: 'rules' | 'guidelines' | 'effective' | 'bootstrap';
 }
 export interface ModelPreset {
   id: string;
@@ -3284,6 +3285,10 @@ export class Workspace {
         notice: `Bootstrapped ${missing.map((p) => p.targetPath).join(', ')}${hookNote} (Undo available).`,
       });
     });
+  }
+  async openRepoBootstrap() {
+    this.set({ instructionsTab: 'bootstrap' });
+    await this.navigate('instructions');
   }
   async retryChangeCommit(message: string) {
     await this.act('Retry commit', async () => {

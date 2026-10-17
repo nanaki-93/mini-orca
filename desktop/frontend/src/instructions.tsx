@@ -47,13 +47,21 @@ function insertGuidelineSection(content: string, category: string, additions: st
 export function Instructions({ s }: { s: State }) {
   const w = useWorkspace();
   const preview = s.instructionPreview;
-  const [tab, setTab] = useState<'rules' | 'guidelines' | 'effective' | 'bootstrap'>('rules');
+  const [tab, setTab] = useState<'rules' | 'guidelines' | 'effective' | 'bootstrap'>(
+    s.instructionsTab || 'rules',
+  );
   const [path, setPath] = useState(preview?.path || 'AGENTS.md');
   const [content, setContent] = useState(preview?.existing_content || '');
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
+  useEffect(() => {
+    if (s.instructionsTab) {
+      setTab(s.instructionsTab);
+      w.set({ instructionsTab: undefined });
+    }
+  }, [s.instructionsTab]);
   useEffect(() => {
     if (!preview) return;
     setPath(preview.path);

@@ -8,6 +8,7 @@ import {
   allModelPresets,
   isModelPresetActive,
   activeRun,
+  evaluateBootstrapChecklist,
   type State,
   type Page,
 } from './workspace';
@@ -215,6 +216,8 @@ export function Summary({ s }: { s: State }) {
   const scenarioCount =
     docs?.scenarios?.length || Math.max(1, overview?.analysis.flows?.length || 1);
   const docsStatus = docs?.status || overview?.analysis.status || s.project?.ai_status || 'fresh';
+  const bootstrapPillars = evaluateBootstrapChecklist(s);
+  const bootstrapReadyCount = bootstrapPillars.filter((p) => p.ready).length;
 
   return (
     <div className="summary-page">
@@ -228,6 +231,14 @@ export function Summary({ s }: { s: State }) {
             </p>
           </div>
           <div className="actions">
+            <Button
+              icon="shield"
+              tone="ghost"
+              disabled={!!s.busy}
+              onClick={() => void w.openRepoBootstrap()}
+            >
+              Repo Readiness ({bootstrapReadyCount}/4 Pillars)
+            </Button>
             {s.run && (
               <Button
                 icon="activity"

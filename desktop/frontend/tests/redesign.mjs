@@ -960,11 +960,9 @@ try {
   await test('Environment Bootstrap Checklist audits and bootstraps 4 repository pillars in GUI and TUI', async () => {
     const { page, close } = await pageFor({ git: true, trusted: true });
     try {
-      await nav(page, 'Settings & Rules');
+      // Click Repo Readiness (1/4 Pillars) directly from GUI Overview to open dedicated 4. Repo Bootstrap sub-view
+      await page.getByRole('button', { name: 'Repo Readiness (1/4 Pillars)', exact: true }).click();
       await idle(page);
-
-      // Switch to dedicated 4. Repo Bootstrap (1/4) sub-view tab
-      await page.getByRole('tab', { name: /^4\. Repo Bootstrap \(1\/4\)/ }).click();
       await page
         .getByRole('heading', { name: 'Environment Bootstrap Checklist', exact: true })
         .waitFor();
@@ -980,12 +978,12 @@ try {
       await page.getByText('2/4 Pillars Ready', { exact: true }).waitFor();
       await page.getByText('Ready (justfile)', { exact: true }).waitFor();
 
-      // Switch to TUI mode, open [0] Rules -> [2. Repo Bootstrap (2/4)], and bootstrap remaining 2 pillars (.mise.toml and lefthook.yml)
+      // Switch to TUI mode, open [1] Overview -> click [Repo Readiness (2/4)], and bootstrap remaining 2 pillars (.mise.toml and lefthook.yml)
       await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
       const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
       await tui.waitFor();
-      await page.getByRole('button', { name: /\[0\] Rules/ }).click();
-      await page.getByRole('button', { name: /\[2\. Repo Bootstrap \(2\/4\)\]/ }).click();
+      await page.getByRole('button', { name: /\[1\] Overview/ }).click();
+      await page.getByRole('button', { name: '[Repo Readiness (2/4)]', exact: true }).click();
       await page
         .getByText('STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)', {
           exact: true,
