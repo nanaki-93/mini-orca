@@ -18,7 +18,7 @@ import { collectAgentDashboardItems, type StageId } from './agents';
 import { resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine } from './change-shared';
-import { classifyNoticeTone, human } from './ui';
+import { Spinner, classifyNoticeTone, human } from './ui';
 import type * as M from './models';
 import './tui.css';
 
@@ -1585,95 +1585,119 @@ export function TuiApp({
               <table className="tui-table" aria-label="Agents in progress">
                 <thead>
                   <tr>
-                    <th>AGENT / BRANCH</th>
-                    <th>GROUPED ISSUES</th>
-                    <th>CURRENT STEP</th>
-                    <th>STATUS / PROBLEM</th>
+                    <th>BUG(S)</th>
+                    <th>4-STEP PIPELINE</th>
                     <th>DETAIL</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {agentItems.map((item, idx) => (
-                    <tr
-                      key={item.key}
-                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
-                      onClick={() => {
-                        setSelectedIdx(idx);
-                        void w.selectAgent(item.path);
-                      }}
-                    >
-                      <td>
-                        {idx === clampedIdx && (
-                          <span className="tui-cursor-indicator" aria-hidden="true">
-                            &gt;
-                          </span>
-                        )}
-                        <strong className="tui-c-accent">{item.title}</strong>
-                        <div className="tui-c-muted">{item.branch}</div>
-                      </td>
-                      <td>
-                        <strong>
-                          {item.linkedIssues.length > 0
-                            ? `${item.linkedIssues.length} issue(s)`
-                            : `${item.findingTargets.length || 1} issue(s)`}
-                        </strong>
-                        {item.linkedIssues.length > 0 && (
-                          <div className="tui-c-muted">
-                            {item.linkedIssues.map((iss) => iss.name).join(', ')}
+                  {agentItems.map((item, idx) => {
+                    const bugTitles =
+                      item.linkedIssues.length > 0
+                        ? item.linkedIssues.map((iss) => iss.name).join(' · ')
+                        : item.title;
+                    return (
+                      <tr
+                        key={item.key}
+                        className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                        onClick={() => {
+                          setSelectedIdx(idx);
+                          void w.selectAgent(item.path);
+                        }}
+                      >
+                        <td>
+                          {idx === clampedIdx && (
+                            <span className="tui-cursor-indicator" aria-hidden="true">
+                              &gt;
+                            </span>
+                          )}
+                          <strong className="tui-c-accent">{bugTitles}</strong>
+                          {item.hasProblem && (
+                            <div className="tui-c-red">
+                              PROBLEM: {item.problemSummary || 'Check failed'}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {(
+                              [
+                                [1, 'Create Fix'],
+                                [2, 'Verify & Test'],
+                                [3, 'Critic Review'],
+                                [4, 'Review & Commit'],
+                              ] as const
+                            ).map(([stepNum, shortTitle]) => {
+                              const isDone =
+                                item.stepNumber > stepNum ||
+                                (item.stepNumber === 4 &&
+                                  (item.mergeable || item.status === 'completed'));
+                              const isCurrent = item.stepNumber === stepNum && !isDone;
+                              const isRunningStep = isCurrent && item.status === 'running';
+                              const isProblemStep = isCurrent && item.hasProblem;
+                              return (
+                                <span
+                                  key={stepNum}
+                                  className={`tui-badge ${
+                                    isProblemStep
+                                      ? 'tui-c-red'
+                                      : isDone
+                                        ? 'tui-c-green'
+                                        : isCurrent
+                                          ? 'tui-c-purple'
+                                          : 'tui-c-muted'
+                                  }`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                  }}
+                                >
+                                  {isRunningStep ? (
+                                    <Spinner />
+                                  ) : isProblemStep ? (
+                                    '⚠ '
+                                  ) : isDone ? (
+                                    '✓ '
+                                  ) : (
+                                    ''
+                                  )}
+                                  <span>
+                                    {stepNum}. {shortTitle}
+                                  </span>
+                                </span>
+                              );
+                            })}
                           </div>
-                        )}
-                      </td>
-                      <td>
-                        <span className="tui-badge tui-c-purple">
-                          Step {item.stepNumber}/4 · {item.stageLabel}
-                        </span>
-                      </td>
-                      <td>
-                        {item.hasProblem ? (
-                          <span className="tui-badge tui-c-red">
-                            PROBLEM: {item.problemSummary || 'Check failed'}
-                          </span>
-                        ) : (
-                          <span
-                            className={`tui-badge ${
-                              item.status === 'committed' || item.status === 'ready_to_apply'
-                                ? 'tui-c-green'
-                                : item.status === 'running' || item.status === 'draft'
-                                  ? 'tui-c-accent'
-                                  : 'tui-c-amber'
-                            }`}
-                          >
-                            {item.status === 'committed' ? 'Ready to Merge' : item.status}
-                          </span>
-                        )}
-                      </td>
-                      <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          className="tui-btn primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void w.selectAgent(item.path);
-                          }}
-                        >
-                          [Open Agent Detail]
-                        </button>
-                        {item.mergeable && item.path && (
+                        </td>
+                        <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                           <button
                             type="button"
-                            className="tui-btn"
-                            disabled={!!activeBusy}
+                            className="tui-btn primary"
                             onClick={(e) => {
                               e.stopPropagation();
-                              void w.mergeAgentWorktree(item.path!);
+                              void w.selectAgent(item.path);
                             }}
                           >
-                            [Merge]
+                            [Open Agent Detail]
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          {item.mergeable && item.path && (
+                            <button
+                              type="button"
+                              className="tui-btn"
+                              disabled={!!activeBusy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void w.mergeAgentWorktree(item.path!);
+                              }}
+                            >
+                              [Merge]
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -1761,25 +1785,12 @@ export function TuiApp({
                   [← All Agents]
                 </button>{' '}
                 <strong className="tui-c-accent">
-                  {selectedAgentItem?.title || change?.title || 'Agent Detail'}
-                </strong>{' '}
-                {selectedAgentItem && (
-                  <span className="tui-c-muted">
-                    ({selectedAgentItem.branch} · Step {selectedAgentItem.stepNumber}/4 ·{' '}
-                    {selectedAgentItem.stageLabel})
-                  </span>
-                )}
+                  {selectedAgentItem && selectedAgentItem.linkedIssues.length > 0
+                    ? selectedAgentItem.linkedIssues.map((iss) => iss.name).join(' · ')
+                    : selectedAgentItem?.title || change?.title || 'Agent Detail'}
+                </strong>
               </div>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {workflow?.auto_repair && (
-                  <span className="tui-badge tui-c-cyan">
-                    [
-                    {workflow.auto_repair_attempts
-                      ? `AUTO-HEAL: ${workflow.auto_repair_attempts}/2`
-                      : 'AUTO-HEAL: ON'}
-                    ]
-                  </span>
-                )}
                 {selectedAgentItem?.hasProblem && (
                   <span className="tui-badge tui-c-red">
                     [PROBLEM: {selectedAgentItem.problemSummary}]
@@ -1818,21 +1829,6 @@ export function TuiApp({
               </div>
             </div>
 
-            {selectedAgentItem && selectedAgentItem.linkedIssues.length > 0 && (
-              <div className="tui-box" style={{ marginBottom: '8px' }}>
-                <span className="tui-box-title">
-                  GROUPED ISSUES IN THIS AGENT ({selectedAgentItem.linkedIssues.length})
-                </span>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  {selectedAgentItem.linkedIssues.map((iss) => (
-                    <span key={iss.key} className="tui-pill">
-                      <strong>{iss.name}</strong> <span className="tui-c-muted">({iss.path})</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="tui-box focused">
               <span className="tui-box-title">4-STAGE AUTONOMOUS CLEAN-CODE PIPELINE</span>
               <span className="tui-box-meta">
@@ -1841,12 +1837,12 @@ export function TuiApp({
               <div className="tui-grid-4" style={{ marginTop: '4px' }}>
                 {(
                   [
-                    ['create', '1. ARCHITECT & CODE', models.create],
-                    ['test', '2. VERIFY & TEST', models.test],
-                    ['review', '3. CLEAN-CODE CRITIC', models.review],
-                    ['human_review', '4. HUMAN PRECISION GATE', 'explicit-apply'],
+                    ['create', '1. CREATE FIX'],
+                    ['test', '2. VERIFY & TEST'],
+                    ['review', '3. CRITIC REVIEW'],
+                    ['human_review', '4. REVIEW & COMMIT'],
                   ] as const
-                ).map(([stageId, label, modelName]) => {
+                ).map(([stageId, label]) => {
                   const st =
                     workflow?.stages.find((x) => x.name === stageId)?.status ||
                     (change ? 'completed' : agentS.changeSeed ? 'staged' : 'idle');
@@ -1860,24 +1856,25 @@ export function TuiApp({
                         setSelectedAgentStage((prev) => (prev === stageId ? 'all' : stageId))
                       }
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        {st === 'running' ? (
+                          <Spinner />
+                        ) : st === 'completed' ? (
+                          <span className="tui-c-green" aria-hidden="true">
+                            ✓
+                          </span>
+                        ) : st === 'failed' ? (
+                          <span className="tui-c-red" aria-hidden="true">
+                            ⚠
+                          </span>
+                        ) : null}
                         <strong className="tui-c-accent">{label}</strong>
-                        <span
-                          className={`tui-badge ${
-                            st === 'completed'
-                              ? 'tui-c-green'
-                              : st === 'running'
-                                ? 'tui-c-purple'
-                                : st === 'failed'
-                                  ? 'tui-c-red'
-                                  : 'tui-c-muted'
-                          }`}
-                        >
-                          {st}
-                        </span>
-                      </div>
-                      <div className="tui-sub" style={{ marginTop: '4px' }}>
-                        model: <code>{modelName}</code>
                       </div>
                     </div>
                   );

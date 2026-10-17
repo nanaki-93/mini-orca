@@ -571,6 +571,10 @@ try {
         exact: true,
       });
       await dashboard.waitFor();
+      await dashboard.getByText('1. Create Fix', { exact: true }).first().waitFor();
+      await dashboard.getByText('2. Verify & Test', { exact: true }).first().waitFor();
+      await dashboard.getByText('3. Critic Review', { exact: true }).first().waitFor();
+      await dashboard.getByText('4. Review & Commit', { exact: true }).first().waitFor();
 
       // Click the agent card on the dashboard to navigate to the Agent & Issue Detail page
       await dashboard.getByRole('tab').first().click();

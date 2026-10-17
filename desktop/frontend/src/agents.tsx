@@ -23,7 +23,6 @@ import {
   Panel,
   Prose,
   Spinner,
-  StatusDot,
   human,
 } from './ui';
 import type * as M from './models';
@@ -758,8 +757,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
     change?.commit?.oid ||
     agentState.changeReceipt?.commit?.oid ||
     activeWorktree?.completed?.[0]?.commit?.oid;
-  const commitBranch =
-    change?.commit?.branch || activeWorktree?.branch || agentState.repository?.branch || 'main';
   const mainBranch = s.repository?.branch || 'main';
 
   // PAGE 1: NEW CUSTOM AGENT FORM
@@ -886,6 +883,10 @@ export function AgentsWorkspace({ s }: { s: State }) {
             >
               {dashboardItems.map((item) => {
                 const issueCount = item.linkedIssues.length;
+                const bugTitles =
+                  issueCount > 0
+                    ? item.linkedIssues.map((iss) => iss.name).join(' · ')
+                    : item.title;
                 return (
                   <div
                     key={item.key}
@@ -912,34 +913,17 @@ export function AgentsWorkspace({ s }: { s: State }) {
                       boxShadow: item.hasProblem ? '0 0 0 1px var(--red, #e5534b)' : undefined,
                     }}
                   >
-                    <div className="row between wrap" style={{ gap: '10px' }}>
-                      <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                        <StatusDot value={item.status} label={item.title} />
-                        <strong style={{ fontSize: '0.96rem' }}>{item.title}</strong>
-                        <Badge value={item.branch} />
-                        {issueCount > 0 && (
-                          <Badge
-                            value={`${issueCount} ${issueCount === 1 ? 'issue' : 'issues'}`}
-                            tone="violet"
-                          />
-                        )}
-                        {item.commitOid && (
-                          <span className="small font-mono muted">
-                            #{item.commitOid.slice(0, 7)}
-                          </span>
-                        )}
-                      </div>
-                      <Badge value={item.stageLabel} tone={item.tone} />
+                    <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.96rem' }}>{bugTitles}</strong>
+                      {issueCount > 1 && <Badge value={`${issueCount} issues`} tone="violet" />}
                     </div>
 
-                    {/* Compact 4-Step Progress Strip */}
+                    {/* 4-Step Progress Strip with inline Spinner in running label */}
                     <div
                       className="row wrap"
                       style={{
-                        gap: '6px',
-                        marginTop: '8px',
-                        paddingTop: '8px',
-                        borderTop: '1px solid var(--line)',
+                        gap: '8px',
+                        marginTop: '10px',
                       }}
                     >
                       {PIPELINE_STAGES.map((st, idx) => {
@@ -949,13 +933,17 @@ export function AgentsWorkspace({ s }: { s: State }) {
                           (item.stepNumber === 4 &&
                             (item.mergeable || item.status === 'completed'));
                         const isCurrent = item.stepNumber === stepNum && !isDone;
+                        const isRunningStep = isCurrent && item.status === 'running';
                         const isProblemStep = isCurrent && item.hasProblem;
                         return (
                           <span
                             key={st.id}
                             className="small font-mono"
                             style={{
-                              padding: '2px 8px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '3px 10px',
                               borderRadius: '4px',
                               background: isProblemStep
                                 ? 'rgba(229, 83, 75, 0.16)'
@@ -977,31 +965,20 @@ export function AgentsWorkspace({ s }: { s: State }) {
                               fontWeight: isCurrent ? 600 : 400,
                             }}
                           >
-                            {isProblemStep ? '⚠ ' : isDone ? '✓ ' : isCurrent ? '● ' : ''}
-                            {stepNum}. {st.shortTitle}
+                            {isRunningStep ? (
+                              <Spinner />
+                            ) : isProblemStep ? (
+                              <span aria-hidden="true">⚠</span>
+                            ) : isDone ? (
+                              <span aria-hidden="true">✓</span>
+                            ) : null}
+                            <span>
+                              {stepNum}. {st.shortTitle}
+                            </span>
                           </span>
                         );
                       })}
                     </div>
-
-                    {/* Concise Grouped Issues Preview */}
-                    {item.linkedIssues.length > 0 && (
-                      <div
-                        className="row wrap small muted"
-                        style={{ gap: '8px', marginTop: '6px' }}
-                      >
-                        <span>Fixing:</span>
-                        {item.linkedIssues.slice(0, 3).map((iss) => (
-                          <span key={iss.key} className="font-mono">
-                            {iss.name} ({iss.path.split('/').at(-1)}
-                            {iss.line ? `:${iss.line}` : ''})
-                          </span>
-                        ))}
-                        {item.linkedIssues.length > 3 && (
-                          <span className="font-mono">+{item.linkedIssues.length - 3} more</span>
-                        )}
-                      </div>
-                    )}
 
                     {/* Highlighted Problem Callout */}
                     {item.hasProblem && item.problemSummary && (
@@ -1057,32 +1034,17 @@ export function AgentsWorkspace({ s }: { s: State }) {
     currentAgentIdx >= 0 && currentAgentIdx < dashboardItems.length - 1
       ? dashboardItems[currentAgentIdx + 1]
       : undefined;
+  const detailBugTitles =
+    linkedIssues.length > 0
+      ? linkedIssues.map((iss) => iss.name).join(' · ')
+      : change?.title || seed?.title || currentAgentItem?.title || 'Agent';
 
   return (
     <div className="workspace-page agents-page">
       <Heading
         variant="intro"
         title="Agent Mission Control"
-        detail={
-          <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-            <strong>{change?.title || seed?.title || currentAgentItem?.title || 'Agent'}</strong>
-            <Badge value={`Branch: ${commitBranch}`} />
-            {currentAgentItem && (
-              <Badge value={currentAgentItem.stageLabel} tone={currentAgentItem.tone} />
-            )}
-            {workflow?.auto_repair && (
-              <Badge
-                value={
-                  workflow.auto_repair_attempts
-                    ? `Auto-Heal: ${workflow.auto_repair_attempts}/2`
-                    : 'Auto-Heal: ON'
-                }
-                tone="blue"
-              />
-            )}
-            {commitOid && <Badge value={`#${commitOid.slice(0, 7)}`} tone="green" />}
-          </span>
-        }
+        detail={<strong>{detailBugTitles}</strong>}
       >
         <Button icon="back" tone="ghost" onClick={() => w.openAgentsDashboard()}>
           All Agents ({dashboardItems.length})
@@ -1197,7 +1159,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
         </Panel>
       )}
 
-      {/* Top Clickable 4-Stage Workflow Bar */}
+      {/* Top Clickable 4-Stage Workflow Bar with inline Spinner in the running step label */}
       <div
         className="kpi-pulse-grid box-grid-4 agent-pipeline-grid"
         role="tablist"
@@ -1207,9 +1169,9 @@ export function AgentsWorkspace({ s }: { s: State }) {
           const status = stageStatus(stage.id);
           const visitable = isStageVisitable(stage.id);
           const isSelected = activeStage === stage.id;
-          const stageModel =
-            workflow?.stages.find((st) => st.name === stage.id)?.model?.model ||
-            (stage.modelKey ? models[stage.modelKey] : 'Human approval');
+          const isProblem = ['failed', 'changes_requested', 'interrupted', 'stale'].includes(
+            status,
+          );
           return (
             <button
               key={stage.id}
@@ -1225,7 +1187,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 opacity: visitable ? 1 : 0.55,
                 borderColor: isSelected
                   ? 'var(--accent)'
-                  : status === 'failed'
+                  : isProblem
                     ? 'var(--red, #e5534b)'
                     : status === 'running' || status === 'awaiting_human_review'
                       ? 'var(--accent)'
@@ -1233,18 +1195,24 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 boxShadow: isSelected ? '0 0 0 1px var(--accent)' : undefined,
               }}
             >
-              <div className="box-head">
-                <span className="box-eyebrow">
+              <div className="row" style={{ gap: '6px', alignItems: 'center' }}>
+                {status === 'running' ? (
+                  <Spinner />
+                ) : isProblem ? (
+                  <span style={{ color: 'var(--red, #e5534b)' }} aria-hidden="true">
+                    ⚠
+                  </span>
+                ) : status === 'completed' ? (
+                  <span style={{ color: 'var(--green)' }} aria-hidden="true">
+                    ✓
+                  </span>
+                ) : null}
+                <strong style={{ fontSize: '0.92rem' }}>
                   {stage.step} · {stage.shortTitle}
-                </span>
-                <StatusDot value={status} label={stage.title} />
+                </strong>
               </div>
-              <div className="box-value" style={{ fontSize: '0.94rem', marginTop: '4px' }}>
+              <div className="small muted" style={{ marginTop: '4px' }}>
                 {stage.title}
-              </div>
-              <div className="box-meta" style={{ marginTop: '4px' }}>
-                <span className="small">{human(status)}</span>
-                <span className="font-mono small muted">{stageModel}</span>
               </div>
             </button>
           );
