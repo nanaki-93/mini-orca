@@ -242,6 +242,7 @@ export function TuiApp({
   const [showNewMissionForm, setShowNewMissionForm] = useState(false);
   const [showKeybindsModal, setShowKeybindsModal] = useState(false);
   const [docsSection, setDocsSection] = useState<TuiDocsSection>('context');
+  const [rulesSection, setRulesSection] = useState<'trust' | 'bootstrap'>('trust');
   const [selectedAgentStage, setSelectedAgentStage] = useState<StageId | 'all'>('all');
   const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'diff'>('auto');
   const [editorPrompt, setEditorPrompt] = useState('');
@@ -595,6 +596,13 @@ export function TuiApp({
             ? sections[(cur + 1) % sections.length]
             : sections[(cur - 1 + sections.length) % sections.length];
         setDocsSection(next);
+        setSelectedIdx(0);
+      } else if (
+        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
+        currentTabPage === 'instructions'
+      ) {
+        e.preventDefault();
+        setRulesSection((prev) => (prev === 'trust' ? 'bootstrap' : 'trust'));
         setSelectedIdx(0);
       } else if (e.key === 'Enter') {
         e.preventDefault();
@@ -2808,177 +2816,245 @@ export function TuiApp({
             const missingCount = bootstrapPillars.length - readyCount;
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div className="tui-box focused">
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '6px',
-                      marginBottom: '8px',
-                    }}
-                  >
-                    <span className="tui-box-title">
-                      STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)
-                    </span>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span
-                        className={`tui-badge ${readyCount === 4 ? 'tui-c-green' : 'tui-c-amber'}`}
-                      >
-                        {readyCount}/4 PILLARS READY
-                      </span>
-                      {missingCount > 0 && (
-                        <button
-                          type="button"
-                          className="tui-btn primary"
-                          disabled={!!activeBusy}
-                          onClick={() => void w.bootstrapMissingPillars()}
-                        >
-                          [b: Bootstrap Missing ({missingCount})]
-                        </button>
-                      )}
-                    </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`tui-btn${rulesSection === 'trust' ? ' primary' : ''}`}
+                      onClick={() => setRulesSection('trust')}
+                    >
+                      [1. Trust &amp; Model Routing]
+                    </button>
+                    <button
+                      type="button"
+                      className={`tui-btn${rulesSection === 'bootstrap' ? ' primary' : ''}`}
+                      onClick={() => setRulesSection('bootstrap')}
+                    >
+                      [2. Repo Bootstrap ({readyCount}/4)]
+                    </button>
                   </div>
-                  <table className="tui-table" aria-label="TUI environment bootstrap checklist">
-                    <thead>
-                      <tr>
-                        <th>PILLAR</th>
-                        <th>TARGET FILE</th>
-                        <th>STATUS</th>
-                        <th>ACTION</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bootstrapPillars.map((pillar) => (
-                        <tr key={pillar.id}>
-                          <td>
-                            <strong className="tui-c-accent">{pillar.title}</strong>
-                            <div className="tui-sub">{pillar.summary}</div>
-                          </td>
-                          <td>
-                            <code>{pillar.detectedPath || pillar.targetPath}</code>
-                          </td>
-                          <td>
-                            <span
-                              className={`tui-badge ${pillar.ready ? 'tui-c-green' : 'tui-c-amber'}`}
-                            >
-                              {pillar.statusLabel}
-                            </span>
-                          </td>
-                          <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {!pillar.ready && (
-                              <button
-                                type="button"
-                                className="tui-btn primary"
-                                disabled={!!activeBusy}
-                                onClick={() => void w.bootstrapPillar(pillar.id)}
-                              >
-                                [Bootstrap {pillar.targetPath}]
-                              </button>
-                            )}
-                            {pillar.ready && pillar.detectedPath && (
-                              <button
-                                type="button"
-                                className="tui-btn"
-                                disabled={!!activeBusy}
-                                onClick={() => void w.openFile(pillar.detectedPath!)}
-                              >
-                                [Inspect {pillar.detectedPath}]
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <span className="tui-sub">h/l switch section</span>
                 </div>
 
-                <div className="tui-split-main">
-                  <div className="tui-box">
-                    <span className="tui-box-title">
-                      WORKSPACE TRUST &amp; AGENTS.MD (t toggle trust)
-                    </span>
-                    <span className="tui-box-meta">BOUNDARIES</span>
+                {rulesSection === 'bootstrap' ? (
+                  <div className="tui-box focused">
                     <div
-                      style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px',
+                        marginBottom: '8px',
+                      }}
                     >
-                      <button
-                        type="button"
-                        className="tui-btn primary"
-                        onClick={() => void w.setWorkspaceTrust(s.workspaceTrust === false)}
+                      <span className="tui-box-title">
+                        STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span
+                          className={`tui-badge ${readyCount === 4 ? 'tui-c-green' : 'tui-c-amber'}`}
+                        >
+                          {readyCount}/4 PILLARS READY
+                        </span>
+                        {missingCount > 0 && (
+                          <button
+                            type="button"
+                            className="tui-btn primary"
+                            disabled={!!activeBusy}
+                            onClick={() => void w.bootstrapMissingPillars()}
+                          >
+                            [b: Bootstrap Missing ({missingCount})]
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          disabled={!!activeBusy}
+                          onClick={() => void w.runBootstrapToolchain()}
+                        >
+                          [Run mise trust &amp;&amp; mise install]
+                        </button>
+                      </div>
+                    </div>
+                    {s.bootstrapExec && s.bootstrapExec.steps.length > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '6px',
+                          flexWrap: 'wrap',
+                          marginBottom: '8px',
+                        }}
                       >
-                        [{s.workspaceTrust !== false ? 'Revoke Trust' : 'Grant Workspace Trust'}]
-                      </button>
-                      <button
-                        type="button"
-                        className="tui-btn"
-                        onClick={() => void w.openProjectInstructions()}
-                      >
-                        [Reload AGENTS.md]
-                      </button>
-                    </div>
-                    <pre className="tui-pre">
-                      {s.projectInstructions?.existing_content ||
-                        s.instructionPreview?.existing_content ||
-                        'AGENTS.md rules enforce surgical diffs, passing tests, and explicit Apply.'}
-                    </pre>
-                  </div>
-                  <div className="tui-box">
-                    <span className="tui-box-title">
-                      4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)
-                    </span>
-                    <span className="tui-box-meta">MODELS</span>
-                    <div className="tui-sub">
-                      Stage 1 (Create): <code className="tui-c-accent">{models.create}</code>
-                    </div>
-                    <div className="tui-sub">
-                      Stage 2 (Test): <code className="tui-c-green">{models.test}</code>
-                    </div>
-                    <div className="tui-sub" style={{ marginBottom: '8px' }}>
-                      Stage 3 (Critic): <code className="tui-c-purple">{models.review}</code>
-                    </div>
-                    <table className="tui-table" aria-label="Model presets">
+                        {s.bootstrapExec.steps.map((step) => (
+                          <span
+                            key={step.command}
+                            className={`tui-badge ${
+                              step.state === 'passed'
+                                ? 'tui-c-green'
+                                : step.state === 'failed'
+                                  ? 'tui-c-red'
+                                  : 'tui-c-amber'
+                            }`}
+                          >
+                            {step.command}: {step.state}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <table className="tui-table" aria-label="TUI environment bootstrap checklist">
                       <thead>
                         <tr>
-                          <th>PRESET</th>
+                          <th>PILLAR</th>
+                          <th>TARGET FILE</th>
                           <th>STATUS</th>
+                          <th>ACTION</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {modelPresets.map((preset, idx) => {
-                          const active = isModelPresetActive(s, preset);
-                          return (
-                            <tr
-                              key={preset.id}
-                              className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
-                              onClick={() => {
-                                setSelectedIdx(idx);
-                                w.applyModelPreset(preset);
-                              }}
-                            >
-                              <td>
-                                {idx === clampedIdx && (
-                                  <span className="tui-cursor-indicator" aria-hidden="true">
-                                    &gt;
-                                  </span>
-                                )}
-                                {preset.name}
-                              </td>
-                              <td>
-                                {active ? (
-                                  <span className="tui-badge tui-c-green">ACTIVE</span>
-                                ) : (
-                                  <span className="tui-c-muted">Enter to apply</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {bootstrapPillars.map((pillar) => (
+                          <tr key={pillar.id}>
+                            <td>
+                              <strong className="tui-c-accent">{pillar.title}</strong>
+                              <div className="tui-sub">{pillar.summary}</div>
+                            </td>
+                            <td>
+                              <code>{pillar.detectedPath || pillar.targetPath}</code>
+                            </td>
+                            <td>
+                              <span
+                                className={`tui-badge ${pillar.ready ? 'tui-c-green' : 'tui-c-amber'}`}
+                              >
+                                {pillar.statusLabel}
+                              </span>
+                            </td>
+                            <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              {!pillar.ready && (
+                                <button
+                                  type="button"
+                                  className="tui-btn primary"
+                                  disabled={!!activeBusy}
+                                  onClick={() => void w.bootstrapPillar(pillar.id)}
+                                >
+                                  [Bootstrap {pillar.targetPath}]
+                                </button>
+                              )}
+                              {pillar.ready && pillar.detectedPath && (
+                                <button
+                                  type="button"
+                                  className="tui-btn"
+                                  disabled={!!activeBusy}
+                                  onClick={() => void w.openFile(pillar.detectedPath!)}
+                                >
+                                  [Inspect {pillar.detectedPath}]
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                ) : (
+                  <div className="tui-split-main">
+                    <div className="tui-box focused">
+                      <span className="tui-box-title">
+                        WORKSPACE TRUST &amp; AGENTS.MD (t toggle trust)
+                      </span>
+                      <span className="tui-box-meta">BOUNDARIES</span>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '8px',
+                          marginBottom: '8px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          onClick={() => void w.setWorkspaceTrust(s.workspaceTrust === false)}
+                        >
+                          [{s.workspaceTrust !== false ? 'Revoke Trust' : 'Grant Workspace Trust'}]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          onClick={() => void w.openProjectInstructions()}
+                        >
+                          [Reload AGENTS.md]
+                        </button>
+                      </div>
+                      <pre className="tui-pre">
+                        {s.projectInstructions?.existing_content ||
+                          s.instructionPreview?.existing_content ||
+                          'AGENTS.md rules enforce surgical diffs, passing tests, and explicit Apply.'}
+                      </pre>
+                    </div>
+                    <div className="tui-box">
+                      <span className="tui-box-title">
+                        4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)
+                      </span>
+                      <span className="tui-box-meta">MODELS</span>
+                      <div className="tui-sub">
+                        Stage 1 (Create): <code className="tui-c-accent">{models.create}</code>
+                      </div>
+                      <div className="tui-sub">
+                        Stage 2 (Test): <code className="tui-c-green">{models.test}</code>
+                      </div>
+                      <div className="tui-sub" style={{ marginBottom: '8px' }}>
+                        Stage 3 (Critic): <code className="tui-c-purple">{models.review}</code>
+                      </div>
+                      <table className="tui-table" aria-label="Model presets">
+                        <thead>
+                          <tr>
+                            <th>PRESET</th>
+                            <th>STATUS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modelPresets.map((preset, idx) => {
+                            const active = isModelPresetActive(s, preset);
+                            return (
+                              <tr
+                                key={preset.id}
+                                className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                                onClick={() => {
+                                  setSelectedIdx(idx);
+                                  w.applyModelPreset(preset);
+                                }}
+                              >
+                                <td>
+                                  {idx === clampedIdx && (
+                                    <span className="tui-cursor-indicator" aria-hidden="true">
+                                      &gt;
+                                    </span>
+                                  )}
+                                  {preset.name}
+                                </td>
+                                <td>
+                                  {active ? (
+                                    <span className="tui-badge tui-c-green">ACTIVE</span>
+                                  ) : (
+                                    <span className="tui-c-muted">Enter to apply</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}

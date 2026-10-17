@@ -240,6 +240,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("DELETE /api/projects/current/scan", projectHandler.CancelGoScan)
 	mux.HandleFunc("GET /api/projects/current/execution-trust", projectHandler.ExecutionTrust)
 	mux.HandleFunc("POST /api/projects/current/execution-trust", projectHandler.TrustProjectExecution)
+	mux.HandleFunc("POST /api/projects/current/bootstrap/exec", projectHandler.BootstrapExec)
 	mux.HandleFunc("GET /api/projects/current/index", projectHandler.Index)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
 	mux.HandleFunc("GET /api/projects/current/files/symbols", projectHandler.Symbols)

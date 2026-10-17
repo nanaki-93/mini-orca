@@ -113,6 +113,7 @@ export interface State {
   workflowModels?: M.ChangeWorkflowModels;
   modelPresets?: ModelPreset[];
   workspaceTrust?: boolean;
+  bootstrapExec?: M.BootstrapExecResult;
 }
 export interface ModelPreset {
   id: string;
@@ -3227,26 +3228,59 @@ export class Workspace {
       this.set({ notice: `Saved ${path} (Undo available).` });
     });
   }
+  private async executeBootstrapHooks() {
+    const execRes = await this.api
+      .post<M.BootstrapExecResult>(`${current}/bootstrap/exec`, {
+        project_revision: this.identity().project_revision,
+        confirm: true,
+      })
+      .catch(() => undefined);
+    if (execRes) this.set({ bootstrapExec: execRes });
+    return execRes;
+  }
+  async runBootstrapToolchain() {
+    await this.act('Run mise trust && mise install', async () => {
+      const execRes = await this.executeBootstrapHooks();
+      const summary = execRes?.steps.map((s) => `${s.command} (${s.state})`).join(' · ');
+      this.set({
+        notice: summary
+          ? `Toolchain synced: ${summary}.`
+          : 'No .mise.toml or lefthook.yml found in this repository.',
+      });
+    });
+  }
   async bootstrapPillar(pillarId: BootstrapChecklistPillar['id']) {
     await this.act('Bootstrap repository pillar', async () => {
       const pillar = evaluateBootstrapChecklist(this.state).find((item) => item.id === pillarId);
       if (!pillar) return;
       await this.applyDirectFile(pillar.targetPath, pillar.templateContent);
-      this.set({ notice: `Bootstrapped ${pillar.targetPath} (Undo available).` });
+      const execRes =
+        pillar.id === 'toolchain' || pillar.id === 'precommit'
+          ? await this.executeBootstrapHooks()
+          : undefined;
+      const hookNote = execRes?.steps.length
+        ? ` · ${execRes.steps.map((s) => `${s.command}: ${s.state}`).join(', ')}`
+        : '';
+      this.set({ notice: `Bootstrapped ${pillar.targetPath}${hookNote} (Undo available).` });
     });
   }
   async bootstrapMissingPillars() {
     await this.act('Bootstrap repository workflow', async () => {
       const missing = evaluateBootstrapChecklist(this.state).filter((item) => !item.ready);
       if (!missing.length) {
+        await this.executeBootstrapHooks();
         this.set({ notice: 'All 4 repository bootstrap pillars are already ready.' });
         return;
       }
       for (const pillar of missing) {
         await this.applyDirectFile(pillar.targetPath, pillar.templateContent);
       }
+      const execRes = await this.executeBootstrapHooks();
+      const hookNote = execRes?.steps.length
+        ? ` · ${execRes.steps.map((s) => `${s.command}: ${s.state}`).join(', ')}`
+        : '';
       this.set({
-        notice: `Bootstrapped ${missing.map((p) => p.targetPath).join(', ')} (Undo available).`,
+        notice: `Bootstrapped ${missing.map((p) => p.targetPath).join(', ')}${hookNote} (Undo available).`,
       });
     });
   }
