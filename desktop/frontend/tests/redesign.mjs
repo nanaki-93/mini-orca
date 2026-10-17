@@ -185,12 +185,23 @@ try {
       await page.getByText('Selected Issue Inspector', { exact: true }).waitFor();
       await page.getByRole('button', { name: 'Full Details', exact: true }).waitFor();
 
+      // Verify open findings whose analysis freshness is stale still keep the Fix button enabled
+      await page.evaluate(() => {
+        window.fixture.state.finding.freshness = 'stale';
+      });
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await firstRow.getByRole('button', { name: 'Fix', exact: true }).isEnabled(),
+        true,
+      );
+
       await page.getByRole('button', { name: /^Features \(/ }).click();
       await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
       await page.getByRole('button', { name: 'Save idea', exact: true }).waitFor();
       await page
         .locator('.results-inspector-panel')
-        .getByRole('button', { name: 'Fix with Agent', exact: true })
+        .getByRole('button', { name: 'Fix', exact: true })
         .waitFor();
     } finally {
       await close();
@@ -360,14 +371,14 @@ try {
 
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Fix', exact: true }).first().click();
       await idle(page);
       await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
 
       const workflowReq = await page.evaluate(() =>
         window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
       );
-      assert.ok(workflowReq, 'Fix with Agent dispatches a workflow request');
+      assert.ok(workflowReq, 'Fix dispatches a workflow request');
       assert.deepEqual(workflowReq.body.models, {
         create: 'pi:lm-studio/qwen/local',
         test: 'agy:gemini-4-argon-high',
@@ -524,7 +535,7 @@ try {
       await nav(page, 'Features');
       await idle(page);
       await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Fix', exact: true }).first().click();
       await idle(page);
       await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
 
@@ -548,10 +559,10 @@ try {
   await test('Agents in Progress Dashboard, Agent/Issue Detail page, and interactive Terminal UI (TUI) mode', async () => {
     const { page, close } = await pageFor({ trusted: true, featuresReady: true });
     try {
-      // 1. Dispatch Fix with Agent from Issues & Ideas -> lands on Agents in Progress Dashboard
+      // 1. Dispatch Fix from Issues & Ideas -> lands on Agents in Progress Dashboard
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Fix', exact: true }).first().click();
       await idle(page);
 
       await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();

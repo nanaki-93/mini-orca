@@ -2,7 +2,6 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 're
 import type * as M from './models';
 import {
   workspace as w,
-  activeChangeWorkflow,
   findingCategory,
   inProgressFindingTargets,
   isTestFilePath,
@@ -510,7 +509,7 @@ export function Results({ s }: { s: State }) {
     void w.startAgentFix(preparedSeed);
   };
   const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
-  const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
+  const fixDisabled = !!s.busy || detail?.status === 'fixed';
   const detailPanel = detail ? (
     <div className="workspace-page results-page results-detail guided-fix" data-accent={category}>
       <div className="row between wrap fix-back">
@@ -604,7 +603,7 @@ export function Results({ s }: { s: State }) {
               disabled={fixDisabled}
               onClick={() => void w.startAgentFix(seed)}
             >
-              Fix with Agent
+              Fix
             </Button>
           </div>
         </Panel>
@@ -1074,7 +1073,7 @@ export function Results({ s }: { s: State }) {
                 <Button
                   tone="primary small"
                   icon="sparkles"
-                  disabled={!!s.busy || selectedRows.some((r) => r.freshness === 'stale')}
+                  disabled={!!s.busy}
                   onClick={() => triggerBatchFix(selectedRows)}
                 >
                   Fix Selected ({selectedRows.length})
@@ -1197,12 +1196,12 @@ export function Results({ s }: { s: State }) {
                         <>
                           <Badge
                             value={
-                              rowAgent.status === 'committed'
+                              rowAgent.status === 'completed' || rowAgent.mergeable
                                 ? `Committed in ${rowAgent.branch}`
-                                : `Step ${rowAgent.stepNumber}/4 · ${rowAgent.stageLabel}`
+                                : rowAgent.stageLabel
                             }
                             tone={
-                              rowAgent.status === 'committed'
+                              rowAgent.status === 'completed' || rowAgent.mergeable
                                 ? 'green'
                                 : rowAgent.status === 'running'
                                   ? 'violet'
@@ -1221,9 +1220,7 @@ export function Results({ s }: { s: State }) {
                     </small>
                   </span>
                   <div className="finding-inline-actions" style={{ display: 'flex', gap: '6px' }}>
-                    {!showFeatures &&
-                    rowAgent &&
-                    ['running', 'review', 'committed'].includes(rowAgent.status) ? (
+                    {!showFeatures && row.status !== 'fixed' && rowAgent ? (
                       <Button
                         tone="primary small"
                         icon="sparkles"
@@ -1238,7 +1235,7 @@ export function Results({ s }: { s: State }) {
                       <Button
                         tone="primary small"
                         icon="sparkles"
-                        disabled={!!s.busy || row.freshness === 'stale'}
+                        disabled={!!s.busy || row.status === 'fixed'}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (showFeatures) {
@@ -1251,7 +1248,7 @@ export function Results({ s }: { s: State }) {
                           }
                         }}
                       >
-                        Fix with Agent
+                        Fix
                       </Button>
                     )}
                   </div>
@@ -1272,7 +1269,7 @@ export function Results({ s }: { s: State }) {
               }
               detail={
                 inProgressOnly
-                  ? 'Select one or more open issues and click Fix with Agent to dispatch an agent.'
+                  ? 'Select one or more open issues and click Fix to dispatch an agent.'
                   : unique.length
                     ? 'Try clearing the search or priority filter.'
                     : results
@@ -1416,9 +1413,7 @@ export function Results({ s }: { s: State }) {
                       <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
                         <Badge value={inspectorAgent.branch} tone="violet" />
                         <span className="small">
-                          <strong>
-                            Step {inspectorAgent.stepNumber}/4 · {inspectorAgent.stageLabel}
-                          </strong>
+                          <strong>{inspectorAgent.stageLabel}</strong>
                         </span>
                         {inspectorAgent.hasProblem && <Badge value="Needs Attention" tone="red" />}
                         {inspectorAgent.commitOid && (
@@ -1430,7 +1425,7 @@ export function Results({ s }: { s: State }) {
                       <span className="small muted">
                         {inspectorAgent.hasProblem
                           ? inspectorAgent.problemSummary
-                          : inspectorAgent.status === 'committed'
+                          : inspectorAgent.status === 'completed' || inspectorAgent.mergeable
                             ? `Committed on worktree branch ${inspectorAgent.branch}. Merge into ${s.repository?.branch || 'main'} to mark Done.`
                             : 'An agent is working on this issue.'}
                       </span>
@@ -1485,16 +1480,16 @@ export function Results({ s }: { s: State }) {
                   <Button
                     tone="primary"
                     icon="sparkles"
-                    disabled={!!s.busy}
+                    disabled={!!s.busy || inspectorRow.status === 'fixed'}
                     onClick={() => triggerFix(inspectorRow)}
                   >
-                    Fix with Agent
+                    Fix
                   </Button>
                 ) : (
                   <Button
                     tone="primary"
                     icon="sparkles"
-                    disabled={!!s.busy}
+                    disabled={!!s.busy || inspectorRow.status === 'fixed'}
                     onClick={() => {
                       const idea = s.features?.suggestions.find(
                         (item) => `feature:${item.id}` === inspectorRow.key,
@@ -1502,7 +1497,7 @@ export function Results({ s }: { s: State }) {
                       if (idea) void w.discussFeature(idea);
                     }}
                   >
-                    Fix with Agent
+                    Fix
                   </Button>
                 )}
                 {inspectorRow.path && (

@@ -374,7 +374,7 @@ export function TuiApp({
       message: `Address this finding: ${issue.title}\nLocation: ${issue.path}${issue.line ? `:${issue.line}` : ''}\nCause: ${issue.cause}\nProposed solution: ${issue.solution}`,
       acceptance_criteria: issue.acceptance_criteria,
     });
-    setCmdOutput(`Dispatched Fix with Agent for ${issue.name} (${issue.path})`);
+    setCmdOutput(`Dispatched Fix for ${issue.name} (${issue.path})`);
     void w.startAgentFix(seed);
   };
 
@@ -1167,13 +1167,13 @@ export function TuiApp({
                             <button
                               type="button"
                               className="tui-btn primary"
-                              disabled={!!s.busy || running}
+                              disabled={!!s.busy}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 dispatchIssueToAgent(iss);
                               }}
                             >
-                              [Fix with Agent]
+                              [Fix]
                             </button>
                           </td>
                         </tr>
@@ -1249,7 +1249,7 @@ export function TuiApp({
                 }}
               >
                 <span className="tui-box-title">
-                  ISSUES QUEUE (j/k move · h/l filter · x select · d dismiss · Enter/a agent fix)
+                  ISSUES QUEUE (j/k move · h/l filter · x select · d dismiss · Enter/a fix)
                 </span>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   <button
@@ -1339,7 +1339,7 @@ export function TuiApp({
                         )
                       }
                     >
-                      [Fix Selected with Agent ({selectedIssueIds.length})]
+                      [Fix Selected ({selectedIssueIds.length})]
                     </button>
                     <button
                       type="button"
@@ -1354,7 +1354,7 @@ export function TuiApp({
               {issues.length === 0 ? (
                 <p className="tui-sub">
                   {issueView === 'in_progress'
-                    ? 'No issues in progress. Select open issues and press [a] or click [Fix with Agent].'
+                    ? 'No issues in progress. Select open issues and press [a] or click [Fix].'
                     : issueView === 'done'
                       ? 'No merged issues yet. Issues are marked Done when their agent branch is merged.'
                       : 'No open findings.'}
@@ -1425,9 +1425,7 @@ export function TuiApp({
                             </span>
                           ) : iss.agent ? (
                             <span style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
-                              <span className="tui-badge tui-c-purple">
-                                Step {iss.agent.stepNumber}/4 · {iss.agent.stageLabel}
-                              </span>
+                              <span className="tui-badge tui-c-purple">{iss.agent.stageLabel}</span>
                               {iss.agent.hasProblem && (
                                 <span className="tui-badge tui-c-red">PROBLEM</span>
                               )}
@@ -1458,7 +1456,7 @@ export function TuiApp({
                                 dispatchIssueToAgent(iss);
                               }}
                             >
-                              [Fix with Agent]
+                              [Fix]
                             </button>
                           ) : null}
                         </td>
@@ -1491,9 +1489,7 @@ export function TuiApp({
                     >
                       <div>
                         <strong className="tui-c-purple">{selectedIssue.agent.branch}</strong> ·{' '}
-                        <span>
-                          Step {selectedIssue.agent.stepNumber}/4 · {selectedIssue.agent.stageLabel}
-                        </span>
+                        <span>{selectedIssue.agent.stageLabel}</span>
                       </div>
                       {selectedIssue.agent.hasProblem && (
                         <div className="tui-c-red">
@@ -1526,7 +1522,7 @@ export function TuiApp({
                         disabled={!!s.busy}
                         onClick={() => dispatchIssueToAgent(selectedIssue)}
                       >
-                        [a] Fix with Agent
+                        [a] Fix
                       </button>
                     ) : null}
                     <button
@@ -2574,7 +2570,7 @@ export function TuiApp({
                             void w.discussFeature(idea);
                           }}
                         >
-                          [Fix with Agent]
+                          [Fix]
                         </button>
                         <button
                           type="button"
@@ -3190,7 +3186,7 @@ export function TuiApp({
                       <td>
                         <strong className="tui-key">a</strong>
                       </td>
-                      <td>Dispatch Fix with Agent / Open Agent</td>
+                      <td>Dispatch Fix / Open Agent</td>
                     </tr>
                     <tr>
                       <td>
