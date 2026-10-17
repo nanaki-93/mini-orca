@@ -1717,6 +1717,24 @@ export function installFixture(options = {}) {
               ],
             });
           }
+          if (path.endsWith('/bootstrap/exec')) {
+            state.trusted = true;
+            const steps = [];
+            if (state.files.some((f) => f.path.toLowerCase() === '.mise.toml')) {
+              steps.push({
+                command: 'mise trust && mise install',
+                state: 'passed',
+                output: 'mise ok',
+              });
+            }
+            if (state.files.some((f) => f.path.toLowerCase() === 'lefthook.yml')) {
+              steps.push({ command: 'lefthook install', state: 'passed', output: 'lefthook ok' });
+            }
+            return response({
+              ...rev,
+              steps,
+            });
+          }
           if (path.endsWith('/scan')) {
             if (method === 'POST')
               state.scan = {

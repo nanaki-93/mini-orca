@@ -963,6 +963,8 @@ try {
       await nav(page, 'Settings & Rules');
       await idle(page);
 
+      // Switch to dedicated 4. Repo Bootstrap (1/4) sub-view tab
+      await page.getByRole('tab', { name: /^4\. Repo Bootstrap \(1\/4\)/ }).click();
       await page
         .getByRole('heading', { name: 'Environment Bootstrap Checklist', exact: true })
         .waitFor();
@@ -978,11 +980,12 @@ try {
       await page.getByText('2/4 Pillars Ready', { exact: true }).waitFor();
       await page.getByText('Ready (justfile)', { exact: true }).waitFor();
 
-      // Switch to TUI mode and open [0] Rules to bootstrap the remaining 2 pillars (.mise.toml and lefthook.yml)
+      // Switch to TUI mode, open [0] Rules -> [2. Repo Bootstrap (2/4)], and bootstrap remaining 2 pillars (.mise.toml and lefthook.yml)
       await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
       const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
       await tui.waitFor();
       await page.getByRole('button', { name: /\[0\] Rules/ }).click();
+      await page.getByRole('button', { name: /\[2\. Repo Bootstrap \(2\/4\)\]/ }).click();
       await page
         .getByText('STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)', {
           exact: true,
@@ -993,12 +996,16 @@ try {
       await page.getByRole('button', { name: '[b: Bootstrap Missing (2)]', exact: true }).click();
       await idle(page);
       await page.getByText('4/4 PILLARS READY', { exact: true }).waitFor();
+      await page.getByText('mise trust && mise install: passed', { exact: true }).waitFor();
+      await page.getByText('lefthook install: passed', { exact: true }).waitFor();
 
-      // Return to GUI and verify 4/4 Pillars Ready
+      // Return to GUI and verify 4/4 Pillars Ready and mise trust && mise install status
       const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
       await cmdPrompt.fill(':gui');
       await cmdPrompt.press('Enter');
+      await page.getByRole('tab', { name: /^4\. Repo Bootstrap \(4\/4\)/ }).click();
       await page.getByText('4/4 Pillars Ready', { exact: true }).waitFor();
+      await page.getByText('mise trust && mise install: passed', { exact: true }).waitFor();
     } finally {
       await close();
     }

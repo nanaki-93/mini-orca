@@ -253,6 +253,21 @@ func (h *ProjectHandler) TrustProjectExecution(w http.ResponseWriter, r *http.Re
 	api.WriteJSON(w, http.StatusOK, trust)
 }
 
+// BootstrapExec executes `mise trust && mise install` and `lefthook install`
+// in the active project root under explicit local execution trust.
+func (h *ProjectHandler) BootstrapExec(w http.ResponseWriter, r *http.Request) {
+	var request executionTrustRequest
+	if !decodeStrictJSON(w, r, &request, "invalid bootstrap exec request", "Provide project_revision and confirm: true.") || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	result, err := h.service.ExecuteBootstrapToolchain(r.Context(), request.ProjectRevision, request.Confirm)
+	if err != nil {
+		api.WriteAppError(w, api.BadRequest("bootstrap toolchain execution failed", "Confirm local execution trust before running mise and lefthook.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, result)
+}
+
 // GoScanProgress reads source-free persisted progress for the active revision.
 func (h *ProjectHandler) GoScanProgress(w http.ResponseWriter, r *http.Request) {
 	revision := r.URL.Query().Get("project_revision")

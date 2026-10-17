@@ -710,3 +710,11 @@ export interface InstructionPreview extends ProjectIdentity {
     fingerprint: string;
   };
 }
+export interface BootstrapExecStep {
+  command: string;
+  state: string;
+  output?: string;
+}
+export interface BootstrapExecResult extends ProjectIdentity {
+  steps: BootstrapExecStep[];
+}
