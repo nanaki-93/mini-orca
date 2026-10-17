@@ -1,6 +1,6 @@
 import { useWorkspace } from './workspace-context';
 import { useEffect, useState } from 'react';
-import { type State } from './workspace';
+import { evaluateBootstrapChecklist, type State } from './workspace';
 import { Badge, Button, Disclosure, Heading, Notice, Panel, Prose } from './ui';
 import type { InstructionPreview } from './models';
 
@@ -294,6 +294,108 @@ export function Instructions({ s }: { s: State }) {
               </label>
             </div>
           </Panel>
+
+          {(() => {
+            const pillars = evaluateBootstrapChecklist(s);
+            const readyCount = pillars.filter((p) => p.ready).length;
+            const missingCount = pillars.length - readyCount;
+            return (
+              <Panel
+                title="Environment Bootstrap Checklist"
+                actions={
+                  <Badge
+                    value={`${readyCount}/4 Pillars Ready`}
+                    tone={readyCount === 4 ? 'green' : 'amber'}
+                  />
+                }
+              >
+                <div className="stack">
+                  <div className="row between wrap" style={{ gap: '12px' }}>
+                    <p className="small muted">
+                      Standardizes repository entrypoints (<code>justfile</code>), pinned toolchains
+                      (<code>.mise.toml</code>), concise agent contracts (<code>AGENTS.md</code>{' '}
+                      &lt;150 lines), and fast parallel pre-commit gates (<code>lefthook.yml</code>{' '}
+                      + <code>gitleaks</code>).
+                    </p>
+                    {missingCount > 0 && (
+                      <div className="actions">
+                        <Button
+                          tone="primary"
+                          disabled={!!s.busy}
+                          onClick={() => void w.bootstrapMissingPillars()}
+                        >
+                          Bootstrap Missing Pillars ({missingCount})
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="stack" role="list" aria-label="Environment bootstrap checklist">
+                    {pillars.map((pillar) => (
+                      <div
+                        key={pillar.id}
+                        role="listitem"
+                        className="row between wrap"
+                        style={{
+                          gap: '12px',
+                          padding: '10px 12px',
+                          border: '1px solid var(--line)',
+                          borderRadius: '8px',
+                          background: 'var(--bg-soft)',
+                        }}
+                      >
+                        <div className="list-copy" style={{ flex: '1 1 280px' }}>
+                          <div className="row wrap" style={{ gap: '8px' }}>
+                            <strong>{pillar.title}</strong>
+                            <Badge
+                              value={pillar.statusLabel}
+                              tone={pillar.ready ? 'green' : 'amber'}
+                            />
+                          </div>
+                          <p className="small muted">{pillar.summary}</p>
+                        </div>
+                        <div className="actions">
+                          {!pillar.ready && (
+                            <Button
+                              tone="primary"
+                              disabled={!!s.busy}
+                              onClick={() => void w.bootstrapPillar(pillar.id)}
+                            >
+                              Bootstrap {pillar.targetPath}
+                            </Button>
+                          )}
+                          {pillar.id === 'contract' && (
+                            <Button
+                              tone="ghost"
+                              disabled={!!s.busy}
+                              onClick={async () => {
+                                setPath('AGENTS.md');
+                                if (!ready || path !== 'AGENTS.md') {
+                                  await w.loadInstructions('AGENTS.md');
+                                }
+                                setContent(pillar.templateContent);
+                                setEditing(true);
+                              }}
+                            >
+                              Load Concise Template
+                            </Button>
+                          )}
+                          {pillar.ready && pillar.detectedPath && (
+                            <Button
+                              tone="ghost"
+                              disabled={!!s.busy}
+                              onClick={() => void w.openFile(pillar.detectedPath!)}
+                            >
+                              Inspect {pillar.detectedPath}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Panel>
+            );
+          })()}
 
           <section className="stack" aria-label="Instruction draft">
             <Panel title="Choose instruction scope">

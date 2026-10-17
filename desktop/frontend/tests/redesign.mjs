@@ -956,6 +956,53 @@ try {
       await close();
     }
   });
+
+  await test('Environment Bootstrap Checklist audits and bootstraps 4 repository pillars in GUI and TUI', async () => {
+    const { page, close } = await pageFor({ git: true, trusted: true });
+    try {
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+
+      await page
+        .getByRole('heading', { name: 'Environment Bootstrap Checklist', exact: true })
+        .waitFor();
+      await page.getByText('1/4 Pillars Ready', { exact: true }).waitFor();
+      await page.getByText('1. Standardize the Repo Entrypoint', { exact: true }).waitFor();
+      await page.getByText('2. Pin the Toolchain', { exact: true }).waitFor();
+      await page.getByText('3. Write the Agent Contract (<150 lines)', { exact: true }).waitFor();
+      await page.getByText('4. Enforce Fast Pre-Commit Gates', { exact: true }).waitFor();
+
+      // Bootstrap Pillar 1 (justfile) in GUI
+      await page.getByRole('button', { name: 'Bootstrap justfile', exact: true }).click();
+      await idle(page);
+      await page.getByText('2/4 Pillars Ready', { exact: true }).waitFor();
+      await page.getByText('Ready (justfile)', { exact: true }).waitFor();
+
+      // Switch to TUI mode and open [0] Rules to bootstrap the remaining 2 pillars (.mise.toml and lefthook.yml)
+      await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
+      const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
+      await tui.waitFor();
+      await page.getByRole('button', { name: /\[0\] Rules/ }).click();
+      await page
+        .getByText('STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)', {
+          exact: true,
+        })
+        .waitFor();
+      await page.getByText('2/4 PILLARS READY', { exact: true }).waitFor();
+
+      await page.getByRole('button', { name: '[b: Bootstrap Missing (2)]', exact: true }).click();
+      await idle(page);
+      await page.getByText('4/4 PILLARS READY', { exact: true }).waitFor();
+
+      // Return to GUI and verify 4/4 Pillars Ready
+      const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
+      await cmdPrompt.fill(':gui');
+      await cmdPrompt.press('Enter');
+      await page.getByText('4/4 Pillars Ready', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();
