@@ -242,7 +242,15 @@ export function TuiApp({
   const [showNewMissionForm, setShowNewMissionForm] = useState(false);
   const [showKeybindsModal, setShowKeybindsModal] = useState(false);
   const [docsSection, setDocsSection] = useState<TuiDocsSection>('context');
-  const [rulesSection, setRulesSection] = useState<'trust' | 'bootstrap'>('trust');
+  const [rulesSection, setRulesSection] = useState<'trust' | 'bootstrap'>(
+    s.instructionsTab === 'bootstrap' ? 'bootstrap' : 'trust',
+  );
+  useEffect(() => {
+    if (s.instructionsTab === 'bootstrap') {
+      setRulesSection('bootstrap');
+      w.set({ instructionsTab: undefined });
+    }
+  }, [s.instructionsTab]);
   const [selectedAgentStage, setSelectedAgentStage] = useState<StageId | 'all'>('all');
   const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'diff'>('auto');
   const [editorPrompt, setEditorPrompt] = useState('');
@@ -1068,7 +1076,7 @@ export function TuiApp({
                 <div className="tui-stat tui-c-green">
                   {s.scan ? human(s.scan.status) : 'Ready'}
                 </div>
-                <div className="tui-sub">
+                <div className="tui-sub" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="tui-btn"
@@ -1076,6 +1084,15 @@ export function TuiApp({
                     onClick={() => void w.scanProject(false)}
                   >
                     [Run Tests]
+                  </button>
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!s.busy}
+                    onClick={() => void w.openRepoBootstrap()}
+                  >
+                    [Repo Readiness ({evaluateBootstrapChecklist(s).filter((p) => p.ready).length}
+                    /4)]
                   </button>
                 </div>
               </div>
