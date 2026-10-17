@@ -1070,6 +1070,16 @@ export function AgentsWorkspace({ s }: { s: State }) {
             {currentAgentItem && (
               <Badge value={currentAgentItem.stageLabel} tone={currentAgentItem.tone} />
             )}
+            {workflow?.auto_repair && (
+              <Badge
+                value={
+                  workflow.auto_repair_attempts
+                    ? `Auto-Heal: ${workflow.auto_repair_attempts}/2`
+                    : 'Auto-Heal: ON'
+                }
+                tone="blue"
+              />
+            )}
             {commitOid && <Badge value={`#${commitOid.slice(0, 7)}`} tone="green" />}
           </span>
         }

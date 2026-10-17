@@ -1759,6 +1759,15 @@ export function TuiApp({
                 )}
               </div>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {workflow?.auto_repair && (
+                  <span className="tui-badge tui-c-cyan">
+                    [
+                    {workflow.auto_repair_attempts
+                      ? `AUTO-HEAL: ${workflow.auto_repair_attempts}/2`
+                      : 'AUTO-HEAL: ON'}
+                    ]
+                  </span>
+                )}
                 {selectedAgentItem?.hasProblem && (
                   <span className="tui-badge tui-c-red">
                     [PROBLEM: {selectedAgentItem.problemSummary}]

@@ -2776,6 +2776,7 @@ export class Workspace {
             models,
             confirmed_profiles: profiles,
             confirm_security: seed.kind === 'security',
+            auto_repair: true,
           },
         );
         if (epoch !== this.epoch || operation !== this.operation || this.state.change?.id !== id)

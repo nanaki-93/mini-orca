@@ -550,3 +550,35 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 		t.Fatalf("expected rerun create message to include failed test error output, got %+v", rerunDone.Messages)
 	}
 }
+
+func TestChangeWorkflowAutonomousSelfHealingLoop(t *testing.T) {
+	var createCalls atomic.Int32
+	s, _, session := workflowService(t, [3]func() string{
+		func() string {
+			if createCalls.Add(1) == 1 {
+				return workflowImplementation
+			}
+			return strings.ReplaceAll(workflowImplementation, "return 2", "return 99")
+		},
+		func() string { return strings.ReplaceAll(workflowTests, "Helper() != 2", "Helper() != 99") },
+		func() string { return workflowApproval },
+	})
+	req := workflowRequest(session)
+	req.AutoRepair = true
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
+		t.Fatal(err)
+	}
+	healed := finishedWorkflow(t, s, session.ID)
+	if healed.Workflow.Status != "awaiting_human_review" || !healed.Workflow.AutoRepair || healed.Workflow.AutoRepairAttempts != 1 {
+		t.Fatalf("expected autonomous self-healing loop to succeed in 1 auto-repair attempt, got %+v", healed.Workflow)
+	}
+	foundAutoRepairPrompt := false
+	for _, msg := range healed.Messages {
+		if msg.Role == "user" && strings.Contains(msg.Content, "Previous check failures to resolve:") && strings.Contains(msg.Content, "wrong result") {
+			foundAutoRepairPrompt = true
+		}
+	}
+	if !foundAutoRepairPrompt {
+		t.Fatalf("expected auto-repair Stage 0 prompt to include failed test output, got %+v", healed.Messages)
+	}
+}

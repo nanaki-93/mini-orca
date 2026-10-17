@@ -57,7 +57,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	now := time.Now().UTC()
 	session.Revision++ // Invalidates operations admitted before this run.
-	w := &ChangeWorkflow{ID: fmt.Sprintf("%s-%d", id, session.Revision), Status: "running", Models: request.Models, StartedAt: now, UpdatedAt: now}
+	w := &ChangeWorkflow{ID: fmt.Sprintf("%s-%d", id, session.Revision), Status: "running", Models: request.Models, AutoRepair: request.AutoRepair, StartedAt: now, UpdatedAt: now}
 	for i, profile := range request.Models.selections() {
 		runtime := s.workflowStageRuntime(i, profile)
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
@@ -72,7 +72,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	delete(s.changeAuthority, session.ProjectID+"/"+id)
 	workCtx, cancel := context.WithTimeout(context.Background(), changeWorkflowBudget)
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
-	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, cancel: cancel, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.job = job
 	s.changeWorkflow.mu.Unlock()
@@ -109,16 +109,76 @@ func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWork
 	return s.requireProjectExecutionTrust(session.ProjectRevision)
 }
 
+const maxWorkflowAutoRepairs = 2
+
 func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) {
 	defer job.cancel()
 	defer close(job.done)
 	var runErr error
-	for stage := 0; stage < 3; stage++ {
-		if runErr = s.executeChangeWorkflowStage(ctx, job, stage, message); runErr != nil {
+	currentMessage := message
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			nextMsg, ok := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
+			if !ok {
+				break
+			}
+			currentMessage = nextMsg
+		}
+		for stage := 0; stage < 3; stage++ {
+			if runErr = s.executeChangeWorkflowStage(ctx, job, stage, currentMessage); runErr != nil {
+				break
+			}
+		}
+		if !job.autoRepair || attempt >= maxWorkflowAutoRepairs || !s.shouldAutoRepairWorkflow(ctx, job, runErr) {
 			break
 		}
 	}
 	s.finishChangeWorkflow(ctx, job, runErr)
+}
+
+func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkflowJob, runErr error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if errors.Is(runErr, errWorkflowChecksFailed) {
+		return true
+	}
+	if runErr != nil {
+		return false
+	}
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	session, err := readChangeSession(job.root, job.sessionID)
+	if err != nil || session.Workflow == nil || session.Workflow.Review == nil {
+		return false
+	}
+	return session.Workflow.Review.Verdict == "changes_requested"
+}
+
+func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, bool) {
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	session, err := readChangeSession(job.root, job.sessionID)
+	if err != nil || session.Workflow == nil || session.Workflow.ID != job.id {
+		return "", false
+	}
+	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
+		return "", false
+	}
+	retryMsg := workflowRetryMessage(baseMessage, session.Workflow, session.Checks)
+	session.Messages = stripWorkflowTestMessages(session.Messages)
+	session.Workflow.AutoRepairAttempts = attempt
+	session.Workflow.Review = nil
+	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
+		session.Workflow.Stages[i].Status = "pending"
+	}
+	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
+	if err := writeChangeSession(job.root, session); err != nil {
+		return "", false
+	}
+	s.notifyEvent("workflow")
+	return retryMsg, true
 }
 
 func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWorkflowJob, stage int, message string) error {
