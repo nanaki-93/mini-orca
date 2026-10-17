@@ -512,7 +512,7 @@ try {
   });
 
   await test('Dedicated Architecture, Features, Last Run, and Model Routing pages render simplified single-focus views', async () => {
-    const { page, close } = await pageFor({ featuresReady: true });
+    const { page, close } = await pageFor({ featuresReady: true, trusted: true });
     try {
       await nav(page, 'Architecture');
       await idle(page);
@@ -524,6 +524,9 @@ try {
       await nav(page, 'Features');
       await idle(page);
       await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
 
       await nav(page, 'Last Run');
       await idle(page);
@@ -1005,6 +1008,16 @@ try {
       await page.getByText('4/4 PILLARS READY', { exact: true }).waitFor();
       await page.getByText('mise trust && mise install: passed', { exact: true }).waitFor();
       await page.getByText('lefthook install: passed', { exact: true }).waitFor();
+
+      // Verify dedicated [1. Trust & Rules] and [2. Model Routing] sub-views in TUI [0] Rules/Models
+      await page.getByRole('button', { name: '[1. Trust & Rules]', exact: true }).click();
+      await page
+        .getByText('WORKSPACE TRUST & AGENTS.MD (t toggle trust)', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: '[2. Model Routing]', exact: true }).click();
+      await page
+        .getByText('4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)', { exact: true })
+        .waitFor();
 
       // Return to GUI and verify 4/4 Pillars Ready and mise trust && mise install status
       const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
