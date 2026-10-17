@@ -101,7 +101,7 @@ func changeHasGo(edits []ChangeEdit) bool {
 }
 
 func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journal *changeJournal, revision string) ([]CheckResult, error) {
-	checks := changeSourceChecks(journal.Session.Changes)
+	checks := changeSourceChecks(root, journal.Session.Changes)
 	if !changeHasGo(journal.Session.Changes) || !requiredChecksPassed(checks) {
 		return checks, ctx.Err()
 	}

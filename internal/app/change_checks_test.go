@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -195,5 +196,50 @@ func TestNonGoJustfileChecksAndTestsExecuteUnderTrust(t *testing.T) {
 	})
 	if err != nil || !requiredChecksPassed(passedCheck.Checks) {
 		t.Fatalf("expected just test and just check to pass after repair, got %+v, err=%v", passedCheck, err)
+	}
+}
+
+func TestChangeChecksEnforceArchitectureBoundariesAndComplexityGate(t *testing.T) {
+	overlyComplexGo := "package api\n\nimport \"example.test/internal/storage\"\n\nfunc Handle(x int) int {\n\t_ = storage.Name\n\tif x == 1 {\n\t\treturn 1\n\t}\n\tif x == 2 {\n\t\treturn 2\n\t}\n\tif x == 3 {\n\t\treturn 3\n\t}\n\tif x == 4 {\n\t\treturn 4\n\t}\n\tif x == 5 {\n\t\treturn 5\n\t}\n\tif x == 6 {\n\t\treturn 6\n\t}\n\tif x == 7 {\n\t\treturn 7\n\t}\n\tif x == 8 {\n\t\treturn 8\n\t}\n\tif x == 9 {\n\t\treturn 9\n\t}\n\tif x == 10 {\n\t\treturn 10\n\t}\n\tif x == 11 {\n\t\treturn 11\n\t}\n\tif x == 12 {\n\t\treturn 12\n\t}\n\tif x == 13 {\n\t\treturn 13\n\t}\n\tif x == 14 {\n\t\treturn 14\n\t}\n\tif x == 15 {\n\t\treturn 15\n\t}\n\treturn 0\n}\n"
+	var reply atomic.Value
+	reply.Store(`{"explanation":"Violating candidate.","changes":[{"path":"internal/api/handler.go","content":` + strconv.Quote(overlyComplexGo) + `}]}`)
+	server := changeProvider(t, func() string { return reply.Load().(string) })
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# Agent Contract\n- `internal/api/` must never import `internal/storage` or `internal/llm`.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	session := prepareChangeFixture(t, service, "internal/api/handler.go")
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil || requiredChecksPassed(checked.Checks) {
+		t.Fatalf("expected architecture and complexity checks to fail, got %+v, err=%v", checked, err)
+	}
+	var archFailed, complexityFailed bool
+	for _, check := range checked.Checks {
+		if check.Name == "architecture boundaries" && check.State == CheckFailed && strings.Contains(check.Output, "internal/storage") {
+			archFailed = true
+		}
+		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "cyclomatic complexity 16") {
+			complexityFailed = true
+		}
+	}
+	if !archFailed || !complexityFailed {
+		t.Fatalf("expected both architecture boundaries and complexity gate to fail with diagnostics, got %+v", checked.Checks)
+	}
+
+	cleanGo := "package api\n\nfunc Handle(x int) int {\n\tif x == 1 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n"
+	reply.Store(`{"explanation":"Clean candidate.","changes":[{"path":"internal/api/handler.go","content":` + strconv.Quote(cleanGo) + `}]}`)
+	repaired, err := service.RepairChangeMessage(context.Background(), checked.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(checked),
+		Repair:         true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	passed, err := service.CheckChange(context.Background(), repaired.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(repaired)})
+	if err != nil || !requiredChecksPassed(passed.Checks) {
+		t.Fatalf("expected clean candidate to pass architecture and complexity checks, got %+v, err=%v", passed, err)
 	}
 }

@@ -29,7 +29,7 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 			return nil, err
 		}
 	}
-	checks := changeSourceChecks(session.Changes)
+	checks := changeSourceChecks(root, session.Changes)
 	if requiredChecksPassed(checks) && (request.RunTests || request.RunLint) {
 		executed, err := s.checkChangeWorkspace(ctx, root, session, request.CheckOptions)
 		if err != nil {
@@ -97,7 +97,7 @@ func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 	}
 }
 
-func changeSourceChecks(edits []ChangeEdit) []CheckResult {
+func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 	checks := []CheckResult{}
 	for _, edit := range edits {
 		if filepath.Ext(edit.Path) != ".go" {
@@ -114,6 +114,7 @@ func changeSourceChecks(edits []ChangeEdit) []CheckResult {
 		}
 		checks = append(checks, check)
 	}
+	checks = append(checks, changeArchitectureAndComplexityChecks(root, edits)...)
 	return checks
 }
 
