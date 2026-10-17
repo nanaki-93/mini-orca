@@ -864,7 +864,7 @@ export function installFixture(options = {}) {
             const change = {
               ...rev,
               id: `change-${Object.keys(state.changes).length + 1}`,
-              kind: 'instructions',
+              kind: body.kind || 'instructions',
               title: body.title,
               acceptance_criteria: body.acceptance_criteria,
               revision: 1,
@@ -1132,6 +1132,38 @@ export function installFixture(options = {}) {
                     action === 'apply'
                       ? edit.content
                       : change.targets.find((target) => target.path === edit.path).content;
+              if (action === 'apply') {
+                for (const edit of change.changes) {
+                  if (
+                    [
+                      'justfile',
+                      'taskfile.yml',
+                      '.mise.toml',
+                      'devbox.json',
+                      'lefthook.yml',
+                    ].includes(edit.path.toLowerCase())
+                  ) {
+                    const lineCount = edit.content.split('\n').length;
+                    const existing = state.files.find((f) => f.path === edit.path);
+                    if (existing) {
+                      existing.line_count = lineCount;
+                    } else {
+                      state.files.push({
+                        path: edit.path,
+                        content_hash: `hash-${edit.path}`,
+                        language: 'Text',
+                        size_bytes: edit.content.length,
+                        line_count: lineCount,
+                        modified_at: '2026-03-01T00:00:00Z',
+                        binary: false,
+                        imports: [],
+                        symbols: [],
+                        analysis_status: 'missing',
+                      });
+                    }
+                  }
+                }
+              }
               state.changeReceipt = {
                 project_id: identity.project_id,
                 project_revision: state.project.project_revision,

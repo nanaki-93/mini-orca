@@ -250,6 +250,304 @@ export function effectiveWorkflowModel(
     )?.model
   );
 }
+export interface BootstrapChecklistPillar {
+  id: 'entrypoint' | 'toolchain' | 'contract' | 'precommit';
+  step: number;
+  title: string;
+  shortTitle: string;
+  targetPath: string;
+  detectedPath?: string;
+  ready: boolean;
+  statusLabel: string;
+  summary: string;
+  templateContent: string;
+}
+
+function stackBootstrapTemplates(projectType: string, projectName: string) {
+  const kind = (projectType || 'go').toLowerCase();
+  const isNode = ['typescript', 'javascript', 'node', 'react', 'nextjs'].some((k) =>
+    kind.includes(k),
+  );
+  const isPython = kind.includes('python');
+  const isJvm = ['kotlin', 'java', 'gradle', 'maven'].some((k) => kind.includes(k));
+
+  const justfile = isNode
+    ? `# Standardized repository entrypoint for ${projectName}
+set shell := ["sh", "-cu"]
+
+default:
+    @just --list
+
+# Install dependencies and pre-commit hooks
+setup:
+    npm install
+    command -v lefthook >/dev/null 2>&1 && lefthook install || true
+
+# Start local development server
+dev:
+    npm run dev
+
+# Run the automated test suite
+test:
+    npm test
+
+# Run a single named test
+test-one name:
+    npx vitest run -t "{{name}}"
+
+# Run linters, typechecks, and tests
+check:
+    npm run check
+    npm test
+`
+    : isPython
+      ? `# Standardized repository entrypoint for ${projectName}
+set shell := ["sh", "-cu"]
+
+default:
+    @just --list
+
+# Install dependencies and pre-commit hooks
+setup:
+    python3 -m pip install -e .
+    command -v lefthook >/dev/null 2>&1 && lefthook install || true
+
+# Start local development workflow
+dev:
+    python3 -m unittest
+
+# Run the automated test suite
+test:
+    python3 -m unittest discover -v
+
+# Run a single test module or case
+test-one name:
+    python3 -m unittest {{name}} -v
+
+# Run static checks and tests
+check:
+    python3 -m compileall -q .
+    python3 -m unittest discover
+`
+      : isJvm
+        ? `# Standardized repository entrypoint for ${projectName}
+set shell := ["sh", "-cu"]
+
+default:
+    @just --list
+
+# Bootstrap dependencies and pre-commit hooks
+setup:
+    ./gradlew classes
+    command -v lefthook >/dev/null 2>&1 && lefthook install || true
+
+# Start local development server
+dev:
+    ./gradlew run
+
+# Run the automated test suite
+test:
+    ./gradlew test
+
+# Run a single test class or method
+test-one name:
+    ./gradlew test --tests "*{{name}}*"
+
+# Run linters (ktlint/check) and tests
+check:
+    ./gradlew check
+`
+        : `# Standardized repository entrypoint for ${projectName}
+set shell := ["sh", "-cu"]
+
+default:
+    @just --list
+
+# Bootstrap dependencies and pre-commit hooks
+setup:
+    go mod download
+    command -v lefthook >/dev/null 2>&1 && lefthook install || true
+
+# Start local development mode
+dev:
+    go test ./...
+
+# Run the automated test suite with race detector
+test:
+    go test -race ./...
+
+# Run a single named Go test
+test-one name:
+    go test ./... -run "{{name}}" -v
+
+# Run formatting, static analysis, and tests
+check:
+    test -z "$(gofmt -l .)"
+    go vet ./...
+    go test -race ./...
+`;
+
+  const miseToml = isNode
+    ? `# Pinned runtime and linter toolchain for ${projectName}
+[tools]
+node = "22"
+just = "1.36.0"
+lefthook = "1.10.10"
+gitleaks = "8.24.0"
+`
+    : isPython
+      ? `# Pinned runtime and linter toolchain for ${projectName}
+[tools]
+python = "3.12"
+just = "1.36.0"
+lefthook = "1.10.10"
+gitleaks = "8.24.0"
+`
+      : isJvm
+        ? `# Pinned runtime and linter toolchain for ${projectName}
+[tools]
+java = "temurin-21"
+kotlin = "2.1.0"
+ktlint = "1.5.0"
+just = "1.36.0"
+lefthook = "1.10.10"
+gitleaks = "8.24.0"
+`
+        : `# Pinned runtime and linter toolchain for ${projectName}
+[tools]
+go = "1.22"
+golangci-lint = "1.63.4"
+just = "1.36.0"
+lefthook = "1.10.10"
+gitleaks = "8.24.0"
+`;
+
+  const agentsMd = `# ${projectName} Agent Contract
+
+Keep this contract under 150 lines so human developers and coding agents share identical operational rules.
+
+## 1. Quick Commands & Single-Test Execution
+
+- Bootstrap & entrypoints (\`justfile\`): \`just setup\`, \`just dev\`, \`just test\`, \`just check\`.
+- Run a single test: \`just test-one TestName\`.
+- Always run \`just check\` before committing changes.
+
+## 2. Architecture Boundaries
+
+- Entrypoints and HTTP/UI handlers must never import database or storage packages directly; always go through service interfaces.
+- Domain and indexing packages must remain pure and never import transport or presentation layers.
+- Keep diffs surgical and scoped to the requested change, its callers, and its regression tests.
+
+## 3. Error Handling & Concurrency Conventions
+
+- Handle all errors explicitly with actionable context (e.g., \`fmt.Errorf("action: %w", err)\`). Never swallow errors or silently return fallback values.
+- Propagate cancellation (\`context.Context\` / \`AbortSignal\`) across all I/O, child processes, and model calls.
+- Guard shared state with explicit synchronization and ensure no background workers leak after a task or test finishes.
+`;
+
+  const lefthookYml = `# Fast parallel pre-commit gates (<2s on staged files)
+pre-commit:
+  parallel: true
+  commands:
+    whitespace:
+      glob: "*.{go,ts,tsx,js,py,kt,java,md,yml,yaml,json,toml}"
+      run: git diff --cached --check -- {staged_files}
+    gitleaks:
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks protect --staged --no-banner --redact
+        fi
+`;
+
+  return { justfile, miseToml, agentsMd, lefthookYml };
+}
+
+export function evaluateBootstrapChecklist(s: State): BootstrapChecklistPillar[] {
+  const files = s.index?.files || [];
+  const projectName = s.project?.name || 'Project';
+  const projectType = s.project?.type || 'go';
+  const templates = stackBootstrapTemplates(projectType, projectName);
+
+  const findFile = (candidates: string[]) =>
+    files.find((f) => candidates.some((c) => f.path.toLowerCase() === c.toLowerCase()));
+
+  const entrypointFile = findFile(['justfile', 'Taskfile.yml', 'Taskfile.yaml']);
+  const toolchainFile = findFile(['.mise.toml', 'mise.toml', 'devbox.json']);
+  const contractFile = findFile(['AGENTS.md', '.cursorrules']);
+  const precommitFile = findFile(['lefthook.yml', '.lefthook.yml', 'lefthook.yaml']);
+
+  const previewIsRootAgents =
+    s.instructionPreview?.path === 'AGENTS.md' && s.instructionPreview.exists;
+  const projectInstIsRootAgents =
+    s.projectInstructions?.path === 'AGENTS.md' && s.projectInstructions.exists;
+  const hasContract = !!contractFile || !!previewIsRootAgents || !!projectInstIsRootAgents;
+  const contractLines = previewIsRootAgents
+    ? s.instructionPreview!.existing_content.split('\n').length
+    : projectInstIsRootAgents
+      ? s.projectInstructions!.existing_content.split('\n').length
+      : contractFile?.line_count || 0;
+  const contractReady = hasContract && contractLines > 0 && contractLines <= 150;
+
+  return [
+    {
+      id: 'entrypoint',
+      step: 1,
+      title: '1. Standardize the Repo Entrypoint',
+      shortTitle: 'Repo Entrypoint',
+      targetPath: entrypointFile?.path || 'justfile',
+      detectedPath: entrypointFile?.path,
+      ready: !!entrypointFile,
+      statusLabel: entrypointFile ? `Ready (${entrypointFile.path})` : 'Missing',
+      summary:
+        'Add a justfile or Taskfile.yml with setup, dev, test, and check targets so Step 2 verification runs your exact checks.',
+      templateContent: templates.justfile,
+    },
+    {
+      id: 'toolchain',
+      step: 2,
+      title: '2. Pin the Toolchain',
+      shortTitle: 'Pinned Toolchain',
+      targetPath: toolchainFile?.path || '.mise.toml',
+      detectedPath: toolchainFile?.path,
+      ready: !!toolchainFile,
+      statusLabel: toolchainFile ? `Ready (${toolchainFile.path})` : 'Missing',
+      summary:
+        'Add a .mise.toml or devbox.json pinning exact language runtimes and linters (golangci-lint, ktlint, gitleaks, lefthook).',
+      templateContent: templates.miseToml,
+    },
+    {
+      id: 'contract',
+      step: 3,
+      title: '3. Write the Agent Contract (<150 lines)',
+      shortTitle: 'Agent Contract (<150L)',
+      targetPath: 'AGENTS.md',
+      detectedPath: hasContract ? contractFile?.path || 'AGENTS.md' : undefined,
+      ready: contractReady,
+      statusLabel: !hasContract
+        ? 'Missing'
+        : contractReady
+          ? `Ready (${contractLines} / 150 lines)`
+          : `Over limit (${contractLines} / 150 lines)`,
+      summary:
+        'Keep root AGENTS.md under 150 lines with exact build/single-test commands, architecture boundaries, and error/concurrency rules.',
+      templateContent: templates.agentsMd,
+    },
+    {
+      id: 'precommit',
+      step: 4,
+      title: '4. Enforce Fast Pre-Commit Gates',
+      shortTitle: 'Pre-Commit Gates',
+      targetPath: precommitFile?.path || 'lefthook.yml',
+      detectedPath: precommitFile?.path,
+      ready: !!precommitFile,
+      statusLabel: precommitFile ? `Ready (${precommitFile.path})` : 'Missing',
+      summary:
+        'Configure lefthook.yml to run formatters, linters, and secret scanners (gitleaks) in parallel on staged files (<2s).',
+      templateContent: templates.lefthookYml,
+    },
+  ];
+}
+
 const changePage = (kind: string): Page =>
   ['fix', 'performance', 'security'].includes(kind) ? 'changes' : 'chat';
 function readStoredJson<T>(key: string): T | undefined {
@@ -2877,39 +3175,79 @@ export class Workspace {
       await this.requestChangeChecks(false);
     });
   }
+  private async applyDirectFile(path: string, content: string) {
+    if (activeChangeWorkflow(this.state.change))
+      throw new Error('Finish or cancel the active workflow first.');
+    const isInstructions = path === 'AGENTS.md' || path.endsWith('/AGENTS.md');
+    const change = await this.api.post<M.ChangeSession>(`${current}/instructions/proposal`, {
+      ...this.identity(),
+      kind: isInstructions ? 'instructions' : 'feature',
+      title: `Save ${path}`,
+      paths: [path],
+      acceptance_criteria: [`Apply direct edits to ${path}.`],
+      content,
+    });
+    this.set({ change, changeSeed: undefined, changeReceipt: undefined });
+    const checked = await this.api.post<M.ChangeSession>(
+      `${current}/changes/${encodeURIComponent(change.id)}/checks`,
+      { ...this.changeIdentity(change), run_tests: false },
+    );
+    const reviewed = await this.api.post<M.ChangeSession>(
+      `${current}/changes/${encodeURIComponent(checked.id)}/review`,
+      this.changeIdentity(checked),
+    );
+    this.set({ change: reviewed });
+    const repository = this.state.repository;
+    const receipt = await this.writeChangeSource(reviewed.id, 'apply', {
+      ...this.changeIdentity(reviewed),
+      ...(repository?.available
+        ? { head: repository.head, branch: repository.branch, commit_message: `Update ${path}` }
+        : {}),
+    });
+    await this.acceptChangeMutation(receipt);
+    if (this.state.file?.path === path) await this.refreshFile();
+    if (isInstructions) {
+      const preview = await this.api
+        .get<M.InstructionPreview>(`${current}/instructions`, {
+          path,
+          project_revision: this.identity().project_revision,
+        })
+        .catch(() => undefined);
+      if (preview) {
+        this.set({
+          instructionPreview: preview,
+          ...(path === 'AGENTS.md' ? { projectInstructions: preview } : {}),
+        });
+      }
+    }
+  }
   async saveDirectFile(path: string, content: string) {
     await this.act('Save file', async () => {
-      if (activeChangeWorkflow(this.state.change))
-        throw new Error('Finish or cancel the active workflow first.');
-      const isInstructions = path === 'AGENTS.md' || path.endsWith('/AGENTS.md');
-      const change = await this.api.post<M.ChangeSession>(`${current}/instructions/proposal`, {
-        ...this.identity(),
-        kind: isInstructions ? 'instructions' : 'feature',
-        title: `Save ${path}`,
-        paths: [path],
-        acceptance_criteria: [`Apply direct edits to ${path}.`],
-        content,
-      });
-      this.set({ change, changeSeed: undefined, changeReceipt: undefined });
-      const checked = await this.api.post<M.ChangeSession>(
-        `${current}/changes/${encodeURIComponent(change.id)}/checks`,
-        { ...this.changeIdentity(change), run_tests: false },
-      );
-      const reviewed = await this.api.post<M.ChangeSession>(
-        `${current}/changes/${encodeURIComponent(checked.id)}/review`,
-        this.changeIdentity(checked),
-      );
-      this.set({ change: reviewed });
-      const repository = this.state.repository;
-      const receipt = await this.writeChangeSource(reviewed.id, 'apply', {
-        ...this.changeIdentity(reviewed),
-        ...(repository?.available
-          ? { head: repository.head, branch: repository.branch, commit_message: `Update ${path}` }
-          : {}),
-      });
-      await this.acceptChangeMutation(receipt);
-      if (this.state.file?.path === path) await this.refreshFile();
+      await this.applyDirectFile(path, content);
       this.set({ notice: `Saved ${path} (Undo available).` });
+    });
+  }
+  async bootstrapPillar(pillarId: BootstrapChecklistPillar['id']) {
+    await this.act('Bootstrap repository pillar', async () => {
+      const pillar = evaluateBootstrapChecklist(this.state).find((item) => item.id === pillarId);
+      if (!pillar) return;
+      await this.applyDirectFile(pillar.targetPath, pillar.templateContent);
+      this.set({ notice: `Bootstrapped ${pillar.targetPath} (Undo available).` });
+    });
+  }
+  async bootstrapMissingPillars() {
+    await this.act('Bootstrap repository workflow', async () => {
+      const missing = evaluateBootstrapChecklist(this.state).filter((item) => !item.ready);
+      if (!missing.length) {
+        this.set({ notice: 'All 4 repository bootstrap pillars are already ready.' });
+        return;
+      }
+      for (const pillar of missing) {
+        await this.applyDirectFile(pillar.targetPath, pillar.templateContent);
+      }
+      this.set({
+        notice: `Bootstrapped ${missing.map((p) => p.targetPath).join(', ')} (Undo available).`,
+      });
     });
   }
   async retryChangeCommit(message: string) {
