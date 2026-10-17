@@ -115,6 +115,9 @@ func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 		checks = append(checks, check)
 	}
 	checks = append(checks, changeArchitectureAndComplexityChecks(root, edits)...)
+	if len(edits) > 0 {
+		checks = append(checks, checkChangeSecretAndHygiene(edits))
+	}
 	return checks
 }
 
@@ -146,6 +149,9 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	}
 	if options.RunLint {
 		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{"go", "vet", "./..."}, false, false))
+		if gitleaksCheck, ok := s.runOptionalGitleaksCheck(ctx, workspace, session.ProjectRevision); ok {
+			checks = append(checks, gitleaksCheck)
+		}
 	}
 	if options.RunTests {
 		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, []string{"go", "test", "./..."}, false, true))

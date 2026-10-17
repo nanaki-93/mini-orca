@@ -243,3 +243,39 @@ func TestChangeChecksEnforceArchitectureBoundariesAndComplexityGate(t *testing.T
 		t.Fatalf("expected clean candidate to pass architecture and complexity checks, got %+v, err=%v", passed, err)
 	}
 }
+
+func TestChangeChecksEnforceSecretAndHygieneGate(t *testing.T) {
+	leakedConfig := "# Config\n<<<<<<< HEAD\naws_id = \"AKIAIOSFODNN7EXAMPLE\"\n=======\n>>>>>>> main\n"
+	var reply atomic.Value
+	reply.Store(`{"explanation":"Add config.","changes":[{"path":"docs/config.md","content":` + strconv.Quote(leakedConfig) + `}]}`)
+	server := changeProvider(t, func() string { return reply.Load().(string) })
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	session := prepareChangeFixture(t, service, "docs/config.md")
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil || requiredChecksPassed(checked.Checks) {
+		t.Fatalf("expected secret & hygiene gate to fail on conflict marker and AWS key, got %+v, err=%v", checked, err)
+	}
+	var hygieneFailed bool
+	for _, check := range checked.Checks {
+		if check.Name == "secret & hygiene gate" && check.State == CheckFailed && strings.Contains(check.Output, "AWS access key ID") && strings.Contains(check.Output, "unresolved Git merge conflict marker") {
+			hygieneFailed = true
+		}
+	}
+	if !hygieneFailed {
+		t.Fatalf("expected secret & hygiene gate diagnostics, got %+v", checked.Checks)
+	}
+
+	cleanConfig := "# Config\naws_id_env = \"AWS_ACCESS_KEY_ID\"\n"
+	reply.Store(`{"explanation":"Use env var.","changes":[{"path":"docs/config.md","content":` + strconv.Quote(cleanConfig) + `}]}`)
+	repaired, err := service.RepairChangeMessage(context.Background(), checked.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(checked),
+		Repair:         true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	passed, err := service.CheckChange(context.Background(), repaired.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(repaired)})
+	if err != nil || !requiredChecksPassed(passed.Checks) {
+		t.Fatalf("expected clean candidate to pass secret & hygiene gate, got %+v, err=%v", passed, err)
+	}
+}
