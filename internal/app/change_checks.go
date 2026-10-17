@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/format"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -133,7 +134,7 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 		return nil, project.ErrRevisionConflict
 	}
 	if !workspaceHasGo(workspace, session.Changes) {
-		return checkNonGoWorkspace(ctx, workspace, session, options)
+		return s.checkNonGoWorkspace(ctx, workspace, session, options)
 	}
 	checks, err := s.changeRegressionBaseline(ctx, workspace, session, options.RunTests)
 	if err != nil {
@@ -151,21 +152,89 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	return checks, ctx.Err()
 }
 
-func checkNonGoWorkspace(ctx context.Context, workspace string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
 	if err := stageChangeEdits(workspace, session.Changes); err != nil {
 		return nil, err
 	}
+	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
 	checks := []CheckResult{}
 	if options.RunLint {
-		checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
+		if runner != "" && checkTarget != "" {
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{runner, checkTarget}, false, true))
+		} else {
+			checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
+		}
 	}
 	if options.RunTests {
 		if len(newChangeTestEdits(session)) > 0 {
 			checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
 		}
-		checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
+		if runner != "" && testTarget != "" {
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, []string{runner, testTarget}, false, true))
+		} else {
+			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
+		}
 	}
 	return checks, ctx.Err()
+}
+
+func detectExecutableTaskRunner(workspace string) (string, string, string) {
+	runner, checkTarget, testTarget := detectDeclaredTaskRunner(workspace)
+	if runner == "" {
+		return "", "", ""
+	}
+	if _, err := exec.LookPath(runner); err != nil {
+		return "", "", ""
+	}
+	return runner, checkTarget, testTarget
+}
+
+func detectDeclaredTaskRunner(workspace string) (string, string, string) {
+	for _, entry := range []struct {
+		files  []string
+		runner string
+	}{
+		{files: []string{"justfile", "Justfile"}, runner: "just"},
+		{files: []string{"Taskfile.yml", "Taskfile.yaml"}, runner: "task"},
+	} {
+		for _, name := range entry.files {
+			data, err := os.ReadFile(filepath.Join(workspace, name))
+			if err != nil {
+				continue
+			}
+			checkTarget, testTarget := parseTaskRunnerTargets(string(data))
+			if checkTarget != "" || testTarget != "" {
+				return entry.runner, checkTarget, testTarget
+			}
+		}
+	}
+	return "", "", ""
+}
+
+func parseTaskRunnerTargets(content string) (string, string) {
+	var checkTarget, testTarget string
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "#") || !strings.Contains(line, ":") {
+			continue
+		}
+		head := strings.TrimSpace(strings.SplitN(line, ":", 2)[0])
+		name := strings.Fields(head)
+		if len(name) == 0 {
+			continue
+		}
+		switch name[0] {
+		case "check":
+			checkTarget = "check"
+		case "lint":
+			if checkTarget == "" {
+				checkTarget = "lint"
+			}
+		case "test":
+			testTarget = "test"
+		}
+	}
+	return checkTarget, testTarget
 }
 
 func workspaceHasGo(workspace string, edits []ChangeEdit) bool {

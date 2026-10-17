@@ -26,8 +26,22 @@ type executionTrustStore struct {
 
 func newExecutionTrustStore() *executionTrustStore { return &executionTrustStore{} }
 
-func projectCodeCommands(taskName string) ([][]string, error) {
+func projectCodeCommands(root, taskName string) ([][]string, error) {
 	if taskName == "" {
+		if !workspaceHasGo(root, nil) {
+			if runner, checkTarget, testTarget := detectDeclaredTaskRunner(root); runner != "" {
+				var cmds [][]string
+				if testTarget != "" {
+					cmds = append(cmds, []string{runner, testTarget})
+				}
+				if checkTarget != "" {
+					cmds = append(cmds, []string{runner, checkTarget})
+				}
+				if len(cmds) > 0 {
+					return cmds, nil
+				}
+			}
+		}
 		return [][]string{{"go", "test", "./..."}}, nil
 	}
 	if !validGoTestName(taskName) {
@@ -47,7 +61,7 @@ func (s *Service) ExecutionTrust(revision, taskName string) (*ExecutionTrust, er
 	s.executionTrust.mu.Lock()
 	trusted := s.executionTrust.project == analysis.ProjectID && s.executionTrust.revision == analysis.ProjectRevision
 	s.executionTrust.mu.Unlock()
-	commands, err := projectCodeCommands(taskName)
+	commands, err := projectCodeCommands(s.manager.Root(), taskName)
 	if err != nil {
 		return nil, err
 	}
