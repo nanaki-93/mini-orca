@@ -24,7 +24,7 @@ function classifyLayer(path: string, name: string): string {
   return 'Domain & Persistence';
 }
 
-export function buildFallbackDocs(s: State): ProjectDocsReport {
+function buildFallbackDocs(s: State): ProjectDocsReport {
   const analysis = s.overview?.analysis;
   const files = s.index?.files || [];
   const rawComponents = analysis?.components || [];

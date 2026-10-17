@@ -1,18 +1,7 @@
 import { useWorkspace } from './workspace-context';
-import { activeChangeWorkflow, type State } from './workspace';
+import { type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
 import { AgentModel } from './agent-model';
-import {
-  Badge,
-  BulletContent,
-  Button,
-  Disclosure,
-  KeyValues,
-  Notice,
-  Panel,
-  Prose,
-  human,
-} from './ui';
 
 export function WorkflowModels({
   s,
@@ -41,94 +30,5 @@ export function WorkflowModels({
         ))}
       </div>
     </fieldset>
-  );
-}
-
-const stageNames: Record<string, string> = {
-  create: 'Create',
-  test: 'Write and run tests',
-  review: 'Model review',
-  human_review: 'Human diff review',
-};
-
-export function WorkflowProgress({
-  s,
-  showOutcome = true,
-  actionLabel = 'Accept changes',
-  showCancel = true,
-}: {
-  s: State;
-  showOutcome?: boolean;
-  actionLabel?: string;
-  showCancel?: boolean;
-}) {
-  const w = useWorkspace();
-  const workflow = s.change?.workflow;
-  if (!workflow) return null;
-  return (
-    <Panel
-      title="Agent workflow"
-      className="workflow-progress"
-      actions={
-        <Badge
-          value={s.change?.state === 'draft' ? workflow.status : s.change?.state || workflow.status}
-        />
-      }
-    >
-      <ol className="workflow-stages" aria-label="Workflow stages" aria-live="polite">
-        {workflow.stages.map((stage) => (
-          <li key={stage.name} aria-current={stage.status === 'running' ? 'step' : undefined}>
-            <div className="row between wrap">
-              <strong>{stageNames[stage.name] || human(stage.name)}</strong>
-              <span className="row small">
-                <Badge value={stage.status} />
-                {stage.status === 'completed' && <span>Completed</span>}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <Disclosure title="Models used">
-        <KeyValues
-          values={workflow.stages
-            .filter((stage) => stage.model)
-            .map((stage) => [
-              stageNames[stage.name] || human(stage.name),
-              `${stage.model!.model} · Thinking: ${stage.model!.reasoning_effort || 'Default'}`,
-            ])}
-        />
-      </Disclosure>
-      {showOutcome && workflow.reason && (
-        <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
-      )}
-      {showOutcome && workflow.review && (
-        <section aria-label="Model review report">
-          <div className="row wrap">
-            <strong>Model verdict</strong>
-            <Badge value={workflow.review.verdict} />
-          </div>
-          <Prose text={workflow.review.summary} />
-          <BulletContent title="Requested changes" items={workflow.review.findings} />
-          <p className="small muted">
-            Model advice. Review the file differences and test evidence before approving.
-          </p>
-        </section>
-      )}
-      {showOutcome &&
-        workflow.status === 'awaiting_human_review' &&
-        s.change?.state === 'draft' && (
-          <Notice>Review the file differences, then select {actionLabel}.</Notice>
-        )}
-      {showCancel && activeChangeWorkflow(s.change) && (
-        <div className="actions">
-          <Button
-            disabled={!!s.busy || workflow.status === 'canceling'}
-            onClick={() => void w.cancelChangeWorkflow()}
-          >
-            Cancel workflow
-          </Button>
-        </div>
-      )}
-    </Panel>
   );
 }

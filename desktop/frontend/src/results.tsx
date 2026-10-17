@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type * as M from './models';
 import {
   workspace as w,
@@ -7,15 +7,11 @@ import {
   inProgressFindingTargets,
   isTestFilePath,
   workflowSeed,
-  workflowSetupModels,
   activeRun,
   type FindingCategory,
   type FindingListView,
   type State,
 } from './workspace';
-import { FixPreparation } from './fix-preparation';
-import { FixHeading } from './fix-workspace';
-import { SolutionExcerpt } from './fix-solution';
 import { StaleAnalysisButton } from './analysis';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import {
@@ -36,6 +32,76 @@ import {
   human,
 } from './ui';
 import { collectAgentDashboardItems, type AgentDashboardItem } from './agents';
+
+function FixHeading({
+  title,
+  path,
+  symbol,
+  line,
+  kind,
+  metadata,
+  children,
+}: {
+  title: string;
+  path?: string;
+  symbol?: string;
+  line?: number;
+  kind: M.ChangeSeed['kind'];
+  metadata?: ReactNode;
+  children?: ReactNode;
+}) {
+  const label =
+    kind === 'performance' ? 'Performance fix' : kind === 'security' ? 'Security fix' : 'Bug fix';
+  return (
+    <header className="page-heading fix-heading">
+      <div className="fix-identity">
+        <span className="fix-kind-icon" role="img" aria-label={label} title={label}>
+          <Icon name={kind === 'performance' ? 'gauge' : kind === 'security' ? 'shield' : 'bug'} />
+        </span>
+        <div>
+          <h1>{title}</h1>
+          <p className="results-detail-meta">
+            {path && (
+              <span className="path">
+                {path}
+                {line ? `:${line}` : ''}
+              </span>
+            )}
+            <span className="row wrap">
+              {symbol && <span>{symbol}</span>}
+              {metadata}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div className="actions">{children}</div>
+    </header>
+  );
+}
+
+function SolutionExcerpt({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentID = useId();
+  const paragraph = text.split(/\n\s*\n/)[0];
+  const summary = paragraph.length > 240 ? `${paragraph.slice(0, 240).trimEnd()}…` : paragraph;
+  return (
+    <>
+      <div id={contentID}>
+        <Prose text={expanded ? text : summary} />
+      </div>
+      {summary !== text && (
+        <Button
+          tone="ghost"
+          aria-expanded={expanded}
+          aria-controls={contentID}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Show less' : 'Full explanation'}
+        </Button>
+      )}
+    </>
+  );
+}
 
 interface ResultRow {
   key: string;
@@ -395,27 +461,8 @@ export function Results({ s }: { s: State }) {
       confidence: row.confidence,
     },
   });
-  const triggerFix = (row: ResultRow, targetPage: 'agents' | 'changes' = 'agents') => {
-    const preparedSeed = workflowSeed(fixSeed(row));
-    if (targetPage === 'agents') {
-      void w.startAgentFix(preparedSeed);
-      return;
-    }
-    w.seedChange(preparedSeed, targetPage);
-    void (async () => {
-      try {
-        const context = await w.readFixPreparation();
-        const useAgents = preparedSeed.paths.some(isTestFilePath);
-        const models = workflowSetupModels(s);
-        if (useAgents) {
-          await w.startChangeWorkflow(preparedSeed, models, context, targetPage);
-        } else {
-          await w.prepareChange(preparedSeed, true, models.create, context, targetPage);
-        }
-      } catch (error) {
-        w.fail(error);
-      }
-    })();
+  const triggerFix = (row: ResultRow) => {
+    void w.startAgentFix(workflowSeed(fixSeed(row)));
   };
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const toggleRowSelection = (key: string) => {
@@ -545,7 +592,22 @@ export function Results({ s }: { s: State }) {
         <SolutionExcerpt text={detail.solution || 'No remediation supplied.'} />
       </Panel>
       {seed && detail.path && (
-        <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
+        <Panel title="Agent Workflow" className="fix-preparation-panel">
+          <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+            <span className="small muted">
+              Dispatch an isolated worktree agent to implement, test, review, and commit a fix for{' '}
+              <code>{detail.path}</code>.
+            </span>
+            <Button
+              tone="primary"
+              icon="sparkles"
+              disabled={fixDisabled}
+              onClick={() => void w.startAgentFix(seed)}
+            >
+              Fix with Agent
+            </Button>
+          </div>
+        </Panel>
       )}
       <div className="stack results-detail-layout">
         {detail.text
@@ -1185,7 +1247,7 @@ export function Results({ s }: { s: State }) {
                             );
                             if (idea) w.discussFeature(idea, false);
                           } else {
-                            triggerFix(row, 'agents');
+                            triggerFix(row);
                           }
                         }}
                       >
@@ -1424,7 +1486,7 @@ export function Results({ s }: { s: State }) {
                     tone="primary"
                     icon="sparkles"
                     disabled={!!s.busy}
-                    onClick={() => triggerFix(inspectorRow, 'agents')}
+                    onClick={() => triggerFix(inspectorRow)}
                   >
                     Fix with Agent
                   </Button>

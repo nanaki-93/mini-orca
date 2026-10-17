@@ -39,7 +39,7 @@ interface StageSpec {
   modelKey?: keyof M.ChangeWorkflowModels;
 }
 
-export const PIPELINE_STAGES: StageSpec[] = [
+const PIPELINE_STAGES: StageSpec[] = [
   {
     id: 'create',
     step: 'Step 1',

@@ -98,7 +98,6 @@ export interface State {
   chosenPath?: string;
   change?: M.ChangeSession;
   changeSeed?: M.ChangeSeed;
-  chatDraft?: ChatDraft;
   changeHistory?: M.ChangeHistoryEntry[];
   changeReceipt?: M.ChangeMutation | null;
   features?: M.FeatureReport;
@@ -124,14 +123,6 @@ export interface ModelPreset {
   analysis: M.AnalysisModels;
   workflow: M.ChangeWorkflowModels;
 }
-export interface ChatDraft {
-  sessionID?: string;
-  seed?: M.ChangeSeed;
-  title: string;
-  paths: string;
-  message: string;
-  tests: boolean;
-}
 export type AnalysisAssignments = Required<
   Pick<M.AnalysisModels, 'code' | 'performance' | 'security' | 'features'>
 >;
@@ -156,7 +147,7 @@ export function workflowSetupModels(s: State): M.ChangeWorkflowModels {
     review: resolve(setup.review),
   };
 }
-export function builtInModelPresets(s: State): ModelPreset[] {
+function builtInModelPresets(s: State): ModelPreset[] {
   const resolve = (id: string) => s.availableModels?.defaults[id] || id;
   const fastModel =
     s.availableModels?.models.find((m) => m.location === 'local' || !m.model.remote_provider)?.id ||
@@ -648,7 +639,7 @@ export function canAcceptChange(s: State) {
   );
 }
 
-export function canApplyChange(s: State) {
+function canApplyChange(s: State) {
   return canAcceptChange(s) && s.change!.reviewed_hash === s.change!.hash;
 }
 
@@ -703,7 +694,7 @@ export function isTestFilePath(path: string): boolean {
     .some((part) => ['test', 'tests', '__tests__', 'spec', 'specs'].includes(part));
 }
 
-export function inferTestPath(path: string): string | undefined {
+function inferTestPath(path: string): string | undefined {
   if (isTestFilePath(path)) return undefined;
   if (path.endsWith('.go')) return path.replace(/\.go$/, '_test.go');
   if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path))
@@ -742,7 +733,7 @@ export function workflowSeed(seed: M.ChangeSeed): M.ChangeSeed {
     .slice(0, 16);
   return { ...seed, paths, ...(finding_targets ? { finding_targets } : {}) };
 }
-export function workflowReviewable(change: M.ChangeSession) {
+function workflowReviewable(change: M.ChangeSession) {
   const flow = change.workflow;
   return (
     !flow ||
@@ -1083,17 +1074,6 @@ export class Workspace {
         });
       },
     );
-  }
-  async previewGitMerge(tree: M.GitWorktree) {
-    await this.act('Preview merge', async () => {
-      const repository = this.state.gitWorkspace;
-      if (!repository) return;
-      const epoch = this.epoch,
-        navigation = this.navigation;
-      const gitPreview = await this.readGitMergePreview(tree, repository);
-      if (epoch !== this.epoch || navigation !== this.navigation) return;
-      this.set({ gitPreview });
-    });
   }
   private async readGitMergePreview(tree: M.GitWorktree, repository: M.GitWorkspace) {
     const preview = await this.api.post<M.GitMergePreview>(`${current}/git/merge-preview`, {
@@ -2512,11 +2492,7 @@ export class Workspace {
       change: undefined,
       changeSeed: undefined,
       changeReceipt: undefined,
-      chatDraft: undefined,
     });
-  }
-  setChatDraft(chatDraft: ChatDraft) {
-    this.set({ chatDraft });
   }
   async loadChangeHistory() {
     if (!this.state.project) return;

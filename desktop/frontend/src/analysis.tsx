@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
-import { CapturedModels, AnalysisModelSummary } from './analysis-models';
+import { CapturedModels } from './analysis-models';
 import {
   Button,
   Spinner,
@@ -67,141 +67,6 @@ function selectionChanged(s: State) {
   return (
     JSON.stringify([...selectionPaths(s)].sort()) !==
     JSON.stringify([...(s.selection?.excluded_paths || [])].sort())
-  );
-}
-export function Analysis({ s }: { s: State }) {
-  const limits = s.analysisLimits || defaults;
-  const refresh = s.analysisRefresh || false;
-  const models = analysisSetupModels(s);
-  const changed = selectionChanged(s);
-  const continuation =
-    s.run && ['paused', 'interrupted'].includes(s.run.status) ? s.run : undefined;
-  const hasRepair =
-    !activeRun(s.run) && !continuation && s.selection?.recovery?.state === 'available';
-  const preview = (mode: 'new' | 'repair', start = false) => {
-    if (changed) {
-      w.fail('Save your file selection before starting analysis.');
-      return;
-    }
-    void w.previewAnalysis(mode, limits, refresh, models, undefined, start);
-  };
-  return (
-    <div className="workspace-page analysis-setup">
-      <Heading variant="intro" title="Analysis">
-        <Button
-          disabled={!!s.busy}
-          icon="refresh"
-          onClick={() => void w.act('Refresh files', () => w.refreshProject())}
-        >
-          Refresh
-        </Button>
-        <StaleAnalysisButton s={s} />
-        <Button
-          disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
-          onClick={() =>
-            continuation
-              ? void w.previewAnalysis('resume', continuation.plan.limits)
-              : preview('new')
-          }
-        >
-          Preview analysis
-        </Button>
-        {hasRepair && (
-          <Button
-            icon="play"
-            disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-            title="Repair does not change code. It re-attempts unfinished analysis work."
-            onClick={() => preview('repair')}
-          >
-            Repair analysis
-          </Button>
-        )}
-        <Button
-          tone="primary"
-          loading={s.busy === 'Execute analysis' || s.busy === 'Start analysis'}
-          aria-describedby="analysis-start-permissions"
-          icon="play"
-          disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
-          onClick={() =>
-            continuation
-              ? void w.previewAnalysis(
-                  'resume',
-                  continuation.plan.limits,
-                  false,
-                  undefined,
-                  undefined,
-                  true,
-                )
-              : preview('new', true)
-          }
-        >
-          Execute analysis
-        </Button>
-      </Heading>
-      {continuation && (
-        <Notice tone="warning">
-          Analysis {human(continuation.status)}. Resume or cancel in Last run.
-        </Notice>
-      )}
-      <Panel className="analysis-run-settings">
-        <Disclosure title="Advanced settings">
-          <div className="form-grid analysis-settings-fields">
-            {(
-              [
-                ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
-                [
-                  'budget_seconds',
-                  'Time budget · seconds',
-                  1,
-                  3600,
-                  'File-analysis time per batch.',
-                ],
-                [
-                  'max_attempts_per_stage',
-                  'Attempts per stage',
-                  1,
-                  4,
-                  'Includes the first attempt and retries.',
-                ],
-              ] as const
-            ).map(([key, label, min, max, hint]) => (
-              <div className="analysis-setting" key={key}>
-                <label htmlFor={`analysis-${key}`}>{label}</label>
-                <input
-                  id={`analysis-${key}`}
-                  aria-describedby={`analysis-${key}-hint`}
-                  type="number"
-                  min={min}
-                  max={max}
-                  value={limits[key]}
-                  onChange={(e) =>
-                    w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
-                  }
-                />
-                <small id={`analysis-${key}-hint`} className="muted">
-                  {hint}
-                </small>
-              </div>
-            ))}
-          </div>
-          <label className="checkbox-line analysis-refresh-option">
-            <input
-              type="checkbox"
-              checked={refresh}
-              onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
-            />
-            Refresh previously analyzed files
-          </label>
-        </Disclosure>
-        <AnalysisModelSummary s={s} value={models} />
-      </Panel>
-      {changed && (
-        <Notice tone="warning">
-          File selection has unsaved changes.{' '}
-          <Go page="analysis-files">Save selection in Context</Go>
-        </Notice>
-      )}
-    </div>
   );
 }
 export function AnalysisFiles({ s }: { s: State }) {
@@ -374,7 +239,7 @@ export function AnalysisPreview({ s }: { s: State }) {
     return (
       <div className="workspace-page analysis-preview">
         <Heading variant="intro" title="Analysis preview">
-          <Go page="analysis">Back to analysis</Go>
+          <Go page="summary">Back to overview</Go>
         </Heading>
         <Empty title="Prepare a new preview" />
       </div>
@@ -400,7 +265,7 @@ export function AnalysisPreview({ s }: { s: State }) {
         variant="intro"
         title={isRepair ? 'Repair analysis' : isResume ? 'Continue analysis' : 'Ready to analyze'}
       >
-        <Go page="analysis">Back</Go>
+        <Go page="summary">Back</Go>
         <Button
           tone="primary"
           icon="play"

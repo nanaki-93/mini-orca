@@ -1,7 +1,7 @@
 import { useWorkspace } from './workspace-context';
 import { useState } from 'react';
 import { CommitMessage } from './git-controls';
-import { activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
+import { activeChangeWorkflow, type State } from './workspace';
 import type { ChangeMutation, ChangeSession } from './models';
 import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
 
@@ -225,53 +225,6 @@ export function ChangeHistory({ s }: { s: State }) {
           Refresh history
         </Button>
       </div>
-    </Panel>
-  );
-}
-
-export function ChangeChecks({ s, tests = true }: { s: State; tests?: boolean }) {
-  const w = useWorkspace();
-  const change = s.change;
-  if (!change) return null;
-  const blocked =
-    !!s.busy ||
-    activeChangeWorkflow(change) ||
-    change.state !== 'draft' ||
-    change.freshness !== 'current';
-  return (
-    <Panel title="Check evidence">
-      {change.checks.length === 0 ? (
-        <p>No current checks.</p>
-      ) : (
-        change.checks.map((check, i) => (
-          <div key={i} className="chat-check">
-            <div className="row between wrap">
-              <strong>{check.name}</strong>
-              <Badge value={check.state} />
-            </div>
-            {check.output && (
-              <Disclosure title="Diagnostics">
-                <pre>{check.output}</pre>
-              </Disclosure>
-            )}
-          </div>
-        ))
-      )}
-      {!change.workflow && (
-        <div className="actions section-gap">
-          <Button disabled={blocked} onClick={() => void w.checkChange(tests)}>
-            Check proposal
-          </Button>
-          {change.checks.length > 0 && !changeChecksPassed(change) && (
-            <Button
-              disabled={blocked || change.repair_attempts >= 3}
-              onClick={() => void w.repairChange()}
-            >
-              Repair failed checks
-            </Button>
-          )}
-        </div>
-      )}
     </Panel>
   );
 }

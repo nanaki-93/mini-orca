@@ -17,13 +17,12 @@ import {
   isModelPresetActive,
   type Page,
 } from './workspace';
-import { Button, Heading, Icon, Modal, Notice, Overlay, Spinner } from './ui';
+import { Button, Icon, Modal, Notice, Overlay, Spinner } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { DocsWorkspace } from './docs';
-import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
+import { AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results, selectedResult } from './results';
 import { Editor, Context } from './editor';
-import { ChangeHistory } from './change-shared';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
 import { AgentsWorkspace } from './agents';
@@ -253,7 +252,6 @@ function App() {
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'docs') content = <DocsWorkspace s={s} />;
   else if (s.page === 'agents') content = <AgentsWorkspace s={s} />;
-  else if (s.page === 'analysis') content = <Analysis s={s} />;
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
@@ -261,17 +259,6 @@ function App() {
     content = <Results s={s} key={`${s.project.project_id}:${category || s.page}`} />;
   else if (s.page === 'editor' || s.page === 'chat' || s.page === 'changes')
     content = <Editor s={s} />;
-  else if (s.page === 'history')
-    content = (
-      <div className="workspace-page">
-        <Heading
-          title="History"
-          detail="Restore saved work without generating or applying changes."
-          variant="intro"
-        />
-        <ChangeHistory s={s} />
-      </div>
-    );
   else if (s.page === 'instructions') content = <Instructions s={s} />;
   else if (s.page === 'context') content = <Context s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
