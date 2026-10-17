@@ -13,7 +13,7 @@ guides add local detail; keep shared rules here instead of copying them.
 
 ## Quick commands & single-test execution
 
-- Bootstrap & entrypoints (`justfile` / `Makefile`): `just setup`, `just dev`, `just test`, `just check` (or `make build`, `make dev`, `make test`, `make check`, `make quality`).
+- Bootstrap & entrypoints (`justfile` / `Makefile`): `just setup`, `just dev`, `just desktop` (daemon + desktop app), `just desktop-run`, `just test`, `just check` (or `make build`, `make dev`, `make desktop-run`, `make test`, `make check`, `make quality`).
 - Build daemon: `go build ./cmd/daemon` (or `just build`).
 - Run a single Go test: `go test ./internal/app -run TestName -v` (or `just test-one TestName`).
 - Run a single frontend test file: `npm --prefix desktop/frontend run build && node desktop/frontend/tests/redesign.mjs`.
