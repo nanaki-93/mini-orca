@@ -1165,70 +1165,188 @@ export function TuiApp({
         </div>
       </header>
 
-      {/* Numbered 5-Hub Top Bar */}
-      <nav className="tui-tabbar" aria-label="TUI Workspaces">
-        {TUI_TABS.map((t) => {
-          const isCurrent = activeHubEntry.key === t.key;
-          const badge =
-            t.key === '2' &&
-            (workflow ||
-              agentItems.length > 0 ||
-              issueSummary.totalOpenIssues > 0 ||
-              issueSummary.featureCount > 0)
-              ? workflow
-                ? `[${workflow.status}]`
-                : `(${agentItems.length}a/${issueSummary.totalOpenIssues}i/${issueSummary.featureCount}f)`
-              : t.key === '3' && changedFiles.length > 0
-                ? `(${changedFiles.length}d)`
-                : '';
-          return (
-            <button
-              key={t.key}
-              type="button"
-              className="tui-tab"
-              aria-current={isCurrent ? 'page' : undefined}
-              onClick={() => void w.navigate(t.page)}
-            >
-              <span className="tui-key">[{t.key}]</span>
-              <span>{t.label}</span>
-              {badge && <span className="tui-c-amber">{badge}</span>}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Hub Sub-View Strip ([Tab] cycles sub-views inside active Hub) */}
-      {activeHubEntry.subPages.length > 0 && (
+      {/* Single-Row Numbered 5-Hub Top Bar + Inline Sub-Views */}
+      <nav
+        className="tui-tabbar"
+        aria-label="TUI Workspaces"
+        style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+          {TUI_TABS.map((t) => {
+            const isCurrent = activeHubEntry.key === t.key;
+            const badge =
+              t.key === '2' &&
+              (workflow ||
+                agentItems.length > 0 ||
+                issueSummary.totalOpenIssues > 0 ||
+                issueSummary.featureCount > 0)
+                ? workflow
+                  ? `[${workflow.status}]`
+                  : `(${agentItems.length}a/${issueSummary.totalOpenIssues}i/${issueSummary.featureCount}f)`
+                : t.key === '3' && changedFiles.length > 0
+                  ? `(${changedFiles.length}d)`
+                  : '';
+            return (
+              <button
+                key={t.key}
+                type="button"
+                className="tui-tab"
+                aria-current={isCurrent ? 'page' : undefined}
+                onClick={() => void w.navigate(t.page)}
+              >
+                <span className="tui-key">[{t.key}]</span>
+                <span>{t.label}</span>
+                {badge && <span className="tui-c-amber">{badge}</span>}
+              </button>
+            );
+          })}
+        </div>
         <div
           aria-label="TUI Hub Sub-Views"
           style={{
-            padding: '4px 12px',
-            borderBottom: '1px solid var(--tui-border)',
-            background: 'var(--tui-bg-alt)',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '8px',
+            gap: '6px',
             flexWrap: 'wrap',
+            alignItems: 'center',
+            paddingRight: '8px',
           }}
         >
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span className="tui-sub">HUB SUB-VIEW:</span>
-            {activeHubEntry.subPages.map((sp) => (
-              <button
-                key={sp.page}
-                type="button"
-                className={`tui-btn${currentTabPage === sp.page ? ' primary' : ''}`}
-                aria-current={currentTabPage === sp.page ? 'page' : undefined}
-                onClick={() => void w.navigate(sp.page)}
-              >
-                [{sp.label}]
-              </button>
-            ))}
-          </div>
-          <span className="tui-sub">[Tab] cycle sub-view</span>
+          {(activeHubEntry.subPages.length > 0
+            ? activeHubEntry.subPages
+            : [
+                { page: 'bugs' as Page, label: 'Issues' },
+                { page: 'features' as Page, label: 'Features' },
+                { page: 'analysis-run' as Page, label: 'Last Run' },
+              ]
+          ).map((sp) => (
+            <button
+              key={sp.page}
+              type="button"
+              className={`tui-btn${currentTabPage === sp.page ? ' primary' : ''}`}
+              aria-current={currentTabPage === sp.page ? 'page' : undefined}
+              onClick={() => void w.navigate(sp.page)}
+            >
+              [{sp.label}]
+            </button>
+          ))}
+          {activeHubEntry.subPages.length > 0 && <span className="tui-sub">[Tab]</span>}
         </div>
-      )}
+      </nav>
+
+      {/* Live Analysis Progress Banner (visible across all TUI screens when running or paused) */}
+      {s.run &&
+        (activeRun(s.run) || ['paused', 'interrupted'].includes(s.run.status)) &&
+        (() => {
+          const runTotal = s.run.sections.reduce((sum, sec) => sum + sec.coverage.total, 0);
+          const runDone = s.run.sections.reduce(
+            (sum, sec) =>
+              sum +
+              sec.coverage.succeeded +
+              sec.coverage.partial +
+              sec.coverage.failed +
+              sec.coverage.skipped +
+              sec.coverage.unavailable,
+            0,
+          );
+          const pct = runTotal > 0 ? Math.floor((runDone / runTotal) * 100) : 0;
+          const barWidth = 16;
+          const filled = Math.round((pct / 100) * barWidth);
+          const asciiBar = `${'█'.repeat(Math.max(0, Math.min(barWidth, filled)))}${'░'.repeat(Math.max(0, barWidth - filled))}`;
+          const runningFile = s.run.files.find((f) =>
+            f.stages.some((st) => st.status === 'running'),
+          );
+          const runningStage = runningFile?.stages.find((st) => st.status === 'running');
+          const stepLabel =
+            s.run.status === 'canceling'
+              ? 'Canceling analysis…'
+              : s.run.status === 'pausing'
+                ? 'Finishing current step before pausing…'
+                : runningStage && runningFile
+                  ? `${runningStage.stage} · ${runningFile.path}`
+                  : s.run.features?.status === 'running'
+                    ? 'Generating feature suggestions…'
+                    : s.run.status === 'queued'
+                      ? 'Queued…'
+                      : ['paused', 'interrupted'].includes(s.run.status)
+                        ? s.run.reason || `Analysis ${s.run.status}`
+                        : `${s.run.window_files_completed} files completed this batch`;
+          return (
+            <div
+              role="status"
+              aria-label="TUI live analysis progress"
+              style={{
+                padding: '6px 12px',
+                borderBottom: '1px solid var(--tui-accent)',
+                background: 'var(--tui-bg-alt)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {activeRun(s.run) ? (
+                  <span className="tui-c-accent" style={{ fontWeight: 700 }}>
+                    <Spinner /> [ANALYZING]
+                  </span>
+                ) : (
+                  <span className="tui-c-amber" style={{ fontWeight: 700 }}>
+                    [ANALYSIS {s.run.status.toUpperCase()}]
+                  </span>
+                )}
+                <span className="tui-c-green" style={{ fontFamily: 'var(--font-mono)' }}>
+                  [{asciiBar}] {pct}% ({runDone}/{runTotal} steps)
+                </span>
+                <span className="tui-sub">{stepLabel}</span>
+                <span className="tui-c-amber">
+                  {issueSummary.totalOpenIssues} issues ({issueSummary.bugCount}b/
+                  {issueSummary.secCount}s/{issueSummary.perfCount}p) · {issueSummary.featureCount}{' '}
+                  features · {s.run.elapsed_seconds}s
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {['running', 'queued'].includes(s.run.status) && (
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!activeBusy}
+                    onClick={() => void w.controlRun('pause')}
+                  >
+                    [Pause]
+                  </button>
+                )}
+                {['paused', 'interrupted'].includes(s.run.status) && (
+                  <button
+                    type="button"
+                    className="tui-btn primary"
+                    disabled={!!activeBusy}
+                    onClick={() => void w.resumeAnalysisDirect()}
+                  >
+                    [Resume Analysis]
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy || s.run.status === 'canceling'}
+                  onClick={() => void w.controlRun('cancel')}
+                >
+                  [Cancel]
+                </button>
+                {currentTabPage !== 'analysis-run' && (
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    onClick={() => void w.navigate('analysis-run')}
+                  >
+                    [Last Run]
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Notices / Errors (Root + Active Child Worktree) */}
       {(activeError || activeNotice || activeBusy) && (
@@ -1475,7 +1593,9 @@ export function TuiApp({
                 <span className="tui-box-title">
                   ISSUES QUEUE (j/k move · h/l filter · x select · d dismiss · Enter/a fix)
                 </span>
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                <div
+                  style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}
+                >
                   <button
                     type="button"
                     className={`tui-btn${issueView === 'open' ? ' primary' : ''}`}
@@ -1506,36 +1626,30 @@ export function TuiApp({
                   >
                     [Done ({doneIssues.length})]
                   </button>
+                  <span className="tui-sub" aria-hidden="true">
+                    |
+                  </span>
+                  {(
+                    [
+                      ['all', `All (${issueSummary.totalOpenIssues})`],
+                      ['bugs', `Bugs (${issueSummary.bugCount})`],
+                      ['security', `Security (${issueSummary.secCount})`],
+                      ['performance', `Performance (${issueSummary.perfCount})`],
+                    ] as const
+                  ).map(([cat, label]) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`tui-btn${issueCategory === cat ? ' active' : ''}`}
+                      onClick={() => {
+                        setIssueCategory(cat);
+                        setSelectedIdx(0);
+                      }}
+                    >
+                      [{label}]
+                    </button>
+                  ))}
                 </div>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '4px',
-                  flexWrap: 'wrap',
-                  marginBottom: '8px',
-                }}
-              >
-                {(
-                  [
-                    ['all', 'All'],
-                    ['bugs', 'Bugs'],
-                    ['security', 'Security'],
-                    ['performance', 'Performance'],
-                  ] as const
-                ).map(([cat, label]) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    className={`tui-btn${issueCategory === cat ? ' active' : ''}`}
-                    onClick={() => {
-                      setIssueCategory(cat);
-                      setSelectedIdx(0);
-                    }}
-                  >
-                    [{label}]
-                  </button>
-                ))}
               </div>
               {selectedIssueIds.length > 0 && (
                 <div
@@ -2953,42 +3067,89 @@ export function TuiApp({
               </div>
             </div>
             {s.run ? (
-              <table className="tui-table">
-                <thead>
-                  <tr>
-                    <th>PHASE</th>
-                    <th>STATUS</th>
-                    <th>FINDINGS</th>
-                    <th>COVERAGE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runSections.map((sec, idx) => (
-                    <tr
-                      key={sec.category}
-                      className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
-                      onClick={() => {
-                        setSelectedIdx(idx);
-                        void w.navigate(sec.category as Page);
-                      }}
-                    >
-                      <td className="tui-c-accent">
-                        {idx === clampedIdx && (
-                          <span className="tui-cursor-indicator" aria-hidden="true">
-                            &gt;
-                          </span>
-                        )}
-                        {human(sec.category)}
-                      </td>
-                      <td>{sec.status}</td>
-                      <td>{sec.finding_count}</td>
-                      <td className="tui-c-muted">
-                        {sec.coverage.succeeded}/{sec.coverage.total} files
-                      </td>
+              <>
+                <div
+                  className="tui-sub"
+                  style={{
+                    marginBottom: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <span>
+                    Status: <strong className="tui-c-accent">{human(s.run.status)}</strong> · Files
+                    in scope: <strong>{s.run.files.length}</strong> · Elapsed:{' '}
+                    <strong>{s.run.elapsed_seconds}s</strong>
+                  </span>
+                  <span className="tui-c-amber">
+                    Open Issues: <strong>{issueSummary.totalOpenIssues}</strong> (
+                    {issueSummary.bugCount}b/{issueSummary.secCount}s/{issueSummary.perfCount}p) ·
+                    Feature Ideas: <strong>{issueSummary.featureCount}</strong>
+                  </span>
+                </div>
+                <table className="tui-table">
+                  <thead>
+                    <tr>
+                      <th>PHASE</th>
+                      <th>STATUS</th>
+                      <th>OPEN / SAVED</th>
+                      <th>COVERAGE</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {runSections.map((sec, idx) => {
+                      const openForCat =
+                        sec.category === 'bugs'
+                          ? issueSummary.bugCount
+                          : sec.category === 'security'
+                            ? issueSummary.secCount
+                            : issueSummary.perfCount;
+                      return (
+                        <tr
+                          key={sec.category}
+                          className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                          onClick={() => {
+                            setSelectedIdx(idx);
+                            void w.navigate(sec.category as Page);
+                          }}
+                        >
+                          <td className="tui-c-accent">
+                            {idx === clampedIdx && (
+                              <span className="tui-cursor-indicator" aria-hidden="true">
+                                &gt;
+                              </span>
+                            )}
+                            {human(sec.category)}
+                          </td>
+                          <td>{sec.status}</td>
+                          <td>
+                            {openForCat} open
+                            {typeof sec.finding_count === 'number'
+                              ? ` (${sec.finding_count} in run)`
+                              : ''}
+                          </td>
+                          <td className="tui-c-muted">
+                            {sec.coverage.succeeded}/{sec.coverage.total} files
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {s.run.features && (
+                      <tr className="tui-selectable" onClick={() => void w.navigate('features')}>
+                        <td className="tui-c-accent">Feature Discovery</td>
+                        <td>{s.run.features.status}</td>
+                        <td>{issueSummary.featureCount} ideas</td>
+                        <td className="tui-c-muted">
+                          {s.run.features.attempts}/{s.run.plan.limits.max_attempts_per_stage}{' '}
+                          attempts
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </>
             ) : (
               <p className="tui-sub">No analysis run recorded yet.</p>
             )}
