@@ -601,6 +601,44 @@ const projectKey = (p?: M.ProjectIdentity) => (p ? `${p.project_id}:${p.project_
 const fileKey = (s: State) => `${projectKey(s.project)}:${s.file?.path}:${s.file?.content_hash}`;
 export const activeRun = (run?: M.AnalysisRun | null) =>
   !!run && ['queued', 'running', 'pausing', 'canceling'].includes(run.status);
+
+const RECOVERABLE_STAGE_STATUSES = ['failed', 'stale', 'partial', 'canceled', 'interrupted'];
+
+export function recoverableFileCount(s: State): number {
+  const runPaths = new Set<string>();
+  for (const file of s.run?.files || []) {
+    if (file.stages.some((st) => RECOVERABLE_STAGE_STATUSES.includes(st.status))) {
+      runPaths.add(file.path);
+    }
+  }
+  const excluded = s.selection?.excluded_paths || [];
+  for (const file of s.selection?.files || []) {
+    if (
+      !file.reason &&
+      !excluded.includes(file.path) &&
+      file.stages.some((st) => RECOVERABLE_STAGE_STATUSES.includes(st.status))
+    ) {
+      runPaths.add(file.path);
+    }
+  }
+  return Math.max(
+    runPaths.size,
+    s.selection?.recovery?.file_count || 0,
+    s.overview?.analysis_coverage?.failed || 0,
+  );
+}
+
+export function canRepairAnalysis(s: State): boolean {
+  if (activeRun(s.run) || (s.run && ['paused', 'interrupted'].includes(s.run.status))) {
+    return false;
+  }
+  if (recoverableFileCount(s) > 0) return true;
+  if (s.selection?.recovery?.state === 'available' || s.selection?.recovery?.state === 'blocked') {
+    return true;
+  }
+  return !!s.run && ['partial', 'failed', 'stale', 'canceled'].includes(s.run.status);
+}
+
 export function canCancelOperation(label: string) {
   return (
     !!label &&
@@ -1710,20 +1748,40 @@ export class Workspace {
       const setup = this.state.analysisSetup ? { ...this.state.analysisSetup } : undefined;
       const selection_id = this.state.selection?.selection_id;
       const run = mode === 'resume' ? this.state.run : undefined;
-      const preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
+      const isScopedRetry = mode === 'repair' || mode === 'stale';
+      let preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
         ...this.identity(),
         scope: 'project',
         include_features: run ? !!run.plan.features : mode === 'new',
         models: run ? run.plan.models : models,
         limits: run?.plan.limits || limits,
-        refresh: run ? run.plan.refresh : refresh || clearResults,
-        clear_results: run ? !!run.plan.clear_results : clearResults,
+        refresh: run ? run.plan.refresh : isScopedRetry ? false : refresh || clearResults,
+        clear_results: run ? !!run.plan.clear_results : isScopedRetry ? false : clearResults,
         retry_stale_failed: run ? !!run.plan.retry_stale_failed : false,
-        recover_incomplete: mode === 'repair',
-        stale_only: mode === 'stale',
-        stale_path: stalePath,
+        recover_incomplete: run ? !!run.plan.recover_incomplete : mode === 'repair',
+        stale_only: run ? !!run.plan.stale_only : mode === 'stale',
+        stale_path: run ? run.plan.stale_path : stalePath,
         ...(run ? { resume_run: run.identity } : {}),
       });
+      if (
+        start &&
+        mode === 'repair' &&
+        !preview.files.length &&
+        !preview.features?.max_model_requests
+      ) {
+        preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
+          ...this.identity(),
+          scope: 'project',
+          include_features: false,
+          models,
+          limits,
+          refresh: false,
+          clear_results: false,
+          retry_stale_failed: false,
+          recover_incomplete: false,
+          stale_only: false,
+        });
+      }
       if (
         epoch !== this.epoch ||
         operation !== this.operation ||
@@ -1752,7 +1810,36 @@ export class Workspace {
       true,
     );
   }
+  private needsReindexBeforeAnalysis() {
+    return (
+      this.state.selection?.recovery?.state === 'blocked' ||
+      this.state.run?.status === 'stale' ||
+      !!this.state.selection?.files.some((f) =>
+        f.stages.some(
+          (st) =>
+            st.reason?.includes('changed since indexing') ||
+            st.reason?.includes('could not be read'),
+        ),
+      )
+    );
+  }
+  async repairAnalysisDirect(targetPath?: string) {
+    if (this.needsReindexBeforeAnalysis() && this.state.project) {
+      await this.reindex();
+    }
+    const limits = this.state.run?.plan.limits ||
+      this.state.analysisLimits || {
+        batch_files: 20,
+        budget_seconds: 1800,
+        max_attempts_per_stage: 2,
+      };
+    const models = this.state.run?.plan.models || analysisSetupModels(this.state);
+    await this.previewAnalysis('repair', limits, false, models, targetPath, true, false);
+  }
   async runAnalysisDirect(clearResults = true) {
+    if (this.needsReindexBeforeAnalysis() && this.state.project) {
+      await this.reindex();
+    }
     const limits = this.state.analysisLimits || {
       batch_files: 20,
       budget_seconds: 1800,

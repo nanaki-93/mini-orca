@@ -279,7 +279,7 @@ func validateAnalysisSelectionOptions(recoverIncomplete, refresh, clearResults, 
 	if clearResults && !refresh {
 		return fmt.Errorf("clear_results requires refresh")
 	}
-	if stalePath != "" && (!staleOnly || !analysisMetadataPath(stalePath)) {
+	if stalePath != "" && ((!staleOnly && !recoverIncomplete) || !analysisMetadataPath(stalePath)) {
 		return fmt.Errorf("stale_path requires stale_only and a project-relative file path")
 	}
 	incompatible := refresh || clearResults || retryStaleFailed || includeFeatures
@@ -1183,12 +1183,23 @@ func (s *Service) failExhaustedAnalysisStageLocked(fileIndex, stageIndex int) er
 
 func (s *Service) finishCompletedAnalysisRunLocked(ctx context.Context) {
 	c := s.analysisRun
-	if err := s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, true); err != nil {
+	if err := s.validateAnalysisCompletedRun(ctx, c.root, &c.run.Plan); err != nil {
 		s.staleAnalysisRunLocked()
 	} else {
 		refreshAnalysisSections(c.run)
 		c.run.Status = analysisFinishedStatus(c.run)
-		s.persistProjectDocs()
+		s.persistProjectDocsForRun(c.run.Status)
 	}
 	_ = s.saveAnalysisRunLocked(false) // Failure is retained and stops this worker.
+}
+
+func (s *Service) validateAnalysisCompletedRun(ctx context.Context, root string, plan *AnalysisRunPreview) error {
+	if err := s.validateAnalysisQueue(ctx, root, plan, false); err != nil {
+		return err
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return err
+	}
+	return project.VerifyProjectSources(ctx, root, index)
 }

@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
+import {
+  activeRun,
+  analysisSetupModels,
+  canRepairAnalysis,
+  recoverableFileCount,
+  workspace as w,
+  type State,
+} from './workspace';
 import { CapturedModels } from './analysis-models';
 import {
   Button,
@@ -83,6 +90,8 @@ export function AnalysisFiles({ s }: { s: State }) {
   const files = (s.selection?.files || []).filter((file) =>
     file.path.toLowerCase().includes(filter.toLowerCase()),
   );
+  const canRepair = canRepairAnalysis(s);
+  const recoverableCount = recoverableFileCount(s);
   return (
     <div className="workspace-page analysis-files">
       <Heading
@@ -90,15 +99,21 @@ export function AnalysisFiles({ s }: { s: State }) {
         title="File Scope & Exclusions"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected · configure files to skip`}
       >
-        <Button
-          icon="refresh"
-          disabled={!!s.busy || changed}
-          onClick={() => void w.act('Refresh files', () => w.refreshProject())}
-        >
+        <Button icon="refresh" disabled={!!s.busy || changed} onClick={() => void w.reindex()}>
           Refresh
         </Button>
+        {canRepair && (
+          <Button
+            tone="primary"
+            icon="refresh"
+            disabled={!!s.busy || changed || activeRun(s.run)}
+            onClick={() => void w.repairAnalysisDirect()}
+          >
+            {recoverableCount > 0 ? `Retry Failed (${recoverableCount})` : 'Repair Analysis'}
+          </Button>
+        )}
         <Button
-          tone="primary"
+          tone={canRepair ? 'default' : 'primary'}
           icon="play"
           disabled={!!s.busy || changed || activeRun(s.run)}
           loading={activeRun(s.run)}
@@ -413,17 +428,37 @@ export function AnalysisRun({ s }: { s: State }) {
   );
   const runningStage = runningFile?.stages.find((stage) => stage.status === 'running');
   const failedFiles = run.files.filter((file) =>
-    file.stages.some((stage) => stage.status === 'failed'),
+    file.stages.some((stage) =>
+      ['failed', 'stale', 'partial', 'canceled', 'interrupted'].includes(stage.status),
+    ),
   );
   const filteredRunFiles = run.files.filter(
     (file) =>
-      (!onlyFailedFiles || file.stages.some((stage) => stage.status === 'failed')) &&
+      (!onlyFailedFiles ||
+        failedFiles.length === 0 ||
+        file.stages.some((stage) =>
+          ['failed', 'stale', 'partial', 'canceled', 'interrupted'].includes(stage.status),
+        )) &&
       (!fileQuery.trim() || file.path.toLowerCase().includes(fileQuery.trim().toLowerCase())),
   );
+  const isScopedRun = !!(
+    run.plan.recover_incomplete ||
+    run.plan.stale_only ||
+    run.plan.retry_stale_failed
+  );
+  const sectionFindingCount = (category: string, runCount: number | null) => {
+    const saved = s.results[category]?.saved_finding_count;
+    if (isScopedRun && typeof saved === 'number') {
+      return Math.max(runCount ?? 0, saved);
+    }
+    return runCount;
+  };
   const totalFindings = run.sections.reduce(
-    (sum, section) => sum + (section.finding_count || 0),
+    (sum, section) => sum + (sectionFindingCount(section.category, section.finding_count) || 0),
     0,
   );
+  const canRepair = canRepairAnalysis(s);
+  const recoverableCount = recoverableFileCount(s);
   const elapsed =
     run.elapsed_seconds < 60
       ? `${run.elapsed_seconds}s`
@@ -494,14 +529,30 @@ export function AnalysisRun({ s }: { s: State }) {
           </>
         )}
         {!activeRun(run) && !pausedOrInterrupted && (
-          <Button
-            tone="primary"
-            icon="play"
-            disabled={!!s.busy}
-            onClick={() => void w.runAnalysisDirect(true)}
-          >
-            New Analysis
-          </Button>
+          <>
+            {canRepair && (
+              <Button
+                tone="primary"
+                icon="refresh"
+                disabled={!!s.busy}
+                onClick={() => void w.repairAnalysisDirect()}
+              >
+                {failedFiles.length > 0
+                  ? `Retry Failed (${failedFiles.length})`
+                  : recoverableCount > 0
+                    ? `Retry Failed (${recoverableCount})`
+                    : 'Repair Analysis'}
+              </Button>
+            )}
+            <Button
+              tone={canRepair ? 'default' : 'primary'}
+              icon="play"
+              disabled={!!s.busy}
+              onClick={() => void w.runAnalysisDirect(true)}
+            >
+              New Analysis
+            </Button>
+          </>
         )}
         {(activeRun(run) || pausedOrInterrupted) && (
           <Button
@@ -520,7 +571,21 @@ export function AnalysisRun({ s }: { s: State }) {
               : 'info'
           }
         >
-          {run.reason}
+          <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+            <span>{run.reason}</span>
+            {canRepair && (
+              <Button
+                tone="primary small"
+                icon="refresh"
+                disabled={!!s.busy}
+                onClick={() => void w.repairAnalysisDirect()}
+              >
+                {failedFiles.length > 0
+                  ? `Retry Failed (${failedFiles.length})`
+                  : 'Repair Analysis'}
+              </Button>
+            )}
+          </div>
         </Notice>
       )}
       {run.features?.reason && (
@@ -646,17 +711,27 @@ export function AnalysisRun({ s }: { s: State }) {
               <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
                 <span>
                   {failedFiles.length} {failedFiles.length === 1 ? 'file' : 'files'} encountered
-                  stage failures during this run.
+                  stage failures or incomplete steps during this run.
                 </span>
-                <Button
-                  tone="ghost small"
-                  onClick={() => {
-                    setOnlyFailedFiles(true);
-                    setTab('files');
-                  }}
-                >
-                  Inspect Failed Files ({failedFiles.length})
-                </Button>
+                <div className="actions">
+                  <Button
+                    tone="primary small"
+                    icon="refresh"
+                    disabled={!!s.busy || activeRun(run)}
+                    onClick={() => void w.repairAnalysisDirect()}
+                  >
+                    Retry Failed ({failedFiles.length})
+                  </Button>
+                  <Button
+                    tone="ghost small"
+                    onClick={() => {
+                      setOnlyFailedFiles(true);
+                      setTab('files');
+                    }}
+                  >
+                    Inspect Failed Files ({failedFiles.length})
+                  </Button>
+                </div>
               </div>
             </Notice>
           )}
@@ -672,54 +747,57 @@ export function AnalysisRun({ s }: { s: State }) {
               </span>
             </div>
             <div className="grid analysis-run-categories">
-              {run.sections.map((section) => (
-                <Panel
-                  key={section.category}
-                  title={human(section.category)}
-                  className="run-result-card"
-                  actions={<StatusDot value={section.status} label={human(section.category)} />}
-                >
-                  <div data-accent={section.category} className="run-result-summary">
-                    <div className="metric-number">{section.finding_count ?? '—'}</div>
-                    <span>{human(section.status)}</span>
-                  </div>
-                  <p className="small muted">
-                    {section.coverage.succeeded}/{section.coverage.total} files succeeded ·{' '}
-                    {section.finding_count === null
-                      ? 'No evidence yet'
-                      : section.category === 'performance'
-                        ? 'Hypotheses'
-                        : 'Saved findings'}
-                  </p>
-                  <div className="row between wrap" style={{ marginTop: '6px' }}>
-                    <Go
-                      page={section.category as 'bugs' | 'security' | 'performance'}
-                      icon={
-                        section.category === 'security'
-                          ? 'shield'
-                          : section.category === 'performance'
-                            ? 'gauge'
-                            : 'bug'
-                      }
-                      tone="ghost small"
-                    >
-                      Open {human(section.category)} →
-                    </Go>
-                  </div>
-                  <Disclosure title="Coverage details">
-                    <KeyValues
-                      values={[
-                        ['Completed', section.coverage.succeeded],
-                        ['Partial', section.coverage.partial],
-                        ['Failed', section.coverage.failed],
-                        ['Unavailable', section.coverage.unavailable],
-                        ['Skipped', section.coverage.skipped],
-                        ['Pending', section.coverage.pending],
-                      ]}
-                    />
-                  </Disclosure>
-                </Panel>
-              ))}
+              {run.sections.map((section) => {
+                const count = sectionFindingCount(section.category, section.finding_count);
+                return (
+                  <Panel
+                    key={section.category}
+                    title={human(section.category)}
+                    className="run-result-card"
+                    actions={<StatusDot value={section.status} label={human(section.category)} />}
+                  >
+                    <div data-accent={section.category} className="run-result-summary">
+                      <div className="metric-number">{count ?? '—'}</div>
+                      <span>{human(section.status)}</span>
+                    </div>
+                    <p className="small muted">
+                      {section.coverage.succeeded}/{section.coverage.total} files succeeded ·{' '}
+                      {count === null
+                        ? 'No evidence yet'
+                        : section.category === 'performance'
+                          ? 'Hypotheses'
+                          : 'Saved findings'}
+                    </p>
+                    <div className="row between wrap" style={{ marginTop: '6px' }}>
+                      <Go
+                        page={section.category as 'bugs' | 'security' | 'performance'}
+                        icon={
+                          section.category === 'security'
+                            ? 'shield'
+                            : section.category === 'performance'
+                              ? 'gauge'
+                              : 'bug'
+                        }
+                        tone="ghost small"
+                      >
+                        Open {human(section.category)} →
+                      </Go>
+                    </div>
+                    <Disclosure title="Coverage details">
+                      <KeyValues
+                        values={[
+                          ['Completed', section.coverage.succeeded],
+                          ['Partial', section.coverage.partial],
+                          ['Failed', section.coverage.failed],
+                          ['Unavailable', section.coverage.unavailable],
+                          ['Skipped', section.coverage.skipped],
+                          ['Pending', section.coverage.pending],
+                        ]}
+                      />
+                    </Disclosure>
+                  </Panel>
+                );
+              })}
               {run.features && (
                 <Panel
                   title="New feature suggestions"
@@ -789,6 +867,14 @@ export function AnalysisRun({ s }: { s: State }) {
                 >
                   Failed Only ({failedFiles.length})
                 </Button>
+                <Button
+                  tone="primary small"
+                  icon="refresh"
+                  disabled={!!s.busy || activeRun(run)}
+                  onClick={() => void w.repairAnalysisDirect()}
+                >
+                  Retry All Failed ({failedFiles.length})
+                </Button>
               </div>
             )}
           </div>
@@ -797,6 +883,16 @@ export function AnalysisRun({ s }: { s: State }) {
             <Panel
               title={`Files with failures (${failedFiles.length})`}
               className="analysis-failed-files"
+              actions={
+                <Button
+                  tone="primary small"
+                  icon="refresh"
+                  disabled={!!s.busy || activeRun(run)}
+                  onClick={() => void w.repairAnalysisDirect()}
+                >
+                  Retry Failed ({failedFiles.length})
+                </Button>
+              }
             >
               <div className="scroll-list">
                 {failedFiles.map((file) => (
@@ -830,6 +926,23 @@ export function AnalysisRun({ s }: { s: State }) {
                         </span>
                       </div>
                     ))}
+                    <div className="actions" style={{ marginTop: '8px' }}>
+                      <Button
+                        tone="primary small"
+                        icon="refresh"
+                        disabled={!!s.busy || activeRun(run)}
+                        onClick={() => void w.repairAnalysisDirect(file.path)}
+                      >
+                        Retry File
+                      </Button>
+                      <Button
+                        tone="ghost small"
+                        icon="code"
+                        onClick={() => void w.openFile(file.path)}
+                      >
+                        Open File
+                      </Button>
+                    </div>
                   </Disclosure>
                 ))}
               </div>
@@ -841,33 +954,48 @@ export function AnalysisRun({ s }: { s: State }) {
               <p className="small muted">No matching files recorded in this run.</p>
             ) : (
               <div className="scroll-list">
-                {filteredRunFiles.map((file) => (
-                  <div className="list-row" key={file.path}>
-                    <span className="list-copy">
-                      <strong className="font-mono small">{file.path}</strong>
-                    </span>
-                    <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                      {file.stages.map((stage) => (
-                        <span
-                          key={stage.stage}
-                          className="row"
-                          style={{ gap: '4px', fontSize: '0.75rem' }}
-                          title={`${stageNames[stage.stage]}: ${human(stage.status)}${stage.reason ? ` — ${stage.reason}` : ''}`}
+                {filteredRunFiles.map((file) => {
+                  const fileHasFailure = file.stages.some((st) =>
+                    ['failed', 'stale', 'partial', 'canceled', 'interrupted'].includes(st.status),
+                  );
+                  return (
+                    <div className="list-row" key={file.path}>
+                      <span className="list-copy">
+                        <strong className="font-mono small">{file.path}</strong>
+                      </span>
+                      <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                        {file.stages.map((stage) => (
+                          <span
+                            key={stage.stage}
+                            className="row"
+                            style={{ gap: '4px', fontSize: '0.75rem' }}
+                            title={`${stageNames[stage.stage]}: ${human(stage.status)}${stage.reason ? ` — ${stage.reason}` : ''}`}
+                          >
+                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                            <span className="muted">{stageNames[stage.stage]}</span>
+                          </span>
+                        ))}
+                        {fileHasFailure && (
+                          <Button
+                            tone="primary small"
+                            icon="refresh"
+                            disabled={!!s.busy || activeRun(run)}
+                            onClick={() => void w.repairAnalysisDirect(file.path)}
+                          >
+                            Retry
+                          </Button>
+                        )}
+                        <Button
+                          tone="ghost small"
+                          icon="code"
+                          onClick={() => void w.openFile(file.path)}
                         >
-                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                          <span className="muted">{stageNames[stage.stage]}</span>
-                        </span>
-                      ))}
-                      <Button
-                        tone="ghost small"
-                        icon="code"
-                        onClick={() => void w.openFile(file.path)}
-                      >
-                        Open
-                      </Button>
-                    </span>
-                  </div>
-                ))}
+                          Open
+                        </Button>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Panel>

@@ -1181,6 +1181,49 @@ try {
       await close();
     }
   });
+
+  await test('Failed files in stale or partial analysis runs can be retried individually or in batch without clearing saved findings', async () => {
+    const { page, close } = await pageFor({
+      runStatus: 'stale',
+      failedPaths: ['internal/worker/process.go'],
+      hasRecovery: true,
+      analysisCompletes: true,
+    });
+    try {
+      // Overview header shows Retry Failed (1) alongside Run Analysis
+      await page.getByRole('button', { name: 'Retry Failed (1)', exact: true }).waitFor();
+
+      // Navigate to Last Run
+      await page.getByRole('button', { name: 'Last Run', exact: true }).first().click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Last Run', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Inspect Failed Files (1)', exact: true }).click();
+      await page.getByText('Files with failures (1)', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
+
+      // Click Retry on the failed file row
+      await page.getByRole('button', { name: 'Retry', exact: true }).click();
+      await idle(page);
+
+      const reqs = await page.evaluate(() => window.fixture.requests);
+      const previewReq = reqs.findLast((r) => r.path.endsWith('/analysis/preview'));
+      const runReq = reqs.findLast((r) => r.method === 'POST' && r.path.endsWith('/analysis/run'));
+      assert.ok(previewReq, 'Expected /analysis/preview request for single-file retry');
+      assert.equal(previewReq.body.recover_incomplete, true);
+      assert.equal(previewReq.body.stale_path, 'internal/worker/process.go');
+      assert.equal(previewReq.body.clear_results, false);
+      assert.ok(runReq, 'Expected POST /analysis/run request for single-file retry');
+      assert.equal(runReq.body.recover_incomplete, true);
+      assert.equal(runReq.body.stale_path, 'internal/worker/process.go');
+      assert.equal(runReq.body.clear_results, false);
+
+      // Run should now be Completed and no longer show Files with failures
+      assert.equal(await page.getByText('Files with failures (1)', { exact: true }).count(), 0);
+      await page.getByText('Files in this run (4)', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

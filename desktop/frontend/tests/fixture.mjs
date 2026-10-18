@@ -173,10 +173,13 @@ export function installFixture(options = {}) {
       ...f,
       stages: stages.map((stage) => ({
         stage,
-        status: 'completed',
+        status:
+          options.failedPaths?.includes(f.path) && stage === 'semantic' ? 'failed' : 'completed',
+        reason:
+          options.failedPaths?.includes(f.path) && stage === 'semantic' ? 'Model timeout' : '',
         attempts: 1,
         cached: false,
-        finding_count: 1,
+        finding_count: options.failedPaths?.includes(f.path) && stage === 'semantic' ? 0 : 1,
       })),
     })),
     sections: ['bugs', 'performance', 'security'].map((category) => ({
@@ -1398,6 +1401,22 @@ export function installFixture(options = {}) {
             state.preview.models = choices;
             if (body.recover_incomplete) {
               state.preview.recover_incomplete = true;
+              state.preview.stale_path = body.stale_path;
+              const recoverablePaths = new Set([
+                ...(options.failedPaths || []),
+                ...(options.stalePaths || []),
+              ]);
+              if (recoverablePaths.size > 0) {
+                state.preview.files = state.preview.files.filter(
+                  (file) =>
+                    recoverablePaths.has(file.path) &&
+                    (!body.stale_path || body.stale_path === file.path),
+                );
+              } else if (body.stale_path) {
+                state.preview.files = state.preview.files.filter(
+                  (file) => file.path === body.stale_path,
+                );
+              }
             }
             if (body.stale_only) {
               state.preview.stale_only = true;
@@ -1577,6 +1596,18 @@ export function installFixture(options = {}) {
                   security: filterSec('security', state.results?.security),
                 };
               }
+              if ((body.recover_incomplete || body.stale_only) && options.analysisCompletes) {
+                const matchPath = (p) => !body.stale_path || body.stale_path === p;
+                if (options.failedPaths) {
+                  options.failedPaths = options.failedPaths.filter((p) => !matchPath(p));
+                }
+                if (options.stalePaths) {
+                  options.stalePaths = options.stalePaths.filter((p) => !matchPath(p));
+                }
+                if (!options.failedPaths?.length && !options.stalePaths?.length) {
+                  options.hasRecovery = false;
+                }
+              }
               const nextStatus = options.analysisCompletes ? 'completed' : 'running';
               state.run = {
                 ...run,
@@ -1587,6 +1618,23 @@ export function installFixture(options = {}) {
                 },
                 plan: { ...state.preview },
                 status: nextStatus,
+                files: files.map((f) => ({
+                  ...f,
+                  stages: stages.map((stage) => ({
+                    stage,
+                    status:
+                      options.failedPaths?.includes(f.path) && stage === 'semantic'
+                        ? 'failed'
+                        : 'completed',
+                    reason:
+                      options.failedPaths?.includes(f.path) && stage === 'semantic'
+                        ? 'Model timeout'
+                        : '',
+                    attempts: 1,
+                    cached: false,
+                    finding_count: 1,
+                  })),
+                })),
                 sections: run.sections.map((sec) => ({
                   ...sec,
                   status: nextStatus,

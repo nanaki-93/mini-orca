@@ -369,3 +369,40 @@ func TestAnalysisRecoverResumeAdoptsCapturedOptionAndRejectsMismatch(t *testing.
 		t.Fatalf("recovery resume of a full run: %v", err)
 	}
 }
+
+func TestAnalysisRecoverSingleTargetAndRefreshesDocsAfterReindex(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "failed.go"), []byte("package main\nfunc Fail() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	limits := AnalysisRunLimits{100, 30, 2}
+	startAndCompleteAnalysis(t, s, analysisRunPreviewFor(t, s, limits, nil))
+	seedRetrySemanticReport(t, s, "failed.go", "failed")
+	seedRetrySemanticReport(t, s, "helper.go", "failed")
+
+	req := recoveryRequestFor(t, s, limits, nil)
+	req.StalePath = "failed.go"
+	preview, err := s.PreviewAnalysisRun(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(previewPaths(preview), []string{"failed.go"}) || preview.ExpectedModelRequests != 1 {
+		t.Fatalf("single-target recovery preview=%+v", preview)
+	}
+	before := calls.Load()
+	run := startAndCompleteAnalysis(t, s, preview)
+	if run.Status != AnalysisRunCompletedEmpty || calls.Load() != before+1 {
+		t.Fatalf("single-target recovery run=%s calls=%d", run.Status, calls.Load()-before)
+	}
+	overview, err := s.ProjectOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Docs == nil || overview.Docs.Status != project.ProjectAnalysisStatusFresh {
+		t.Fatalf("expected fresh docs after completed recovery run, got %+v", overview.Docs)
+	}
+}

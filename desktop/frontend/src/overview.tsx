@@ -8,7 +8,9 @@ import {
   allModelPresets,
   isModelPresetActive,
   activeRun,
+  canRepairAnalysis,
   evaluateBootstrapChecklist,
+  recoverableFileCount,
   type State,
   type Page,
 } from './workspace';
@@ -164,18 +166,24 @@ export function Summary({ s }: { s: State }) {
   const bugSection = s.run?.sections.find((value) => value.category === 'bugs');
   const secSection = s.run?.sections.find((value) => value.category === 'security');
   const perfSection = s.run?.sections.find((value) => value.category === 'performance');
-  const bugCount =
-    bugSection?.finding_count ??
-    s.findings?.filter((f) => f.category === 'bugs' && f.status !== 'fixed').length ??
-    0;
-  const secCount =
-    secSection?.finding_count ??
-    s.findings?.filter((f) => f.category === 'security' && f.status !== 'fixed').length ??
-    0;
-  const perfCount =
-    perfSection?.finding_count ??
-    s.findings?.filter((f) => f.category === 'performance' && f.status !== 'fixed').length ??
-    0;
+  const isScopedRepairRun =
+    !!s.run &&
+    (s.run.plan.recover_incomplete || s.run.plan.stale_only || s.run.plan.retry_stale_failed);
+  const countCategoryFindings = (
+    cat: 'bugs' | 'security' | 'performance',
+    sectionCount?: number | null,
+  ) => {
+    const savedCount =
+      s.results[cat]?.saved_finding_count ??
+      s.findings?.filter((f) => f.category === cat && f.status !== 'fixed').length;
+    if (isScopedRepairRun) {
+      return Math.max(sectionCount ?? 0, savedCount ?? 0);
+    }
+    return sectionCount ?? savedCount ?? 0;
+  };
+  const bugCount = countCategoryFindings('bugs', bugSection?.finding_count);
+  const secCount = countCategoryFindings('security', secSection?.finding_count);
+  const perfCount = countCategoryFindings('performance', perfSection?.finding_count);
   const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0) + featureCount;
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('editor') : w.viewChange(id));
 
@@ -267,15 +275,29 @@ export function Summary({ s }: { s: State }) {
                 </Button>
               </>
             ) : (
-              <Button
-                icon="play"
-                tone="primary"
-                disabled={!!s.busy || activeRun(s.run)}
-                loading={activeRun(s.run)}
-                onClick={() => void w.runAnalysisDirect(true)}
-              >
-                {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
-              </Button>
+              <>
+                {canRepairAnalysis(s) && (
+                  <Button
+                    icon="refresh"
+                    tone="primary"
+                    disabled={!!s.busy || activeRun(s.run)}
+                    onClick={() => void w.repairAnalysisDirect()}
+                  >
+                    {recoverableFileCount(s) > 0
+                      ? `Retry Failed (${recoverableFileCount(s)})`
+                      : 'Repair Analysis'}
+                  </Button>
+                )}
+                <Button
+                  icon="play"
+                  tone={canRepairAnalysis(s) ? undefined : 'primary'}
+                  disabled={!!s.busy || activeRun(s.run)}
+                  loading={activeRun(s.run)}
+                  onClick={() => void w.runAnalysisDirect(true)}
+                >
+                  {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+                </Button>
+              </>
             )}
           </div>
         </header>

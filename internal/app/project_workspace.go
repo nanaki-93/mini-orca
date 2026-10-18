@@ -109,7 +109,7 @@ func (s *Service) projectDocs(analysis *project.Analysis, index *project.Project
 		return nil, err
 	}
 	if stored != nil && len(stored.Components) > 0 {
-		if analysis.Report.Status == project.ProjectAnalysisStatusStale {
+		if stored.Status == project.ProjectAnalysisStatusFresh && project.VerifyProjectSources(context.Background(), s.manager.Root(), index) != nil {
 			stored.Status = project.ProjectAnalysisStatusStale
 		}
 		return stored, nil
@@ -119,6 +119,19 @@ func (s *Service) projectDocs(analysis *project.Analysis, index *project.Project
 }
 
 func (s *Service) persistProjectDocs() {
+	s.persistProjectDocsWithStatus("")
+}
+
+func (s *Service) persistProjectDocsForRun(runStatus AnalysisRunStatus) {
+	switch runStatus {
+	case AnalysisRunCompleted, AnalysisRunCompletedEmpty, AnalysisRunPartial:
+		s.persistProjectDocsWithStatus(project.ProjectAnalysisStatusFresh)
+	default:
+		s.persistProjectDocsWithStatus("")
+	}
+}
+
+func (s *Service) persistProjectDocsWithStatus(statusOverride string) {
 	analysis, err := s.manager.Analysis()
 	if err != nil {
 		return
@@ -128,6 +141,9 @@ func (s *Service) persistProjectDocs() {
 		return
 	}
 	docs := project.BuildProjectDocs(*analysis, index)
+	if statusOverride != "" {
+		docs.Status = statusOverride
+	}
 	_ = project.StoreProjectDocsReport(s.manager.Root(), docs)
 }
 

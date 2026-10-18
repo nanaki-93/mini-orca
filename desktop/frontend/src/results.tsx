@@ -7,6 +7,8 @@ import {
   isTestFilePath,
   workflowSeed,
   activeRun,
+  canRepairAnalysis,
+  recoverableFileCount,
   type FindingCategory,
   type FindingListView,
   type State,
@@ -845,15 +847,29 @@ export function Results({ s }: { s: State }) {
             </Button>
           </>
         ) : (
-          <Button
-            icon="play"
-            tone="primary"
-            disabled={!!s.busy || activeRun(s.run)}
-            loading={activeRun(s.run)}
-            onClick={() => void w.runAnalysisDirect(true)}
-          >
-            {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
-          </Button>
+          <>
+            {canRepairAnalysis(s) && (
+              <Button
+                icon="refresh"
+                tone="primary"
+                disabled={!!s.busy || activeRun(s.run)}
+                onClick={() => void w.repairAnalysisDirect()}
+              >
+                {recoverableFileCount(s) > 0
+                  ? `Retry Failed (${recoverableFileCount(s)})`
+                  : 'Repair Analysis'}
+              </Button>
+            )}
+            <Button
+              icon="play"
+              tone={canRepairAnalysis(s) ? undefined : 'primary'}
+              disabled={!!s.busy || activeRun(s.run)}
+              loading={activeRun(s.run)}
+              onClick={() => void w.runAnalysisDirect(true)}
+            >
+              {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+            </Button>
+          </>
         )}
       </Heading>
       {results?.retained_files?.length ? (
@@ -862,7 +878,18 @@ export function Results({ s }: { s: State }) {
         </Notice>
       ) : null}
       {s.run?.status === 'stale' && (
-        <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
+        <Notice>
+          <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+            <span>Unchanged files keep saved analysis; reanalyze stale files to refresh.</span>
+            <Button
+              icon="refresh"
+              disabled={!!s.busy || activeRun(s.run)}
+              onClick={() => void w.repairAnalysisDirect()}
+            >
+              Repair Analysis
+            </Button>
+          </div>
+        </Notice>
       )}
       {(activeRun(s.run) || pausedOrInterrupted) && (
         <div className="analysis-live-banner">

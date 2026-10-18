@@ -4,10 +4,12 @@ import {
   activeRun,
   allModelPresets,
   canAcceptChange,
+  canRepairAnalysis,
   changeChecksPassed,
   evaluateBootstrapChecklist,
   findingCategory,
   isModelPresetActive,
+  recoverableFileCount,
   workflowSeed,
   workflowSetupModels,
   workspace as w,
@@ -932,6 +934,11 @@ export function TuiApp({
     if (cmd === 'resume') {
       setCmdOutput('Resuming paused analysis...');
       void w.resumeAnalysisDirect();
+      return;
+    }
+    if (cmd === 'repair' || cmd === 'retry') {
+      setCmdOutput('Retrying failed/stale analysis files...');
+      void w.repairAnalysisDirect(arg || undefined);
       return;
     }
     if (cmd === 'pause') {
@@ -2863,6 +2870,20 @@ export function TuiApp({
                     [Resume Analysis]
                   </button>
                 )}
+                {!activeRun(s.run) &&
+                  !(s.run && ['paused', 'interrupted'].includes(s.run.status)) &&
+                  canRepairAnalysis(s) && (
+                    <button
+                      type="button"
+                      className="tui-btn primary"
+                      disabled={!!activeBusy}
+                      onClick={() => void w.repairAnalysisDirect()}
+                    >
+                      {recoverableFileCount(s) > 0
+                        ? `[Retry Failed (${recoverableFileCount(s)})]`
+                        : '[Repair Analysis]'}
+                    </button>
+                  )}
                 {activeRun(s.run) && (
                   <>
                     <button
