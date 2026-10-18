@@ -1347,6 +1347,92 @@ try {
       await close();
     }
   });
+
+  await test('TUI keyboard-only navigation, strict hub sub-view boundaries, visible per-file analysis progress, and full application feature parity', async () => {
+    const { page, close } = await pageFor({
+      git: true,
+      trusted: true,
+      featuresReady: true,
+      runStatus: 'paused',
+    });
+    try {
+      await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
+      const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
+      await tui.waitFor();
+      await tui.focus();
+
+      // 1. Verify [1] Overview hub sub-bar only exposes [Dashboard] and [Project & Tests] (no crossing functions)
+      await page.keyboard.press('1');
+      const subbar = page.getByLabel('TUI Hub Sub-Views', {
+        exact: true,
+      });
+      await subbar.waitFor();
+      const overviewSubbarText = await subbar.innerText();
+      assert.ok(
+        overviewSubbarText.includes('[Dashboard]') &&
+          overviewSubbarText.includes('[Project & Tests]') &&
+          !overviewSubbarText.includes('[Git & Worktrees]'),
+        `Expected [1] Overview sub-bar to only contain Overview sub-views, got: ${overviewSubbarText}`,
+      );
+
+      // Press Tab to cycle to [Project & Tests] purely via keyboard
+      await page.keyboard.press('Tab');
+      await page.getByText('PROJECT WORKSPACE & DAEMON CONNECTION', { exact: true }).waitFor();
+      await page
+        .getByText('VERIFICATION & TEST PHASES (j/k phase · t/Enter run)', { exact: true })
+        .waitFor();
+
+      // 2. Press '2' to jump to [2] Agent Studio, then Tab through [Issues], [Features], [Last Run], and [File Scope]
+      await page.keyboard.press('2');
+      await page.getByText('AGENTS IN PROGRESS DASHBOARD', { exact: true }).waitFor();
+      await page.keyboard.press('Tab'); // -> Issues
+      await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+      await page.keyboard.press('Tab'); // -> Features
+      await page.getByText('FEATURE IDEA INSPECTOR', { exact: true }).waitFor();
+      await page.keyboard.press('Tab'); // -> Last Run
+      await page.getByText('PER-FILE STAGE COVERAGE INSPECTOR', { exact: true }).waitFor();
+      await page.getByRole('table', { name: 'Per-file analysis progress', exact: true }).waitFor();
+      await page.keyboard.press('Tab'); // -> File Scope
+      await page
+        .getByText('FILE SCOPE & EXCLUSIONS (j/k move · Space/Enter toggle · Save Scope)', {
+          exact: true,
+        })
+        .waitFor();
+      await page.getByRole('table', { name: 'Analysis file scope', exact: true }).waitFor();
+
+      // 3. Press '3' to jump to [3] Code & Diff, verify 3-pane inspector, then Tab through [Git & Worktrees], [Saved Proposals], and [Terminal]
+      await page.keyboard.press('3');
+      await page.getByText('FILE & SYMBOL INSPECTOR', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '[3. AI & Context]', exact: true }).click();
+      await page.getByRole('button', { name: '[Analyze File]', exact: true }).waitFor();
+      await tui.focus();
+      await page.keyboard.press('Tab'); // -> Git & Worktrees
+      await page
+        .getByText('GIT & WORKTREES (j/k move · Enter open · m merge)', { exact: true })
+        .waitFor();
+      await page.keyboard.press('Tab'); // -> Saved Proposals
+      await page
+        .getByText('SAVED PROPOSALS & CHANGE HISTORY (j/k move · Enter inspect diff)', {
+          exact: true,
+        })
+        .waitFor();
+      await page.keyboard.press('Tab'); // -> Terminal
+      await page.getByText('WORKSPACE TERMINAL & VERIFICATION RUNNER', { exact: true }).waitFor();
+
+      // 4. Press '5' to jump to [5] Governance & Rules and verify AGENTS.md editor & 7-stage model routing
+      await page.keyboard.press('5');
+      await page
+        .getByText('WORKSPACE TRUST & AGENTS.MD (t toggle trust)', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: '[Edit AGENTS.md]', exact: true }).click();
+      await page.getByLabel('TUI AGENTS.md editor', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '[2. Model Routing]', exact: true }).click();
+      await page.getByLabel('Workflow Create model', { exact: true }).waitFor();
+      await page.getByLabel('Analysis Security model', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

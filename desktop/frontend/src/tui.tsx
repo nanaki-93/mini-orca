@@ -424,9 +424,25 @@ export function TuiApp({
     localStorage.setItem('mini-orca:tui-palette', palette);
   }, [palette]);
 
+  const livePage: Page = w.snapshot().page || activePage;
+  const currentTabPage: Page =
+    findingCategory({ ...s, page: livePage }) || livePage === 'finding'
+      ? 'bugs'
+      : livePage === 'welcome'
+        ? 'project'
+        : livePage === 'changes'
+          ? 'history'
+          : livePage === 'context' || livePage === 'search'
+            ? 'editor'
+            : livePage === 'analysis' || livePage === 'analysis-preview'
+              ? 'analysis-run'
+              : livePage === 'models' || livePage === 'instructions'
+                ? 'instructions'
+                : livePage;
+
   useEffect(() => {
     setSelectedIdx(0);
-  }, [activePage, s.agentDetailOpen, issueView, issueCategory, rulesSection, docsSection]);
+  }, [currentTabPage, s.agentDetailOpen, issueView, issueCategory, rulesSection, docsSection]);
 
   useEffect(() => {
     if (s.file) {
@@ -464,21 +480,6 @@ export function TuiApp({
   useEffect(() => {
     if (s.run?.features && !s.resourceErrors['feature suggestions']) void w.loadFeatures();
   }, [s.run?.features?.status, s.run?.features?.report_hash]);
-
-  const currentTabPage: Page =
-    findingCategory(s) || s.page === 'finding'
-      ? 'bugs'
-      : activePage === 'welcome'
-        ? 'project'
-        : activePage === 'changes'
-          ? 'history'
-          : activePage === 'context' || activePage === 'search'
-            ? 'editor'
-            : activePage === 'analysis' || activePage === 'analysis-preview'
-              ? 'analysis-run'
-              : activePage === 'models' || activePage === 'instructions'
-                ? 'instructions'
-                : activePage;
 
   useEffect(() => {
     if (
@@ -5133,7 +5134,7 @@ export function TuiApp({
                       }}
                     >
                       <span className="tui-box-title">
-                        HARNESS² LESSON INBOX (j/k move · Enter or g graduate lesson to AGENTS.md)
+                        HARNESS² LESSON INBOX (g graduate lesson to AGENTS.md)
                       </span>
                       <span className="tui-badge tui-c-purple">DISCOVERED INVARIANTS</span>
                     </div>
@@ -5199,8 +5200,7 @@ export function TuiApp({
                       }}
                     >
                       <span className="tui-box-title">
-                        STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (j/k move · Enter act · b
-                        bootstrap missing)
+                        STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)
                       </span>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <span
@@ -5318,7 +5318,7 @@ export function TuiApp({
                 ) : rulesSection === 'models' ? (
                   <div className="tui-box focused">
                     <span className="tui-box-title">
-                      4-STAGE AGENT &amp; ANALYSIS MODEL ROUTING (j/k preset · Enter apply)
+                      4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)
                     </span>
                     <span className="tui-box-meta">MODELS</span>
                     <div className="tui-split-main" style={{ marginBottom: '10px' }}>
