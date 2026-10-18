@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type * as M from './models';
 import {
   workspace as w,
@@ -131,8 +131,10 @@ function isClosedStatus(status: string): boolean {
   return status === 'fixed' || status === 'dismissed' || status === 'retired';
 }
 
-function findAgentForRow(s: State, row: ResultRow): AgentDashboardItem | undefined {
-  const items = collectAgentDashboardItems(s);
+function findAgentForRow(
+  items: AgentDashboardItem[],
+  row: ResultRow,
+): AgentDashboardItem | undefined {
   const rowTitle = row.name.trim().toLowerCase();
   const fullTitle = row.title.trim().toLowerCase();
   return items.find((item) => {
@@ -339,25 +341,45 @@ export function Results({ s }: { s: State }) {
   const search = useRef<HTMLInputElement>(null);
   const updateView = (patch: Partial<FindingListView>) =>
     w.set({ findingViews: { ...s.findingViews, [category]: { ...listView, ...patch } } });
-  const allRows = [
-    ...resultRows(s, 'bugs'),
-    ...resultRows(s, 'performance'),
-    ...resultRows(s, 'security'),
-  ];
-  const bugRows = resultRows(s, 'bugs');
-  const secRows = resultRows(s, 'security');
-  const perfRows = resultRows(s, 'performance');
+  const bugRows = useMemo(
+    () => resultRows(s, 'bugs'),
+    [s.results.bugs, s.findings, s.completedFindings],
+  );
+  const secRows = useMemo(
+    () => resultRows(s, 'security'),
+    [s.results.security, s.findings, s.completedFindings],
+  );
+  const perfRows = useMemo(
+    () => resultRows(s, 'performance'),
+    [s.results.performance, s.findings, s.completedFindings],
+  );
+  const uniqueAllRows = useMemo(() => {
+    const allRows = [...bugRows, ...perfRows, ...secRows];
+    return [...new Map(allRows.map((r) => [r.key, r])).values()];
+  }, [bugRows, perfRows, secRows]);
+  const agentItems = useMemo(
+    () => collectAgentDashboardItems(s),
+    [
+      s.change,
+      s.changeSeed,
+      s.changeReceipt,
+      s.gitWorkspace,
+      s.implementations,
+      s.findings,
+      s.results,
+      s.repository,
+    ],
+  );
   const countBugs = bugRows.filter((row) => (showDone ? true : !isClosedStatus(row.status))).length;
   const countSec = secRows.filter((row) => (showDone ? true : !isClosedStatus(row.status))).length;
   const countPerf = perfRows.filter((row) =>
     showDone ? true : !isClosedStatus(row.status),
   ).length;
-  const uniqueAllRows = [...new Map(allRows.map((r) => [r.key, r])).values()];
   const countAll = uniqueAllRows.filter((row) =>
     showDone ? true : !isClosedStatus(row.status),
   ).length;
   const inProgressCount = uniqueAllRows.filter(
-    (row) => !isClosedStatus(row.status) && !!findAgentForRow(s, row),
+    (row) => !isClosedStatus(row.status) && !!findAgentForRow(agentItems, row),
   ).length;
   const closedCount = uniqueAllRows.filter((row) => isClosedStatus(row.status)).length;
   const categoryCounts: Record<'all' | FindingCategory, number> = {
@@ -369,7 +391,11 @@ export function Results({ s }: { s: State }) {
   const unique =
     categoryFilter === 'all' || categoryFilter === 'features'
       ? uniqueAllRows
-      : resultRows(s, categoryFilter);
+      : categoryFilter === 'bugs'
+        ? bugRows
+        : categoryFilter === 'security'
+          ? secRows
+          : perfRows;
   const severityRank: Record<string, number> = {
     critical: 0,
     high: 1,
@@ -381,7 +407,7 @@ export function Results({ s }: { s: State }) {
     .filter(
       (row) =>
         (inProgressOnly
-          ? !isClosedStatus(row.status) && !!findAgentForRow(s, row)
+          ? !isClosedStatus(row.status) && !!findAgentForRow(agentItems, row)
           : !showDone
             ? !isClosedStatus(row.status)
             : true) &&
@@ -1129,7 +1155,7 @@ export function Results({ s }: { s: State }) {
           <div className="result-list">
             {pageRows.map((row) => {
               const rowCategory = row.category || category;
-              const rowAgent = !showFeatures ? findAgentForRow(s, row) : undefined;
+              const rowAgent = !showFeatures ? findAgentForRow(agentItems, row) : undefined;
               return (
                 <div
                   className={`result-row ${inspectorRow?.key === row.key ? 'active' : ''}`}
@@ -1403,7 +1429,9 @@ export function Results({ s }: { s: State }) {
                 </p>
               </div>
               {(() => {
-                const inspectorAgent = !showFeatures ? findAgentForRow(s, inspectorRow) : undefined;
+                const inspectorAgent = !showFeatures
+                  ? findAgentForRow(agentItems, inspectorRow)
+                  : undefined;
                 if (!inspectorAgent) return null;
                 return (
                   <div

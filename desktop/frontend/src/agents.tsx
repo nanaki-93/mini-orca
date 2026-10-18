@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   activeChangeWorkflow,
   canAcceptChange,
@@ -735,7 +735,19 @@ export function AgentsWorkspace({ s }: { s: State }) {
     setShowNewForm(true);
   };
 
-  const dashboardItems = collectAgentDashboardItems(s);
+  const dashboardItems = useMemo(
+    () => collectAgentDashboardItems(s),
+    [
+      s.change,
+      s.changeSeed,
+      s.changeReceipt,
+      s.gitWorkspace,
+      s.implementations,
+      s.findings,
+      s.results,
+      s.repository,
+    ],
+  );
   const currentAgentItem =
     dashboardItems.find((item) => (item.path || '') === (s.selectedAgentPath || '')) ||
     dashboardItems[0];

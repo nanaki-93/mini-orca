@@ -95,8 +95,7 @@ interface TuiIssueRow {
   acceptance_criteria: string[];
 }
 
-function collectTuiIssues(s: State): TuiIssueRow[] {
-  const agentItems = collectAgentDashboardItems(s);
+function collectTuiIssues(s: State, agentItems = collectAgentDashboardItems(s)): TuiIssueRow[] {
   const findCompletion = (target: M.FindingTarget) =>
     s.completedFindings?.find(
       (c) =>
@@ -303,7 +302,19 @@ export function TuiApp({
     : undefined;
   const agentW = selectedChild || w;
   const agentS = selectedChild ? selectedChild.state : s;
-  const agentItems = collectAgentDashboardItems(s);
+  const agentItems = useMemo(
+    () => collectAgentDashboardItems(s),
+    [
+      s.change,
+      s.changeSeed,
+      s.changeReceipt,
+      s.gitWorkspace,
+      s.implementations,
+      s.findings,
+      s.results,
+      s.repository,
+    ],
+  );
   const selectedAgentItem =
     agentItems.find((item) => (item.path || '') === (s.selectedAgentPath || '')) || agentItems[0];
 
@@ -343,7 +354,10 @@ export function TuiApp({
     ) || TUI_TABS[0];
 
   const docs = useMemo(() => resolveProjectDocs(s), [s.overview, s.project, s.index]);
-  const allIssues = collectTuiIssues(s);
+  const allIssues = useMemo(
+    () => collectTuiIssues(s, agentItems),
+    [s.findings, s.results, s.completedFindings, agentItems],
+  );
   const categoryFilteredIssues = allIssues.filter(
     (i) => issueCategory === 'all' || i.category === issueCategory,
   );
@@ -360,7 +374,7 @@ export function TuiApp({
   );
   const runSections = s.run?.sections || [];
   const gitWorktrees = s.gitWorkspace?.worktrees || [];
-  const modelPresets = allModelPresets(s);
+  const modelPresets = useMemo(() => allModelPresets(s), [s.modelPresets]);
 
   const activeListLength =
     currentTabPage === 'summary'

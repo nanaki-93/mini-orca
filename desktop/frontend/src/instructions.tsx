@@ -1,5 +1,5 @@
 import { useWorkspace } from './workspace-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { evaluateBootstrapChecklist, type State } from './workspace';
 import { Badge, Button, Disclosure, Heading, Icon, Notice, Panel, Prose } from './ui';
 import type { InstructionPreview } from './models';
@@ -177,14 +177,18 @@ export function Instructions({ s }: { s: State }) {
     preview.path === path &&
     preview.project_id === s.project?.project_id &&
     preview.project_revision === s.project?.project_revision;
-  const presets = (preview?.presets || []).map((preset) => ({
-    ...preset,
-    present: containsGuideline(content, preset.content)
-      ? path
-      : preview?.effective.files.find(
-          (file) => file.path !== path && containsGuideline(file.content, preset.content),
-        )?.path,
-  }));
+  const presets = useMemo(
+    () =>
+      (preview?.presets || []).map((preset) => ({
+        ...preset,
+        present: containsGuideline(content, preset.content)
+          ? path
+          : preview?.effective.files.find(
+              (file) => file.path !== path && containsGuideline(file.content, preset.content),
+            )?.path,
+      })),
+    [preview, content, path],
+  );
   const pending = presets.filter((preset) => !preset.present && selected.includes(preset.id));
   const categories = [...new Set(presets.map((p) => p.category || 'General guidelines'))];
   const search = query.trim().toLowerCase();
@@ -205,11 +209,17 @@ export function Instructions({ s }: { s: State }) {
   const matched = presets.filter((p) => p.evidence?.length).length;
   const proposed = content;
   const excluded = preview?.effective.excluded.some((file) => file.path === preview.path);
-  const bootstrapPillars = evaluateBootstrapChecklist(s);
+  const bootstrapPillars = useMemo(
+    () => evaluateBootstrapChecklist(s),
+    [s.project, s.index, s.projectInstructions, s.instructionPreview],
+  );
   const readyPillarsCount = bootstrapPillars.filter((p) => p.ready).length;
   const missingPillarsCount = bootstrapPillars.length - readyPillarsCount;
-  const boundaryRules = parseImportBoundaryRules(content);
-  const harnessLessons = collectHarnessLessons(s);
+  const boundaryRules = useMemo(() => parseImportBoundaryRules(content), [content]);
+  const harnessLessons = useMemo(
+    () => collectHarnessLessons(s),
+    [s.change, s.changeHistory, s.implementations],
+  );
 
   const applyBoundaryRule = () => {
     const src = sourceLayer.trim();
