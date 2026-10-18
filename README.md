@@ -1,6 +1,6 @@
 # Mini-Orca
 
-A local-first coding assistant with a dual **GUI / TUI** interface and a loopback Go daemon, built to analyze repositories, surface verified and semantic **Issues**, synthesize structured **Docs**, suggest goal-aligned **Features**, and prepare guarded **AI Changes** with explicit human review.
+A local-first coding assistant with a pure Go **Terminal UI (TUI)** and a loopback Go daemon, built to analyze repositories, surface verified and semantic **Issues**, synthesize structured **Docs**, suggest goal-aligned **Features**, and prepare guarded **AI Changes** with explicit human review.
 
 ## Purpose of the Project
 
@@ -19,47 +19,44 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
    - **Step 1 · Architect & Code**: Generates a unified proposal or isolated worktree fix from findings, feature ideas, or chat instructions.
    - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with bounded self-repair (up to 3 repair attempts).
    - **Step 3 · Critic Review**: Evaluates the checked diff for regressions, boundary violations, and clean-code precision before human sign-off.
-   - **Step 4 · Human Precision Gate**: Presents read-only unified/split diffs for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
-4. **Dual GUI / TUI Parity**: Provides both a Wails/React graphical studio and a full-featured keyboard-driven Terminal UI (`TUI`) backed by the same workspace state and loopback API, enabling a seamless transition to a pure TUI workflow.
+   - **Step 4 · Human Precision Gate**: Presents read-only unified/hunk diffs for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
+4. **Keyboard-First Pure Go TUI**: Provides a 5-hub Terminal UI (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with modal vim navigation, `:command` execution, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
 
 ## Architecture
 
-Mini-Orca enforces strict layered ownership across the Go daemon and the desktop client:
+Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 
 | Layer / Path | Responsibility |
 | --- | --- |
-| `cmd/daemon`, `cmd/eval` | Startup, configuration wiring, loopback server binding, and CLI evaluation entry points. |
+| `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval` | Daemon startup, terminal UI CLI entry point, and evaluation runner. |
 | `internal/api` | Loopback HTTP decoding, browser-origin protection, local request policy, and structured error responses. |
 | `internal/app` | Workflow orchestration, analysis runs, 4-stage change/agent sessions, Git worktree isolation, and guarded source mutation. |
 | `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
 | `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their persisted schemas. |
 | `internal/llm`, `internal/config` | Provider transport (OpenAI-compatible HTTP, `agy`, `pi`), timeouts, and 3-scope model configuration. |
-| `desktop/` | Wails native bridge (`desktop/internal/bridge`) and React/TypeScript frontend (`desktop/frontend/src`) hosting both the GUI and TUI views. |
+| `internal/tui` | Guarded daemon client, 5-hub TUI state machine, keyboard/colon-command handlers, and ANSI terminal renderer. |
 
 ## Main Dependencies
 
 | Dependency | Scope | Purpose |
 | --- | --- | --- |
-| **Go 1.22+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon & CLI | Core HTTP daemon, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
-| **Wails v2** (`github.com/wailsapp/wails/v2`) | Desktop Host | Native macOS arm64 window host, loopback bridge, and local PTY terminal management (`github.com/creack/pty`). |
-| **React 18 + TypeScript 5 + Vite 5** | Frontend (`desktop/frontend`) | Unified state machine (`workspace.ts`), GUI studio views, and keyboard-first Terminal UI (`tui.tsx`). |
+| **Go 1.22+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
 | **Model Providers** (`HTTP` / `agy` / `pi`) | AI Transport | Pluggable local or remote LLM execution for `analyze`, `bug`, and `function` scopes. |
-| **Playwright + Go Quality Gates** | Verification | Headless component/workflow verification (`make web-test`) and static/complexity/clone checks (`make quality`). |
+| **Go Quality & Race Gates** | Verification | Deterministic TUI/daemon verification (`make check`) and static/reachability/complexity/clone checks (`make quality`). |
 
-## Other Project Info & Persistence
+## Run Locally
 
-### Run Locally
-
-Use Go 1.25+, Node.js 22+, and Xcode command-line tools for the macOS arm64 desktop application. Read [desktop setup](desktop/README.md#build-and-run) and [CONFIG.md](CONFIG.md) before the first launch.
+Read [CONFIG.md](CONFIG.md) before the first launch.
 
 ```sh
 cp config.example.yaml config.yaml
+just tui
+# Or run daemon and TUI separately:
 go run ./cmd/daemon
-# In a second terminal:
-make desktop-run
+go run ./cmd/tui
 ```
 
-The daemon defaults to `127.0.0.1:9090`; the desktop connects to `http://127.0.0.1:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local. Every prompt-bearing request to a non-loopback HTTP or CLI provider requires scope-specific consent.
+The daemon defaults to `127.0.0.1:9090`; the TUI connects to `http://127.0.0.1:9090` unless `MINI_ORCA_URL` or `-url` is set. Keep `config.yaml` local. Every prompt-bearing request to a non-loopback HTTP or CLI provider requires scope-specific consent.
 
 ### Project Intelligence & Storage (`.mini-orca/`)
 
@@ -67,7 +64,7 @@ Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`, `proje
 
 ## Development and documentation
 
-Follow [AGENTS.md](AGENTS.md). UI contributions follow the [UI interaction and accessibility guidelines](desktop/UI_DESIGN_GUIDELINES.md). Run focused tests while editing. The full local gate is:
+Follow [AGENTS.md](AGENTS.md). TUI contributions follow the [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md). Run focused tests while editing. The full local gate is:
 
 ```sh
 ./scripts/validate.sh
@@ -75,8 +72,8 @@ Follow [AGENTS.md](AGENTS.md). UI contributions follow the [UI interaction and a
 
 The checks use fakes and temporary directories, do not start the daemon, and do not require a provider, key, or project configuration.
 
-- `make check`: Formatting, Go tests/races/vet, Python tooling, and desktop workflow/bridge tests.
+- `make check`: Formatting, Go unit/race/vet checks, Python tooling, and Go TUI tests.
 - `make quality`: Pinned Go static, reachability, complexity, and clone checks.
-- [Desktop setup and usage](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
+- [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md) · [cleanup plan](docs/cleanup-plan.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
 - [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [LICENSE](LICENSE)

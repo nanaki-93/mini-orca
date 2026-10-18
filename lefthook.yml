@@ -12,9 +12,6 @@ pre-commit:
           echo "$unformatted"
           exit 1
         fi
-    prettier:
-      glob: "desktop/frontend/{src,tests}/**/*.{ts,tsx,css,mjs,json}"
-      run: npx --prefix desktop/frontend prettier --check {staged_files}
     whitespace:
       run: git diff --cached --check
     gitleaks:

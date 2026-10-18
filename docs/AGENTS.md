@@ -7,18 +7,18 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
   and measured evidence from an assumption.
 - Update the existing owner of a fact: root README for setup, `CONFIG.md` and
   `config.example.yaml` for configuration, `api-contract.md`/`openapi.yaml` for the
-  wire contract, and desktop guides for UI/runtime. Link instead of duplicating prose.
+  wire contract, and [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for TUI interaction. Link instead of duplicating prose.
 - Keep agent instructions short and actionable. Shared rules belong in root
   `AGENTS.md`; area rules belong in the relevant area file and must be linked from
   the root. Update affected instructions when ownership or commands change.
 - UI specifications and acceptance criteria should describe required behavior,
   state and accessibility, not treat existing visuals as mandatory. See the
-  [UI guidelines](../desktop/UI_DESIGN_GUIDELINES.md). Distinguish proposed copy
+  [UI guidelines](UI_DESIGN_GUIDELINES.md). Distinguish proposed copy
   from text already in the product.
 - Keep current documentation focused on use, implementation and supported
   contracts. Do not turn ordinary edits into completion reports or task ledgers.
 - Examples must use real routes/options and placeholder secrets/portable paths.
-  Keep API examples consistent with guard fields, error states and TypeScript/Go types.
+  Keep API examples consistent with guard fields, error states and Go types.
   `internal/version/version.go` owns the release version; check it before changing
   release references.
 - Record only checks actually performed. Separate unit/fixture evidence from

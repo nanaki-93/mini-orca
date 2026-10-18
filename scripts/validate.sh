@@ -51,7 +51,7 @@ run_stage go-vet make vet
 run_stage daemon-contracts go test ./cmd/daemon -run 'Test(ReleaseDocumentationUsesCanonicalVersion|DocumentedRoutesAreHandledByDaemon)$'
 run_stage agent-dispatcher python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 run_stage go-quality ./scripts/quality.sh --go-only
-run_stage desktop-web ./scripts/desktop-web.sh test
+run_stage tui-test go test -race ./internal/tui/... ./cmd/tui/...
 
 if [ -n "$failed_stages" ]; then
   printf '\nValidation failed: %s\n' "$failed_stages" >&2

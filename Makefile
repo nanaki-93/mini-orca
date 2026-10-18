@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build build-linux clean test test-race vet fmt-check quality check agent-dispatcher desktop-test desktop-build desktop-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -37,16 +37,18 @@ help: ## Show this help message
 	@echo ""
 
 # ─── Local Build ───────────────────────────────────────────────────────────────
-build: ## Build the application locally
+build: ## Build the daemon and TUI binaries locally
 	@echo "$(COLOR_GREEN)Building $(APP_NAME) $(VERSION)...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
-	@echo "$(COLOR_GREEN)Build complete: $(BUILD_DIR)/$(APP_NAME)-daemon$(COLOR_RESET)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
+	@echo "$(COLOR_GREEN)Build complete: $(BUILD_DIR)/$(APP_NAME)-daemon, $(BUILD_DIR)/$(APP_NAME)-tui$(COLOR_RESET)"
 
-build-linux: ## Build the Linux amd64 release daemon
+build-linux: ## Build the Linux amd64 release daemon and TUI
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64 ./cmd/daemon
-	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64$(COLOR_RESET)"
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64 ./cmd/tui
+	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64, $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64$(COLOR_RESET)"
 
 clean: ## Remove build artifacts
 	@echo "$(COLOR_YELLOW)Cleaning build artifacts...$(COLOR_RESET)"
@@ -76,26 +78,17 @@ fmt-check: ## Verify Go formatting without modifying files
 quality: ## Run Go static, reachability, complexity and clone checks
 	@./scripts/quality.sh
 
-desktop-test: web-test ## Run desktop workflow, component and native bridge tests
+tui-test: ## Run Go TUI workflow, state and renderer tests
+	@$(GO) test -race ./internal/tui/... ./cmd/tui/...
 
-check: fmt-check test test-race vet agent-dispatcher web-test ## Run the complete supported validation path
+tui-build: ## Build the Go TUI binary
+	@mkdir -p $(BUILD_DIR)
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
 
-.PHONY: web-test web-build web-run web-preview
-desktop-build: web-build ## Build the desktop web application
+tui-run: ## Launch the Go TUI client
+	@$(GO) run ./cmd/tui
 
-desktop-run: web-run ## Run the desktop web application
-
-web-build: ## Package the Wails application for macOS arm64
-	@./scripts/desktop-web.sh build
-
-web-run: ## Build and run the Wails desktop client
-	@./scripts/desktop-web.sh run
-
-web-test: ## Check web UI workflows, layouts and native bridge/PTY lifecycle
-	@./scripts/desktop-web.sh test
-
-web-preview: ## Preview web UI assets in a browser (native actions unavailable)
-	@./scripts/desktop-web.sh ui
+check: fmt-check test test-race vet agent-dispatcher tui-test ## Run the complete supported validation path
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image

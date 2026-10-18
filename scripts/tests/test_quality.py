@@ -66,7 +66,7 @@ class QualityTests(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertIn(
             "go run golang.org/x/tools/cmd/deadcode@v0.40.0 "
-            "./cmd/daemon ./cmd/engineering-insight-eval",
+            "./cmd/daemon ./cmd/engineering-insight-eval ./cmd/tui",
             calls,
         )
         self.assertTrue(any("gocyclo@v0.6.0" in call for call in calls))
@@ -133,7 +133,6 @@ class ValidationTests(unittest.TestCase):
             for path in [
                 *(bin_dir / name for name in ("make", "go", "python3")),
                 scripts / "quality.sh",
-                scripts / "desktop-web.sh",
             ]:
                 path.write_text(stub)
                 path.chmod(0o755)
@@ -152,7 +151,7 @@ class ValidationTests(unittest.TestCase):
                         capture_output=True, text=True, timeout=10,
                     )
                     self.assertEqual(result.returncode, 1 if failure else 0)
-                    self.assertIn("PASS desktop-web", result.stdout)
+                    self.assertIn("PASS tui-test", result.stdout)
                     self.assertIn("PASS go-quality", result.stdout)
                     self.assertIn("PASS daemon-contracts", result.stdout)
                     self.assertEqual(len(calls.read_text().splitlines()), 7 if failure else 8)

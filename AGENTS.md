@@ -6,33 +6,32 @@ guides add local detail; keep shared rules here instead of copying them.
 
 | Work area | Read before editing |
 | --- | --- |
-| Go daemon and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
-| Desktop client (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md) |
+| Go daemon, TUI and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
 | Python/shell tooling, Makefile and CI | [scripts/AGENTS.md](scripts/AGENTS.md) |
 | Documentation and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
 
 ## Quick commands & single-test execution
 
-- Bootstrap & entrypoints (`justfile` / `Makefile`): `just setup`, `just dev`, `just desktop` (daemon + desktop app), `just desktop-run`, `just test`, `just check` (or `make build`, `make dev`, `make desktop-run`, `make test`, `make check`, `make quality`).
-- Build daemon: `go build ./cmd/daemon` (or `just build`).
+- Bootstrap & entrypoints (`justfile` / `Makefile`): `just setup`, `just dev`, `just tui` (daemon + Go TUI), `just tui-run`, `just test`, `just check` (or `make build`, `make dev`, `make tui-run`, `make test`, `make check`, `make quality`).
+- Build daemon and TUI: `make build` (or `just build`).
 - Run a single Go test: `go test ./internal/app -run TestName -v` (or `just test-one TestName`).
-- Run a single frontend test file: `npm --prefix desktop/frontend run build && node desktop/frontend/tests/redesign.mjs`.
+- Run Go TUI tests: `go test -race ./internal/tui/... ./cmd/tui/...` (or `make tui-test`).
 
 ## Architecture boundaries & ownership
 
-Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Wails/React
-desktop client and a loopback HTTP API. It supports project-wide analysis and
-checked chat proposals across up to eight captured paths, with diff review,
-explicit Apply and guarded Undo.
+Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a pure Go
+Terminal UI (`cmd/tui`, `internal/tui`) and a loopback HTTP API. It supports
+project-wide analysis and checked chat proposals across up to eight captured
+paths, with diff review, explicit Apply and guarded Undo.
 
-- `cmd/` owns startup, configuration wiring and command entry points.
+- `cmd/` owns startup, configuration wiring and command entry points (`cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`).
 - `internal/api/` owns HTTP decoding, local request policy and error responses. Handlers must never import `internal/storage` or `internal/llm` directly; always call `internal/app` service methods.
 - `internal/app/` owns workflow orchestration, model calls and guarded changes.
 - `internal/project/` owns project facts, indexing, context policy and composition. It must never import `internal/app` or `internal/api`.
 - `internal/storage/` owns durable file primitives; domain stores own their schemas.
 - `internal/llm/` owns provider transport; `internal/config/` owns configuration.
 - `internal/insighteval/` owns the evaluation runner, separate from normal app use.
-- `desktop/` owns presentation, client state and user-operated terminal sessions.
+- `internal/tui/` owns the terminal UI state machine, guarded loopback client, keyboard/colon-command handling and ANSI rendering.
 
 ## Workspace & commit conventions
 
@@ -47,7 +46,7 @@ explicit Apply and guarded Undo.
 3. Identify observable behavior, failure cases and checks that establish completion. For a bug, reproduce it or add a regression case that exposes it.
 4. Resolve routine choices from the code and request. Ask only when missing information materially changes product behavior, compatibility or scope.
 
-Current behavior is documented in the README, desktop guides and API contract. Do not infer authorization from old task queues or `.mini-orca/autopilot/` worktrees.
+Current behavior is documented in the README, TUI design guidelines and API contract. Do not infer authorization from old task queues or `.mini-orca/autopilot/` worktrees.
 
 ## Implementation, error handling & concurrency standard
 
@@ -61,18 +60,18 @@ Current behavior is documented in the README, desktop guides and API contract. D
 
 ## UI, UX & product boundaries
 
-- Follow [desktop/UI_DESIGN_GUIDELINES.md](desktop/UI_DESIGN_GUIDELINES.md) for interaction and verification expectations. Keep actions, states, errors, scope, consent and recovery clear in both GUI and TUI modes.
+- Follow [docs/UI_DESIGN_GUIDELINES.md](docs/UI_DESIGN_GUIDELINES.md) for TUI interaction and verification expectations. Keep actions, states, errors, scope, consent and recovery clear.
 - Source and composed diffs are read-only except guided `AGENTS.md` instruction text. Source mutation requires explicit diff Review/Apply and guarded Undo with current project, proposal and source identity/hash checks.
 - Navigation, disclosures, previews and local restore must not trigger provider requests, project-code execution or source writes. Keep remote-provider consent, Security review intent and execution trust tied to the relevant scope.
 - Keep model suggestions, verified findings and measured benchmarks distinct. Failed, unavailable, partial, stale and canceled results retain their meaning.
-- Keep the daemon loopback-only by default. Never commit credentials, provider tokens, source-bearing diagnostics, local `config.yaml`, or generated outputs (`build/`, `desktop/build/`, `.mini-orca/autopilot/`).
+- Keep the daemon loopback-only by default. Never commit credentials, provider tokens, source-bearing diagnostics, local `config.yaml`, or generated outputs (`build/`, `.mini-orca/autopilot/`).
 
 ## Validation, diff review & handoff
 
 | Changed area | Required checks when the environment permits |
 | --- | --- |
-| Go code | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
-| Desktop web client/host | `make web-test`; native packaging changes also require `make web-build` on macOS arm64 |
+| Go code (`cmd/`, `internal/`) | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
+| Go TUI (`cmd/tui`, `internal/tui`) | `make tui-test` (`go test -race ./internal/tui/... ./cmd/tui/...`) |
 | Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
 | Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
 | Cross-stack changes or full validation request | `./scripts/validate.sh` (or `just check`) |

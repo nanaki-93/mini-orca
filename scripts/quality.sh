@@ -30,9 +30,9 @@ run_stage() {
 }
 
 run_go_reachability() {
-  # Keep both roots: evaluation campaigns are owned by internal/insighteval.
+  # Keep all roots: daemon, evaluation CLI, and terminal UI.
   # deadcode reports findings on stdout but exits successfully when it finds any.
-  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval)
+  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval ./cmd/tui)
   reachability_status=$?
   if [ -n "$reachability_output" ]; then
     printf '%s\n' "$reachability_output"
@@ -56,7 +56,7 @@ run_go_quality() {
     --min-lines 8 \
     --threshold 1 \
     --format go \
-    --ignore '**/*_test.go,**/testdata/**,build/**,desktop/**' \
+    --ignore '**/*_test.go,**/testdata/**,build/**' \
     internal cmd
 }
 

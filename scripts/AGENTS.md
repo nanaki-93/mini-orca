@@ -4,9 +4,8 @@ Read [../AGENTS.md](../AGENTS.md) first. This is also the tooling guide for root
 Makefile and `.github/workflows/` changes.
 
 - Preserve ownership: `validate.sh` aggregates full validation, `quality.sh` owns
-  pinned Go quality stages, `desktop-web.sh` owns desktop checks and packaging,
-  and Makefile/CI invoke those maintained paths. Fix a stage in its owner;
-  do not introduce another competing validation script.
+  pinned Go quality stages, and Makefile/CI invoke those maintained paths. Fix a
+  stage in its owner; do not introduce another competing validation script.
 - Keep shell scripts compatible with their declared interpreter and Python with
   the documented runtime. Prefer the standard library. Quote paths and arguments;
   use subprocess argv instead of interpolating executable shell strings.

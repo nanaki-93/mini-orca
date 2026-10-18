@@ -25,12 +25,5 @@ jobs:
         with:
           node-version: 22.20.0
 
-      - name: Install desktop browser test dependencies
-        working-directory: desktop/frontend
-        run: |
-          node --version
-          npm ci
-          npx playwright install --with-deps chromium
-
       - name: Run maintained local gates
         run: ./scripts/validate.sh
