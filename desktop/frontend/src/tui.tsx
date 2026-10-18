@@ -1010,6 +1010,64 @@ export function TuiApp({
         return;
       }
 
+      if (
+        currentTabPage === 'bugs' &&
+        (e.key === 't' ||
+          e.key === 'T' ||
+          e.key === 'c' ||
+          e.key === 'C' ||
+          e.key === 'f' ||
+          e.key === 'F' ||
+          e.key === ',' ||
+          e.key === '.' ||
+          e.key === '<' ||
+          e.key === '>' ||
+          e.key === 'H' ||
+          e.key === 'L' ||
+          (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')))
+      ) {
+        e.preventDefault();
+        const categories: ('all' | 'bugs' | 'security' | 'performance')[] = [
+          'all',
+          'bugs',
+          'security',
+          'performance',
+        ];
+        const cur = categories.indexOf(issueCategory);
+        const backward =
+          e.key === 'T' ||
+          e.key === 'C' ||
+          e.key === 'F' ||
+          e.key === ',' ||
+          e.key === '<' ||
+          e.key === 'H' ||
+          (e.shiftKey && e.key === 'ArrowLeft');
+        const next = backward
+          ? categories[(cur - 1 + categories.length) % categories.length]
+          : categories[(cur + 1) % categories.length];
+        setIssueCategory(next);
+        setSelectedIdx(0);
+        setCmdOutput(`Issue type filter: ${next.toUpperCase()}`);
+        return;
+      }
+
+      if (
+        currentTabPage === 'bugs' &&
+        (e.key === 's' || e.key === 'S' || e.key === 'v' || e.key === 'V')
+      ) {
+        e.preventDefault();
+        const views: ('open' | 'in_progress' | 'done')[] = ['open', 'in_progress', 'done'];
+        const cur = views.indexOf(issueView);
+        const backward = e.key === 'S' || e.key === 'V';
+        const next = backward
+          ? views[(cur - 1 + views.length) % views.length]
+          : views[(cur + 1) % views.length];
+        setIssueView(next);
+        setSelectedIdx(0);
+        setCmdOutput(`Issue status view: ${next.toUpperCase()}`);
+        return;
+      }
+
       if (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') {
         const forward = e.key === 'l' || e.key === 'ArrowRight';
         if (currentTabPage === 'bugs') {
@@ -1021,6 +1079,7 @@ export function TuiApp({
             : views[(cur - 1 + views.length) % views.length];
           setIssueView(next);
           setSelectedIdx(0);
+          setCmdOutput(`Issue status view: ${next.toUpperCase()}`);
           return;
         }
         if (currentTabPage === 'docs') {
@@ -1277,6 +1336,7 @@ export function TuiApp({
     editorMode,
     featureSuggestions,
     historyItems,
+    issueCategory,
     issueView,
     openIssues,
     rulesSection,
@@ -1429,9 +1489,29 @@ export function TuiApp({
       setCmdOutput('Switched to [2] Agent Studio.');
       return;
     }
-    if (cmd === 'issues' || cmd === 'bugs') {
+    if (
+      cmd === 'issues' ||
+      cmd === 'all' ||
+      cmd === 'bugs' ||
+      cmd === 'security' ||
+      cmd === 'performance' ||
+      cmd === 'perf'
+    ) {
       void w.navigate('bugs');
-      setCmdOutput('Switched to [2] Agent Studio · Issues.');
+      if (
+        cmd === 'all' ||
+        cmd === 'bugs' ||
+        cmd === 'security' ||
+        cmd === 'performance' ||
+        cmd === 'perf'
+      ) {
+        const nextCat = cmd === 'perf' ? 'performance' : cmd;
+        setIssueCategory(nextCat);
+        setSelectedIdx(0);
+        setCmdOutput(`Switched to [2] Agent Studio · Issues (${nextCat.toUpperCase()}).`);
+      } else {
+        setCmdOutput('Switched to [2] Agent Studio · Issues.');
+      }
       return;
     }
     if (cmd === 'features') {
@@ -2289,14 +2369,17 @@ export function TuiApp({
                 }}
               >
                 <span className="tui-box-title">
-                  ISSUES QUEUE (j/k move · h/l filter · x select · d dismiss · Enter/a fix)
+                  ISSUES QUEUE (j/k move · h/l status · t/c type · x select · d dismiss · Enter/a
+                  fix)
                 </span>
                 <div
                   style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}
                 >
+                  <span className="tui-sub">status [h/l]:</span>
                   <button
                     type="button"
                     className={`tui-btn${issueView === 'open' ? ' primary' : ''}`}
+                    aria-pressed={issueView === 'open'}
                     onClick={() => {
                       setIssueView('open');
                       setSelectedIdx(0);
@@ -2307,6 +2390,7 @@ export function TuiApp({
                   <button
                     type="button"
                     className={`tui-btn${issueView === 'in_progress' ? ' primary' : ''}`}
+                    aria-pressed={issueView === 'in_progress'}
                     onClick={() => {
                       setIssueView('in_progress');
                       setSelectedIdx(0);
@@ -2317,6 +2401,7 @@ export function TuiApp({
                   <button
                     type="button"
                     className={`tui-btn${issueView === 'done' ? ' primary' : ''}`}
+                    aria-pressed={issueView === 'done'}
                     onClick={() => {
                       setIssueView('done');
                       setSelectedIdx(0);
@@ -2327,6 +2412,7 @@ export function TuiApp({
                   <span className="tui-sub" aria-hidden="true">
                     |
                   </span>
+                  <span className="tui-sub">type [t/c]:</span>
                   {(
                     [
                       ['all', `All (${issueSummary.totalOpenIssues})`],
@@ -2338,7 +2424,8 @@ export function TuiApp({
                     <button
                       key={cat}
                       type="button"
-                      className={`tui-btn${issueCategory === cat ? ' active' : ''}`}
+                      className={`tui-btn${issueCategory === cat ? ' primary' : ''}`}
+                      aria-pressed={issueCategory === cat}
                       onClick={() => {
                         setIssueCategory(cat);
                         setSelectedIdx(0);
@@ -5714,6 +5801,18 @@ export function TuiApp({
                   <tbody>
                     <tr>
                       <td>
+                        <strong className="tui-key">t / c / f</strong>
+                      </td>
+                      <td>[Issues] Cycle issue type (All / Bugs / Security / Perf)</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">h / l · s / v</strong>
+                      </td>
+                      <td>[Issues] Cycle status (Open / In Progress / Done)</td>
+                    </tr>
+                    <tr>
+                      <td>
                         <strong className="tui-key">a</strong>
                       </td>
                       <td>[Overview / Issues / Features] Dispatch to Agent</td>
@@ -5774,6 +5873,15 @@ export function TuiApp({
                         <code className="tui-c-green">:help</code>
                       </td>
                       <td>Show this keybind reference</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:all</code> /{' '}
+                        <code className="tui-c-green">:bugs</code> /{' '}
+                        <code className="tui-c-green">:security</code> /{' '}
+                        <code className="tui-c-green">:perf</code>
+                      </td>
+                      <td>Jump to Issues filtered by issue type</td>
                     </tr>
                     <tr>
                       <td>
@@ -5869,6 +5977,12 @@ export function TuiApp({
           </span>
           <span>
             <strong className="tui-key">[j/k]</strong> move
+          </span>
+          <span>
+            <strong className="tui-key">[t/c]</strong> issue type
+          </span>
+          <span>
+            <strong className="tui-key">[h/l]</strong> status/tab
           </span>
           <span>
             <strong className="tui-key">[Enter]</strong> open

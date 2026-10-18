@@ -1387,6 +1387,28 @@ try {
       await page.getByText('AGENTS IN PROGRESS DASHBOARD', { exact: true }).waitFor();
       await page.keyboard.press('Tab'); // -> Issues
       await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+      await page.getByText('type [t/c]:', { exact: true }).waitFor();
+      await page.keyboard.press('t'); // All -> Bugs
+      assert.equal(
+        await page
+          .getByRole('button', { name: '[Bugs (1)]', exact: true })
+          .getAttribute('aria-pressed'),
+        'true',
+      );
+      await page.keyboard.press('c'); // Bugs -> Security
+      assert.equal(
+        await page
+          .getByRole('button', { name: '[Security (1)]', exact: true })
+          .getAttribute('aria-pressed'),
+        'true',
+      );
+      await page.keyboard.press('T'); // Security -> Bugs (reverse)
+      assert.equal(
+        await page
+          .getByRole('button', { name: '[Bugs (1)]', exact: true })
+          .getAttribute('aria-pressed'),
+        'true',
+      );
       await page.keyboard.press('Tab'); // -> Features
       await page.getByText('FEATURE IDEA INSPECTOR', { exact: true }).waitFor();
       await page.keyboard.press('Tab'); // -> Last Run
