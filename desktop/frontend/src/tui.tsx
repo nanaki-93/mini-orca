@@ -3,6 +3,7 @@ import {
   activeChangeWorkflow,
   activeRun,
   allModelPresets,
+  analysisSetupModels,
   canAcceptChange,
   canRepairAnalysis,
   changeChecksPassed,
@@ -18,7 +19,7 @@ import {
 } from './workspace';
 import { collectAgentDashboardItems, type StageId } from './agents';
 import { collectHarnessLessons, containsGuideline, insertGuidelineSection } from './instructions';
-import { resolveProjectDocs } from './docs';
+import { formatArchitectureMarkdown, resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import { compareBySeverity, computeWorkspaceIssueSummary } from './results';
 import { isAddedLine, isRemovedLine, summarizeDiffHunk, summarizeFileEdit } from './change-shared';
@@ -380,6 +381,9 @@ export function TuiApp({
   );
   const [directFileDraft, setDirectFileDraft] = useState(s.file?.content || '');
   const [acceptedTuiHunks, setAcceptedTuiHunks] = useState<Record<string, number[]>>({});
+  const [instructionScopeInput, setInstructionScopeInput] = useState('AGENTS.md');
+  const [showInstructionEditor, setShowInstructionEditor] = useState(false);
+  const [customPresetName, setCustomPresetName] = useState('');
   const [cmdInput, setCmdInput] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1);
@@ -3714,11 +3718,13 @@ export function TuiApp({
             );
           })()}
 
-        {/* [2] ARCH — LAYERED ARCHITECTURE & SUBSYSTEM INSPECTOR */}
+        {/* [4] HANDBOOK & ARCH — LAYERED ARCHITECTURE & SUBSYSTEM INSPECTOR */}
         {currentTabPage === 'diagrams' && (
           <div className="tui-split-main">
             <div className="tui-box focused">
-              <span className="tui-box-title">ARCHITECTURE &amp; SUBSYSTEMS (j/k navigate)</span>
+              <span className="tui-box-title">
+                ARCHITECTURE &amp; SUBSYSTEMS (j/k navigate · Enter open file)
+              </span>
               <span className="tui-box-meta">{archComponents.length} components</span>
               <table className="tui-table">
                 <thead>
@@ -3758,13 +3764,32 @@ export function TuiApp({
               </span>
               {archComponents[clampedIdx] ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div>
-                    <strong className="tui-c-accent">{archComponents[clampedIdx].name}</strong> ·{' '}
-                    <span className="tui-badge tui-c-purple">
-                      {archComponents[clampedIdx].layer}
-                    </span>
-                    <div className="tui-sub">{archComponents[clampedIdx].summary}</div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                    }}
+                  >
+                    <div>
+                      <strong className="tui-c-accent">{archComponents[clampedIdx].name}</strong> ·{' '}
+                      <span className="tui-badge tui-c-purple">
+                        {archComponents[clampedIdx].layer}
+                      </span>
+                    </div>
+                    {archComponents[clampedIdx].path && (
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        onClick={() => void w.openFile(archComponents[clampedIdx].path)}
+                      >
+                        [Enter: Open {archComponents[clampedIdx].path}]
+                      </button>
+                    )}
                   </div>
+                  <div className="tui-sub">{archComponents[clampedIdx].summary}</div>
                   <div>
                     <div className="tui-c-green">DOMAIN RESPONSIBILITIES:</div>
                     {archComponents[clampedIdx].responsibilities.map((resp, idx) => (
@@ -3781,6 +3806,16 @@ export function TuiApp({
                       </div>
                     ))}
                   </div>
+                  {(s.overview?.analysis?.entry_points || []).length > 0 && (
+                    <div>
+                      <div className="tui-c-purple">SYSTEM ENTRY POINTS:</div>
+                      {(s.overview?.analysis?.entry_points || []).slice(0, 4).map((ep, idx) => (
+                        <div key={idx} className="tui-sub">
+                          • <code>{ep}</code>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="tui-sub">Select a subsystem on the left to inspect its contracts.</p>
@@ -3789,7 +3824,7 @@ export function TuiApp({
           </div>
         )}
 
-        {/* [3] DOCS — PURPOSE, GOAL PURSUIT, ARCHITECTURE, DEPENDENCIES & RUNBOOK */}
+        {/* [4] HANDBOOK & ARCH — PURPOSE, GOAL PURSUIT, ARCHITECTURE, DEPENDENCIES & RUNBOOK */}
         {currentTabPage === 'docs' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div className="tui-box focused">
@@ -3824,6 +3859,17 @@ export function TuiApp({
                       [{label}]
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!activeBusy}
+                    onClick={() => {
+                      const md = formatArchitectureMarkdown(docs, s.project?.name || 'Project');
+                      void w.saveDirectFile('docs/ARCHITECTURE.md', md);
+                    }}
+                  >
+                    [Sync to docs/ARCHITECTURE.md]
+                  </button>
                   <button
                     type="button"
                     className="tui-btn"
@@ -3901,9 +3947,23 @@ export function TuiApp({
                     </tr>
                   </thead>
                   <tbody>
-                    {docs.components.map((comp) => (
-                      <tr key={comp.path}>
-                        <td className="tui-c-accent">{comp.name}</td>
+                    {docs.components.map((comp, idx) => (
+                      <tr
+                        key={comp.path}
+                        className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                        onClick={() => {
+                          setSelectedIdx(idx);
+                          if (comp.path) void w.openFile(comp.path);
+                        }}
+                      >
+                        <td className="tui-c-accent">
+                          {idx === clampedIdx && (
+                            <span className="tui-cursor-indicator" aria-hidden="true">
+                              &gt;
+                            </span>
+                          )}
+                          {comp.name}
+                        </td>
                         <td>{comp.layer}</td>
                         <td>{comp.path}</td>
                         <td className="tui-c-muted">
@@ -4550,7 +4610,7 @@ export function TuiApp({
                       type="button"
                       className="tui-btn primary"
                       disabled={!!activeBusy}
-                      onClick={() => void w.saveSelection(includedPaths)}
+                      onClick={() => void w.saveSelection(excludedPaths)}
                     >
                       [Save Scope ({includedPaths.length}/{allIndexFiles.length})]
                     </button>
@@ -4995,18 +5055,25 @@ export function TuiApp({
 
         {currentTabPage === 'instructions' &&
           (() => {
-            const bootstrapPillars = evaluateBootstrapChecklist(s);
             const readyCount = bootstrapPillars.filter((p) => p.ready).length;
             const missingCount = bootstrapPillars.length - readyCount;
-            const defaultLessonRule =
-              'Propagate context.Context cancellation and add a regression test for every check repair.';
-            const dynamicLessons = collectHarnessLessons(s);
-            const allTuiLessons = [
-              defaultLessonRule,
-              ...dynamicLessons.filter(
-                (l) => l.trim().toLowerCase() !== defaultLessonRule.toLowerCase(),
-              ),
-            ];
+            const analysisModels = analysisSetupModels(s);
+            const modelChoices = s.availableModels?.models || [];
+            const choiceIds = Array.from(
+              new Set([
+                'function',
+                'bug',
+                'analyze',
+                ...Object.keys(s.models?.scopes || {}),
+                ...modelChoices.map((m) => m.id),
+              ]),
+            );
+            const instPath =
+              s.instructionDraft?.path ||
+              s.instructionPreview?.path ||
+              s.projectInstructions?.path ||
+              instructionScopeInput ||
+              'AGENTS.md';
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div
@@ -5048,7 +5115,9 @@ export function TuiApp({
                       [4. Harness² Inbox]
                     </button>
                   </div>
-                  <span className="tui-sub">h/l or [Tab] switch section</span>
+                  <span className="tui-sub">
+                    h/l or [Tab] switch section · j/k move · Enter act
+                  </span>
                 </div>
 
                 {rulesSection === 'lessons' ? (
@@ -5064,7 +5133,7 @@ export function TuiApp({
                       }}
                     >
                       <span className="tui-box-title">
-                        HARNESS² LESSON INBOX (g graduate lesson to AGENTS.md)
+                        HARNESS² LESSON INBOX (j/k move · Enter or g graduate lesson to AGENTS.md)
                       </span>
                       <span className="tui-badge tui-c-purple">DISCOVERED INVARIANTS</span>
                     </div>
@@ -5074,20 +5143,29 @@ export function TuiApp({
                         const isGraduated =
                           graduatedTuiLessons.includes(lessonId) ||
                           containsGuideline(activeInstructionDraft, lessonRule);
+                        const isSelected = idx === clampedIdx;
                         return (
                           <div
                             key={lessonId}
+                            onClick={() => setSelectedIdx(idx)}
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
                               gap: '8px',
                               padding: '6px 8px',
-                              border: '1px solid var(--tui-border)',
+                              border: `1px solid ${isSelected ? 'var(--tui-accent)' : 'var(--tui-border)'}`,
+                              background: isSelected ? 'var(--tui-sel-bg)' : undefined,
                               flexWrap: 'wrap',
+                              cursor: 'pointer',
                             }}
                           >
                             <div>
+                              {isSelected && (
+                                <span className="tui-cursor-indicator" aria-hidden="true">
+                                  &gt;
+                                </span>
+                              )}
                               <strong className="tui-c-accent">
                                 {idx === 0
                                   ? 'Verification & Self-Repair Invariant'
@@ -5121,7 +5199,8 @@ export function TuiApp({
                       }}
                     >
                       <span className="tui-box-title">
-                        STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (b bootstrap missing)
+                        STEP-BY-STEP ENVIRONMENT BOOTSTRAP CHECKLIST (j/k move · Enter act · b
+                        bootstrap missing)
                       </span>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <span
@@ -5184,9 +5263,18 @@ export function TuiApp({
                         </tr>
                       </thead>
                       <tbody>
-                        {bootstrapPillars.map((pillar) => (
-                          <tr key={pillar.id}>
+                        {bootstrapPillars.map((pillar, idx) => (
+                          <tr
+                            key={pillar.id}
+                            className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                            onClick={() => setSelectedIdx(idx)}
+                          >
                             <td>
+                              {idx === clampedIdx && (
+                                <span className="tui-cursor-indicator" aria-hidden="true">
+                                  &gt;
+                                </span>
+                              )}
                               <strong className="tui-c-accent">{pillar.title}</strong>
                               <div className="tui-sub">{pillar.summary}</div>
                             </td>
@@ -5230,18 +5318,133 @@ export function TuiApp({
                 ) : rulesSection === 'models' ? (
                   <div className="tui-box focused">
                     <span className="tui-box-title">
-                      4-STAGE AGENT MODEL ROUTING (j/k preset · Enter apply)
+                      4-STAGE AGENT &amp; ANALYSIS MODEL ROUTING (j/k preset · Enter apply)
                     </span>
                     <span className="tui-box-meta">MODELS</span>
-                    <div className="tui-sub">
-                      Stage 1 (Create): <code className="tui-c-accent">{models.create}</code>
+                    <div className="tui-split-main" style={{ marginBottom: '10px' }}>
+                      <div>
+                        <div className="tui-c-accent" style={{ marginBottom: '4px' }}>
+                          AGENT WORKFLOW STAGES (CREATE · TEST · CRITIC):
+                        </div>
+                        <div className="tui-sub" style={{ marginBottom: '4px' }}>
+                          Stage 1 (Create): <code className="tui-c-accent">{models.create}</code>{' '}
+                          <select
+                            aria-label="Workflow Create model"
+                            className="tui-select"
+                            value={models.create}
+                            onChange={(e) =>
+                              w.setWorkflowModels({ ...models, create: e.target.value })
+                            }
+                          >
+                            {choiceIds.map((id) => (
+                              <option key={id} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="tui-sub" style={{ marginBottom: '4px' }}>
+                          Stage 2 (Test): <code className="tui-c-green">{models.test}</code>{' '}
+                          <select
+                            aria-label="Workflow Test model"
+                            className="tui-select"
+                            value={models.test}
+                            onChange={(e) =>
+                              w.setWorkflowModels({ ...models, test: e.target.value })
+                            }
+                          >
+                            {choiceIds.map((id) => (
+                              <option key={id} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="tui-sub">
+                          Stage 3 (Critic): <code className="tui-c-purple">{models.review}</code>{' '}
+                          <select
+                            aria-label="Workflow Critic model"
+                            className="tui-select"
+                            value={models.review}
+                            onChange={(e) =>
+                              w.setWorkflowModels({ ...models, review: e.target.value })
+                            }
+                          >
+                            {choiceIds.map((id) => (
+                              <option key={id} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="tui-c-amber" style={{ marginBottom: '4px' }}>
+                          ANALYSIS STAGES (CODE · PERF · SECURITY · FEATURES):
+                        </div>
+                        {(
+                          [
+                            ['code', 'Code & Bugs'],
+                            ['performance', 'Performance'],
+                            ['security', 'Security'],
+                            ['features', 'Features'],
+                          ] as const
+                        ).map(([stageKey, label]) => (
+                          <div key={stageKey} className="tui-sub" style={{ marginBottom: '4px' }}>
+                            {label}: <code>{analysisModels[stageKey]}</code>{' '}
+                            <select
+                              aria-label={`Analysis ${label} model`}
+                              className="tui-select"
+                              value={analysisModels[stageKey]}
+                              onChange={(e) =>
+                                w.setAnalysisSetup({
+                                  ...analysisModels,
+                                  [stageKey]: e.target.value,
+                                })
+                              }
+                            >
+                              {choiceIds.map((id) => (
+                                <option key={id} value={id}>
+                                  {id}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="tui-sub">
-                      Stage 2 (Test): <code className="tui-c-green">{models.test}</code>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '6px',
+                        alignItems: 'center',
+                        marginBottom: '8px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <input
+                        aria-label="Custom model preset name"
+                        className="tui-input"
+                        style={{ width: '220px' }}
+                        value={customPresetName}
+                        onChange={(e) => setCustomPresetName(e.target.value)}
+                        placeholder="Custom preset name…"
+                      />
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        disabled={!customPresetName.trim()}
+                        onClick={() => {
+                          w.saveCustomModelPreset(customPresetName);
+                          setCustomPresetName('');
+                        }}
+                      >
+                        [Save Current Routing as Preset]
+                      </button>
                     </div>
-                    <div className="tui-sub" style={{ marginBottom: '8px' }}>
-                      Stage 3 (Critic): <code className="tui-c-purple">{models.review}</code>
-                    </div>
+
                     <table className="tui-table" aria-label="Model presets">
                       <thead>
                         <tr>
@@ -5271,11 +5474,23 @@ export function TuiApp({
                                 <strong>{preset.name}</strong>
                               </td>
                               <td className="tui-c-muted">{preset.description}</td>
-                              <td>
+                              <td style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                 {active ? (
                                   <span className="tui-badge tui-c-green">ACTIVE</span>
                                 ) : (
                                   <span className="tui-c-muted">Enter to apply</span>
+                                )}
+                                {!preset.builtIn && (
+                                  <button
+                                    type="button"
+                                    className="tui-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      w.deleteCustomModelPreset(preset.id);
+                                    }}
+                                  >
+                                    [Delete]
+                                  </button>
                                 )}
                               </td>
                             </tr>
@@ -5289,13 +5504,14 @@ export function TuiApp({
                     <span className="tui-box-title">
                       WORKSPACE TRUST &amp; AGENTS.MD (t toggle trust)
                     </span>
-                    <span className="tui-box-meta">BOUNDARIES</span>
+                    <span className="tui-box-meta">{instPath}</span>
                     <div
                       style={{
                         display: 'flex',
                         gap: '8px',
                         marginBottom: '8px',
                         flexWrap: 'wrap',
+                        alignItems: 'center',
                       }}
                     >
                       <button
@@ -5312,7 +5528,71 @@ export function TuiApp({
                       >
                         [Reload AGENTS.md]
                       </button>
+                      <button
+                        type="button"
+                        className={`tui-btn${showInstructionEditor ? ' primary' : ''}`}
+                        onClick={() => setShowInstructionEditor((prev) => !prev)}
+                      >
+                        [{showInstructionEditor ? 'Hide Editor' : 'Edit AGENTS.md'}]
+                      </button>
+                      <input
+                        aria-label="Instruction scope path"
+                        className="tui-input"
+                        style={{ width: '180px' }}
+                        value={instructionScopeInput}
+                        onChange={(e) => setInstructionScopeInput(e.target.value)}
+                        placeholder="AGENTS.md or subdir/AGENTS.md"
+                      />
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        disabled={!!activeBusy || !instructionScopeInput.trim()}
+                        onClick={() => void w.loadInstructions(instructionScopeInput.trim())}
+                      >
+                        [Load Scope]
+                      </button>
                     </div>
+                    {showInstructionEditor && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <textarea
+                          aria-label="TUI AGENTS.md editor"
+                          className="tui-textarea"
+                          style={{ minHeight: '180px' }}
+                          value={activeInstructionDraft}
+                          onChange={(e) => {
+                            setTuiCustomDraft(e.target.value);
+                            w.set({
+                              instructionDraft: { path: instPath, content: e.target.value },
+                            });
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="tui-btn primary"
+                            disabled={!!activeBusy || !activeInstructionDraft.trim()}
+                            onClick={() => void w.saveDirectFile(instPath, activeInstructionDraft)}
+                          >
+                            [Save {instPath}]
+                          </button>
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!activeBusy || !activeInstructionDraft.trim()}
+                            onClick={() => void w.proposeInstructions(activeInstructionDraft)}
+                          >
+                            [Preview Instruction Diff]
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <pre className="tui-pre">
                       {activeInstructionDraft ||
                         'AGENTS.md rules enforce surgical diffs, passing tests, and explicit Apply.'}
@@ -5374,13 +5654,13 @@ export function TuiApp({
                       <td>
                         <strong className="tui-key">[1]–[5]</strong>
                       </td>
-                      <td>Jump to TUI workspace hub</td>
+                      <td>Switch between the 5 non-overlapping hubs</td>
                     </tr>
                     <tr>
                       <td>
-                        <strong className="tui-key">[Tab]</strong>
+                        <strong className="tui-key">[Tab] / [Shift+Tab]</strong>
                       </td>
-                      <td>Cycle sub-views inside active hub</td>
+                      <td>Cycle sub-views inside the active hub</td>
                     </tr>
                     <tr>
                       <td>
@@ -5392,31 +5672,31 @@ export function TuiApp({
                       <td>
                         <strong className="tui-key">j / k / ↓ / ↑</strong>
                       </td>
-                      <td>Move row cursor down / up</td>
+                      <td>Move row cursor down / up (auto-scrolls)</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">h / l / ← / →</strong>
                       </td>
-                      <td>Cycle Open / In Progress / Done</td>
+                      <td>Cycle sub-tabs or Open / In Progress / Done</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">Enter</strong>
                       </td>
-                      <td>Open / Execute highlighted item</td>
+                      <td>Activate highlighted row or focused button</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">y / n</strong>
+                      </td>
+                      <td>Confirm / Cancel active confirmation dialog</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">Esc / Backspace</strong>
                       </td>
-                      <td>Back to All Agents / Close modal</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong className="tui-key">?</strong>
-                      </td>
-                      <td>Toggle Keybindings Reference</td>
+                      <td>Exit input / Close modal / Back to All Agents</td>
                     </tr>
                     <tr>
                       <td>
@@ -5429,56 +5709,56 @@ export function TuiApp({
               </div>
 
               <div className="tui-box">
-                <span className="tui-box-title">WORKFLOW &amp; ACTIONS</span>
+                <span className="tui-box-title">HUB-SCOPED SHORTCUTS</span>
                 <table className="tui-table">
                   <tbody>
                     <tr>
                       <td>
                         <strong className="tui-key">a</strong>
                       </td>
-                      <td>Dispatch Fix / Open Agent</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong className="tui-key">e</strong>
-                      </td>
-                      <td>Toggle inline diff explanations</td>
+                      <td>[Overview / Issues / Features] Dispatch to Agent</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">x / Space</strong>
                       </td>
-                      <td>Toggle issue for batch agent fix</td>
+                      <td>[Issues] Batch select · [File Scope] Toggle path</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">d</strong>
+                      </td>
+                      <td>[Issues / Features] Dismiss selected item</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">n</strong>
                       </td>
-                      <td>New custom agent mission form</td>
+                      <td>[Agents] Open New Mission form</td>
                     </tr>
                     <tr>
                       <td>
-                        <strong className="tui-key">c</strong>
+                        <strong className="tui-key">e</strong>
                       </td>
-                      <td>Accept &amp; Commit verified proposal</td>
+                      <td>[Code &amp; Diff] Toggle inline [WHY] explanations</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">c / u</strong>
+                      </td>
+                      <td>[Agents / Code &amp; Diff] Apply proposal / Undo</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">m</strong>
                       </td>
-                      <td>Merge agent worktree into main</td>
+                      <td>[Agents / Git] Merge ready worktree into main</td>
                     </tr>
                     <tr>
                       <td>
-                        <strong className="tui-key">r</strong>
+                        <strong className="tui-key">r / t / b / g</strong>
                       </td>
-                      <td>Run/Resume analysis or Self-Repair</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong className="tui-key">t / b / g</strong>
-                      </td>
-                      <td>Tests/Trust · Bootstrap · Graduate lesson / GUI</td>
+                      <td>Run/Repair · Tests/Trust · Bootstrap · Graduate</td>
                     </tr>
                   </tbody>
                 </table>
@@ -5504,21 +5784,23 @@ export function TuiApp({
                     </tr>
                     <tr>
                       <td>
+                        <code className="tui-c-green">:project [path]</code>
+                      </td>
+                      <td>Open Project &amp; Tests or switch repo</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:scope</code> /{' '}
+                        <code className="tui-c-green">:proposals</code>
+                      </td>
+                      <td>Open File Scope or Saved Proposals</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <code className="tui-c-green">:terminal</code> /{' '}
                         <code className="tui-c-green">:test</code>
                       </td>
-                      <td>Run verification test suite</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <code className="tui-c-green">:fix</code>
-                      </td>
-                      <td>Dispatch selected issue(s) to agent</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <code className="tui-c-green">:agent &lt;prompt&gt;</code>
-                      </td>
-                      <td>Stage custom agent mission</td>
+                      <td>Open Terminal or run verification suite</td>
                     </tr>
                     <tr>
                       <td>
