@@ -1,16 +1,16 @@
 .tui-root {
-  --tui-bg: #0b0e14;
-  --tui-bg-alt: #11151f;
-  --tui-bg-sel: #1b2234;
-  --tui-fg: #d8dee9;
-  --tui-fg-muted: #6e7a94;
-  --tui-border: #2a3245;
-  --tui-border-focus: #7dcfff;
-  --tui-accent: #7dcfff;
-  --tui-purple: #bb9af7;
-  --tui-green: #73daca;
-  --tui-amber: #e0af68;
-  --tui-red: #f7768e;
+  --tui-bg: #0a0e17;
+  --tui-bg-alt: #111826;
+  --tui-bg-sel: #1c2942;
+  --tui-fg: #e6edf7;
+  --tui-fg-muted: #94a3b8;
+  --tui-border: #2b3954;
+  --tui-border-focus: #58d1ff;
+  --tui-accent: #58d1ff;
+  --tui-purple: #c4a7ff;
+  --tui-green: #4ade80;
+  --tui-amber: #fbbf24;
+  --tui-red: #fb7185;
 
   position: fixed;
   inset: 0;
@@ -23,54 +23,58 @@
     'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, Menlo, Consolas,
     monospace;
   font-size: 12.5px;
-  line-height: 1.45;
+  line-height: 1.48;
   overflow: hidden;
   user-select: text;
 }
 
+.tui-root:focus {
+  outline: none;
+}
+
 .tui-root[data-tui-palette='crt'] {
-  --tui-bg: #050d07;
-  --tui-bg-alt: #09160c;
-  --tui-bg-sel: #102a17;
-  --tui-fg: #68ff9a;
-  --tui-fg-muted: #2f8f50;
-  --tui-border: #1b4d2b;
-  --tui-border-focus: #68ff9a;
-  --tui-accent: #68ff9a;
-  --tui-purple: #9effbe;
-  --tui-green: #68ff9a;
-  --tui-amber: #d2ff68;
-  --tui-red: #ff6b6b;
+  --tui-bg: #040b06;
+  --tui-bg-alt: #08160c;
+  --tui-bg-sel: #11301b;
+  --tui-fg: #7dffaa;
+  --tui-fg-muted: #4ec978;
+  --tui-border: #1f5c35;
+  --tui-border-focus: #7dffaa;
+  --tui-accent: #7dffaa;
+  --tui-purple: #b5ffd0;
+  --tui-green: #7dffaa;
+  --tui-amber: #e2ff70;
+  --tui-red: #ff7b7b;
 }
 
 .tui-root[data-tui-palette='amber'] {
-  --tui-bg: #0f0a04;
-  --tui-bg-alt: #171006;
-  --tui-bg-sel: #281b09;
-  --tui-fg: #ffb84d;
-  --tui-fg-muted: #996b26;
-  --tui-border: #4d3511;
-  --tui-border-focus: #ffd180;
-  --tui-accent: #ffd180;
-  --tui-purple: #ff9e44;
-  --tui-green: #ffd180;
-  --tui-amber: #ffb84d;
-  --tui-red: #ff5e5e;
+  --tui-bg: #0e0903;
+  --tui-bg-alt: #181005;
+  --tui-bg-sel: #2c1e0a;
+  --tui-fg: #ffc66d;
+  --tui-fg-muted: #c79548;
+  --tui-border: #593e16;
+  --tui-border-focus: #ffda99;
+  --tui-accent: #ffda99;
+  --tui-purple: #ffab5e;
+  --tui-green: #a3e635;
+  --tui-amber: #ffc66d;
+  --tui-red: #ff6b6b;
 }
 
 .tui-root[data-tui-palette='paper'] {
-  --tui-bg: #f6f4ee;
-  --tui-bg-alt: #ece8dc;
-  --tui-bg-sel: #dcd6c4;
-  --tui-fg: #1d2021;
-  --tui-fg-muted: #665c54;
-  --tui-border: #bdae93;
-  --tui-border-focus: #076678;
-  --tui-accent: #076678;
-  --tui-purple: #8f3f71;
-  --tui-green: #427b58;
-  --tui-amber: #b57614;
-  --tui-red: #9d0006;
+  --tui-bg: #f8f6f0;
+  --tui-bg-alt: #eeeadd;
+  --tui-bg-sel: #dfd8c4;
+  --tui-fg: #181a1b;
+  --tui-fg-muted: #524b44;
+  --tui-border: #b5a689;
+  --tui-border-focus: #055868;
+  --tui-accent: #055868;
+  --tui-purple: #7c2d62;
+  --tui-green: #2d6a44;
+  --tui-amber: #9c6209;
+  --tui-red: #990006;
 }
 
 .tui-statusbar {
@@ -89,7 +93,7 @@
 .tui-statusbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -127,11 +131,32 @@
 .tui-tabbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   background: var(--tui-bg);
   border-bottom: 1px solid var(--tui-border);
   padding: 0 8px;
   overflow-x: auto;
   flex-shrink: 0;
+  gap: 8px;
+}
+
+.tui-hub-group,
+.tui-subnav-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.tui-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--tui-bg-alt);
+  border-bottom: 1px solid var(--tui-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .tui-tab {
@@ -141,17 +166,27 @@
   border-right: 1px solid var(--tui-border);
   color: var(--tui-fg-muted);
   font: inherit;
-  padding: 5px 10px;
+  padding: 6px 11px;
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  transition:
+    background 80ms ease,
+    color 80ms ease;
 }
 
 .tui-tab:hover {
   color: var(--tui-fg);
   background: var(--tui-bg-alt);
+}
+
+.tui-tab:focus-visible,
+.tui-btn:focus-visible,
+.tui-select:focus-visible {
+  outline: 2px solid var(--tui-border-focus);
+  outline-offset: -1px;
 }
 
 .tui-tab[aria-current='page'] {
@@ -169,6 +204,66 @@
   font-weight: 700;
 }
 
+/* Always-visible Analysis Progress Strip */
+.tui-progress-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 12px;
+  background: var(--tui-bg-alt);
+  border-bottom: 1px solid var(--tui-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+
+.tui-progress-bar {
+  width: 140px;
+  height: 9px;
+  background: var(--tui-bg);
+  border: 1px solid var(--tui-border);
+  overflow: hidden;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tui-progress-fill {
+  height: 100%;
+  background: var(--tui-accent);
+  transition: width 160ms ease;
+}
+
+.tui-progress-fill.running {
+  background: var(--tui-green);
+}
+
+.tui-progress-fill.paused {
+  background: var(--tui-amber);
+}
+
+.tui-progress-fill.failed {
+  background: var(--tui-red);
+}
+
+.tui-explain-banner {
+  padding: 6px 12px;
+  background: var(--tui-bg-sel);
+  border-bottom: 1px solid var(--tui-border-focus);
+  color: var(--tui-fg);
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+
+.tui-inline-note {
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  background: var(--tui-bg-alt);
+  border-left: 3px solid var(--tui-accent);
+  color: var(--tui-fg-muted);
+  font-size: 11.5px;
+}
+
 .tui-workspace {
   flex: 1;
   padding: 10px 12px;
@@ -181,6 +276,12 @@
 .tui-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.tui-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -197,10 +298,19 @@
   align-items: start;
 }
 
-@media (max-width: 960px) {
+.tui-split-3 {
+  display: grid;
+  grid-template-columns: 240px 1fr 310px;
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
   .tui-grid-2,
+  .tui-grid-3,
   .tui-grid-4,
-  .tui-split-main {
+  .tui-split-main,
+  .tui-split-3 {
     grid-template-columns: 1fr;
   }
 }
@@ -214,6 +324,7 @@
 
 .tui-box.focused {
   border-color: var(--tui-border-focus);
+  box-shadow: inset 0 0 0 1px rgba(88, 209, 255, 0.18);
 }
 
 .tui-box-title {
@@ -250,6 +361,11 @@
   font-size: 11.5px;
 }
 
+.tui-scroll-list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
 .tui-table {
   width: 100%;
   border-collapse: collapse;
@@ -260,13 +376,17 @@
   text-align: left;
   color: var(--tui-fg-muted);
   border-bottom: 1px solid var(--tui-border);
-  padding: 4px 6px;
-  font-weight: 600;
+  padding: 5px 6px;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  background: var(--tui-bg);
+  z-index: 1;
 }
 
 .tui-table td {
   padding: 5px 6px;
-  border-bottom: 1px dashed rgba(125, 207, 255, 0.12);
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.16);
   vertical-align: middle;
 }
 
@@ -277,6 +397,10 @@
 .tui-table tr.tui-selectable:hover,
 .tui-table tr.tui-selected {
   background: var(--tui-bg-sel);
+}
+
+.tui-table tr.tui-selected td {
+  color: var(--tui-fg);
 }
 
 .tui-table tr.tui-selected td:first-child {
@@ -320,6 +444,9 @@
   font-size: 11.5px;
   padding: 2px 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .tui-btn:hover:not(:disabled) {
@@ -346,7 +473,8 @@
 }
 
 .tui-input,
-.tui-textarea {
+.tui-textarea,
+.tui-select {
   width: 100%;
   background: var(--tui-bg-alt);
   color: var(--tui-fg);
@@ -356,9 +484,11 @@
 }
 
 .tui-input:focus,
-.tui-textarea:focus {
+.tui-textarea:focus,
+.tui-select:focus {
   outline: none;
   border-color: var(--tui-accent);
+  box-shadow: 0 0 0 1px var(--tui-accent);
 }
 
 .tui-pre {
@@ -375,14 +505,21 @@
 
 .tui-diff-add {
   color: var(--tui-green);
-  background: rgba(115, 218, 202, 0.08);
+  background: rgba(74, 222, 128, 0.1);
   display: block;
 }
 
 .tui-diff-del {
   color: var(--tui-red);
-  background: rgba(247, 118, 142, 0.08);
+  background: rgba(251, 113, 133, 0.1);
   display: block;
+}
+
+.tui-diff-hunk {
+  color: var(--tui-purple);
+  background: rgba(196, 167, 255, 0.12);
+  display: block;
+  font-weight: 700;
 }
 
 .tui-cmdbar {
@@ -430,7 +567,7 @@
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.76);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -438,13 +575,13 @@
 }
 
 .tui-modal {
-  width: min(860px, 95vw);
+  width: min(880px, 95vw);
   max-height: 86vh;
   overflow-y: auto;
   background: var(--tui-bg);
   border: 2px solid var(--tui-accent);
   padding: 16px 18px 14px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.72);
 }
 
 .tui-keybind-grid {
