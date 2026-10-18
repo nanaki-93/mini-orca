@@ -21,10 +21,68 @@ import { collectHarnessLessons, containsGuideline, insertGuidelineSection } from
 import { resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import { compareBySeverity, computeWorkspaceIssueSummary } from './results';
-import { isAddedLine, isRemovedLine, summarizeFileEdit } from './change-shared';
+import { isAddedLine, isRemovedLine, summarizeDiffHunk, summarizeFileEdit } from './change-shared';
 import { Spinner, classifyNoticeTone, human } from './ui';
 import type * as M from './models';
 import './tui.css';
+
+interface TuiDiffHunk {
+  index: number;
+  oldStart: number;
+  oldEnd: number;
+  newStart: number;
+  newEnd: number;
+  lines: { kind: string; old_line: number; new_line: number; text: string }[];
+}
+
+function splitTuiDiffIntoHunks(
+  lines: { kind: string; old_line: number; new_line: number; text: string }[] = [],
+): TuiDiffHunk[] {
+  const changedIndices: number[] = [];
+  lines.forEach((line, idx) => {
+    if (isAddedLine(line.kind) || isRemovedLine(line.kind)) changedIndices.push(idx);
+  });
+  if (!changedIndices.length) return [];
+  const ranges: [number, number][] = [];
+  for (const idx of changedIndices) {
+    const start = Math.max(0, idx - 2);
+    const end = Math.min(lines.length - 1, idx + 2);
+    if (!ranges.length || start > ranges[ranges.length - 1][1] + 1) {
+      ranges.push([start, end]);
+    } else {
+      ranges[ranges.length - 1][1] = Math.max(ranges[ranges.length - 1][1], end);
+    }
+  }
+  return ranges.map(([start, end], i) => {
+    const slice = lines.slice(start, end + 1);
+    const oldLines = slice.filter((l) => l.old_line > 0).map((l) => l.old_line);
+    const newLines = slice.filter((l) => l.new_line > 0).map((l) => l.new_line);
+    return {
+      index: i,
+      oldStart: oldLines[0] || 1,
+      oldEnd: oldLines.at(-1) || oldLines[0] || 1,
+      newStart: newLines[0] || 1,
+      newEnd: newLines.at(-1) || newLines[0] || 1,
+      lines: slice,
+    };
+  });
+}
+
+function rejectTuiHunkFromDiff(
+  allLines: { kind: string; old_line: number; new_line: number; text: string }[],
+  hunk: TuiDiffHunk,
+): string {
+  const hunkSet = new Set(hunk.lines);
+  const kept: string[] = [];
+  for (const line of allLines) {
+    if (hunkSet.has(line)) {
+      if (!isAddedLine(line.kind)) kept.push(line.text);
+    } else {
+      if (!isRemovedLine(line.kind)) kept.push(line.text);
+    }
+  }
+  return kept.join('\n');
+}
 
 type TuiPalette = 'tokyo' | 'crt' | 'amber' | 'paper';
 type TuiDocsSection = 'context' | 'components' | 'scenarios' | 'decisions';
@@ -316,6 +374,12 @@ export function TuiApp({
     'all',
   );
   const [scopeFilter, setScopeFilter] = useState('');
+  const [editorFileFilter, setEditorFileFilter] = useState('');
+  const [editorInspectorTab, setEditorInspectorTab] = useState<'symbols' | 'findings' | 'ai'>(
+    'symbols',
+  );
+  const [directFileDraft, setDirectFileDraft] = useState(s.file?.content || '');
+  const [acceptedTuiHunks, setAcceptedTuiHunks] = useState<Record<string, number[]>>({});
   const [cmdInput, setCmdInput] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1);
@@ -359,6 +423,12 @@ export function TuiApp({
   useEffect(() => {
     setSelectedIdx(0);
   }, [activePage, s.agentDetailOpen, issueView, issueCategory, rulesSection, docsSection]);
+
+  useEffect(() => {
+    if (s.file) {
+      setDirectFileDraft(s.file.content);
+    }
+  }, [s.file?.path, s.file?.content_hash]);
 
   useEffect(() => {
     if (agentS.changeSeed) {
@@ -406,6 +476,17 @@ export function TuiApp({
                 ? 'instructions'
                 : activePage;
 
+  useEffect(() => {
+    if (
+      currentTabPage === 'history' &&
+      s.project &&
+      !s.changeHistory &&
+      !s.resourceErrors['change history']
+    ) {
+      void w.loadChangeHistory();
+    }
+  }, [currentTabPage, s.project?.project_id, s.changeHistory]);
+
   const activeHubEntry =
     TUI_TABS.find(
       (t) => t.page === currentTabPage || t.subPages.some((sp) => sp.page === currentTabPage),
@@ -432,7 +513,14 @@ export function TuiApp({
   const overviewIssues = allOpenIssues.slice(0, 8);
   const archComponents = docs.components || [];
   const allIndexFiles = s.index?.files || [];
-  const editorFiles = allIndexFiles;
+  const editorFiles = useMemo(() => {
+    const q = editorFileFilter.trim().toLowerCase();
+    return q
+      ? allIndexFiles.filter(
+          (f) => f.path.toLowerCase().includes(q) || (f.language || '').toLowerCase().includes(q),
+        )
+      : allIndexFiles;
+  }, [allIndexFiles, editorFileFilter]);
   const scopeFiles = useMemo(() => {
     const q = scopeFilter.trim().toLowerCase();
     return q
@@ -3080,195 +3168,551 @@ export function TuiApp({
         )}
 
         {/* [3] CODE & DIFF */}
-        {currentTabPage === 'editor' && (
-          <div className="tui-split-main">
-            <div className="tui-box">
-              <span className="tui-box-title">PROJECT FILES (j/k move · Enter open)</span>
-              <span className="tui-box-meta">{s.index?.files.length || 0} files</span>
-              <table className="tui-table">
-                <thead>
-                  <tr>
-                    <th>PATH</th>
-                    <th>LANGUAGE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editorFiles.map((f, idx) => (
-                    <tr
-                      key={f.path}
-                      className={`tui-selectable${idx === clampedIdx || s.file?.path === f.path ? ' tui-selected' : ''}`}
-                      onClick={() => {
-                        setSelectedIdx(idx);
-                        void w.openFile(f.path);
+        {currentTabPage === 'editor' &&
+          (() => {
+            const fileIssues = s.file ? allIssues.filter((i) => i.path === s.file?.path) : [];
+            const isDiffView =
+              (editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
+              changedFiles.length > 0;
+            return (
+              <div className="tui-split-3">
+                <div className="tui-box">
+                  <span className="tui-box-title">PROJECT FILES (j/k move · Enter open)</span>
+                  <span className="tui-box-meta">
+                    {editorFiles.length}/{allIndexFiles.length}
+                  </span>
+                  <div style={{ marginBottom: '6px' }}>
+                    <input
+                      aria-label="Filter project files"
+                      className="tui-input"
+                      value={editorFileFilter}
+                      onChange={(e) => {
+                        setEditorFileFilter(e.target.value);
+                        setSelectedIdx(0);
                       }}
-                    >
-                      <td>
-                        {idx === clampedIdx && (
-                          <span className="tui-cursor-indicator" aria-hidden="true">
-                            &gt;
-                          </span>
-                        )}
-                        {f.path}
-                      </td>
-                      <td className="tui-c-muted">{f.language || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="tui-box focused">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '6px',
-                  marginBottom: '6px',
-                }}
-              >
-                <span className="tui-box-title">
-                  {(editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
-                  changedFiles.length > 0
-                    ? `PROPOSED DIFF (${changedFiles.length} files)`
-                    : `SOURCE: ${s.file?.path || 'none'}`}
-                </span>
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className={`tui-btn${showTuiInlineWhy ? ' primary' : ''}`}
-                    aria-label="Toggle TUI inline explanations"
-                    aria-pressed={showTuiInlineWhy}
-                    onClick={() => setShowTuiInlineWhy((prev) => !prev)}
-                  >
-                    [e: Why: {showTuiInlineWhy ? 'ON' : 'OFF'}]
-                  </button>
-                  <button
-                    type="button"
-                    className={`tui-btn${editorMode === 'source' || (editorMode === 'auto' && changedFiles.length === 0) ? ' primary' : ''}`}
-                    onClick={() => setEditorMode('source')}
-                  >
-                    [Source]
-                  </button>
-                  <button
-                    type="button"
-                    className={`tui-btn${editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0) ? ' primary' : ''}`}
-                    onClick={() => setEditorMode('diff')}
-                  >
-                    [Diff ({changedFiles.length})]
-                  </button>
-                </div>
-              </div>
-              {(editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
-              changedFiles.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {changedFiles.map((fc) => {
-                    const summaryInfo = summarizeFileEdit(fc, s.symbols);
-                    return (
-                      <div key={fc.path}>
-                        <div className="tui-c-accent" style={{ fontWeight: 700 }}>
-                          --- a/{fc.path} +++ b/{fc.path}
-                        </div>
-                        {showTuiInlineWhy && (
-                          <div
-                            className="tui-sub"
-                            aria-label={`TUI inline summary for ${fc.path}`}
-                            style={{
-                              padding: '4px 8px',
-                              border: '1px solid var(--tui-border)',
-                              background: 'var(--tui-bg-alt)',
-                              marginBottom: '4px',
+                      placeholder="Filter files…"
+                    />
+                  </div>
+                  <div className="tui-scroll-list">
+                    <table className="tui-table">
+                      <thead>
+                        <tr>
+                          <th>PATH</th>
+                          <th>LANG</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editorFiles.map((f, idx) => (
+                          <tr
+                            key={f.path}
+                            className={`tui-selectable${idx === clampedIdx || s.file?.path === f.path ? ' tui-selected' : ''}`}
+                            onClick={() => {
+                              setSelectedIdx(idx);
+                              void w.openFile(f.path);
                             }}
                           >
-                            <strong className="tui-c-purple">[WHY]</strong> {summaryInfo.summary}
-                          </div>
-                        )}
-                        <pre className="tui-pre">
-                          {(fc.diff?.lines || []).map((ln, idx) => (
-                            <span
-                              key={idx}
-                              className={
-                                isAddedLine(ln.kind)
-                                  ? 'tui-diff-add'
-                                  : isRemovedLine(ln.kind)
-                                    ? 'tui-diff-del'
-                                    : undefined
-                              }
-                            >
-                              {isAddedLine(ln.kind)
-                                ? `+ ${ln.text}`
-                                : isRemovedLine(ln.kind)
-                                  ? `- ${ln.text}`
-                                  : `  ${ln.text}`}
-                              {'\n'}
-                            </span>
-                          ))}
-                        </pre>
-                      </div>
-                    );
-                  })}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="tui-btn primary"
-                      disabled={!!agentS.busy || !canAcceptChange(agentS)}
-                      onClick={() => void agentW.applyProposalNow()}
-                    >
-                      [Apply Verified Proposal]
-                    </button>
-                    {agentS.changeReceipt?.undo_available && (
-                      <button
-                        type="button"
-                        className="tui-btn"
-                        disabled={!!agentS.busy}
-                        onClick={() => void agentW.undoChange()}
-                      >
-                        [Undo Last Change]
-                      </button>
-                    )}
+                            <td>
+                              {idx === clampedIdx && (
+                                <span className="tui-cursor-indicator" aria-hidden="true">
+                                  &gt;
+                                </span>
+                              )}
+                              {f.path}
+                            </td>
+                            <td className="tui-c-muted">{f.language || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <pre className="tui-pre">{s.file?.content || 'Select a file on the left.'}</pre>
-                  {s.file && (
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <input
-                        aria-label="TUI file change instruction"
-                        className="tui-input"
-                        style={{ flex: 1 }}
-                        value={editorPrompt}
-                        onChange={(e) => setEditorPrompt(e.target.value)}
-                        placeholder={`Ask AI to change ${s.file.path}…`}
-                      />
+
+                <div className="tui-box focused">
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    <span className="tui-box-title">
+                      {editorMode === 'edit' && s.file
+                        ? `EDITING: ${s.file.path}`
+                        : isDiffView
+                          ? `PROPOSED DIFF (${changedFiles.length} files)`
+                          : `SOURCE: ${s.file?.path || 'none'}`}
+                    </span>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        className="tui-btn primary"
-                        disabled={!!activeBusy || !editorPrompt.trim()}
-                        onClick={() => {
-                          const seed = workflowSeed({
-                            title: editorPrompt.trim().slice(0, 64),
-                            kind: 'fix',
-                            paths: [s.file!.path],
-                            message: editorPrompt.trim(),
-                            acceptance_criteria: [
-                              'Keep the diff minimal and preserve existing tests.',
-                            ],
-                          });
-                          setEditorPrompt('');
-                          void w.startAgentFix(seed);
-                        }}
+                        className={`tui-btn${showTuiInlineWhy ? ' primary' : ''}`}
+                        aria-label="Toggle TUI inline explanations"
+                        aria-pressed={showTuiInlineWhy}
+                        onClick={() => setShowTuiInlineWhy((prev) => !prev)}
                       >
-                        [Generate Diff with Agent]
+                        [e: Why: {showTuiInlineWhy ? 'ON' : 'OFF'}]
                       </button>
+                      <button
+                        type="button"
+                        className={`tui-btn${editorMode === 'source' || (editorMode === 'auto' && changedFiles.length === 0) ? ' primary' : ''}`}
+                        onClick={() => setEditorMode('source')}
+                      >
+                        [Source]
+                      </button>
+                      {s.file && (
+                        <button
+                          type="button"
+                          className={`tui-btn${editorMode === 'edit' ? ' primary' : ''}`}
+                          onClick={() => {
+                            setDirectFileDraft(s.file!.content);
+                            setEditorMode('edit');
+                          }}
+                        >
+                          [Edit File]
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={`tui-btn${isDiffView ? ' primary' : ''}`}
+                        onClick={() => setEditorMode('diff')}
+                      >
+                        [Diff ({changedFiles.length})]
+                      </button>
+                    </div>
+                  </div>
+
+                  {editorMode === 'edit' && s.file ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <textarea
+                        aria-label="Direct file editor"
+                        className="tui-textarea"
+                        style={{ minHeight: '280px' }}
+                        value={directFileDraft}
+                        onChange={(e) => setDirectFileDraft(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          disabled={!!activeBusy || directFileDraft === s.file.content}
+                          onClick={() => {
+                            void w.saveDirectFile(s.file!.path, directFileDraft);
+                            setEditorMode('source');
+                          }}
+                        >
+                          [Save File (Undo Guarded)]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          onClick={() => setEditorMode('source')}
+                        >
+                          [Cancel (Esc)]
+                        </button>
+                      </div>
+                    </div>
+                  ) : isDiffView ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {changedFiles.map((fc) => {
+                        const summaryInfo = summarizeFileEdit(fc, s.symbols);
+                        const hunks = splitTuiDiffIntoHunks(fc.diff?.lines || []);
+                        const acceptedForFile = acceptedTuiHunks[fc.path] || [];
+                        return (
+                          <div key={fc.path}>
+                            <div className="tui-c-accent" style={{ fontWeight: 700 }}>
+                              --- a/{fc.path} +++ b/{fc.path}
+                            </div>
+                            {showTuiInlineWhy && (
+                              <div
+                                className="tui-sub"
+                                aria-label={`TUI inline summary for ${fc.path}`}
+                                style={{
+                                  padding: '4px 8px',
+                                  border: '1px solid var(--tui-border)',
+                                  background: 'var(--tui-bg-alt)',
+                                  marginBottom: '4px',
+                                }}
+                              >
+                                <strong className="tui-c-purple">[WHY]</strong>{' '}
+                                {summaryInfo.summary}
+                              </div>
+                            )}
+                            {hunks.length > 0 ? (
+                              hunks.map((hunk) => {
+                                const hunkInfo = summarizeDiffHunk(
+                                  hunk.lines,
+                                  hunk.newStart,
+                                  hunk.newEnd,
+                                  s.symbols,
+                                );
+                                const isAccepted = acceptedForFile.includes(hunk.index);
+                                return (
+                                  <div key={hunk.index} className="tui-diff-hunk">
+                                    <div className="tui-diff-hunk-head">
+                                      <span>
+                                        @@ -{hunk.oldStart},{hunk.oldEnd} +{hunk.newStart},
+                                        {hunk.newEnd} @@ · {hunkInfo.summary}
+                                      </span>
+                                      {change?.state === 'draft' && (
+                                        <span style={{ display: 'flex', gap: '4px' }}>
+                                          <button
+                                            type="button"
+                                            className={`tui-btn${isAccepted ? ' primary' : ''}`}
+                                            onClick={() =>
+                                              setAcceptedTuiHunks((prev) => {
+                                                const cur = prev[fc.path] || [];
+                                                return {
+                                                  ...prev,
+                                                  [fc.path]: cur.includes(hunk.index)
+                                                    ? cur.filter((idx) => idx !== hunk.index)
+                                                    : [...cur, hunk.index],
+                                                };
+                                              })
+                                            }
+                                          >
+                                            [{isAccepted ? 'Hunk Accepted ✓' : 'Accept Hunk'}]
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="tui-btn"
+                                            disabled={!!agentS.busy}
+                                            onClick={() =>
+                                              void agentW.updateProposalFileContent(
+                                                fc.path,
+                                                rejectTuiHunkFromDiff(fc.diff?.lines || [], hunk),
+                                                `Rejected hunk #${hunk.index + 1} in ${fc.path}`,
+                                              )
+                                            }
+                                          >
+                                            [Reject Hunk]
+                                          </button>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <pre className="tui-pre">
+                                      {hunk.lines.map((ln, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={
+                                            isAddedLine(ln.kind)
+                                              ? 'tui-diff-add'
+                                              : isRemovedLine(ln.kind)
+                                                ? 'tui-diff-del'
+                                                : undefined
+                                          }
+                                        >
+                                          {isAddedLine(ln.kind)
+                                            ? `+ ${ln.text}`
+                                            : isRemovedLine(ln.kind)
+                                              ? `- ${ln.text}`
+                                              : `  ${ln.text}`}
+                                          {'\n'}
+                                        </span>
+                                      ))}
+                                    </pre>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <pre className="tui-pre">
+                                {(fc.diff?.lines || []).map((ln, idx) => (
+                                  <span
+                                    key={idx}
+                                    className={
+                                      isAddedLine(ln.kind)
+                                        ? 'tui-diff-add'
+                                        : isRemovedLine(ln.kind)
+                                          ? 'tui-diff-del'
+                                          : undefined
+                                    }
+                                  >
+                                    {isAddedLine(ln.kind)
+                                      ? `+ ${ln.text}`
+                                      : isRemovedLine(ln.kind)
+                                        ? `- ${ln.text}`
+                                        : `  ${ln.text}`}
+                                    {'\n'}
+                                  </span>
+                                ))}
+                              </pre>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          disabled={!!agentS.busy || !canAcceptChange(agentS)}
+                          onClick={() => void agentW.applyProposalNow()}
+                        >
+                          [Apply Verified Proposal]
+                        </button>
+                        {agentS.changeReceipt?.undo_available && (
+                          <button
+                            type="button"
+                            className="tui-btn"
+                            disabled={!!agentS.busy}
+                            onClick={() => void agentW.undoChange()}
+                          >
+                            [Undo Last Change]
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <pre className="tui-pre">
+                        {s.file?.content || 'Select a file on the left.'}
+                      </pre>
+                      {s.file && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <input
+                            aria-label="TUI file change instruction"
+                            className="tui-input"
+                            style={{ flex: 1 }}
+                            value={editorPrompt}
+                            onChange={(e) => setEditorPrompt(e.target.value)}
+                            placeholder={`Ask AI to change ${s.file.path}…`}
+                          />
+                          <button
+                            type="button"
+                            className="tui-btn primary"
+                            disabled={!!activeBusy || !editorPrompt.trim()}
+                            onClick={() => {
+                              const seed = workflowSeed({
+                                title: editorPrompt.trim().slice(0, 64),
+                                kind: 'fix',
+                                paths: [s.file!.path],
+                                message: editorPrompt.trim(),
+                                acceptance_criteria: [
+                                  'Keep the diff minimal and preserve existing tests.',
+                                ],
+                              });
+                              setEditorPrompt('');
+                              void w.startAgentFix(seed);
+                            }}
+                          >
+                            [Generate Diff with Agent]
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
+
+                <div className="tui-box">
+                  <span className="tui-box-title">FILE &amp; SYMBOL INSPECTOR</span>
+                  <span className="tui-box-meta">{s.symbol || s.file?.language || 'inspect'}</span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '4px',
+                      flexWrap: 'wrap',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`tui-btn${editorInspectorTab === 'symbols' ? ' primary' : ''}`}
+                      onClick={() => setEditorInspectorTab('symbols')}
+                    >
+                      [1. Symbols ({s.symbols.length})]
+                    </button>
+                    <button
+                      type="button"
+                      className={`tui-btn${editorInspectorTab === 'findings' ? ' primary' : ''}`}
+                      onClick={() => setEditorInspectorTab('findings')}
+                    >
+                      [2. Findings ({fileIssues.length})]
+                    </button>
+                    <button
+                      type="button"
+                      className={`tui-btn${editorInspectorTab === 'ai' ? ' primary' : ''}`}
+                      onClick={() => setEditorInspectorTab('ai')}
+                    >
+                      [3. AI &amp; Context]
+                    </button>
+                  </div>
+
+                  {editorInspectorTab === 'symbols' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {s.symbols.length > 0 ? (
+                        <div className="tui-scroll-list" style={{ maxHeight: '220px' }}>
+                          <table className="tui-table" aria-label="File symbols">
+                            <thead>
+                              <tr>
+                                <th>SYMBOL</th>
+                                <th>KIND</th>
+                                <th>LINES</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {s.symbols.map((sym) => (
+                                <tr
+                                  key={`${sym.name}-${sym.start_line}`}
+                                  className={`tui-selectable${s.symbol === sym.name ? ' tui-selected' : ''}`}
+                                  onClick={() => void w.selectSymbol(sym.name)}
+                                >
+                                  <td className="tui-c-accent">{sym.name}</td>
+                                  <td className="tui-c-muted">{sym.kind}</td>
+                                  <td className="tui-c-muted">
+                                    L{sym.start_line}–{sym.end_line}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="tui-sub">
+                          {s.file
+                            ? 'No indexed declarations in this file.'
+                            : 'Open a file to inspect symbols and callers.'}
+                        </p>
+                      )}
+                      {s.impact && (
+                        <div>
+                          <div className="tui-c-amber">
+                            IMPACT REFERENCES FOR {s.impact.target_symbol} (
+                            {s.impact.references.length}):
+                          </div>
+                          {s.impact.references.length > 0 ? (
+                            s.impact.references.slice(0, 8).map((ref, idx) => (
+                              <div key={idx} className="tui-sub">
+                                • <code>{ref.path}</code> ({ref.symbol || 'file'}) — {ref.reason}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="tui-sub">No external references found.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {editorInspectorTab === 'findings' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {fileIssues.length > 0 ? (
+                        fileIssues.map((iss) => (
+                          <div
+                            key={iss.id}
+                            style={{
+                              padding: '6px',
+                              border: '1px solid var(--tui-border)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <div>
+                              <span
+                                className={`tui-badge ${
+                                  ['critical', 'high'].includes(iss.severity)
+                                    ? 'tui-c-red'
+                                    : iss.severity === 'medium'
+                                      ? 'tui-c-amber'
+                                      : 'tui-c-accent'
+                                }`}
+                              >
+                                {iss.severity}
+                              </span>{' '}
+                              <strong>{iss.name}</strong>
+                              <div className="tui-sub">{iss.title}</div>
+                            </div>
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              onClick={() => dispatchIssueToAgent(iss)}
+                            >
+                              [Fix]
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="tui-sub">No active findings recorded for this file.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {editorInspectorTab === 'ai' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="tui-btn primary"
+                          disabled={!s.file || !!activeBusy}
+                          onClick={() => void w.analyzeFile()}
+                        >
+                          [Analyze File]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          disabled={!s.file || !s.symbol || !!activeBusy}
+                          onClick={() => void w.explain()}
+                        >
+                          [Explain Symbol]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          disabled={!s.file || !!activeBusy}
+                          onClick={() => void w.securityReview(false)}
+                        >
+                          [Security Scan]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          disabled={!s.file || !!activeBusy}
+                          onClick={() => void w.securityReview(true)}
+                        >
+                          [AI Security Review]
+                        </button>
+                        <button
+                          type="button"
+                          className="tui-btn"
+                          disabled={!s.file || !!activeBusy}
+                          onClick={() => void w.inspectContext()}
+                        >
+                          [Inspect Context]
+                        </button>
+                      </div>
+                      {s.fileAnalysis && (
+                        <div>
+                          <div className="tui-c-accent">FILE PURPOSE:</div>
+                          <div className="tui-sub">{s.fileAnalysis.purpose}</div>
+                        </div>
+                      )}
+                      {s.explanation && (
+                        <div>
+                          <div className="tui-c-green">
+                            SYMBOL EXPLANATION ({s.explanation.anchor.symbol}):
+                          </div>
+                          <div className="tui-sub">{s.explanation.summary}</div>
+                        </div>
+                      )}
+                      {s.context && (
+                        <div>
+                          <div className="tui-c-purple">CONTEXT MANIFEST:</div>
+                          <div className="tui-sub">
+                            Included files: <strong>{s.context.included.length}</strong> · Tokens:{' '}
+                            <strong>{s.context.estimated_tokens || 0}</strong> /{' '}
+                            {s.context.token_limit || '—'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
         {/* [2] ARCH — LAYERED ARCHITECTURE & SUBSYSTEM INSPECTOR */}
         {currentTabPage === 'diagrams' && (
@@ -4163,13 +4607,38 @@ export function TuiApp({
 
         {currentTabPage === 'git' && (
           <div className="tui-box focused">
-            <span className="tui-box-title">
-              GIT &amp; WORKTREES (j/k move · Enter open · m merge)
-            </span>
-            <span className="tui-box-meta">{s.repository?.branch || 'main'}</span>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '6px',
+                marginBottom: '8px',
+              }}
+            >
+              <span className="tui-box-title">
+                GIT &amp; WORKTREES (j/k move · Enter open · m merge)
+              </span>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <span className="tui-badge tui-c-accent">{s.repository?.branch || 'main'}</span>
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy}
+                  onClick={() => void w.reindex()}
+                >
+                  [Refresh Git &amp; Index]
+                </button>
+              </div>
+            </div>
             <div className="tui-sub" style={{ marginBottom: '8px' }}>
-              HEAD: <code>{s.repository?.head || '—'}</code> · Worktrees:{' '}
-              <strong>{gitWorktrees.filter((wt) => !wt.current).length}</strong>
+              Root: <code>{s.repository?.root || s.project?.path || '—'}</code> · HEAD:{' '}
+              <code>{s.repository?.head || '—'}</code> · Working tree:{' '}
+              <strong className={s.repository?.dirty ? 'tui-c-amber' : 'tui-c-green'}>
+                {s.repository?.dirty ? 'DIRTY' : 'CLEAN'}
+              </strong>{' '}
+              · Active worktrees: <strong>{gitWorktrees.filter((wt) => !wt.current).length}</strong>
             </div>
             <table className="tui-table">
               <thead>
@@ -4245,6 +4714,282 @@ export function TuiApp({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* [3] CODE & DIFF — SAVED PROPOSALS & CHANGE HISTORY */}
+        {currentTabPage === 'history' && (
+          <div className="tui-split-main">
+            <div className="tui-box focused">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginBottom: '8px',
+                }}
+              >
+                <span className="tui-box-title">
+                  SAVED PROPOSALS &amp; CHANGE HISTORY (j/k move · Enter inspect diff)
+                </span>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!activeBusy}
+                    onClick={() => void w.loadChangeHistory()}
+                  >
+                    [Refresh History]
+                  </button>
+                  <button
+                    type="button"
+                    className="tui-btn primary"
+                    disabled={!!activeBusy}
+                    onClick={() => {
+                      w.newChange();
+                      void w.navigate('agents');
+                    }}
+                  >
+                    [+ New Proposal]
+                  </button>
+                </div>
+              </div>
+              {historyItems.length > 0 ? (
+                <div className="tui-scroll-list">
+                  <table className="tui-table" aria-label="Saved change proposals">
+                    <thead>
+                      <tr>
+                        <th>TITLE</th>
+                        <th>KIND</th>
+                        <th>STATE</th>
+                        <th>FRESHNESS</th>
+                        <th>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyItems.map((entry, idx) => (
+                        <tr
+                          key={entry.id}
+                          className={`tui-selectable${idx === clampedIdx ? ' tui-selected' : ''}`}
+                          onClick={() => setSelectedIdx(idx)}
+                        >
+                          <td className="tui-c-accent">
+                            {idx === clampedIdx && (
+                              <span className="tui-cursor-indicator" aria-hidden="true">
+                                &gt;
+                              </span>
+                            )}
+                            <strong>{entry.title}</strong>
+                            {entry.paths && entry.paths.length > 0 && (
+                              <div className="tui-sub">{entry.paths.join(', ')}</div>
+                            )}
+                          </td>
+                          <td className="tui-c-muted">{entry.kind}</td>
+                          <td>
+                            <span
+                              className={`tui-badge ${
+                                entry.state === 'applied'
+                                  ? 'tui-c-green'
+                                  : entry.state === 'draft'
+                                    ? 'tui-c-accent'
+                                    : 'tui-c-amber'
+                              }`}
+                            >
+                              {entry.state}
+                            </span>
+                          </td>
+                          <td className="tui-c-muted">{entry.freshness}</td>
+                          <td style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              disabled={!!activeBusy}
+                              onClick={() => void w.viewChange(entry.id, 'editor')}
+                            >
+                              [Inspect Diff]
+                            </button>
+                            <button
+                              type="button"
+                              className="tui-btn"
+                              disabled={!!activeBusy}
+                              onClick={() => void w.resumeChange(entry.id)}
+                            >
+                              [Resume]
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="tui-sub">
+                  No saved proposals yet. Dispatch a fix from [2] Agent Studio or generate a diff in
+                  [Code &amp; Diff].
+                </p>
+              )}
+            </div>
+
+            <div className="tui-box">
+              <span className="tui-box-title">PROPOSAL INSPECTOR &amp; RECOVERY</span>
+              <span className="tui-box-meta">{historyItems[clampedIdx]?.id || 'proposal'}</span>
+              {historyItems[clampedIdx] ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div>
+                    <strong className="tui-c-accent">{historyItems[clampedIdx].title}</strong>
+                    <div className="tui-sub">
+                      Kind: <strong>{historyItems[clampedIdx].kind}</strong> · State:{' '}
+                      <strong>{historyItems[clampedIdx].state}</strong> · Revision:{' '}
+                      <strong>{historyItems[clampedIdx].revision}</strong>
+                    </div>
+                    <div className="tui-sub">
+                      Updated: <code>{historyItems[clampedIdx].updated_at}</code>
+                    </div>
+                  </div>
+                  {historyItems[clampedIdx].paths && historyItems[clampedIdx].paths!.length > 0 && (
+                    <div>
+                      <div className="tui-c-amber">CAPTURED PATHS:</div>
+                      {historyItems[clampedIdx].paths!.map((p) => (
+                        <div key={p} className="tui-sub">
+                          • <code>{p}</code>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {historyItems[clampedIdx].commit && (
+                    <div>
+                      <div className="tui-c-green">COMMIT RECORD:</div>
+                      <div className="tui-sub">
+                        State: <strong>{historyItems[clampedIdx].commit!.state}</strong> ·{' '}
+                        {historyItems[clampedIdx].commit!.oid ||
+                          historyItems[clampedIdx].commit!.message}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="tui-btn primary"
+                      disabled={!!activeBusy}
+                      onClick={() => void w.viewChange(historyItems[clampedIdx].id, 'editor')}
+                    >
+                      [Enter: Open in Code &amp; Diff]
+                    </button>
+                    {s.changeReceipt?.undo_available && (
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        disabled={!!activeBusy}
+                        onClick={() => void w.undoChange()}
+                      >
+                        [u: Undo Latest Applied Change]
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="tui-sub">Select a saved proposal to inspect its metadata.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* [3] CODE & DIFF — WORKSPACE TERMINAL & VERIFICATION RUNNER */}
+        {currentTabPage === 'terminal' && (
+          <div className="tui-box focused">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '6px',
+                marginBottom: '8px',
+              }}
+            >
+              <span className="tui-box-title">WORKSPACE TERMINAL &amp; VERIFICATION RUNNER</span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="tui-btn primary"
+                  disabled={!!activeBusy}
+                  onClick={() => void w.openTerminal()}
+                >
+                  [+ Open Terminal Session]
+                </button>
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy}
+                  onClick={() => void w.scanProject(false)}
+                >
+                  [t: Run Project Checks]
+                </button>
+                <button
+                  type="button"
+                  className="tui-btn"
+                  disabled={!!activeBusy}
+                  onClick={() => void w.reindex()}
+                >
+                  [Reindex Repository]
+                </button>
+              </div>
+            </div>
+            {s.terminals.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {s.terminals.map((term) => (
+                  <div key={term.id} className="tui-box">
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      <span>
+                        <strong className="tui-c-accent">SESSION {term.id}</strong> ·{' '}
+                        <span className="tui-badge tui-c-green">{term.state || 'active'}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="tui-btn"
+                        onClick={() => void w.closeTerminal(term.id)}
+                      >
+                        [Close Session]
+                      </button>
+                    </div>
+                    <pre className="tui-pre">
+                      {term.data || term.error || 'Terminal session ready.'}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <p className="tui-sub">
+                  No interactive native terminal sessions open. Click [+ Open Terminal Session] to
+                  spawn a shell in <code>{s.project?.path || '.'}</code>, or inspect the latest
+                  verification output below.
+                </p>
+                {scanPhases.length > 0 && (
+                  <div>
+                    <div className="tui-c-amber">LATEST VERIFICATION OUTPUT:</div>
+                    {scanPhases.map((ph, idx) => (
+                      <div key={`${ph.name}-${idx}`} style={{ marginBottom: '6px' }}>
+                        <div className="tui-sub">
+                          <strong>{ph.name}</strong> ({ph.state}) —{' '}
+                          <code>{(ph.command || []).join(' ')}</code>
+                        </div>
+                        {ph.output && <pre className="tui-pre">{ph.output}</pre>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
