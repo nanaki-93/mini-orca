@@ -35,7 +35,15 @@ const TUI_TABS: {
   label: string;
   subPages: { page: Page; label: string }[];
 }[] = [
-  { key: '1', page: 'summary', label: 'Overview', subPages: [] },
+  {
+    key: '1',
+    page: 'summary',
+    label: 'Overview',
+    subPages: [
+      { page: 'summary', label: 'Dashboard' },
+      { page: 'project', label: 'Project & Tests' },
+    ],
+  },
   {
     key: '2',
     page: 'agents',
@@ -45,6 +53,7 @@ const TUI_TABS: {
       { page: 'bugs', label: 'Issues' },
       { page: 'features', label: 'Features' },
       { page: 'analysis-run', label: 'Last Run' },
+      { page: 'analysis-files', label: 'File Scope' },
     ],
   },
   {
@@ -54,6 +63,8 @@ const TUI_TABS: {
     subPages: [
       { page: 'editor', label: 'Code & Diff' },
       { page: 'git', label: 'Git & Worktrees' },
+      { page: 'history', label: 'Saved Proposals' },
+      { page: 'terminal', label: 'Terminal' },
     ],
   },
   {
@@ -292,7 +303,7 @@ export function TuiApp({
     }
   }, [s.instructionsTab, activePage]);
   const [selectedAgentStage, setSelectedAgentStage] = useState<StageId | 'all'>('all');
-  const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'diff'>('auto');
+  const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'edit' | 'diff'>('auto');
   const [showTuiInlineWhy, setShowTuiInlineWhy] = useState(true);
   const [graduatedTuiLessons, setGraduatedTuiLessons] = useState<string[]>([]);
   const [tuiCustomDraft, setTuiCustomDraft] = useState('');
@@ -304,6 +315,9 @@ export function TuiApp({
   const [cmdOutput, setCmdOutput] = useState(
     'Press [?] or type :keys for keyboard shortcuts · [1-5] switch hubs · [Tab] sub-view · [j/k] move · [Enter] select · [:gui] exit',
   );
+  const rootRef = useRef<HTMLDivElement>(null);
+  const cmdRef = useRef<HTMLInputElement>(null);
+
   const selectedChild = s.selectedAgentPath
     ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
     : undefined;
@@ -330,7 +344,6 @@ export function TuiApp({
     agentS.changeSeed?.paths.join(', ') || s.file?.path || s.index?.files[0]?.path || '',
   );
   const [missionPrompt, setMissionPrompt] = useState(agentS.changeSeed?.message || '');
-  const cmdRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     localStorage.setItem('mini-orca:tui-palette', palette);
@@ -338,7 +351,7 @@ export function TuiApp({
 
   useEffect(() => {
     setSelectedIdx(0);
-  }, [activePage, s.agentDetailOpen, issueView, issueCategory]);
+  }, [activePage, s.agentDetailOpen, issueView, issueCategory, rulesSection, docsSection]);
 
   useEffect(() => {
     if (agentS.changeSeed) {
@@ -374,9 +387,17 @@ export function TuiApp({
   const currentTabPage: Page =
     findingCategory(s) || s.page === 'finding'
       ? 'bugs'
-      : ['models', 'instructions', 'analysis-files', 'context'].includes(activePage)
-        ? 'instructions'
-        : activePage;
+      : activePage === 'welcome'
+        ? 'project'
+        : activePage === 'changes'
+          ? 'history'
+          : activePage === 'context' || activePage === 'search'
+            ? 'editor'
+            : activePage === 'analysis' || activePage === 'analysis-preview'
+              ? 'analysis-run'
+              : activePage === 'models' || activePage === 'instructions'
+                ? 'instructions'
+                : activePage;
 
   const activeHubEntry =
     TUI_TABS.find(
@@ -403,34 +424,70 @@ export function TuiApp({
     issueView === 'in_progress' ? inProgressIssues : issueView === 'done' ? doneIssues : openIssues;
   const overviewIssues = allOpenIssues.slice(0, 8);
   const archComponents = docs.components || [];
-  const editorFiles = (s.index?.files || []).slice(0, 24);
+  const allIndexFiles = s.index?.files || [];
+  const editorFiles = allIndexFiles;
   const featureSuggestions = (s.features?.suggestions || []).filter(
     (idea) => idea.status !== 'dismissed',
   );
   const runSections = s.run?.sections || [];
   const gitWorktrees = s.gitWorkspace?.worktrees || [];
   const modelPresets = useMemo(() => allModelPresets(s), [s.modelPresets]);
+  const bootstrapPillars = useMemo(
+    () => evaluateBootstrapChecklist(s),
+    [s.index, s.projectInstructions, s.instructionPreview, s.instructionDraft],
+  );
+  const defaultLessonRule =
+    'Propagate context.Context cancellation and add a regression test for every check repair.';
+  const allTuiLessons = useMemo(() => {
+    const dynamicLessons = collectHarnessLessons(s);
+    return [
+      defaultLessonRule,
+      ...dynamicLessons.filter((l) => l.trim().toLowerCase() !== defaultLessonRule.toLowerCase()),
+    ];
+  }, [s.change, s.changeHistory, s.findings]);
+  const scanPhases = s.scan?.phases || [];
+  const historyItems = s.changeHistory || [];
 
   const activeListLength =
     currentTabPage === 'summary'
       ? overviewIssues.length
-      : currentTabPage === 'diagrams'
-        ? archComponents.length
-        : currentTabPage === 'editor'
-          ? editorFiles.length
-          : currentTabPage === 'bugs'
-            ? issues.length
-            : currentTabPage === 'features'
-              ? featureSuggestions.length
-              : currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm
-                ? agentItems.length
-                : currentTabPage === 'analysis-run'
-                  ? runSections.length
-                  : currentTabPage === 'git'
-                    ? gitWorktrees.length
-                    : currentTabPage === 'instructions'
-                      ? modelPresets.length
-                      : 0;
+      : currentTabPage === 'project'
+        ? Math.max(1, scanPhases.length)
+        : currentTabPage === 'diagrams'
+          ? archComponents.length
+          : currentTabPage === 'docs'
+            ? docsSection === 'components'
+              ? docs.components.length
+              : docsSection === 'scenarios'
+                ? docs.scenarios.length
+                : docsSection === 'decisions'
+                  ? docs.decisions.length
+                  : (docs.dependencies || []).length
+            : currentTabPage === 'editor'
+              ? editorFiles.length
+              : currentTabPage === 'bugs'
+                ? issues.length
+                : currentTabPage === 'features'
+                  ? featureSuggestions.length
+                  : currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm
+                    ? agentItems.length
+                    : currentTabPage === 'analysis-run'
+                      ? runSections.length + (s.run?.features ? 1 : 0)
+                      : currentTabPage === 'analysis-files'
+                        ? allIndexFiles.length
+                        : currentTabPage === 'git'
+                          ? gitWorktrees.length
+                          : currentTabPage === 'history'
+                            ? historyItems.length
+                            : currentTabPage === 'instructions'
+                              ? rulesSection === 'models'
+                                ? modelPresets.length
+                                : rulesSection === 'bootstrap'
+                                  ? bootstrapPillars.length
+                                  : rulesSection === 'lessons'
+                                    ? allTuiLessons.length
+                                    : 1
+                              : 0;
 
   const clampedIdx = Math.min(selectedIdx, Math.max(0, activeListLength - 1));
   const selectedIssue =
@@ -442,6 +499,14 @@ export function TuiApp({
   const checks = change?.checks || [];
   const passedChecks = checks.filter((c) => c.state === 'passed').length;
   const allChecksPassed = change ? changeChecksPassed(change) : false;
+
+  // Auto-scroll highlighted table row into view during keyboard navigation
+  useEffect(() => {
+    const el = rootRef.current?.querySelector('.tui-table tr.tui-selected');
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [clampedIdx, currentTabPage, rulesSection]);
 
   const toggleIssueSelection = (id: string) => {
     setSelectedIssueIds((prev) =>
@@ -548,6 +613,26 @@ export function TuiApp({
     setCmdOutput(`Graduated Harness² lesson into AGENTS.md: ${ruleText}`);
   };
 
+  const toggleExcludedPath = (path: string) => {
+    const currentId = s.selection?.selection_id || '';
+    const baseExcluded =
+      s.analysisSelectionDraft && s.analysisSelectionDraft.selectionID === currentId
+        ? s.analysisSelectionDraft.excluded
+        : s.selection?.excluded_paths || [];
+    const nextExcluded = baseExcluded.includes(path)
+      ? baseExcluded.filter((p) => p !== path)
+      : [...baseExcluded, path];
+    w.set({
+      analysisSelectionDraft: {
+        selectionID: currentId,
+        excluded: nextExcluded,
+      },
+    });
+    setCmdOutput(
+      `${nextExcluded.includes(path) ? 'Excluded' : 'Included'} ${path} in analysis scope`,
+    );
+  };
+
   const activateCurrentRow = () => {
     if (currentTabPage === 'summary' || currentTabPage === 'bugs') {
       if (!selectedIssue) return;
@@ -560,11 +645,32 @@ export function TuiApp({
       }
       return;
     }
+    if (currentTabPage === 'project') {
+      void w.scanProject(false);
+      setCmdOutput('Running project verification checks...');
+      return;
+    }
     if (currentTabPage === 'editor') {
       const file = editorFiles[clampedIdx];
       if (file) {
         setCmdOutput(`Opened ${file.path}`);
         void w.openFile(file.path);
+      }
+      return;
+    }
+    if (currentTabPage === 'diagrams') {
+      const comp = archComponents[clampedIdx];
+      if (comp?.path) {
+        setCmdOutput(`Opened ${comp.path}`);
+        void w.openFile(comp.path);
+      }
+      return;
+    }
+    if (currentTabPage === 'docs' && docsSection === 'components') {
+      const comp = docs.components[clampedIdx];
+      if (comp?.path) {
+        setCmdOutput(`Opened ${comp.path}`);
+        void w.openFile(comp.path);
       }
       return;
     }
@@ -585,9 +691,21 @@ export function TuiApp({
       return;
     }
     if (currentTabPage === 'analysis-run') {
-      const sec = runSections[clampedIdx];
-      if (sec) {
-        void w.navigate(sec.category as Page);
+      if (clampedIdx < runSections.length) {
+        const sec = runSections[clampedIdx];
+        if (sec) {
+          setIssueCategory(sec.category as 'bugs' | 'security' | 'performance');
+          void w.navigate('bugs');
+        }
+      } else if (s.run?.features) {
+        void w.navigate('features');
+      }
+      return;
+    }
+    if (currentTabPage === 'analysis-files') {
+      const file = allIndexFiles[clampedIdx];
+      if (file) {
+        toggleExcludedPath(file.path);
       }
       return;
     }
@@ -598,32 +716,83 @@ export function TuiApp({
       }
       return;
     }
+    if (currentTabPage === 'history') {
+      const entry = historyItems[clampedIdx];
+      if (entry) {
+        setCmdOutput(`Loaded proposal ${entry.title}`);
+        void w.viewChange(entry.id, 'editor');
+      }
+      return;
+    }
     if (currentTabPage === 'instructions') {
-      const preset = modelPresets[clampedIdx];
-      if (preset) {
-        w.applyModelPreset(preset);
-        setCmdOutput(`Applied model preset: ${preset.name}`);
+      if (rulesSection === 'models') {
+        const preset = modelPresets[clampedIdx];
+        if (preset) {
+          w.applyModelPreset(preset);
+          setCmdOutput(`Applied model preset: ${preset.name}`);
+        }
+      } else if (rulesSection === 'bootstrap') {
+        const pillar = bootstrapPillars[clampedIdx];
+        if (pillar) {
+          if (!pillar.ready) {
+            void w.bootstrapPillar(pillar.id);
+            setCmdOutput(`Bootstrapping ${pillar.title}...`);
+          } else if (pillar.detectedPath) {
+            void w.openFile(pillar.detectedPath);
+          }
+        }
+      } else if (rulesSection === 'lessons') {
+        const lessonRule = allTuiLessons[clampedIdx];
+        if (lessonRule) {
+          const lessonId = clampedIdx === 0 ? 'lesson-default-1' : `lesson-dyn-${clampedIdx}`;
+          graduateTuiLesson(lessonRule, lessonId);
+        }
+      } else if (rulesSection === 'trust') {
+        void w.setWorkspaceTrust(s.workspaceTrust === false);
+        setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}`);
       }
     }
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') {
         if (e.key === 'Escape') {
           e.preventDefault();
-          (e.target as HTMLElement).blur();
+          target?.blur();
+          rootRef.current?.focus();
         }
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // Handle TUI confirmation dialog first
+      if (s.confirmation) {
+        if (e.key === 'y' || e.key === 'Y' || (e.key === 'Enter' && tag !== 'button')) {
+          e.preventDefault();
+          w.respond(true);
+          return;
+        }
+        if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') {
+          e.preventDefault();
+          w.respond(false);
+          return;
+        }
+        return;
+      }
 
       if (showKeybindsModal) {
         if (e.key === 'Escape' || e.key === '?' || e.key === 'Enter' || e.key === 'q') {
           e.preventDefault();
           setShowKeybindsModal(false);
         }
+        return;
+      }
+
+      // Let focused buttons/links handle native Enter/Space activation cleanly
+      if ((tag === 'button' || tag === 'a') && (e.key === 'Enter' || e.key === ' ')) {
         return;
       }
 
@@ -634,6 +803,12 @@ export function TuiApp({
       }
 
       if (e.key === 'Escape' || e.key === 'Backspace') {
+        if (editorMode === 'edit') {
+          e.preventDefault();
+          setEditorMode('source');
+          setCmdOutput('Exited direct file edit mode');
+          return;
+        }
         if (showNewMissionForm) {
           e.preventDefault();
           setShowNewMissionForm(false);
@@ -662,7 +837,11 @@ export function TuiApp({
             0,
             activeHubEntry.subPages.findIndex((sp) => sp.page === currentTabPage),
           );
-          const nextSub = activeHubEntry.subPages[(curSubIdx + 1) % activeHubEntry.subPages.length];
+          const delta = e.shiftKey ? -1 : 1;
+          const nextSub =
+            activeHubEntry.subPages[
+              (curSubIdx + delta + activeHubEntry.subPages.length) % activeHubEntry.subPages.length
+            ];
           if (nextSub) {
             setSelectedIdx(0);
             void w.navigate(nextSub.page);
@@ -679,7 +858,8 @@ export function TuiApp({
             'lessons',
           ];
           const cur = sections.indexOf(rulesSection);
-          const next = sections[(cur + 1) % sections.length];
+          const delta = e.shiftKey ? -1 : 1;
+          const next = sections[(cur + delta + sections.length) % sections.length];
           setRulesSection(next);
           setSelectedIdx(0);
           return;
@@ -707,117 +887,171 @@ export function TuiApp({
       if (e.key === '/' || e.key === ':') {
         e.preventDefault();
         cmdRef.current?.focus();
-      } else if (e.key === 'j' || e.key === 'ArrowDown') {
+        return;
+      }
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIdx((i) => Math.min(Math.max(0, activeListLength - 1), i + 1));
-      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        return;
+      }
+
+      if (e.key === 'k' || e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIdx((i) => Math.max(0, i - 1));
-      } else if (
-        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
-        currentTabPage === 'bugs'
-      ) {
-        e.preventDefault();
-        const views: ('open' | 'in_progress' | 'done')[] = ['open', 'in_progress', 'done'];
-        const cur = views.indexOf(issueView);
-        const next =
-          e.key === 'l' || e.key === 'ArrowRight'
+        return;
+      }
+
+      if (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') {
+        const forward = e.key === 'l' || e.key === 'ArrowRight';
+        if (currentTabPage === 'bugs') {
+          e.preventDefault();
+          const views: ('open' | 'in_progress' | 'done')[] = ['open', 'in_progress', 'done'];
+          const cur = views.indexOf(issueView);
+          const next = forward
             ? views[(cur + 1) % views.length]
             : views[(cur - 1 + views.length) % views.length];
-        setIssueView(next);
-        setSelectedIdx(0);
-      } else if (
-        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
-        currentTabPage === 'docs'
-      ) {
-        e.preventDefault();
-        const sections: TuiDocsSection[] = ['context', 'components', 'scenarios', 'decisions'];
-        const cur = sections.indexOf(docsSection);
-        const next =
-          e.key === 'l' || e.key === 'ArrowRight'
+          setIssueView(next);
+          setSelectedIdx(0);
+          return;
+        }
+        if (currentTabPage === 'docs') {
+          e.preventDefault();
+          const sections: TuiDocsSection[] = ['context', 'components', 'scenarios', 'decisions'];
+          const cur = sections.indexOf(docsSection);
+          const next = forward
             ? sections[(cur + 1) % sections.length]
             : sections[(cur - 1 + sections.length) % sections.length];
-        setDocsSection(next);
-        setSelectedIdx(0);
-      } else if (
-        (e.key === 'h' || e.key === 'ArrowLeft' || e.key === 'l' || e.key === 'ArrowRight') &&
-        currentTabPage === 'instructions'
-      ) {
-        e.preventDefault();
-        const sections: ('trust' | 'models' | 'bootstrap' | 'lessons')[] = [
-          'trust',
-          'models',
-          'bootstrap',
-          'lessons',
-        ];
-        const cur = sections.indexOf(rulesSection);
-        const next =
-          e.key === 'l' || e.key === 'ArrowRight'
+          setDocsSection(next);
+          setSelectedIdx(0);
+          return;
+        }
+        if (currentTabPage === 'instructions') {
+          e.preventDefault();
+          const sections: ('trust' | 'models' | 'bootstrap' | 'lessons')[] = [
+            'trust',
+            'models',
+            'bootstrap',
+            'lessons',
+          ];
+          const cur = sections.indexOf(rulesSection);
+          const next = forward
             ? sections[(cur + 1) % sections.length]
             : sections[(cur - 1 + sections.length) % sections.length];
-        setRulesSection(next);
-        setSelectedIdx(0);
-      } else if (e.key === 'Enter') {
+          setRulesSection(next);
+          setSelectedIdx(0);
+          return;
+        }
+        if (activeHubEntry.subPages.length > 1) {
+          e.preventDefault();
+          const curSubIdx = Math.max(
+            0,
+            activeHubEntry.subPages.findIndex((sp) => sp.page === currentTabPage),
+          );
+          const nextSub =
+            activeHubEntry.subPages[
+              (curSubIdx + (forward ? 1 : -1) + activeHubEntry.subPages.length) %
+                activeHubEntry.subPages.length
+            ];
+          if (nextSub) {
+            setSelectedIdx(0);
+            void w.navigate(nextSub.page);
+            setCmdOutput(`Sub-view: ${nextSub.label}`);
+          }
+          return;
+        }
+      }
+
+      if (e.key === 'Enter') {
         e.preventDefault();
         activateCurrentRow();
-      } else if (
-        (e.key === 'x' || e.key === ' ') &&
-        currentTabPage === 'bugs' &&
-        selectedIssue &&
-        selectedIssue.status !== 'done'
-      ) {
-        e.preventDefault();
-        toggleIssueSelection(selectedIssue.id);
-      } else if (e.key === 'd') {
-        if (currentTabPage === 'bugs' && selectedIssue && selectedIssue.status !== 'done') {
-          e.preventDefault();
-          setCmdOutput(`Dismissed finding: ${selectedIssue.name}`);
-          void w.triage(selectedIssue.target, 'dismissed');
-        } else if (currentTabPage === 'features') {
-          const idea = featureSuggestions[clampedIdx];
-          if (idea) {
+        return;
+      }
+
+      // Page-scoped shortcuts (strictly respecting functional boundaries)
+      if (currentTabPage === 'bugs' || currentTabPage === 'summary') {
+        if ((e.key === 'x' || e.key === ' ') && currentTabPage === 'bugs' && selectedIssue) {
+          if (selectedIssue.status !== 'done') {
             e.preventDefault();
-            setCmdOutput(`Dismissed feature idea: ${idea.title}`);
-            void w.setFeatureStatus(idea.id, 'dismissed');
+            toggleIssueSelection(selectedIssue.id);
           }
+          return;
         }
-      } else if (e.key === 'a') {
-        e.preventDefault();
-        const chosen = openIssues.filter((i) => selectedIssueIds.includes(i.id));
-        if (chosen.length > 0) {
-          dispatchBatchIssuesToAgent(chosen);
-        } else if (selectedIssue) {
-          if (selectedIssue.agent) {
-            void w.selectAgent(selectedIssue.agent.path);
-          } else if (selectedIssue.status !== 'done') {
-            dispatchIssueToAgent(selectedIssue);
+        if (e.key === 'd' && currentTabPage === 'bugs' && selectedIssue) {
+          if (selectedIssue.status !== 'done') {
+            e.preventDefault();
+            setCmdOutput(`Dismissed finding: ${selectedIssue.name}`);
+            void w.triage(selectedIssue.target, 'dismissed');
           }
+          return;
         }
-      } else if (e.key === 'n') {
-        e.preventDefault();
-        setShowNewMissionForm(true);
-        void w.navigate('agents');
-        setCmdOutput('Opened Dispatch Precision Agent Mission form');
-      } else if (e.key === 'c') {
-        if (change && change.state !== 'applied' && allChecksPassed) {
+        if (e.key === 'a') {
+          e.preventDefault();
+          const chosen = openIssues.filter((i) => selectedIssueIds.includes(i.id));
+          if (chosen.length > 0) {
+            dispatchBatchIssuesToAgent(chosen);
+          } else if (selectedIssue) {
+            if (selectedIssue.agent) {
+              void w.selectAgent(selectedIssue.agent.path);
+            } else if (selectedIssue.status !== 'done') {
+              dispatchIssueToAgent(selectedIssue);
+            }
+          }
+          return;
+        }
+      }
+
+      if (currentTabPage === 'features') {
+        const idea = featureSuggestions[clampedIdx];
+        if (e.key === 'd' && idea) {
+          e.preventDefault();
+          setCmdOutput(`Dismissed feature idea: ${idea.title}`);
+          void w.setFeatureStatus(idea.id, 'dismissed');
+          return;
+        }
+        if (e.key === 'a' && idea) {
+          e.preventDefault();
+          setCmdOutput(`Dispatched feature idea "${idea.title}" to isolated Agent`);
+          void w.discussFeature(idea);
+          return;
+        }
+      }
+
+      if (currentTabPage === 'analysis-files') {
+        if (e.key === ' ' || e.key === 'x') {
+          e.preventDefault();
+          const file = allIndexFiles[clampedIdx];
+          if (file) toggleExcludedPath(file.path);
+          return;
+        }
+      }
+
+      if (currentTabPage === 'agents') {
+        if (e.key === 'n') {
+          e.preventDefault();
+          setShowNewMissionForm(true);
+          setCmdOutput('Opened Dispatch Precision Agent Mission form');
+          return;
+        }
+        if (e.key === 'c' && change && change.state !== 'applied' && allChecksPassed) {
           e.preventDefault();
           setCmdOutput('Applying and committing verified proposal...');
           void agentW.applyProposalNow();
+          return;
         }
-      } else if (e.key === 'm') {
-        if (currentTabPage === 'git') {
-          const wt = gitWorktrees[clampedIdx];
-          if (wt && !wt.current && wt.mergeable) {
-            e.preventDefault();
-            void w.mergeAgentWorktree(wt.path);
-          }
-        } else if (selectedChild?.worktreePath) {
+        if (e.key === 'm' && selectedChild?.worktreePath) {
           e.preventDefault();
           void w.mergeAgentWorktree(selectedChild.worktreePath);
+          return;
         }
-      } else if (e.key === 'r') {
-        e.preventDefault();
-        if (currentTabPage === 'agents' && s.agentDetailOpen && change) {
+        if (e.key === 'u' && agentS.changeReceipt?.undo_available) {
+          e.preventDefault();
+          setCmdOutput('Requesting guarded Undo...');
+          void agentW.undoChange();
+          return;
+        }
+        if (e.key === 'r' && s.agentDetailOpen && change) {
+          e.preventDefault();
           if (!allChecksPassed && checks.length > 0) {
             setCmdOutput('Triggering agent self-repair...');
             void agentW.repairChange();
@@ -825,51 +1059,100 @@ export function TuiApp({
             setCmdOutput('Re-running deterministic verification checks...');
             void agentW.checkChange(true);
           }
-        } else if (s.run && ['paused', 'interrupted'].includes(s.run.status)) {
+          return;
+        }
+      }
+
+      if (currentTabPage === 'editor') {
+        if (e.key === 'e') {
+          e.preventDefault();
+          setShowTuiInlineWhy((prev) => {
+            const next = !prev;
+            setCmdOutput(`Inline diff explanations ${next ? 'enabled' : 'hidden'}`);
+            return next;
+          });
+          return;
+        }
+        if (e.key === 'u' && agentS.changeReceipt?.undo_available) {
+          e.preventDefault();
+          setCmdOutput('Requesting guarded Undo...');
+          void agentW.undoChange();
+          return;
+        }
+        if (e.key === 'c' && change && change.state !== 'applied' && allChecksPassed) {
+          e.preventDefault();
+          setCmdOutput('Applying and committing verified proposal...');
+          void agentW.applyProposalNow();
+          return;
+        }
+      }
+
+      if (currentTabPage === 'git') {
+        if (e.key === 'm') {
+          const wt = gitWorktrees[clampedIdx];
+          if (wt && !wt.current && wt.mergeable) {
+            e.preventDefault();
+            void w.mergeAgentWorktree(wt.path);
+          }
+          return;
+        }
+      }
+
+      if (currentTabPage === 'instructions') {
+        if (e.key === 'b') {
+          e.preventDefault();
+          setRulesSection('bootstrap');
+          setCmdOutput('Bootstrapping missing repository workflow pillars...');
+          void w.bootstrapMissingPillars();
+          return;
+        }
+        if (e.key === 't') {
+          e.preventDefault();
+          void w.setWorkspaceTrust(s.workspaceTrust === false);
+          setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}`);
+          return;
+        }
+        if (e.key === 'g') {
+          e.preventDefault();
+          setRulesSection('lessons');
+          const lessonRule = allTuiLessons[clampedIdx] || defaultLessonRule;
+          const lessonId = clampedIdx === 0 ? 'lesson-default-1' : `lesson-dyn-${clampedIdx}`;
+          graduateTuiLesson(lessonRule, lessonId);
+          return;
+        }
+      }
+
+      if (currentTabPage === 'summary' || currentTabPage === 'project') {
+        if (e.key === 't') {
+          e.preventDefault();
+          setCmdOutput('Running project tests and checks...');
+          void w.scanProject(false);
+          return;
+        }
+      }
+
+      if (
+        e.key === 'r' &&
+        (currentTabPage === 'summary' ||
+          currentTabPage === 'analysis-run' ||
+          currentTabPage === 'bugs' ||
+          currentTabPage === 'features' ||
+          currentTabPage === 'docs')
+      ) {
+        e.preventDefault();
+        if (s.run && ['paused', 'interrupted'].includes(s.run.status)) {
           setCmdOutput('Resuming project analysis...');
           void w.resumeAnalysisDirect();
         } else {
           setCmdOutput('Starting project analysis...');
           void w.runAnalysisDirect(false);
         }
-      } else if (e.key === 'e' && currentTabPage === 'editor') {
-        e.preventDefault();
-        setShowTuiInlineWhy((prev) => {
-          const next = !prev;
-          setCmdOutput(`Inline diff explanations ${next ? 'enabled' : 'hidden'}`);
-          return next;
-        });
-      } else if (e.key === 'b' && currentTabPage === 'instructions') {
-        e.preventDefault();
-        setCmdOutput('Bootstrapping missing repository workflow pillars...');
-        void w.bootstrapMissingPillars();
-      } else if (e.key === 't') {
-        e.preventDefault();
-        if (currentTabPage === 'instructions') {
-          void w.setWorkspaceTrust(s.workspaceTrust === false);
-          setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}`);
-        } else {
-          setCmdOutput('Running project tests and checks...');
-          void w.scanProject(false);
-        }
-      } else if (e.key === 'u') {
-        e.preventDefault();
-        setCmdOutput('Requesting guarded Undo...');
-        void agentW.undoChange();
-      } else if (e.key === 'p') {
+        return;
+      }
+
+      if (e.key === 'p') {
         e.preventDefault();
         cyclePalette();
-      } else if (e.key === 'g') {
-        e.preventDefault();
-        if (currentTabPage === 'instructions') {
-          setRulesSection('lessons');
-          graduateTuiLesson(
-            'Propagate context.Context cancellation and add a regression test for every check repair.',
-            'lesson-default-1',
-          );
-        } else {
-          onExitTui();
-        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -877,10 +1160,15 @@ export function TuiApp({
   }, [
     activeHubEntry,
     activeListLength,
+    allIndexFiles,
+    allTuiLessons,
+    bootstrapPillars,
     clampedIdx,
     currentTabPage,
     docsSection,
+    editorMode,
     featureSuggestions,
+    historyItems,
     issueView,
     openIssues,
     rulesSection,
@@ -889,6 +1177,7 @@ export function TuiApp({
     showKeybindsModal,
     showNewMissionForm,
     s.agentDetailOpen,
+    s.confirmation,
     s.run,
     s.workspaceTrust,
     change,
@@ -921,7 +1210,7 @@ export function TuiApp({
     ) {
       setShowKeybindsModal(true);
       setCmdOutput(
-        'Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | bootstrap | dismiss | agent <prompt> | open <file> | project <path> | apply | merge | undo | palette | gui',
+        'Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | bootstrap | dismiss | agent <prompt> | open <file> | project <path> | scope | proposals | terminal | apply | merge | undo | palette | gui',
       );
       return;
     }
@@ -939,14 +1228,36 @@ export function TuiApp({
       setCmdOutput(`Workspace trust ${s.workspaceTrust === false ? 'granted' : 'revoked'}.`);
       return;
     }
+    if (cmd === 'reconnect' || cmd === 'connect') {
+      setCmdOutput('Reconnecting to local daemon...');
+      void w.connect();
+      return;
+    }
     if (cmd === 'project') {
       if (arg) {
         setCmdOutput(`Opening project at ${arg}...`);
         void w.openProject(arg, false);
       } else {
-        setCmdOutput('Choosing project directory...');
-        void w.chooseProject();
+        void w.navigate('project');
+        setCmdOutput('Switched to [1] Overview · Project & Tests.');
       }
+      return;
+    }
+    if (cmd === 'scope' || cmd === 'files') {
+      void w.navigate('analysis-files');
+      setCmdOutput('Switched to [2] Agent Studio · File Scope.');
+      return;
+    }
+    if (cmd === 'proposals' || cmd === 'history') {
+      void w.loadChangeHistory();
+      void w.navigate('history');
+      setCmdOutput('Switched to [3] Code & Diff · Saved Proposals.');
+      return;
+    }
+    if (cmd === 'terminal' || cmd === 'term') {
+      void w.openTerminal();
+      void w.navigate('terminal');
+      setCmdOutput('Switched to [3] Code & Diff · Terminal.');
       return;
     }
     if (cmd === 'reindex') {
@@ -1015,6 +1326,11 @@ export function TuiApp({
       setCmdOutput('Switched to [2] Agent Studio · Issues.');
       return;
     }
+    if (cmd === 'features') {
+      void w.navigate('features');
+      setCmdOutput('Switched to [2] Agent Studio · Features.');
+      return;
+    }
     if (cmd === 'arch' || cmd === 'diagrams') {
       void w.navigate('diagrams');
       setCmdOutput('Switched to [4] Handbook & Arch · Architecture.');
@@ -1037,12 +1353,7 @@ export function TuiApp({
     }
     if (cmd === 'apply' || cmd === 'commit') {
       setCmdOutput('Applying verified proposal...');
-      void agentW.applyProposalNow();
-      return;
-    }
-    if (cmd === 'repair') {
-      setCmdOutput('Triggering agent self-repair...');
-      void agentW.repairChange();
+      void agentW.applyProposalNow(arg || undefined);
       return;
     }
     if (cmd === 'merge' && selectedChild?.worktreePath) {
@@ -1094,6 +1405,8 @@ export function TuiApp({
 
   return (
     <div
+      ref={rootRef}
+      tabIndex={-1}
       className="tui-root"
       data-tui-palette={palette}
       role="application"
@@ -1165,7 +1478,7 @@ export function TuiApp({
         </div>
       </header>
 
-      {/* Single-Row Numbered 5-Hub Top Bar + Inline Sub-Views */}
+      {/* Single-Row Numbered 5-Hub Top Bar + Strictly Scoped Hub Sub-Views */}
       <nav
         className="tui-tabbar"
         aria-label="TUI Workspaces"
@@ -1201,41 +1514,35 @@ export function TuiApp({
             );
           })}
         </div>
-        <div
-          aria-label="TUI Hub Sub-Views"
-          style={{
-            display: 'flex',
-            gap: '6px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            paddingRight: '8px',
-          }}
-        >
-          {(activeHubEntry.subPages.length > 0
-            ? activeHubEntry.subPages
-            : [
-                { page: 'bugs' as Page, label: 'Issues' },
-                { page: 'features' as Page, label: 'Features' },
-                { page: 'analysis-run' as Page, label: 'Last Run' },
-              ]
-          ).map((sp) => (
-            <button
-              key={sp.page}
-              type="button"
-              className={`tui-btn${currentTabPage === sp.page ? ' primary' : ''}`}
-              aria-current={currentTabPage === sp.page ? 'page' : undefined}
-              onClick={() => void w.navigate(sp.page)}
-            >
-              [{sp.label}]
-            </button>
-          ))}
-          {activeHubEntry.subPages.length > 0 && <span className="tui-sub">[Tab]</span>}
-        </div>
+        {activeHubEntry.subPages.length > 0 && (
+          <div
+            aria-label="TUI Hub Sub-Views"
+            style={{
+              display: 'flex',
+              gap: '6px',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              paddingRight: '8px',
+            }}
+          >
+            {activeHubEntry.subPages.map((sp) => (
+              <button
+                key={sp.page}
+                type="button"
+                className={`tui-btn${currentTabPage === sp.page ? ' primary' : ''}`}
+                aria-current={currentTabPage === sp.page ? 'page' : undefined}
+                onClick={() => void w.navigate(sp.page)}
+              >
+                [{sp.label}]
+              </button>
+            ))}
+            <span className="tui-sub">[Tab / h·l]</span>
+          </div>
+        )}
       </nav>
 
-      {/* Live Analysis Progress Banner (visible across all TUI screens when running or paused) */}
+      {/* Always-Visible Analysis Progress Banner across all TUI screens */}
       {s.run &&
-        (activeRun(s.run) || ['paused', 'interrupted'].includes(s.run.status)) &&
         (() => {
           const runTotal = s.run.sections.reduce((sum, sec) => sum + sec.coverage.total, 0);
           const runDone = s.run.sections.reduce(
@@ -1248,14 +1555,29 @@ export function TuiApp({
               sec.coverage.unavailable,
             0,
           );
-          const pct = runTotal > 0 ? Math.floor((runDone / runTotal) * 100) : 0;
-          const barWidth = 16;
+          const pct =
+            runTotal > 0
+              ? Math.floor((runDone / runTotal) * 100)
+              : s.run.status === 'completed'
+                ? 100
+                : 0;
+          const barWidth = 14;
           const filled = Math.round((pct / 100) * barWidth);
           const asciiBar = `${'█'.repeat(Math.max(0, Math.min(barWidth, filled)))}${'░'.repeat(Math.max(0, barWidth - filled))}`;
           const runningFile = s.run.files.find((f) =>
             f.stages.some((st) => st.status === 'running'),
           );
           const runningStage = runningFile?.stages.find((st) => st.status === 'running');
+          const isRunning = activeRun(s.run);
+          const isPaused = ['paused', 'interrupted'].includes(s.run.status);
+          const isFailed = s.run.status === 'failed' || s.run.status === 'canceled';
+          const fillTone = isRunning
+            ? ' running'
+            : isPaused
+              ? ' paused'
+              : isFailed
+                ? ' failed'
+                : '';
           const stepLabel =
             s.run.status === 'canceling'
               ? 'Canceling analysis…'
@@ -1267,36 +1589,56 @@ export function TuiApp({
                     ? 'Generating feature suggestions…'
                     : s.run.status === 'queued'
                       ? 'Queued…'
-                      : ['paused', 'interrupted'].includes(s.run.status)
+                      : isPaused
                         ? s.run.reason || `Analysis ${s.run.status}`
-                        : `${s.run.window_files_completed} files completed this batch`;
+                        : `${s.run.files.length} files in scope`;
           return (
             <div
               role="status"
               aria-label="TUI live analysis progress"
-              style={{
-                padding: '6px 12px',
-                borderBottom: '1px solid var(--tui-accent)',
-                background: 'var(--tui-bg-alt)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}
+              className="tui-progress-strip"
             >
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {activeRun(s.run) ? (
+                {isRunning ? (
                   <span className="tui-c-accent" style={{ fontWeight: 700 }}>
                     <Spinner /> [ANALYZING]
                   </span>
-                ) : (
+                ) : isPaused ? (
                   <span className="tui-c-amber" style={{ fontWeight: 700 }}>
                     [ANALYSIS {s.run.status.toUpperCase()}]
                   </span>
+                ) : isFailed ? (
+                  <span className="tui-c-red" style={{ fontWeight: 700 }}>
+                    [ANALYSIS {s.run.status.toUpperCase()}]
+                  </span>
+                ) : (
+                  <span className="tui-c-green" style={{ fontWeight: 700 }}>
+                    [ANALYSIS {s.run.status.toUpperCase()}]
+                  </span>
                 )}
-                <span className="tui-c-green" style={{ fontFamily: 'var(--font-mono)' }}>
+                <span className="tui-progress-bar" aria-hidden="true">
+                  <span className={`tui-progress-fill${fillTone}`} style={{ width: `${pct}%` }} />
+                </span>
+                <span className="tui-c-green">
                   [{asciiBar}] {pct}% ({runDone}/{runTotal} steps)
+                </span>
+                <span style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {s.run.sections.map((sec) => (
+                    <span
+                      key={sec.category}
+                      className={`tui-badge ${
+                        sec.status === 'completed'
+                          ? 'tui-c-green'
+                          : sec.status === 'running'
+                            ? 'tui-c-accent'
+                            : sec.status === 'failed'
+                              ? 'tui-c-red'
+                              : 'tui-c-amber'
+                      }`}
+                    >
+                      {sec.category.slice(0, 4)}:{sec.coverage.succeeded}/{sec.coverage.total}
+                    </span>
+                  ))}
                 </span>
                 <span className="tui-sub">{stepLabel}</span>
                 <span className="tui-c-amber">
@@ -1316,7 +1658,7 @@ export function TuiApp({
                     [Pause]
                   </button>
                 )}
-                {['paused', 'interrupted'].includes(s.run.status) && (
+                {isPaused && (
                   <button
                     type="button"
                     className="tui-btn primary"
@@ -1326,14 +1668,26 @@ export function TuiApp({
                     [Resume Analysis]
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="tui-btn"
-                  disabled={!!activeBusy || s.run.status === 'canceling'}
-                  onClick={() => void w.controlRun('cancel')}
-                >
-                  [Cancel]
-                </button>
+                {isRunning && (
+                  <button
+                    type="button"
+                    className="tui-btn"
+                    disabled={!!activeBusy || s.run.status === 'canceling'}
+                    onClick={() => void w.controlRun('cancel')}
+                  >
+                    [Cancel]
+                  </button>
+                )}
+                {!isRunning && !isPaused && canRepairAnalysis(s) && (
+                  <button
+                    type="button"
+                    className="tui-btn primary"
+                    disabled={!!activeBusy}
+                    onClick={() => void w.repairAnalysisDirect()}
+                  >
+                    [Retry Failed]
+                  </button>
+                )}
                 {currentTabPage !== 'analysis-run' && (
                   <button
                     type="button"
@@ -1347,6 +1701,41 @@ export function TuiApp({
             </div>
           );
         })()}
+
+      {/* Inline TUI Confirmation Dialog (y/Enter confirm · n/Esc cancel) */}
+      {s.confirmation && (
+        <div className="tui-modal-backdrop" role="presentation" onClick={() => w.respond(false)}>
+          <div
+            className="tui-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={s.confirmation.title}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '8px' }}>
+              <strong className={s.confirmation.destructive ? 'tui-c-red' : 'tui-c-amber'}>
+                [CONFIRM] {s.confirmation.title}
+              </strong>
+              <div className="tui-sub" style={{ marginTop: '4px' }}>
+                {s.confirmation.message}
+              </div>
+            </div>
+            {s.confirmation.details && s.confirmation.details.length > 0 && (
+              <pre className="tui-pre" style={{ marginBottom: '8px' }}>
+                {s.confirmation.details.join('\n')}
+              </pre>
+            )}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="tui-btn" onClick={() => w.respond(false)}>
+                [n / Esc: Cancel]
+              </button>
+              <button type="button" className="tui-btn primary" onClick={() => w.respond(true)}>
+                [y / Enter: {s.confirmation.accept}]
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notices / Errors (Root + Active Child Worktree) */}
       {(activeError || activeNotice || activeBusy) && (
@@ -1387,7 +1776,7 @@ export function TuiApp({
 
       {/* Main TUI Workspace */}
       <main className="tui-workspace">
-        {/* [1] OVERVIEW */}
+        {/* [1] OVERVIEW — DASHBOARD */}
         {currentTabPage === 'summary' && (
           <>
             <div className="tui-grid-4">
@@ -1406,9 +1795,23 @@ export function TuiApp({
                 <span className="tui-box-title">OPEN ISSUES</span>
                 <span className="tui-box-meta">[2] STUDIO</span>
                 <div className="tui-stat tui-c-amber">{issueSummary.totalOpenIssues}</div>
-                <div className="tui-sub">
-                  {issueSummary.bugCount}b · {issueSummary.secCount}s · {issueSummary.perfCount}p ·{' '}
-                  {issueSummary.featureCount} feature ideas
+                <div
+                  className="tui-sub"
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '6px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span>
+                    {issueSummary.bugCount}b · {issueSummary.secCount}s · {issueSummary.perfCount}p
+                    · {issueSummary.featureCount} feature ideas
+                  </span>
+                  <button type="button" className="tui-btn" onClick={() => void w.navigate('bugs')}>
+                    [Issues]
+                  </button>
                 </div>
               </div>
               <div className="tui-box">
