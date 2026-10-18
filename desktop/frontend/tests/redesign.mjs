@@ -44,6 +44,7 @@ const HUB_FOR_LABEL = {
   'Governance & Rules': 'Governance & Rules',
   'Settings & Rules': 'Governance & Rules',
   'Model Routing': 'Governance & Rules',
+  'File Scope': 'Governance & Rules',
 };
 
 async function nav(page, label) {
@@ -1220,6 +1221,128 @@ try {
       // Run should now be Completed and no longer show Files with failures
       assert.equal(await page.getByText('Files with failures (1)', { exact: true }).count(), 0);
       await page.getByText('Files in this run (4)', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Issues sort by severity by default, duplicate buttons are removed, TUI shows live analysis progress & single-bar nav, and breadcrumbs connect all views', async () => {
+    const { page, close } = await pageFor({
+      featuresReady: true,
+      runStatus: 'paused',
+    });
+    try {
+      // Inject a low-severity finding in an alphabetically earlier path (cmd/server/main.go)
+      // and a critical-severity finding in an alphabetically later path (internal/worker/queue.go)
+      await page.evaluate(() => {
+        const base = window.fixture.state.finding;
+        const lowFinding = {
+          ...base,
+          id: 'finding-low-path-first',
+          severity: 'low',
+          title: 'Low verbosity startup log',
+          location: { path: 'cmd/server/main.go', symbol: 'main', start_line: 1, end_line: 3 },
+        };
+        const critFinding = {
+          ...base,
+          id: 'finding-crit-path-last',
+          severity: 'critical',
+          title: 'Critical panic in queue',
+          location: {
+            path: 'internal/worker/queue.go',
+            symbol: 'Dispatch',
+            start_line: 20,
+            end_line: 25,
+          },
+        };
+        window.fixture.state.findingsList = [lowFinding, base, critFinding];
+        window.fixture.state.results.bugs = {
+          ...(window.fixture.state.results.bugs || {}),
+          semantic: [lowFinding, base, critFinding],
+          saved_finding_count: 3,
+        };
+      });
+
+      // 1. Navigate to Issues & Ideas and verify default sort is Severity (high to low)
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await idle(page);
+
+      const sortSelect = page.getByLabel('Sort issues', { exact: true });
+      assert.equal(await sortSelect.inputValue(), 'severity');
+      const rowTexts = await page.locator('.result-row').allInnerTexts();
+      assert.ok(rowTexts.length >= 3, `Expected at least 3 issue rows, got ${rowTexts.length}`);
+      assert.ok(
+        rowTexts[0].includes('Critical panic in queue'),
+        `Expected critical issue first by default, got: ${rowTexts[0]}`,
+      );
+      assert.ok(
+        rowTexts[rowTexts.length - 1].includes('Low verbosity startup log'),
+        `Expected low severity issue last by default, got: ${rowTexts[rowTexts.length - 1]}`,
+      );
+
+      // 2. Verify duplicate Last Run button is removed from page header (only 1 in hub sub-nav)
+      assert.equal(await page.getByRole('button', { name: 'Last Run', exact: true }).count(), 1);
+
+      // 3. Verify hierarchical clickable Breadcrumb navigation on sub-views
+      const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb', exact: true });
+      await breadcrumb.getByRole('button', { name: 'Agent Studio', exact: true }).click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole('button', { name: 'Browse Issues', exact: true }).count(),
+        0,
+      );
+
+      // Navigate to File Scope via Governance & Rules hub sub-nav and return via Breadcrumb
+      await nav(page, 'File Scope');
+      await idle(page);
+      await page.getByRole('heading', { name: 'File Scope & Exclusions', exact: true }).waitFor();
+      await breadcrumb.getByRole('button', { name: 'harbor', exact: true }).click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+
+      // 4. Switch to TUI mode and verify live analysis progress banner, single-bar nav, and accurate issue/feature totals
+      await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
+      const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
+      await tui.waitFor();
+
+      const progressBanner = page.getByRole('status', {
+        name: 'TUI live analysis progress',
+        exact: true,
+      });
+      await progressBanner.waitFor();
+      const bannerText = await progressBanner.innerText();
+      assert.ok(
+        bannerText.includes('[ANALYSIS PAUSED]') &&
+          bannerText.includes('5 issues (3b/1s/1p) · 1 features'),
+        `Expected live analysis banner with accurate open issue & feature counts, got: ${bannerText}`,
+      );
+
+      // Jump directly to [Issues] from [1] Overview quick-jump bar and verify high-to-low severity order in TUI
+      await page.getByRole('button', { name: '[Issues]', exact: true }).click();
+      await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+      const tuiRows = await page.locator('.tui-selectable').allInnerTexts();
+      assert.ok(
+        tuiRows[0].includes('Critical panic in queue'),
+        `Expected TUI issues sorted high-to-low by default, got first row: ${tuiRows[0]}`,
+      );
+      assert.ok(
+        tuiRows[tuiRows.length - 1].includes('Low verbosity startup log'),
+        `Expected TUI low severity issue last by default, got last row: ${tuiRows[tuiRows.length - 1]}`,
+      );
+
+      // Filter TUI issues to [Security (1)] and verify Overview KPI still reports all 5 open issues
+      await page.getByRole('button', { name: '[Security (1)]', exact: true }).click();
+      await page.getByRole('button', { name: /\[1\] Overview/ }).click();
+      const kpiText = await page.locator('.tui-grid-4').innerText();
+      assert.ok(
+        kpiText.includes('OPEN ISSUES') &&
+          kpiText.includes('5') &&
+          kpiText.includes('3b · 1s · 1p · 1 feature ideas'),
+        `Expected TUI Overview KPI row to retain full open issues (5) and features (1), got: ${kpiText}`,
+      );
     } finally {
       await close();
     }

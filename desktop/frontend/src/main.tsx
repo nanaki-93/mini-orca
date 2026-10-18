@@ -312,12 +312,20 @@ function App() {
             </span>
           </button>
           <nav className="breadcrumbs" aria-label="Breadcrumb">
-            <span className="muted">{s.project?.name || 'Mini-Orca'}</span>
+            {s.project ? (
+              <button onClick={() => void w.navigate('summary')}>{s.project.name}</button>
+            ) : (
+              <span className="muted">Mini-Orca</span>
+            )}
             <span className="muted" aria-hidden="true">
               /
             </span>
             {category && s.page === 'finding' ? (
               <>
+                <button onClick={() => void w.navigate('agents')}>Agent Studio</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
                 <button onClick={() => void w.navigate('bugs')}>Issues & Ideas</button>
                 <span className="muted" aria-hidden="true">
                   /
@@ -330,11 +338,31 @@ function App() {
               </>
             ) : s.page === 'analysis-run' ? (
               <>
+                <button onClick={() => void w.navigate('agents')}>Agent Studio</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
                 <button onClick={() => void w.navigate('bugs')}>Issues & Ideas</button>
                 <span className="muted" aria-hidden="true">
                   /
                 </span>
                 <span aria-current="page">Last Run</span>
+              </>
+            ) : ['bugs', 'security', 'performance', 'features'].includes(s.page) ? (
+              <>
+                <button onClick={() => void w.navigate('agents')}>Agent Studio</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">{title}</span>
+              </>
+            ) : s.page === 'agents' && s.agentDetailOpen ? (
+              <>
+                <button onClick={() => w.openAgentsDashboard()}>Agents</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">Mission Detail</span>
               </>
             ) : ['editor', 'chat', 'changes'].includes(s.page) &&
               (s.file?.path || s.change?.changes?.[0]?.path) ? (
@@ -346,6 +374,22 @@ function App() {
                 <span aria-current="page" className="font-mono">
                   {s.file?.path || s.change?.changes?.[0]?.path}
                 </span>
+              </>
+            ) : s.page === 'git' ? (
+              <>
+                <button onClick={() => void w.navigate('editor')}>Code & Diff</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">Git & Worktrees</span>
+              </>
+            ) : s.page === 'diagrams' ? (
+              <>
+                <button onClick={() => void w.navigate('docs')}>Handbook & Arch</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">Architecture</span>
               </>
             ) : ['models', 'analysis-files', 'context'].includes(s.page) ? (
               <>
