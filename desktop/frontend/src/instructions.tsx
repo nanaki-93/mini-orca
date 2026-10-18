@@ -1,7 +1,7 @@
 import { useWorkspace } from './workspace-context';
 import { useEffect, useState } from 'react';
 import { evaluateBootstrapChecklist, type State } from './workspace';
-import { Badge, Button, Disclosure, Heading, Notice, Panel, Prose } from './ui';
+import { Badge, Button, Disclosure, Heading, Icon, Notice, Panel, Prose } from './ui';
 import type { InstructionPreview } from './models';
 
 function containsGuideline(text: string, guideline: string) {
@@ -112,6 +112,7 @@ export function Instructions({ s }: { s: State }) {
   const [tab, setTab] = useState<'rules' | 'guidelines' | 'effective' | 'bootstrap'>(
     s.instructionsTab || 'rules',
   );
+  const [ruleSubTab, setRuleSubTab] = useState<'boundaries' | 'lessons' | 'draft'>('boundaries');
   const [path, setPath] = useState(preview?.path || 'AGENTS.md');
   const [content, setContent] = useState(preview?.existing_content || '');
   const [selected, setSelected] = useState<string[]>([]);
@@ -216,6 +217,7 @@ export function Instructions({ s }: { s: State }) {
       insertGuidelineSection(filtered, 'Architecture boundaries & ownership', lines.join('\n')),
     );
     setEditing(true);
+    setRuleSubTab('draft');
   };
 
   const promoteHarnessLesson = (lesson: string) => {
@@ -229,6 +231,7 @@ export function Instructions({ s }: { s: State }) {
       ),
     );
     setEditing(true);
+    setRuleSubTab('draft');
   };
 
   const guidelinePicker = (switchToEditorOnAdd = false) => (
@@ -357,6 +360,7 @@ export function Instructions({ s }: { s: State }) {
           disabled={!!s.busy || !ready}
           onClick={() => {
             setTab('rules');
+            setRuleSubTab('draft');
             setEditing(!editing);
           }}
         >
@@ -406,24 +410,52 @@ export function Instructions({ s }: { s: State }) {
       </div>
 
       {tab === 'rules' && (
-        <>
-          <Panel
-            title="Consolidated Workspace Trust"
-            actions={
+        <div className="stack" style={{ gap: '12px' }}>
+          {/* Compact 1-Row Scope & Workspace Trust Strip */}
+          <div
+            className="panel"
+            style={{
+              padding: '10px 14px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div className="row wrap" style={{ gap: '10px', alignItems: 'center', flex: 1 }}>
+              <Icon name="file" />
+              <label className="row" style={{ gap: '8px', alignItems: 'center', margin: 0 }}>
+                <span className="small muted">Scope:</span>
+                <input
+                  className="field font-mono"
+                  style={{ minWidth: '220px', padding: '5px 10px' }}
+                  aria-label="Instruction path"
+                  value={path}
+                  disabled={!!s.busy}
+                  onChange={(e) => {
+                    setPath(e.target.value);
+                    w.clearInstructionScope();
+                  }}
+                  placeholder="AGENTS.md or internal/AGENTS.md"
+                />
+              </label>
+              <Button
+                tone="primary small"
+                disabled={!!s.busy || !path.trim()}
+                onClick={async () => {
+                  if (await w.loadInstructions(path)) setEditing(true);
+                }}
+              >
+                Load scope
+              </Button>
+            </div>
+
+            <div className="row wrap" style={{ gap: '10px', alignItems: 'center' }}>
               <Badge
                 value={s.workspaceTrust ? 'Trusted Workspace' : 'Confirmations Active'}
                 tone={s.workspaceTrust ? 'green' : 'violet'}
               />
-            }
-          >
-            <div className="row between wrap" style={{ gap: '16px' }}>
-              <div>
-                <p className="small muted">
-                  Unifies remote AI provider consent, AI security scan consent, and local test
-                  execution trust into a single workspace-level setting so running analyses and
-                  prompts is frictionless.
-                </p>
-              </div>
               <label
                 className="row"
                 style={{ gap: '8px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
@@ -437,290 +469,319 @@ export function Instructions({ s }: { s: State }) {
                 <span>Trust this workspace</span>
               </label>
             </div>
-          </Panel>
+          </div>
 
-          <Panel
-            title="Architect Boundaries &amp; Quality Budgets"
-            actions={
-              <Badge
-                value={`${boundaryRules.length} import ${boundaryRules.length === 1 ? 'rule' : 'rules'} · ≤${budgetComplexity} complexity`}
-                tone="violet"
-              />
-            }
-          >
-            <div className="stack" style={{ gap: '12px' }}>
-              <p className="small muted">
-                Compile deterministic architectural import boundaries and polyglot complexity
-                budgets directly into <code>{path}</code>. Step 2 verification gates enforce these
-                rules across all indexed languages.
-              </p>
-
-              {boundaryRules.length > 0 && (
-                <div className="row wrap" style={{ gap: '6px' }} aria-label="Active boundary rules">
-                  {boundaryRules.map((rule, idx) => (
-                    <Badge
-                      key={`${rule.source}-${rule.target}-${idx}`}
-                      value={`${rule.source} ↛ ${rule.target}`}
-                      tone="amber"
-                    />
-                  ))}
-                </div>
-              )}
-
-              <div
-                className="grid"
-                style={{ gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'end' }}
+          {/* Sub-Tab Bar: Strict 1-Card Focus per Sub-Tab */}
+          <div className="toolbar" style={{ marginBottom: 0 }}>
+            <div className="mode-switch-group" role="tablist" aria-label="Rule studio sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={ruleSubTab === 'boundaries'}
+                className={`mode-switch-btn ${ruleSubTab === 'boundaries' ? 'active' : ''}`}
+                onClick={() => setRuleSubTab('boundaries')}
               >
-                <label className="block">
-                  <span className="small muted">Source Layer / Directory</span>
-                  <input
-                    className="field font-mono"
-                    aria-label="Source layer path"
-                    value={sourceLayer}
-                    disabled={!!s.busy || excluded}
-                    onChange={(e) => setSourceLayer(e.target.value)}
-                    placeholder="e.g., internal/api/ or src/ui/"
-                  />
-                </label>
-                <label className="block">
-                  <span className="small muted">Must Never Import</span>
-                  <input
-                    className="field font-mono"
-                    aria-label="Forbidden target path"
-                    value={forbiddenTarget}
-                    disabled={!!s.busy || excluded}
-                    onChange={(e) => setForbiddenTarget(e.target.value)}
-                    placeholder="e.g., internal/storage/ or src/db/"
-                  />
-                </label>
-                <Button
-                  tone="ghost"
-                  disabled={!!s.busy || excluded || !sourceLayer.trim() || !forbiddenTarget.trim()}
-                  onClick={applyBoundaryRule}
-                >
-                  Add Boundary Rule
-                </Button>
-              </div>
-
-              <div
-                className="grid"
-                style={{ gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}
+                <Icon name="shield" />
+                <span>Boundaries &amp; Budgets ({boundaryRules.length})</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={ruleSubTab === 'lessons'}
+                className={`mode-switch-btn ${ruleSubTab === 'lessons' ? 'active' : ''}`}
+                onClick={() => setRuleSubTab('lessons')}
               >
-                <label className="block">
-                  <span className="small muted">Max Function Complexity</span>
-                  <input
-                    className="field font-mono"
-                    aria-label="Max function complexity"
-                    type="number"
-                    min={5}
-                    max={50}
-                    value={budgetComplexity}
-                    disabled={!!s.busy || excluded}
-                    onChange={(e) => setBudgetComplexity(e.target.value)}
-                  />
-                </label>
-                <label className="block">
-                  <span className="small muted">Max Function Lines</span>
-                  <input
-                    className="field font-mono"
-                    aria-label="Max function lines"
-                    type="number"
-                    min={20}
-                    max={500}
-                    value={budgetFnLines}
-                    disabled={!!s.busy || excluded}
-                    onChange={(e) => setBudgetFnLines(e.target.value)}
-                  />
-                </label>
-                <label className="block">
-                  <span className="small muted">Max File Lines</span>
-                  <input
-                    className="field font-mono"
-                    aria-label="Max file lines"
-                    type="number"
-                    min={100}
-                    max={5000}
-                    value={budgetFileLines}
-                    disabled={!!s.busy || excluded}
-                    onChange={(e) => setBudgetFileLines(e.target.value)}
-                  />
-                </label>
-                <Button
-                  tone="ghost"
-                  disabled={!!s.busy || excluded}
-                  onClick={applyQualityBudgetsToDraft}
-                >
-                  Apply Quality Budgets
-                </Button>
-              </div>
+                <Icon name="inbox" />
+                <span>Harness² Lesson Inbox ({harnessLessons.length})</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={ruleSubTab === 'draft'}
+                className={`mode-switch-btn ${ruleSubTab === 'draft' ? 'active' : ''}`}
+                onClick={() => setRuleSubTab('draft')}
+              >
+                <Icon name="file" />
+                <span>AGENTS.md Draft</span>
+              </button>
             </div>
-          </Panel>
+          </div>
 
-          <Panel
-            title="Harness² Lesson Inbox"
-            actions={
-              <Badge
-                value={`${harnessLessons.length} ${harnessLessons.length === 1 ? 'lesson' : 'lessons'}`}
-                tone={harnessLessons.length > 0 ? 'green' : undefined}
-              />
-            }
-          >
-            <div className="stack" style={{ gap: '8px' }}>
-              <p className="small muted">
-                Reusable architectural and testing lessons synthesized by the{' '}
-                <code>Propose → Probe → Compose</code> loop when agents overcome verification or
-                critic failures. Graduate lessons into <code>{path}</code> so future runs avoid the
-                same pitfalls.
-              </p>
-              {harnessLessons.length === 0 ? (
-                <p className="small muted" style={{ margin: 0 }}>
-                  No pending Harness² lessons yet. Lessons appear automatically when an agent
-                  repairs a failed check or resolves critic feedback.
-                </p>
-              ) : (
-                <div
-                  className="stack"
-                  style={{ gap: '6px' }}
-                  role="list"
-                  aria-label="Harness² lessons"
-                >
-                  {harnessLessons.map((lesson, idx) => {
-                    const adopted = containsGuideline(content, lesson);
-                    return (
-                      <div
-                        key={idx}
-                        role="listitem"
-                        className="row between wrap"
-                        style={{
-                          gap: '10px',
-                          padding: '8px 12px',
-                          borderRadius: '6px',
-                          border: '1px solid var(--line)',
-                          background: 'var(--bg-soft)',
-                        }}
-                      >
-                        <span className="small" style={{ flex: '1 1 300px' }}>
-                          {lesson}
-                        </span>
-                        <div className="row" style={{ gap: '6px' }}>
-                          <Badge
-                            value={adopted ? 'In Draft' : 'Ready'}
-                            tone={adopted ? 'green' : 'violet'}
-                          />
-                          {!adopted && (
-                            <Button
-                              tone="primary small"
-                              disabled={!!s.busy || excluded}
-                              onClick={() => promoteHarnessLesson(lesson)}
-                            >
-                              Promote to AGENTS.md
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </Panel>
-
-          <section className="stack" aria-label="Instruction draft">
-            <Panel title="Choose instruction scope">
-              <label className="block">
-                Project-relative AGENTS.md path
-                <input
-                  className="field"
-                  aria-label="Instruction path"
-                  value={path}
-                  disabled={!!s.busy}
-                  onChange={(e) => {
-                    setPath(e.target.value);
-                    w.clearInstructionScope();
-                  }}
-                  placeholder="AGENTS.md or internal/AGENTS.md"
+          {ruleSubTab === 'boundaries' && (
+            <Panel
+              title="Architect Boundaries &amp; Quality Budgets"
+              actions={
+                <Badge
+                  value={`${boundaryRules.length} import ${boundaryRules.length === 1 ? 'rule' : 'rules'} · ≤${budgetComplexity} complexity`}
+                  tone="violet"
                 />
-              </label>
-              <Button
-                tone="primary"
-                disabled={!!s.busy || !path.trim()}
-                onClick={async () => {
-                  if (await w.loadInstructions(path)) setEditing(true);
-                }}
-              >
-                Load scope
-              </Button>
-            </Panel>
-            {!editing && ready && (
-              <section className="instruction-reading">
-                <div className="row between">
-                  <strong>{path}</strong>
-                  <Badge value={preview?.exists ? 'Included' : 'New file'} />
-                </div>
-                <Prose text={content || 'No instructions saved in this scope.'} />
-              </section>
-            )}
-            {editing && (
-              <Panel
-                title="Edit guidance"
-                actions={<Badge value={preview?.exists ? 'existing file' : 'new file'} />}
-              >
-                {preview && <p className="path instruction-scope">{path}</p>}
-                {!ready ? (
-                  <Notice error>Load this scope again before editing.</Notice>
-                ) : (
-                  <>
-                    <label className="block">
-                      Guidance draft
-                      <textarea
-                        className="instruction-text"
-                        aria-label="Custom instructions"
-                        value={content}
-                        disabled={!!s.busy || excluded}
-                        onChange={(e) => setContent(e.target.value)}
-                        placeholder="# Project instructions\n\nDescribe the rules agents should follow…"
+              }
+            >
+              <div className="stack" style={{ gap: '12px' }}>
+                <p className="small muted">
+                  Compile deterministic architectural import boundaries and polyglot complexity
+                  budgets directly into <code>{path}</code>. Step 2 verification gates enforce these
+                  rules across all indexed languages.
+                </p>
+
+                {boundaryRules.length > 0 && (
+                  <div
+                    className="row wrap"
+                    style={{ gap: '6px' }}
+                    aria-label="Active boundary rules"
+                  >
+                    {boundaryRules.map((rule, idx) => (
+                      <Badge
+                        key={`${rule.source}-${rule.target}-${idx}`}
+                        value={`${rule.source} ↛ ${rule.target}`}
+                        tone="amber"
                       />
-                    </label>
-                    <Disclosure title="Add project guidelines">{guidelinePicker(false)}</Disclosure>
-                    {pending.length > 0 && (
-                      <Notice>Add selected guidance to the draft before continuing.</Notice>
-                    )}
-                    <div className="actions">
-                      <Button
-                        tone="primary"
-                        disabled={
-                          !!s.busy ||
-                          !ready ||
-                          excluded ||
-                          !proposed.trim() ||
-                          pending.length > 0 ||
-                          proposed === preview?.existing_content
-                        }
-                        onClick={() => void w.proposeInstructions(proposed)}
-                      >
-                        Preview instruction diff
-                      </Button>
-                      <Button
-                        tone="ghost"
-                        disabled={
-                          !!s.busy ||
-                          !ready ||
-                          excluded ||
-                          !proposed.trim() ||
-                          pending.length > 0 ||
-                          proposed === preview?.existing_content
-                        }
-                        onClick={() => void w.saveDirectFile(path, proposed)}
-                      >
-                        Save Rules Directly
-                      </Button>
-                    </div>
-                  </>
+                    ))}
+                  </div>
                 )}
-              </Panel>
-            )}
-          </section>
-        </>
+
+                <div
+                  className="grid"
+                  style={{ gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'end' }}
+                >
+                  <label className="block">
+                    <span className="small muted">Source Layer / Directory</span>
+                    <input
+                      className="field font-mono"
+                      aria-label="Source layer path"
+                      value={sourceLayer}
+                      disabled={!!s.busy || excluded}
+                      onChange={(e) => setSourceLayer(e.target.value)}
+                      placeholder="e.g., internal/api/ or src/ui/"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="small muted">Must Never Import</span>
+                    <input
+                      className="field font-mono"
+                      aria-label="Forbidden target path"
+                      value={forbiddenTarget}
+                      disabled={!!s.busy || excluded}
+                      onChange={(e) => setForbiddenTarget(e.target.value)}
+                      placeholder="e.g., internal/storage/ or src/db/"
+                    />
+                  </label>
+                  <Button
+                    tone="ghost"
+                    disabled={
+                      !!s.busy || excluded || !sourceLayer.trim() || !forbiddenTarget.trim()
+                    }
+                    onClick={applyBoundaryRule}
+                  >
+                    Add Boundary Rule
+                  </Button>
+                </div>
+
+                <div
+                  className="grid"
+                  style={{
+                    gridTemplateColumns: '1fr 1fr 1fr auto',
+                    gap: '10px',
+                    alignItems: 'end',
+                  }}
+                >
+                  <label className="block">
+                    <span className="small muted">Max Function Complexity</span>
+                    <input
+                      className="field font-mono"
+                      aria-label="Max function complexity"
+                      type="number"
+                      min={5}
+                      max={50}
+                      value={budgetComplexity}
+                      disabled={!!s.busy || excluded}
+                      onChange={(e) => setBudgetComplexity(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="small muted">Max Function Lines</span>
+                    <input
+                      className="field font-mono"
+                      aria-label="Max function lines"
+                      type="number"
+                      min={20}
+                      max={500}
+                      value={budgetFnLines}
+                      disabled={!!s.busy || excluded}
+                      onChange={(e) => setBudgetFnLines(e.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="small muted">Max File Lines</span>
+                    <input
+                      className="field font-mono"
+                      aria-label="Max file lines"
+                      type="number"
+                      min={100}
+                      max={5000}
+                      value={budgetFileLines}
+                      disabled={!!s.busy || excluded}
+                      onChange={(e) => setBudgetFileLines(e.target.value)}
+                    />
+                  </label>
+                  <Button
+                    tone="ghost"
+                    disabled={!!s.busy || excluded}
+                    onClick={applyQualityBudgetsToDraft}
+                  >
+                    Apply Quality Budgets
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+          )}
+
+          {ruleSubTab === 'lessons' && (
+            <Panel
+              title="Harness² Lesson Inbox"
+              actions={
+                <Badge
+                  value={`${harnessLessons.length} ${harnessLessons.length === 1 ? 'lesson' : 'lessons'}`}
+                  tone={harnessLessons.length > 0 ? 'green' : undefined}
+                />
+              }
+            >
+              <div className="stack" style={{ gap: '8px' }}>
+                <p className="small muted">
+                  Reusable architectural and testing lessons synthesized by the{' '}
+                  <code>Propose → Probe → Compose</code> loop when agents overcome verification or
+                  critic failures. Graduate lessons into <code>{path}</code> so future runs avoid
+                  the same pitfalls.
+                </p>
+                {harnessLessons.length === 0 ? (
+                  <p className="small muted" style={{ margin: 0 }}>
+                    No pending Harness² lessons yet. Lessons appear automatically when an agent
+                    repairs a failed check or resolves critic feedback.
+                  </p>
+                ) : (
+                  <div
+                    className="stack"
+                    style={{ gap: '6px' }}
+                    role="list"
+                    aria-label="Harness² lessons"
+                  >
+                    {harnessLessons.map((lesson, idx) => {
+                      const adopted = containsGuideline(content, lesson);
+                      return (
+                        <div
+                          key={idx}
+                          role="listitem"
+                          className="row between wrap"
+                          style={{
+                            gap: '10px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--line)',
+                            background: 'var(--bg-soft)',
+                          }}
+                        >
+                          <span className="small" style={{ flex: '1 1 300px' }}>
+                            {lesson}
+                          </span>
+                          <div className="row" style={{ gap: '6px' }}>
+                            <Badge
+                              value={adopted ? 'In Draft' : 'Ready'}
+                              tone={adopted ? 'green' : 'violet'}
+                            />
+                            {!adopted && (
+                              <Button
+                                tone="primary small"
+                                disabled={!!s.busy || excluded}
+                                onClick={() => promoteHarnessLesson(lesson)}
+                              >
+                                Promote to AGENTS.md
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </Panel>
+          )}
+
+          {ruleSubTab === 'draft' && (
+            <section className="stack" aria-label="Instruction draft">
+              {!editing && ready && (
+                <section className="instruction-reading">
+                  <div className="row between">
+                    <strong>{path}</strong>
+                    <Badge value={preview?.exists ? 'Included' : 'New file'} />
+                  </div>
+                  <Prose text={content || 'No instructions saved in this scope.'} />
+                </section>
+              )}
+              {(editing || !ready) && (
+                <Panel
+                  title="Edit guidance"
+                  actions={<Badge value={preview?.exists ? 'existing file' : 'new file'} />}
+                >
+                  {preview && <p className="path instruction-scope">{path}</p>}
+                  {!ready ? (
+                    <Notice error>Load this scope again before editing.</Notice>
+                  ) : (
+                    <>
+                      <label className="block">
+                        Guidance draft
+                        <textarea
+                          className="instruction-text"
+                          aria-label="Custom instructions"
+                          value={content}
+                          disabled={!!s.busy || excluded}
+                          onChange={(e) => setContent(e.target.value)}
+                          placeholder="# Project instructions\n\nDescribe the rules agents should follow…"
+                        />
+                      </label>
+                      <Disclosure title="Add project guidelines">
+                        {guidelinePicker(false)}
+                      </Disclosure>
+                      {pending.length > 0 && (
+                        <Notice>Add selected guidance to the draft before continuing.</Notice>
+                      )}
+                      <div className="actions">
+                        <Button
+                          tone="primary"
+                          disabled={
+                            !!s.busy ||
+                            !ready ||
+                            excluded ||
+                            !proposed.trim() ||
+                            pending.length > 0 ||
+                            proposed === preview?.existing_content
+                          }
+                          onClick={() => void w.proposeInstructions(proposed)}
+                        >
+                          Preview instruction diff
+                        </Button>
+                        <Button
+                          tone="ghost"
+                          disabled={
+                            !!s.busy ||
+                            !ready ||
+                            excluded ||
+                            !proposed.trim() ||
+                            pending.length > 0 ||
+                            proposed === preview?.existing_content
+                          }
+                          onClick={() => void w.saveDirectFile(path, proposed)}
+                        >
+                          Save Rules Directly
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </Panel>
+              )}
+            </section>
+          )}
+        </div>
       )}
 
       {tab === 'guidelines' && (

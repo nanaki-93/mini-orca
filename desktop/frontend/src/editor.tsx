@@ -231,6 +231,8 @@ export function Editor({ s }: { s: State }) {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [customTargets, setCustomTargets] = useState<string[]>([]);
   const [contextPickerOpen, setContextPickerOpen] = useState(false);
+  const [showInlineWhy, setShowInlineWhy] = useState(true);
+  const [focusedHunkIdx, setFocusedHunkIdx] = useState(0);
   const gutterRef = useRef<HTMLDivElement | null>(null);
 
   const change = s.change?.state === 'draft' ? s.change : undefined;
@@ -522,24 +524,63 @@ export function Editor({ s }: { s: State }) {
                 </Button>
               )}
               {mode === 'diff' && (
-                <div className="mode-switch-group" role="group" aria-label="Diff layout">
-                  <button
-                    type="button"
-                    aria-pressed={diffLayout === 'unified'}
-                    className={`mode-switch-btn ${diffLayout === 'unified' ? 'active' : ''}`}
-                    onClick={() => setDiffLayout('unified')}
+                <>
+                  {hunks.length > 0 && (
+                    <div
+                      className="row"
+                      style={{ gap: '4px' }}
+                      role="group"
+                      aria-label="Hunk navigation"
+                    >
+                      <Button
+                        tone="ghost small"
+                        icon="chevronLeft"
+                        aria-label="Previous hunk"
+                        disabled={hunks.length <= 1}
+                        onClick={() =>
+                          setFocusedHunkIdx((i) => (i - 1 + hunks.length) % hunks.length)
+                        }
+                      />
+                      <span className="small muted font-mono">
+                        Hunk {Math.min(focusedHunkIdx + 1, hunks.length)}/{hunks.length}
+                      </span>
+                      <Button
+                        tone="ghost small"
+                        icon="chevron"
+                        aria-label="Next hunk"
+                        disabled={hunks.length <= 1}
+                        onClick={() => setFocusedHunkIdx((i) => (i + 1) % hunks.length)}
+                      />
+                    </div>
+                  )}
+                  <Button
+                    tone={showInlineWhy ? 'primary small' : 'ghost small'}
+                    icon="info"
+                    aria-label="Toggle inline explanations"
+                    aria-pressed={showInlineWhy}
+                    onClick={() => setShowInlineWhy((v) => !v)}
                   >
-                    Unified
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={diffLayout === 'split'}
-                    className={`mode-switch-btn ${diffLayout === 'split' ? 'active' : ''}`}
-                    onClick={() => setDiffLayout('split')}
-                  >
-                    Split
-                  </button>
-                </div>
+                    Inline Explanations
+                  </Button>
+                  <div className="mode-switch-group" role="group" aria-label="Diff layout">
+                    <button
+                      type="button"
+                      aria-pressed={diffLayout === 'unified'}
+                      className={`mode-switch-btn ${diffLayout === 'unified' ? 'active' : ''}`}
+                      onClick={() => setDiffLayout('unified')}
+                    >
+                      Unified
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={diffLayout === 'split'}
+                      className={`mode-switch-btn ${diffLayout === 'split' ? 'active' : ''}`}
+                      onClick={() => setDiffLayout('split')}
+                    >
+                      Split
+                    </button>
+                  </div>
+                </>
               )}
               <div className="mode-switch-group" role="tablist" aria-label="Editor mode">
                 <button
@@ -664,48 +705,53 @@ export function Editor({ s }: { s: State }) {
                     {activeEdit ? (
                       hunks.length > 0 ? (
                         <>
-                          {(() => {
-                            const fileSymbols = s.index?.files.find(
-                              (f) => f.path === activeEdit.path,
-                            )?.symbols;
-                            const fileInfo = summarizeFileEdit(activeEdit, fileSymbols);
-                            const assistantNote = [...(change.messages || [])]
-                              .reverse()
-                              .find((m) => m.role === 'assistant')?.content;
-                            return (
-                              <div
-                                className="diff-inline-summary"
-                                aria-label={`Inline edit summary for ${activeEdit.path}`}
-                                style={{
-                                  padding: '8px 12px',
-                                  borderRadius: '6px',
-                                  border: '1px solid var(--line)',
-                                  background: 'var(--bg-soft)',
-                                  marginBottom: '8px',
-                                  fontSize: '0.84rem',
-                                }}
-                              >
-                                <div className="row between wrap" style={{ gap: '8px' }}>
-                                  <span>
-                                    <strong>File Edit Summary:</strong> {fileInfo.summary}
-                                  </span>
-                                  <div className="row wrap" style={{ gap: '6px' }}>
-                                    {fileInfo.symbols.map((sym) => (
-                                      <Badge key={sym} value={`fn ${sym}`} tone="violet" />
-                                    ))}
+                          {showInlineWhy &&
+                            (() => {
+                              const fileSymbols = s.index?.files.find(
+                                (f) => f.path === activeEdit.path,
+                              )?.symbols;
+                              const fileInfo = summarizeFileEdit(activeEdit, fileSymbols);
+                              const assistantNote = [...(change.messages || [])]
+                                .reverse()
+                                .find((m) => m.role === 'assistant')?.content;
+                              return (
+                                <div
+                                  className="diff-inline-summary"
+                                  aria-label={`Inline edit summary for ${activeEdit.path}`}
+                                  style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--line)',
+                                    background: 'var(--bg-soft)',
+                                    marginBottom: '8px',
+                                    fontSize: '0.84rem',
+                                  }}
+                                >
+                                  <div className="row between wrap" style={{ gap: '8px' }}>
+                                    <span
+                                      className="row wrap"
+                                      style={{ gap: '6px', alignItems: 'center' }}
+                                    >
+                                      <Icon name="info" />
+                                      <strong>File Edit Summary:</strong> {fileInfo.summary}
+                                    </span>
+                                    <div className="row wrap" style={{ gap: '6px' }}>
+                                      {fileInfo.symbols.map((sym) => (
+                                        <Badge key={sym} value={`fn ${sym}`} tone="violet" />
+                                      ))}
+                                    </div>
                                   </div>
+                                  {assistantNote && (
+                                    <p
+                                      className="small muted"
+                                      style={{ marginTop: '4px', marginBottom: 0 }}
+                                    >
+                                      {assistantNote}
+                                    </p>
+                                  )}
                                 </div>
-                                {assistantNote && (
-                                  <p
-                                    className="small muted"
-                                    style={{ marginTop: '4px', marginBottom: 0 }}
-                                  >
-                                    {assistantNote}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })()}
+                              );
+                            })()}
                           {hunks.map((hunk) => {
                             const isAccepted = fileAcceptedHunks.includes(hunk.index);
                             const fileSymbols = s.index?.files.find(
@@ -733,12 +779,16 @@ export function Editor({ s }: { s: State }) {
                                         <Badge key={sym} value={`fn ${sym}`} tone="violet" />
                                       ))}
                                     </span>
-                                    <span
-                                      className="small muted"
-                                      aria-label={`Hunk #${hunk.index + 1} explanation`}
-                                    >
-                                      {hunkInfo.summary}
-                                    </span>
+                                    {showInlineWhy && (
+                                      <span
+                                        className="small muted row"
+                                        style={{ gap: '4px', alignItems: 'center' }}
+                                        aria-label={`Hunk #${hunk.index + 1} explanation`}
+                                      >
+                                        <Icon name="info" />
+                                        <span>{hunkInfo.summary}</span>
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="row" style={{ gap: '6px' }}>
                                     <Button

@@ -8,7 +8,7 @@ const themes = [
 ];
 
 export async function testThemes({ test, pageFor, nav, idle }) {
-  await test('Collapsible 10-view sidebar keeps every destination accessible and remembers its width', async () => {
+  await test('Collapsible 5-Hub enterprise sidebar keeps every hub and sub-view accessible and remembers its width', async () => {
     const { page, close } = await pageFor();
     try {
       await idle(page);
@@ -18,16 +18,10 @@ export async function testThemes({ test, pageFor, nav, idle }) {
         .evaluateAll((links) => links.map((link) => link.getAttribute('aria-label')));
       assert.deepEqual(destinations, [
         'Overview',
-        'Architecture',
-        'Docs',
+        'Agent Studio',
         'Code & Diff',
-        'Issues & Ideas',
-        'Features',
-        'Agents',
-        'Last Run',
-        'Git & Worktrees',
-        'Settings & Rules',
-        'Model Routing',
+        'Handbook & Arch',
+        'Governance & Rules',
       ]);
       const expanded = await sidebar.boundingBox();
       await sidebar.getByRole('button', { name: 'Collapse sidebar' }).focus();
@@ -44,6 +38,16 @@ export async function testThemes({ test, pageFor, nav, idle }) {
       await idle(page);
       assert.equal(
         await sidebar
+          .getByRole('button', { name: 'Agent Studio', exact: true })
+          .getAttribute('aria-current'),
+        'page',
+      );
+      const hubSubnav = page.getByRole('navigation', {
+        name: 'Workspace hub sections',
+        exact: true,
+      });
+      assert.equal(
+        await hubSubnav
           .getByRole('button', { name: 'Issues & Ideas', exact: true })
           .getAttribute('aria-current'),
         'page',

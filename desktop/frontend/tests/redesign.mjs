@@ -29,9 +29,34 @@ async function pageFor(options = {}) {
   return { page, close: () => context.close() };
 }
 
+const HUB_FOR_LABEL = {
+  Overview: 'Overview',
+  'Agent Studio': 'Agent Studio',
+  Agents: 'Agent Studio',
+  'Issues & Ideas': 'Agent Studio',
+  Features: 'Agent Studio',
+  'Last Run': 'Agent Studio',
+  'Code & Diff': 'Code & Diff',
+  'Git & Worktrees': 'Code & Diff',
+  'Handbook & Arch': 'Handbook & Arch',
+  Docs: 'Handbook & Arch',
+  Architecture: 'Handbook & Arch',
+  'Governance & Rules': 'Governance & Rules',
+  'Settings & Rules': 'Governance & Rules',
+  'Model Routing': 'Governance & Rules',
+};
+
 async function nav(page, label) {
   const sidebar = page.getByRole('complementary', { name: 'Application' });
-  await sidebar.getByRole('button', { name: label, exact: true }).click();
+  const hub = HUB_FOR_LABEL[label] || label;
+  await sidebar.getByRole('button', { name: hub, exact: true }).click();
+  if (label !== hub && label !== 'Overview') {
+    const hubSubnav = page.getByRole('navigation', {
+      name: 'Workspace hub sections',
+      exact: true,
+    });
+    await hubSubnav.getByRole('button', { name: label, exact: true }).click();
+  }
 }
 
 async function test(name, fn) {
@@ -625,15 +650,16 @@ try {
       await page.getByRole('button', { name: 'CRT Green', exact: true }).click();
       assert.equal(await tui.getAttribute('data-tui-palette'), 'crt');
 
-      // Navigate TUI views via numbered tabs ([1] Overview, [2] Arch, [3] Docs, [5] Issues)
+      // Navigate TUI views via 5-Hub top bar ([1] Overview, [4] Handbook & Arch, [2] Agent Studio)
       await page.getByRole('button', { name: /\[1\] Overview/ }).click();
       await page.getByText('SOURCE FILES', { exact: true }).waitFor();
-      await page.getByRole('button', { name: /\[2\] Arch/ }).click();
-      await page.getByText('SUBSYSTEM CONTRACT INSPECTOR', { exact: true }).waitFor();
-      await page.getByRole('button', { name: /\[3\] Docs/ }).click();
+      await page.getByRole('button', { name: /\[4\] Handbook & Arch/ }).click();
       await page.getByText('1. PURPOSE OF THE PROJECT:', { exact: true }).waitFor();
       await page.getByText(/4\. MAIN DEPENDENCIES/).waitFor();
-      await page.getByRole('button', { name: /\[5\] Issues/ }).click();
+      await page.getByRole('button', { name: '[Architecture]', exact: true }).click();
+      await page.getByText('SUBSYSTEM CONTRACT INSPECTOR', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /\[2\] Agent Studio/ }).click();
+      await page.getByRole('button', { name: '[Issues]', exact: true }).click();
       await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
       await page.getByRole('button', { name: /\[d: Dismiss\]/ }).waitFor();
       assert.equal(await page.getByRole('button', { name: '[Done]', exact: true }).count(), 0);
@@ -1049,7 +1075,7 @@ try {
   await test('Enterprise Workspace: Inline Diff Explanations, Architect Boundaries Builder, Harness² Lesson Inbox, and Handbook Reader', async () => {
     const { page, close } = await pageFor({ trusted: true });
     try {
-      // 1. Code & Diff -> Inline File Edit Summary and per-hunk explanation
+      // 1. Code & Diff -> Inline File Edit Summary, per-hunk explanation, and Toggle inline explanations button
       await nav(page, 'Code & Diff');
       await idle(page);
       await page.locator('.explorer-file-btn').first().click();
@@ -1062,8 +1088,18 @@ try {
       await page.getByRole('tab', { name: /^Diff Review/ }).click();
       await page.getByText('File Edit Summary:').waitFor();
       await page.getByLabel('Hunk #1 explanation').waitFor();
+      const whyToggle = page.getByRole('button', {
+        name: 'Toggle inline explanations',
+        exact: true,
+      });
+      await whyToggle.waitFor();
+      assert.equal(await whyToggle.getAttribute('aria-pressed'), 'true');
+      await whyToggle.click();
+      assert.equal(await page.getByLabel('Hunk #1 explanation').count(), 0);
+      await whyToggle.click();
+      await page.getByLabel('Hunk #1 explanation').waitFor();
 
-      // 2. Settings & Rules -> Architect Boundaries & Quality Budgets + Harness² Lesson Inbox
+      // 2. Settings & Rules -> 1-Card Rule Studio Sections (Boundaries & Budgets, Harness² Lesson Inbox, AGENTS.md Draft)
       await nav(page, 'Settings & Rules');
       await idle(page);
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
@@ -1071,7 +1107,6 @@ try {
       await page
         .getByRole('heading', { name: 'Architect Boundaries & Quality Budgets', exact: true })
         .waitFor();
-      await page.getByRole('heading', { name: 'Harness² Lesson Inbox', exact: true }).waitFor();
 
       const srcInput = page.getByRole('textbox', { name: 'Source layer path', exact: true });
       const tgtInput = page.getByRole('textbox', { name: 'Forbidden target path', exact: true });
@@ -1081,6 +1116,7 @@ try {
       await page.getByText('desktop/frontend/ ↛ internal/storage/', { exact: true }).waitFor();
 
       await page.getByRole('button', { name: 'Apply Quality Budgets', exact: true }).click();
+      // Applying quality budgets switches to AGENTS.md Draft sub-tab
       const draftVal = await page
         .getByRole('textbox', { name: 'Custom instructions', exact: true })
         .inputValue();
@@ -1090,6 +1126,13 @@ try {
         `Expected AGENTS.md draft to contain compiled boundary rule and complexity budget, got: ${draftVal}`,
       );
 
+      // Switch to Harness² Lesson Inbox sub-tab
+      await page
+        .getByRole('tablist', { name: 'Rule studio sections', exact: true })
+        .getByRole('tab', { name: /^Harness² Lesson Inbox/ })
+        .click();
+      await page.getByRole('heading', { name: 'Harness² Lesson Inbox', exact: true }).waitFor();
+
       // 3. Engineering Specification -> 5. Handbook Reader & Sync to docs/ARCHITECTURE.md
       await nav(page, 'Docs');
       await idle(page);
@@ -1097,6 +1140,21 @@ try {
       await page.getByRole('navigation', { name: 'Handbook table of contents' }).waitFor();
       await page.getByRole('button', { name: 'Sync to docs/ARCHITECTURE.md', exact: true }).click();
       await idle(page);
+
+      // 4. Verify TUI Option A [3] Code & Diff inline why toggle and [5] Governance & Rules Harness² Inbox
+      await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
+      await page.getByRole('application', { name: 'Mini-Orca Terminal UI' }).waitFor();
+      await page.getByRole('button', { name: /\[3\] Code & Diff/ }).click();
+      await page
+        .getByRole('button', { name: 'Toggle TUI inline explanations', exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: /\[5\] Governance & Rules/ }).click();
+      await page.getByRole('button', { name: '[4. Harness² Inbox]', exact: true }).click();
+      await page
+        .getByText('HARNESS² LESSON INBOX (g graduate lesson to AGENTS.md)', { exact: true })
+        .waitFor();
+      await page.getByRole('button', { name: '[g: Graduate to AGENTS.md]', exact: true }).click();
+      await page.getByRole('button', { name: '[Graduated [OK]]', exact: true }).waitFor();
     } finally {
       await close();
     }

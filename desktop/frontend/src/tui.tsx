@@ -17,7 +17,7 @@ import {
 import { collectAgentDashboardItems, type StageId } from './agents';
 import { resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
-import { isAddedLine, isRemovedLine } from './change-shared';
+import { isAddedLine, isRemovedLine, summarizeFileEdit } from './change-shared';
 import { Spinner, classifyNoticeTone, human } from './ui';
 import type * as M from './models';
 import './tui.css';
@@ -25,17 +25,48 @@ import './tui.css';
 type TuiPalette = 'tokyo' | 'crt' | 'amber' | 'paper';
 type TuiDocsSection = 'context' | 'components' | 'scenarios' | 'decisions';
 
-const TUI_TABS: { key: string; page: Page; label: string }[] = [
-  { key: '1', page: 'summary', label: 'Overview' },
-  { key: '2', page: 'diagrams', label: 'Arch' },
-  { key: '3', page: 'docs', label: 'Docs' },
-  { key: '4', page: 'editor', label: 'Code/Diff' },
-  { key: '5', page: 'bugs', label: 'Issues' },
-  { key: '6', page: 'features', label: 'Features' },
-  { key: '7', page: 'agents', label: 'Agents' },
-  { key: '8', page: 'analysis-run', label: 'Last Run' },
-  { key: '9', page: 'git', label: 'Git/Trees' },
-  { key: '0', page: 'instructions', label: 'Rules/Models' },
+const TUI_TABS: {
+  key: string;
+  page: Page;
+  label: string;
+  subPages: { page: Page; label: string }[];
+}[] = [
+  { key: '1', page: 'summary', label: 'Overview', subPages: [] },
+  {
+    key: '2',
+    page: 'agents',
+    label: 'Agent Studio',
+    subPages: [
+      { page: 'agents', label: 'Agents' },
+      { page: 'bugs', label: 'Issues' },
+      { page: 'features', label: 'Features' },
+      { page: 'analysis-run', label: 'Last Run' },
+    ],
+  },
+  {
+    key: '3',
+    page: 'editor',
+    label: 'Code & Diff',
+    subPages: [
+      { page: 'editor', label: 'Code & Diff' },
+      { page: 'git', label: 'Git & Worktrees' },
+    ],
+  },
+  {
+    key: '4',
+    page: 'docs',
+    label: 'Handbook & Arch',
+    subPages: [
+      { page: 'docs', label: 'Handbook / Docs' },
+      { page: 'diagrams', label: 'Architecture' },
+    ],
+  },
+  {
+    key: '5',
+    page: 'instructions',
+    label: 'Governance & Rules',
+    subPages: [],
+  },
 ];
 
 const PALETTES: { id: TuiPalette; label: string }[] = [
@@ -242,7 +273,7 @@ export function TuiApp({
   const [showNewMissionForm, setShowNewMissionForm] = useState(false);
   const [showKeybindsModal, setShowKeybindsModal] = useState(false);
   const [docsSection, setDocsSection] = useState<TuiDocsSection>('context');
-  const [rulesSection, setRulesSection] = useState<'trust' | 'models' | 'bootstrap'>(
+  const [rulesSection, setRulesSection] = useState<'trust' | 'models' | 'bootstrap' | 'lessons'>(
     s.instructionsTab === 'bootstrap' ? 'bootstrap' : activePage === 'models' ? 'models' : 'trust',
   );
   useEffect(() => {
@@ -255,13 +286,16 @@ export function TuiApp({
   }, [s.instructionsTab, activePage]);
   const [selectedAgentStage, setSelectedAgentStage] = useState<StageId | 'all'>('all');
   const [editorMode, setEditorMode] = useState<'auto' | 'source' | 'diff'>('auto');
+  const [showTuiInlineWhy, setShowTuiInlineWhy] = useState(true);
+  const [graduatedTuiLessons, setGraduatedTuiLessons] = useState<string[]>([]);
+  const [tuiCustomDraft, setTuiCustomDraft] = useState('');
   const [editorPrompt, setEditorPrompt] = useState('');
   const [featureGoalInput, setFeatureGoalInput] = useState('');
   const [cmdInput, setCmdInput] = useState('');
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [cmdHistoryIdx, setCmdHistoryIdx] = useState(-1);
   const [cmdOutput, setCmdOutput] = useState(
-    'Press [?] or type :keys for keyboard shortcuts · [1-0] switch views · [j/k] move · [Enter] select · [:gui] exit',
+    'Press [?] or type :keys for keyboard shortcuts · [1-5] switch hubs · [Tab] sub-view · [j/k] move · [Enter] select · [:gui] exit',
   );
   const selectedChild = s.selectedAgentPath
     ? s.implementations.find((impl) => impl.worktreePath === s.selectedAgentPath)
@@ -301,6 +335,11 @@ export function TuiApp({
       : ['models', 'instructions', 'analysis-files', 'context'].includes(activePage)
         ? 'instructions'
         : activePage;
+
+  const activeHubEntry =
+    TUI_TABS.find(
+      (t) => t.page === currentTabPage || t.subPages.some((sp) => sp.page === currentTabPage),
+    ) || TUI_TABS[0];
 
   const docs = useMemo(() => resolveProjectDocs(s), [s.overview, s.project, s.index]);
   const allIssues = collectTuiIssues(s);
@@ -439,6 +478,20 @@ export function TuiApp({
     setCmdOutput(`Switched TUI palette to ${next.label}`);
   };
 
+  const graduateTuiLesson = (ruleText: string, lessonId: string) => {
+    const block = `\n## Harness² Graduated Lesson\n- ${ruleText}`;
+    const current =
+      tuiCustomDraft ||
+      s.projectInstructions?.existing_content ||
+      s.instructionPreview?.existing_content ||
+      '';
+    if (!current.includes(ruleText)) {
+      setTuiCustomDraft(`${current.trimEnd()}\n${block}\n`.trimStart());
+    }
+    setGraduatedTuiLessons((prev) => (prev.includes(lessonId) ? prev : [...prev, lessonId]));
+    setCmdOutput(`Graduated Harness² lesson into AGENTS.md: ${ruleText}`);
+  };
+
   const activateCurrentRow = () => {
     if (currentTabPage === 'summary' || currentTabPage === 'bugs') {
       if (!selectedIssue) return;
@@ -542,14 +595,45 @@ export function TuiApp({
       if (tab) {
         e.preventDefault();
         void w.navigate(tab.page);
+        setCmdOutput(`Switched to [${tab.key}] ${tab.label}`);
         return;
+      }
+
+      if (e.key === 'Tab') {
+        if (activeHubEntry.subPages.length > 0) {
+          e.preventDefault();
+          const curSubIdx = Math.max(
+            0,
+            activeHubEntry.subPages.findIndex((sp) => sp.page === currentTabPage),
+          );
+          const nextSub = activeHubEntry.subPages[(curSubIdx + 1) % activeHubEntry.subPages.length];
+          if (nextSub) {
+            void w.navigate(nextSub.page);
+            setCmdOutput(`Sub-view: ${nextSub.label}`);
+          }
+          return;
+        }
+        if (currentTabPage === 'instructions') {
+          e.preventDefault();
+          const sections: ('trust' | 'models' | 'bootstrap' | 'lessons')[] = [
+            'trust',
+            'models',
+            'bootstrap',
+            'lessons',
+          ];
+          const cur = sections.indexOf(rulesSection);
+          const next = sections[(cur + 1) % sections.length];
+          setRulesSection(next);
+          setSelectedIdx(0);
+          return;
+        }
       }
 
       if (e.key === '[' || e.key === ']') {
         e.preventDefault();
         const curIdx = Math.max(
           0,
-          TUI_TABS.findIndex((t) => t.page === currentTabPage),
+          TUI_TABS.findIndex((t) => t.key === activeHubEntry.key),
         );
         const nextIdx =
           e.key === ']'
@@ -603,7 +687,12 @@ export function TuiApp({
         currentTabPage === 'instructions'
       ) {
         e.preventDefault();
-        const sections: ('trust' | 'models' | 'bootstrap')[] = ['trust', 'models', 'bootstrap'];
+        const sections: ('trust' | 'models' | 'bootstrap' | 'lessons')[] = [
+          'trust',
+          'models',
+          'bootstrap',
+          'lessons',
+        ];
         const cur = sections.indexOf(rulesSection);
         const next =
           e.key === 'l' || e.key === 'ArrowRight'
@@ -686,6 +775,13 @@ export function TuiApp({
           setCmdOutput('Starting project analysis...');
           void w.runAnalysisDirect(false);
         }
+      } else if (e.key === 'e' && currentTabPage === 'editor') {
+        e.preventDefault();
+        setShowTuiInlineWhy((prev) => {
+          const next = !prev;
+          setCmdOutput(`Inline diff explanations ${next ? 'enabled' : 'hidden'}`);
+          return next;
+        });
       } else if (e.key === 'b' && currentTabPage === 'instructions') {
         e.preventDefault();
         setCmdOutput('Bootstrapping missing repository workflow pillars...');
@@ -708,12 +804,21 @@ export function TuiApp({
         cyclePalette();
       } else if (e.key === 'g') {
         e.preventDefault();
-        onExitTui();
+        if (currentTabPage === 'instructions') {
+          setRulesSection('lessons');
+          graduateTuiLesson(
+            'Propagate context.Context cancellation and add a regression test for every check repair.',
+            'lesson-default-1',
+          );
+        } else {
+          onExitTui();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
+    activeHubEntry,
     activeListLength,
     clampedIdx,
     currentTabPage,
@@ -721,6 +826,7 @@ export function TuiApp({
     featureSuggestions,
     issueView,
     openIssues,
+    rulesSection,
     selectedIssue,
     selectedIssueIds,
     showKeybindsModal,
@@ -839,11 +945,31 @@ export function TuiApp({
         setShowNewMissionForm(true);
       }
       void w.navigate('agents');
-      setCmdOutput('Switched to [7] Agents in Progress.');
+      setCmdOutput('Switched to [2] Agent Studio.');
+      return;
+    }
+    if (cmd === 'issues' || cmd === 'bugs') {
+      void w.navigate('bugs');
+      setCmdOutput('Switched to [2] Agent Studio · Issues.');
+      return;
+    }
+    if (cmd === 'arch' || cmd === 'diagrams') {
+      void w.navigate('diagrams');
+      setCmdOutput('Switched to [4] Handbook & Arch · Architecture.');
+      return;
+    }
+    if (cmd === 'docs' || cmd === 'handbook') {
+      void w.navigate('docs');
+      setCmdOutput('Switched to [4] Handbook & Arch · Handbook / Docs.');
+      return;
+    }
+    if (cmd === 'git') {
+      void w.navigate('git');
+      setCmdOutput('Switched to [3] Code & Diff · Git & Worktrees.');
       return;
     }
     if (cmd === 'open' && arg) {
-      setCmdOutput(`Opening ${arg} in Code/Diff...`);
+      setCmdOutput(`Opening ${arg} in Code & Diff...`);
       void w.openFile(arg);
       return;
     }
@@ -977,20 +1103,18 @@ export function TuiApp({
         </div>
       </header>
 
-      {/* Numbered Tab Bar */}
+      {/* Numbered 5-Hub Top Bar */}
       <nav className="tui-tabbar" aria-label="TUI Workspaces">
         {TUI_TABS.map((t) => {
-          const isCurrent = currentTabPage === t.page;
+          const isCurrent = activeHubEntry.key === t.key;
           const badge =
-            t.page === 'bugs' && issues.length > 0
-              ? `(${issues.length})`
-              : t.page === 'agents' && (workflow || agentItems.length > 0)
-                ? workflow
-                  ? `[${workflow.status}]`
-                  : `(${agentItems.length})`
-                : t.page === 'editor' && changedFiles.length > 0
-                  ? `(${changedFiles.length}d)`
-                  : '';
+            t.key === '2' && (workflow || agentItems.length > 0 || issues.length > 0)
+              ? workflow
+                ? `[${workflow.status}]`
+                : `(${agentItems.length}a/${issues.length}i)`
+              : t.key === '3' && changedFiles.length > 0
+                ? `(${changedFiles.length}d)`
+                : '';
           return (
             <button
               key={t.key}
@@ -1006,6 +1130,39 @@ export function TuiApp({
           );
         })}
       </nav>
+
+      {/* Hub Sub-View Strip ([Tab] cycles sub-views inside active Hub) */}
+      {activeHubEntry.subPages.length > 0 && (
+        <div
+          aria-label="TUI Hub Sub-Views"
+          style={{
+            padding: '4px 12px',
+            borderBottom: '1px solid var(--tui-border)',
+            background: 'var(--tui-bg-alt)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span className="tui-sub">HUB SUB-VIEW:</span>
+            {activeHubEntry.subPages.map((sp) => (
+              <button
+                key={sp.page}
+                type="button"
+                className={`tui-btn${currentTabPage === sp.page ? ' primary' : ''}`}
+                aria-current={currentTabPage === sp.page ? 'page' : undefined}
+                onClick={() => void w.navigate(sp.page)}
+              >
+                [{sp.label}]
+              </button>
+            ))}
+          </div>
+          <span className="tui-sub">[Tab] cycle sub-view</span>
+        </div>
+      )}
 
       {/* Notices / Errors (Root + Active Child Worktree) */}
       {(activeError || activeNotice || activeBusy) && (
@@ -1397,7 +1554,7 @@ export function TuiApp({
                               [{selectedIssueIds.includes(iss.id) ? 'x' : ' '}]
                             </button>
                           ) : (
-                            <span className="tui-c-green">✓</span>
+                            <span className="tui-c-green">[OK]</span>
                           )}
                         </td>
                         <td>
@@ -1551,7 +1708,7 @@ export function TuiApp({
           </div>
         )}
 
-        {/* [7] AGENTS — DASHBOARD vs AGENT & ISSUE DETAIL vs NEW MISSION */}
+        {/* [2] AGENT STUDIO — DASHBOARD vs AGENT & ISSUE DETAIL vs NEW MISSION */}
         {currentTabPage === 'agents' && !s.agentDetailOpen && !showNewMissionForm && (
           <div className="tui-box focused">
             <div
@@ -1565,7 +1722,7 @@ export function TuiApp({
               <span className="tui-box-title">AGENTS IN PROGRESS DASHBOARD</span>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button type="button" className="tui-btn" onClick={() => void w.navigate('bugs')}>
-                  [5: Select Issues]
+                  [Select Issues]
                 </button>
                 <button
                   type="button"
@@ -1578,8 +1735,8 @@ export function TuiApp({
             </div>
             {agentItems.length === 0 ? (
               <p className="tui-sub">
-                No agents in progress. Select one or more issues in [5] Issues and press [a], or
-                press [n] for [+ New Agent Fix].
+                No agents in progress. Select one or more issues in [Issues] and press [a], or press
+                [n] for [+ New Agent Fix].
               </p>
             ) : (
               <table className="tui-table" aria-label="Agents in progress">
@@ -1656,9 +1813,9 @@ export function TuiApp({
                                   {isRunningStep ? (
                                     <Spinner />
                                   ) : isProblemStep ? (
-                                    '⚠ '
+                                    '[!] '
                                   ) : isDone ? (
-                                    '✓ '
+                                    '[OK] '
                                   ) : (
                                     ''
                                   )}
@@ -1867,11 +2024,11 @@ export function TuiApp({
                           <Spinner />
                         ) : st === 'completed' ? (
                           <span className="tui-c-green" aria-hidden="true">
-                            ✓
+                            [OK]
                           </span>
                         ) : st === 'failed' ? (
                           <span className="tui-c-red" aria-hidden="true">
-                            ⚠
+                            [!]
                           </span>
                         ) : null}
                         <strong className="tui-c-accent">{label}</strong>
@@ -1994,7 +2151,7 @@ export function TuiApp({
                       className="tui-btn"
                       onClick={() => void w.navigate('editor')}
                     >
-                      [4: Inspect Diff &amp; Apply]
+                      [3: Inspect Diff &amp; Apply]
                     </button>
                     <button
                       type="button"
@@ -2063,7 +2220,7 @@ export function TuiApp({
           </>
         )}
 
-        {/* [4] CODE / DIFF */}
+        {/* [3] CODE & DIFF */}
         {currentTabPage === 'editor' && (
           <div className="tui-split-main">
             <div className="tui-box">
@@ -2118,7 +2275,16 @@ export function TuiApp({
                     ? `PROPOSED DIFF (${changedFiles.length} files)`
                     : `SOURCE: ${s.file?.path || 'none'}`}
                 </span>
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`tui-btn${showTuiInlineWhy ? ' primary' : ''}`}
+                    aria-label="Toggle TUI inline explanations"
+                    aria-pressed={showTuiInlineWhy}
+                    onClick={() => setShowTuiInlineWhy((prev) => !prev)}
+                  >
+                    [e: Why: {showTuiInlineWhy ? 'ON' : 'OFF'}]
+                  </button>
                   <button
                     type="button"
                     className={`tui-btn${editorMode === 'source' || (editorMode === 'auto' && changedFiles.length === 0) ? ' primary' : ''}`}
@@ -2138,34 +2304,51 @@ export function TuiApp({
               {(editorMode === 'diff' || (editorMode === 'auto' && changedFiles.length > 0)) &&
               changedFiles.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {changedFiles.map((fc) => (
-                    <div key={fc.path}>
-                      <div className="tui-c-accent" style={{ fontWeight: 700 }}>
-                        --- a/{fc.path} +++ b/{fc.path}
-                      </div>
-                      <pre className="tui-pre">
-                        {(fc.diff?.lines || []).map((ln, idx) => (
-                          <span
-                            key={idx}
-                            className={
-                              isAddedLine(ln.kind)
-                                ? 'tui-diff-add'
-                                : isRemovedLine(ln.kind)
-                                  ? 'tui-diff-del'
-                                  : undefined
-                            }
+                  {changedFiles.map((fc) => {
+                    const summaryInfo = summarizeFileEdit(fc, s.symbols);
+                    return (
+                      <div key={fc.path}>
+                        <div className="tui-c-accent" style={{ fontWeight: 700 }}>
+                          --- a/{fc.path} +++ b/{fc.path}
+                        </div>
+                        {showTuiInlineWhy && (
+                          <div
+                            className="tui-sub"
+                            aria-label={`TUI inline summary for ${fc.path}`}
+                            style={{
+                              padding: '4px 8px',
+                              border: '1px solid var(--tui-border)',
+                              background: 'var(--tui-bg-alt)',
+                              marginBottom: '4px',
+                            }}
                           >
-                            {isAddedLine(ln.kind)
-                              ? `+ ${ln.text}`
-                              : isRemovedLine(ln.kind)
-                                ? `- ${ln.text}`
-                                : `  ${ln.text}`}
-                            {'\n'}
-                          </span>
-                        ))}
-                      </pre>
-                    </div>
-                  ))}
+                            <strong className="tui-c-purple">[WHY]</strong> {summaryInfo.summary}
+                          </div>
+                        )}
+                        <pre className="tui-pre">
+                          {(fc.diff?.lines || []).map((ln, idx) => (
+                            <span
+                              key={idx}
+                              className={
+                                isAddedLine(ln.kind)
+                                  ? 'tui-diff-add'
+                                  : isRemovedLine(ln.kind)
+                                    ? 'tui-diff-del'
+                                    : undefined
+                              }
+                            >
+                              {isAddedLine(ln.kind)
+                                ? `+ ${ln.text}`
+                                : isRemovedLine(ln.kind)
+                                  ? `- ${ln.text}`
+                                  : `  ${ln.text}`}
+                              {'\n'}
+                            </span>
+                          ))}
+                        </pre>
+                      </div>
+                    );
+                  })}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -2579,7 +2762,7 @@ export function TuiApp({
                             )
                           }
                         >
-                          [{idea.status === 'saved' ? 'Saved ★' : 'Save'}]
+                          [{idea.status === 'saved' ? 'Saved *' : 'Save'}]
                         </button>
                         <button
                           type="button"
@@ -2823,6 +3006,9 @@ export function TuiApp({
             const bootstrapPillars = evaluateBootstrapChecklist(s);
             const readyCount = bootstrapPillars.filter((p) => p.ready).length;
             const missingCount = bootstrapPillars.length - readyCount;
+            const defaultLessonRule =
+              'Propagate context.Context cancellation and add a regression test for every check repair.';
+            const isDefaultLessonGraduated = graduatedTuiLessons.includes('lesson-default-1');
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div
@@ -2856,11 +3042,62 @@ export function TuiApp({
                     >
                       [3. Repo Bootstrap ({readyCount}/4)]
                     </button>
+                    <button
+                      type="button"
+                      className={`tui-btn${rulesSection === 'lessons' ? ' primary' : ''}`}
+                      onClick={() => setRulesSection('lessons')}
+                    >
+                      [4. Harness² Inbox]
+                    </button>
                   </div>
-                  <span className="tui-sub">h/l switch section</span>
+                  <span className="tui-sub">h/l or [Tab] switch section</span>
                 </div>
 
-                {rulesSection === 'bootstrap' ? (
+                {rulesSection === 'lessons' ? (
+                  <div className="tui-box focused">
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <span className="tui-box-title">
+                        HARNESS² LESSON INBOX (g graduate lesson to AGENTS.md)
+                      </span>
+                      <span className="tui-badge tui-c-purple">DISCOVERED INVARIANTS</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        border: '1px solid var(--tui-border)',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div>
+                        <strong className="tui-c-accent">
+                          Verification &amp; Self-Repair Invariant
+                        </strong>
+                        <div className="tui-sub">Rule: {defaultLessonRule}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="tui-btn primary"
+                        disabled={isDefaultLessonGraduated}
+                        onClick={() => graduateTuiLesson(defaultLessonRule, 'lesson-default-1')}
+                      >
+                        [{isDefaultLessonGraduated ? 'Graduated [OK]' : 'g: Graduate to AGENTS.md'}]
+                      </button>
+                    </div>
+                  </div>
+                ) : rulesSection === 'bootstrap' ? (
                   <div className="tui-box focused">
                     <div
                       style={{
@@ -3066,7 +3303,8 @@ export function TuiApp({
                       </button>
                     </div>
                     <pre className="tui-pre">
-                      {s.projectInstructions?.existing_content ||
+                      {tuiCustomDraft ||
+                        s.projectInstructions?.existing_content ||
                         s.instructionPreview?.existing_content ||
                         'AGENTS.md rules enforce surgical diffs, passing tests, and explicit Apply.'}
                     </pre>
@@ -3125,15 +3363,21 @@ export function TuiApp({
                   <tbody>
                     <tr>
                       <td>
-                        <strong className="tui-key">[1]–[9], [0]</strong>
+                        <strong className="tui-key">[1]–[5]</strong>
                       </td>
-                      <td>Jump to TUI workspace tab</td>
+                      <td>Jump to TUI workspace hub</td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <strong className="tui-key">[Tab]</strong>
+                      </td>
+                      <td>Cycle sub-views inside active hub</td>
                     </tr>
                     <tr>
                       <td>
                         <strong className="tui-key">[ / ]</strong>
                       </td>
-                      <td>Previous / Next workspace tab</td>
+                      <td>Previous / Next workspace hub</td>
                     </tr>
                     <tr>
                       <td>
@@ -3187,6 +3431,12 @@ export function TuiApp({
                     </tr>
                     <tr>
                       <td>
+                        <strong className="tui-key">e</strong>
+                      </td>
+                      <td>Toggle inline diff explanations</td>
+                    </tr>
+                    <tr>
+                      <td>
                         <strong className="tui-key">x / Space</strong>
                       </td>
                       <td>Toggle issue for batch agent fix</td>
@@ -3217,15 +3467,9 @@ export function TuiApp({
                     </tr>
                     <tr>
                       <td>
-                        <strong className="tui-key">t</strong>
+                        <strong className="tui-key">t / b / g</strong>
                       </td>
-                      <td>Run tests (or toggle Trust on [0])</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong className="tui-key">u / p / g</strong>
-                      </td>
-                      <td>Undo / Cycle Palette / GUI mode</td>
+                      <td>Tests/Trust · Bootstrap · Graduate lesson / GUI</td>
                     </tr>
                   </tbody>
                 </table>
@@ -3271,7 +3515,7 @@ export function TuiApp({
                       <td>
                         <code className="tui-c-green">:open &lt;path&gt;</code>
                       </td>
-                      <td>Open file in [4] Code/Diff</td>
+                      <td>Open file in [3] Code &amp; Diff</td>
                     </tr>
                     <tr>
                       <td>
@@ -3330,13 +3574,16 @@ export function TuiApp({
         </form>
         <div className="tui-hints">
           <span>
-            <strong className="tui-key">[1-0 / [/]]</strong> view
+            <strong className="tui-key">[1-5 / Tab]</strong> hub / sub-view
           </span>
           <span>
             <strong className="tui-key">[j/k]</strong> move
           </span>
           <span>
             <strong className="tui-key">[Enter]</strong> open
+          </span>
+          <span>
+            <strong className="tui-key">[e]</strong> why
           </span>
           <span>
             <strong className="tui-key">[a]</strong> agent fix

@@ -32,17 +32,31 @@ import './studio.css';
 
 const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
-  ['diagrams', 'Architecture', 'layers'],
-  ['docs', 'Docs', 'book'],
+  ['agents', 'Agent Studio', 'sparkles'],
   ['editor', 'Code & Diff', 'code'],
-  ['bugs', 'Issues & Ideas', 'bug'],
-  ['features', 'Features', 'sparkles'],
-  ['agents', 'Agents', 'sparkles'],
-  ['analysis-run', 'Last Run', 'activity'],
-  ['git', 'Git & Worktrees', 'branch'],
-  ['instructions', 'Settings & Rules', 'shield'],
-  ['models', 'Model Routing', 'compass'],
+  ['docs', 'Handbook & Arch', 'book'],
+  ['instructions', 'Governance & Rules', 'shield'],
 ];
+const hubSubNav: Partial<Record<Page, [Page, string, string][]>> = {
+  agents: [
+    ['agents', 'Agents', 'sparkles'],
+    ['bugs', 'Issues & Ideas', 'bug'],
+    ['features', 'Features', 'layers'],
+    ['analysis-run', 'Last Run', 'activity'],
+  ],
+  editor: [
+    ['editor', 'Code & Diff', 'code'],
+    ['git', 'Git & Worktrees', 'branch'],
+  ],
+  docs: [
+    ['docs', 'Docs', 'book'],
+    ['diagrams', 'Architecture', 'layers'],
+  ],
+  instructions: [
+    ['instructions', 'Settings & Rules', 'shield'],
+    ['models', 'Model Routing', 'gauge'],
+  ],
+};
 const contextPages: [Page, string][] = [
   ['analysis-files', 'Files to skip / Scope'],
   ['analysis-run', 'Last Run'],
@@ -204,22 +218,29 @@ function App() {
     nonCurrentWorktrees.filter((t) => (t.sessions?.length || 0) > 0 || t.completed.length > 0)
       .length;
   const changeCount = draftChange?.changes?.length || 0;
+  const activeHub: Page = ['agents', 'bugs', 'features', 'analysis-run'].includes(activePage)
+    ? 'agents'
+    : ['editor', 'git'].includes(activePage)
+      ? 'editor'
+      : ['docs', 'diagrams'].includes(activePage)
+        ? 'docs'
+        : ['instructions', 'models'].includes(activePage)
+          ? 'instructions'
+          : 'summary';
   const nav = (items: typeof mainNav) =>
     items.map(([page, label, icon]) => {
       const count =
-        page === 'editor' && changeCount > 0
-          ? `${changeCount} diff`
-          : page === 'agents' && (runningAgentsCount > 0 || activeAgentsCount > 0)
+        page === 'editor' && (changeCount > 0 || worktreeCount > 0)
+          ? changeCount > 0
+            ? `${changeCount} diff`
+            : `${worktreeCount} wt`
+          : page === 'agents' && (runningAgentsCount > 0 || activeAgentsCount > 0 || issueCount > 0)
             ? runningAgentsCount > 0
               ? `${runningAgentsCount} run`
-              : activeAgentsCount > 1
-                ? `${activeAgentsCount} agents`
-                : 'ready'
-            : page === 'bugs' && issueCount > 0
-              ? issueCount
-              : page === 'git' && worktreeCount > 0
-                ? worktreeCount
-                : undefined;
+              : activeAgentsCount > 0
+                ? `${activeAgentsCount} active`
+                : `${issueCount} open`
+            : undefined;
       return (
         <button
           key={page}
@@ -228,7 +249,7 @@ function App() {
           aria-label={label}
           title={sidebarCollapsed ? label : undefined}
           disabled={!s.project && !['project', 'models', 'instructions'].includes(page)}
-          aria-current={activePage === page ? 'page' : undefined}
+          aria-current={activeHub === page ? 'page' : undefined}
           onClick={() => void w.navigate(page)}
         >
           <Icon name={icon} />
@@ -237,7 +258,9 @@ function App() {
         </button>
       );
     });
+  const allSubNavItems = Object.values(hubSubNav).flatMap((items) => items || []);
   const title =
+    allSubNavItems.find(([page]) => page === activePage)?.[1] ||
     mainNav.find(([page]) => page === activePage)?.[1] ||
     (contextPages.find(([page]) => page === s.page)?.[1] ??
       s.page
@@ -463,6 +486,29 @@ function App() {
                 );
               })()}
               <div className="page" data-accent={s.page}>
+                {(s.project || ['instructions', 'models'].includes(activePage)) &&
+                  hubSubNav[activeHub] && (
+                    <nav className="toolbar hub-subnav" aria-label="Workspace hub sections">
+                      <div className="mode-switch-group">
+                        {hubSubNav[activeHub]!.map(([subPage, subLabel, subIcon]) => (
+                          <button
+                            key={subPage}
+                            type="button"
+                            className={`mode-switch-btn ${activePage === subPage ? 'active' : ''}`}
+                            aria-label={subLabel}
+                            aria-current={activePage === subPage ? 'page' : undefined}
+                            disabled={
+                              !s.project && !['project', 'models', 'instructions'].includes(subPage)
+                            }
+                            onClick={() => void w.navigate(subPage)}
+                          >
+                            <Icon name={subIcon} />
+                            <span>{subLabel}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </nav>
+                  )}
                 {s.error && <Notice error>{s.error}</Notice>}
                 {s.notice && <Notice>{s.notice}</Notice>}
                 {Object.entries(s.resourceErrors).map(([key, error]) => (

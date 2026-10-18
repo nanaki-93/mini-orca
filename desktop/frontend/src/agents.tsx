@@ -19,6 +19,7 @@ import {
   Empty,
   Go,
   Heading,
+  Icon,
   Notice,
   Panel,
   Prose,
@@ -552,6 +553,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
   const [missionPrompt, setMissionPrompt] = useState(seed?.message || '');
   const [selectedDiffPath, setSelectedDiffPath] = useState<string>('all');
   const [retryNote, setRetryNote] = useState('');
+  const [probeTraceOpen, setProbeTraceOpen] = useState(false);
 
   useEffect(() => {
     if (s.selectedAgentPath && !selectedChild && !s.busy) {
@@ -968,9 +970,9 @@ export function AgentsWorkspace({ s }: { s: State }) {
                             {isRunningStep ? (
                               <Spinner />
                             ) : isProblemStep ? (
-                              <span aria-hidden="true">⚠</span>
+                              <Icon name="warning" />
                             ) : isDone ? (
-                              <span aria-hidden="true">✓</span>
+                              <Icon name="check" />
                             ) : null}
                             <span>
                               {stepNum}. {st.shortTitle}
@@ -1199,12 +1201,12 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 {status === 'running' ? (
                   <Spinner />
                 ) : isProblem ? (
-                  <span style={{ color: 'var(--red, #e5534b)' }} aria-hidden="true">
-                    ⚠
+                  <span style={{ color: 'var(--red, #e5534b)', display: 'inline-flex' }}>
+                    <Icon name="warning" />
                   </span>
                 ) : status === 'completed' ? (
-                  <span style={{ color: 'var(--green)' }} aria-hidden="true">
-                    ✓
+                  <span style={{ color: 'var(--green)', display: 'inline-flex' }}>
+                    <Icon name="check" />
                   </span>
                 ) : null}
                 <strong style={{ fontSize: '0.92rem' }}>
@@ -1537,39 +1539,64 @@ export function AgentsWorkspace({ s }: { s: State }) {
                 className="panel"
                 aria-label="Harness² Recursive Loop Diagnostics"
                 style={{
-                  padding: '10px 14px',
+                  padding: '8px 12px',
                   background: 'var(--bg-soft)',
                   border: '1px solid var(--line)',
                 }}
               >
                 <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                  <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
+                  <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                    <Icon name="shield" />
                     <Badge value="Harness² Loop" tone="violet" />
-                    <strong className="small">Propose → Probe → Compose Diagnostics</strong>
+                    <strong className="small">
+                      Propose → Probe → Compose ·{' '}
+                      {workflow?.harness_lessons?.length
+                        ? `${workflow.harness_lessons.length} reusable ${workflow.harness_lessons.length === 1 ? 'lesson' : 'lessons'}`
+                        : 'Verified'}
+                    </strong>
                   </div>
-                  {(workflow?.harness_lessons?.length || 0) > 0 && (
+                  <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
+                    {(workflow?.harness_lessons?.length || 0) > 0 && (
+                      <Button
+                        tone="ghost small"
+                        icon="inbox"
+                        onClick={() => {
+                          w.set({ instructionsTab: 'rules' });
+                          void w.navigate('instructions');
+                        }}
+                      >
+                        Graduate Lessons to AGENTS.md ({workflow?.harness_lessons?.length})
+                      </Button>
+                    )}
                     <Button
                       tone="ghost small"
-                      onClick={() => {
-                        w.set({ instructionsTab: 'rules' });
-                        void w.navigate('instructions');
-                      }}
+                      icon="down"
+                      aria-expanded={probeTraceOpen}
+                      onClick={() => setProbeTraceOpen((open) => !open)}
                     >
-                      Graduate Lessons to AGENTS.md ({workflow?.harness_lessons?.length})
+                      {probeTraceOpen ? 'Hide Probe Trace' : 'Inspect Probe Trace'}
                     </Button>
-                  )}
+                  </div>
                 </div>
-                {workflow?.probe_summary && (
-                  <p className="small muted" style={{ marginTop: '6px', marginBottom: 0 }}>
-                    <strong>Friction Probe:</strong> {workflow.probe_summary}
-                  </p>
-                )}
-                {(workflow?.harness_lessons?.length || 0) > 0 && (
-                  <div style={{ marginTop: '6px' }}>
-                    <BulletContent
-                      title="Reusable Harness Lessons"
-                      items={workflow?.harness_lessons || []}
-                    />
+                {probeTraceOpen && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      paddingTop: '8px',
+                      borderTop: '1px solid var(--line)',
+                    }}
+                  >
+                    {workflow?.probe_summary && (
+                      <p className="small muted" style={{ marginTop: 0, marginBottom: '6px' }}>
+                        <strong>Friction Probe:</strong> {workflow.probe_summary}
+                      </p>
+                    )}
+                    {(workflow?.harness_lessons?.length || 0) > 0 && (
+                      <BulletContent
+                        title="Reusable Harness Lessons"
+                        items={workflow?.harness_lessons || []}
+                      />
+                    )}
                   </div>
                 )}
               </div>
