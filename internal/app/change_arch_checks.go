@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,8 +39,15 @@ var defaultArchitectureImportRules = []architectureImportRule{
 	},
 }
 
+type parsedEditFacts struct {
+	lang       string
+	rawImports []string
+	symbols    []project.SymbolInfo
+}
+
 var (
 	backtickSpanPattern    = regexp.MustCompile("`([^`]+)`")
+	plainPathTokenPattern  = regexp.MustCompile(`([A-Za-z0-9_./-]+)`)
 	budgetNumberPattern    = regexp.MustCompile(`(\d+)`)
 	commonJSRequirePattern = regexp.MustCompile(`\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 	branchKeywordPattern   = regexp.MustCompile(`\b(if|elif|for|while|case|catch)\b`)
@@ -49,16 +57,36 @@ func changeArchitectureAndComplexityChecks(root string, edits []ChangeEdit) []Ch
 	if len(edits) == 0 {
 		return nil
 	}
+	factsByPath := extractAllEditFacts(edits)
 	rules, budgets := loadArchitecturePolicy(root)
-	checks := []CheckResult{checkArchitectureBoundaries(edits, rules)}
-	if changeHasCodeSource(edits) {
-		checks = append(checks, checkFunctionComplexityAndBudgets(edits, budgets))
+	checks := []CheckResult{checkArchitectureBoundaries(edits, rules, factsByPath)}
+	if changeHasCodeSource(edits, factsByPath) || budgets.maxFileLines > 0 {
+		checks = append(checks, checkFunctionComplexityAndBudgets(edits, budgets, factsByPath))
 	}
 	return checks
 }
 
+func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
+	facts := make(map[string]parsedEditFacts, len(edits))
+	for _, edit := range edits {
+		if filepath.Ext(edit.Path) == ".go" {
+			continue
+		}
+		lang, rawImports, symbols := project.ExtractFileFacts(edit.Path, []byte(edit.Content))
+		facts[edit.Path] = parsedEditFacts{
+			lang:       lang,
+			rawImports: rawImports,
+			symbols:    symbols,
+		}
+	}
+	return facts
+}
+
 func loadArchitecturePolicy(root string) ([]architectureImportRule, architectureQualityBudgets) {
-	rules := append([]architectureImportRule(nil), defaultArchitectureImportRules...)
+	var rules []architectureImportRule
+	for _, r := range defaultArchitectureImportRules {
+		rules = appendUniqueImportRule(rules, r)
+	}
 	budgets := architectureQualityBudgets{maxComplexity: maxFunctionComplexity}
 	if strings.TrimSpace(root) == "" {
 		return rules, budgets
@@ -69,11 +97,31 @@ func loadArchitecturePolicy(root string) ([]architectureImportRule, architecture
 	}
 	for _, raw := range strings.Split(string(data), "\n") {
 		if parsed, ok := parseAgentsImportRuleLine(raw); ok {
-			rules = append(rules, parsed)
+			rules = appendUniqueImportRule(rules, parsed)
 		}
 		parseAgentsBudgetLine(raw, &budgets)
 	}
 	return rules, budgets
+}
+
+func appendUniqueImportRule(rules []architectureImportRule, candidate architectureImportRule) []architectureImportRule {
+	if candidate.sourcePrefix == "" || len(candidate.forbidden) == 0 {
+		return rules
+	}
+	for i := range rules {
+		if rules[i].sourcePrefix == candidate.sourcePrefix {
+			for _, f := range candidate.forbidden {
+				if !slices.Contains(rules[i].forbidden, f) {
+					rules[i].forbidden = append(rules[i].forbidden, f)
+				}
+			}
+			return rules
+		}
+	}
+	return append(rules, architectureImportRule{
+		sourcePrefix: candidate.sourcePrefix,
+		forbidden:    append([]string(nil), candidate.forbidden...),
+	})
 }
 
 func parseAgentsBudgetLine(line string, budgets *architectureQualityBudgets) {
@@ -102,24 +150,37 @@ func parseAgentsImportRuleLine(line string) (architectureImportRule, bool) {
 	if idx < 0 {
 		return architectureImportRule{}, false
 	}
-	before := extractBacktickPaths(line[:idx])
-	after := extractBacktickPaths(line[idx+len("must never import"):])
+	before := extractRulePaths(line[:idx])
+	after := extractRulePaths(line[idx+len("must never import"):])
 	if len(before) == 0 || len(after) == 0 {
 		return architectureImportRule{}, false
 	}
+	source := normalizeRulePathPrefix(before[0])
+	forbidden := normalizeRulePaths(after)
+	if source == "" || len(forbidden) == 0 {
+		return architectureImportRule{}, false
+	}
 	return architectureImportRule{
-		sourcePrefix: normalizeRulePathPrefix(before[0]),
-		forbidden:    normalizeRulePaths(after),
+		sourcePrefix: source,
+		forbidden:    forbidden,
 	}, true
 }
 
-func extractBacktickPaths(segment string) []string {
-	matches := backtickSpanPattern.FindAllStringSubmatch(segment, -1)
+func extractRulePaths(segment string) []string {
 	var out []string
-	for _, m := range matches {
-		candidate := strings.TrimSpace(m[1])
-		if strings.Contains(candidate, "/") || strings.Contains(candidate, ".") {
+	for _, m := range backtickSpanPattern.FindAllStringSubmatch(segment, -1) {
+		candidate := strings.Trim(strings.TrimSpace(m[1]), ".,;:")
+		if candidate != "" && !strings.ContainsAny(candidate, " \t") {
 			out = append(out, candidate)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for _, tokenMatch := range plainPathTokenPattern.FindAllStringSubmatch(segment, -1) {
+		tok := strings.Trim(strings.TrimSpace(tokenMatch[1]), ".,;:-")
+		if strings.Contains(tok, "/") || strings.Contains(tok, ".") {
+			out = append(out, tok)
 		}
 	}
 	return out
@@ -132,17 +193,17 @@ func normalizeRulePathPrefix(raw string) string {
 func normalizeRulePaths(items []string) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		if norm := normalizeRulePathPrefix(item); norm != "" {
+		if norm := normalizeRulePathPrefix(item); norm != "" && !slices.Contains(out, norm) {
 			out = append(out, norm)
 		}
 	}
 	return out
 }
 
-func checkArchitectureBoundaries(edits []ChangeEdit, rules []architectureImportRule) CheckResult {
+func checkArchitectureBoundaries(edits []ChangeEdit, rules []architectureImportRule, factsByPath map[string]parsedEditFacts) CheckResult {
 	var violations []string
 	for _, edit := range edits {
-		violations = append(violations, editArchitectureViolations(edit, rules)...)
+		violations = append(violations, editArchitectureViolations(edit, rules, factsByPath[edit.Path])...)
 	}
 	if len(violations) > 0 {
 		return CheckResult{
@@ -160,9 +221,9 @@ func checkArchitectureBoundaries(edits []ChangeEdit, rules []architectureImportR
 	}
 }
 
-func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule) []string {
+func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule, facts parsedEditFacts) []string {
 	slashPath := strings.TrimPrefix(filepath.ToSlash(edit.Path), "./")
-	imports := extractEditImports(edit.Path, edit.Content)
+	imports := extractEditImports(edit.Path, edit.Content, facts.rawImports)
 	if len(imports) == 0 {
 		return nil
 	}
@@ -204,12 +265,14 @@ func importMatchesForbidden(importPath, forbidden string) bool {
 
 var rawQuotedImportSpec = regexp.MustCompile(`['"<]([^'">]+)['">]`)
 
-func extractEditImports(path, content string) []string {
+func extractEditImports(path, content string, rawImports []string) []string {
 	if filepath.Ext(path) == ".go" {
 		return extractGoEditImports(path, content)
 	}
 	slashDir := filepath.Dir(strings.TrimPrefix(filepath.ToSlash(path), "./"))
-	_, rawImports, _ := project.ExtractFileFacts(path, []byte(content))
+	if rawImports == nil {
+		_, rawImports, _ = project.ExtractFileFacts(path, []byte(content))
+	}
 	imports := make([]string, 0, len(rawImports)*2)
 	appendNorm := func(raw string) {
 		if m := rawQuotedImportSpec.FindStringSubmatch(raw); len(m) == 2 {
@@ -250,27 +313,27 @@ func extractGoEditImports(path, content string) []string {
 	return imports
 }
 
-func changeHasCodeSource(edits []ChangeEdit) bool {
+func changeHasCodeSource(edits []ChangeEdit, factsByPath map[string]parsedEditFacts) bool {
 	if changeHasGo(edits) {
 		return true
 	}
 	for _, edit := range edits {
-		lang, _, symbols := project.ExtractFileFacts(edit.Path, []byte(edit.Content))
-		if lang != "" && lang != "Markdown" && lang != "Text" && len(symbols) > 0 {
+		f := factsByPath[edit.Path]
+		if f.lang != "" && f.lang != "Markdown" && f.lang != "Text" && len(f.symbols) > 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQualityBudgets) CheckResult {
+func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQualityBudgets, factsByPath map[string]parsedEditFacts) CheckResult {
 	var violations []string
 	for _, edit := range edits {
 		violations = append(violations, fileLineBudgetViolations(edit, budgets)...)
 		if filepath.Ext(edit.Path) == ".go" {
 			violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content, budgets)...)
 		} else {
-			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets)...)
+			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets, factsByPath[edit.Path].symbols)...)
 		}
 	}
 	if len(violations) > 0 {
@@ -325,8 +388,10 @@ func goEditComplexityViolations(path, content string, budgets architectureQualit
 	return violations
 }
 
-func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
-	_, _, symbols := project.ExtractFileFacts(path, []byte(content))
+func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets, symbols []project.SymbolInfo) []string {
+	if symbols == nil {
+		_, _, symbols = project.ExtractFileFacts(path, []byte(content))
+	}
 	if len(symbols) == 0 {
 		return nil
 	}

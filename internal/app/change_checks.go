@@ -406,6 +406,7 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 }
 
 func (s *Service) RepairChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {
+	userGuidance := strings.TrimSpace(request.Message)
 	runtime, err := s.changeMessageRuntime(ctx, request)
 	if err != nil {
 		return nil, err
@@ -414,7 +415,11 @@ func (s *Service) RepairChangeMessage(ctx context.Context, id string, request Ch
 	if err != nil {
 		return nil, err
 	}
-	request.Message = "Repair the current proposal (including any test compile or assertion errors) without changing scope or acceptance criteria. Check evidence:\n" + changeCheckEvidence(session.Checks)
+	prompt := "Repair the current proposal (including any test compile or assertion errors) without changing scope or acceptance criteria. Check evidence:\n" + changeCheckEvidence(session.Checks)
+	if userGuidance != "" && userGuidance != "Repair the current proposal to satisfy failed checks." {
+		prompt += "\n\nUser repair guidance:\n" + userGuidance
+	}
+	request.Message = prompt
 	return s.generateChangeWithRuntime(ctx, root, session, request, runtime)
 }
 
@@ -430,6 +435,14 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 		return nil, root, fmt.Errorf("repair requires current failed checks and fewer than three attempts")
 	}
 	session.RepairAttempts++
+	if session.Workflow != nil {
+		if probeSummary, lessons := probeWorkflowFriction(session.Workflow, session.Checks); probeSummary != "" || len(lessons) > 0 {
+			if probeSummary != "" {
+				session.Workflow.ProbeSummary = probeSummary
+			}
+			session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
+		}
+	}
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, root, err
 	}
