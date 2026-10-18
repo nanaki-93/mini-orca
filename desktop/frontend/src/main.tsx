@@ -21,7 +21,7 @@ import { Button, Icon, Modal, Notice, Overlay, Spinner } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { DocsWorkspace } from './docs';
 import { AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
-import { Results, selectedResult } from './results';
+import { Results, computeWorkspaceIssueSummary, selectedResult } from './results';
 import { Editor, Context } from './editor';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
@@ -201,12 +201,8 @@ function App() {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [s.confirmation, s.project, live.page]);
-  const issueCount =
-    (s.findings?.filter(
-      (f) => f.status !== 'fixed' && f.status !== 'retired' && f.status !== 'dismissed',
-    ).length ||
-      s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
-      0) + (s.features?.suggestions.length || 0);
+  const { totalOpenIssues, featureCount } = computeWorkspaceIssueSummary(s);
+  const issueCount = totalOpenIssues + featureCount;
   const nonCurrentWorktrees = s.gitWorkspace?.worktrees.filter((t) => !t.current) || [];
   const worktreeCount = nonCurrentWorktrees.length;
   const runningAgentsCount =

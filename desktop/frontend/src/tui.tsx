@@ -20,6 +20,7 @@ import { collectAgentDashboardItems, type StageId } from './agents';
 import { collectHarnessLessons, containsGuideline, insertGuidelineSection } from './instructions';
 import { resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
+import { compareBySeverity, computeWorkspaceIssueSummary } from './results';
 import { isAddedLine, isRemovedLine, summarizeFileEdit } from './change-shared';
 import { Spinner, classifyNoticeTone, human } from './ui';
 import type * as M from './models';
@@ -212,7 +213,11 @@ function collectTuiIssues(s: State, agentItems = collectAgentDashboardItems(s)):
         });
       }
     }
-    for (const rep of res?.security || []) {
+    const secReports = [
+      ...(res?.security || []),
+      ...(cat === 'security' && s.securityReport ? [s.securityReport] : []),
+    ];
+    for (const rep of secReports) {
       for (const f of rep.findings || []) {
         if (f.triage === 'dismissed') continue;
         const path = f.source_anchor.path || rep.path;
@@ -250,7 +255,7 @@ function collectTuiIssues(s: State, agentItems = collectAgentDashboardItems(s)):
       }
     }
   }
-  return dedupeFindingItems(rows);
+  return dedupeFindingItems(rows).sort(compareBySeverity);
 }
 
 export function TuiApp({
@@ -343,6 +348,29 @@ export function TuiApp({
     }
   }, [agentS.changeSeed?.title, agentS.changeSeed?.message, s.selectedAgentPath]);
 
+  useEffect(() => {
+    if (!s.features && !s.resourceErrors['feature suggestions']) void w.loadFeatures();
+  }, [s.project?.project_id]);
+
+  useEffect(() => {
+    if (!s.run) return;
+    for (const cat of ['bugs', 'security', 'performance'] as const) {
+      const current = s.results[cat];
+      const section = s.run.sections.find((sec) => sec.category === cat);
+      const needsLoad =
+        !current ||
+        JSON.stringify(current.identity) !== JSON.stringify(s.run.identity) ||
+        JSON.stringify(current.progress) !== JSON.stringify(section);
+      if (needsLoad && !s.resourceErrors[cat] && !s.resourceErrors[`${cat} results`]) {
+        void w.loadResults(cat);
+      }
+    }
+  }, [s.run]);
+
+  useEffect(() => {
+    if (s.run?.features && !s.resourceErrors['feature suggestions']) void w.loadFeatures();
+  }, [s.run?.features?.status, s.run?.features?.report_hash]);
+
   const currentTabPage: Page =
     findingCategory(s) || s.page === 'finding'
       ? 'bugs'
@@ -356,10 +384,15 @@ export function TuiApp({
     ) || TUI_TABS[0];
 
   const docs = useMemo(() => resolveProjectDocs(s), [s.overview, s.project, s.index]);
+  const issueSummary = useMemo(
+    () => computeWorkspaceIssueSummary(s),
+    [s.results, s.findings, s.completedFindings, s.run, s.overview, s.features],
+  );
   const allIssues = useMemo(
     () => collectTuiIssues(s, agentItems),
-    [s.findings, s.results, s.completedFindings, agentItems],
+    [s.findings, s.results, s.completedFindings, s.securityReport, agentItems],
   );
+  const allOpenIssues = useMemo(() => allIssues.filter((i) => i.status !== 'done'), [allIssues]);
   const categoryFilteredIssues = allIssues.filter(
     (i) => issueCategory === 'all' || i.category === issueCategory,
   );
@@ -368,7 +401,7 @@ export function TuiApp({
   const doneIssues = categoryFilteredIssues.filter((i) => i.status === 'done');
   const issues =
     issueView === 'in_progress' ? inProgressIssues : issueView === 'done' ? doneIssues : openIssues;
-  const overviewIssues = issues.slice(0, 8);
+  const overviewIssues = allOpenIssues.slice(0, 8);
   const archComponents = docs.components || [];
   const editorFiles = (s.index?.files || []).slice(0, 24);
   const featureSuggestions = (s.features?.suggestions || []).filter(
@@ -1137,10 +1170,14 @@ export function TuiApp({
         {TUI_TABS.map((t) => {
           const isCurrent = activeHubEntry.key === t.key;
           const badge =
-            t.key === '2' && (workflow || agentItems.length > 0 || issues.length > 0)
+            t.key === '2' &&
+            (workflow ||
+              agentItems.length > 0 ||
+              issueSummary.totalOpenIssues > 0 ||
+              issueSummary.featureCount > 0)
               ? workflow
                 ? `[${workflow.status}]`
-                : `(${agentItems.length}a/${issues.length}i)`
+                : `(${agentItems.length}a/${issueSummary.totalOpenIssues}i/${issueSummary.featureCount}f)`
               : t.key === '3' && changedFiles.length > 0
                 ? `(${changedFiles.length}d)`
                 : '';
@@ -1250,9 +1287,10 @@ export function TuiApp({
               <div className="tui-box">
                 <span className="tui-box-title">OPEN ISSUES</span>
                 <span className="tui-box-meta">[2] STUDIO</span>
-                <div className="tui-stat tui-c-amber">{issues.length}</div>
+                <div className="tui-stat tui-c-amber">{issueSummary.totalOpenIssues}</div>
                 <div className="tui-sub">
-                  {s.features?.suggestions.length || 0} feature ideas queued
+                  {issueSummary.bugCount}b · {issueSummary.secCount}s · {issueSummary.perfCount}p ·{' '}
+                  {issueSummary.featureCount} feature ideas
                 </div>
               </div>
               <div className="tui-box">
@@ -1304,7 +1342,7 @@ export function TuiApp({
                 <span className="tui-box-title">
                   PRIORITY FINDINGS (j/k move · Enter/a = Agent Fix)
                 </span>
-                <span className="tui-box-meta">{issues.length} total</span>
+                <span className="tui-box-meta">{issueSummary.totalOpenIssues} open</span>
                 {overviewIssues.length === 0 ? (
                   <p className="tui-sub">
                     No open issues. Press <code>r</code> or type <code>analyze</code> to scan.

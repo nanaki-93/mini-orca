@@ -1665,7 +1665,7 @@ export class Workspace {
     if (JSON.stringify(this.state.run) !== old) {
       await this.refreshProject();
       const category = findingCategory(this.state);
-      if (category) {
+      if (category || Object.keys(this.state.results).length > 0) {
         await Promise.all([
           this.loadResults('bugs'),
           this.loadResults('security'),

@@ -277,6 +277,71 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
   });
   return dedupeFindingItems(mapped);
 }
+export const SEVERITY_RANK: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
+export function compareBySeverity(
+  a: { severity: string; path: string; line?: number },
+  b: { severity: string; path: string; line?: number },
+): number {
+  return (
+    (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9) ||
+    a.path.localeCompare(b.path) ||
+    (a.line ?? 0) - (b.line ?? 0)
+  );
+}
+
+export function computeWorkspaceIssueSummary(s: State): {
+  bugCount: number;
+  secCount: number;
+  perfCount: number;
+  totalOpenIssues: number;
+  featureCount: number;
+} {
+  const isScopedRun =
+    !!s.run &&
+    (s.run.plan.recover_incomplete || s.run.plan.stale_only || s.run.plan.retry_stale_failed);
+  const bugRows = resultRows(s, 'bugs');
+  const secRows = resultRows(s, 'security');
+  const perfRows = resultRows(s, 'performance');
+  const openCountFor = (cat: FindingCategory, rows: ResultRow[]) => {
+    const openRows = rows.filter((row) => !isClosedStatus(row.status)).length;
+    if (s.results[cat]) {
+      return openRows;
+    }
+    const hasSemanticForCat = (s.findings || []).some((f) => f.category === cat);
+    if (hasSemanticForCat) {
+      return openRows;
+    }
+    const sec = s.run?.sections.find((item) => item.category === cat);
+    const runCount = typeof sec?.finding_count === 'number' ? sec.finding_count : 0;
+    if (isScopedRun) {
+      return Math.max(openRows, runCount);
+    }
+    return Math.max(openRows, runCount);
+  };
+  const bugCount = openCountFor('bugs', bugRows);
+  const secCount = openCountFor('security', secRows);
+  const perfCount = openCountFor('performance', perfRows);
+  const allLoaded = Boolean(s.results.bugs && s.results.security && s.results.performance);
+  const totalOpenIssues = allLoaded
+    ? [...new Map([...bugRows, ...perfRows, ...secRows].map((r) => [r.key, r])).values()].filter(
+        (row) => !isClosedStatus(row.status),
+      ).length
+    : bugCount + secCount + perfCount;
+  const featureCount = s.features
+    ? s.features.suggestions.filter((idea) => idea.status !== 'dismissed').length
+    : typeof s.run?.features?.suggestion_count === 'number'
+      ? s.run.features.suggestion_count
+      : 0;
+  return { bugCount, secCount, perfCount, totalOpenIssues, featureCount };
+}
+
 export function selectedResult(s: State) {
   const selected = s.selectedFinding;
   if (!selected) return undefined;
@@ -307,7 +372,7 @@ export function Results({ s }: { s: State }) {
   }, [s.page]);
   const [showDone, setShowDone] = useState(false);
   const [inProgressOnly, setInProgressOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'default' | 'severity' | 'path' | 'category'>('default');
+  const [sortBy, setSortBy] = useState<'severity' | 'path' | 'category'>('severity');
   const [goals, setGoals] = useState(s.features?.goals || '');
   useEffect(() => {
     setGoals(s.features?.goals || '');
@@ -398,13 +463,6 @@ export function Results({ s }: { s: State }) {
         : categoryFilter === 'security'
           ? secRows
           : perfRows;
-  const severityRank: Record<string, number> = {
-    critical: 0,
-    high: 1,
-    medium: 2,
-    low: 3,
-    info: 4,
-  };
   const filtered = unique
     .filter(
       (row) =>
@@ -419,22 +477,13 @@ export function Results({ s }: { s: State }) {
         (!severity || row.severity === severity),
     )
     .sort((a, b) => {
-      if (sortBy === 'severity') {
-        return (
-          (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) ||
-          a.path.localeCompare(b.path)
-        );
-      }
       if (sortBy === 'path') {
         return a.path.localeCompare(b.path) || a.line - b.line;
       }
       if (sortBy === 'category') {
-        return (
-          (a.category || '').localeCompare(b.category || '') ||
-          (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9)
-        );
+        return (a.category || '').localeCompare(b.category || '') || compareBySeverity(a, b);
       }
-      return 0;
+      return compareBySeverity(a, b);
     });
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(listView.page, pageCount);
@@ -1069,18 +1118,15 @@ export function Results({ s }: { s: State }) {
               <Icon name="down" />
             </div>
             {!showFeatures && (
-              <div className="priority-filter" data-active={sortBy !== 'default'}>
+              <div className="priority-filter" data-active={sortBy !== 'severity'}>
                 <span className="priority-filter-icon" aria-hidden="true">
                   <Icon name="layers" />
                 </span>
                 <select
                   aria-label="Sort issues"
                   value={sortBy}
-                  onChange={(e) =>
-                    setSortBy(e.target.value as 'default' | 'severity' | 'path' | 'category')
-                  }
+                  onChange={(e) => setSortBy(e.target.value as 'severity' | 'path' | 'category')}
                 >
-                  <option value="default">Sort: Default</option>
                   <option value="severity">Sort: Severity</option>
                   <option value="path">Sort: File Path</option>
                   <option value="category">Sort: Category</option>

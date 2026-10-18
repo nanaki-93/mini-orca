@@ -18,6 +18,7 @@ import { ModelIcon } from './agent-model';
 import { Tests } from './tools';
 import { ModelSelectors } from './analysis-models';
 import { WorkflowModels } from './change-workflow';
+import { computeWorkspaceIssueSummary } from './results';
 import {
   Button,
   BulletContent,
@@ -158,33 +159,10 @@ export function Summary({ s }: { s: State }) {
   const overview = s.overview;
   const coverage = overview?.analysis_coverage;
   const percent = coverage?.total ? Math.round((100 * coverage.fresh) / coverage.total) : null;
-  const features = s.features;
-  const featureCount =
-    features?.suggestions.filter((idea) => idea.status !== 'dismissed').length || 0;
+  const { bugCount, secCount, perfCount, totalOpenIssues, featureCount } =
+    computeWorkspaceIssueSummary(s);
   const draftChange = s.change?.state === 'draft' ? s.change : undefined;
   const currentWork = draftChange || s.changeHistory?.find((entry) => entry.state === 'draft');
-  const bugSection = s.run?.sections.find((value) => value.category === 'bugs');
-  const secSection = s.run?.sections.find((value) => value.category === 'security');
-  const perfSection = s.run?.sections.find((value) => value.category === 'performance');
-  const isScopedRepairRun =
-    !!s.run &&
-    (s.run.plan.recover_incomplete || s.run.plan.stale_only || s.run.plan.retry_stale_failed);
-  const countCategoryFindings = (
-    cat: 'bugs' | 'security' | 'performance',
-    sectionCount?: number | null,
-  ) => {
-    const savedCount =
-      s.results[cat]?.saved_finding_count ??
-      s.findings?.filter((f) => f.category === cat && f.status !== 'fixed').length;
-    if (isScopedRepairRun) {
-      return Math.max(sectionCount ?? 0, savedCount ?? 0);
-    }
-    return sectionCount ?? savedCount ?? 0;
-  };
-  const bugCount = countCategoryFindings('bugs', bugSection?.finding_count);
-  const secCount = countCategoryFindings('security', secSection?.finding_count);
-  const perfCount = countCategoryFindings('performance', perfSection?.finding_count);
-  const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0) + featureCount;
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('editor') : w.viewChange(id));
 
   const pausedOrInterrupted = !!s.run && ['paused', 'interrupted'].includes(s.run.status);
@@ -444,10 +422,11 @@ export function Summary({ s }: { s: State }) {
             </span>
             {percent !== null && <span className="pill">{percent}% analyzed</span>}
           </div>
-          <div className="kpi-pulse-value box-value">{totalIssues} Open</div>
+          <div className="kpi-pulse-value box-value">{totalOpenIssues} Open</div>
           <div className="box-meta">
             <span>
-              {bugCount} Bugs · {secCount} Sec · {perfCount} Perf
+              {bugCount} Bugs · {secCount} Sec · {perfCount} Perf · {featureCount}{' '}
+              {featureCount === 1 ? 'Feature' : 'Features'}
             </span>
             <Icon name="arrow" />
           </div>
