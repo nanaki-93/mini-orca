@@ -4,7 +4,7 @@ import { evaluateBootstrapChecklist, type State } from './workspace';
 import { Badge, Button, Disclosure, Heading, Icon, Notice, Panel, Prose } from './ui';
 import type { InstructionPreview } from './models';
 
-function containsGuideline(text: string, guideline: string) {
+export function containsGuideline(text: string, guideline: string) {
   const normalize = (value: string) => value.trim().replace(/\s+/g, ' ');
   return normalize(text).includes(normalize(guideline));
 }
@@ -22,7 +22,7 @@ function addGuidelines(content: string, presets: InstructionPreview['presets']) 
   return draft;
 }
 
-function insertGuidelineSection(content: string, category: string, additions: string) {
+export function insertGuidelineSection(content: string, category: string, additions: string) {
   // Only merge with a real level-two heading, never a heading shown in a code example.
   let fence = '',
     offset = 0;
@@ -113,10 +113,23 @@ export function Instructions({ s }: { s: State }) {
     s.instructionsTab || 'rules',
   );
   const [ruleSubTab, setRuleSubTab] = useState<'boundaries' | 'lessons' | 'draft'>('boundaries');
-  const [path, setPath] = useState(preview?.path || 'AGENTS.md');
-  const [content, setContent] = useState(preview?.existing_content || '');
+  const [path, setPath] = useState(s.instructionDraft?.path || preview?.path || 'AGENTS.md');
+  const [content, setContentState] = useState(
+    s.instructionDraft?.content ?? preview?.existing_content ?? '',
+  );
+  const setContent = (next: string) => {
+    setContentState(next);
+    w.set({ instructionDraft: { path, content: next } });
+  };
   const [selected, setSelected] = useState<string[]>([]);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() =>
+    Boolean(
+      s.instructionDraft &&
+      preview &&
+      s.instructionDraft.path === preview.path &&
+      s.instructionDraft.content !== preview.existing_content,
+    ),
+  );
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [sourceLayer, setSourceLayer] = useState('internal/api/');
@@ -132,17 +145,33 @@ export function Instructions({ s }: { s: State }) {
     }
   }, [s.instructionsTab]);
   useEffect(() => {
+    if (s.instructionDraft && s.instructionDraft.path === path) {
+      if (s.instructionDraft.content !== content) {
+        setContentState(s.instructionDraft.content);
+      }
+      if (preview && s.instructionDraft.content !== preview.existing_content) {
+        setEditing(true);
+      }
+      return;
+    }
     if (!preview) return;
     setPath(preview.path);
-    setContent(preview.existing_content);
+    const nextText =
+      s.instructionDraft?.path === preview.path
+        ? s.instructionDraft.content
+        : preview.existing_content;
+    setContentState(nextText);
+    if (nextText !== preview.existing_content) {
+      setEditing(true);
+    }
     setSelected([]);
     setQuery('');
     setCategory('');
-    const nextBudgets = parseQualityBudgets(preview.existing_content);
+    const nextBudgets = parseQualityBudgets(nextText);
     setBudgetComplexity(nextBudgets.maxComplexity);
     setBudgetFnLines(nextBudgets.maxFnLines);
     setBudgetFileLines(nextBudgets.maxFileLines);
-  }, [preview]);
+  }, [preview, s.instructionDraft?.path, s.instructionDraft?.content]);
   const ready =
     !!preview &&
     preview.path === path &&

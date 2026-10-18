@@ -2452,3 +2452,18 @@ button.statusbar-item:hover {
   border-radius: 0;
   flex: 1;
 }
+
+.hub-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--subtle-line);
+}
+
+.hunk-card.focused-hunk {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}

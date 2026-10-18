@@ -114,6 +114,7 @@ export interface State {
   workspaceTrust?: boolean;
   bootstrapExec?: M.BootstrapExecResult;
   instructionsTab?: 'rules' | 'guidelines' | 'effective' | 'bootstrap';
+  instructionDraft?: { path: string; content: string };
 }
 export interface ModelPreset {
   id: string;
@@ -1573,7 +1574,7 @@ export class Workspace {
     if (['chat', 'changes', 'history', 'agents'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
-      await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
+      await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md', true);
     const category = findingCategory(this.state);
     if (category) await this.loadResults(category);
     if (page === 'context') await this.inspectContext();
@@ -2398,17 +2399,34 @@ export class Workspace {
     });
     await this.startAgentFix(seed);
   }
-  async loadInstructions(path: string) {
+  async loadInstructions(path: string, preserveDraft = false) {
     if (!this.state.project) return false;
     const request = ++this.instructionRequest;
-    this.set({ instructionPreview: undefined });
+    const existingDraft =
+      preserveDraft && this.state.instructionDraft?.path === path
+        ? this.state.instructionDraft
+        : undefined;
+    this.set({
+      instructionPreview: undefined,
+      ...(existingDraft ? {} : { instructionDraft: undefined }),
+    });
     let loaded = false;
     await this.resource(
       'project instructions',
       () =>
         this.api.get<M.InstructionPreview>(`${current}/instructions`, { ...this.identity(), path }),
       (instructionPreview) => {
-        this.set({ instructionPreview });
+        const currentDraft =
+          preserveDraft && this.state.instructionDraft?.path === instructionPreview.path
+            ? this.state.instructionDraft
+            : existingDraft;
+        this.set({
+          instructionPreview,
+          instructionDraft: currentDraft || {
+            path: instructionPreview.path,
+            content: instructionPreview.existing_content,
+          },
+        });
         loaded = true;
       },
       () => request === this.instructionRequest,
@@ -2444,7 +2462,7 @@ export class Workspace {
   }
   clearInstructionScope() {
     this.instructionRequest++;
-    this.set({ instructionPreview: undefined });
+    this.set({ instructionPreview: undefined, instructionDraft: undefined });
   }
   async proposeInstructions(content: string) {
     await this.act('Preview instruction diff', async () => {

@@ -272,7 +272,18 @@ export function Editor({ s }: { s: State }) {
   const activeEdit = mode === 'diff' ? exactEdit || change?.changes?.[0] : exactEdit;
   useEffect(() => {
     if (exactEdit) setMode('diff');
-  }, [exactEdit?.path, change?.revision]);
+    setFocusedHunkIdx(0);
+  }, [exactEdit?.path, activePath, change?.id, change?.revision]);
+
+  const focusDiffHunk = (nextIdx: number) => {
+    setFocusedHunkIdx(nextIdx);
+    if (typeof document !== 'undefined') {
+      const el = document.querySelector(`[data-hunk-idx="${nextIdx}"]`);
+      if (el && typeof (el as HTMLElement).scrollIntoView === 'function') {
+        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  };
 
   const [opened, setOpened] = useState<string[]>(() =>
     [...new Set([activePath, ...changedPaths])].filter(Boolean),
@@ -538,7 +549,7 @@ export function Editor({ s }: { s: State }) {
                         aria-label="Previous hunk"
                         disabled={hunks.length <= 1}
                         onClick={() =>
-                          setFocusedHunkIdx((i) => (i - 1 + hunks.length) % hunks.length)
+                          focusDiffHunk((focusedHunkIdx - 1 + hunks.length) % hunks.length)
                         }
                       />
                       <span className="small muted font-mono">
@@ -549,7 +560,7 @@ export function Editor({ s }: { s: State }) {
                         icon="chevron"
                         aria-label="Next hunk"
                         disabled={hunks.length <= 1}
-                        onClick={() => setFocusedHunkIdx((i) => (i + 1) % hunks.length)}
+                        onClick={() => focusDiffHunk((focusedHunkIdx + 1) % hunks.length)}
                       />
                     </div>
                   )}
@@ -766,7 +777,8 @@ export function Editor({ s }: { s: State }) {
                             return (
                               <div
                                 key={hunk.index}
-                                className={`hunk-card ${isAccepted ? 'accepted' : ''}`}
+                                data-hunk-idx={hunk.index}
+                                className={`hunk-card ${isAccepted ? 'accepted' : ''}${focusedHunkIdx === hunk.index ? ' focused-hunk' : ''}`}
                               >
                                 <div className="hunk-card-head">
                                   <div className="stack" style={{ gap: '2px' }}>

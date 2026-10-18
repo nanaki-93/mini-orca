@@ -15,6 +15,7 @@ import {
   type State,
 } from './workspace';
 import { collectAgentDashboardItems, type StageId } from './agents';
+import { collectHarnessLessons, containsGuideline, insertGuidelineSection } from './instructions';
 import { resolveProjectDocs } from './docs';
 import { dedupeFindingItems, findingName, findingTitle } from './finding-name';
 import { isAddedLine, isRemovedLine, summarizeFileEdit } from './change-shared';
@@ -478,16 +479,22 @@ export function TuiApp({
     setCmdOutput(`Switched TUI palette to ${next.label}`);
   };
 
+  const activeInstructionDraft =
+    s.instructionDraft?.content ||
+    tuiCustomDraft ||
+    s.projectInstructions?.existing_content ||
+    s.instructionPreview?.existing_content ||
+    '';
+
   const graduateTuiLesson = (ruleText: string, lessonId: string) => {
-    const block = `\n## Harness² Graduated Lesson\n- ${ruleText}`;
-    const current =
-      tuiCustomDraft ||
-      s.projectInstructions?.existing_content ||
-      s.instructionPreview?.existing_content ||
-      '';
-    if (!current.includes(ruleText)) {
-      setTuiCustomDraft(`${current.trimEnd()}\n${block}\n`.trimStart());
-    }
+    const bullet = ruleText.startsWith('- ') ? ruleText : `- ${ruleText}`;
+    const targetPath = s.instructionDraft?.path || s.instructionPreview?.path || 'AGENTS.md';
+    const baseText = activeInstructionDraft || '# Project instructions';
+    const nextDraft = containsGuideline(baseText, bullet)
+      ? baseText
+      : insertGuidelineSection(baseText, 'Harness² Lessons & Guardrails', bullet);
+    setTuiCustomDraft(nextDraft);
+    w.set({ instructionDraft: { path: targetPath, content: nextDraft } });
     setGraduatedTuiLessons((prev) => (prev.includes(lessonId) ? prev : [...prev, lessonId]));
     setCmdOutput(`Graduated Harness² lesson into AGENTS.md: ${ruleText}`);
   };
@@ -608,6 +615,7 @@ export function TuiApp({
           );
           const nextSub = activeHubEntry.subPages[(curSubIdx + 1) % activeHubEntry.subPages.length];
           if (nextSub) {
+            setSelectedIdx(0);
             void w.navigate(nextSub.page);
             setCmdOutput(`Sub-view: ${nextSub.label}`);
           }
@@ -1220,7 +1228,7 @@ export function TuiApp({
               </div>
               <div className="tui-box">
                 <span className="tui-box-title">OPEN ISSUES</span>
-                <span className="tui-box-meta">[5] TRIAGE</span>
+                <span className="tui-box-meta">[2] STUDIO</span>
                 <div className="tui-stat tui-c-amber">{issues.length}</div>
                 <div className="tui-sub">
                   {s.features?.suggestions.length || 0} feature ideas queued
@@ -1254,7 +1262,7 @@ export function TuiApp({
               </div>
               <div className="tui-box focused">
                 <span className="tui-box-title">AGENT PIPELINE</span>
-                <span className="tui-box-meta">[7] AGENTS</span>
+                <span className="tui-box-meta">[2] AGENTS</span>
                 <div className="tui-stat tui-c-purple">
                   {workflow ? human(workflow.status) : change ? 'Staged' : 'Idle'}
                 </div>
@@ -1365,7 +1373,7 @@ export function TuiApp({
                     className="tui-btn"
                     onClick={() => void w.navigate('agents')}
                   >
-                    [7: Agent Mission Control]
+                    [2: Agent Mission Control]
                   </button>
                   <button
                     type="button"
@@ -3008,7 +3016,13 @@ export function TuiApp({
             const missingCount = bootstrapPillars.length - readyCount;
             const defaultLessonRule =
               'Propagate context.Context cancellation and add a regression test for every check repair.';
-            const isDefaultLessonGraduated = graduatedTuiLessons.includes('lesson-default-1');
+            const dynamicLessons = collectHarnessLessons(s);
+            const allTuiLessons = [
+              defaultLessonRule,
+              ...dynamicLessons.filter(
+                (l) => l.trim().toLowerCase() !== defaultLessonRule.toLowerCase(),
+              ),
+            ];
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div
@@ -3070,31 +3084,44 @@ export function TuiApp({
                       </span>
                       <span className="tui-badge tui-c-purple">DISCOVERED INVARIANTS</span>
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '6px 8px',
-                        border: '1px solid var(--tui-border)',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <div>
-                        <strong className="tui-c-accent">
-                          Verification &amp; Self-Repair Invariant
-                        </strong>
-                        <div className="tui-sub">Rule: {defaultLessonRule}</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="tui-btn primary"
-                        disabled={isDefaultLessonGraduated}
-                        onClick={() => graduateTuiLesson(defaultLessonRule, 'lesson-default-1')}
-                      >
-                        [{isDefaultLessonGraduated ? 'Graduated [OK]' : 'g: Graduate to AGENTS.md'}]
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {allTuiLessons.map((lessonRule, idx) => {
+                        const lessonId = idx === 0 ? 'lesson-default-1' : `lesson-dyn-${idx}`;
+                        const isGraduated =
+                          graduatedTuiLessons.includes(lessonId) ||
+                          containsGuideline(activeInstructionDraft, lessonRule);
+                        return (
+                          <div
+                            key={lessonId}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 8px',
+                              border: '1px solid var(--tui-border)',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <div>
+                              <strong className="tui-c-accent">
+                                {idx === 0
+                                  ? 'Verification & Self-Repair Invariant'
+                                  : `Harness² Lesson #${idx}`}
+                              </strong>
+                              <div className="tui-sub">Rule: {lessonRule}</div>
+                            </div>
+                            <button
+                              type="button"
+                              className="tui-btn primary"
+                              disabled={isGraduated}
+                              onClick={() => graduateTuiLesson(lessonRule, lessonId)}
+                            >
+                              [{isGraduated ? 'Graduated [OK]' : 'g: Graduate to AGENTS.md'}]
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : rulesSection === 'bootstrap' ? (
@@ -3303,9 +3330,7 @@ export function TuiApp({
                       </button>
                     </div>
                     <pre className="tui-pre">
-                      {tuiCustomDraft ||
-                        s.projectInstructions?.existing_content ||
-                        s.instructionPreview?.existing_content ||
+                      {activeInstructionDraft ||
                         'AGENTS.md rules enforce surgical diffs, passing tests, and explicit Apply.'}
                     </pre>
                   </div>

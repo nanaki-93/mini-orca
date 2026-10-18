@@ -1088,6 +1088,7 @@ try {
       await page.getByRole('tab', { name: /^Diff Review/ }).click();
       await page.getByText('File Edit Summary:').waitFor();
       await page.getByLabel('Hunk #1 explanation').waitFor();
+      await page.locator('.hunk-card.focused-hunk[data-hunk-idx="0"]').waitFor();
       const whyToggle = page.getByRole('button', {
         name: 'Toggle inline explanations',
         exact: true,
@@ -1155,6 +1156,27 @@ try {
         .waitFor();
       await page.getByRole('button', { name: '[g: Graduate to AGENTS.md]', exact: true }).click();
       await page.getByRole('button', { name: '[Graduated [OK]]', exact: true }).waitFor();
+
+      // Switch back to GUI and verify the TUI-graduated lesson + GUI boundary rule persist in AGENTS.md Draft
+      const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
+      await cmdPrompt.fill(':gui');
+      await cmdPrompt.press('Enter');
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page
+        .getByRole('tablist', { name: 'Rule studio sections', exact: true })
+        .getByRole('tab', { name: /^AGENTS\.md Draft/ })
+        .click();
+      const syncedDraft = await page
+        .getByRole('textbox', { name: 'Custom instructions', exact: true })
+        .inputValue();
+      assert.ok(
+        syncedDraft.includes('`desktop/frontend/` must never import `internal/storage/`.') &&
+          syncedDraft.includes(
+            'Propagate context.Context cancellation and add a regression test for every check repair.',
+          ),
+        `Expected GUI/TUI synced AGENTS.md draft to contain both boundary rule and TUI lesson, got: ${syncedDraft}`,
+      );
     } finally {
       await close();
     }
