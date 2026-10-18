@@ -1532,6 +1532,72 @@ export function AgentsWorkspace({ s }: { s: State }) {
               <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
             )}
 
+            {(workflow?.probe_summary || (workflow?.harness_lessons?.length || 0) > 0) && (
+              <div
+                className="panel"
+                aria-label="Harness² Recursive Loop Diagnostics"
+                style={{
+                  padding: '10px 14px',
+                  background: 'var(--bg-soft)',
+                  border: '1px solid var(--line)',
+                }}
+              >
+                <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                  <div className="row wrap" style={{ gap: '6px', alignItems: 'center' }}>
+                    <Badge value="Harness² Loop" tone="violet" />
+                    <strong className="small">Propose → Probe → Compose Diagnostics</strong>
+                  </div>
+                  {(workflow?.harness_lessons?.length || 0) > 0 && (
+                    <Button
+                      tone="ghost small"
+                      onClick={() => {
+                        w.set({ instructionsTab: 'rules' });
+                        void w.navigate('instructions');
+                      }}
+                    >
+                      Graduate Lessons to AGENTS.md ({workflow?.harness_lessons?.length})
+                    </Button>
+                  )}
+                </div>
+                {workflow?.probe_summary && (
+                  <p className="small muted" style={{ marginTop: '6px', marginBottom: 0 }}>
+                    <strong>Friction Probe:</strong> {workflow.probe_summary}
+                  </p>
+                )}
+                {(workflow?.harness_lessons?.length || 0) > 0 && (
+                  <div style={{ marginTop: '6px' }}>
+                    <BulletContent
+                      title="Reusable Harness Lessons"
+                      items={workflow?.harness_lessons || []}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(() => {
+              const assistantMsg = [...(change.messages || [])]
+                .reverse()
+                .find((m) => m.role === 'assistant')?.content;
+              if (!assistantMsg) return null;
+              return (
+                <div
+                  className="panel"
+                  aria-label="Proposed solution summary"
+                  style={{
+                    padding: '10px 14px',
+                    background: 'var(--raised)',
+                    border: '1px solid var(--line)',
+                  }}
+                >
+                  <strong className="small uppercase muted">Proposed Solution Summary</strong>
+                  <div style={{ marginTop: '4px' }}>
+                    <Prose text={assistantMsg} />
+                  </div>
+                </div>
+              );
+            })()}
+
             <div
               className="proposal-action-banner"
               style={{
@@ -1625,6 +1691,7 @@ export function AgentsWorkspace({ s }: { s: State }) {
                       edit={edit}
                       index={idx}
                       total={visibleDiffFiles.length}
+                      symbols={agentState.index?.files.find((f) => f.path === edit.path)?.symbols}
                     />
                   ))}
                 </div>

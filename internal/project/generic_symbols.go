@@ -120,3 +120,53 @@ func genericImport(language, line string) bool {
 		return false
 	}
 }
+
+// ExtractFileFacts returns the detected language, raw import lines, and symbol spans
+// for any non-Go source file.
+func ExtractFileFacts(path string, source []byte) (string, []string, []SymbolInfo) {
+	lang := detectLanguage(path)
+	if lang == "Go" {
+		imports, symbols, _ := extractGoFacts(path, source)
+		return lang, imports, symbols
+	}
+	imports, symbols := extractGenericFacts(lang, source)
+	return lang, imports, symbols
+}
+
+var quotedImportPattern = regexp.MustCompile(`['"<]([^'">]+)['">]`)
+
+// NormalizeGenericImportPath extracts a slash-normalized module path from a raw
+// import statement across TypeScript/JS, Python, Rust, JVM, C/C++, C#, Ruby, PHP, and Elixir.
+func NormalizeGenericImportPath(raw string) string {
+	trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(raw), ";"))
+	if m := quotedImportPattern.FindStringSubmatch(trimmed); len(m) == 2 {
+		return cleanRelativeImport(m[1])
+	}
+	for _, kw := range []string{"from ", "import ", "use ", "using ", "alias ", "require_relative ", "require "} {
+		if idx := strings.Index(trimmed, kw); idx >= 0 {
+			rest := strings.TrimSpace(trimmed[idx+len(kw):])
+			if fields := strings.Fields(rest); len(fields) > 0 {
+				token := strings.Trim(fields[0], "{};()")
+				token = strings.ReplaceAll(token, "::", "/")
+				token = strings.ReplaceAll(token, "\\", "/")
+				if !strings.Contains(token, "/") && strings.Contains(token, ".") {
+					token = strings.ReplaceAll(token, ".", "/")
+				}
+				return cleanRelativeImport(strings.ToLower(token))
+			}
+		}
+	}
+	return cleanRelativeImport(trimmed)
+}
+
+func cleanRelativeImport(spec string) string {
+	slash := strings.ReplaceAll(strings.TrimSpace(spec), "\\", "/")
+	for strings.HasPrefix(slash, "./") || strings.HasPrefix(slash, "../") {
+		if strings.HasPrefix(slash, "./") {
+			slash = strings.TrimPrefix(slash, "./")
+		} else {
+			slash = strings.TrimPrefix(slash, "../")
+		}
+	}
+	return strings.Trim(slash, "/")
+}

@@ -44,6 +44,68 @@ function insertGuidelineSection(content: string, category: string, additions: st
   return `${content}\n\n${category ? `## ${category}\n\n` : ''}${additions}\n`;
 }
 
+export interface ParsedBoundaryRule {
+  source: string;
+  target: string;
+  rawLine: string;
+}
+
+export function parseImportBoundaryRules(text: string): ParsedBoundaryRule[] {
+  const rules: ParsedBoundaryRule[] = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(
+      /`?([A-Za-z0-9_./-]+)`?\s+must\s+never\s+import\s+`?([A-Za-z0-9_./-]+)`?/i,
+    );
+    if (m && m[1] && m[2]) {
+      rules.push({
+        source: m[1],
+        target: m[2],
+        rawLine: line.trim(),
+      });
+    }
+  }
+  return rules;
+}
+
+export function parseQualityBudgets(text: string): {
+  maxComplexity: string;
+  maxFnLines: string;
+  maxFileLines: string;
+} {
+  let maxComplexity = '15';
+  let maxFnLines = '80';
+  let maxFileLines = '800';
+  for (const line of text.split('\n')) {
+    const c = line.match(/max\s+function\s+complexity\s*[:=]\s*(\d+)/i);
+    if (c?.[1]) maxComplexity = c[1];
+    const fn = line.match(/max\s+function\s+lines\s*[:=]\s*(\d+)/i);
+    if (fn?.[1]) maxFnLines = fn[1];
+    const fl = line.match(/max\s+file\s+lines\s*[:=]\s*(\d+)/i);
+    if (fl?.[1]) maxFileLines = fl[1];
+  }
+  return { maxComplexity, maxFnLines, maxFileLines };
+}
+
+export function collectHarnessLessons(s: State): string[] {
+  const seen = new Set<string>();
+  const lessons: string[] = [];
+  const add = (items?: string[]) => {
+    for (const raw of items || []) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lessons.push(trimmed);
+    }
+  };
+  add(s.change?.workflow?.harness_lessons);
+  for (const impl of s.implementations || []) {
+    add(impl.state.change?.workflow?.harness_lessons);
+  }
+  return lessons;
+}
+
 export function Instructions({ s }: { s: State }) {
   const w = useWorkspace();
   const preview = s.instructionPreview;
@@ -56,6 +118,12 @@ export function Instructions({ s }: { s: State }) {
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
+  const [sourceLayer, setSourceLayer] = useState('internal/api/');
+  const [forbiddenTarget, setForbiddenTarget] = useState('internal/storage/');
+  const parsedBudgets = parseQualityBudgets(content);
+  const [budgetComplexity, setBudgetComplexity] = useState(parsedBudgets.maxComplexity);
+  const [budgetFnLines, setBudgetFnLines] = useState(parsedBudgets.maxFnLines);
+  const [budgetFileLines, setBudgetFileLines] = useState(parsedBudgets.maxFileLines);
   useEffect(() => {
     if (s.instructionsTab) {
       setTab(s.instructionsTab);
@@ -69,6 +137,10 @@ export function Instructions({ s }: { s: State }) {
     setSelected([]);
     setQuery('');
     setCategory('');
+    const nextBudgets = parseQualityBudgets(preview.existing_content);
+    setBudgetComplexity(nextBudgets.maxComplexity);
+    setBudgetFnLines(nextBudgets.maxFnLines);
+    setBudgetFileLines(nextBudgets.maxFileLines);
   }, [preview]);
   const ready =
     !!preview &&
@@ -106,6 +178,58 @@ export function Instructions({ s }: { s: State }) {
   const bootstrapPillars = evaluateBootstrapChecklist(s);
   const readyPillarsCount = bootstrapPillars.filter((p) => p.ready).length;
   const missingPillarsCount = bootstrapPillars.length - readyPillarsCount;
+  const boundaryRules = parseImportBoundaryRules(content);
+  const harnessLessons = collectHarnessLessons(s);
+
+  const applyBoundaryRule = () => {
+    const src = sourceLayer.trim();
+    const tgt = forbiddenTarget.trim();
+    if (!src || !tgt || src === tgt) return;
+    const ruleLine = `- \`${src}\` must never import \`${tgt}\`.`;
+    if (containsGuideline(content, ruleLine)) return;
+    setContent(
+      insertGuidelineSection(
+        content || '# Project instructions',
+        'Architecture boundaries & ownership',
+        ruleLine,
+      ),
+    );
+    setEditing(true);
+  };
+
+  const applyQualityBudgetsToDraft = () => {
+    const lines = [
+      `- Max function complexity: ${Number(budgetComplexity) || 15}`,
+      `- Max function lines: ${Number(budgetFnLines) || 80}`,
+      `- Max file lines: ${Number(budgetFileLines) || 800}`,
+    ];
+    const filtered = (content || '# Project instructions')
+      .split('\n')
+      .filter(
+        (line) =>
+          !/max\s+function\s+complexity\s*[:=]/i.test(line) &&
+          !/max\s+function\s+lines\s*[:=]/i.test(line) &&
+          !/max\s+file\s+lines\s*[:=]/i.test(line),
+      )
+      .join('\n');
+    setContent(
+      insertGuidelineSection(filtered, 'Architecture boundaries & ownership', lines.join('\n')),
+    );
+    setEditing(true);
+  };
+
+  const promoteHarnessLesson = (lesson: string) => {
+    const bullet = lesson.startsWith('- ') ? lesson : `- ${lesson}`;
+    if (containsGuideline(content, bullet)) return;
+    setContent(
+      insertGuidelineSection(
+        content || '# Project instructions',
+        'Harness² Lessons & Guardrails',
+        bullet,
+      ),
+    );
+    setEditing(true);
+  };
 
   const guidelinePicker = (switchToEditorOnAdd = false) => (
     <div className="stack">
@@ -312,6 +436,192 @@ export function Instructions({ s }: { s: State }) {
                 />
                 <span>Trust this workspace</span>
               </label>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Architect Boundaries &amp; Quality Budgets"
+            actions={
+              <Badge
+                value={`${boundaryRules.length} import ${boundaryRules.length === 1 ? 'rule' : 'rules'} · ≤${budgetComplexity} complexity`}
+                tone="violet"
+              />
+            }
+          >
+            <div className="stack" style={{ gap: '12px' }}>
+              <p className="small muted">
+                Compile deterministic architectural import boundaries and polyglot complexity
+                budgets directly into <code>{path}</code>. Step 2 verification gates enforce these
+                rules across all indexed languages.
+              </p>
+
+              {boundaryRules.length > 0 && (
+                <div className="row wrap" style={{ gap: '6px' }} aria-label="Active boundary rules">
+                  {boundaryRules.map((rule, idx) => (
+                    <Badge
+                      key={`${rule.source}-${rule.target}-${idx}`}
+                      value={`${rule.source} ↛ ${rule.target}`}
+                      tone="amber"
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'end' }}
+              >
+                <label className="block">
+                  <span className="small muted">Source Layer / Directory</span>
+                  <input
+                    className="field font-mono"
+                    aria-label="Source layer path"
+                    value={sourceLayer}
+                    disabled={!!s.busy || excluded}
+                    onChange={(e) => setSourceLayer(e.target.value)}
+                    placeholder="e.g., internal/api/ or src/ui/"
+                  />
+                </label>
+                <label className="block">
+                  <span className="small muted">Must Never Import</span>
+                  <input
+                    className="field font-mono"
+                    aria-label="Forbidden target path"
+                    value={forbiddenTarget}
+                    disabled={!!s.busy || excluded}
+                    onChange={(e) => setForbiddenTarget(e.target.value)}
+                    placeholder="e.g., internal/storage/ or src/db/"
+                  />
+                </label>
+                <Button
+                  tone="ghost"
+                  disabled={!!s.busy || excluded || !sourceLayer.trim() || !forbiddenTarget.trim()}
+                  onClick={applyBoundaryRule}
+                >
+                  Add Boundary Rule
+                </Button>
+              </div>
+
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: '1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}
+              >
+                <label className="block">
+                  <span className="small muted">Max Function Complexity</span>
+                  <input
+                    className="field font-mono"
+                    aria-label="Max function complexity"
+                    type="number"
+                    min={5}
+                    max={50}
+                    value={budgetComplexity}
+                    disabled={!!s.busy || excluded}
+                    onChange={(e) => setBudgetComplexity(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="small muted">Max Function Lines</span>
+                  <input
+                    className="field font-mono"
+                    aria-label="Max function lines"
+                    type="number"
+                    min={20}
+                    max={500}
+                    value={budgetFnLines}
+                    disabled={!!s.busy || excluded}
+                    onChange={(e) => setBudgetFnLines(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="small muted">Max File Lines</span>
+                  <input
+                    className="field font-mono"
+                    aria-label="Max file lines"
+                    type="number"
+                    min={100}
+                    max={5000}
+                    value={budgetFileLines}
+                    disabled={!!s.busy || excluded}
+                    onChange={(e) => setBudgetFileLines(e.target.value)}
+                  />
+                </label>
+                <Button
+                  tone="ghost"
+                  disabled={!!s.busy || excluded}
+                  onClick={applyQualityBudgetsToDraft}
+                >
+                  Apply Quality Budgets
+                </Button>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Harness² Lesson Inbox"
+            actions={
+              <Badge
+                value={`${harnessLessons.length} ${harnessLessons.length === 1 ? 'lesson' : 'lessons'}`}
+                tone={harnessLessons.length > 0 ? 'green' : undefined}
+              />
+            }
+          >
+            <div className="stack" style={{ gap: '8px' }}>
+              <p className="small muted">
+                Reusable architectural and testing lessons synthesized by the{' '}
+                <code>Propose → Probe → Compose</code> loop when agents overcome verification or
+                critic failures. Graduate lessons into <code>{path}</code> so future runs avoid the
+                same pitfalls.
+              </p>
+              {harnessLessons.length === 0 ? (
+                <p className="small muted" style={{ margin: 0 }}>
+                  No pending Harness² lessons yet. Lessons appear automatically when an agent
+                  repairs a failed check or resolves critic feedback.
+                </p>
+              ) : (
+                <div
+                  className="stack"
+                  style={{ gap: '6px' }}
+                  role="list"
+                  aria-label="Harness² lessons"
+                >
+                  {harnessLessons.map((lesson, idx) => {
+                    const adopted = containsGuideline(content, lesson);
+                    return (
+                      <div
+                        key={idx}
+                        role="listitem"
+                        className="row between wrap"
+                        style={{
+                          gap: '10px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--line)',
+                          background: 'var(--bg-soft)',
+                        }}
+                      >
+                        <span className="small" style={{ flex: '1 1 300px' }}>
+                          {lesson}
+                        </span>
+                        <div className="row" style={{ gap: '6px' }}>
+                          <Badge
+                            value={adopted ? 'In Draft' : 'Ready'}
+                            tone={adopted ? 'green' : 'violet'}
+                          />
+                          {!adopted && (
+                            <Button
+                              tone="primary small"
+                              disabled={!!s.busy || excluded}
+                              onClick={() => promoteHarnessLesson(lesson)}
+                            >
+                              Promote to AGENTS.md
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </Panel>
 

@@ -32,10 +32,10 @@ func projectCodeCommands(root, taskName string) ([][]string, error) {
 			if runner, checkTarget, testTarget := detectDeclaredTaskRunner(root); runner != "" {
 				var cmds [][]string
 				if testTarget != "" {
-					cmds = append(cmds, []string{runner, testTarget})
+					cmds = append(cmds, buildTaskRunnerArgv(runner, testTarget))
 				}
 				if checkTarget != "" {
-					cmds = append(cmds, []string{runner, checkTarget})
+					cmds = append(cmds, buildTaskRunnerArgv(runner, checkTarget))
 				}
 				if len(cmds) > 0 {
 					return cmds, nil

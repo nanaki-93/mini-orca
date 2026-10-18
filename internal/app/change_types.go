@@ -24,6 +24,7 @@ type ChangeEdit struct {
 	Path    string              `json:"path"`
 	Content string              `json:"content"`
 	Hash    string              `json:"hash"`
+	Summary string              `json:"summary,omitempty"`
 	Diff    project.UnifiedDiff `json:"diff"`
 }
 
@@ -100,6 +101,7 @@ type ChangeIdentity struct {
 type ChangeEditInput struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	Summary string `json:"summary,omitempty"`
 }
 
 type ChangeMessageRequest struct {

@@ -165,6 +165,9 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
 		return "", false
 	}
+	probe, lessons := probeWorkflowFriction(session.Workflow, session.Checks)
+	session.Workflow.ProbeSummary = probe
+	session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
 	retryMsg := workflowRetryMessage(baseMessage, session.Workflow, session.Checks)
 	session.Messages = stripWorkflowTestMessages(session.Messages)
 	session.Workflow.AutoRepairAttempts = attempt
@@ -257,6 +260,12 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 			if !errors.Is(runErr, errWorkflowChecksFailed) {
 				delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 			}
+		}
+		if probe, lessons := probeWorkflowFriction(w, session.Checks); probe != "" || len(lessons) > 0 {
+			if w.ProbeSummary == "" {
+				w.ProbeSummary = probe
+			}
+			w.HarnessLessons = mergeHarnessLessons(w.HarnessLessons, lessons)
 		}
 		w.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 		err = writeChangeSession(job.root, session)

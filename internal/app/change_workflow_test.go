@@ -572,13 +572,16 @@ func TestChangeWorkflowAutonomousSelfHealingLoop(t *testing.T) {
 	if healed.Workflow.Status != "awaiting_human_review" || !healed.Workflow.AutoRepair || healed.Workflow.AutoRepairAttempts != 1 {
 		t.Fatalf("expected autonomous self-healing loop to succeed in 1 auto-repair attempt, got %+v", healed.Workflow)
 	}
+	if healed.Workflow.ProbeSummary == "" || len(healed.Workflow.HarnessLessons) == 0 {
+		t.Fatalf("expected Harness² ProbeSummary and HarnessLessons on healed workflow, got probe=%q lessons=%+v", healed.Workflow.ProbeSummary, healed.Workflow.HarnessLessons)
+	}
 	foundAutoRepairPrompt := false
 	for _, msg := range healed.Messages {
-		if msg.Role == "user" && strings.Contains(msg.Content, "Previous check failures to resolve:") && strings.Contains(msg.Content, "wrong result") {
+		if msg.Role == "user" && strings.Contains(msg.Content, "Previous check failures to resolve:") && strings.Contains(msg.Content, "Harness² Propose-Probe-Compose:") && strings.Contains(msg.Content, "wrong result") {
 			foundAutoRepairPrompt = true
 		}
 	}
 	if !foundAutoRepairPrompt {
-		t.Fatalf("expected auto-repair Stage 0 prompt to include failed test output, got %+v", healed.Messages)
+		t.Fatalf("expected auto-repair Stage 0 prompt to include Harness² Probe and failed test output, got %+v", healed.Messages)
 	}
 }

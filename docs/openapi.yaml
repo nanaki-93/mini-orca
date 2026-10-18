@@ -1948,6 +1948,10 @@ components:
         id: {type: string}
         status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
         reason: {type: string}
+        auto_repair: {type: boolean}
+        auto_repair_attempts: {type: integer}
+        probe_summary: {type: string, description: Optional Harness² Propose-Probe-Compose diagnostic summary of check or critic friction.}
+        harness_lessons: {type: array, items: {type: string}, description: Optional reusable Harness² lessons extracted from verification or critic loops.}
         models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
         stages:
           type: array
@@ -2005,6 +2009,7 @@ components:
             properties:
               path: {type: string}
               content: {type: string}
+              summary: {type: string, description: Optional concise explanation of what changed in this file and why.}
               hash: {type: string}
               diff: {$ref: '#/components/schemas/UnifiedDiff'}
         messages:

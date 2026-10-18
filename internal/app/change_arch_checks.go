@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const maxFunctionComplexity = 15
@@ -16,6 +19,12 @@ const maxFunctionComplexity = 15
 type architectureImportRule struct {
 	sourcePrefix string
 	forbidden    []string
+}
+
+type architectureQualityBudgets struct {
+	maxComplexity    int
+	maxFunctionLines int
+	maxFileLines     int
 }
 
 var defaultArchitectureImportRules = []architectureImportRule{
@@ -29,35 +38,62 @@ var defaultArchitectureImportRules = []architectureImportRule{
 	},
 }
 
-var backtickSpanPattern = regexp.MustCompile("`([^`]+)`")
+var (
+	backtickSpanPattern    = regexp.MustCompile("`([^`]+)`")
+	budgetNumberPattern    = regexp.MustCompile(`(\d+)`)
+	commonJSRequirePattern = regexp.MustCompile(`\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)`)
+	branchKeywordPattern   = regexp.MustCompile(`\b(if|elif|for|while|case|catch)\b`)
+)
 
 func changeArchitectureAndComplexityChecks(root string, edits []ChangeEdit) []CheckResult {
 	if len(edits) == 0 {
 		return nil
 	}
-	rules := loadArchitectureImportRules(root)
+	rules, budgets := loadArchitecturePolicy(root)
 	checks := []CheckResult{checkArchitectureBoundaries(edits, rules)}
-	if changeHasGo(edits) {
-		checks = append(checks, checkGoFunctionComplexity(edits))
+	if changeHasCodeSource(edits) {
+		checks = append(checks, checkFunctionComplexityAndBudgets(edits, budgets))
 	}
 	return checks
 }
 
-func loadArchitectureImportRules(root string) []architectureImportRule {
+func loadArchitecturePolicy(root string) ([]architectureImportRule, architectureQualityBudgets) {
 	rules := append([]architectureImportRule(nil), defaultArchitectureImportRules...)
+	budgets := architectureQualityBudgets{maxComplexity: maxFunctionComplexity}
 	if strings.TrimSpace(root) == "" {
-		return rules
+		return rules, budgets
 	}
 	data, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
 	if err != nil {
-		return rules
+		return rules, budgets
 	}
 	for _, raw := range strings.Split(string(data), "\n") {
 		if parsed, ok := parseAgentsImportRuleLine(raw); ok {
 			rules = append(rules, parsed)
 		}
+		parseAgentsBudgetLine(raw, &budgets)
 	}
-	return rules
+	return rules, budgets
+}
+
+func parseAgentsBudgetLine(line string, budgets *architectureQualityBudgets) {
+	lower := strings.ToLower(line)
+	match := budgetNumberPattern.FindStringSubmatch(lower)
+	if len(match) != 2 {
+		return
+	}
+	val, err := strconv.Atoi(match[1])
+	if err != nil || val <= 0 {
+		return
+	}
+	switch {
+	case strings.Contains(lower, "max function complexity"):
+		budgets.maxComplexity = val
+	case strings.Contains(lower, "max function lines"):
+		budgets.maxFunctionLines = val
+	case strings.Contains(lower, "max file lines"):
+		budgets.maxFileLines = val
+	}
 }
 
 func parseAgentsImportRuleLine(line string) (architectureImportRule, bool) {
@@ -160,16 +196,47 @@ func pathMatchesPrefix(slashPath, prefix string) bool {
 
 func importMatchesForbidden(importPath, forbidden string) bool {
 	normImp := strings.Trim(filepath.ToSlash(importPath), "/")
-	if normImp == forbidden || strings.HasSuffix(normImp, "/"+forbidden) {
+	if normImp == forbidden || strings.HasPrefix(normImp, forbidden+"/") || strings.HasSuffix(normImp, "/"+forbidden) {
 		return true
 	}
 	return strings.Contains(normImp, "/"+forbidden+"/")
 }
 
+var rawQuotedImportSpec = regexp.MustCompile(`['"<]([^'">]+)['">]`)
+
 func extractEditImports(path, content string) []string {
-	if filepath.Ext(path) != ".go" {
-		return nil
+	if filepath.Ext(path) == ".go" {
+		return extractGoEditImports(path, content)
 	}
+	slashDir := filepath.Dir(strings.TrimPrefix(filepath.ToSlash(path), "./"))
+	_, rawImports, _ := project.ExtractFileFacts(path, []byte(content))
+	imports := make([]string, 0, len(rawImports)*2)
+	appendNorm := func(raw string) {
+		if m := rawQuotedImportSpec.FindStringSubmatch(raw); len(m) == 2 {
+			spec := strings.ReplaceAll(strings.TrimSpace(m[1]), "\\", "/")
+			if strings.HasPrefix(spec, "./") || strings.HasPrefix(spec, "../") {
+				resolved := filepath.ToSlash(filepath.Clean(filepath.Join(slashDir, spec)))
+				if resolved != "" && resolved != "." {
+					imports = append(imports, resolved)
+				}
+			}
+		}
+		if norm := project.NormalizeGenericImportPath(raw); norm != "" {
+			imports = append(imports, norm)
+		}
+	}
+	for _, raw := range rawImports {
+		appendNorm(raw)
+	}
+	for _, m := range commonJSRequirePattern.FindAllStringSubmatch(content, -1) {
+		if len(m) == 2 {
+			appendNorm(`"` + m[1] + `"`)
+		}
+	}
+	return imports
+}
+
+func extractGoEditImports(path, content string) []string {
 	file, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 	if err != nil || file == nil {
 		return nil
@@ -183,13 +250,28 @@ func extractEditImports(path, content string) []string {
 	return imports
 }
 
-func checkGoFunctionComplexity(edits []ChangeEdit) CheckResult {
+func changeHasCodeSource(edits []ChangeEdit) bool {
+	if changeHasGo(edits) {
+		return true
+	}
+	for _, edit := range edits {
+		lang, _, symbols := project.ExtractFileFacts(edit.Path, []byte(edit.Content))
+		if lang != "" && lang != "Markdown" && lang != "Text" && len(symbols) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQualityBudgets) CheckResult {
 	var violations []string
 	for _, edit := range edits {
-		if filepath.Ext(edit.Path) != ".go" {
-			continue
+		violations = append(violations, fileLineBudgetViolations(edit, budgets)...)
+		if filepath.Ext(edit.Path) == ".go" {
+			violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content, budgets)...)
+		} else {
+			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets)...)
 		}
-		violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content)...)
 	}
 	if len(violations) > 0 {
 		return CheckResult{
@@ -203,11 +285,22 @@ func checkGoFunctionComplexity(edits []ChangeEdit) CheckResult {
 		Name:     "complexity gate",
 		Required: true,
 		State:    CheckPassed,
-		Output:   fmt.Sprintf("All proposed Go functions are within the cyclomatic complexity budget (<= %d).", maxFunctionComplexity),
+		Output:   fmt.Sprintf("All proposed functions are within the cyclomatic complexity budget (<= %d).", budgets.maxComplexity),
 	}
 }
 
-func goEditComplexityViolations(path, content string) []string {
+func fileLineBudgetViolations(edit ChangeEdit, budgets architectureQualityBudgets) []string {
+	if budgets.maxFileLines <= 0 {
+		return nil
+	}
+	lines := strings.Count(edit.Content, "\n") + 1
+	if lines <= budgets.maxFileLines {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s: file has %d lines (max %d); split into cohesive modules", filepath.ToSlash(edit.Path), lines, budgets.maxFileLines)}
+}
+
+func goEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, content, 0)
 	if err != nil || file == nil {
@@ -219,13 +312,68 @@ func goEditComplexityViolations(path, content string) []string {
 		if !ok || fn.Body == nil {
 			continue
 		}
+		startLine := fset.Position(fn.Pos()).Line
+		endLine := fset.Position(fn.End()).Line
 		complexity := astFunctionComplexity(fn.Body)
-		if complexity > maxFunctionComplexity {
-			line := fset.Position(fn.Pos()).Line
-			violations = append(violations, fmt.Sprintf("%s:%d: function %s has cyclomatic complexity %d (max %d); split into smaller helpers", filepath.ToSlash(path), line, fn.Name.Name, complexity, maxFunctionComplexity))
+		if complexity > budgets.maxComplexity {
+			violations = append(violations, fmt.Sprintf("%s:%d: function %s has cyclomatic complexity %d (max %d); split into smaller helpers", filepath.ToSlash(path), startLine, fn.Name.Name, complexity, budgets.maxComplexity))
+		}
+		if budgets.maxFunctionLines > 0 && (endLine-startLine+1) > budgets.maxFunctionLines {
+			violations = append(violations, fmt.Sprintf("%s:%d: function %s has %d lines (max %d); split into smaller helpers", filepath.ToSlash(path), startLine, fn.Name.Name, endLine-startLine+1, budgets.maxFunctionLines))
 		}
 	}
 	return violations
+}
+
+func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
+	_, _, symbols := project.ExtractFileFacts(path, []byte(content))
+	if len(symbols) == 0 {
+		return nil
+	}
+	lines := strings.Split(content, "\n")
+	var violations []string
+	for _, sym := range symbols {
+		if !isCallableSymbolKind(sym.Kind) {
+			continue
+		}
+		complexity := genericSpanComplexity(lines, sym.StartLine, sym.EndLine)
+		if complexity > budgets.maxComplexity {
+			violations = append(violations, fmt.Sprintf("%s:%d: function %s has cyclomatic complexity %d (max %d); split into smaller helpers", filepath.ToSlash(path), sym.StartLine, sym.Name, complexity, budgets.maxComplexity))
+		}
+		spanLines := sym.EndLine - sym.StartLine + 1
+		if budgets.maxFunctionLines > 0 && spanLines > budgets.maxFunctionLines {
+			violations = append(violations, fmt.Sprintf("%s:%d: function %s has %d lines (max %d); split into smaller helpers", filepath.ToSlash(path), sym.StartLine, sym.Name, spanLines, budgets.maxFunctionLines))
+		}
+	}
+	return violations
+}
+
+func isCallableSymbolKind(kind string) bool {
+	switch kind {
+	case "function", "fun", "fn", "def", "defp", "method", "const":
+		return true
+	default:
+		return false
+	}
+}
+
+func genericSpanComplexity(lines []string, startLine, endLine int) int {
+	if startLine < 1 || startLine > len(lines) {
+		return 1
+	}
+	if endLine < startLine || endLine > len(lines) {
+		endLine = min(len(lines), startLine+40)
+	}
+	complexity := 1
+	for i := startLine - 1; i < endLine; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		complexity += len(branchKeywordPattern.FindAllString(trimmed, -1))
+		complexity += strings.Count(trimmed, "&&") + strings.Count(trimmed, "||")
+	}
+	return complexity
 }
 
 func astFunctionComplexity(body *ast.BlockStmt) int {

@@ -1045,6 +1045,62 @@ try {
       await close();
     }
   });
+
+  await test('Enterprise Workspace: Inline Diff Explanations, Architect Boundaries Builder, Harness² Lesson Inbox, and Handbook Reader', async () => {
+    const { page, close } = await pageFor({ trusted: true });
+    try {
+      // 1. Code & Diff -> Inline File Edit Summary and per-hunk explanation
+      await nav(page, 'Code & Diff');
+      await idle(page);
+      await page.locator('.explorer-file-btn').first().click();
+      await idle(page);
+      await page
+        .getByLabel('Ask about this file', { exact: true })
+        .fill('Add context cancellation check');
+      await page.getByRole('button', { name: 'Generate Diff', exact: true }).click();
+      await idle(page);
+      await page.getByRole('tab', { name: /^Diff Review/ }).click();
+      await page.getByText('File Edit Summary:').waitFor();
+      await page.getByLabel('Hunk #1 explanation').waitFor();
+
+      // 2. Settings & Rules -> Architect Boundaries & Quality Budgets + Harness² Lesson Inbox
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await idle(page);
+      await page
+        .getByRole('heading', { name: 'Architect Boundaries & Quality Budgets', exact: true })
+        .waitFor();
+      await page.getByRole('heading', { name: 'Harness² Lesson Inbox', exact: true }).waitFor();
+
+      const srcInput = page.getByRole('textbox', { name: 'Source layer path', exact: true });
+      const tgtInput = page.getByRole('textbox', { name: 'Forbidden target path', exact: true });
+      await srcInput.fill('desktop/frontend/');
+      await tgtInput.fill('internal/storage/');
+      await page.getByRole('button', { name: 'Add Boundary Rule', exact: true }).click();
+      await page.getByText('desktop/frontend/ ↛ internal/storage/', { exact: true }).waitFor();
+
+      await page.getByRole('button', { name: 'Apply Quality Budgets', exact: true }).click();
+      const draftVal = await page
+        .getByRole('textbox', { name: 'Custom instructions', exact: true })
+        .inputValue();
+      assert.ok(
+        draftVal.includes('`desktop/frontend/` must never import `internal/storage/`.') &&
+          draftVal.includes('Max function complexity: 15'),
+        `Expected AGENTS.md draft to contain compiled boundary rule and complexity budget, got: ${draftVal}`,
+      );
+
+      // 3. Engineering Specification -> 5. Handbook Reader & Sync to docs/ARCHITECTURE.md
+      await nav(page, 'Docs');
+      await idle(page);
+      await page.getByRole('tab', { name: '5. Handbook Reader', exact: true }).click();
+      await page.getByRole('navigation', { name: 'Handbook table of contents' }).waitFor();
+      await page.getByRole('button', { name: 'Sync to docs/ARCHITECTURE.md', exact: true }).click();
+      await idle(page);
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

@@ -167,7 +167,7 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 	checks := []CheckResult{}
 	if options.RunLint {
 		if runner != "" && checkTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{runner, checkTarget}, false, true))
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
 		} else {
 			checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
 		}
@@ -177,12 +177,19 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 			checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
 		}
 		if runner != "" && testTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, []string{runner, testTarget}, false, true))
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
 		} else {
 			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
 		}
 	}
 	return checks, ctx.Err()
+}
+
+func buildTaskRunnerArgv(runner, target string) []string {
+	if runner == "npm" && target != "test" {
+		return []string{"npm", "run", target}
+	}
+	return []string{runner, target}
 }
 
 func detectExecutableTaskRunner(workspace string) (string, string, string) {
@@ -203,6 +210,7 @@ func detectDeclaredTaskRunner(workspace string) (string, string, string) {
 	}{
 		{files: []string{"justfile", "Justfile"}, runner: "just"},
 		{files: []string{"Taskfile.yml", "Taskfile.yaml"}, runner: "task"},
+		{files: []string{"Makefile"}, runner: "make"},
 	} {
 		for _, name := range entry.files {
 			data, err := os.ReadFile(filepath.Join(workspace, name))
@@ -215,7 +223,50 @@ func detectDeclaredTaskRunner(workspace string) (string, string, string) {
 			}
 		}
 	}
+	return detectEcosystemTaskRunner(workspace)
+}
+
+func detectEcosystemTaskRunner(workspace string) (string, string, string) {
+	if data, err := os.ReadFile(filepath.Join(workspace, "package.json")); err == nil {
+		if checkTarget, testTarget := parsePackageJSONTargets(string(data)); checkTarget != "" || testTarget != "" {
+			return "npm", checkTarget, testTarget
+		}
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "Cargo.toml")); err == nil {
+		return "cargo", "check", "test"
+	}
+	if data, err := os.ReadFile(filepath.Join(workspace, "pyproject.toml")); err == nil {
+		text := string(data)
+		if strings.Contains(text, "pytest") {
+			return "pytest", "", "-q"
+		}
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "pom.xml")); err == nil {
+		return "mvn", "test-compile", "test"
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "build.gradle")); err == nil {
+		return "gradle", "check", "test"
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "build.gradle.kts")); err == nil {
+		return "gradle", "check", "test"
+	}
 	return "", "", ""
+}
+
+func parsePackageJSONTargets(content string) (string, string) {
+	if !strings.Contains(content, `"scripts"`) {
+		return "", ""
+	}
+	var checkTarget, testTarget string
+	if strings.Contains(content, `"check"`) {
+		checkTarget = "check"
+	} else if strings.Contains(content, `"lint"`) {
+		checkTarget = "lint"
+	}
+	if strings.Contains(content, `"test"`) && !strings.Contains(content, "no test specified") {
+		testTarget = "test"
+	}
+	return checkTarget, testTarget
 }
 
 func parseTaskRunnerTargets(content string) (string, string) {

@@ -325,6 +325,7 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 			return nil, err
 		}
 		if edit != nil {
+			edit.Summary = sanitizeEditSummary(input.Summary)
 			edits = append(edits, *edit)
 		}
 	}

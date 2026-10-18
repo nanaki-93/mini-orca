@@ -237,21 +237,144 @@ export function isRemovedLine(kind?: string): boolean {
   return kind === 'removed' || kind === 'remove' || kind === 'delete' || kind === 'del';
 }
 
+const SYMBOL_DECL_RE =
+  /^\s*(?:export\s+)?(?:default\s+)?(?:public\s+|private\s+|protected\s+|internal\s+)?(?:async\s+|static\s+|final\s+|abstract\s+)*(?:func\s+(?:\([^)]+\)\s*)?|function\s+|def\s+|fn\s+|fun\s+|class\s+|interface\s+|struct\s+|type\s+|const\s+)([A-Za-z_][A-Za-z0-9_]*)/;
+
+export function detectInlineSymbols(
+  lines: { kind: string; old_line: number; new_line: number; text: string }[],
+  newStart?: number,
+  newEnd?: number,
+  indexedSymbols?: { name: string; kind: string; start_line: number; end_line: number }[],
+): string[] {
+  const found = new Set<string>();
+  if (indexedSymbols?.length && newStart !== undefined && newEnd !== undefined) {
+    for (const sym of indexedSymbols) {
+      if (sym.start_line <= newEnd && sym.end_line >= newStart) {
+        found.add(sym.name);
+      }
+    }
+  }
+  for (const line of lines) {
+    const m = line.text.match(SYMBOL_DECL_RE);
+    if (m?.[1]) found.add(m[1]);
+  }
+  return [...found].slice(0, 4);
+}
+
+export function summarizeDiffHunk(
+  lines: { kind: string; old_line: number; new_line: number; text: string }[],
+  newStart: number,
+  newEnd: number,
+  indexedSymbols?: { name: string; kind: string; start_line: number; end_line: number }[],
+): { summary: string; symbols: string[]; adds: number; dels: number } {
+  const adds = lines.filter((l) => isAddedLine(l.kind)).length;
+  const dels = lines.filter((l) => isRemovedLine(l.kind)).length;
+  const symbols = detectInlineSymbols(lines, newStart, newEnd, indexedSymbols);
+  const changedText = lines
+    .filter((l) => isAddedLine(l.kind) || isRemovedLine(l.kind))
+    .map((l) => l.text.trim())
+    .filter(Boolean)
+    .join(' ');
+
+  const intents: string[] = [];
+  if (/\b(import|from|require|use|include)\b/.test(changedText))
+    intents.push('updates module imports');
+  if (/\b(if|else|switch|case|match|guard)\b/.test(changedText))
+    intents.push('refines branching / guard condition');
+  if (/\b(err|error|throw|catch|panic|fmt\.Errorf)\b/i.test(changedText))
+    intents.push('strengthens error handling');
+  if (/\b(test|assert|expect|t\.Fatal|t\.Error)\b/i.test(changedText))
+    intents.push('updates test verification');
+  if (/\b(return|yield)\b/.test(changedText) && intents.length < 2)
+    intents.push('adjusts return behavior');
+
+  const actionClause = intents.length
+    ? intents.slice(0, 2).join(' & ')
+    : adds > 0 && dels === 0
+      ? 'adds new implementation lines'
+      : dels > 0 && adds === 0
+        ? 'removes obsolete lines'
+        : 'updates implementation logic';
+
+  const symbolPrefix = symbols.length ? `In ${symbols.join(', ')}: ` : '';
+  return {
+    summary: `${symbolPrefix}${actionClause} (+${adds} / -${dels} lines)`,
+    symbols,
+    adds,
+    dels,
+  };
+}
+
+export function summarizeFileEdit(
+  edit: ChangeSession['changes'][number],
+  indexedSymbols?: { name: string; kind: string; start_line: number; end_line: number }[],
+): { summary: string; symbols: string[]; adds: number; dels: number } {
+  const lines = edit.diff?.lines || [];
+  const adds = lines.filter((l) => isAddedLine(l.kind)).length;
+  const dels = lines.filter((l) => isRemovedLine(l.kind)).length;
+  const changedLines = lines.filter((l) => isAddedLine(l.kind) || isRemovedLine(l.kind));
+  const newLineNums = changedLines.map((l) => l.new_line).filter((n) => n > 0);
+  const minLine = newLineNums.length ? Math.min(...newLineNums) : 1;
+  const maxLine = newLineNums.length ? Math.max(...newLineNums) : 1;
+  const symbols = detectInlineSymbols(lines, minLine, maxLine, indexedSymbols);
+
+  if (edit.summary?.trim()) {
+    return { summary: edit.summary.trim(), symbols, adds, dels };
+  }
+  const hunkSummary = summarizeDiffHunk(lines, minLine, maxLine, indexedSymbols);
+  return {
+    summary: hunkSummary.summary,
+    symbols,
+    adds,
+    dels,
+  };
+}
+
 export function ProposalDiff({
   edit,
   index,
   total,
+  symbols,
 }: {
   edit: ChangeSession['changes'][number];
   index: number;
   total: number;
+  symbols?: { name: string; kind: string; start_line: number; end_line: number }[];
 }) {
+  const info = summarizeFileEdit(edit, symbols);
   return (
     <div className="diff" aria-label={`Read-only diff for ${edit.path}`} tabIndex={0}>
       <div className="code-header">
-        <strong className="font-mono">{edit.path}</strong>
+        <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+          <strong className="font-mono">{edit.path}</strong>
+          {info.symbols.map((sym) => (
+            <Badge key={sym} value={`fn ${sym}`} tone="violet" />
+          ))}
+        </div>
         <span className="font-mono">
           {index + 1} / {total}
+        </span>
+      </div>
+      <div
+        className="diff-inline-summary"
+        aria-label={`Inline edit summary for ${edit.path}`}
+        style={{
+          padding: '6px 12px',
+          borderBottom: '1px solid var(--line)',
+          background: 'var(--bg-soft)',
+          fontSize: '0.82rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>
+          <strong>Edit Summary:</strong> {info.summary}
+        </span>
+        <span className="small font-mono muted">
+          +{info.adds} / -{info.dels} lines
         </span>
       </div>
       <pre tabIndex={0} aria-label={`Changes in ${edit.path}`}>

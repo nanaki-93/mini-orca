@@ -565,6 +565,7 @@ export interface ChangeSession extends ProjectIdentity {
     path: string;
     content: string;
     hash: string;
+    summary?: string;
     diff: {
       old_path: string;
       new_path: string;
@@ -607,6 +608,8 @@ export interface ChangeWorkflow {
   models: ChangeWorkflowModels;
   auto_repair?: boolean;
   auto_repair_attempts?: number;
+  probe_summary?: string;
+  harness_lessons?: string[];
   stages: { name: string; status: string; model?: Model }[];
   review?: { proposal_hash: string; verdict: string; summary: string; findings: string[] };
   started_at: string;

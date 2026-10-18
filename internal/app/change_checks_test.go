@@ -279,3 +279,65 @@ func TestChangeChecksEnforceSecretAndHygieneGate(t *testing.T) {
 		t.Fatalf("expected clean candidate to pass secret & hygiene gate, got %+v, err=%v", passed, err)
 	}
 }
+
+func TestPolyglotArchitectureBoundariesQualityBudgetsAndEcosystemRunners(t *testing.T) {
+	violatingTS := "import { query } from '../db/store';\n\nexport function renderView(x: number): number {\n  if (x === 1) return 1;\n  if (x === 2) return 2;\n  if (x === 3) return 3;\n  if (x === 4) return 4;\n  if (x === 5) return 5;\n  if (x === 6) return 6;\n  return query(x);\n}\n"
+	var reply atomic.Value
+	reply.Store(`{"explanation":"Add view.","changes":[{"path":"src/ui/view.ts","summary":"Render view with db query.","content":` + strconv.Quote(violatingTS) + `}]}`)
+	server := changeProvider(t, func() string { return reply.Load().(string) })
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "src", "ui"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "src", "ui", "view.ts"), []byte("export function renderView() { return 0; }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"polyglot-app","scripts":{"test":"node -e \"process.exit(0)\"","check":"node -e \"process.exit(0)\""}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	agentsContract := "# Agent Contract\n## Architecture boundaries & ownership\n- `src/ui/` must never import `src/db/`.\n- Max function complexity: 5\n- Max function lines: 25\n- Max file lines: 200\n"
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(agentsContract), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "polyglot-app", Path: root, Type: "typescript"}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(scopedTestConfig(server.URL), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust, err := service.ExecutionTrust(analysis.ProjectRevision, "")
+	if err != nil || len(trust.Commands) != 2 || strings.Join(trust.Commands[0], " ") != "npm test" || strings.Join(trust.Commands[1], " ") != "npm run check" {
+		t.Fatalf("expected npm test and npm run check in execution trust commands, got %+v, err=%v", trust, err)
+	}
+
+	session := prepareChangeFixture(t, service, "src/ui/view.ts")
+	if len(session.Changes) != 1 || session.Changes[0].Summary != "Render view with db query." {
+		t.Fatalf("expected per-file edit summary to be preserved, got %+v", session.Changes)
+	}
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil || requiredChecksPassed(checked.Checks) {
+		t.Fatalf("expected polyglot architecture and complexity checks to fail, got %+v, err=%v", checked, err)
+	}
+	var archFailed, complexityFailed bool
+	for _, check := range checked.Checks {
+		if check.Name == "architecture boundaries" && check.State == CheckFailed && strings.Contains(check.Output, "src/db") {
+			archFailed = true
+		}
+		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "(max 5)") {
+			complexityFailed = true
+		}
+	}
+	if !archFailed || !complexityFailed {
+		t.Fatalf("expected both polyglot architecture boundaries and custom complexity budget to fail, got %+v", checked.Checks)
+	}
+}

@@ -36,7 +36,7 @@ func stripWorkflowTestMessages(messages []ChangeMessage) []ChangeMessage {
 }
 
 func workflowRetryMessage(message string, workflow *ChangeWorkflow, checks []CheckResult) string {
-	extra := criticReviewRetryFeedback(message, workflow) + workflowFailureRetryFeedback(message, workflow, checks)
+	extra := criticReviewRetryFeedback(message, workflow) + workflowFailureRetryFeedback(message, workflow, checks) + harnessProbeRetryDirective(message, workflow, checks)
 	if extra == "" {
 		return message
 	}
@@ -45,6 +45,79 @@ func workflowRetryMessage(message string, workflow *ChangeWorkflow, checks []Che
 		return combined[:8192]
 	}
 	return combined
+}
+
+func harnessProbeRetryDirective(message string, workflow *ChangeWorkflow, checks []CheckResult) string {
+	if strings.Contains(message, "Harness² Propose-Probe-Compose:") {
+		return ""
+	}
+	probe, _ := probeWorkflowFriction(workflow, checks)
+	if probe == "" {
+		return ""
+	}
+	return "\n\nHarness² Propose-Probe-Compose:\n" + probe
+}
+
+func probeWorkflowFriction(workflow *ChangeWorkflow, checks []CheckResult) (string, []string) {
+	var directives []string
+	var lessons []string
+	for _, check := range checks {
+		if check.State == CheckPassed || check.State == CheckSkipped {
+			continue
+		}
+		dir, lesson := classifyFailedCheckFriction(check)
+		if dir != "" {
+			directives = append(directives, dir)
+		}
+		if lesson != "" {
+			lessons = append(lessons, lesson)
+		}
+	}
+	if workflow != nil && workflow.Review != nil && workflow.Review.Verdict == "changes_requested" {
+		directives = append(directives, "Resolve every Critic review finding while keeping existing tests and architecture boundaries intact.")
+		if len(workflow.Review.Findings) > 0 {
+			lessons = append(lessons, "Critic Guardrail: "+strings.TrimSpace(workflow.Review.Findings[0]))
+		}
+	}
+	if len(directives) == 0 {
+		return "", nil
+	}
+	return strings.Join(directives, " "), mergeHarnessLessons(nil, lessons)
+}
+
+func classifyFailedCheckFriction(check CheckResult) (string, string) {
+	name := strings.ToLower(check.Name)
+	switch {
+	case name == "architecture boundaries":
+		return "Remove forbidden cross-layer imports and call the owning domain/service interface instead.", "Respect declared layer boundaries (`<source>` must never import `<forbidden>`); route cross-layer access through service contracts."
+	case name == "complexity gate":
+		return "Decompose complex or oversized functions into smaller cohesive helpers within the complexity budget.", "Keep function cyclomatic complexity <= 15 and extract focused helper functions before adding nested branches."
+	case name == "secret & hygiene gate":
+		return "Remove hardcoded tokens/keys and unresolved conflict markers; inject secrets from configuration or environment.", "Never embed credentials, API tokens, or merge conflict markers in source or documentation."
+	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "format:") || name == "lint":
+		return "Fix syntax, formatting, and static analysis diagnostics using sibling symbol signatures.", "Ensure all proposed edits compile cleanly and pass static/lint checks before test execution."
+	case name == "tests" || name == "regression baseline":
+		return "Align implementation logic with failing test assertions without weakening pinned regression tests.", "Verify edge cases and return contracts against unit test assertions before finalizing changes."
+	default:
+		return "", ""
+	}
+}
+
+func mergeHarnessLessons(existing, added []string) []string {
+	out := make([]string, 0, len(existing)+len(added))
+	seen := map[string]bool{}
+	for _, item := range append(append([]string(nil), existing...), added...) {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" || seen[trimmed] || len(out) >= 6 {
+			continue
+		}
+		if len(trimmed) > 360 {
+			trimmed = trimmed[:360]
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+	}
+	return out
 }
 
 func criticReviewRetryFeedback(message string, workflow *ChangeWorkflow) string {
