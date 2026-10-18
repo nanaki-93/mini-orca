@@ -55,6 +55,7 @@ const hubSubNav: Partial<Record<Page, [Page, string, string][]>> = {
   instructions: [
     ['instructions', 'Settings & Rules', 'shield'],
     ['models', 'Model Routing', 'gauge'],
+    ['analysis-files', 'File Scope', 'folder'],
   ],
 };
 const contextPages: [Page, string][] = [
@@ -135,9 +136,11 @@ function App() {
                   ? 'git'
                   : s.page === 'models'
                     ? 'models'
-                    : ['instructions', 'analysis-files', 'context'].includes(s.page)
-                      ? 'instructions'
-                      : s.page;
+                    : s.page === 'analysis-files'
+                      ? 'analysis-files'
+                      : ['instructions', 'context'].includes(s.page)
+                        ? 'instructions'
+                        : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => {
@@ -220,7 +223,7 @@ function App() {
       ? 'editor'
       : ['docs', 'diagrams'].includes(activePage)
         ? 'docs'
-        : ['instructions', 'models'].includes(activePage)
+        : ['instructions', 'models', 'analysis-files'].includes(activePage)
           ? 'instructions'
           : 'summary';
   const nav = (items: typeof mainNav) =>

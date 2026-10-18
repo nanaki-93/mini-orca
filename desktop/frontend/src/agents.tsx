@@ -859,9 +859,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
               : 'Dashboard of agents in progress. Click an agent to inspect its step and grouped issues.'
           }
         >
-          <Go page="bugs" tone="ghost" icon="bug">
-            Browse Issues
-          </Go>
           <Button tone="primary" icon="plus" disabled={!!s.busy} onClick={openNewAgentForm}>
             New Fix
           </Button>
@@ -876,9 +873,6 @@ export function AgentsWorkspace({ s }: { s: State }) {
             <Go page="bugs" tone="primary" icon="bug">
               Browse Issues
             </Go>
-            <Button tone="ghost" icon="plus" onClick={openNewAgentForm}>
-              New Fix
-            </Button>
           </Empty>
         ) : (
           <Panel

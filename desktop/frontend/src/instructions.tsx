@@ -388,14 +388,6 @@ export function Instructions({ s }: { s: State }) {
         detail="Consolidated workspace trust and project-wide agent rules."
       >
         <Button
-          tone="ghost"
-          icon="folder"
-          disabled={!!s.busy}
-          onClick={() => void w.navigate('analysis-files')}
-        >
-          File Scope
-        </Button>
-        <Button
           disabled={!!s.busy || !ready}
           onClick={() => {
             setTab('rules');

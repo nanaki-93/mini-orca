@@ -515,9 +515,6 @@ export function Models({ s }: { s: State }) {
         detail="Model assignments for analysis, creation, testing and review."
         variant="intro"
       >
-        <Go page="analysis-files" tone="ghost" icon="folder">
-          File Scope
-        </Go>
         <Button
           icon="refresh"
           disabled={!!s.busy}
@@ -770,9 +767,6 @@ export function Diagrams({ s }: { s: State }) {
         detail="System topology, core components, and repository entry points."
         variant="intro"
       >
-        <Go page="docs" icon="book">
-          Engineering Spec
-        </Go>
         <Go page="editor" icon="code">
           Explore source
         </Go>

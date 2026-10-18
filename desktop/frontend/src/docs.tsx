@@ -1105,16 +1105,6 @@ export function DocsWorkspace({ s }: { s: State }) {
                   <strong className="small">{sec.label}</strong>
                 </button>
               ))}
-              <div style={{ marginTop: '8px' }}>
-                <Button
-                  tone="primary small"
-                  icon="file"
-                  disabled={!!s.busy}
-                  onClick={syncArchitectureDoc}
-                >
-                  Write docs/ARCHITECTURE.md
-                </Button>
-              </div>
             </nav>
           </Panel>
 

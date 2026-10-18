@@ -868,15 +868,6 @@ export function Results({ s }: { s: State }) {
         >
           Refresh
         </Button>
-        {s.run && (
-          <Button
-            icon="activity"
-            disabled={!!s.busy}
-            onClick={() => void w.navigate('analysis-run')}
-          >
-            Last Run
-          </Button>
-        )}
         {pausedOrInterrupted ? (
           <>
             <Button
@@ -927,18 +918,7 @@ export function Results({ s }: { s: State }) {
         </Notice>
       ) : null}
       {s.run?.status === 'stale' && (
-        <Notice>
-          <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
-            <span>Unchanged files keep saved analysis; reanalyze stale files to refresh.</span>
-            <Button
-              icon="refresh"
-              disabled={!!s.busy || activeRun(s.run)}
-              onClick={() => void w.repairAnalysisDirect()}
-            >
-              Repair Analysis
-            </Button>
-          </div>
-        </Notice>
+        <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
       )}
       {(activeRun(s.run) || pausedOrInterrupted) && (
         <div className="analysis-live-banner">

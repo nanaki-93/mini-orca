@@ -395,9 +395,6 @@ export function AnalysisRun({ s }: { s: State }) {
     return (
       <div className="workspace-page analysis-run">
         <Heading variant="intro" title="Last Run">
-          <Go page="bugs" icon="bug">
-            Issues & Ideas
-          </Go>
           <Button
             tone="primary"
             icon="play"
@@ -498,12 +495,6 @@ export function AnalysisRun({ s }: { s: State }) {
           </span>
         }
       >
-        <Go page="bugs" icon="bug">
-          Issues &amp; Ideas ({totalFindings})
-        </Go>
-        <Go page="agents" icon="sparkles" tone="ghost">
-          Fix Pipeline
-        </Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
             Pause
@@ -571,21 +562,7 @@ export function AnalysisRun({ s }: { s: State }) {
               : 'info'
           }
         >
-          <div className="row between wrap" style={{ gap: '8px', alignItems: 'center' }}>
-            <span>{run.reason}</span>
-            {canRepair && (
-              <Button
-                tone="primary small"
-                icon="refresh"
-                disabled={!!s.busy}
-                onClick={() => void w.repairAnalysisDirect()}
-              >
-                {failedFiles.length > 0
-                  ? `Retry Failed (${failedFiles.length})`
-                  : 'Repair Analysis'}
-              </Button>
-            )}
-          </div>
+          <span>{run.reason}</span>
         </Notice>
       )}
       {run.features?.reason && (
@@ -714,14 +691,6 @@ export function AnalysisRun({ s }: { s: State }) {
                   stage failures or incomplete steps during this run.
                 </span>
                 <div className="actions">
-                  <Button
-                    tone="primary small"
-                    icon="refresh"
-                    disabled={!!s.busy || activeRun(run)}
-                    onClick={() => void w.repairAnalysisDirect()}
-                  >
-                    Retry Failed ({failedFiles.length})
-                  </Button>
                   <Button
                     tone="ghost small"
                     onClick={() => {
@@ -883,16 +852,6 @@ export function AnalysisRun({ s }: { s: State }) {
             <Panel
               title={`Files with failures (${failedFiles.length})`}
               className="analysis-failed-files"
-              actions={
-                <Button
-                  tone="primary small"
-                  icon="refresh"
-                  disabled={!!s.busy || activeRun(run)}
-                  onClick={() => void w.repairAnalysisDirect()}
-                >
-                  Retry Failed ({failedFiles.length})
-                </Button>
-              }
             >
               <div className="scroll-list">
                 {failedFiles.map((file) => (
