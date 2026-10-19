@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -124,7 +125,7 @@ func TestGoScanLifecyclePersistsWorkspaceLimitFailure(t *testing.T) {
 	if err := os.WriteFile(largePath, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Truncate(largePath, checkLimits.maxWorkspaceBytes+1); err != nil {
+	if err := os.Truncate(largePath, checkexec.MaxWorkspaceBytes+1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.StartGoScan(revision); err != nil {
@@ -160,7 +161,7 @@ func TestGoScanFailureReportStorageFailurePreservesOriginalFailure(t *testing.T)
 	if err := os.WriteFile(largePath, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Truncate(largePath, checkLimits.maxWorkspaceBytes+1); err != nil {
+	if err := os.Truncate(largePath, checkexec.MaxWorkspaceBytes+1); err != nil {
 		t.Fatal(err)
 	}
 	initial := newGoScanReport(analysis.ProjectID, revision)
@@ -182,7 +183,7 @@ func TestGoScanFailureReportStorageFailurePreservesOriginalFailure(t *testing.T)
 		if path != root || failed.Status != "failed" || len(failed.Phases) != 1 || !strings.Contains(failed.Phases[0].Output, "byte limit") {
 			t.Fatalf("storage failure did not follow the original scan failure: %s, %+v", path, failed)
 		}
-		return errors.New("store scan report: " + root + " api_key=private-token " + strings.Repeat("x", checkLimits.maxOutputBytes+1))
+		return errors.New("store scan report: " + root + " api_key=private-token " + strings.Repeat("x", checkexec.MaxOutputBytes+1))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -220,7 +221,7 @@ func TestGoScanFailureReportStorageFailurePreservesOriginalFailure(t *testing.T)
 	if !strings.Contains(diagnostic.Error, "store scan report") || !strings.Contains(diagnostic.Error, "<project>") || !strings.Contains(diagnostic.Error, "[redacted]") || strings.Contains(output.String(), root) || strings.Contains(output.String(), "private-token") {
 		t.Fatalf("missing or unsanitized persistence failure: %s", output.String())
 	}
-	if len(diagnostic.Error) > checkLimits.maxOutputBytes+len("\n[output truncated]") || !strings.HasSuffix(diagnostic.Error, "[output truncated]") {
+	if len(diagnostic.Error) > checkexec.MaxOutputBytes+len("\n[output truncated]") || !strings.HasSuffix(diagnostic.Error, "[output truncated]") {
 		t.Fatalf("persistence diagnostic was not bounded: %d bytes", len(diagnostic.Error))
 	}
 	stored, err := os.ReadFile(reportPath)

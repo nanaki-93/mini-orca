@@ -1,53 +1,19 @@
 package app
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"go/parser"
-	"go/token"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
 )
 
 const (
-	CheckNotRun         = archcheck.CheckNotRun
-	CheckPassed         = archcheck.CheckPassed
-	CheckFailed         = archcheck.CheckFailed
-	CheckSkipped        = archcheck.CheckSkipped
-	CheckCanceled       = archcheck.CheckCanceled
-	CheckUnavailable    = archcheck.CheckUnavailable
-	checkCopyBufferSize = 32 * 1024
-)
-
-type checkResourceLimits struct {
-	maxOutputBytes    int
-	maxWorkspaceFiles int
-	maxWorkspaceBytes int64
-	pipeDrainWait     time.Duration
-}
-
-// checkLimits is the single resource budget for copied check workspaces and
-// their command diagnostics. A copy that exceeds this budget is not evidence
-// for a successful check.
-var checkLimits = checkResourceLimits{
-	maxOutputBytes:    8 * 1024,
-	maxWorkspaceFiles: 4 * 1024,
-	maxWorkspaceBytes: 64 * 1024 * 1024,
-	pipeDrainWait:     250 * time.Millisecond,
-}
-
-var (
-	checkAuthorization = regexp.MustCompile(`(?i)\b(?:proxy-)?authorization\b\s*[:=]\s*[^\r\n]*`)
-	checkSecret        = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential)\b\s*[:=]\s*[^\s,;]+`)
+	CheckNotRun      = archcheck.CheckNotRun
+	CheckPassed      = archcheck.CheckPassed
+	CheckFailed      = archcheck.CheckFailed
+	CheckSkipped     = archcheck.CheckSkipped
+	CheckCanceled    = archcheck.CheckCanceled
+	CheckUnavailable = archcheck.CheckUnavailable
 )
 
 type CheckResult = archcheck.CheckResult
@@ -68,14 +34,7 @@ func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, nam
 }
 
 func parseGoSource(path, source string) CheckResult {
-	check := CheckResult{Name: "parse", Required: true}
-	if _, err := parser.ParseFile(token.NewFileSet(), path, source, parser.AllErrors); err != nil {
-		check.State = CheckFailed
-		check.Output = err.Error()
-		return check
-	}
-	check.State = CheckPassed
-	return check
+	return checkexec.ParseGoSource(path, source)
 }
 
 func (s *Service) runCheck(ctx context.Context, workspace, revision, name string, required bool, command []string, failOnOutput, executesProjectCode bool) CheckResult {
@@ -100,8 +59,8 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
 	result, err := s.runCheckCommand(timed, workspace, check.Command, revision, executesProjectCode)
-	check.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, s.manager.Root())
-	check.ExitCode = result.exitCode
+	check.Output = sanitizeCheckOutput(result.Output, result.Truncated, workspace, s.manager.Root())
+	check.ExitCode = result.ExitCode
 	if timed.Err() != nil {
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()
@@ -110,339 +69,27 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 	return check, err
 }
 
-func (s *Service) runCheckCommand(ctx context.Context, workspace string, command []string, revision string, executesProjectCode bool) (checkCommandResult, error) {
+func (s *Service) runCheckCommand(ctx context.Context, workspace string, command []string, revision string, executesProjectCode bool) (checkexec.CommandResult, error) {
 	if !executesProjectCode {
-		return runCheckCommand(ctx, workspace, command)
+		return checkexec.RunCommand(ctx, workspace, command)
 	}
-	return runCheckCommandWithStart(ctx, workspace, command, true, func() error {
+	return checkexec.RunCommandWithStart(ctx, workspace, command, true, func() error {
 		return s.requireProjectExecutionTrust(revision)
 	})
 }
 
-type checkCommandResult struct {
-	output    string
-	exitCode  int
-	truncated bool
-}
-
-func runCheckCommand(ctx context.Context, directory string, command []string) (checkCommandResult, error) {
-	return runCheckCommandWithStart(ctx, directory, command, false, nil)
-}
-
-func runCheckCommandWithStart(ctx context.Context, directory string, command []string, ownsDescendants bool, beforeStart func() error) (checkCommandResult, error) {
-	return runCheckCommandWithEnvironment(ctx, directory, command, ownsDescendants, beforeStart, checkChildEnvironment(os.Environ()))
-}
-
-// runCheckCommandWithEnvironment accepts a caller-captured, already-sanitized
-// environment when two commands must use the exact same toolchain inputs.
-func runCheckCommandWithEnvironment(ctx context.Context, directory string, command []string, ownsDescendants bool, beforeStart func() error, environment []string) (checkCommandResult, error) {
-	if len(command) == 0 {
-		return checkCommandResult{}, fmt.Errorf("empty check command")
-	}
-	process := exec.CommandContext(ctx, command[0], command[1:]...)
-	process.Dir = directory
-	process.Env = append([]string(nil), environment...)
-	if ownsDescendants {
-		if err := configureCheckCommand(process); err != nil {
-			return checkCommandResult{}, err
-		}
-	}
-	process.WaitDelay = checkLimits.pipeDrainWait
-	output := &boundedCheckOutput{limit: checkLimits.maxOutputBytes}
-	process.Stdout = output
-	process.Stderr = output
-	if beforeStart != nil {
-		if err := beforeStart(); err != nil {
-			return checkCommandResult{}, err
-		}
-	}
-	err := process.Run()
-	result := checkCommandResult{output: output.String(), truncated: output.Truncated()}
-	if exitError, ok := err.(*exec.ExitError); ok {
-		result.exitCode = exitError.ExitCode()
-	}
-	return result, err
-}
-
-var checkEnvironmentAllowlist = map[string]bool{
-	"PATH": true, "HOME": true, "TMPDIR": true, "TMP": true, "TEMP": true,
-	"LANG": true, "LC_ALL": true, "LC_CTYPE": true,
-	"GOROOT": true, "GOPATH": true, "GOCACHE": true, "GOENV": true,
-	"CGO_ENABLED": true, "CC": true, "CXX": true, "PKG_CONFIG": true,
-	"SYSTEMROOT": true, "SystemRoot": true, "COMSPEC": true, "ComSpec": true,
-}
-
-// checkChildEnvironment starts from a small toolchain allowlist. In
-// particular it never inherits provider credentials or arbitrary host secrets.
 func checkChildEnvironment(parent []string) []string {
-	child := make([]string, 0, len(checkEnvironmentAllowlist))
-	for _, entry := range parent {
-		name, _, found := strings.Cut(entry, "=")
-		if found && checkEnvironmentAllowlist[name] {
-			child = append(child, entry)
-		}
-	}
-	return child
-}
-
-// boundedCheckOutput owns both command streams. Write always reports a full
-// write so os/exec continues draining either pipe after the diagnostic budget
-// is exhausted.
-type boundedCheckOutput struct {
-	mu        sync.Mutex
-	buffer    bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (output *boundedCheckOutput) Write(data []byte) (int, error) {
-	output.mu.Lock()
-	defer output.mu.Unlock()
-	remaining := output.limit - output.buffer.Len()
-	if remaining <= 0 {
-		output.truncated = true
-		return len(data), nil
-	}
-	if len(data) > remaining {
-		_, _ = output.buffer.Write(data[:remaining])
-		output.truncated = true
-		return len(data), nil
-	}
-	_, _ = output.buffer.Write(data)
-	return len(data), nil
-}
-
-func (output *boundedCheckOutput) String() string {
-	output.mu.Lock()
-	defer output.mu.Unlock()
-	return output.buffer.String()
-}
-
-func (output *boundedCheckOutput) Truncated() bool {
-	output.mu.Lock()
-	defer output.mu.Unlock()
-	return output.truncated
+	return checkexec.ChildEnvironment(parent)
 }
 
 func requiredChecksPassed(checks []CheckResult) bool {
-	for _, check := range checks {
-		if check.Required && check.State != CheckPassed {
-			return false
-		}
-	}
-	return true
+	return checkexec.RequiredChecksPassed(checks)
 }
 
 func sanitizeCheckOutput(output string, truncated bool, workspace, root string) string {
-	if workspace != "" {
-		output = strings.ReplaceAll(output, workspace, "<workspace>")
-	}
-	if root != "" {
-		output = strings.ReplaceAll(output, root, "<project>")
-	}
-	output = checkAuthorization.ReplaceAllString(output, "[redacted]")
-	output = checkSecret.ReplaceAllString(output, "[redacted]")
-	if len(output) > checkLimits.maxOutputBytes {
-		output = output[:checkLimits.maxOutputBytes]
-		truncated = true
-	}
-	if truncated {
-		output += "\n[output truncated]"
-	}
-	return strings.TrimSpace(output)
+	return checkexec.SanitizeOutput(output, truncated, workspace, root)
 }
 
-// copyCheckWorkspace intentionally keeps its own traversal: a temporary Go
-// check workspace needs every regular project file (except metadata and known
-// caches), whereas project.WalkProjectFiles returns only source-policy
-// candidates. destination must be a temporary workspace owned by the caller.
 func copyCheckWorkspace(ctx context.Context, source, destination string) error {
-	copier := checkWorkspaceCopier{
-		ctx: ctx, source: source, destination: destination,
-		buffer: make([]byte, checkCopyBufferSize),
-	}
-	if err := copier.copy(); err != nil {
-		if cleanupErr := os.RemoveAll(destination); cleanupErr != nil {
-			return fmt.Errorf("%w; clean failed check workspace: %v", err, cleanupErr)
-		}
-		return err
-	}
-	return nil
-}
-
-type checkWorkspaceCopier struct {
-	ctx         context.Context
-	source      string
-	destination string
-	files       int
-	bytes       int64
-	buffer      []byte
-}
-
-func (copier *checkWorkspaceCopier) copy() error {
-	return filepath.WalkDir(copier.source, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := copier.ctx.Err(); err != nil {
-			return fmt.Errorf("copy check workspace: %w", err)
-		}
-		relative, err := filepath.Rel(copier.source, path)
-		if err != nil {
-			return err
-		}
-		if relative == "." {
-			return nil
-		}
-		return copier.copyEntry(path, relative, entry)
-	})
-}
-
-func (copier *checkWorkspaceCopier) copyEntry(path, relative string, entry os.DirEntry) error {
-	info, err := entry.Info()
-	if err != nil {
-		return err
-	}
-	if isCheckWorkspaceMetadata(relative) {
-		if info.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	}
-	if info.IsDir() {
-		if skipCheckWorkspaceDirectory(relative) {
-			return filepath.SkipDir
-		}
-		return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
-	}
-	if !isRegularCheckWorkspaceFile(info) {
-		return nil
-	}
-	if copier.files == checkLimits.maxWorkspaceFiles {
-		return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
-	}
-	if info.Size() > checkLimits.maxWorkspaceBytes-copier.bytes {
-		return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
-	}
-	return copier.copyFile(path, relative, info)
-}
-
-func (copier *checkWorkspaceCopier) copyFile(path, relative string, info os.FileInfo) error {
-	input, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	if err := validateCheckWorkspaceFile(path, info, input); err != nil {
-		_ = input.Close()
-		return err
-	}
-	outputPath := filepath.Join(copier.destination, relative)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
-		_ = input.Close()
-		return err
-	}
-	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-	if err != nil {
-		_ = input.Close()
-		return err
-	}
-	copied, copyErr := copyCheckWorkspaceFile(copier.ctx, output, input, copier.buffer, checkLimits.maxWorkspaceBytes-copier.bytes)
-	closeErr := output.Close()
-	inputErr := input.Close()
-	if copyErr != nil {
-		_ = os.Remove(outputPath)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(outputPath)
-		return closeErr
-	}
-	if inputErr != nil {
-		_ = os.Remove(outputPath)
-		return inputErr
-	}
-	copier.files++
-	copier.bytes += copied
-	return nil
-}
-
-func isRegularCheckWorkspaceFile(info os.FileInfo) bool {
-	return info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular()
-}
-
-func validateCheckWorkspaceFile(path string, expected os.FileInfo, input *os.File) error {
-	if !isRegularCheckWorkspaceFile(expected) {
-		return fmt.Errorf("check workspace source %q is not a regular file", path)
-	}
-	opened, err := input.Stat()
-	if err != nil {
-		return fmt.Errorf("stat check workspace source %q: %w", path, err)
-	}
-	if !isRegularCheckWorkspaceFile(opened) || !os.SameFile(expected, opened) {
-		return fmt.Errorf("check workspace source %q changed while opening", path)
-	}
-	current, err := os.Lstat(path)
-	if err != nil {
-		return fmt.Errorf("recheck workspace source %q: %w", path, err)
-	}
-	if !isRegularCheckWorkspaceFile(current) || !os.SameFile(expected, current) {
-		return fmt.Errorf("check workspace source %q changed while opening", path)
-	}
-	return nil
-}
-
-func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Reader, buffer []byte, remaining int64) (int64, error) {
-	var copied int64
-	for {
-		if err := ctx.Err(); err != nil {
-			return copied, fmt.Errorf("copy check workspace: %w", err)
-		}
-		read, readErr := input.Read(buffer)
-		if read > 0 {
-			if int64(read) > remaining-copied {
-				return copied, fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
-			}
-			written, writeErr := output.Write(buffer[:read])
-			copied += int64(written)
-			if writeErr != nil {
-				return copied, writeErr
-			}
-			if written != read {
-				return copied, io.ErrShortWrite
-			}
-		}
-		if readErr == io.EOF {
-			return copied, nil
-		}
-		if readErr != nil {
-			return copied, readErr
-		}
-	}
-}
-
-func skipCheckWorkspaceDirectory(relative string) bool {
-	switch filepath.Base(relative) {
-	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "build", "dist", "target":
-		return !checkWorkspaceFixturePath(relative)
-	default:
-		return false
-	}
-}
-
-func isCheckWorkspaceMetadata(relative string) bool {
-	switch filepath.Base(relative) {
-	case ".mini-orca", ".worktrees", ".git", ".hg", ".svn":
-		return true
-	default:
-		return false
-	}
-}
-
-func checkWorkspaceFixturePath(relative string) bool {
-	for _, part := range strings.FieldsFunc(filepath.ToSlash(relative), func(r rune) bool { return r == '/' }) {
-		if part == "testdata" {
-			return true
-		}
-	}
-	return false
+	return checkexec.CopyWorkspace(ctx, source, destination)
 }

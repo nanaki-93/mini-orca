@@ -318,8 +318,8 @@ func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, revision,
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
 	result, err := s.runCheckCommand(timed, workspace, command, revision, name == "tests")
-	phase.Output = sanitizeCheckOutput(result.output, result.truncated, workspace, root)
-	phase.ExitCode = result.exitCode
+	phase.Output = sanitizeCheckOutput(result.Output, result.Truncated, workspace, root)
+	phase.ExitCode = result.ExitCode
 	if timed.Err() != nil {
 		phase.State = CheckCanceled
 		phase.Output = timed.Err().Error()

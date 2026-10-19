@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
 )
 
 // Git never inherits host Git overrides, runs hooks, opens an editor or signs.
@@ -31,12 +33,12 @@ func gitCommand(ctx context.Context, root, index string, input io.Reader, args .
 	if index != "" {
 		command.Env = append(command.Env, "GIT_INDEX_FILE="+index)
 	}
-	if err := configureCheckCommand(command); err != nil {
+	if err := checkexec.ConfigureCommand(command); err != nil {
 		return "", err
 	}
 	command.WaitDelay = time.Second
 	command.Stdin = input
-	out, diagnostics := &boundedCheckOutput{limit: 1024 * 1024}, &boundedCheckOutput{limit: 8192}
+	out, diagnostics := checkexec.NewBoundedOutput(1024*1024), checkexec.NewBoundedOutput(8192)
 	command.Stdout, command.Stderr = out, diagnostics
 	err := command.Run()
 	if timed.Err() != nil {

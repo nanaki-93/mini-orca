@@ -1,6 +1,6 @@
 //go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 
-package app
+package checkexec
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func configureCheckCommand(process *exec.Cmd) error {
+func ConfigureCommand(process *exec.Cmd) error {
 	process.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	process.Cancel = func() error {
 		if process.Process == nil {

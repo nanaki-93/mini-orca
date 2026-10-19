@@ -87,7 +87,7 @@ func TestProjectCodeProcessRechecksTheOriginalRevisionAtStart(t *testing.T) {
 	if _, err := service.TrustProjectExecution(updated.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.runCheckCommand(context.Background(), t.TempDir(), checkHelperCommand("huge-output"), originalRevision, true)
+	_, err = service.runCheckCommand(context.Background(), t.TempDir(), []string{"go", "version"}, originalRevision, true)
 	if !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("old project command started after project change: %v", err)
 	}
