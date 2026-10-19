@@ -704,4 +704,15 @@ func (s *State) loadProjectResources(ctx context.Context, client *Client) {
 	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust", nil, &trust); err == nil {
 		s.WorkspaceTrust = trust.Trusted
 	}
+	if s.Project.ProjectID != "" && s.Project.ProjectRevision != "" {
+		idQuery := fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(s.Project.ProjectID), url.QueryEscape(s.Project.ProjectRevision))
+		var feat FeatureReport
+		if err := client.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
+			s.Features = &feat
+		}
+		var history []ChangeHistoryEntry
+		if err := client.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
+			s.ChangeHistory = history
+		}
+	}
 }

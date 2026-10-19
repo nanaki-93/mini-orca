@@ -137,6 +137,11 @@ func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 }
 
 func (s *State) handleBackOrHorizontalKey(ev KeyEvent) bool {
+	if ev.Key == "Escape" && s.Error != "" {
+		s.Error = ""
+		s.CmdOutput = "Dismissed error alert."
+		return true
+	}
 	if (ev.Key == "Escape" || ev.Key == "Backspace") && s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
 		s.CmdOutput = "Returned to Agents in Progress Dashboard"

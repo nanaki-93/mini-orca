@@ -40,8 +40,8 @@ func run(ctx context.Context, args []string, in io.Reader, out io.Writer) error 
 	paletteFlag := fs.String("palette", "tokyo", "Initial TUI color palette (tokyo, crt, amber, paper)")
 	cmdFlag := fs.String("cmd", "", "Optional colon command to run on startup")
 	onceFlag := fs.Bool("once", false, "Render a single frame and exit")
-	widthFlag := fs.Int("width", 120, "Terminal width in columns")
-	heightFlag := fs.Int("height", 36, "Terminal height in rows")
+	widthFlag := fs.Int("width", 0, "Terminal width in columns (0 = auto-detect full screen)")
+	heightFlag := fs.Int("height", 0, "Terminal height in rows (0 = auto-detect full screen)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -65,11 +65,12 @@ func run(ctx context.Context, args []string, in io.Reader, out io.Writer) error 
 		state.ExecuteCommand(*cmdFlag)
 		state.FlushActions(ctx, client)
 	}
+	w, h := tui.DetectTerminalSize(*widthFlag, *heightFlag)
 	if *onceFlag {
 		if root := client.Root(); root != "" && state.Project != nil && state.Project.Path == "" {
 			state.Project.Path = root
 		}
-		_, err := fmt.Fprintln(out, state.Render(*widthFlag, *heightFlag))
+		_, err := fmt.Fprintln(out, state.Render(w, h))
 		return err
 	}
 	go func() {

@@ -78,7 +78,9 @@ func (s *State) dispatchSingleIssue(issue IssueRow) {
 		Message:            fmt.Sprintf("Address this finding: %s\nLocation: %s:%d\nCause: %s\nProposed solution: %s", issue.Title, issue.Path, issue.Line, issue.Cause, issue.Solution),
 		AcceptanceCriteria: issue.AcceptanceCriteria,
 	}
-	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s)", issue.Name, issue.Path)
+	s.startLocalAgentPreview(seed)
+	s.Navigate(PageAgents)
+	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s) — Agent Pipeline active", issue.Name, issue.Path)
 	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, Seed: seed})
 }
 
@@ -117,8 +119,41 @@ func (s *State) dispatchBatchIssues() {
 		Kind:           "fix",
 		Message:        fmt.Sprintf("Address %d selected findings across %s", len(batch), strings.Join(paths, ", ")),
 	}
+	s.startLocalAgentPreview(seed)
+	s.Navigate(PageAgents)
 	s.CmdOutput = fmt.Sprintf("Dispatched grouped agent fix for %d issues", len(batch))
 	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+}
+
+func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
+	if seed == nil {
+		return
+	}
+	var targets []ChangeTarget
+	for _, p := range seed.Paths {
+		if strings.TrimSpace(p) != "" {
+			targets = append(targets, ChangeTarget{Path: p, Exists: true})
+		}
+	}
+	s.Change = &ChangeSession{
+		ID:                 "agent-session",
+		Kind:               firstNonEmpty(seed.Kind, "fix"),
+		Title:              firstNonEmpty(seed.Title, "Agent Mission"),
+		State:              "running",
+		FindingTargets:     seed.FindingTargets,
+		Targets:            targets,
+		AcceptanceCriteria: seed.AcceptanceCriteria,
+		Workflow: &ChangeWorkflow{
+			ID:     "wf-active",
+			Status: "running",
+			Stages: []ChangeWorkflowStage{
+				{Name: "Architect & Code", Status: "running"},
+				{Name: "Verify & Test", Status: "queued"},
+				{Name: "Critic Review", Status: "queued"},
+				{Name: "Human Review", Status: "queued"},
+			},
+		},
+	}
 }
 
 func containsString(list []string, target string) bool {
@@ -138,6 +173,8 @@ func (s *State) dispatchFeatureIdea(idea FeatureSuggestion) {
 		Message:            fmt.Sprintf("Implement feature: %s\nBenefit: %s", idea.Title, idea.Benefit),
 		AcceptanceCriteria: idea.AcceptanceCriteria,
 	}
+	s.startLocalAgentPreview(seed)
+	s.Navigate(PageAgents)
 	s.CmdOutput = fmt.Sprintf("Dispatched feature idea %q to isolated Agent", idea.Title)
 	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: idea.ID, Seed: seed})
 }
@@ -560,7 +597,8 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 	case "agent", "agents":
 		s.Navigate(PageAgents)
 		if arg != "" {
-			seed := &ChangeSeed{Title: "Clean-code agent mission", Kind: "fix", Message: arg}
+			seed := &ChangeSeed{Title: truncatePlain(arg, 48), Kind: "fix", Message: arg}
+			s.startLocalAgentPreview(seed)
 			s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, Seed: seed})
 			s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)
 		} else {

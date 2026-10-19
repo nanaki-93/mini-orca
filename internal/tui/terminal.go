@@ -8,17 +8,26 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
 
-func enableRawTerminal(in io.Reader) func() {
+func isCharDevice(in io.Reader) (*os.File, bool) {
 	f, ok := in.(*os.File)
 	if !ok {
-		return func() {}
+		return nil, false
 	}
 	info, err := f.Stat()
 	if err != nil || (info.Mode()&os.ModeCharDevice) == 0 {
+		return nil, false
+	}
+	return f, true
+}
+
+func enableRawTerminal(in io.Reader, out io.Writer) func() {
+	f, ok := isCharDevice(in)
+	if !ok {
 		return func() {}
 	}
 	saveCmd := exec.Command("stty", "-g")
@@ -33,11 +42,66 @@ func enableRawTerminal(in io.Reader) func() {
 	if err := rawCmd.Run(); err != nil {
 		return func() {}
 	}
+	_, _ = fmt.Fprint(out, "\033[?1049h\033[?25l")
 	return func() {
+		_, _ = fmt.Fprint(out, "\033[?25h\033[?1049l")
 		restoreCmd := exec.Command("stty", saved)
 		restoreCmd.Stdin = f
 		_ = restoreCmd.Run()
 	}
+}
+
+// DetectTerminalSize inspects the active controlling terminal or environment for full-screen dimensions.
+func DetectTerminalSize(fallbackWidth, fallbackHeight int) (int, int) {
+	if fallbackWidth > 0 && fallbackHeight > 0 {
+		return fallbackWidth, fallbackHeight
+	}
+	cols, rows := querySttySize(os.Stdin)
+	if cols <= 0 || rows <= 0 {
+		if tty, err := os.Open("/dev/tty"); err == nil {
+			cols, rows = querySttySize(tty)
+			_ = tty.Close()
+		}
+	}
+	if cols <= 0 {
+		cols, _ = strconv.Atoi(os.Getenv("COLUMNS"))
+	}
+	if rows <= 0 {
+		rows, _ = strconv.Atoi(os.Getenv("LINES"))
+	}
+	if fallbackWidth > 0 {
+		cols = fallbackWidth
+	} else if cols <= 0 {
+		cols = 120
+	}
+	if fallbackHeight > 0 {
+		rows = fallbackHeight
+	} else if rows <= 0 {
+		rows = 36
+	}
+	return cols, rows
+}
+
+func querySttySize(f *os.File) (int, int) {
+	if f == nil {
+		return 0, 0
+	}
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = f
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return 0, 0
+	}
+	rows, err1 := strconv.Atoi(fields[0])
+	cols, err2 := strconv.Atoi(fields[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return cols, rows
 }
 
 // DecodeInputBytes parses raw terminal input bytes into discrete KeyEvents.
@@ -137,6 +201,8 @@ func (s *State) dispatchAction(ctx context.Context, client *Client, reqID string
 		return nil
 	case "open-file":
 		return s.fetchFileInfo(ctx, client, reqID, act.Target)
+	case "run-analysis", "reanalyze":
+		return s.dispatchAnalysisRun(ctx, client, reqID, act.Kind == "reanalyze")
 	default:
 		return s.dispatchMutationAction(ctx, client, reqID, act)
 	}
@@ -154,8 +220,64 @@ func (s *State) fetchFileInfo(ctx context.Context, client *Client, reqID, path s
 	return nil
 }
 
+func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID string, refresh bool) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	previewReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"scope":            "project",
+		"refresh":          refresh,
+		"include_features": true,
+		"limits": map[string]int{
+			"max_files":          64,
+			"max_model_requests": 256,
+			"max_concurrency":    2,
+		},
+	}
+	var preview struct {
+		PreviewID string         `json:"preview_id"`
+		Identity  map[string]any `json:"identity"`
+		Limits    map[string]any `json:"limits"`
+		Providers []struct {
+			ID string `json:"id"`
+		} `json:"providers"`
+	}
+	if err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
+		return err
+	}
+	var providerIDs []string
+	for _, p := range preview.Providers {
+		if p.ID != "" {
+			providerIDs = append(providerIDs, p.ID)
+		}
+	}
+	startReq := map[string]any{
+		"identity":         preview.Identity,
+		"preview_id":       preview.PreviewID,
+		"limits":           preview.Limits,
+		"refresh":          refresh,
+		"include_features": true,
+		"confirmations": map[string]any{
+			"provider_ids":    providerIDs,
+			"security_review": true,
+		},
+	}
+	var run AnalysisRun
+	if err := client.DoJSON(ctx, reqID+"-start", http.MethodPost, "/api/projects/current/analysis/run", startReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
 func (s *State) dispatchMutationAction(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
 	switch act.Kind {
+	case "start-agent":
+		return s.dispatchStartAgent(ctx, client, reqID, act)
+	case "apply-commit":
+		return s.dispatchApplyCommit(ctx, client, reqID, act)
 	case "dismiss-finding":
 		if act.Issue == nil {
 			return nil
@@ -179,11 +301,84 @@ func (s *State) dispatchMutationAction(ctx context.Context, client *Client, reqI
 	}
 }
 
+func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	paths := act.Seed.Paths
+	if len(paths) == 0 && s.Index != nil && len(s.Index.Files) > 0 {
+		paths = []string{s.Index.Files[0].Path}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	createReq := map[string]any{
+		"project_id":          s.Project.ProjectID,
+		"project_revision":    s.Project.ProjectRevision,
+		"kind":                firstNonEmpty(act.Seed.Kind, "fix"),
+		"title":               firstNonEmpty(act.Seed.Title, "Agent Mission"),
+		"paths":               paths,
+		"acceptance_criteria": act.Seed.AcceptanceCriteria,
+		"finding_targets":     act.Seed.FindingTargets,
+	}
+	var session ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes", createReq, &session); err != nil {
+		return err
+	}
+	s.Change = &session
+	wfReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         session.Revision,
+		"hash":             session.Hash,
+		"message":          firstNonEmpty(act.Seed.Message, act.Message, session.Title),
+		"models": map[string]string{
+			"create": "bug",
+			"test":   "function",
+			"review": "analyze",
+		},
+		"confirmed_profiles": []string{"analyze", "bug", "function"},
+		"confirm_security":   true,
+		"auto_repair":        true,
+	}
+	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow"
+	var wfSession ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
+		return err
+	}
+	s.Change = &wfSession
+	return nil
+}
+
+func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if s.Change == nil || s.Project == nil {
+		return nil
+	}
+	applyReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"confirm":          true,
+		"commit_message":   firstNonEmpty(act.Message, s.Change.Title),
+	}
+	var receipt ChangeMutation
+	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + "/apply"
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, applyReq, &receipt); err != nil {
+		return err
+	}
+	s.ChangeReceipt = &receipt
+	s.Change.State = "applied"
+	return nil
+}
+
 // RunSession runs an interactive terminal session reading keystrokes from in and writing ANSI frames to out.
 func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
-	restore := enableRawTerminal(in)
+	restore := enableRawTerminal(in, out)
 	defer restore()
-	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(width, height)); err != nil {
+
+	w, h := DetectTerminalSize(width, height)
+	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(w, h)); err != nil {
 		return fmt.Errorf("render initial frame: %w", err)
 	}
 	buf := make([]byte, 64)
@@ -200,7 +395,8 @@ func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, ou
 					break
 				}
 			}
-			if _, wErr := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(width, height)); wErr != nil {
+			w, h = DetectTerminalSize(width, height)
+			if _, wErr := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(w, h)); wErr != nil {
 				return fmt.Errorf("render frame: %w", wErr)
 			}
 		}
