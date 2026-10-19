@@ -204,7 +204,16 @@ func (s *State) toggleCurrentFileExclusion() {
 }
 
 func (s *State) applyAndCommitProposal(commitMsg string) {
-	if s.Change == nil || s.Change.State == "applied" {
+	if s.Change == nil {
+		s.CmdOutput = "No active proposal diff to apply."
+		return
+	}
+	if s.Change.State == "applied" {
+		s.CmdOutput = fmt.Sprintf("Proposal %q is already applied and committed (press [u] for Undo).", s.Change.Title)
+		return
+	}
+	if s.hasRunningWorkflow() {
+		s.CmdOutput = "Wait for the active agent workflow to finish verification before applying."
 		return
 	}
 	passed, total := countPassedChecks(s.Change.Checks)
@@ -218,6 +227,7 @@ func (s *State) applyAndCommitProposal(commitMsg string) {
 
 func (s *State) requestGuardedUndo() {
 	if s.ChangeReceipt == nil || !s.ChangeReceipt.UndoAvailable {
+		s.CmdOutput = "No applied proposal receipt available for guarded Undo."
 		return
 	}
 	s.CmdOutput = "Requesting guarded Undo..."
@@ -262,6 +272,7 @@ func (s *State) triggerAgentRecheckOrRepair() {
 func (s *State) rejectCurrentDiffHunk() {
 	active, _, ok := s.activeDiffHunk()
 	if !ok || active.FileIndex < 0 || active.FileIndex >= len(s.Change.Changes) {
+		s.CmdOutput = "No modifiable diff hunk selected to reject."
 		return
 	}
 	fc := &s.Change.Changes[active.FileIndex]
@@ -362,6 +373,10 @@ func (s *State) activateIssueRow() {
 }
 
 func (s *State) activateEditorFileRow() {
+	if s.isViewingDiff() {
+		s.applyAndCommitProposal("")
+		return
+	}
 	if s.Index == nil {
 		return
 	}
@@ -372,10 +387,12 @@ func (s *State) activateEditorFileRow() {
 }
 
 func (s *State) openAgentDiffInspector() {
-	if s.Change != nil && len(s.Change.Changes) > 0 {
+	s.File = nil
+	s.BrowseFiles = false
+	if s.Change != nil && len(EffectiveSessionChanges(s.Change)) > 0 {
 		s.Navigate(PageEditor)
 		s.syncDiffSelectionToHunk(0)
-		s.CmdOutput = fmt.Sprintf("Inspecting diff for %s ([n/N] Hunk · [f/F] File · [v] View Mode · [c] Apply · [x] Reject)", s.Change.Title)
+		s.CmdOutput = fmt.Sprintf("Inspecting diff for %s", s.Change.Title)
 		return
 	}
 	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
@@ -407,7 +424,7 @@ func (s *State) activateAgentRow() {
 	if idx >= len(items) {
 		return
 	}
-	if s.Change != nil && len(s.Change.Changes) > 0 {
+	if s.Change != nil && len(EffectiveSessionChanges(s.Change)) > 0 {
 		s.openAgentDiffInspector()
 		return
 	}
@@ -415,7 +432,7 @@ func (s *State) activateAgentRow() {
 	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 	}
-	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s) — press [d] for Diff Inspector or [r] to refresh", items[idx].Title, items[idx].Branch)
+	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s)", items[idx].Title, items[idx].Branch)
 }
 
 func (s *State) activateSecondaryRow() {
@@ -425,6 +442,8 @@ func (s *State) activateSecondaryRow() {
 	case PageHistory:
 		if idx := s.ClampedIdx(); idx < len(s.ChangeHistory) {
 			entry := s.ChangeHistory[idx]
+			s.File = nil
+			s.BrowseFiles = false
 			s.CmdOutput = fmt.Sprintf("Loaded proposal %s", entry.Title)
 			s.Navigate(PageEditor)
 			s.enqueueAction(ActionRequest{Kind: "load-change", Target: entry.ID})
@@ -559,6 +578,7 @@ func (s *State) openFileInEditor(path string) {
 	if path == "" {
 		return
 	}
+	s.BrowseFiles = false
 	s.File = &FileInfo{Path: path, Name: path}
 	s.Navigate(PageEditor)
 	s.CmdOutput = fmt.Sprintf("Opened %s", path)
@@ -733,7 +753,7 @@ func (s *State) setIssueStatusFilter(view string) {
 	s.Navigate(PageBugs)
 	s.IssueView = view
 	s.SelectedIdx = 0
-	s.CmdOutput = fmt.Sprintf("Issue status filter: %s (Category: %s) · Keys: [s/v] Status · [f/t] Category",
+	s.CmdOutput = fmt.Sprintf("Issue status filter: %s (Category: %s)",
 		strings.ToUpper(s.IssueView), strings.ToUpper(s.IssueCategory))
 }
 
@@ -799,7 +819,7 @@ func (s *State) applyCombinedFilterArg(arg string) bool {
 func (s *State) navigateToIssuesCategory(cmd string) {
 	s.Navigate(PageBugs)
 	if cmd == "issues" {
-		s.CmdOutput = "Switched to [2] Agent Studio · Issues (Keys: [s/v] Status · [f/t] Category)."
+		s.CmdOutput = "Switched to [2] Agent Studio · Issues."
 		return
 	}
 	cat := cmd
@@ -815,7 +835,7 @@ func (s *State) execModelCommand(cmd, arg string) bool {
 	switch cmd {
 	case "models":
 		s.Navigate(PageModels)
-		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing (Keys: [m/M] Cycle Model · [v] Cycle Preset · [x] Reset · [r] Refresh)."
+		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing."
 		return true
 	case "model":
 		s.Navigate(PageModels)
@@ -908,7 +928,7 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 			s.CmdOutput = "Switched to [2] Agent Studio."
 		}
 		return true
-	case "apply", "commit":
+	case "accept", "apply", "commit":
 		s.applyAndCommitProposal(arg)
 		return true
 	case "diff", "inspect":

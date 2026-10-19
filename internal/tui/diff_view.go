@@ -38,7 +38,47 @@ type UnifiedDiffRow struct {
 	Line          DiffLine
 }
 
-// CollectChangeHunks extracts all hunks across all modified files in a ChangeSession.
+// EffectiveSessionChanges returns all modified files in the proposal plus any captured target files not already in Changes.
+func EffectiveSessionChanges(change *ChangeSession) []FileChange {
+	if change == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(change.Changes))
+	out := make([]FileChange, 0, len(change.Changes)+len(change.Targets))
+	for _, fc := range change.Changes {
+		seen[fc.Path] = true
+		out = append(out, fc)
+	}
+	for _, t := range change.Targets {
+		if t.Path == "" || seen[t.Path] || !t.Exists || strings.TrimSpace(t.Content) == "" {
+			continue
+		}
+		seen[t.Path] = true
+		out = append(out, FileChange{
+			Path:    t.Path,
+			Summary: "Captured target file in scope (unchanged)",
+			Content: t.Content,
+			Diff:    FileDiff{Lines: buildContextDiffLines(t.Content)},
+		})
+	}
+	return out
+}
+
+func buildContextDiffLines(content string) []DiffLine {
+	raw := strings.Split(strings.ReplaceAll(strings.TrimRight(content, "\r\n"), "\r\n", "\n"), "\n")
+	lines := make([]DiffLine, 0, len(raw))
+	for idx, text := range raw {
+		lines = append(lines, DiffLine{
+			Kind:    "context",
+			OldLine: idx + 1,
+			NewLine: idx + 1,
+			Text:    text,
+		})
+	}
+	return lines
+}
+
+// CollectChangeHunks extracts all hunks across all files in a ChangeSession.
 func CollectChangeHunks(changes []FileChange) []FileDiffHunk {
 	if len(changes) == 0 {
 		return nil
@@ -47,6 +87,18 @@ func CollectChangeHunks(changes []FileChange) []FileDiffHunk {
 	for fIdx, fc := range changes {
 		fAdd, fRem := countFileDiffLines(fc.Diff.Lines)
 		hunks := SplitDiffIntoHunks(fc.Diff.Lines)
+		if len(hunks) == 0 && len(fc.Diff.Lines) > 0 {
+			oldStart, oldEnd := lineBounds(fc.Diff.Lines, true)
+			newStart, newEnd := lineBounds(fc.Diff.Lines, false)
+			hunks = []DiffHunk{{
+				Index:    0,
+				OldStart: oldStart,
+				OldEnd:   oldEnd,
+				NewStart: newStart,
+				NewEnd:   newEnd,
+				Lines:    fc.Diff.Lines,
+			}}
+		}
 		for hIdx, h := range hunks {
 			out = append(out, FileDiffHunk{
 				GlobalIndex:   len(out),
@@ -62,40 +114,7 @@ func CollectChangeHunks(changes []FileChange) []FileDiffHunk {
 			})
 		}
 	}
-	if len(out) > 0 {
-		return out
-	}
-	return fallbackContextHunks(changes)
-}
-
-func fallbackContextHunks(changes []FileChange) []FileDiffHunk {
-	for fIdx, fc := range changes {
-		if len(fc.Diff.Lines) == 0 {
-			continue
-		}
-		oldStart, oldEnd := lineBounds(fc.Diff.Lines, true)
-		newStart, newEnd := lineBounds(fc.Diff.Lines, false)
-		return []FileDiffHunk{
-			{
-				GlobalIndex:   0,
-				FileIndex:     fIdx,
-				FileTotal:     len(changes),
-				Path:          fc.Path,
-				Summary:       fc.Summary,
-				FileHunkIndex: 0,
-				FileHunkTotal: 1,
-				Hunk: DiffHunk{
-					Index:    0,
-					OldStart: oldStart,
-					OldEnd:   oldEnd,
-					NewStart: newStart,
-					NewEnd:   newEnd,
-					Lines:    fc.Diff.Lines,
-				},
-			},
-		}
-	}
-	return nil
+	return out
 }
 
 func countFileDiffLines(lines []DiffLine) (added int, removed int) {
@@ -183,10 +202,11 @@ func diffModeDisplayName(mode string) string {
 }
 
 func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
-	if s.Change == nil || len(s.Change.Changes) == 0 {
+	changes := EffectiveSessionChanges(s.Change)
+	if len(changes) == 0 {
 		return FileDiffHunk{}, nil, false
 	}
-	all := CollectChangeHunks(s.Change.Changes)
+	all := CollectChangeHunks(changes)
 	if len(all) == 0 {
 		return FileDiffHunk{}, nil, false
 	}
@@ -195,10 +215,11 @@ func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
 }
 
 func (s *State) unifiedDiffRows() []UnifiedDiffRow {
-	if s.Change == nil || len(s.Change.Changes) == 0 {
+	changes := EffectiveSessionChanges(s.Change)
+	if len(changes) == 0 {
 		return nil
 	}
-	allHunks := CollectChangeHunks(s.Change.Changes)
+	allHunks := CollectChangeHunks(changes)
 	var rows []UnifiedDiffRow
 	for _, fh := range allHunks {
 		header := fmt.Sprintf("File %d/%d: %s · Hunk #%d/%d (@@ -%d,%d +%d,%d @@)",
@@ -294,12 +315,12 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	if !ok {
 		return []string{fmt.Sprintf("  %sNo diff lines available.%s", th.muted, th.reset)}
 	}
-	added, removed, badge := ClassifyDiffScope(s.Change.Changes)
+	added, removed, _ := ClassifyDiffScope(s.Change.Changes)
 	mode := s.EffectiveDiffMode()
-	meta := s.buildDiffReviewMeta(th, active, len(allHunks), added, removed, badge)
-	rightTag := fmt.Sprintf("%s · %s", diffModeDisplayName(mode), badge)
+	meta := s.buildDiffReviewMeta(th, active, len(allHunks), added, removed)
+	stateTag := strings.ToUpper(firstNonEmpty(s.Change.State, "draft"))
+	rightTag := fmt.Sprintf("%s · +%d / -%d", stateTag, added, removed)
 	lines := th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, meta)
-	lines = append(lines, s.renderDiffFileTabsAndNav(th, width, active, len(allHunks), mode)...)
 
 	switch mode {
 	case "split":
@@ -311,55 +332,22 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	}
 }
 
-func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, added, removed int, badge string) []string {
-	fileScope := fmt.Sprintf("%sFile:%s %s%s%s", th.muted, th.reset, th.cyan, truncatePlain(active.Path, 26), th.reset)
-	if active.FileTotal > 1 {
-		fileScope = fmt.Sprintf("%sFile %d/%d:%s %s%s%s",
-			th.muted, active.FileIndex+1, active.FileTotal, th.reset, th.cyan, truncatePlain(active.Path, 24), th.reset)
-	}
+func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, added, removed int) []string {
+	fileScope := fmt.Sprintf("%sFile %d/%d:%s %s%s%s",
+		th.muted, active.FileIndex+1, max(1, active.FileTotal), th.reset,
+		th.cyan, truncatePlain(active.Path, 28), th.reset)
 	meta := []string{
 		fmt.Sprintf(
-			"%sHunk #%d/%d%s · %s (%s+%d%s/%s-%d%s) · %sProposal:%s %s%s%s",
+			"%sHunk #%d/%d%s · %s · %sProposal:%s %s%s%s",
 			th.bold+th.accent, active.GlobalIndex+1, totalHunks, th.reset,
 			fileScope,
-			th.green, added, th.reset, th.red, removed, th.reset,
-			th.muted, th.reset, th.bold+th.fg, truncatePlain(s.Change.Title, 26), th.reset,
+			th.muted, th.reset, th.bold+th.fg, truncatePlain(s.Change.Title, 32), th.reset,
 		),
 	}
 	if s.ShowInlineWhy && active.Summary != "" {
 		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, sanitizeCodeText(active.Summary), th.reset))
 	}
 	return meta
-}
-
-func (s *State) renderDiffFileTabsAndNav(th ansiTheme, width int, active FileDiffHunk, totalHunks int, mode string) []string {
-	var filePills []string
-	for idx, fc := range s.Change.Changes {
-		fAdd, fRem := countFileDiffLines(fc.Diff.Lines)
-		shortPath := truncatePlain(fc.Path, 20)
-		if idx == active.FileIndex {
-			filePills = append(filePills, fmt.Sprintf("%s▸ [%d/%d] %s%s %s(+%d/-%d)%s",
-				th.bold+th.accent, idx+1, len(s.Change.Changes), shortPath, th.reset, th.green, fAdd, fRem, th.reset))
-		} else {
-			filePills = append(filePills, fmt.Sprintf("%s[%d/%d] %s (+%d/-%d)%s",
-				th.muted, idx+1, len(s.Change.Changes), shortPath, fAdd, fRem, th.reset))
-		}
-	}
-	fileRow := fmt.Sprintf("  %sFILES:%s %s", th.bold+th.cyan, th.reset, strings.Join(filePills, "  "))
-	navRow := fmt.Sprintf(
-		"  %sKEYS:%s  %s[n/N]%s Hunk #%d/%d  %s[f/F]%s File %d/%d  %s[j/k]%s Line  %s[v]%s View:%s%s%s  %s[x]%s Reject  %s[c]%s Apply",
-		th.bold+th.cyan, th.reset,
-		th.cyan, th.reset, active.GlobalIndex+1, totalHunks,
-		th.cyan, th.reset, active.FileIndex+1, active.FileTotal,
-		th.cyan, th.reset,
-		th.cyan, th.reset, th.bold+th.amber, strings.ToUpper(mode), th.reset,
-		th.cyan, th.reset,
-		th.cyan, th.reset,
-	)
-	return []string{
-		padVisibleRight(fileRow, max(20, width-2)),
-		padVisibleRight(navRow, max(20, width-2)),
-	}
 }
 
 func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
@@ -369,7 +357,7 @@ func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHu
 	hunkLines := active.Hunk.Lines
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(hunkLines), selected, 12)
+	start, end := windowBounds(len(hunkLines), selected, 14)
 	for idx := start; idx < end; idx++ {
 		lines = append(lines, formatDualNumberDiffLine(th, hunkLines[idx], idx == selected, codeCol))
 	}
@@ -404,7 +392,7 @@ func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk
 
 	splitRows := BuildSplitDiffRows(active.Hunk.Lines)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(splitRows), selected, 12)
+	start, end := windowBounds(len(splitRows), selected, 14)
 	for idx := start; idx < end; idx++ {
 		r := splitRows[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -442,7 +430,7 @@ func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiff
 	uRows := s.unifiedDiffRows()
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(uRows), selected, 12)
+	start, end := windowBounds(len(uRows), selected, 14)
 	for idx := start; idx < end; idx++ {
 		r := uRows[idx]
 		if r.IsHeader {

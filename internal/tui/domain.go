@@ -530,7 +530,7 @@ func buildAgentItemFromWorktree(wt GitWorktree) AgentItem {
 func countPassedChecks(checks []Check) (int, int) {
 	passed := 0
 	for _, c := range checks {
-		if c.State == "passed" {
+		if c.State == "passed" || (!c.Required && c.State == "skipped") {
 			passed++
 		}
 	}

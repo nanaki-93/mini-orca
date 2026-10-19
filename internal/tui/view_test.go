@@ -535,3 +535,104 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 		t.Fatalf("expected file 1 content to remain intact after rejecting file 2 hunk, got %q", s.Change.Changes[0].Content)
 	}
 }
+
+func TestKeybindsModalNoTruncationAcrossAllPages(t *testing.T) {
+	s := NewState()
+	pages := []Page{
+		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
+		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
+		PageInstructions, PageModels, PageBootstrap, PageLessons,
+	}
+	th := themeForPalette(s.Palette)
+	for _, p := range pages {
+		s.Navigate(p)
+		for _, width := range []int{80, 100, 120} {
+			lines := s.renderKeybindsModal(th, width)
+			for idx, line := range lines {
+				if strings.Contains(line, "…") {
+					t.Fatalf("page %s at width %d: keybinds modal row %d was truncated: %q", p, width, idx, line)
+				}
+			}
+		}
+	}
+}
+
+func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
+	s := NewState()
+	var addedLines []DiffLine
+	for i := 1; i <= 20; i++ {
+		addedLines = append(addedLines, DiffLine{Kind: "add", NewLine: i, Text: "func testCase() {}"})
+	}
+	s.Index = &ProjectIndex{
+		Files: []IndexedFile{
+			{Path: "internal/utils/utils.go", Language: "Go", LineCount: 30},
+			{Path: "internal/utils/utils_test.go", Language: "Go", LineCount: 20},
+		},
+	}
+	s.Change = &ChangeSession{
+		ID:    "chg-targets",
+		Title: "Add unit tests for utils",
+		State: "checked",
+		Targets: []ChangeTarget{
+			{Path: "internal/utils/utils.go", Exists: true, Content: "package utils\nfunc Validate() bool { return true }\n"},
+			{Path: "internal/utils/utils_test.go", Exists: false, Content: ""},
+		},
+		Changes: []FileChange{
+			{
+				Path:    "internal/utils/utils_test.go",
+				Summary: "Add comprehensive tests",
+				Content: "package utils\n",
+				Diff:    FileDiff{Lines: addedLines},
+			},
+		},
+		Checks: []Check{{Name: "go test", Required: true, State: "passed"}},
+	}
+	s.Navigate(PageEditor)
+
+	// 1. Verify no inline KEYS: or FILES: bar clutters the diff screen
+	frame := s.Render(120, 36)
+	if strings.Contains(frame, "KEYS:") || strings.Contains(frame, "FILES:") {
+		t.Fatalf("expected clean diff screen without inline KEYS: or FILES: rows:\n%s", frame)
+	}
+
+	// 2. Verify 'n' pages through a >14-line single hunk before switching hunks
+	s.HandleKey(KeyEvent{Key: "n"})
+	if s.HunkIdx != 0 || s.SelectedIdx == 0 {
+		t.Fatalf("expected 'n' in 20-line hunk to page down within hunk #1 first, got HunkIdx=%d SelectedIdx=%d", s.HunkIdx, s.SelectedIdx)
+	}
+
+	// 3. Verify 'f' switches to the captured target file (internal/utils/utils.go) even when only utils_test.go is in Changes
+	s.HandleKey(KeyEvent{Key: "f"})
+	if s.HunkIdx != 1 || !strings.Contains(s.CmdOutput, "internal/utils/utils.go") {
+		t.Fatalf("expected 'f' to switch to captured target file internal/utils/utils.go, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	}
+
+	// 4. Verify 'a' (Accept) and 'Enter' on Diff page enqueue apply-commit
+	s.HandleKey(KeyEvent{Key: "a"})
+	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "apply-commit" {
+		t.Fatalf("expected 'a' on diff page to enqueue apply-commit, got %+v", s.PendingActions)
+	}
+	s.PendingActions = nil
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "apply-commit" {
+		t.Fatalf("expected 'Enter' on diff page to enqueue apply-commit, got %+v", s.PendingActions)
+	}
+
+	// 5. Verify explicit feedback when proposal is already applied
+	s.Change.State = "applied"
+	s.HandleKey(KeyEvent{Key: "a"})
+	if !strings.Contains(s.CmdOutput, "already applied") {
+		t.Fatalf("expected explicit feedback when proposal is already applied, got %q", s.CmdOutput)
+	}
+
+	// 6. Verify 'o' toggles to repository file browser so user can browse all files
+	s.HandleKey(KeyEvent{Key: "o"})
+	if !s.BrowseFiles {
+		t.Fatal("expected 'o' to switch PageEditor to repository file browser")
+	}
+	browserFrame := s.Render(120, 36)
+	if !strings.Contains(browserFrame, "REPOSITORY FILE PATH") {
+		t.Fatalf("expected repository file list when BrowseFiles is true:\n%s", browserFrame)
+	}
+}

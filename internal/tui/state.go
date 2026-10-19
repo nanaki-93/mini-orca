@@ -94,6 +94,7 @@ type State struct {
 	ShowInlineWhy     bool
 	DiffMode          string
 	HunkIdx           int
+	BrowseFiles       bool
 	AgentDetailOpen   bool
 	ShowKeybindsModal bool
 	Confirmation      *Confirmation
@@ -651,11 +652,15 @@ func (s *State) ActiveListLength() int {
 	}
 }
 
+func (s *State) isViewingDiff() bool {
+	return !s.BrowseFiles && s.File == nil && s.Change != nil && len(EffectiveSessionChanges(s.Change)) > 0
+}
+
 func (s *State) editorListLength() int {
-	if s.Change != nil && len(s.Change.Changes) > 0 {
+	if s.isViewingDiff() {
 		return s.diffViewRowCount()
 	}
-	if s.File != nil && s.File.Content != "" {
+	if !s.BrowseFiles && s.File != nil && s.File.Content != "" {
 		return max(1, len(strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")))
 	}
 	return s.indexedFileCount()
@@ -900,14 +905,28 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 	if err := client.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
 		s.ChangeReceipt = &rec
 	}
-	if s.Change == nil && len(s.ChangeHistory) > 0 && s.ChangeHistory[0].ID != "" {
-		var chg ChangeSession
-		target := "/api/projects/current/changes/" + url.PathEscape(s.ChangeHistory[0].ID) + idQuery
-		if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
-			s.Change = &chg
+	if s.Change == nil && len(s.ChangeHistory) > 0 {
+		if chgID := pickInitialChangeID(s.ChangeHistory); chgID != "" {
+			var chg ChangeSession
+			target := "/api/projects/current/changes/" + url.PathEscape(chgID) + idQuery
+			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+				s.Change = &chg
+			}
 		}
 	}
 	s.loadAuxResources(ctx, client, idQuery, revQuery)
+}
+
+func pickInitialChangeID(history []ChangeHistoryEntry) string {
+	for _, entry := range history {
+		if entry.ID != "" && entry.State != "applied" && entry.State != "reverted" && entry.Revision > 0 {
+			return entry.ID
+		}
+	}
+	if len(history) > 0 {
+		return history[0].ID
+	}
+	return ""
 }
 
 func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, revQuery string) {

@@ -518,18 +518,7 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 		return nil
 	}
 	sessionID := url.PathEscape(s.Change.ID)
-	if s.Change.Hash != "" && s.Change.ReviewedHash != s.Change.Hash {
-		reviewReq := map[string]any{
-			"project_id":       s.Project.ProjectID,
-			"project_revision": s.Project.ProjectRevision,
-			"revision":         s.Change.Revision,
-			"hash":             s.Change.Hash,
-		}
-		var reviewed ChangeSession
-		if err := client.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq, &reviewed); err == nil && reviewed.ID != "" {
-			s.Change = &reviewed
-		}
-	}
+	s.ensureChangeReviewed(ctx, client, reqID, sessionID)
 	applyReq := map[string]any{
 		"project_id":       s.Project.ProjectID,
 		"project_revision": s.Project.ProjectRevision,
@@ -555,7 +544,36 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 	if receipt.ProjectRevision != "" {
 		s.Project.ProjectRevision = receipt.ProjectRevision
 	}
+	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q", s.Change.Title)
 	return nil
+}
+
+func (s *State) ensureChangeReviewed(ctx context.Context, client *Client, reqID, sessionID string) {
+	if s.Change == nil || s.Change.Hash == "" {
+		return
+	}
+	reviewReq := func() map[string]any {
+		return map[string]any{
+			"project_id":       s.Project.ProjectID,
+			"project_revision": s.Project.ProjectRevision,
+			"revision":         s.Change.Revision,
+			"hash":             s.Change.Hash,
+		}
+	}
+	var reviewed ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+		return
+	}
+	checkReq := reviewReq()
+	checkReq["run_tests"] = true
+	var checked ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-chk", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/checks", checkReq, &checked); err == nil && checked.ID != "" {
+		s.Change = &checked
+	}
+	if err := client.DoJSON(ctx, reqID+"-rev2", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+	}
 }
 
 func (s *State) recordAppliedFindingCompletions(targets []FindingTarget, commit *ChangeCommit) {

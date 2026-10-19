@@ -192,7 +192,8 @@ func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWor
 	runtime := s.workflowStageRuntime(stage, job.models.selections()[stage])
 	switch stage {
 	case 0:
-		_, err = s.generateChangeWithRuntime(ctx, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message}, runtime)
+		isRepair := session.Workflow != nil && session.Workflow.AutoRepairAttempts > 0
+		_, err = s.generateChangeWithRuntime(ctx, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message, Repair: isRepair}, runtime)
 	case 1:
 		session, err = s.generateWorkflowTests(ctx, job.root, session, runtime)
 		if err == nil {

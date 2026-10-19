@@ -348,39 +348,97 @@ type pageHelpSpec struct {
 	commands  string
 }
 
-func renderKeyPills(th ansiTheme, items []keyDesc) string {
-	parts := make([]string, 0, len(items))
+func renderWrappedKeyPillRows(th ansiTheme, labelStyle, label string, items []keyDesc, availW int) []string {
+	var lines []string
+	curLine := ""
+	curW := 0
 	for _, it := range items {
-		parts = append(parts, th.keyPill(it.key, it.desc))
+		pill := th.keyPill(it.key, it.desc)
+		pillW := visibleRuneCount(pill)
+		if curW > 0 && curW+2+pillW > availW {
+			lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, curLine))
+			curLine = pill
+			curW = pillW
+			continue
+		}
+		if curW > 0 {
+			curLine += "  " + pill
+			curW += 2 + pillW
+		} else {
+			curLine = pill
+			curW = pillW
+		}
 	}
-	return strings.Join(parts, "  ")
+	if curLine != "" || len(lines) == 0 {
+		lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, curLine))
+	}
+	return lines
+}
+
+func renderWrappedCommandRows(th ansiTheme, labelStyle, label, raw string, availW int) []string {
+	sep := "  "
+	if !strings.Contains(raw, "  ") {
+		sep = " "
+	}
+	var tokens []string
+	for _, part := range strings.Split(raw, sep) {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			tokens = append(tokens, trimmed)
+		}
+	}
+	var lines []string
+	curLine := ""
+	curW := 0
+	for _, tok := range tokens {
+		tokW := visibleRuneCount(tok)
+		if curW > 0 && curW+2+tokW > availW {
+			lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, th.fg+curLine+th.reset))
+			curLine = tok
+			curW = tokW
+			continue
+		}
+		if curW > 0 {
+			curLine += "  " + tok
+			curW += 2 + tokW
+		} else {
+			curLine = tok
+			curW = tokW
+		}
+	}
+	if curLine != "" || len(lines) == 0 {
+		lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, th.fg+curLine+th.reset))
+	}
+	return lines
+}
+
+func formatKeybindRow(th ansiTheme, labelStyle, label string, first bool, content string) string {
+	if first {
+		return fmt.Sprintf("%s%-16s%s%s", labelStyle, label, th.reset, content)
+	}
+	return strings.Repeat(" ", 16) + content
 }
 
 func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	spec := lookupPageHelpSpec(s.EffectivePage())
-	ruleLen := max(16, min(88, width-6)-6)
+	boxW := max(44, min(108, width-4))
+	contentW := max(24, boxW-4)
+	availW := max(18, contentW-16)
+	ruleLen := max(16, boxW-6)
+	globalNav := []keyDesc{{"1-5", "Section"}, {"Tab", "Sub-page"}, {"h/l", "View"}, {"j/k", "Select Row"}}
+	globalKeys := []keyDesc{{"?", "Close Help"}, {":", "Command"}, {"p", "Cycle Palette"}, {"q", "Quit"}}
+	genericCmds := ":help  :keys  :analyze  :test  :fix  :agent  :open  :project  :models  :apply  :undo  :palette  :q"
+
 	body := []string{
 		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.accent, spec.title, th.reset),
-		fmt.Sprintf("%sPAGE KEYS%s       %s", th.bold+th.green, th.reset, renderKeyPills(th, spec.primary)),
-		fmt.Sprintf("%sWORKFLOW%s        %s", th.bold+th.amber, th.reset, renderKeyPills(th, spec.secondary)),
-		fmt.Sprintf("%sPAGE COMMANDS%s   %s%s%s", th.bold+th.purple, th.reset, th.fg, spec.commands, th.reset),
-		fmt.Sprintf("%s%s%s", th.border, strings.Repeat("─", ruleLen), th.reset),
-		fmt.Sprintf("%sGLOBAL NAV%s      %s  %s  %s  %s",
-			th.bold+th.cyan, th.reset,
-			th.keyPill("1-5", "Section"),
-			th.keyPill("Tab", "Sub-page"),
-			th.keyPill("h/l", "View"),
-			th.keyPill("j/k", "Select Row")),
-		fmt.Sprintf("%sGLOBAL KEYS%s     %s  %s  %s  %s",
-			th.bold+th.cyan, th.reset,
-			th.keyPill("?", "Close Help"),
-			th.keyPill(":", "Command"),
-			th.keyPill("p", "Cycle Palette"),
-			th.keyPill("q", "Quit")),
-		fmt.Sprintf("%sGENERIC CMDS%s    %s:help :keys :analyze :test :fix :agent :open :project :models :apply :undo :palette :q%s",
-			th.bold+th.purple, th.reset, th.fg, th.reset),
 	}
-	return th.renderPanelBox("KEYBINDINGS & COLON COMMANDS REFERENCE", s.activeBreadcrumb(), min(88, width-6), body)
+	body = append(body, renderWrappedKeyPillRows(th, th.bold+th.green, "PAGE KEYS", spec.primary, availW)...)
+	body = append(body, renderWrappedKeyPillRows(th, th.bold+th.amber, "WORKFLOW", spec.secondary, availW)...)
+	body = append(body, renderWrappedCommandRows(th, th.bold+th.purple, "PAGE COMMANDS", spec.commands, availW)...)
+	body = append(body, fmt.Sprintf("%s%s%s", th.border, strings.Repeat("─", ruleLen), th.reset))
+	body = append(body, renderWrappedKeyPillRows(th, th.bold+th.cyan, "GLOBAL NAV", globalNav, availW)...)
+	body = append(body, renderWrappedKeyPillRows(th, th.bold+th.cyan, "GLOBAL KEYS", globalKeys, availW)...)
+	body = append(body, renderWrappedCommandRows(th, th.bold+th.purple, "GENERIC CMDS", genericCmds, availW)...)
+	return th.renderPanelBox("KEYBINDINGS & COLON COMMANDS REFERENCE", "[?] / Esc", boxW, body)
 }
 
 func lookupPageHelpSpec(page Page) pageHelpSpec {
@@ -415,7 +473,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageAgents: {
 		title:     "[2] AGENT STUDIO · PIPELINE & WORKTREES",
 		primary:   []keyDesc{{"Enter/d/i", "Inspect Diff"}, {"r", "Refresh/Repair"}, {"x", "Cancel Workflow"}},
-		secondary: []keyDesc{{"c", "Apply & Commit"}, {"u", "Guarded Undo"}, {"m", "Merge"}, {"b", "Issues"}},
+		secondary: []keyDesc{{"a/c", "Apply & Commit"}, {"u", "Guarded Undo"}, {"m", "Merge"}, {"b", "Issues"}},
 		commands:  ":agent <prompt>  :diff  :apply [msg]  :cancel  :merge  :undo",
 	},
 	PageBugs: {
@@ -453,20 +511,20 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
 		title:     "[3] CODE & DIFF · INSPECTOR",
-		primary:   []keyDesc{{"n/N", "Next/Prev Hunk"}, {"f/F", "Next/Prev File"}, {"v", "Diff View Mode"}, {"c", "Apply & Commit"}},
-		secondary: []keyDesc{{"x", "Reject Hunk"}, {"e", "Toggle Why"}, {"u", "Guarded Undo"}, {"w", "Agent Pipeline"}},
+		primary:   []keyDesc{{"a/c/Enter", "Apply & Commit"}, {"n/N", "Next/Prev Hunk"}, {"f/F", "Next/Prev File"}, {"v", "Diff View"}},
+		secondary: []keyDesc{{"x", "Reject Hunk"}, {"e", "Toggle Why"}, {"o", "Browse Files"}, {"u", "Guarded Undo"}},
 		commands:  ":diff [hunk|split|unified]  :hunk [next|prev]  :apply [msg]  :undo  :open <file>",
 	},
 	PageGit: {
 		title:     "[3] CODE & DIFF · GIT & WORKTREES",
-		primary:   []keyDesc{{"m", "Merge Worktree"}, {"c", "Apply & Commit"}, {"u", "Guarded Undo"}},
+		primary:   []keyDesc{{"m", "Merge Worktree"}, {"a/c", "Apply & Commit"}, {"u", "Guarded Undo"}},
 		secondary: []keyDesc{{"j/k", "Select Worktree"}, {"h/l", "Code & Diff View"}, {"Tab", "Next View"}},
 		commands:  ":git  :merge  :apply [msg]  :undo  :proposals",
 	},
 	PageHistory: {
 		title:     "[3] CODE & DIFF · SAVED PROPOSALS",
 		primary:   []keyDesc{{"Enter", "Load Proposal Diff"}, {"u", "Guarded Undo"}, {"j/k", "Select Proposal"}},
-		secondary: []keyDesc{{"c", "Apply & Commit"}, {"h/l", "Code & Diff View"}, {"Tab", "Next View"}},
+		secondary: []keyDesc{{"a/c", "Apply & Commit"}, {"h/l", "Code & Diff View"}, {"Tab", "Next View"}},
 		commands:  ":proposals  :history  :apply [msg]  :undo",
 	},
 	PageDocs: {

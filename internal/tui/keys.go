@@ -162,6 +162,13 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 		s.CmdOutput = "Returned to Agents in Progress Dashboard"
 		return true
 	}
+	if s.Page == PageEditor && (!s.BrowseFiles && (s.File != nil || s.isViewingDiff())) {
+		s.File = nil
+		s.BrowseFiles = true
+		s.SelectedIdx = 0
+		s.CmdOutput = "Browsing repository files (press [d] for proposal diff)"
+		return true
+	}
 	return false
 }
 
@@ -255,7 +262,7 @@ func (s *State) moveSelection(delta int) {
 		s.cycleSubView(delta > 0)
 		return
 	case PageEditor:
-		if s.Change != nil && len(s.Change.Changes) > 0 {
+		if s.isViewingDiff() {
 			s.moveEditorDiffSelection(delta)
 			return
 		}
@@ -413,11 +420,25 @@ func (s *State) handleAgentsAndEditorKey(ev KeyEvent) bool {
 		return s.handleAgentsKey(ev.Key)
 	case PageEditor:
 		return s.handleEditorKey(ev.Key)
-	case PageGit:
-		if ev.Key == "m" {
+	case PageGit, PageHistory:
+		return s.handleGitOrHistoryKey(ev.Key)
+	}
+	return false
+}
+
+func (s *State) handleGitOrHistoryKey(key string) bool {
+	switch key {
+	case "m":
+		if s.Page == PageGit {
 			s.mergeSelectedWorktree()
 			return true
 		}
+	case "a", "c":
+		s.applyAndCommitProposal("")
+		return true
+	case "u":
+		s.requestGuardedUndo()
+		return true
 	}
 	return false
 }
@@ -434,7 +455,7 @@ func (s *State) handleAgentsKey(key string) bool {
 		s.Navigate(PageBugs)
 		s.CmdOutput = "Returned to [2] Agent Studio · Issues"
 		return true
-	case "c":
+	case "a", "c":
 		s.applyAndCommitProposal("")
 		return true
 	case "u":
@@ -466,7 +487,7 @@ func (s *State) handleEditorKey(key string) bool {
 		}
 		s.CmdOutput = fmt.Sprintf("Inline diff explanations %s", stateWord)
 		return true
-	case "c":
+	case "a", "c":
 		s.applyAndCommitProposal("")
 		return true
 	case "u":
@@ -474,6 +495,12 @@ func (s *State) handleEditorKey(key string) bool {
 		return true
 	case "x":
 		s.rejectCurrentDiffHunk()
+		return true
+	case "o":
+		s.toggleEditorFileBrowser()
+		return true
+	case "d":
+		s.openAgentDiffInspector()
 		return true
 	case "w":
 		s.Navigate(PageAgents)
@@ -485,6 +512,19 @@ func (s *State) handleEditorKey(key string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *State) toggleEditorFileBrowser() {
+	if s.BrowseFiles {
+		s.BrowseFiles = false
+		s.SelectedIdx = 0
+		s.CmdOutput = "Returned to diff inspector"
+		return
+	}
+	s.File = nil
+	s.BrowseFiles = true
+	s.SelectedIdx = 0
+	s.CmdOutput = "Browsing repository files"
 }
 
 func (s *State) handleEditorDiffNavKey(key string) bool {
@@ -507,6 +547,21 @@ func (s *State) stepDiffHunk(forward bool) {
 	if !ok {
 		return
 	}
+	rowCount := s.diffViewRowCount()
+	if rowCount > 14 && s.EffectiveDiffMode() != "unified" {
+		if forward && s.SelectedIdx+12 < rowCount {
+			s.SelectedIdx = min(rowCount-1, s.SelectedIdx+12)
+			s.CmdOutput = fmt.Sprintf("Focused diff hunk #%d/%d · %s (line %d/%d)",
+				active.GlobalIndex+1, len(allHunks), active.Path, s.SelectedIdx+1, rowCount)
+			return
+		}
+		if !forward && s.SelectedIdx > firstChangedRowForMode(active.Hunk, s.EffectiveDiffMode()) {
+			s.SelectedIdx = max(0, s.SelectedIdx-12)
+			s.CmdOutput = fmt.Sprintf("Focused diff hunk #%d/%d · %s (line %d/%d)",
+				active.GlobalIndex+1, len(allHunks), active.Path, s.SelectedIdx+1, rowCount)
+			return
+		}
+	}
 	delta := -1
 	if forward {
 		delta = 1
@@ -517,12 +572,20 @@ func (s *State) stepDiffHunk(forward bool) {
 }
 
 func (s *State) stepDiffFile(forward bool) {
+	if !s.isViewingDiff() {
+		s.stepIndexedEditorFile(forward)
+		return
+	}
 	active, allHunks, ok := s.activeDiffHunk()
 	if !ok {
 		return
 	}
 	if active.FileTotal <= 1 {
-		s.CmdOutput = fmt.Sprintf("Single file in proposal: %s (use [n/N] to step hunks)", active.Path)
+		if s.Index != nil && len(s.Index.Files) > 0 {
+			s.stepIndexedEditorFile(forward)
+			return
+		}
+		s.CmdOutput = fmt.Sprintf("Single file in proposal: %s", active.Path)
 		return
 	}
 	delta := -1
@@ -542,6 +605,31 @@ func (s *State) stepDiffFile(forward bool) {
 	}
 }
 
+func (s *State) stepIndexedEditorFile(forward bool) {
+	if s.Index == nil || len(s.Index.Files) == 0 {
+		return
+	}
+	cur := 0
+	curPath := ""
+	if s.File != nil {
+		curPath = s.File.Path
+	} else if active, _, ok := s.activeDiffHunk(); ok {
+		curPath = active.Path
+	}
+	for i, f := range s.Index.Files {
+		if f.Path == curPath {
+			cur = i
+			break
+		}
+	}
+	delta := -1
+	if forward {
+		delta = 1
+	}
+	next := (cur + delta + len(s.Index.Files)) % len(s.Index.Files)
+	s.openFileInEditor(s.Index.Files[next].Path)
+}
+
 func (s *State) cycleDiffViewMode(forward bool) {
 	modes := []string{"hunk", "split", "unified"}
 	next := stepStringSlice(modes, s.EffectiveDiffMode(), forward)
@@ -556,7 +644,7 @@ func (s *State) setDiffViewMode(mode string) {
 	} else {
 		s.SelectedIdx = 0
 	}
-	s.CmdOutput = fmt.Sprintf("Switched diff inspector view to %s ([v] to cycle · [n/N] hunk · [f/F] file)", diffModeDisplayName(eff))
+	s.CmdOutput = fmt.Sprintf("Switched diff inspector view to %s", diffModeDisplayName(eff))
 }
 
 func (s *State) moveEditorDiffSelection(delta int) {

@@ -582,17 +582,18 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 
 func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	whyLabel := "Inline Rationale: ON"
-	if !s.ShowInlineWhy {
-		whyLabel = "Inline Rationale: OFF"
+	subRight := "Read-only repository inspector"
+	if s.isViewingDiff() {
+		subRight = diffModeDisplayName(s.EffectiveDiffMode())
+	} else if !s.BrowseFiles && s.File != nil {
+		subRight = sanitizeCodeText(s.File.Path)
 	}
-	subRight := fmt.Sprintf("View: %s · %s", diffModeDisplayName(s.EffectiveDiffMode()), whyLabel)
 	lines := renderPageHeader(th, "[3] CODE & DIFF · INSPECTOR", subRight)
-	if s.Change != nil && len(s.Change.Changes) > 0 {
+	if s.isViewingDiff() {
 		lines = append(lines, s.renderChangeDiffLines(th, width)...)
 		return lines
 	}
-	if s.File != nil {
+	if !s.BrowseFiles && s.File != nil {
 		header := fmt.Sprintf("%sFile:%s %s%s%s %s(%s · %d lines)%s",
 			th.muted, th.reset, th.bold+th.fg, sanitizeCodeText(s.File.Path), th.reset,
 			th.muted, firstNonEmpty(s.File.Language, "text"), s.File.LineCount, th.reset)
