@@ -271,28 +271,57 @@ func (p analysisPreviewPayload) providerIDs() []string {
 	return ids
 }
 
+func (s *State) isAnalysisPausedOrInterrupted() bool {
+	return s.Run != nil && (s.Run.Status == "paused" || s.Run.Status == "interrupted")
+}
+
+func isRevisionConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "project or file changed") ||
+		strings.Contains(msg, "active project changed") ||
+		strings.Contains(msg, "stale")
+}
+
+func (s *State) syncProjectRevision(ctx context.Context, client *Client, reqID string) {
+	_ = s.dispatchReindex(ctx, client, reqID+"-reidx")
+	var proj Project
+	if err := client.DoJSON(ctx, reqID+"-proj", http.MethodGet, "/api/projects/current", nil, &proj); err == nil && proj.ProjectID != "" {
+		s.Project = &proj
+	}
+}
+
+func (s *State) cancelPausedAnalysis(ctx context.Context, client *Client, reqID string) {
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		return
+	}
+	ctrlReq := map[string]any{"identity": s.Run.Identity, "action": "cancel"}
+	var run AnalysisRun
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err == nil && run.Identity.ID != "" {
+		s.Run = &run
+	}
+}
+
 func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
 	if s.Project == nil || s.Project.ProjectID == "" {
 		return nil
 	}
+	if act.Kind == "run-analysis" && s.isAnalysisPausedOrInterrupted() {
+		return s.dispatchResumeAnalysis(ctx, client, reqID)
+	}
+	if act.Kind == "repair-analysis" && s.isAnalysisPausedOrInterrupted() {
+		s.cancelPausedAnalysis(ctx, client, reqID+"-cancel")
+	}
 	refresh := act.Kind == "reanalyze"
+	clearResults := refresh && s.isAnalysisPausedOrInterrupted()
 	retryStale := act.Kind == "repair-analysis" && act.Target == ""
 	staleOnly := act.Kind == "repair-analysis" && act.Target != ""
 	includeFeatures := !staleOnly
 
-	previewReq := map[string]any{
-		"project_id":         s.Project.ProjectID,
-		"project_revision":   s.Project.ProjectRevision,
-		"scope":              "project",
-		"refresh":            refresh,
-		"include_features":   includeFeatures,
-		"retry_stale_failed": retryStale,
-		"stale_only":         staleOnly,
-		"stale_path":         act.Target,
-		"limits":             defaultAnalysisLimits(),
-	}
-	var preview analysisPreviewPayload
-	if err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
+	preview, err := s.requestAnalysisPreview(ctx, client, reqID, refresh, clearResults, includeFeatures, retryStale, staleOnly, act.Target)
+	if err != nil {
 		return err
 	}
 	startReq := map[string]any{
@@ -300,6 +329,7 @@ func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID s
 		"preview_id":         preview.PreviewID,
 		"limits":             preview.Limits,
 		"refresh":            refresh,
+		"clear_results":      clearResults,
 		"include_features":   includeFeatures,
 		"retry_stale_failed": retryStale,
 		"stale_only":         staleOnly,
@@ -315,6 +345,30 @@ func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID s
 	}
 	s.Run = &run
 	return nil
+}
+
+func (s *State) requestAnalysisPreview(ctx context.Context, client *Client, reqID string, refresh, clearResults, includeFeatures, retryStale, staleOnly bool, stalePath string) (analysisPreviewPayload, error) {
+	buildReq := func() map[string]any {
+		return map[string]any{
+			"project_id":         s.Project.ProjectID,
+			"project_revision":   s.Project.ProjectRevision,
+			"scope":              "project",
+			"refresh":            refresh,
+			"clear_results":      clearResults,
+			"include_features":   includeFeatures,
+			"retry_stale_failed": retryStale,
+			"stale_only":         staleOnly,
+			"stale_path":         stalePath,
+			"limits":             defaultAnalysisLimits(),
+		}
+	}
+	var preview analysisPreviewPayload
+	err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", buildReq(), &preview)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, client, reqID+"-sync")
+		err = client.DoJSON(ctx, reqID+"-prev2", http.MethodPost, "/api/projects/current/analysis/preview", buildReq(), &preview)
+	}
+	return preview, err
 }
 
 func (s *State) dispatchPauseAnalysis(ctx context.Context, client *Client, reqID string) error {
@@ -334,18 +388,41 @@ func (s *State) dispatchPauseAnalysis(ctx context.Context, client *Client, reqID
 }
 
 func (s *State) dispatchResumeAnalysis(ctx context.Context, client *Client, reqID string) error {
-	if s.Run == nil || s.Run.Identity.ID == "" || s.Project == nil || s.Project.ProjectID == "" {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		_, idQuery := s.resourceQueries()
+		var latest AnalysisRun
+		if err := client.DoJSON(ctx, reqID+"-fetch", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &latest); err == nil && latest.Identity.ID != "" {
+			s.Run = &latest
+		}
+	}
+	if s.Run == nil || s.Run.Identity.ID == "" || !s.isAnalysisPausedOrInterrupted() {
 		return s.dispatchAnalysisRun(ctx, client, reqID, ActionRequest{Kind: "run-analysis"})
 	}
+	limits := s.Run.Plan.Limits
+	if len(limits) == 0 {
+		limits = defaultAnalysisLimits()
+	}
 	previewReq := map[string]any{
-		"project_id":       s.Project.ProjectID,
-		"project_revision": s.Project.ProjectRevision,
-		"scope":            "project",
-		"resume_run":       s.Run.Identity,
-		"limits":           defaultAnalysisLimits(),
+		"project_id":         s.Project.ProjectID,
+		"project_revision":   s.Project.ProjectRevision,
+		"scope":              "project",
+		"refresh":            s.Run.Plan.Refresh,
+		"retry_stale_failed": s.Run.Plan.RetryStaleFailed,
+		"stale_only":         s.Run.Plan.StaleOnly,
+		"stale_path":         s.Run.Plan.StalePath,
+		"resume_run":         s.Run.Identity,
+		"limits":             limits,
 	}
 	var preview analysisPreviewPayload
 	if err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
+		if isRevisionConflictError(err) {
+			s.syncProjectRevision(ctx, client, reqID+"-sync")
+			s.cancelPausedAnalysis(ctx, client, reqID+"-cancel")
+			return s.dispatchAnalysisRun(ctx, client, reqID, ActionRequest{Kind: "run-analysis"})
+		}
 		return err
 	}
 	ctrlReq := map[string]any{
@@ -473,18 +550,8 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 	if len(paths) == 0 {
 		return nil
 	}
-	findingTargets := NormalizeFindingTargets(act.Seed.FindingTargets, s.Project.ProjectID, paths)
-	createReq := map[string]any{
-		"project_id":          s.Project.ProjectID,
-		"project_revision":    s.Project.ProjectRevision,
-		"kind":                firstNonEmpty(act.Seed.Kind, "fix"),
-		"title":               firstNonEmpty(act.Seed.Title, "Agent Mission"),
-		"paths":               paths,
-		"acceptance_criteria": act.Seed.AcceptanceCriteria,
-		"finding_targets":     findingTargets,
-	}
-	var session ChangeSession
-	if err := client.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes", createReq, &session); err != nil {
+	session, err := s.openChangeSessionWithRetry(ctx, client, reqID, act.Seed, paths)
+	if err != nil {
 		if s.Change != nil && s.Change.ID == "agent-session" {
 			s.Change = nil
 		}
@@ -511,6 +578,28 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 	}
 	s.Change = &wfSession
 	return nil
+}
+
+func (s *State) openChangeSessionWithRetry(ctx context.Context, client *Client, reqID string, seed *ChangeSeed, paths []string) (ChangeSession, error) {
+	buildReq := func() map[string]any {
+		return map[string]any{
+			"project_id":          s.Project.ProjectID,
+			"project_revision":    s.Project.ProjectRevision,
+			"kind":                firstNonEmpty(seed.Kind, "fix"),
+			"title":               firstNonEmpty(seed.Title, "Agent Mission"),
+			"paths":               paths,
+			"acceptance_criteria": seed.AcceptanceCriteria,
+			"finding_targets":     NormalizeFindingTargets(seed.FindingTargets, s.Project.ProjectID, paths),
+		}
+	}
+	var session ChangeSession
+	err := client.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes", buildReq(), &session)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, client, reqID+"-sync")
+		_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust2")
+		err = client.DoJSON(ctx, reqID+"-open2", http.MethodPost, "/api/projects/current/changes", buildReq(), &session)
+	}
+	return session, err
 }
 
 func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
@@ -770,6 +859,13 @@ func (s *State) postChangeSessionAction(ctx context.Context, client *Client, req
 	var updated ChangeSession
 	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + suffix
 	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
+		if isRevisionConflictError(err) {
+			if seed := s.buildSeedFromCurrentChange(); seed != nil {
+				s.syncProjectRevision(ctx, client, reqID+"-sync")
+				s.CmdOutput = fmt.Sprintf("Proposal was stale — started fresh agent mission for %q", seed.Title)
+				return s.dispatchStartAgent(ctx, client, reqID+"-refresh", ActionRequest{Kind: "start-agent", Seed: seed})
+			}
+		}
 		return err
 	}
 	s.Change = &updated

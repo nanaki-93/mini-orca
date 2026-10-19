@@ -236,8 +236,14 @@ func (s *State) ActiveHub() HubTab {
 
 // Navigate switches the active page, synchronizes section state, and resets selection when switching lists.
 func (s *State) Navigate(page Page) {
-	if s.Page != page && page != PageIssueDetail {
-		s.SelectedIdx = 0
+	if s.Page != page {
+		s.Error = ""
+		if page != PageIssueDetail {
+			s.SelectedIdx = 0
+		}
+	}
+	if page != PageAgents {
+		s.AgentDetailOpen = false
 	}
 	s.Page = page
 	switch page {
@@ -542,7 +548,7 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 	lowName := strings.ToLower(strings.TrimSpace(name))
 	lowTitle := strings.ToLower(strings.TrimSpace(title))
 	for _, item := range agents {
-		if item.Status == "applied" || item.Status == "reverted" || item.Status == "canceled" {
+		if isInactiveAgentStatus(item.Status) {
 			continue
 		}
 		for _, t := range item.FindingTargets {
@@ -556,6 +562,15 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 		}
 	}
 	return ""
+}
+
+func isInactiveAgentStatus(status string) bool {
+	switch status {
+	case "applied", "reverted", "canceled", "stale", "failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func issueStatus(done bool, agentPath string) string {
@@ -905,11 +920,15 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 	if err := client.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
 		s.ChangeReceipt = &rec
 	}
+	projRev := s.projectRevision()
+	if s.Change != nil && !isUsableInitialChange(s.Change, projRev) {
+		s.Change = nil
+	}
 	if s.Change == nil && len(s.ChangeHistory) > 0 {
-		if chgID := pickInitialChangeID(s.ChangeHistory); chgID != "" {
+		if chgID := pickInitialChangeID(s.ChangeHistory, projRev); chgID != "" {
 			var chg ChangeSession
 			target := "/api/projects/current/changes/" + url.PathEscape(chgID) + idQuery
-			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
 				s.Change = &chg
 			}
 		}
@@ -917,16 +936,42 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 	s.loadAuxResources(ctx, client, idQuery, revQuery)
 }
 
-func pickInitialChangeID(history []ChangeHistoryEntry) string {
+func pickInitialChangeID(history []ChangeHistoryEntry, projectRev string) string {
 	for _, entry := range history {
-		if entry.ID != "" && entry.State != "applied" && entry.State != "reverted" && entry.Revision > 0 {
+		if isUsableHistoryEntry(entry, projectRev) {
 			return entry.ID
 		}
 	}
-	if len(history) > 0 {
-		return history[0].ID
-	}
 	return ""
+}
+
+func isUsableHistoryEntry(entry ChangeHistoryEntry, projectRev string) bool {
+	if entry.ID == "" || entry.Revision <= 0 || entry.Freshness == "stale" {
+		return false
+	}
+	if isInactiveAgentStatus(entry.State) || isInactiveAgentStatus(entry.WorkflowStatus) {
+		return false
+	}
+	if projectRev != "" && entry.ProjectRevision != "" && entry.ProjectRevision != projectRev {
+		return false
+	}
+	return true
+}
+
+func isUsableInitialChange(chg *ChangeSession, projectRev string) bool {
+	if chg == nil || chg.ID == "" || chg.Freshness == "stale" {
+		return false
+	}
+	if isInactiveAgentStatus(chg.State) {
+		return false
+	}
+	if chg.Workflow != nil && isInactiveAgentStatus(chg.Workflow.Status) {
+		return false
+	}
+	if projectRev != "" && chg.ProjectRevision != "" && chg.ProjectRevision != projectRev {
+		return false
+	}
+	return true
 }
 
 func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, revQuery string) {
@@ -999,17 +1044,45 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 		}
 	}
 	if s.hasRunningAnalysis() {
-		var run AnalysisRun
-		if err := client.DoJSON(ctx, "poll-analysis", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &run); err == nil && run.Identity.ID != "" {
-			s.Run = &run
-			s.loadAnalysisSectionResults(ctx, client)
-		}
+		s.pollRunningAnalysis(ctx, client, idQuery, revQuery)
 	}
 	if s.Scan != nil && s.Scan.Status == "running" {
 		var scan Scan
 		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
 			s.Scan = &scan
 		}
+	}
+}
+
+func (s *State) pollRunningAnalysis(ctx context.Context, client *Client, idQuery, revQuery string) {
+	var run AnalysisRun
+	if err := client.DoJSON(ctx, "poll-analysis", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &run); err != nil || run.Identity.ID == "" {
+		return
+	}
+	s.Run = &run
+	s.loadAnalysisSectionResults(ctx, client)
+	if s.hasRunningAnalysis() {
+		return
+	}
+	s.announceAnalysisTransition(&run)
+	var fResp FindingsResponse
+	if err := client.DoJSON(ctx, "poll-findings", http.MethodGet, "/api/projects/current/findings"+revQuery, nil, &fResp); err == nil && s.AcceptProjectResponse(fResp.ProjectIdentity) {
+		s.Findings = fResp.Findings
+		s.CompletedFindings = fResp.Completed
+	}
+}
+
+func (s *State) announceAnalysisTransition(run *AnalysisRun) {
+	if run == nil {
+		return
+	}
+	switch run.Status {
+	case "paused", "interrupted":
+		s.CmdOutput = fmt.Sprintf("Analysis %s: %s — press [r] to resume", run.Status, firstNonEmpty(run.Reason, "window completed"))
+	case "completed":
+		s.CmdOutput = "Analysis completed — press [2] Agent Studio to inspect findings"
+	case "failed":
+		s.CmdOutput = fmt.Sprintf("Analysis failed: %s — press [r] to retry", firstNonEmpty(run.Reason, "inspect Last Run for details"))
 	}
 }
 
@@ -1021,7 +1094,7 @@ func (s *State) announceWorkflowTransition(chg *ChangeSession) {
 	case "awaiting_human_review", "completed":
 		s.CmdOutput = fmt.Sprintf("Agent completed %q — press [d/Enter] to inspect diff or [c] to Apply & Commit", chg.Title)
 	case "changes_requested", "failed":
-		s.CmdOutput = fmt.Sprintf("Agent workflow %s for %q — press [r] to self-repair or [d] to inspect diff", chg.Workflow.Status, chg.Title)
+		s.CmdOutput = fmt.Sprintf("Agent workflow %s for %q — press [r] to self-repair or [g] to debug", chg.Workflow.Status, chg.Title)
 	case "canceled":
 		s.CmdOutput = fmt.Sprintf("Canceled agent workflow for %q", chg.Title)
 	}

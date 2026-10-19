@@ -289,7 +289,12 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 	if s.Run != nil && s.Run.Status != "" {
 		done, total := runAggregateCoverage(s.Run)
 		bar := th.renderProgressBar(done, total, 12)
-		parts = append(parts, fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds))
+		runText := fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds)
+		if s.isAnalysisPausedOrInterrupted() {
+			reason := truncatePlain(firstNonEmpty(s.Run.Reason, "window paused"), 36)
+			runText += fmt.Sprintf(" %s%s · [r] Resume%s", th.amber, reason, th.reset)
+		}
+		parts = append(parts, runText)
 	}
 	if s.Change != nil {
 		added, removed, badge := ClassifyDiffScope(s.Change.Changes)
@@ -426,7 +431,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	ruleLen := max(16, boxW-6)
 	globalNav := []keyDesc{{"1-5", "Section"}, {"Tab", "Sub-page"}, {"h/l", "View"}, {"j/k", "Select Row"}}
 	globalKeys := []keyDesc{{"?", "Close Help"}, {":", "Command"}, {"p", "Cycle Palette"}, {"q", "Quit"}}
-	genericCmds := ":help  :keys  :analyze  :test  :fix  :agent  :open  :project  :models  :apply  :undo  :palette  :q"
+	genericCmds := ":help  :keys  :analyze  :resume  :test  :fix  :agent  :debug  :open  :models  :apply  :undo  :q"
 
 	body := []string{
 		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.accent, spec.title, th.reset),
@@ -456,7 +461,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		title:     "[1] OVERVIEW · EXECUTIVE DASHBOARD",
 		primary:   []keyDesc{{"Enter/a", "Fix Top Issue"}, {"b", "Issues List"}, {"f", "Features"}},
 		secondary: []keyDesc{{"r", "Run/Resume Analysis"}, {"n", "Reanalyze"}, {"t", "Run Tests/Scan"}},
-		commands:  ":analyze  :test  :bugs  :features  :project <path>",
+		commands:  ":analyze  :resume  :reanalyze  :test  :bugs  :features",
 	},
 	PageRepo: {
 		title:     "[1] OVERVIEW · REPOSITORY & INDEX",
@@ -466,15 +471,15 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageProject: {
 		title:     "[1] OVERVIEW · PROJECT & VERIFICATION",
-		primary:   []keyDesc{{"Enter/t", "Run Scan & Tests"}, {"r", "Run Analysis"}, {"j/k", "Select Check"}},
+		primary:   []keyDesc{{"Enter/t", "Run Scan & Tests"}, {"r", "Run/Resume Analysis"}, {"j/k", "Select Check"}},
 		secondary: []keyDesc{{"h/l", "Overview Sub-page"}, {"n", "Reanalyze"}, {"Tab", "Next Sub-page"}},
 		commands:  ":test  :scan  :project <path>  :analyze",
 	},
 	PageAgents: {
 		title:     "[2] AGENT STUDIO · PIPELINE & WORKTREES",
-		primary:   []keyDesc{{"Enter/d/i", "Inspect Diff"}, {"r", "Refresh/Repair"}, {"x", "Cancel Workflow"}},
+		primary:   []keyDesc{{"Enter/d", "Inspect Diff"}, {"g", "Debug & Logs"}, {"r", "Refresh/Repair"}, {"x", "Cancel"}},
 		secondary: []keyDesc{{"a/c", "Apply & Commit"}, {"u", "Guarded Undo"}, {"m", "Merge"}, {"b", "Issues"}},
-		commands:  ":agent <prompt>  :diff  :apply [msg]  :cancel  :merge  :undo",
+		commands:  ":agent <prompt>  :debug  :diff  :apply [msg]  :cancel  :merge  :undo",
 	},
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
@@ -496,9 +501,9 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageAnalysisRun: {
 		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN",
-		primary:   []keyDesc{{"Enter", "Open Section Issues"}, {"r", "Run/Resume"}, {"P", "Pause Run"}},
-		secondary: []keyDesc{{"R", "Retry Failed/Stale"}, {"n", "Reanalyze"}, {"j/k", "Select Section"}},
-		commands:  ":analyze  :pause  :resume  :repair [path]  :reanalyze",
+		primary:   []keyDesc{{"Enter/r", "Run/Resume Analysis"}, {"P", "Pause Run"}, {"n", "Reanalyze"}},
+		secondary: []keyDesc{{"R", "Retry Failed/Stale"}, {"j/k", "Select Section"}},
+		commands:  ":analyze  :resume  :pause  :repair [path]  :reanalyze",
 	},
 	PageAnalysisFiles: {
 		title:     "[2] AGENT STUDIO · FILE SCOPE",
@@ -529,26 +534,26 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageDocs: {
 		title:     "[4] HANDBOOK & ARCH · CONTEXT & DEPENDENCIES",
-		primary:   []keyDesc{{"1/c", "Context & Deps"}, {"2/m", "Components"}, {"3/s", "Scenarios & ADRs"}},
-		secondary: []keyDesc{{"4/d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}},
+		primary:   []keyDesc{{"c", "Context & Deps"}, {"m", "Components"}, {"s", "Scenarios & ADRs"}},
+		secondary: []keyDesc{{"d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}, {"r", "Refresh"}},
 		commands:  ":docs  :handbook  :arch  :analyze",
 	},
 	PageDocsComponents: {
 		title:     "[4] HANDBOOK & ARCH · ARCHITECTURAL COMPONENTS",
-		primary:   []keyDesc{{"2/m", "Components"}, {"1/c", "Context & Deps"}, {"3/s", "Scenarios & ADRs"}},
-		secondary: []keyDesc{{"4/d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}},
+		primary:   []keyDesc{{"m", "Components"}, {"c", "Context & Deps"}, {"s", "Scenarios & ADRs"}},
+		secondary: []keyDesc{{"d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}, {"r", "Refresh"}},
 		commands:  ":docs  :arch  :analyze",
 	},
 	PageDocsDecisions: {
 		title:     "[4] HANDBOOK & ARCH · SCENARIOS & DECISIONS",
-		primary:   []keyDesc{{"3/s", "Scenarios & ADRs"}, {"1/c", "Context & Deps"}, {"2/m", "Components"}},
-		secondary: []keyDesc{{"4/d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}},
+		primary:   []keyDesc{{"s", "Scenarios & ADRs"}, {"c", "Context & Deps"}, {"m", "Components"}},
+		secondary: []keyDesc{{"d", "Architecture Diagram"}, {"h/l/Tab", "Switch Handbook View"}, {"r", "Refresh"}},
 		commands:  ":docs  :arch  :analyze",
 	},
 	PageDiagrams: {
 		title:     "[4] HANDBOOK & ARCH · ARCHITECTURE DIAGRAM",
-		primary:   []keyDesc{{"4/d", "Architecture Diagram"}, {"1/c", "Context"}, {"2/m", "Components"}},
-		secondary: []keyDesc{{"3/s", "Scenarios & ADRs"}, {"h/l/Tab", "Switch Handbook View"}},
+		primary:   []keyDesc{{"d", "Architecture Diagram"}, {"c", "Context"}, {"m", "Components"}},
+		secondary: []keyDesc{{"s", "Scenarios & ADRs"}, {"h/l/Tab", "Switch Handbook View"}, {"r", "Refresh"}},
 		commands:  ":arch  :diagrams  :docs  :analyze",
 	},
 	PageInstructions: {
@@ -577,17 +582,6 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	},
 }
 
-func (s *State) activeBreadcrumb() string {
-	hub := s.ActiveHub()
-	curPage := s.EffectivePage()
-	for _, sp := range hub.SubPages {
-		if sp.Page == curPage {
-			return fmt.Sprintf("%s / %s", strings.ToUpper(hub.Label), sp.Label)
-		}
-	}
-	return strings.ToUpper(hub.Label)
-}
-
 func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	if s.CmdActive {
 		return th.renderCommandInput(s.CmdInput)
@@ -600,8 +594,8 @@ func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	if s.Busy != "" {
 		badge = th.warnBg + " ⟳ BUSY " + th.reset
 	}
-	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, truncatePlain(s.CmdOutput, max(20, width-38)), th.reset)
-	right := fmt.Sprintf("%s%s%s ", th.muted, s.activeBreadcrumb(), th.reset)
+	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, truncatePlain(s.CmdOutput, max(20, width-28)), th.reset)
+	right := fmt.Sprintf("%s[?] Keys  [:] Cmd%s ", th.muted, th.reset)
 	gap := max(2, width-2-visibleRuneCount(left)-visibleRuneCount(right))
 	return left + strings.Repeat(" ", gap) + right
 }

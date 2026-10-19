@@ -636,3 +636,111 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 		t.Fatalf("expected repository file list when BrowseFiles is true:\n%s", browserFrame)
 	}
 }
+
+func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	s.Run = &AnalysisRun{
+		Identity:             RunIdentity{ID: "run-paused"},
+		Status:               "paused",
+		ElapsedSeconds:       300,
+		WindowFilesCompleted: 7,
+		Reason:               "The file dispatch allowance ended; preview and resume the remaining work.",
+		Sections: []Section{
+			{
+				Category: "bugs",
+				Status:   "partial",
+				Coverage: Coverage{Total: 15, Succeeded: 7},
+				Reason:   "8 files remaining in queue",
+			},
+		},
+	}
+
+	// 1. Overview & Last Run surface the pause reason and [r] Resume guidance
+	s.Navigate(PageSummary)
+	sumFrame := s.Render(120, 36)
+	if !strings.Contains(sumFrame, "file dispatch allowance ended") || !strings.Contains(sumFrame, "Resume") {
+		t.Fatalf("expected paused analysis reason and Resume guidance on Overview:\n%s", sumFrame)
+	}
+	s.Navigate(PageAnalysisRun)
+	runFrame := s.Render(120, 36)
+	for _, token := range []string{"file dispatch allowance ended", "Press [r] or [Enter] to Resume", "8 files remaining in queue"} {
+		if !strings.Contains(runFrame, token) {
+			t.Fatalf("expected Last Run page to contain %q:\n%s", token, runFrame)
+		}
+	}
+
+	// 2. Agent Workflow Debug & Check Inspector page ('g' or :debug) displays multi-line check logs & stage models
+	s.Change = &ChangeSession{
+		ID:        "chg-dbg",
+		Title:     "Fix vault encryption nonce",
+		State:     "failed",
+		Freshness: "current",
+		Checks: []Check{
+			{
+				Name:    "cargo test",
+				State:   "failed",
+				Command: []string{"cargo", "test"},
+				Output:  "thread 'crypto::tests::nonce_uniqueness' panicked at src/crypto.rs:88\nassertion `left != right` failed",
+			},
+		},
+		Workflow: &ChangeWorkflow{
+			ID:                 "wf-dbg",
+			Status:             "failed",
+			Reason:             "Stage 2 verification failed",
+			AutoRepairAttempts: 1,
+			Stages: []ChangeWorkflowStage{
+				{Name: "create", Status: "completed", Model: &Model{Model: "qwen2.5-coder:14b"}},
+				{Name: "test", Status: "failed", Model: &Model{Model: "qwen2.5-coder:7b"}},
+			},
+			Review: &ChangeWorkflowReview{
+				Verdict:  "changes_requested",
+				Summary:  "Nonce counter must increment before encryption",
+				Findings: []string{"src/crypto.rs:42 reuses static slice"},
+			},
+		},
+	}
+	s.Navigate(PageAgents)
+	s.HandleKey(KeyEvent{Key: "g"})
+	if !s.AgentDetailOpen {
+		t.Fatal("expected 'g' on PageAgents to open Agent Debug & Check Inspector")
+	}
+	dbgFrame := s.Render(120, 40)
+	for _, token := range []string{
+		"WORKFLOW DEBUG & CHECK INSPECTOR",
+		"4-STAGE WORKFLOW & ASSIGNED MODELS",
+		"qwen2.5-coder:14b",
+		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
+		"nonce_uniqueness",
+		"assertion `left != right` failed",
+		"STAGE 3 · CRITIC REVIEW VERDICT",
+		"src/crypto.rs:42 reuses static slice",
+	} {
+		if !strings.Contains(dbgFrame, token) {
+			t.Fatalf("expected Agent Debug Inspector to contain %q:\n%s", token, dbgFrame)
+		}
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
+	if s.AgentDetailOpen {
+		t.Fatal("expected Escape to close Agent Debug & Check Inspector")
+	}
+
+	// 3. Handbook direct shortcuts c / m / s / d
+	s.Navigate(PageDocs)
+	s.HandleKey(KeyEvent{Key: "m"})
+	if s.Page != PageDocsComponents {
+		t.Fatalf("expected 'm' in Handbook to open PageDocsComponents, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "s"})
+	if s.Page != PageDocsDecisions {
+		t.Fatalf("expected 's' in Handbook to open PageDocsDecisions, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "d"})
+	if s.Page != PageDiagrams {
+		t.Fatalf("expected 'd' in Handbook to open PageDiagrams, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "c"})
+	if s.Page != PageDocs {
+		t.Fatalf("expected 'c' in Handbook to open PageDocs, got %s", s.Page)
+	}
+}

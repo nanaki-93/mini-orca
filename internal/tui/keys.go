@@ -311,13 +311,42 @@ func (s *State) handlePageScopedKey(ev KeyEvent) {
 	if s.handleBugsPageKey(ev) || s.handleAgentsAndEditorKey(ev) || s.handleRulesAndOverviewKey(ev) {
 		return
 	}
-	if ev.Key == "r" && isAnalysisTriggerPage(s.Page) {
-		s.triggerOrResumeAnalysis()
+	if isAnalysisTriggerPage(s.Page) {
+		s.handleAnalysisKey(ev.Key)
 	}
 }
 
 func isAnalysisTriggerPage(p Page) bool {
-	return p == PageSummary || p == PageAnalysisRun || p == PageBugs || p == PageFeatures || p == PageDocs
+	switch p {
+	case PageSummary, PageProject, PageAnalysisRun, PageAnalysisFiles, PageBugs, PageFeatures:
+		return true
+	default:
+		return isHandbookPage(p)
+	}
+}
+
+func isHandbookPage(p Page) bool {
+	return p == PageDocs || p == PageDocsComponents || p == PageDocsDecisions || p == PageDiagrams
+}
+
+func (s *State) handleAnalysisKey(key string) {
+	switch key {
+	case "r":
+		s.triggerOrResumeAnalysis()
+	case "R":
+		if s.isAnalysisPausedOrInterrupted() {
+			s.triggerOrResumeAnalysis()
+			return
+		}
+		s.CmdOutput = "Retrying failed/stale analysis files..."
+		s.enqueueAction(ActionRequest{Kind: "repair-analysis"})
+	case "n":
+		s.CmdOutput = "Starting fresh project analysis (preserving in-progress issues)..."
+		s.enqueueAction(ActionRequest{Kind: "reanalyze"})
+	case "P":
+		s.CmdOutput = "Pausing active analysis..."
+		s.enqueueAction(ActionRequest{Kind: "pause-analysis"})
+	}
 }
 
 func (s *State) handleBugsPageKey(ev KeyEvent) bool {
@@ -391,6 +420,12 @@ func (s *State) handleIssueShortcut(key string) bool {
 			s.dismissSelectedIssue()
 			return true
 		}
+	case "b", "i":
+		if s.Page == PageIssueDetail {
+			s.Navigate(PageBugs)
+			s.CmdOutput = "Returned to Issues list"
+			return true
+		}
 	}
 	return false
 }
@@ -448,6 +483,9 @@ func (s *State) handleAgentsKey(key string) bool {
 	case "n":
 		s.CmdOutput = "Use :agent <objective> to dispatch a new precision agent mission"
 		return true
+	case "g":
+		s.toggleAgentDebugInspector()
+		return true
 	case "d", "i":
 		s.openAgentDiffInspector()
 		return true
@@ -472,6 +510,18 @@ func (s *State) handleAgentsKey(key string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *State) toggleAgentDebugInspector() {
+	s.AgentDetailOpen = !s.AgentDetailOpen
+	if s.AgentDetailOpen {
+		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([Esc/g] to return)"
+		if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+			s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
+		}
+		return
+	}
+	s.CmdOutput = "Returned to Agents in Progress Dashboard"
 }
 
 func (s *State) handleEditorKey(key string) bool {
@@ -690,7 +740,32 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 	if isGovernancePage(s.Page) {
 		return s.handleGovernanceKey(ev.Key)
 	}
+	if isHandbookPage(s.Page) {
+		return s.handleHandbookKey(ev.Key)
+	}
 	return s.handleOverviewShortcuts(ev.Key)
+}
+
+func (s *State) handleHandbookKey(key string) bool {
+	switch key {
+	case "c":
+		s.Navigate(PageDocs)
+		s.CmdOutput = "Handbook: Context & Dependencies"
+		return true
+	case "m":
+		s.Navigate(PageDocsComponents)
+		s.CmdOutput = "Handbook: Architectural Components"
+		return true
+	case "s":
+		s.Navigate(PageDocsDecisions)
+		s.CmdOutput = "Handbook: Scenarios & Decisions"
+		return true
+	case "d":
+		s.Navigate(PageDiagrams)
+		s.CmdOutput = "Handbook: Architecture Diagram"
+		return true
+	}
+	return false
 }
 
 func (s *State) handleGovernanceKey(key string) bool {

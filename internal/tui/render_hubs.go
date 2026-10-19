@@ -117,6 +117,15 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 		fmt.Sprintf("%sAgent Pipeline:%s     %s", th.bold+th.purple, th.reset, agentSummary),
 		fmt.Sprintf("%sVerification Gate:%s  %s  %s(%d feature proposals queued)%s", th.bold+th.green, th.reset, th.statusBadge(scanState), th.muted, summary.Features, th.reset),
 	}
+	if s.Run != nil && s.Run.Status != "" {
+		runNote := fmt.Sprintf("%s  (%ds elapsed)", th.statusBadge(s.Run.Status), s.Run.ElapsedSeconds)
+		if s.isAnalysisPausedOrInterrupted() {
+			reason := truncatePlain(firstNonEmpty(s.Run.Reason, "Window allowance reached"), max(20, panelW-44))
+			runNote = fmt.Sprintf("%s  %s%s%s · %sPress [r] to Resume%s",
+				th.statusBadge(s.Run.Status), th.amber, reason, th.reset, th.bold+th.cyan, th.reset)
+		}
+		focusBody = append(focusBody, fmt.Sprintf("%sAnalysis Run:%s       %s", th.bold+th.amber, th.reset, runNote))
+	}
 	lines = append(lines, "")
 	return append(lines, th.renderPanelBox("PRIORITY FOCUS & WORKSPACE READINESS", "STATUS SUMMARY", panelW, focusBody)...)
 }
@@ -201,6 +210,9 @@ func appendWindowFooter(th ansiTheme, lines []string, start, end, total int) []s
 }
 
 func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
+	if s.AgentDetailOpen && s.Change != nil {
+		return s.renderAgentDebugPage(th, width)
+	}
 	panelW := adaptivePanelWidth(width)
 	items := CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
 	activeStage := 1
@@ -257,6 +269,80 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	return lines
 }
 
+func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
+	chg := s.Change
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[Esc/g] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
+	wfStatus := chg.State
+	wfReason := ""
+	repairs := chg.RepairAttempts
+	if chg.Workflow != nil {
+		wfStatus = firstNonEmpty(chg.Workflow.Status, wfStatus)
+		wfReason = chg.Workflow.Reason
+		if chg.Workflow.AutoRepairAttempts > repairs {
+			repairs = chg.Workflow.AutoRepairAttempts
+		}
+	}
+	stageBox := []string{
+		fmt.Sprintf("%sSession:%s %s%s%s (%s) · %sStatus:%s %s · %sFreshness:%s %s · %sRepairs:%s %d",
+			th.muted, th.reset, th.bold+th.fg, chg.Title, th.reset, chg.ID,
+			th.muted, th.reset, th.statusBadge(wfStatus),
+			th.muted, th.reset, firstNonEmpty(chg.Freshness, "current"),
+			th.muted, th.reset, repairs),
+	}
+	if strings.TrimSpace(wfReason) != "" {
+		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, truncatePlain(wfReason, max(24, panelW-14)), th.reset))
+	}
+	if chg.Workflow != nil && len(chg.Workflow.Stages) > 0 {
+		for idx, st := range chg.Workflow.Stages {
+			modelName := "default"
+			if st.Model != nil && st.Model.Model != "" {
+				modelName = st.Model.Model
+			}
+			stageBox = append(stageBox, fmt.Sprintf("  %s%d. %-18s%s  %-12s  %smodel:%s%s",
+				th.bold+th.fg, idx+1, CanonicalStageLabel(idx, st.Name), th.reset,
+				th.statusBadge(st.Status), th.cyan, modelName, th.reset))
+		}
+	}
+	lines = append(lines, th.renderPanelBox("4-STAGE WORKFLOW & ASSIGNED MODELS", strings.ToUpper(wfStatus), panelW, stageBox)...)
+	lines = append(lines, "")
+	lines = append(lines, th.renderPanelBox("VERIFICATION CHECKS & DIAGNOSTIC OUTPUT", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))...)
+	if chg.Workflow != nil && chg.Workflow.Review != nil {
+		rev := chg.Workflow.Review
+		revLines := []string{
+			fmt.Sprintf("%sVerdict:%s %s  %s%s%s", th.muted, th.reset, th.statusBadge(rev.Verdict), th.fg, truncatePlain(rev.Summary, max(24, panelW-22)), th.reset),
+		}
+		for _, f := range rev.Findings {
+			revLines = append(revLines, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, truncatePlain(f, max(24, panelW-10))))
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderPanelBox("STAGE 3 · CRITIC REVIEW VERDICT", strings.ToUpper(rev.Verdict), panelW, revLines)...)
+	}
+	return lines
+}
+
+func (s *State) renderAgentCheckDebugLines(th ansiTheme, panelW int) []string {
+	if s.Change == nil || len(s.Change.Checks) == 0 {
+		return []string{fmt.Sprintf("%sNo deterministic verification checks recorded yet — press [r] to run checks.%s", th.muted, th.reset)}
+	}
+	var out []string
+	maxLineW := max(24, panelW-12)
+	for _, chk := range s.Change.Checks {
+		cmdStr := strings.Join(chk.Command, " ")
+		out = append(out, fmt.Sprintf("%s  %s%-18s%s  %s%s%s",
+			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, th.muted, truncatePlain(cmdStr, max(18, maxLineW-30)), th.reset))
+		if strings.TrimSpace(chk.Output) != "" && !strings.EqualFold(chk.State, "passed") {
+			rawLines := strings.Split(strings.TrimSpace(strings.ReplaceAll(chk.Output, "\r\n", "\n")), "\n")
+			limit := min(4, len(rawLines))
+			for i := 0; i < limit; i++ {
+				clean := strings.TrimSpace(sanitizeCodeText(rawLines[i]))
+				out = append(out, fmt.Sprintf("    %s│%s %s%s%s", th.red, th.reset, th.amber, truncatePlain(clean, maxLineW), th.reset))
+			}
+		}
+	}
+	return out
+}
+
 func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
 	if s.Change == nil || s.Change.Workflow == nil || len(s.Change.Workflow.Stages) == 0 {
 		return ""
@@ -307,20 +393,23 @@ func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, maxText i
 func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	st := strings.ToLower(strings.TrimSpace(item.Status))
 	switch {
+	case st == "stale":
+		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "applied":
 		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "running" || st == "queued" || st == "canceling":
-		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[d/Enter]%s Inspect · %s[r]%s Refresh · %s[x]%s Cancel · %s[b]%s Issues",
-			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[g]%s Debug & Logs · %s[r]%s Refresh · %s[x]%s Cancel",
+			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[r]%s Self-Repair/Recheck · %s[d/Enter]%s Inspect Diff · %s[b]%s Issues",
+		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[r]%s Self-Repair · %s[g]%s Debug & Logs · %s[d]%s Diff",
 			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[d/Enter]%s Inspect Diff · %s[c]%s Apply & Commit · %s[b]%s Issues",
+		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[d/Enter]%s Inspect Diff · %s[c]%s Apply & Commit · %s[g]%s Debug",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	default:
-		return fmt.Sprintf("%sNext Step:%s %s[d/Enter]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply & Commit · %s[b]%s Issues",
+		return fmt.Sprintf("%sNext Step:%s %s[d/Enter]%s Inspect Diff · %s[g]%s Debug & Logs · %s[r]%s Run Checks · %s[c]%s Apply",
 			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	}
 }
@@ -517,17 +606,31 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · LAST ANALYSIS RUN", "Section coverage & execution telemetry")
 	if s.Run == nil {
-		return append(lines, fmt.Sprintf("  %sNo analysis run recorded yet.%s", th.muted, th.reset))
+		return append(lines, fmt.Sprintf("  %sNo analysis run recorded yet — press [r] or run :analyze to start.%s", th.muted, th.reset))
 	}
 	done, total := runAggregateCoverage(s.Run)
-	summaryLine := fmt.Sprintf(
-		"%sRun ID:%s %s%s%s · %sStatus:%s %s · %sElapsed:%s %ds · %sCoverage:%s %s",
-		th.muted, th.reset, th.bold+th.fg, s.Run.Identity.ID, th.reset,
-		th.muted, th.reset, th.statusBadge(s.Run.Status),
-		th.muted, th.reset, s.Run.ElapsedSeconds,
-		th.muted, th.reset, th.renderProgressBar(done, total, 12),
-	)
-	lines = append(lines, th.renderPanelBox("ANALYSIS TELEMETRY", strings.ToUpper(s.Run.Status), panelW, []string{summaryLine})...)
+	telemetry := []string{
+		fmt.Sprintf(
+			"%sRun ID:%s %s%s%s · %sStatus:%s %s · %sElapsed:%s %ds · %sFiles:%s %d · %sCoverage:%s %s",
+			th.muted, th.reset, th.bold+th.fg, s.Run.Identity.ID, th.reset,
+			th.muted, th.reset, th.statusBadge(s.Run.Status),
+			th.muted, th.reset, s.Run.ElapsedSeconds,
+			th.muted, th.reset, s.Run.WindowFilesCompleted,
+			th.muted, th.reset, th.renderProgressBar(done, total, 12),
+		),
+	}
+	if strings.TrimSpace(s.Run.Reason) != "" {
+		telemetry = append(telemetry, fmt.Sprintf("%sReason:%s %s%s%s",
+			th.muted, th.reset, th.amber, truncatePlain(s.Run.Reason, max(24, panelW-14)), th.reset))
+	}
+	if s.isAnalysisPausedOrInterrupted() {
+		telemetry = append(telemetry, fmt.Sprintf("%sAction:%s %sPress [r] or [Enter] to Resume remaining work%s · %s[n]%s Full Reanalyze",
+			th.bold+th.cyan, th.reset, th.bold+th.green, th.reset, th.cyan, th.reset))
+	} else if s.Run.Status == "failed" {
+		telemetry = append(telemetry, fmt.Sprintf("%sAction:%s %sPress [R] to Retry failed stages%s · %s[n]%s Full Reanalyze",
+			th.bold+th.cyan, th.reset, th.bold+th.amber, th.reset, th.cyan, th.reset))
+	}
+	lines = append(lines, th.renderPanelBox("ANALYSIS TELEMETRY", strings.ToUpper(s.Run.Status), panelW, telemetry)...)
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("   SECTION         STATUS        PROGRESS             SUCCEEDED    FAILED", width)...)
 	selected := s.ClampedIdx()
@@ -545,6 +648,9 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 			th.statusBadge(sec.Status), bar,
 			th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset, failStr,
 		))
+		if strings.TrimSpace(sec.Reason) != "" {
+			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, truncatePlain(sec.Reason, max(24, width-12)), th.reset))
+		}
 	}
 	return lines
 }
@@ -779,15 +885,6 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · MODEL ROUTING", "Per-scope LLM routing, runtime parameters & preset profiles")
-	lines = append(lines, fmt.Sprintf(
-		"  %sControls:%s %s  %s  %s  %s  %s",
-		th.muted, th.reset,
-		th.keyPill("j/k", "Select"),
-		th.keyPill("Enter/m/M", "Cycle Scope Model"),
-		th.keyPill("v", "Cycle Preset"),
-		th.keyPill("x", "Reset Scope"),
-		th.keyPill("r", "Refresh"),
-	), "")
 	lines = append(lines, th.renderTableHeader("   SCOPE         ASSIGNED MODEL               ORIGIN                  BOUNDARY   PARAMETERS", width)...)
 	selected := s.ClampedIdx()
 	scopes := CanonicalModelScopes()

@@ -751,3 +751,129 @@ func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
 		t.Fatalf("expected deep-audit preset active, got preset=%s analyze=%s", s.ActivePresetID, s.AssignedScopeModelID("analyze"))
 	}
 }
+
+func TestStaleSessionSkippingErrorClearingAndPausedAnalysisResume(t *testing.T) {
+	var (
+		resumedPreviewRefresh bool
+		resumedAction         string
+		reanalyzeClearResults bool
+		openChangeAttempts    int
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/status", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"version":"2.4.0"}`))
+	})
+	mux.HandleFunc("/api/projects/current", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"rev-current","name":"pwd-manager","path":"/repo"}`))
+	})
+	mux.HandleFunc("/api/projects/current/index", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"rev-current","files":[{"path":"src/main.rs","language":"Rust"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/reindex", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"rev-current","files":[{"path":"src/main.rs","language":"Rust"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/overview", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"rev-current","analysis":{"purpose":"Password vault"},"analysis_run":{"identity":{"project_id":"p1","project_revision":"rev-current","id":"run-paused","queue_id":"q1"},"plan":{"refresh":true,"limits":{"batch_files":64,"budget_seconds":300,"max_attempts_per_stage":2}},"status":"paused","elapsed_seconds":300,"window_files_completed":7,"reason":"The file dispatch allowance ended; preview and resume the remaining work."}}`))
+	})
+	mux.HandleFunc("/api/projects/current/findings", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"rev-current","findings":[{"id":"bug-stale","severity":"high","title":"Unwrapped option","message":"Check None","category":"bugs","status":"open","location":{"path":"src/main.rs","start_line":10}}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[{"id":"chg-stale","project_id":"p1","project_revision":"rev-old","title":"Batch fix","revision":8,"state":"draft","freshness":"stale","workflow_status":"stale","finding_targets":[{"project_id":"p1","kind":"semantic","id":"bug-stale","path":"src/main.rs"}]}]`))
+			return
+		}
+		openChangeAttempts++
+		var body struct {
+			ProjectRevision string `json:"project_revision"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.ProjectRevision != "rev-current" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"message":"project or file changed; refresh the proposal"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"chg-fresh","project_id":"p1","project_revision":"rev-current","title":"Unwrapped option","state":"open","revision":1,"hash":"h-fresh"}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-fresh/workflow", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-fresh","project_id":"p1","project_revision":"rev-current","title":"Unwrapped option","state":"running","revision":1,"hash":"h-fresh","workflow":{"id":"wf-fresh","status":"running"}}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/preview", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Refresh      bool           `json:"refresh"`
+			ClearResults bool           `json:"clear_results"`
+			ResumeRun    map[string]any `json:"resume_run"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.ResumeRun) > 0 {
+			resumedPreviewRefresh = body.Refresh
+		} else {
+			reanalyzeClearResults = body.ClearResults
+		}
+		_, _ = w.Write([]byte(`{"preview_id":"prev-resume","identity":{"project_id":"p1","project_revision":"rev-current","id":"run-paused","queue_id":"q1"},"limits":{"batch_files":64,"budget_seconds":300,"max_attempts_per_stage":2},"providers":[{"id":"local"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run/control", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Action string `json:"action"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		resumedAction = body.Action
+		_, _ = w.Write([]byte(`{"identity":{"project_id":"p1","project_revision":"rev-current","id":"run-paused","queue_id":"q1"},"status":"running"}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"identity":{"project_id":"p1","project_revision":"rev-current","id":"run-new","queue_id":"q2"},"status":"running"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	if err := s.SyncFromDaemon(context.Background(), cli, ""); err != nil {
+		t.Fatalf("SyncFromDaemon failed: %v", err)
+	}
+
+	// 1. Stale historical change session must NOT be auto-loaded or hijack open findings
+	if s.Change != nil {
+		t.Fatalf("expected stale historical session to be skipped on startup, got %+v", s.Change)
+	}
+	if openIssues := s.FilteredIssues(); len(openIssues) != 1 || openIssues[0].Status != "open" {
+		t.Fatalf("expected finding from stale session to remain open, got %+v", openIssues)
+	}
+
+	// 2. Navigating between pages clears s.Error so errors never stay stuck on every page
+	s.Error = "project or file changed; refresh the proposal"
+	s.Navigate(PageBugs)
+	if s.Error != "" {
+		t.Fatalf("expected Navigate to clear stale s.Error, got %q", s.Error)
+	}
+
+	// 3. Starting an agent when local revision is stale auto-syncs revision and succeeds on retry
+	s.Project.ProjectRevision = "rev-stale-local"
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	s.FlushActions(context.Background(), cli)
+	if openChangeAttempts != 2 || s.Change == nil || s.Change.ID != "chg-fresh" || s.Error != "" {
+		t.Fatalf("expected auto-resync retry to succeed on 2nd attempt, attempts=%d change=%+v err=%q", openChangeAttempts, s.Change, s.Error)
+	}
+
+	// 4. Pressing 'r' or Enter on PageAnalysisRun when paused resumes with matching plan.Refresh
+	s.Navigate(PageAnalysisRun)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	s.FlushActions(context.Background(), cli)
+	if !resumedPreviewRefresh || resumedAction != "resume" || s.Run.Status != "running" {
+		t.Fatalf("expected Enter on paused PageAnalysisRun to resume with plan.Refresh=true, got refresh=%v action=%q status=%s",
+			resumedPreviewRefresh, resumedAction, s.Run.Status)
+	}
+
+	// 5. Pressing 'n' (Reanalyze) while paused sends clear_results=true so daemon accepts replacement
+	s.Run.Status = "paused"
+	s.HandleKey(KeyEvent{Key: "n"})
+	s.FlushActions(context.Background(), cli)
+	if !reanalyzeClearResults {
+		t.Fatal("expected 'n' (reanalyze) while paused to send clear_results=true")
+	}
+}

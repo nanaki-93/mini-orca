@@ -480,14 +480,17 @@ func effectiveAgentSessionStatus(change *ChangeSession) string {
 	if change == nil {
 		return "idle"
 	}
-	if change.State == "applied" || change.State == "reverted" || change.State == "failed" {
+	if change.State == "applied" || change.State == "reverted" || change.State == "failed" || change.State == "canceled" {
 		return change.State
+	}
+	if change.Freshness == "stale" {
+		return "stale"
 	}
 	if change.Workflow != nil && change.Workflow.Status != "" {
 		switch change.Workflow.Status {
 		case "awaiting_human_review":
 			return "ready"
-		case "running", "queued", "canceling", "failed", "canceled", "changes_requested":
+		case "running", "queued", "canceling", "failed", "canceled", "changes_requested", "stale":
 			return change.Workflow.Status
 		}
 	}

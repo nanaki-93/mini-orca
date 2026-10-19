@@ -301,6 +301,7 @@ type Section struct {
 	Status       string   `json:"status"`
 	Coverage     Coverage `json:"coverage"`
 	FindingCount *int     `json:"finding_count"`
+	Reason       string   `json:"reason,omitempty"`
 }
 
 // RunStage tracks a single stage's status for a file in an analysis run.
@@ -333,12 +334,18 @@ type RunIdentity struct {
 
 // AnalysisPreview holds a pre-dispatch plan for unified project analysis.
 type AnalysisPreview struct {
-	PreviewID                    string `json:"preview_id"`
-	Scope                        string `json:"scope"`
-	Refresh                      bool   `json:"refresh"`
-	ExpectedModelRequests        int    `json:"expected_model_requests"`
-	MaxModelRequests             int    `json:"max_model_requests"`
-	SecurityReviewIntentRequired bool   `json:"security_review_intent_required"`
+	PreviewID                    string         `json:"preview_id"`
+	Scope                        string         `json:"scope"`
+	Refresh                      bool           `json:"refresh"`
+	ClearResults                 bool           `json:"clear_results,omitempty"`
+	RetryStaleFailed             bool           `json:"retry_stale_failed,omitempty"`
+	RecoverIncomplete            bool           `json:"recover_incomplete,omitempty"`
+	StaleOnly                    bool           `json:"stale_only,omitempty"`
+	StalePath                    string         `json:"stale_path,omitempty"`
+	Limits                       map[string]int `json:"limits,omitempty"`
+	ExpectedModelRequests        int            `json:"expected_model_requests"`
+	MaxModelRequests             int            `json:"max_model_requests"`
+	SecurityReviewIntentRequired bool           `json:"security_review_intent_required"`
 }
 
 // AnalysisRunFeatures tracks feature-discovery status inside a unified run.

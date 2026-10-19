@@ -6,6 +6,7 @@ import (
 )
 
 func (s *State) enqueueAction(act ActionRequest) {
+	s.Error = ""
 	s.PendingActions = append(s.PendingActions, act)
 }
 
@@ -259,6 +260,10 @@ func (s *State) triggerAgentRecheckOrRepair() {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 		return
 	}
+	if s.isChangeStale() || (s.Change.Workflow != nil && s.Change.Workflow.Status == "failed" && len(EffectiveSessionChanges(s.Change)) == 0) {
+		s.restartAgentFromCurrentChange()
+		return
+	}
 	passed, total := countPassedChecks(s.Change.Checks)
 	if total > 0 && passed < total {
 		s.CmdOutput = "Triggering agent self-repair..."
@@ -267,6 +272,63 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	}
 	s.CmdOutput = "Re-running deterministic verification checks..."
 	s.enqueueAction(ActionRequest{Kind: "check-change", Target: s.Change.ID})
+}
+
+func (s *State) isChangeStale() bool {
+	if s.Change == nil {
+		return false
+	}
+	if s.Change.Freshness == "stale" {
+		return true
+	}
+	if s.Change.Workflow != nil && s.Change.Workflow.Status == "stale" {
+		return true
+	}
+	if s.Project != nil && s.Change.ProjectRevision != "" && s.Project.ProjectRevision != "" && s.Change.ProjectRevision != s.Project.ProjectRevision {
+		return true
+	}
+	return false
+}
+
+func (s *State) restartAgentFromCurrentChange() {
+	seed := s.buildSeedFromCurrentChange()
+	if seed == nil {
+		return
+	}
+	s.startLocalAgentPreview(seed)
+	s.CmdOutput = fmt.Sprintf("Refreshing stale proposal %q on current project revision...", seed.Title)
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+}
+
+func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
+	if s.Change == nil {
+		return nil
+	}
+	var paths []string
+	for _, t := range s.Change.Targets {
+		if t.Path != "" && !containsString(paths, t.Path) {
+			paths = append(paths, t.Path)
+		}
+	}
+	for _, c := range s.Change.Changes {
+		if c.Path != "" && !containsString(paths, c.Path) {
+			paths = append(paths, c.Path)
+		}
+	}
+	for _, ft := range s.Change.FindingTargets {
+		if ft.Path != "" && !containsString(paths, ft.Path) {
+			paths = append(paths, ft.Path)
+		}
+	}
+	title := firstNonEmpty(s.Change.Title, "Agent Mission")
+	return &ChangeSeed{
+		FindingTargets:     s.Change.FindingTargets,
+		Title:              title,
+		Paths:              paths,
+		Kind:               firstNonEmpty(s.Change.Kind, "fix"),
+		Message:            fmt.Sprintf("Refresh and complete proposal: %s", title),
+		AcceptanceCriteria: s.Change.AcceptanceCriteria,
+	}
 }
 
 func (s *State) rejectCurrentDiffHunk() {
@@ -454,7 +516,8 @@ func (s *State) activateSecondaryRow() {
 }
 
 func (s *State) activateAnalysisRunRow() {
-	if s.Run == nil {
+	if s.Run == nil || s.Run.Status == "paused" || s.Run.Status == "interrupted" {
+		s.triggerOrResumeAnalysis()
 		return
 	}
 	idx := s.ClampedIdx()
@@ -591,6 +654,7 @@ func (s *State) ExecuteCommand(raw string) {
 	if trimmed == "" {
 		return
 	}
+	s.Error = ""
 	s.recordCommandHistory(raw)
 	fields := strings.Fields(trimmed)
 	cmd := strings.ToLower(fields[0])
@@ -621,7 +685,7 @@ func (s *State) execSystemCommand(cmd, arg string) bool {
 		return true
 	case "help", "?", "keys", "keybinds", "keybind", "shortcuts":
 		s.ShowKeybindsModal = true
-		s.CmdOutput = "Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | test | fix | bootstrap | dismiss | agent <prompt> | open <file> | project <path> | scope | proposals | apply | merge | undo | palette | quit"
+		s.CmdOutput = "Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | resume | reanalyze | test | fix | debug | agent <prompt> | open <file> | project <path> | models | apply | undo | quit"
 		return true
 	case "palette", "theme":
 		s.CyclePalette()
@@ -661,8 +725,7 @@ func (s *State) execAnalysisCommand(cmd, arg string) bool {
 		s.enqueueAction(ActionRequest{Kind: "reindex"})
 		return true
 	case "analyze", "run":
-		s.CmdOutput = "Starting project analysis..."
-		s.enqueueAction(ActionRequest{Kind: "run-analysis"})
+		s.triggerOrResumeAnalysis()
 		return true
 	case "new-analysis", "reanalyze":
 		s.CmdOutput = "Starting fresh project analysis (preserving in-progress issues)..."
@@ -693,6 +756,11 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 		return true
 	}
 	switch cmd {
+	case "debug", "logs":
+		s.Navigate(PageAgents)
+		s.AgentDetailOpen = true
+		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([Esc/g] to return)."
+		return true
 	case "scope", "files":
 		s.Navigate(PageAnalysisFiles)
 		s.CmdOutput = "Switched to [2] Agent Studio · File Scope."
