@@ -202,13 +202,68 @@ func visibleRuneCount(s string) int {
 	return lipgloss.Width(s)
 }
 
-// padVisibleRight pads an ANSI-styled string with trailing spaces to target visible columns.
+// padVisibleRight fits an ANSI-styled string to exact target visible columns by truncating or right-padding.
 func padVisibleRight(s string, target int) string {
+	if target <= 0 {
+		return ""
+	}
 	vis := visibleRuneCount(s)
+	if vis > target {
+		s = truncateVisible(s, target)
+		vis = visibleRuneCount(s)
+	}
 	if vis >= target {
 		return s
 	}
 	return s + strings.Repeat(" ", target-vis)
+}
+
+// truncateVisible shortens an ANSI-styled string to maxCols visible columns while preserving SGR sequences.
+func truncateVisible(s string, maxCols int) string {
+	if maxCols <= 0 {
+		return ""
+	}
+	if visibleRuneCount(s) <= maxCols {
+		return s
+	}
+	if maxCols == 1 {
+		return "…"
+	}
+	limit := maxCols - 1
+	var b strings.Builder
+	cols := 0
+	for i := 0; i < len(s); {
+		if seqLen := ansiEscapeLen(s[i:]); seqLen > 0 {
+			b.WriteString(s[i : i+seqLen])
+			i += seqLen
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		rw := max(1, lipgloss.Width(string(r)))
+		if cols+rw > limit {
+			break
+		}
+		b.WriteRune(r)
+		cols += rw
+		i += size
+	}
+	if cols < limit {
+		b.WriteString(strings.Repeat(" ", limit-cols))
+	}
+	b.WriteString("…\x1b[0m")
+	return b.String()
+}
+
+func ansiEscapeLen(s string) int {
+	if len(s) < 2 || s[0] != '\x1b' || s[1] != '[' {
+		return 0
+	}
+	for i := 2; i < len(s); i++ {
+		if s[i] >= 0x40 && s[i] <= 0x7e {
+			return i + 1
+		}
+	}
+	return len(s)
 }
 
 // truncatePlain shortens a plain string to maxCols runes using an ellipsis.
@@ -307,26 +362,31 @@ func (th ansiTheme) statusBadge(state string) string {
 	}
 }
 
-// renderPanelBox wraps content lines in a Lip Gloss rounded enterprise panel frame.
+// renderPanelBox wraps content lines in a Lip Gloss rounded enterprise panel frame without line-wrap overflow.
 func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body []string) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
+	contentW := max(24, innerWidth-4)
 	header := th.titleStyle.Render(strings.TrimSpace(title))
 	if strings.TrimSpace(rightMeta) != "" {
 		meta := th.mutedStyle.Render(strings.TrimSpace(rightMeta))
-		gap := max(2, innerWidth-4-lipgloss.Width(header)-lipgloss.Width(meta))
+		maxTitleW := max(10, contentW-lipgloss.Width(meta)-2)
+		if lipgloss.Width(header) > maxTitleW {
+			header = truncateVisible(header, maxTitleW)
+		}
+		gap := max(2, contentW-lipgloss.Width(header)-lipgloss.Width(meta))
 		header = header + strings.Repeat(" ", gap) + meta
 	}
 	allLines := make([]string, 0, len(body)+2)
-	allLines = append(allLines, header)
+	allLines = append(allLines, padVisibleRight(header, contentW))
 	if len(body) > 0 {
-		allLines = append(allLines, th.border+strings.Repeat("─", max(10, innerWidth-4))+th.reset)
+		allLines = append(allLines, th.border+strings.Repeat("─", contentW)+th.reset)
 	}
 	for _, line := range body {
-		allLines = append(allLines, padVisibleRight(line, innerWidth-4))
+		allLines = append(allLines, padVisibleRight(line, contentW))
 	}
-	rendered := th.cardStyle.Width(innerWidth).Render(strings.Join(allLines, "\n"))
+	rendered := th.cardStyle.Render(strings.Join(allLines, "\n"))
 	rawLines := strings.Split(rendered, "\n")
 	out := make([]string, 0, len(rawLines))
 	for _, rl := range rawLines {
@@ -340,9 +400,10 @@ func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
-	head := fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s", th.critBg, th.reset)
-	msg := fmt.Sprintf("%s%s%s", th.bold+th.red, truncatePlain(strings.TrimSpace(errText), innerWidth-6), th.reset)
-	box := th.errorBoxStyle.Width(innerWidth).Render(head + "\n" + msg)
+	contentW := max(24, innerWidth-4)
+	head := padVisibleRight(fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s", th.critBg, th.reset), contentW)
+	msg := padVisibleRight(fmt.Sprintf("%s%s%s", th.bold+th.red, strings.TrimSpace(errText), th.reset), contentW)
+	box := th.errorBoxStyle.Render(head + "\n" + msg)
 	var out []string
 	for _, line := range strings.Split(box, "\n") {
 		out = append(out, "  "+line)
@@ -355,12 +416,12 @@ func (th ansiTheme) renderKPICards(cards [][2]string, totalWidth int) []string {
 	if len(cards) == 0 {
 		return nil
 	}
-	cardWidth := max(18, (totalWidth-8)/len(cards)-2)
+	cardInner := max(10, (totalWidth-4)/len(cards)-4)
 	var boxes []string
 	for _, c := range cards {
-		label := th.mutedStyle.Render(truncatePlain(strings.ToUpper(c[0]), cardWidth-4))
-		val := padVisibleRight(c[1], cardWidth-4)
-		box := th.cardStyle.Width(cardWidth).Render(label + "\n" + val)
+		label := padVisibleRight(th.mutedStyle.Render(truncatePlain(strings.ToUpper(c[0]), cardInner)), cardInner)
+		val := padVisibleRight(c[1], cardInner)
+		box := th.cardStyle.Render(label + "\n" + val)
 		boxes = append(boxes, box)
 	}
 	joined := lipgloss.JoinHorizontal(lipgloss.Top, boxes...)
@@ -375,7 +436,7 @@ func (th ansiTheme) renderKPICards(cards [][2]string, totalWidth int) []string {
 func (th ansiTheme) renderTableHeader(columns string, width int) []string {
 	ruleWidth := max(30, width-6)
 	return []string{
-		fmt.Sprintf("  %s%s%s", th.bold+th.cyan, columns, th.reset),
+		fmt.Sprintf("  %s%s%s", th.bold+th.cyan, truncatePlain(columns, ruleWidth), th.reset),
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", ruleWidth), th.reset),
 	}
 }
