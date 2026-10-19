@@ -1,10 +1,10 @@
-# Mini-Orca desktop API contract
+# Mini-Orca local API contract
 
 **Version:** 4.4.0
 **Base URL:** `http://localhost:9090`  
 **Content type:** `application/json`
 
-Mini-Orca uses a Wails/React client and loopback daemon for one active project.
+Mini-Orca uses a pure Go TUI client and loopback daemon for one active project.
 The shared change workflow captures up to eight explicit Go/Markdown paths,
 prepares versioned proposals, checks them, records diff review and explicitly
 applies them with guarded recovery/Undo.
@@ -21,13 +21,13 @@ with the structured error response described below.
 
 ## Local request boundary
 
-The daemon trusts the native Wails host to call its loopback API;
+The daemon trusts the local TUI client to call its loopback API;
 it does not provide browser sessions, CORS access, or request authentication.
 With the default loopback bind, requests must use a `Host` of `localhost`,
 `127.0.0.1`, or `::1` (with an optional port). Requests carrying an `Origin`
 header are rejected, and CORS preflight requests receive `403 Forbidden` with
 no CORS response headers. This prevents a web page from treating the daemon as
-a browser API while preserving native desktop requests, which send no
+a browser API while preserving local TUI requests, which send no
 `Origin` header.
 
 `POST` and `PATCH` requests with a body must send `Content-Type:
@@ -565,7 +565,7 @@ interrupted analysis remain distinct. Unreadable file/cache evidence is reported
 as unavailable with a reason. New unindexed files remain visible with a prompt
 to refresh project facts. Ineligible files have an empty stage list and the
 file-level exclusion reason. Selection for the next run does not erase saved
-analysis status. The desktop classifies paths in `excluded_paths` as excluded,
+analysis status. The client classifies paths in `excluded_paths` as excluded,
 just like files with a policy exclusion reason, and omits both from freshness
 counts. Retained stage evidence becomes visible again when a file is re-selected.
 
@@ -854,7 +854,7 @@ rechecked on each request; unrelated, missing and pruned paths are rejected.
 Subsequent requests use its own project ID/revision and ordinary proposal guards.
 Each checkout has a separate manager, execution trust, proposal authority and
 bounded workflow worker. Reads and navigation never start generation or transfer
-consent. The desktop keeps the original branch and terminals selected while
+consent. The client keeps the original branch selected while
 separate implementations run; task Review/Apply/Commit/Undo target only their
 captured checkout. Daemon shutdown and explicit project replacement stop these
 workers; reindexing or switching branches in the original checkout does not
@@ -882,7 +882,7 @@ survives reindexing, stale analysis and restarts. `GET /api/projects/current/fin
 returns these references with their `commit_oid` in `completed`, independently of
 finding filters. Semantic findings also use the existing `status: fixed`; explicit
 reopen or dismissal clears their completion. Confidence, verification and freshness
-are unchanged. The web client labels completed findings **Done** in lists and details.
+are unchanged. The client labels completed findings **Done** in lists and details.
 If saving completion fails, `state` remains `merged`, `warnings` explains the
 failure, and the worktree and its task history are retained. Retrying the guarded
 merge after fixing storage saves completion even if Git has already merged the HEAD.
@@ -894,7 +894,7 @@ The source branch is retained. Private `.mini-orca/` task history is locally
 ignored for removal and deleted with the checkout. Checkouts containing another
 registered worktree are retained. Conflicted, failed and aborted merges never
 complete findings or remove the source. Successful removal returns `removed_worktree`
-with its absolute path, allowing the desktop to close the implementation and stop polling it. If
+with its absolute path, allowing the client to close the implementation and stop polling it. If
 cleanup fails, the merge remains `state: merged` and `warnings` explains why the
 worktree remains; `removed_worktree` is omitted. No push happens automatically.
 

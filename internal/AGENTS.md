@@ -56,7 +56,7 @@ the backend guide for changes to `cmd/`.
   Avoid holding locks during provider or subprocess I/O.
 - Project-code checks require the existing execution-trust guard
   and isolated workspace. Use controlled argv, bounded diagnostics and process
-  cleanup; never execute model text as a shell command. The desktop's user-operated
+  cleanup; never execute model text as a shell command. A user-operated
   terminal does not authorize model-driven commands.
 - Keep source, secrets and transcripts out of metadata/logs that are defined as
   source-free. Preserve provenance and freshness instead of presenting advisory

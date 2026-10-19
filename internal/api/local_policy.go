@@ -18,11 +18,11 @@ func LocalOnly(next http.Handler, allowExternalHosts bool) http.Handler {
 			return
 		}
 		if isCORSPreflight(r) {
-			WriteAppError(w, Forbidden("browser preflight requests are not supported", "Use the Mini-Orca desktop client.", nil))
+			WriteAppError(w, Forbidden("browser preflight requests are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
 		if r.Header.Get("Origin") != "" {
-			WriteAppError(w, Forbidden("browser Origin headers are not supported", "Use the Mini-Orca desktop client.", nil))
+			WriteAppError(w, Forbidden("browser Origin headers are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
 		if requiresJSON(r.Method) && requestHasBody(r) && !isJSONContentType(r.Header.Get("Content-Type")) {

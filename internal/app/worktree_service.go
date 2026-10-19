@@ -10,7 +10,7 @@ import (
 )
 
 // WorktreeService keeps proposal authority, jobs and execution trust local to a
-// registered checkout without replacing the project selected in the desktop.
+// registered checkout without replacing the currently active project.
 func (s *Service) WorktreeService(ctx context.Context, path string) (*Service, *project.Manager, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()

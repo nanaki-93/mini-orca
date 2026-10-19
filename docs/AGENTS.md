@@ -28,11 +28,11 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
 ## Verification
 
 For prose-only changes, review the diff, run `git diff --check` and verify local
-links, file paths and documented commands. No Go/desktop suite is needed solely
+links, file paths and documented commands. No Go/TUI suite is needed solely
 for wording changes.
 
 For API route or release-contract documentation changes, run
 `go test ./cmd/daemon -run 'Test(ReleaseDocumentationUsesCanonicalVersion|DocumentedRoutesAreHandledByDaemon)$'`
 and any additional tests for the affected contract. These route tests do not prove
-payload semantics; cover changed fields/errors in handler and desktop contract tests.
+payload semantics; cover changed fields/errors in handler and TUI client contract tests.
 Build-procedure changes require validating the affected procedure when available.

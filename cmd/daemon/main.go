@@ -118,7 +118,7 @@ func daemonAddress() string {
 	return "127.0.0.1:9090"
 }
 
-// newHTTPMux registers only the local desktop API routes.
+// newHTTPMux registers only the local daemon API routes.
 func newHTTPMux(
 	application *app.Service,
 	projectManager *project.Manager,

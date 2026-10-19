@@ -140,7 +140,7 @@ docker-run: ## Run container in detached mode
 		-e MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090 \
 		$(DOCKER_IMAGE)
 	@echo "$(COLOR_GREEN)Container started: $(APP_NAME)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
 
 docker-run-detached: docker-run ## Run container in detached mode (alias)
 
@@ -160,13 +160,13 @@ compose-up: ## Start services with docker-compose
 	@echo "$(COLOR_GREEN)Starting services with docker-compose...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) up -d --build
 	@echo "$(COLOR_GREEN)Services started$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
 
 compose-up-llm: ## Start services with docker-compose including LM Studio
 	@echo "$(COLOR_GREEN)Starting services with docker-compose (with LM Studio)...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) --profile with-llm up -d --build
 	@echo "$(COLOR_GREEN)Services started (with LM Studio)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the desktop client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
 
 compose-down: ## Stop services with docker-compose
 	@echo "$(COLOR_YELLOW)Stopping services...$(COLOR_RESET)"
