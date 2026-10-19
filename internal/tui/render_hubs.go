@@ -593,14 +593,16 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	}
 	if s.File != nil {
 		header := fmt.Sprintf("%sFile:%s %s%s%s %s(%s · %d lines)%s",
-			th.muted, th.reset, th.bold+th.fg, s.File.Path, th.reset,
+			th.muted, th.reset, th.bold+th.fg, sanitizeCodeText(s.File.Path), th.reset,
 			th.muted, firstNonEmpty(s.File.Language, "text"), s.File.LineCount, th.reset)
 		lines = append(lines, th.renderPanelBox("READ-ONLY SOURCE VIEWER", "SOURCE", panelW, []string{header})...)
 		if s.File.Content != "" {
-			rawLines := strings.Split(s.File.Content, "\n")
+			rawLines := strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")
+			codeCol := max(16, width-12)
 			start, end := windowBounds(len(rawLines), s.ClampedIdx(), 14)
 			for idx := start; idx < end; idx++ {
-				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, rawLines[idx]))
+				codeText := truncatePlain(sanitizeCodeText(rawLines[idx]), codeCol)
+				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, codeText))
 			}
 			lines = appendWindowFooter(th, lines, start, end, len(rawLines))
 		}
@@ -617,32 +619,40 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	meta := []string{
 		fmt.Sprintf(
 			"%sProposal:%s %s%s%s · %sFile:%s %s%s%s %s (%s+%d%s/%s-%d%s) · %sHunks:%s %d",
-			th.muted, th.reset, th.bold+th.fg, s.Change.Title, th.reset,
-			th.muted, th.reset, th.cyan, fc.Path, th.reset,
+			th.muted, th.reset, th.bold+th.fg, truncatePlain(s.Change.Title, 36), th.reset,
+			th.muted, th.reset, th.cyan, truncatePlain(fc.Path, 36), th.reset,
 			th.statusBadge(badge),
 			th.green, added, th.reset, th.red, removed, th.reset,
 			th.muted, th.reset, len(hunks),
 		),
 	}
 	if s.ShowInlineWhy && fc.Summary != "" {
-		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, fc.Summary, th.reset))
+		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, sanitizeCodeText(fc.Summary), th.reset))
 	}
 	lines := th.renderPanelBox("GUARDED DIFF REVIEW", badge, panelW, meta)
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("  SIGN  LINE │ UNIFIED DIFF CONTENT", width)...)
-	start, end := windowBounds(len(fc.Diff.Lines), s.ClampedIdx(), 14)
+	diffLines := s.displayDiffLines()
+	codeCol := max(16, width-14)
+	start, end := windowBounds(len(diffLines), s.ClampedIdx(), 14)
 	for idx := start; idx < end; idx++ {
-		dl := fc.Diff.Lines[idx]
-		switch {
-		case IsAddedLine(dl.Kind):
-			lines = append(lines, fmt.Sprintf("  %s+ %4d │ %s%s", th.green, dl.NewLine, dl.Text, th.reset))
-		case IsRemovedLine(dl.Kind):
-			lines = append(lines, fmt.Sprintf("  %s- %4d │ %s%s", th.red, dl.OldLine, dl.Text, th.reset))
-		default:
-			lines = append(lines, fmt.Sprintf("  %s  %4d │%s %s", th.muted, dl.NewLine, th.reset, dl.Text))
-		}
+		lines = append(lines, formatDiffDisplayLine(th, diffLines[idx], codeCol))
 	}
-	return appendWindowFooter(th, lines, start, end, len(fc.Diff.Lines))
+	return appendWindowFooter(th, lines, start, end, len(diffLines))
+}
+
+func formatDiffDisplayLine(th ansiTheme, dl DiffLine, codeCol int) string {
+	text := truncatePlain(sanitizeCodeText(dl.Text), codeCol)
+	switch {
+	case dl.Kind == "hunk":
+		return fmt.Sprintf("  %s@@   %4d │ %s%s", th.cyan, dl.NewLine, text, th.reset)
+	case IsAddedLine(dl.Kind):
+		return fmt.Sprintf("  %s+ %4d │ %s%s", th.green, dl.NewLine, text, th.reset)
+	case IsRemovedLine(dl.Kind):
+		return fmt.Sprintf("  %s- %4d │ %s%s", th.red, dl.OldLine, text, th.reset)
+	default:
+		return fmt.Sprintf("  %s  %4d │%s %s", th.muted, dl.NewLine, th.reset, text)
+	}
 }
 
 func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {

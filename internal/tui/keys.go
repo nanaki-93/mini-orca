@@ -458,6 +458,9 @@ func (s *State) handleEditorKey(key string) bool {
 		}
 		s.CmdOutput = fmt.Sprintf("Inline diff explanations %s", stateWord)
 		return true
+	case "n", "N":
+		s.stepDiffHunk(key == "n")
+		return true
 	case "c":
 		s.applyAndCommitProposal("")
 		return true
@@ -477,6 +480,30 @@ func (s *State) handleEditorKey(key string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *State) stepDiffHunk(forward bool) {
+	if s.Change == nil || len(s.Change.Changes) == 0 {
+		return
+	}
+	hunks := SplitDiffIntoHunks(s.Change.Changes[0].Diff.Lines)
+	if len(hunks) == 0 {
+		return
+	}
+	delta := -1
+	if forward {
+		delta = 1
+	}
+	s.HunkIdx = (s.HunkIdx + delta + len(hunks)) % len(hunks)
+	offset := 0
+	for i := 0; i < s.HunkIdx; i++ {
+		if len(hunks) > 1 {
+			offset++
+		}
+		offset += len(hunks[i].Lines)
+	}
+	s.SelectedIdx = offset
+	s.CmdOutput = fmt.Sprintf("Focused diff hunk #%d/%d (lines %d-%d)", s.HunkIdx+1, len(hunks), hunks[s.HunkIdx].NewStart, hunks[s.HunkIdx].NewEnd)
 }
 
 func isGovernancePage(p Page) bool {

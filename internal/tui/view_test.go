@@ -345,3 +345,95 @@ func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 		}
 	}
 }
+
+func TestCodeDiffAndSourceTabAndLongLineSanitization(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+
+	var diffLines []DiffLine
+	for i := 1; i <= 60; i++ {
+		diffLines = append(diffLines, DiffLine{
+			Kind:    "context",
+			OldLine: i,
+			NewLine: i,
+			Text:    "\t\t// context line with tabs\r",
+		})
+	}
+	diffLines[15] = DiffLine{
+		Kind:    "delete",
+		OldLine: 16,
+		Text:    "\t\t\tReadTimeout: 0, // legacy unbounded timeout with\ttabs\tand\r\n",
+	}
+	diffLines[16] = DiffLine{
+		Kind:    "add",
+		NewLine: 16,
+		Text:    "\t\t\tReadHeaderTimeout: 5 * time.Second, // " + strings.Repeat("very_long_identifier_", 10),
+	}
+	diffLines[45] = DiffLine{
+		Kind:    "add",
+		NewLine: 46,
+		Text:    "\t\t\tIdleTimeout: 60 * time.Second,\t// second hunk with tabs\r",
+	}
+
+	s.Change = &ChangeSession{
+		ID:    "chg-tabs",
+		Title: "Harden\tHTTP\nserver timeouts",
+		State: "checked",
+		Changes: []FileChange{
+			{
+				Path:    "internal/api/server.go",
+				Summary: "Enforce explicit read header timeout\nand\tstrip control chars\r\n",
+				Diff:    FileDiff{Lines: diffLines},
+			},
+		},
+	}
+
+	s.Navigate(PageEditor)
+	for _, dims := range [][2]int{{68, 24}, {100, 30}, {120, 36}, {180, 50}} {
+		frame := s.Render(dims[0], dims[1])
+		if strings.ContainsAny(frame, "\t\r") {
+			t.Fatalf("diff frame (%dx%d) must not contain raw tab or CR characters", dims[0], dims[1])
+		}
+		rows := strings.Split(frame, "\n")
+		if len(rows) != dims[1] {
+			t.Fatalf("diff frame (%dx%d): expected %d rows, got %d", dims[0], dims[1], dims[1], len(rows))
+		}
+		for rIdx, row := range rows {
+			if gotW := visibleRuneCount(row); gotW != dims[0] {
+				t.Fatalf("diff frame (%dx%d) row %d: expected width %d, got %d: %q", dims[0], dims[1], rIdx, dims[0], gotW, row)
+			}
+		}
+	}
+
+	// Verify focused hunk view shows changed lines immediately and 'n'/'N' steps hunks
+	frame120 := s.Render(120, 36)
+	if !strings.Contains(frame120, "ReadHeaderTimeout") || !strings.Contains(frame120, "Hunk #1/2") {
+		t.Fatalf("expected focused hunk #1 in diff view:\n%s", frame120)
+	}
+	s.HandleKey(KeyEvent{Key: "n"})
+	if s.HunkIdx != 1 || !strings.Contains(s.CmdOutput, "hunk #2/2") {
+		t.Fatalf("expected 'n' to focus hunk #2/2, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	}
+	s.HandleKey(KeyEvent{Key: "N"})
+	if s.HunkIdx != 0 {
+		t.Fatalf("expected 'N' to return to hunk #1/2, got HunkIdx=%d", s.HunkIdx)
+	}
+
+	// Verify read-only source file viewer with tabs, CRLF, and long lines
+	s.Change = nil
+	s.File = &FileInfo{
+		Path:      "internal/api/server.go",
+		Language:  "Go",
+		LineCount: 3,
+		Content:   "package api\r\n\tfunc Start() {\r\n\t\t\tprintln(\"" + strings.Repeat("A", 200) + "\")\r\n\t}\r\n",
+	}
+	sourceFrame := s.Render(120, 36)
+	if strings.ContainsAny(sourceFrame, "\t\r") {
+		t.Fatal("source viewer frame must not contain raw tab or CR characters")
+	}
+	for rIdx, row := range strings.Split(sourceFrame, "\n") {
+		if gotW := visibleRuneCount(row); gotW != 120 {
+			t.Fatalf("source frame row %d: expected width 120, got %d: %q", rIdx, gotW, row)
+		}
+	}
+}

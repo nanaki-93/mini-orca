@@ -375,6 +375,12 @@ func (s *State) openAgentDiffInspector() {
 		s.CmdOutput = fmt.Sprintf("Inspecting diff for %s ([c] Apply & Commit · [x] Reject Hunk · [w] Back to Pipeline)", s.Change.Title)
 		return
 	}
+	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+		s.Navigate(PageEditor)
+		s.CmdOutput = fmt.Sprintf("Loading diff for %s...", s.Change.Title)
+		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
+		return
+	}
 	if s.Change != nil && len(s.Change.Targets) > 0 && s.Change.Targets[0].Path != "" {
 		s.openFileInEditor(s.Change.Targets[0].Path)
 		return

@@ -651,12 +651,45 @@ func (s *State) ActiveListLength() int {
 
 func (s *State) editorListLength() int {
 	if s.Change != nil && len(s.Change.Changes) > 0 {
-		return max(1, len(s.Change.Changes[0].Diff.Lines))
+		return max(1, len(s.displayDiffLines()))
 	}
 	if s.File != nil && s.File.Content != "" {
-		return max(1, len(strings.Split(s.File.Content, "\n")))
+		return max(1, len(strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")))
 	}
 	return s.indexedFileCount()
+}
+
+func (s *State) displayDiffLines() []DiffLine {
+	if s.Change == nil || len(s.Change.Changes) == 0 {
+		return nil
+	}
+	var out []DiffLine
+	for cIdx, fc := range s.Change.Changes {
+		if cIdx > 0 {
+			out = append(out, DiffLine{
+				Kind:    "hunk",
+				NewLine: 1,
+				Text:    fmt.Sprintf("── File: %s ──", fc.Path),
+			})
+		}
+		hunks := SplitDiffIntoHunks(fc.Diff.Lines)
+		if len(hunks) == 0 {
+			out = append(out, fc.Diff.Lines...)
+			continue
+		}
+		for hIdx, h := range hunks {
+			if len(hunks) > 1 {
+				out = append(out, DiffLine{
+					Kind:    "hunk",
+					OldLine: h.OldStart,
+					NewLine: h.NewStart,
+					Text:    fmt.Sprintf("@@ -%d,%d +%d,%d @@ Hunk #%d/%d", h.OldStart, h.OldEnd, h.NewStart, h.NewEnd, hIdx+1, len(hunks)),
+				})
+			}
+			out = append(out, h.Lines...)
+		}
+	}
+	return out
 }
 
 func (s *State) secondaryListLength() int {

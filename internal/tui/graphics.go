@@ -197,9 +197,65 @@ func clampHeight(height int) int {
 	return height
 }
 
+// sanitizeSingleLine normalizes tabs, carriage returns, newlines, and control characters
+// so terminal cursor movement always matches lipgloss.Width column measurement.
+func sanitizeSingleLine(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = strings.ToValidUTF8(s, " ")
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if seqLen := ansiEscapeLen(s[i:]); seqLen > 0 {
+			seq := s[i : i+seqLen]
+			if seq[len(seq)-1] == 'm' {
+				b.WriteString(seq)
+			}
+			i += seqLen
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		writeSanitizedRune(&b, r)
+	}
+	return b.String()
+}
+
+func writeSanitizedRune(b *strings.Builder, r rune) {
+	switch {
+	case r == '\t':
+		b.WriteString("    ")
+	case r == '\n':
+		b.WriteByte(' ')
+	case r == '\r' || r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f):
+		return
+	default:
+		b.WriteRune(r)
+	}
+}
+
+// sanitizeCodeText normalizes raw source or diff text so tabs, CR/LF, and literal ESC bytes never corrupt terminal layout.
+func sanitizeCodeText(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = strings.ToValidUTF8(s, " ")
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\x1b' {
+			b.WriteString("\\x1b")
+			continue
+		}
+		writeSanitizedRune(&b, r)
+	}
+	return b.String()
+}
+
 // visibleRuneCount measures the printable column width of an ANSI-styled string using lipgloss.Width.
 func visibleRuneCount(s string) int {
-	return lipgloss.Width(s)
+	return lipgloss.Width(sanitizeSingleLine(s))
 }
 
 // padVisibleRight fits an ANSI-styled string to exact target visible columns by truncating or right-padding.
@@ -207,10 +263,11 @@ func padVisibleRight(s string, target int) string {
 	if target <= 0 {
 		return ""
 	}
-	vis := visibleRuneCount(s)
+	s = sanitizeSingleLine(s)
+	vis := lipgloss.Width(s)
 	if vis > target {
 		s = truncateVisible(s, target)
-		vis = visibleRuneCount(s)
+		vis = lipgloss.Width(s)
 	}
 	if vis >= target {
 		return s
@@ -220,10 +277,11 @@ func padVisibleRight(s string, target int) string {
 
 // truncateVisible shortens an ANSI-styled string to maxCols visible columns while preserving SGR sequences.
 func truncateVisible(s string, maxCols int) string {
+	s = sanitizeSingleLine(s)
 	if maxCols <= 0 {
 		return ""
 	}
-	if visibleRuneCount(s) <= maxCols {
+	if lipgloss.Width(s) <= maxCols {
 		return s
 	}
 	if maxCols == 1 {
@@ -247,16 +305,19 @@ func truncateVisible(s string, maxCols int) string {
 		cols += rw
 		i += size
 	}
-	if cols < limit {
-		b.WriteString(strings.Repeat(" ", limit-cols))
+	if actual := lipgloss.Width(b.String()); actual < limit {
+		b.WriteString(strings.Repeat(" ", limit-actual))
 	}
 	b.WriteString("…\x1b[0m")
 	return b.String()
 }
 
 func ansiEscapeLen(s string) int {
-	if len(s) < 2 || s[0] != '\x1b' || s[1] != '[' {
+	if len(s) < 2 || s[0] != '\x1b' {
 		return 0
+	}
+	if s[1] != '[' {
+		return 2
 	}
 	for i := 2; i < len(s); i++ {
 		if s[i] >= 0x40 && s[i] <= 0x7e {
@@ -266,19 +327,30 @@ func ansiEscapeLen(s string) int {
 	return len(s)
 }
 
-// truncatePlain shortens a plain string to maxCols runes using an ellipsis.
+// truncatePlain shortens a plain string to maxCols visible columns using an ellipsis.
 func truncatePlain(s string, maxCols int) string {
+	s = sanitizeCodeText(s)
 	if maxCols <= 0 {
 		return ""
 	}
-	if utf8.RuneCountInString(s) <= maxCols {
+	if lipgloss.Width(s) <= maxCols {
 		return s
 	}
 	if maxCols <= 1 {
 		return "…"
 	}
-	runes := []rune(s)
-	return string(runes[:maxCols-1]) + "…"
+	limit := maxCols - 1
+	var b strings.Builder
+	cols := 0
+	for _, r := range s {
+		rw := max(1, lipgloss.Width(string(r)))
+		if cols+rw > limit {
+			break
+		}
+		b.WriteRune(r)
+		cols += rw
+	}
+	return b.String() + "…"
 }
 
 // wrapFrameLine encloses a line in left and right outer vertical frame borders sized to width.
