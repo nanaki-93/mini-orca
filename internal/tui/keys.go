@@ -785,6 +785,19 @@ func (s *State) handleGovernanceKey(key string) bool {
 		s.Navigate(PageLessons)
 		s.graduateSelectedLesson()
 		return true
+	case "d":
+		if s.Change != nil {
+			s.openAgentDiffInspector()
+			return true
+		}
+	case "a", "c":
+		if s.Change != nil {
+			s.applyAndCommitProposal("")
+			return true
+		}
+	case "u":
+		s.requestGuardedUndo()
+		return true
 	}
 	return false
 }

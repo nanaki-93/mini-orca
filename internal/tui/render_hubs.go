@@ -993,13 +993,39 @@ func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · HARNESS² LESSONS", "Graduated engineering guardrails")
-	lines = append(lines, th.renderTableHeader("   HARNESS² GUARDRAIL LESSONS", width)...)
+	panelW := adaptivePanelWidth(width)
+	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · HARNESS² LESSONS", "Graduated engineering guardrails & AGENTS.md rules")
+	lines = append(lines, th.renderTableHeader("   STATUS       HARNESS² GUARDRAIL LESSON", width)...)
+	lessons := s.AllHarnessLessons()
 	selected := s.ClampedIdx()
-	for idx, rule := range s.AllHarnessLessons() {
+	for idx, rule := range lessons {
 		cursor := th.renderCursorPrefix(idx == selected)
+		badge := th.statusBadge("CANDIDATE")
+		if s.IsLessonGraduated(rule) {
+			badge = th.statusBadge("GRADUATED")
+		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s• %s%s%s", cursor, tStyle, rule, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%-12s %s%s%s", cursor, badge, tStyle, truncatePlain(rule, max(24, width-20)), th.reset))
+	}
+	if selected < len(lessons) {
+		selRule := lessons[selected]
+		statusText := "Candidate guardrail — press [Enter/g] to stage into AGENTS.md"
+		if s.IsLessonGraduated(selRule) {
+			statusText = "Active in AGENTS.md draft — press [d] to inspect diff or [a/c] to apply & commit"
+		}
+		propLine := fmt.Sprintf("%sTarget:%s %sAGENTS.md%s · %sStatus:%s %s",
+			th.muted, th.reset, th.bold+th.cyan, th.reset, th.muted, th.reset, statusText)
+		if s.Change != nil && (s.Change.Kind == "instructions" || (len(s.Change.Changes) > 0 && s.Change.Changes[0].Path == "AGENTS.md")) {
+			propLine = fmt.Sprintf("%sProposal:%s %s%s%s (%s) · %s[d]%s Diff · %s[a/c]%s Apply & Commit · %s[u]%s Undo",
+				th.muted, th.reset, th.bold+th.fg, s.Change.Title, th.reset, th.statusBadge(s.Change.State),
+				th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		}
+		box := []string{
+			fmt.Sprintf("%sRule:%s     %s%s%s", th.muted, th.reset, th.bold+th.fg, truncatePlain(selRule, max(24, panelW-14)), th.reset),
+			propLine,
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderPanelBox("AGENTS.MD GUARDRAIL PREVIEW", "HARNESS² GOVERNANCE", panelW, box)...)
 	}
 	return lines
 }

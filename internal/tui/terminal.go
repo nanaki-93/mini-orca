@@ -635,6 +635,10 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 	if receipt.ProjectRevision != "" {
 		s.Project.ProjectRevision = receipt.ProjectRevision
 	}
+	if s.Instructions != nil && len(s.Change.Changes) > 0 && s.Change.Changes[0].Path == firstNonEmpty(s.Instructions.Path, "AGENTS.md") {
+		s.Instructions.Exists = true
+		s.Instructions.ExistingContent = s.Change.Changes[0].Content
+	}
 	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q", s.Change.Title)
 	return nil
 }
@@ -688,7 +692,9 @@ func (s *State) ensureChangeReviewed(ctx context.Context, client *Client, reqID,
 		return
 	}
 	checkReq := reviewReq()
-	checkReq["run_tests"] = true
+	if s.Change.Kind != "instructions" {
+		checkReq["run_tests"] = true
+	}
 	var checked ChangeSession
 	if err := client.DoJSON(ctx, reqID+"-chk", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/checks", checkReq, &checked); err == nil && checked.ID != "" {
 		s.Change = &checked
@@ -1004,23 +1010,87 @@ func (s *State) dispatchProposeInstructions(ctx context.Context, client *Client,
 		return nil
 	}
 	targetPath := firstNonEmpty(path, "AGENTS.md")
+	content = s.syncInstructionDraft(ctx, client, reqID, targetPath, content)
 	draft := firstNonEmpty(content, s.InstructionDraft)
 	if draft == "" {
+		return nil
+	}
+	if s.Instructions != nil && s.Instructions.Exists && s.Instructions.ExistingContent == draft {
+		s.CmdOutput = fmt.Sprintf("%s already contains the selected guardrail", targetPath)
 		return nil
 	}
 	req := map[string]any{
 		"project_id":       s.Project.ProjectID,
 		"project_revision": s.Project.ProjectRevision,
 		"title":            "Update " + targetPath,
+		"kind":             "instructions",
 		"paths":            []string{targetPath},
 		"content":          draft,
 	}
 	var session ChangeSession
-	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/instructions/proposal", req, &session); err != nil {
+	err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/instructions/proposal", req, &session)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, client, reqID+"-sync")
+		req["project_revision"] = s.Project.ProjectRevision
+		err = client.DoJSON(ctx, reqID+"-retry", http.MethodPost, "/api/projects/current/instructions/proposal", req, &session)
+	}
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "instructions are unchanged") {
+			s.CmdOutput = fmt.Sprintf("%s already contains the selected guardrail", targetPath)
+			return nil
+		}
 		return err
 	}
 	s.Change = &session
+	s.prepareInstructionProposal(ctx, client, reqID)
+	s.CmdOutput = fmt.Sprintf("Prepared %s guardrail proposal — press [d] to inspect diff or [a/c] to apply & commit", targetPath)
 	return nil
+}
+
+func (s *State) syncInstructionDraft(ctx context.Context, client *Client, reqID, targetPath, content string) string {
+	if s.Instructions != nil {
+		return content
+	}
+	_, idQuery := s.resourceQueries()
+	var inst InstructionPreview
+	instrTarget := "/api/projects/current/instructions" + idQuery + "&path=" + url.QueryEscape(targetPath)
+	if err := client.DoJSON(ctx, reqID+"-inst", http.MethodGet, instrTarget, nil, &inst); err != nil {
+		return content
+	}
+	s.Instructions = &inst
+	if len(s.GraduatedLessons) == 0 {
+		return content
+	}
+	merged := inst.ExistingContent
+	for _, rule := range s.GraduatedLessons {
+		merged = InsertGuidelineSection(merged, "Harness² Lessons & Guardrails", rule)
+	}
+	s.InstructionDraft = merged
+	return merged
+}
+
+func (s *State) prepareInstructionProposal(ctx context.Context, client *Client, reqID string) {
+	if s.Change == nil || s.Change.ID == "" || s.Change.Hash == "" || s.Project == nil {
+		return
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"run_tests":        false,
+	}
+	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID)
+	var checked ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-chk", http.MethodPost, target+"/checks", req, &checked); err == nil && checked.ID != "" {
+		s.Change = &checked
+		req["revision"] = s.Change.Revision
+		req["hash"] = s.Change.Hash
+	}
+	var reviewed ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-rev", http.MethodPost, target+"/review", req, &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+	}
 }
 
 func (s *State) dispatchBootstrap(ctx context.Context, client *Client, reqID, pillarID string) error {

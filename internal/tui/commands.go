@@ -364,10 +364,31 @@ func (s *State) toggleWorkspaceTrust() {
 	s.enqueueAction(ActionRequest{Kind: "set-trust", Target: word})
 }
 
+// IsLessonGraduated reports whether a Harness² lesson has been graduated or is already present in AGENTS.md.
+func (s *State) IsLessonGraduated(rule string) bool {
+	if containsString(s.GraduatedLessons, rule) {
+		return true
+	}
+	if s.InstructionDraft != "" && ContainsGuideline(s.InstructionDraft, rule) {
+		return true
+	}
+	if s.Instructions != nil && ContainsGuideline(s.Instructions.ExistingContent, rule) {
+		return true
+	}
+	return false
+}
+
 func (s *State) graduateSelectedLesson() {
 	lessons := s.AllHarnessLessons()
+	if len(lessons) == 0 {
+		return
+	}
 	idx := min(max(0, s.ClampedIdx()), len(lessons)-1)
 	rule := lessons[idx]
+	if s.IsLessonGraduated(rule) {
+		s.CmdOutput = fmt.Sprintf("Harness² lesson already graduated into AGENTS.md: %s", rule)
+		return
+	}
 	base := s.InstructionDraft
 	if base == "" && s.Instructions != nil {
 		base = s.Instructions.ExistingContent

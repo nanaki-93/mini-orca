@@ -941,3 +941,88 @@ func TestStaleSessionSkippingErrorClearingAndPausedAnalysisResume(t *testing.T) 
 		t.Fatal("expected 'n' (reanalyze) while paused to send clear_results=true")
 	}
 }
+
+func TestLessonsGraduationAndInstructionProposalWorkflow(t *testing.T) {
+	mux := http.NewServeMux()
+	var capturedKind, capturedContent string
+	var checksRunTests *bool
+	var reviewed bool
+
+	mux.HandleFunc("/api/projects/current/instructions", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","path":"AGENTS.md","exists":true,"existing_content":"# Project instructions\n"}`))
+	})
+	mux.HandleFunc("/api/projects/current/instructions/proposal", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Kind    string `json:"kind"`
+			Content string `json:"content"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		capturedKind = body.Kind
+		capturedContent = body.Content
+		if body.Kind != "instructions" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_request","message":"provide a task title, kind and one to eight paths"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"chg-inst","project_id":"p1","project_revision":"r1","kind":"instructions","title":"Update AGENTS.md","state":"proposed","revision":1,"hash":"h-inst","changes":[{"path":"AGENTS.md","content":` + mustJSON(body.Content) + `}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-inst/checks", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			RunTests bool `json:"run_tests"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		checksRunTests = &body.RunTests
+		_, _ = w.Write([]byte(`{"id":"chg-inst","project_id":"p1","project_revision":"r1","kind":"instructions","title":"Update AGENTS.md","state":"checked","revision":2,"hash":"h-inst","checks":[{"name":"text: AGENTS.md","state":"passed"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-inst/review", func(w http.ResponseWriter, _ *http.Request) {
+		reviewed = true
+		_, _ = w.Write([]byte(`{"id":"chg-inst","project_id":"p1","project_revision":"r1","kind":"instructions","title":"Update AGENTS.md","state":"reviewed","revision":3,"hash":"h-inst","reviewed_hash":"h-inst","checks":[{"name":"text: AGENTS.md","state":"passed"}]}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	s.Navigate(PageLessons)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	s.FlushActions(context.Background(), cli)
+
+	if s.Error != "" {
+		t.Fatalf("expected lesson graduation to succeed without error, got %q", s.Error)
+	}
+	if capturedKind != "instructions" {
+		t.Fatalf("expected kind='instructions' in proposal payload, got %q", capturedKind)
+	}
+	if !strings.Contains(capturedContent, "# Project instructions") || !strings.Contains(capturedContent, "## Harness² Lessons & Guardrails") {
+		t.Fatalf("expected existing AGENTS.md content merged with graduated lesson, got %q", capturedContent)
+	}
+	if checksRunTests == nil || *checksRunTests {
+		t.Fatalf("expected fast instruction checks with run_tests=false, got %v", checksRunTests)
+	}
+	if !reviewed || s.Change == nil || s.Change.State != "reviewed" {
+		t.Fatalf("expected instruction proposal to be reviewed and ready, got reviewed=%v change=%+v", reviewed, s.Change)
+	}
+
+	// Graduating the same lesson again is a safe no-op without error
+	s.HandleKey(KeyEvent{Key: "g"})
+	if s.Error != "" || !strings.Contains(s.CmdOutput, "already graduated") {
+		t.Fatalf("expected duplicate lesson graduation to report already graduated without error, got err=%q out=%q", s.Error, s.CmdOutput)
+	}
+
+	// Pressing 'd' on PageLessons jumps to PageEditor to inspect the AGENTS.md diff
+	s.HandleKey(KeyEvent{Key: "d"})
+	if s.Page != PageEditor {
+		t.Fatalf("expected 'd' on PageLessons to open PageEditor diff, got %s", s.Page)
+	}
+}
+
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}

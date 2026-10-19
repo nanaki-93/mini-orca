@@ -576,9 +576,9 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageLessons: {
 		title:     "[5] GOVERNANCE & RULES · HARNESS² LESSONS",
-		primary:   []keyDesc{{"Enter/g", "Graduate Lesson to AGENTS.md"}, {"j/k", "Select Lesson"}},
-		secondary: []keyDesc{{"b", "Bootstrap Pillars"}, {"t", "Toggle Trust"}, {"h/l/Tab", "Governance View"}},
-		commands:  ":bootstrap  :trust  :models",
+		primary:   []keyDesc{{"Enter/g", "Graduate Lesson to AGENTS.md"}, {"d", "Inspect Diff"}, {"a/c", "Apply & Commit"}},
+		secondary: []keyDesc{{"u", "Guarded Undo"}, {"b", "Bootstrap Pillars"}, {"t", "Toggle Trust"}},
+		commands:  ":apply [msg]  :undo  :diff  :bootstrap  :trust  :models",
 	},
 }
 

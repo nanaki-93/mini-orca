@@ -74,6 +74,11 @@ func CanonicalStageLabel(idx int, rawName string) string {
 	return tuidomain.CanonicalStageLabel(idx, rawName)
 }
 
+// ContainsGuideline reports whether existing AGENTS.md text already contains a rule bullet.
+func ContainsGuideline(markdown, rule string) bool {
+	return tuidomain.ContainsGuideline(markdown, rule)
+}
+
 // InsertGuidelineSection appends a bullet rule under a named Markdown heading in AGENTS.md.
 func InsertGuidelineSection(markdown, heading, bullet string) string {
 	return tuidomain.InsertGuidelineSection(markdown, heading, bullet)
