@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 )
 
 func gitWorkflowFixture(t *testing.T) (*Service, string, GitMutationRequest) {
@@ -62,7 +64,7 @@ func TestGitWorktreeCreationIsolationAndGuards(t *testing.T) {
 	if err != nil || len(workspace.Worktrees) != 2 {
 		t.Fatalf("worktrees: %+v %v", workspace, err)
 	}
-	resolvedRel, err := validateNewWorktreePath(context.Background(), root, ".worktrees/rel-fix")
+	resolvedRel, err := gitops.ValidateNewWorktreePath(context.Background(), root, ".worktrees/rel-fix")
 	if err != nil || resolvedRel != filepath.Join(root, ".worktrees", "rel-fix") {
 		t.Fatalf("expected .worktrees/rel-fix to resolve inside root, got %q (%v)", resolvedRel, err)
 	}
@@ -279,7 +281,7 @@ func TestPassiveGitStatusDoesNotExecuteFilters(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("passive status executed filter")
 	}
-	if gitStatusDirty("?? .mini-orca/index.json\x00?? .worktrees/fix-1/\x00") {
+	if gitops.StatusDirty("?? .mini-orca/index.json\x00?? .worktrees/fix-1/\x00") {
 		t.Fatal("private metadata or worktree paths marked repository dirty")
 	}
 }

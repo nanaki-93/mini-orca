@@ -78,10 +78,6 @@ func (s *Service) runCheckCommand(ctx context.Context, workspace string, command
 	})
 }
 
-func checkChildEnvironment(parent []string) []string {
-	return checkexec.ChildEnvironment(parent)
-}
-
 func requiredChecksPassed(checks []CheckResult) bool {
 	return checkexec.RequiredChecksPassed(checks)
 }

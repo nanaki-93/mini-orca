@@ -8,16 +8,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-type ChangeCommit struct {
-	GitIdentity
-	State   string `json:"state"`
-	Message string `json:"message"`
-	OID     string `json:"oid,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
+type ChangeCommit = gitops.ChangeCommit
 
 func validateCommitMessage(message string) error {
 	if strings.TrimSpace(message) == "" || len(message) > 4096 || !utf8.ValidString(message) || strings.ContainsRune(message, 0) {

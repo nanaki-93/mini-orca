@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -52,22 +53,7 @@ type ChangeSession struct {
 
 // Listing summaries keeps a full history within the native response bound;
 // source and conversation contents are returned only for the chosen session.
-type ChangeHistoryEntry struct {
-	ID              string                  `json:"id"`
-	ProjectID       string                  `json:"project_id"`
-	ProjectRevision string                  `json:"project_revision"`
-	Kind            string                  `json:"kind"`
-	Title           string                  `json:"title"`
-	Revision        int64                   `json:"revision"`
-	Hash            string                  `json:"hash"`
-	State           string                  `json:"state"`
-	Freshness       string                  `json:"freshness"`
-	WorkflowStatus  string                  `json:"workflow_status,omitempty"`
-	WorkflowReason  string                  `json:"workflow_reason,omitempty"`
-	Commit          *ChangeCommit           `json:"commit,omitempty"`
-	FindingTargets  []project.FindingTarget `json:"finding_targets,omitempty"`
-	UpdatedAt       time.Time               `json:"updated_at"`
-}
+type ChangeHistoryEntry = gitops.ChangeHistoryEntry
 
 type ChangeCreateRequest struct {
 	ProjectID          string                  `json:"project_id"`
