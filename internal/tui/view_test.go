@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRenderAllHubsAndPalettes(t *testing.T) {
@@ -64,9 +66,10 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	}
 
 	pages := []Page{
-		PageSummary, PageProject, PageAgents, PageBugs, PageFeatures,
-		PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
-		PageHistory, PageDocs, PageDiagrams, PageInstructions,
+		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
+		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
+		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
 	for _, p := range pages {
 		s.Navigate(p)
@@ -77,6 +80,35 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		if !strings.Contains(frame, "┏") || !strings.Contains(frame, "┗") {
 			t.Fatalf("expected enterprise frame borders on page %s", p)
 		}
+	}
+
+	// Verify Overview Dashboard does NOT duplicate the raw issues table, while Issues & Issue Detail do
+	s.Navigate(PageSummary)
+	summaryFrame := s.Render(120, 40)
+	if strings.Contains(summaryFrame, "Unchecked error return") {
+		t.Fatalf("expected Overview Dashboard to avoid redundant issue table rows:\n%s", summaryFrame)
+	}
+	s.Navigate(PageBugs)
+	bugsFrame := s.Render(120, 40)
+	if !strings.Contains(bugsFrame, "Unchecked error return") {
+		t.Fatalf("expected Issues page to list finding 'Unchecked error return'")
+	}
+	s.HandleKey(KeyEvent{Key: "i"})
+	if s.Page != PageIssueDetail {
+		t.Fatalf("expected 'i' on PageBugs to open PageIssueDetail, got %s", s.Page)
+	}
+	detailFrame := s.Render(120, 40)
+	if !strings.Contains(detailFrame, "ROOT CAUSE DIAGNOSTIC & REMEDIATION") || !strings.Contains(detailFrame, "Check error from Close") {
+		t.Fatalf("expected dedicated Issue Detail view with root cause:\n%s", detailFrame)
+	}
+
+	// Verify Bubble Tea tea.Model lifecycle (Init, Update, View)
+	bm := NewBubbleModel(context.Background(), s, nil, 110, 32)
+	_ = bm.Init()
+	_, _ = bm.Update(tea.WindowSizeMsg{Width: 130, Height: 38})
+	_, _ = bm.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if !strings.Contains(bm.View(), "130x38") {
+		t.Fatalf("expected BubbleModel View to reflect updated 130x38 window size")
 	}
 
 	for _, pal := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {

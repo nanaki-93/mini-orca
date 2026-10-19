@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func isCharDevice(in io.Reader) (*os.File, bool) {
@@ -23,32 +25,6 @@ func isCharDevice(in io.Reader) (*os.File, bool) {
 		return nil, false
 	}
 	return f, true
-}
-
-func enableRawTerminal(in io.Reader, out io.Writer) func() {
-	f, ok := isCharDevice(in)
-	if !ok {
-		return func() {}
-	}
-	saveCmd := exec.Command("stty", "-g")
-	saveCmd.Stdin = f
-	savedBytes, err := saveCmd.Output()
-	if err != nil {
-		return func() {}
-	}
-	saved := strings.TrimSpace(string(savedBytes))
-	rawCmd := exec.Command("stty", "-icanon", "-echo", "min", "1", "time", "0")
-	rawCmd.Stdin = f
-	if err := rawCmd.Run(); err != nil {
-		return func() {}
-	}
-	_, _ = fmt.Fprint(out, "\033[?1049h\033[?25l")
-	return func() {
-		_, _ = fmt.Fprint(out, "\033[?25h\033[?1049l")
-		restoreCmd := exec.Command("stty", saved)
-		restoreCmd.Stdin = f
-		_ = restoreCmd.Run()
-	}
 }
 
 // DetectTerminalSize inspects the active controlling terminal or environment for full-screen dimensions.
@@ -372,13 +348,100 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 	return nil
 }
 
-// RunSession runs an interactive terminal session reading keystrokes from in and writing ANSI frames to out.
-func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
-	restore := enableRawTerminal(in, out)
-	defer restore()
+// BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
+type BubbleModel struct {
+	ctx    context.Context
+	state  *State
+	client *Client
+	width  int
+	height int
+}
 
+// NewBubbleModel constructs a Bubble Tea model wrapping State and Client.
+func NewBubbleModel(ctx context.Context, state *State, client *Client, width, height int) *BubbleModel {
 	w, h := DetectTerminalSize(width, height)
-	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(w, h)); err != nil {
+	return &BubbleModel{
+		ctx:    ctx,
+		state:  state,
+		client: client,
+		width:  w,
+		height: h,
+	}
+}
+
+// Init implements tea.Model.
+func (m *BubbleModel) Init() tea.Cmd {
+	return nil
+}
+
+// Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, and KeyEvent.
+func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch ev := msg.(type) {
+	case tea.WindowSizeMsg:
+		if ev.Width > 0 && ev.Height > 0 {
+			m.width = ev.Width
+			m.height = ev.Height
+		}
+	case tea.KeyMsg:
+		m.applyKeyEvent(keyEventFromTea(ev))
+	case KeyEvent:
+		m.applyKeyEvent(ev)
+	}
+	if m.state.Quitting {
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m *BubbleModel) applyKeyEvent(ev KeyEvent) {
+	m.state.HandleKey(ev)
+	m.state.FlushActions(m.ctx, m.client)
+}
+
+// View implements tea.Model, rendering the full-screen Lip Gloss / Bubbles frame.
+func (m *BubbleModel) View() string {
+	return m.state.Render(m.width, m.height)
+}
+
+func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
+	switch msg.Type {
+	case tea.KeyUp:
+		return KeyEvent{Key: "ArrowUp"}
+	case tea.KeyDown:
+		return KeyEvent{Key: "ArrowDown"}
+	case tea.KeyLeft:
+		return KeyEvent{Key: "ArrowLeft"}
+	case tea.KeyRight:
+		return KeyEvent{Key: "ArrowRight"}
+	case tea.KeyTab:
+		return KeyEvent{Key: "Tab"}
+	case tea.KeyShiftTab:
+		return KeyEvent{Key: "Tab", Shift: true}
+	case tea.KeyEnter:
+		return KeyEvent{Key: "Enter"}
+	case tea.KeyEsc:
+		return KeyEvent{Key: "Escape"}
+	case tea.KeyBackspace:
+		return KeyEvent{Key: "Backspace"}
+	case tea.KeySpace:
+		return KeyEvent{Key: " "}
+	case tea.KeyCtrlC:
+		return KeyEvent{Key: "c", Ctrl: true}
+	default:
+		return KeyEvent{Key: msg.String()}
+	}
+}
+
+// RunSession runs an interactive terminal session using Bubble Tea on TTYs or deterministic model updates on streams.
+func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
+	model := NewBubbleModel(ctx, s, client, width, height)
+	_ = model.Init()
+	if _, isTTY := isCharDevice(in); isTTY {
+		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
+		_, err := prog.Run()
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", model.View()); err != nil {
 		return fmt.Errorf("render initial frame: %w", err)
 	}
 	buf := make([]byte, 64)
@@ -389,14 +452,14 @@ func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, ou
 		n, err := in.Read(buf)
 		if n > 0 {
 			for _, ev := range DecodeInputBytes(buf[:n]) {
-				s.HandleKey(ev)
-				s.FlushActions(ctx, client)
+				_, _ = model.Update(ev)
 				if s.Quitting {
 					break
 				}
 			}
-			w, h = DetectTerminalSize(width, height)
-			if _, wErr := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(w, h)); wErr != nil {
+			w, h := DetectTerminalSize(width, height)
+			_, _ = model.Update(tea.WindowSizeMsg{Width: w, Height: h})
+			if _, wErr := fmt.Fprintf(out, "\033[2J\033[H%s\n", model.View()); wErr != nil {
 				return fmt.Errorf("render frame: %w", wErr)
 			}
 		}
