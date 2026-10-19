@@ -136,4 +136,16 @@ func TestClientTracksProjectRootAndDecodesJSON(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "project is stale — Reopen the project.") {
 		t.Fatalf("expected structured daemon error with hint, got %v", err)
 	}
+
+	gotDetail := DecodeDaemonError(http.StatusBadRequest, `{"type":"bad_request","message":"AI workflow request failed","user_message":"Review the request and try again.","detail":"include a test path in the captured scope"}`)
+	if gotDetail != "AI workflow request failed — include a test path in the captured scope" {
+		t.Fatalf("unexpected AppError detail decode: %q", gotDetail)
+	}
+
+	if !allowedRequest(http.MethodPost, "/api/projects/current/bootstrap/exec", `{"project_revision":"r1","confirm":true}`) {
+		t.Fatal("expected bootstrap/exec route to be allowed")
+	}
+	if !allowedRequest(http.MethodGet, "/api/projects/current/events", "") {
+		t.Fatal("expected events route to be allowed")
+	}
 }

@@ -330,7 +330,7 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	if containsIssueID(rows, id) {
 		return rows
 	}
-	target := FindingTarget{ProjectID: f.ProjectID, Kind: "semantic", ID: f.ID, Path: f.Location.Path}
+	target := FindingTarget{ProjectID: firstNonEmpty(f.ProjectID, s.projectID()), Kind: "semantic", ID: f.ID, Path: f.Location.Path}
 	title := FindingTitle(f.Title, f.Message)
 	name := FindingName(f.Title, f.Message)
 	comp := s.findCompletion(target)
@@ -376,7 +376,7 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		if containsIssueID(rows, id) {
 			continue
 		}
-		target := FindingTarget{ProjectID: rep.ProjectID, Kind: "performance", ID: f.ID, Path: rep.Path}
+		target := FindingTarget{ProjectID: firstNonEmpty(rep.ProjectID, s.projectID()), Kind: "performance", ID: f.ID, Path: rep.Path}
 		name := FindingName(f.Title, f.ObservedPattern)
 		comp := s.findCompletion(target)
 		done := comp != nil
@@ -414,11 +414,12 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			continue
 		}
 		path := firstNonEmpty(f.SourceAnchor.Path, rep.Path)
-		id := fmt.Sprintf("security:%s:%s:%s", rep.Path, rep.Source, f.ID)
+		src := firstNonEmpty(rep.Source, "deterministic")
+		id := fmt.Sprintf("security:%s:%s:%s", rep.Path, src, f.ID)
 		if containsIssueID(rows, id) {
 			continue
 		}
-		target := FindingTarget{ProjectID: rep.ProjectID, Kind: "security", ID: f.ID, Path: path, Source: rep.Source}
+		target := FindingTarget{ProjectID: firstNonEmpty(rep.ProjectID, s.projectID()), Kind: "security", ID: f.ID, Path: path, Source: src}
 		name := FindingName(f.Title, f.ObservedCondition)
 		comp := s.findCompletion(target)
 		done := f.Triage == "fixed" || comp != nil
@@ -675,6 +676,20 @@ func (s *State) AllHarnessLessons() []string {
 	return lessons
 }
 
+func (s *State) projectID() string {
+	if s.Project != nil {
+		return s.Project.ProjectID
+	}
+	return ""
+}
+
+func (s *State) projectRevision() string {
+	if s.Project != nil {
+		return s.Project.ProjectRevision
+	}
+	return ""
+}
+
 // SyncFromDaemon loads the initial workspace snapshot from the local daemon via Client.
 func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath string) error {
 	var status struct {
@@ -690,11 +705,7 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 	s.Error = ""
 
 	if projectPath != "" {
-		var proj Project
-		body := map[string]string{"project_path": projectPath}
-		if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err == nil {
-			s.Project = &proj
-		}
+		s.openOrRestoreProject(ctx, client, projectPath)
 	}
 	if s.Project == nil {
 		var proj Project
@@ -708,11 +719,21 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 	return nil
 }
 
-func (s *State) loadProjectResources(ctx context.Context, client *Client) {
-	revQuery := ""
-	if s.Project.ProjectRevision != "" {
-		revQuery = "?project_revision=" + url.QueryEscape(s.Project.ProjectRevision)
+func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projectPath string) {
+	var proj Project
+	body := map[string]string{"project_path": projectPath}
+	if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err == nil {
+		s.Project = &proj
+		return
 	}
+	importBody := map[string]any{"project_path": projectPath, "confirm_remote_provider": true}
+	if err := client.DoJSON(ctx, "sync-import", http.MethodPost, "/api/projects/import", importBody, &proj); err == nil {
+		s.Project = &proj
+	}
+}
+
+func (s *State) loadProjectResources(ctx context.Context, client *Client) {
+	revQuery, idQuery := s.resourceQueries()
 	var idx ProjectIndex
 	if err := client.DoJSON(ctx, "sync-index", http.MethodGet, "/api/projects/current/index", nil, &idx); err == nil && s.AcceptProjectResponse(idx.ProjectIdentity) {
 		s.Index = &idx
@@ -730,23 +751,158 @@ func (s *State) loadProjectResources(ctx context.Context, client *Client) {
 		s.CompletedFindings = fResp.Completed
 	}
 	var gitWS GitWorkspace
-	if err := client.DoJSON(ctx, "sync-git", http.MethodGet, "/api/projects/current/git/workspace", nil, &gitWS); err == nil {
+	if err := client.DoJSON(ctx, "sync-git", http.MethodGet, "/api/projects/current/git/workspace"+idQuery, nil, &gitWS); err == nil {
 		s.GitWorkspace = &gitWS
 		s.Repository = &gitWS.GitRepository
 	}
+	s.syncExecutionTrust(ctx, client, revQuery)
+	if idQuery != "" {
+		s.loadGuardedProjectResources(ctx, client, idQuery, revQuery)
+	}
+}
+
+func (s *State) resourceQueries() (string, string) {
+	revQuery := ""
+	if s.Project.ProjectRevision != "" {
+		revQuery = "?project_revision=" + url.QueryEscape(s.Project.ProjectRevision)
+	}
+	idQuery := ""
+	if s.Project.ProjectID != "" && s.Project.ProjectRevision != "" {
+		idQuery = fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(s.Project.ProjectID), url.QueryEscape(s.Project.ProjectRevision))
+	}
+	return revQuery, idQuery
+}
+
+func (s *State) syncExecutionTrust(ctx context.Context, client *Client, revQuery string) {
 	var trust ExecutionTrust
-	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust", nil, &trust); err == nil {
+	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust"+revQuery, nil, &trust); err == nil {
+		if trust.Trusted {
+			s.WorkspaceTrust = true
+			return
+		}
+		if s.WorkspaceTrust && s.Project.ProjectRevision != "" {
+			_ = s.ensureExecutionTrust(ctx, client, "sync-trust-grant")
+			return
+		}
 		s.WorkspaceTrust = trust.Trusted
 	}
-	if s.Project.ProjectID != "" && s.Project.ProjectRevision != "" {
-		idQuery := fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(s.Project.ProjectID), url.QueryEscape(s.Project.ProjectRevision))
-		var feat FeatureReport
-		if err := client.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
-			s.Features = &feat
+}
+
+func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client, idQuery, revQuery string) {
+	var feat FeatureReport
+	if err := client.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
+		s.Features = &feat
+	}
+	var history []ChangeHistoryEntry
+	if err := client.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
+		s.ChangeHistory = history
+	}
+	var rec ChangeMutation
+	if err := client.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
+		s.ChangeReceipt = &rec
+	}
+	if s.Change == nil && len(s.ChangeHistory) > 0 && s.ChangeHistory[0].ID != "" {
+		var chg ChangeSession
+		target := "/api/projects/current/changes/" + url.PathEscape(s.ChangeHistory[0].ID) + idQuery
+		if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+			s.Change = &chg
 		}
-		var history []ChangeHistoryEntry
-		if err := client.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
-			s.ChangeHistory = history
+	}
+	s.loadAuxResources(ctx, client, idQuery, revQuery)
+}
+
+func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, revQuery string) {
+	var instr InstructionPreview
+	instrTarget := "/api/projects/current/instructions" + idQuery + "&path=AGENTS.md"
+	if err := client.DoJSON(ctx, "sync-instructions", http.MethodGet, instrTarget, nil, &instr); err == nil && instr.Path != "" {
+		s.Instructions = &instr
+	}
+	var sel Selection
+	if err := client.DoJSON(ctx, "sync-selection", http.MethodGet, "/api/projects/current/analysis/selection"+idQuery, nil, &sel); err == nil && sel.SelectionID != "" {
+		s.Selection = &sel
+		s.ExcludedPaths = sel.ExcludedPaths
+	}
+	var scan Scan
+	if err := client.DoJSON(ctx, "sync-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && (scan.Status != "" || len(scan.Phases) > 0) {
+		s.Scan = &scan
+	}
+	var models ModelCatalog
+	if err := client.DoJSON(ctx, "sync-models", http.MethodGet, "/api/models/current", nil, &models); err == nil && len(models.Scopes) > 0 {
+		s.Models = &models
+	}
+	s.loadAnalysisSectionResults(ctx, client)
+}
+
+func (s *State) loadAnalysisSectionResults(ctx context.Context, client *Client) {
+	if s.Run == nil || s.Run.Identity.ID == "" || s.Run.Identity.QueueID == "" {
+		return
+	}
+	id := s.Run.Identity
+	base := fmt.Sprintf(
+		"/api/projects/current/analysis/results?project_id=%s&project_revision=%s&policy_fingerprint=%s&provider_fingerprint=%s&queue_id=%s&id=%s&generation=%s",
+		url.QueryEscape(id.ProjectID), url.QueryEscape(id.ProjectRevision),
+		url.QueryEscape(id.PolicyFingerprint), url.QueryEscape(id.ProviderFingerprint),
+		url.QueryEscape(id.QueueID), url.QueryEscape(id.ID), url.QueryEscape(id.Generation),
+	)
+	for _, cat := range []string{"bugs", "security", "performance"} {
+		var sec SectionResults
+		if err := client.DoJSON(ctx, "sync-res-"+cat, http.MethodGet, base+"&category="+cat, nil, &sec); err == nil {
+			if s.Results == nil {
+				s.Results = make(map[string]SectionResults)
+			}
+			s.Results[cat] = sec
 		}
+	}
+}
+
+// PollActiveJobs refreshes in-progress workflow, analysis, or scan states from the daemon.
+func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
+	if client == nil || s.Project == nil || s.Project.ProjectID == "" || s.Project.ProjectRevision == "" {
+		return
+	}
+	revQuery, idQuery := s.resourceQueries()
+	if s.hasRunningWorkflow() {
+		var chg ChangeSession
+		target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + idQuery
+		if err := client.DoJSON(ctx, "poll-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+			s.Change = &chg
+		}
+	}
+	if s.hasRunningAnalysis() {
+		var run AnalysisRun
+		if err := client.DoJSON(ctx, "poll-analysis", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &run); err == nil && run.Identity.ID != "" {
+			s.Run = &run
+			s.loadAnalysisSectionResults(ctx, client)
+		}
+	}
+	if s.Scan != nil && s.Scan.Status == "running" {
+		var scan Scan
+		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
+			s.Scan = &scan
+		}
+	}
+}
+
+func (s *State) hasActiveBackgroundJob() bool {
+	return s.hasRunningWorkflow() || s.hasRunningAnalysis() || (s.Scan != nil && s.Scan.Status == "running")
+}
+
+func (s *State) hasRunningWorkflow() bool {
+	if s.Change == nil || s.Change.ID == "" || s.Change.ID == "agent-session" || s.Change.Workflow == nil {
+		return false
+	}
+	st := s.Change.Workflow.Status
+	return st == "running" || st == "queued"
+}
+
+func (s *State) hasRunningAnalysis() bool {
+	if s.Run == nil {
+		return false
+	}
+	switch s.Run.Status {
+	case "running", "queued", "pausing", "canceling":
+		return true
+	default:
+		return false
 	}
 }

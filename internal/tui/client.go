@@ -37,8 +37,8 @@ type Client struct {
 }
 
 var allowedRoutes = map[string]*regexp.Regexp{
-	http.MethodGet:    regexp.MustCompile(`^/(health|status|api/models/(current|available)|api/projects/current|api/projects/current/(changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git(/(repository|workspace))?|analysis/(selection|run|results)))$`),
-	http.MethodPost:   regexp.MustCompile(`^/api/projects/(import|restore|current/(git/(worktrees|switch|merge-preview|merge|abort-merge|discard-worktree)|changes(/[^/]+/(resume|messages|checks|review|apply|commit|undo|verify|workflow(/cancel)?))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)))$`),
+	http.MethodGet:    regexp.MustCompile(`^/(health|status|api/models/(current|available)|api/projects/current|api/projects/current/(events|changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git(/(repository|workspace))?|analysis/(selection|run|results)))$`),
+	http.MethodPost:   regexp.MustCompile(`^/api/projects/(import|restore|current/(bootstrap/exec|git/(worktrees|switch|merge-preview|merge|abort-merge|discard-worktree)|changes(/[^/]+/(resume|messages|checks|review|apply|commit|undo|verify|workflow(/cancel)?))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)))$`),
 	http.MethodPatch:  regexp.MustCompile(`^/api/projects/current/(findings|features)/[^/]+$`),
 	http.MethodDelete: regexp.MustCompile(`^/api/projects/current/scan$`),
 }
@@ -265,18 +265,18 @@ func (c *Client) DoJSON(ctx context.Context, id, method, target string, payload,
 // DecodeDaemonError extracts an actionable message from a daemon error payload.
 func DecodeDaemonError(status int, body string) string {
 	var envelope struct {
-		Error   string `json:"error"`
-		Message string `json:"message"`
-		Details struct {
+		Error       string `json:"error"`
+		Message     string `json:"message"`
+		UserMessage string `json:"user_message"`
+		Detail      string `json:"detail"`
+		Details     struct {
 			Hint string `json:"hint"`
 		} `json:"details"`
 	}
 	if err := json.Unmarshal([]byte(body), &envelope); err == nil {
-		msg := strings.TrimSpace(envelope.Message)
-		if msg == "" {
-			msg = strings.TrimSpace(envelope.Error)
-		}
-		if hint := strings.TrimSpace(envelope.Details.Hint); hint != "" && !strings.Contains(msg, hint) {
+		msg := firstNonEmpty(envelope.Message, envelope.Error)
+		hint := firstNonEmpty(envelope.Detail, envelope.Details.Hint, envelope.UserMessage)
+		if hint != "" && !strings.Contains(msg, hint) {
 			if msg != "" {
 				return msg + " — " + hint
 			}

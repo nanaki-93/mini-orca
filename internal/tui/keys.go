@@ -348,19 +348,33 @@ func (s *State) handleIssueListKey(key string) bool {
 }
 
 func (s *State) handleIssueActionKey(key string) bool {
-	if (s.Page == PageBugs || s.Page == PageIssueDetail || s.Page == PageSummary) && key == "a" {
+	switch s.Page {
+	case PageBugs, PageIssueDetail, PageSummary:
+		return s.handleIssueShortcut(key)
+	case PageFeatures:
+		return s.handleFeaturesKey(key)
+	case PageAnalysisFiles:
+		if key == "x" || key == " " {
+			s.toggleCurrentFileExclusion()
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) handleIssueShortcut(key string) bool {
+	if key == "a" {
 		s.dispatchSelectedIssues()
 		return true
 	}
-	if s.Page == PageIssueDetail && key == "d" {
+	if key == "o" && s.Page != PageSummary {
+		if issue := s.SelectedIssue(); issue != nil && issue.Path != "" {
+			s.openFileInEditor(issue.Path)
+			return true
+		}
+	}
+	if key == "d" && s.Page == PageIssueDetail {
 		s.dismissSelectedIssue()
-		return true
-	}
-	if s.Page == PageFeatures {
-		return s.handleFeaturesKey(key)
-	}
-	if s.Page == PageAnalysisFiles && (key == "x" || key == " ") {
-		s.toggleCurrentFileExclusion()
 		return true
 	}
 	return false
@@ -450,22 +464,46 @@ func isGovernancePage(p Page) bool {
 
 func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 	if isGovernancePage(s.Page) {
-		switch ev.Key {
-		case "b":
-			s.Navigate(PageBootstrap)
-			s.CmdOutput = "Bootstrapping missing repository workflow pillars..."
-			s.enqueueAction(ActionRequest{Kind: "bootstrap"})
-			return true
-		case "t":
-			s.toggleWorkspaceTrust()
-			return true
-		case "g":
-			s.Navigate(PageLessons)
-			s.graduateSelectedLesson()
-			return true
-		}
+		return s.handleGovernanceKey(ev.Key)
 	}
-	if (s.Page == PageSummary || s.Page == PageRepo || s.Page == PageProject) && ev.Key == "t" {
+	return s.handleOverviewShortcuts(ev.Key)
+}
+
+func (s *State) handleGovernanceKey(key string) bool {
+	switch key {
+	case "b":
+		s.Navigate(PageBootstrap)
+		s.CmdOutput = "Bootstrapping missing repository workflow pillars..."
+		s.enqueueAction(ActionRequest{Kind: "bootstrap"})
+		return true
+	case "t":
+		s.toggleWorkspaceTrust()
+		return true
+	case "g":
+		s.Navigate(PageLessons)
+		s.graduateSelectedLesson()
+		return true
+	}
+	return false
+}
+
+func (s *State) handleOverviewShortcuts(key string) bool {
+	if s.Page == PageSummary && key == "b" {
+		s.Navigate(PageBugs)
+		s.CmdOutput = "Switched to [2] Agent Studio · Issues"
+		return true
+	}
+	if s.Page == PageSummary && key == "f" {
+		s.Navigate(PageFeatures)
+		s.CmdOutput = "Switched to [2] Agent Studio · Features"
+		return true
+	}
+	if s.Page == PageRepo && key == "r" {
+		s.CmdOutput = "Reindexing repository..."
+		s.enqueueAction(ActionRequest{Kind: "reindex"})
+		return true
+	}
+	if (s.Page == PageSummary || s.Page == PageRepo || s.Page == PageProject) && key == "t" {
 		s.CmdOutput = "Running project tests and checks..."
 		s.enqueueAction(ActionRequest{Kind: "scan"})
 		return true

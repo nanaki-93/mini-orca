@@ -107,9 +107,11 @@ func (s *State) dispatchBatchIssues() {
 	var paths []string
 	var targets []FindingTarget
 	for _, row := range batch {
-		targets = append(targets, row.Target)
 		if row.Path != "" && !containsString(paths, row.Path) && len(paths) < 7 {
 			paths = append(paths, row.Path)
+		}
+		if row.Path != "" && containsString(paths, row.Path) {
+			targets = append(targets, row.Target)
 		}
 	}
 	seed := &ChangeSeed{
@@ -192,11 +194,13 @@ func (s *State) toggleCurrentFileExclusion() {
 		if p == path {
 			s.ExcludedPaths = append(s.ExcludedPaths[:i], s.ExcludedPaths[i+1:]...)
 			s.CmdOutput = fmt.Sprintf("Included %s in analysis scope", path)
+			s.enqueueAction(ActionRequest{Kind: "save-selection", Target: path})
 			return
 		}
 	}
 	s.ExcludedPaths = append(s.ExcludedPaths, path)
 	s.CmdOutput = fmt.Sprintf("Excluded %s in analysis scope", path)
+	s.enqueueAction(ActionRequest{Kind: "save-selection", Target: path})
 }
 
 func (s *State) applyAndCommitProposal(commitMsg string) {
@@ -240,6 +244,11 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	if s.Change == nil {
 		return
 	}
+	if s.hasRunningWorkflow() {
+		s.CmdOutput = "Refreshing active agent workflow status..."
+		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
+		return
+	}
 	passed, total := countPassedChecks(s.Change.Checks)
 	if total > 0 && passed < total {
 		s.CmdOutput = "Triggering agent self-repair..."
@@ -261,6 +270,7 @@ func (s *State) rejectCurrentDiffHunk() {
 	}
 	idx := min(max(0, s.HunkIdx), len(hunks)-1)
 	fc.Content = RejectHunkFromDiff(fc.Diff.Lines, hunks[idx])
+	fc.Diff.Lines = RejectHunkLines(fc.Diff.Lines, hunks[idx])
 	s.CmdOutput = fmt.Sprintf("Rejected hunk #%d in %s", idx+1, fc.Path)
 }
 
@@ -287,6 +297,7 @@ func (s *State) graduateSelectedLesson() {
 		s.GraduatedLessons = append(s.GraduatedLessons, rule)
 	}
 	s.CmdOutput = fmt.Sprintf("Graduated Harness² lesson into AGENTS.md: %s", rule)
+	s.enqueueAction(ActionRequest{Kind: "propose-instructions", Target: "AGENTS.md", Message: s.InstructionDraft})
 }
 
 func (s *State) triggerOrResumeAnalysis() {
@@ -304,7 +315,10 @@ func (s *State) ActivateCurrentRow() {
 	switch s.Page {
 	case PageSummary, PageBugs, PageIssueDetail:
 		s.activateIssueRow()
-	case PageRepo, PageProject:
+	case PageRepo:
+		s.CmdOutput = "Reindexing repository..."
+		s.enqueueAction(ActionRequest{Kind: "reindex"})
+	case PageProject:
 		s.CmdOutput = "Running project verification checks..."
 		s.enqueueAction(ActionRequest{Kind: "scan"})
 	case PageEditor:
@@ -373,6 +387,7 @@ func (s *State) activateSecondaryRow() {
 			entry := s.ChangeHistory[idx]
 			s.CmdOutput = fmt.Sprintf("Loaded proposal %s", entry.Title)
 			s.Navigate(PageEditor)
+			s.enqueueAction(ActionRequest{Kind: "load-change", Target: entry.ID})
 		}
 	case PageInstructions, PageModels, PageBootstrap, PageLessons:
 		s.activateInstructionsRow()
@@ -434,7 +449,7 @@ func (s *State) ExecuteCommand(raw string) {
 	cmd := strings.ToLower(fields[0])
 	arg := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 
-	if s.execSystemCommand(cmd, arg) || s.execAnalysisCommand(cmd, arg) || s.execNavigationCommand(cmd, arg) || s.execMutationCommand(cmd, arg) {
+	if s.execSystemCommand(cmd, arg) || s.execAnalysisCommand(cmd, arg) || s.execMutationCommand(cmd, arg) || s.execNavigationCommand(cmd, arg) {
 		return
 	}
 	s.CmdOutput = fmt.Sprintf("Unknown command %q. Type \":keys\" or \"help\" for available commands.", trimmed)

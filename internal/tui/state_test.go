@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -260,5 +261,230 @@ func TestIdentityGuardsAndDaemonSync(t *testing.T) {
 	}
 	if s.AcceptProjectResponse(ProjectIdentity{ProjectID: "p1", ProjectRevision: "stale-rev"}) {
 		t.Fatal("expected stale project_revision to be rejected")
+	}
+}
+
+func TestDaemonWireContractsAndActions(t *testing.T) {
+	var (
+		capturedPaths   []string
+		capturedLimits  map[string]int
+		reviewedHash    string
+		appliedHead     string
+		undoConfirmed   bool
+		mergedWorktree  string
+		savedExclusions []string
+		bootstrapped    bool
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ProjectRevision string `json:"project_revision"`
+			Confirm         bool   `json:"confirm"`
+		}
+		if r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.ProjectRevision == "" || !body.Confirm {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","trusted":true}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Paths []string `json:"paths"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		capturedPaths = body.Paths
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":1,"hash":"h-1","checks":[{"name":"test","state":"passed"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/workflow", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":1,"hash":"h-1","checks":[{"name":"test","state":"passed"}],"workflow":{"id":"wf-1","status":"running"}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":2,"hash":"h-2","checks":[{"name":"test","state":"passed"}],"workflow":{"id":"wf-1","status":"completed"}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/review", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Hash string `json:"hash"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		reviewedHash = body.Hash
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":2,"hash":"h-2","reviewed_hash":"h-2","checks":[{"name":"test","state":"passed"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/apply", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Head string `json:"head"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		appliedHead = body.Head
+		_, _ = w.Write([]byte(`{"session_id":"chg-1","project_id":"p1","project_revision":"r2","state":"applied","hash":"h-2","undo_available":true}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/undo", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Confirm bool   `json:"confirm"`
+			Hash    string `json:"hash"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		undoConfirmed = body.Confirm && body.Hash == "h-2"
+		_, _ = w.Write([]byte(`{"session_id":"chg-1","project_id":"p1","project_revision":"r3","state":"reverted","hash":"h-2","undo_available":false}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/preview", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Limits map[string]int `json:"limits"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		capturedLimits = body.Limits
+		_, _ = w.Write([]byte(`{"preview_id":"prev-1","identity":{"project_id":"p1","project_revision":"r1","policy_fingerprint":"pf","provider_fingerprint":"prf","queue_id":"q1"},"limits":{"batch_files":64,"budget_seconds":300,"max_attempts_per_stage":2},"providers":[{"id":"prov-1"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"identity":{"project_id":"p1","project_revision":"r1","policy_fingerprint":"pf","provider_fingerprint":"prf","queue_id":"q1","id":"run-1","generation":"g1"},"status":"running"}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run/control", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"identity":{"project_id":"p1","project_revision":"r1","policy_fingerprint":"pf","provider_fingerprint":"prf","queue_id":"q1","id":"run-1","generation":"g2"},"status":"paused"}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/selection", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","selection_id":"sel-1","excluded_paths":[],"editable":true}`))
+			return
+		}
+		var body struct {
+			ExcludedPaths []string `json:"excluded_paths"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		savedExclusions = body.ExcludedPaths
+		_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","selection_id":"sel-2","excluded_paths":["internal/app/a.go"],"editable":true}`))
+	})
+	mux.HandleFunc("/api/projects/current/git/merge", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mergedWorktree = body.Path
+		_, _ = w.Write([]byte(`{"state":"merged"}`))
+	})
+	mux.HandleFunc("/api/projects/current/bootstrap/exec", func(w http.ResponseWriter, _ *http.Request) {
+		bootstrapped = true
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("/api/projects/current/instructions/proposal", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-inst","title":"Update AGENTS.md","state":"open"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	s.Index = &ProjectIndex{Files: []IndexedFile{{Path: "internal/app/a.go", Language: "Go"}}}
+	s.Repository = &GitRepository{GitIdentity: GitIdentity{Head: "abc1234", Branch: "main"}, Available: true}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: *s.Repository,
+		Worktrees: []GitWorktree{
+			{GitIdentity: GitIdentity{Head: "abc1234", Branch: "main"}, Path: "/repo", Current: true},
+			{GitIdentity: GitIdentity{Head: "def5678", Branch: "fix/bug"}, Path: "/repo/.worktrees/fix", Mergeable: true},
+		},
+	}
+
+	// 1. Start agent from single source file -> must automatically include companion _test.go
+	s.dispatchSingleIssue(IssueRow{
+		ID:       "semantic:b1",
+		Name:     "Fix bug",
+		Title:    "Fix bug",
+		Path:     "internal/app/a.go",
+		Category: "bugs",
+		Target:   FindingTarget{Kind: "semantic", ID: "b1", Path: "internal/app/a.go"},
+	})
+	s.FlushActions(context.Background(), cli)
+	if len(capturedPaths) != 2 || capturedPaths[1] != "internal/app/a_test.go" {
+		t.Fatalf("expected companion test path internal/app/a_test.go in captured scope, got %v", capturedPaths)
+	}
+
+	// 2. PollActiveJobs refreshes running workflow to completed
+	s.PollActiveJobs(context.Background(), cli)
+	if s.Change.Revision != 2 || s.Change.Workflow.Status != "completed" {
+		t.Fatalf("expected PollActiveJobs to refresh change session, got %+v", s.Change)
+	}
+
+	// 3. Apply & commit calls /review first and passes git head
+	s.applyAndCommitProposal("fix: resolve issue")
+	s.FlushActions(context.Background(), cli)
+	if reviewedHash != "h-2" || appliedHead != "abc1234" || s.Project.ProjectRevision != "r2" {
+		t.Fatalf("expected review+apply with git head and updated revision, got reviewed=%q head=%q rev=%q", reviewedHash, appliedHead, s.Project.ProjectRevision)
+	}
+
+	// 4. Guarded Undo sends confirm: true and hash
+	s.requestGuardedUndo()
+	s.FlushActions(context.Background(), cli)
+	if !undoConfirmed || s.Project.ProjectRevision != "r3" {
+		t.Fatalf("expected undo confirmation and revision r3, got confirmed=%v rev=%s", undoConfirmed, s.Project.ProjectRevision)
+	}
+
+	// 5. Analysis preview uses batch_files, budget_seconds, max_attempts_per_stage
+	s.ExecuteCommand(":analyze")
+	s.FlushActions(context.Background(), cli)
+	if capturedLimits["batch_files"] != 64 || capturedLimits["budget_seconds"] != 300 || capturedLimits["max_attempts_per_stage"] != 2 {
+		t.Fatalf("unexpected analysis limits payload: %+v", capturedLimits)
+	}
+
+	// 6. Pause and Resume analysis
+	s.ExecuteCommand(":pause")
+	s.FlushActions(context.Background(), cli)
+	if s.Run == nil || s.Run.Status != "paused" {
+		t.Fatalf("expected paused run, got %+v", s.Run)
+	}
+	s.ExecuteCommand(":resume")
+	s.FlushActions(context.Background(), cli)
+
+	// 7. File Scope toggle persists selection to daemon
+	s.Navigate(PageAnalysisFiles)
+	s.HandleKey(KeyEvent{Key: "x"})
+	s.FlushActions(context.Background(), cli)
+	if len(savedExclusions) != 1 || savedExclusions[0] != "internal/app/a.go" {
+		t.Fatalf("expected saved exclusions [internal/app/a.go], got %v", savedExclusions)
+	}
+
+	// 8. Merge worktree & Bootstrap
+	s.Navigate(PageGit)
+	s.SelectedIdx = 1
+	s.HandleKey(KeyEvent{Key: "m"})
+	s.ExecuteCommand(":bootstrap")
+	s.FlushActions(context.Background(), cli)
+	if mergedWorktree != "/repo/.worktrees/fix" || !bootstrapped {
+		t.Fatalf("expected worktree merge and bootstrap exec, got merged=%q bootstrapped=%v", mergedWorktree, bootstrapped)
+	}
+}
+
+func TestAgentStartFailureClearsPreviewAndSurfacesDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/projects/current/changes" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"type":"bad_request","message":"AI workflow request failed","detail":"working tree has unmerged conflicts"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"trusted":true}`))
+	}))
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	s.Index = &ProjectIndex{Files: []IndexedFile{{Path: "main.go", Language: "Go"}}}
+	s.ExecuteCommand(":agent fix main")
+	s.FlushActions(context.Background(), cli)
+	if s.Change != nil {
+		t.Fatalf("expected failed agent start to clear fake preview session, got %+v", s.Change)
+	}
+	if !strings.Contains(s.Error, "working tree has unmerged conflicts") {
+		t.Fatalf("expected detailed daemon error, got %q", s.Error)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -158,90 +159,206 @@ func (s *State) dispatchAction(ctx context.Context, client *Client, reqID string
 	case "open-project":
 		return s.SyncFromDaemon(ctx, client, act.Target)
 	case "reindex":
-		var idx ProjectIndex
-		if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/reindex", map[string]any{}, &idx); err != nil {
-			return err
-		}
-		if s.AcceptProjectResponse(idx.ProjectIdentity) {
-			s.Index = &idx
-		}
-		return nil
+		return s.dispatchReindex(ctx, client, reqID)
 	case "scan":
-		var scan Scan
-		if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/scan", map[string]any{}, &scan); err != nil {
-			return err
-		}
-		if s.AcceptProjectResponse(scan.ProjectIdentity) {
-			s.Scan = &scan
-		}
-		return nil
+		return s.dispatchScan(ctx, client, reqID)
 	case "open-file":
 		return s.fetchFileInfo(ctx, client, reqID, act.Target)
-	case "run-analysis", "reanalyze":
-		return s.dispatchAnalysisRun(ctx, client, reqID, act.Kind == "reanalyze")
+	case "run-analysis", "reanalyze", "repair-analysis", "pause-analysis", "resume-analysis":
+		return s.dispatchAnalysisAction(ctx, client, reqID, act)
 	default:
 		return s.dispatchMutationAction(ctx, client, reqID, act)
 	}
 }
 
+func (s *State) ensureExecutionTrust(ctx context.Context, client *Client, reqID string) error {
+	if !s.WorkspaceTrust || s.Project == nil || s.Project.ProjectRevision == "" {
+		return nil
+	}
+	body := map[string]any{
+		"project_revision": s.Project.ProjectRevision,
+		"confirm":          true,
+	}
+	var trust ExecutionTrust
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust); err != nil {
+		return err
+	}
+	s.WorkspaceTrust = trust.Trusted || s.WorkspaceTrust
+	return nil
+}
+
+func (s *State) dispatchReindex(ctx context.Context, client *Client, reqID string) error {
+	var idx ProjectIndex
+	body := map[string]any{"project_revision": s.projectRevision()}
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/reindex", body, &idx); err != nil {
+		return err
+	}
+	if s.Project != nil && (s.Project.ProjectID == "" || idx.ProjectID == s.Project.ProjectID) && idx.ProjectRevision != "" {
+		s.Project.ProjectRevision = idx.ProjectRevision
+	}
+	if s.AcceptProjectResponse(idx.ProjectIdentity) {
+		s.Index = &idx
+	}
+	return nil
+}
+
+func (s *State) dispatchScan(ctx context.Context, client *Client, reqID string) error {
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	var scan Scan
+	body := map[string]any{"project_revision": s.projectRevision()}
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/scan", body, &scan); err != nil {
+		return err
+	}
+	if s.AcceptProjectResponse(scan.ProjectIdentity) {
+		s.Scan = &scan
+	}
+	return nil
+}
+
 func (s *State) fetchFileInfo(ctx context.Context, client *Client, reqID, path string) error {
 	var info FileInfo
-	target := "/api/projects/current/files/info?path=" + url.QueryEscape(path)
-	if err := client.DoJSON(ctx, reqID, http.MethodGet, target, nil, &info); err != nil {
+	escaped := url.QueryEscape(path)
+	if err := client.DoJSON(ctx, reqID, http.MethodGet, "/api/projects/current/files/info?path="+escaped, nil, &info); err != nil {
 		return err
 	}
 	if s.AcceptFileResponse(info.Path, "") {
 		s.File = &info
 	}
+	var symResp struct {
+		Symbols []SymbolInfo `json:"symbols"`
+	}
+	if err := client.DoJSON(ctx, reqID+"-sym", http.MethodGet, "/api/projects/current/files/symbols?path="+escaped, nil, &symResp); err == nil {
+		s.Symbols = symResp.Symbols
+	}
 	return nil
 }
 
-func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID string, refresh bool) error {
+func (s *State) dispatchAnalysisAction(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "pause-analysis":
+		return s.dispatchPauseAnalysis(ctx, client, reqID)
+	case "resume-analysis":
+		return s.dispatchResumeAnalysis(ctx, client, reqID)
+	default:
+		return s.dispatchAnalysisRun(ctx, client, reqID, act)
+	}
+}
+
+func defaultAnalysisLimits() map[string]int {
+	return map[string]int{
+		"batch_files":            64,
+		"budget_seconds":         300,
+		"max_attempts_per_stage": 2,
+	}
+}
+
+type analysisPreviewPayload struct {
+	PreviewID string         `json:"preview_id"`
+	Identity  map[string]any `json:"identity"`
+	Limits    map[string]any `json:"limits"`
+	Providers []struct {
+		ID string `json:"id"`
+	} `json:"providers"`
+}
+
+func (p analysisPreviewPayload) providerIDs() []string {
+	ids := make([]string, 0, len(p.Providers))
+	for _, prov := range p.Providers {
+		if prov.ID != "" {
+			ids = append(ids, prov.ID)
+		}
+	}
+	return ids
+}
+
+func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
 	if s.Project == nil || s.Project.ProjectID == "" {
 		return nil
 	}
+	refresh := act.Kind == "reanalyze"
+	retryStale := act.Kind == "repair-analysis" && act.Target == ""
+	staleOnly := act.Kind == "repair-analysis" && act.Target != ""
+	includeFeatures := !staleOnly
+
 	previewReq := map[string]any{
-		"project_id":       s.Project.ProjectID,
-		"project_revision": s.Project.ProjectRevision,
-		"scope":            "project",
-		"refresh":          refresh,
-		"include_features": true,
-		"limits": map[string]int{
-			"max_files":          64,
-			"max_model_requests": 256,
-			"max_concurrency":    2,
-		},
+		"project_id":         s.Project.ProjectID,
+		"project_revision":   s.Project.ProjectRevision,
+		"scope":              "project",
+		"refresh":            refresh,
+		"include_features":   includeFeatures,
+		"retry_stale_failed": retryStale,
+		"stale_only":         staleOnly,
+		"stale_path":         act.Target,
+		"limits":             defaultAnalysisLimits(),
 	}
-	var preview struct {
-		PreviewID string         `json:"preview_id"`
-		Identity  map[string]any `json:"identity"`
-		Limits    map[string]any `json:"limits"`
-		Providers []struct {
-			ID string `json:"id"`
-		} `json:"providers"`
-	}
+	var preview analysisPreviewPayload
 	if err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
 		return err
 	}
-	var providerIDs []string
-	for _, p := range preview.Providers {
-		if p.ID != "" {
-			providerIDs = append(providerIDs, p.ID)
-		}
-	}
 	startReq := map[string]any{
-		"identity":         preview.Identity,
-		"preview_id":       preview.PreviewID,
-		"limits":           preview.Limits,
-		"refresh":          refresh,
-		"include_features": true,
+		"identity":           preview.Identity,
+		"preview_id":         preview.PreviewID,
+		"limits":             preview.Limits,
+		"refresh":            refresh,
+		"include_features":   includeFeatures,
+		"retry_stale_failed": retryStale,
+		"stale_only":         staleOnly,
+		"stale_path":         act.Target,
 		"confirmations": map[string]any{
-			"provider_ids":    providerIDs,
+			"provider_ids":    preview.providerIDs(),
 			"security_review": true,
 		},
 	}
 	var run AnalysisRun
 	if err := client.DoJSON(ctx, reqID+"-start", http.MethodPost, "/api/projects/current/analysis/run", startReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
+func (s *State) dispatchPauseAnalysis(ctx context.Context, client *Client, reqID string) error {
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		return nil
+	}
+	ctrlReq := map[string]any{
+		"identity": s.Run.Identity,
+		"action":   "pause",
+	}
+	var run AnalysisRun
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
+func (s *State) dispatchResumeAnalysis(ctx context.Context, client *Client, reqID string) error {
+	if s.Run == nil || s.Run.Identity.ID == "" || s.Project == nil || s.Project.ProjectID == "" {
+		return s.dispatchAnalysisRun(ctx, client, reqID, ActionRequest{Kind: "run-analysis"})
+	}
+	previewReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"scope":            "project",
+		"resume_run":       s.Run.Identity,
+		"limits":           defaultAnalysisLimits(),
+	}
+	var preview analysisPreviewPayload
+	if err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
+		return err
+	}
+	ctrlReq := map[string]any{
+		"identity":   s.Run.Identity,
+		"action":     "resume",
+		"preview_id": preview.PreviewID,
+		"confirmations": map[string]any{
+			"provider_ids":    preview.providerIDs(),
+			"security_review": true,
+		},
+	}
+	var run AnalysisRun
+	if err := client.DoJSON(ctx, reqID+"-resume", http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err != nil {
 		return err
 	}
 	s.Run = &run
@@ -255,23 +372,34 @@ func (s *State) dispatchMutationAction(ctx context.Context, client *Client, reqI
 	case "apply-commit":
 		return s.dispatchApplyCommit(ctx, client, reqID, act)
 	case "dismiss-finding":
-		if act.Issue == nil {
-			return nil
-		}
-		target := "/api/projects/current/findings/" + url.PathEscape(act.Issue.ID)
-		return client.DoJSON(ctx, reqID, http.MethodPatch, target, map[string]string{"status": "dismissed"}, nil)
+		return s.dispatchDismissFinding(ctx, client, reqID, act)
 	case "dismiss-feature":
-		target := "/api/projects/current/features/" + url.PathEscape(act.Target)
-		return client.DoJSON(ctx, reqID, http.MethodPatch, target, map[string]string{"status": "dismissed"}, nil)
+		return s.dispatchDismissFeature(ctx, client, reqID, act)
 	case "set-trust":
-		body := map[string]bool{"trusted": s.WorkspaceTrust}
-		return client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, nil)
+		return s.dispatchSetTrust(ctx, client, reqID)
 	case "undo":
-		if act.Target == "" {
-			return nil
-		}
-		target := "/api/projects/current/changes/" + url.PathEscape(act.Target) + "/undo"
-		return client.DoJSON(ctx, reqID, http.MethodPost, target, map[string]any{}, nil)
+		return s.dispatchUndo(ctx, client, reqID, act)
+	default:
+		return s.dispatchSecondaryMutation(ctx, client, reqID, act)
+	}
+}
+
+func (s *State) dispatchSecondaryMutation(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "check-change":
+		return s.dispatchCheckChange(ctx, client, reqID)
+	case "repair-change":
+		return s.dispatchRepairChange(ctx, client, reqID, act)
+	case "merge-worktree":
+		return s.dispatchMergeWorktree(ctx, client, reqID, act.Target)
+	case "load-change":
+		return s.dispatchLoadChange(ctx, client, reqID, act.Target)
+	case "save-selection":
+		return s.dispatchSaveSelection(ctx, client, reqID)
+	case "propose-instructions":
+		return s.dispatchProposeInstructions(ctx, client, reqID, act.Target, act.Message)
+	case "bootstrap":
+		return s.dispatchBootstrap(ctx, client, reqID, act.Target)
 	default:
 		return nil
 	}
@@ -281,13 +409,12 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
 		return nil
 	}
-	paths := act.Seed.Paths
-	if len(paths) == 0 && s.Index != nil && len(s.Index.Files) > 0 {
-		paths = []string{s.Index.Files[0].Path}
-	}
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	paths := EnsureChangeTestPaths(act.Seed.Paths, s.Index)
 	if len(paths) == 0 {
 		return nil
 	}
+	findingTargets := NormalizeFindingTargets(act.Seed.FindingTargets, s.Project.ProjectID, paths)
 	createReq := map[string]any{
 		"project_id":          s.Project.ProjectID,
 		"project_revision":    s.Project.ProjectRevision,
@@ -295,24 +422,23 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 		"title":               firstNonEmpty(act.Seed.Title, "Agent Mission"),
 		"paths":               paths,
 		"acceptance_criteria": act.Seed.AcceptanceCriteria,
-		"finding_targets":     act.Seed.FindingTargets,
+		"finding_targets":     findingTargets,
 	}
 	var session ChangeSession
 	if err := client.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes", createReq, &session); err != nil {
+		if s.Change != nil && s.Change.ID == "agent-session" {
+			s.Change = nil
+		}
 		return err
 	}
 	s.Change = &session
 	wfReq := map[string]any{
-		"project_id":       s.Project.ProjectID,
-		"project_revision": s.Project.ProjectRevision,
-		"revision":         session.Revision,
-		"hash":             session.Hash,
-		"message":          firstNonEmpty(act.Seed.Message, act.Message, session.Title),
-		"models": map[string]string{
-			"create": "bug",
-			"test":   "function",
-			"review": "analyze",
-		},
+		"project_id":         s.Project.ProjectID,
+		"project_revision":   s.Project.ProjectRevision,
+		"revision":           session.Revision,
+		"hash":               session.Hash,
+		"message":            firstNonEmpty(act.Seed.Message, act.Message, session.Title),
+		"models":             map[string]string{"create": "bug", "test": "function", "review": "analyze"},
 		"confirmed_profiles": []string{"analyze", "bug", "function"},
 		"confirm_security":   true,
 		"auto_repair":        true,
@@ -320,6 +446,7 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow"
 	var wfSession ChangeSession
 	if err := client.DoJSON(ctx, reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
+		s.Change.State = "failed"
 		return err
 	}
 	s.Change = &wfSession
@@ -330,6 +457,19 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 	if s.Change == nil || s.Project == nil {
 		return nil
 	}
+	sessionID := url.PathEscape(s.Change.ID)
+	if s.Change.Hash != "" && s.Change.ReviewedHash != s.Change.Hash {
+		reviewReq := map[string]any{
+			"project_id":       s.Project.ProjectID,
+			"project_revision": s.Project.ProjectRevision,
+			"revision":         s.Change.Revision,
+			"hash":             s.Change.Hash,
+		}
+		var reviewed ChangeSession
+		if err := client.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq, &reviewed); err == nil && reviewed.ID != "" {
+			s.Change = &reviewed
+		}
+	}
 	applyReq := map[string]any{
 		"project_id":       s.Project.ProjectID,
 		"project_revision": s.Project.ProjectRevision,
@@ -338,14 +478,335 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 		"confirm":          true,
 		"commit_message":   firstNonEmpty(act.Message, s.Change.Title),
 	}
+	if head, branch := s.activeGitIdentity(); head != "" && branch != "" {
+		applyReq["head"] = head
+		applyReq["branch"] = branch
+	}
 	var receipt ChangeMutation
-	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + "/apply"
-	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, applyReq, &receipt); err != nil {
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/changes/"+sessionID+"/apply", applyReq, &receipt); err != nil {
 		return err
 	}
 	s.ChangeReceipt = &receipt
-	s.Change.State = "applied"
+	s.Change.State = firstNonEmpty(receipt.State, "applied")
+	if receipt.ProjectRevision != "" {
+		s.Project.ProjectRevision = receipt.ProjectRevision
+	}
 	return nil
+}
+
+func (s *State) activeGitIdentity() (string, string) {
+	if s.Change != nil && s.Change.Git != nil && s.Change.Git.Head != "" && s.Change.Git.Branch != "" {
+		return s.Change.Git.Head, s.Change.Git.Branch
+	}
+	if s.Repository != nil && s.Repository.Head != "" && s.Repository.Branch != "" {
+		return s.Repository.Head, s.Repository.Branch
+	}
+	if s.GitWorkspace != nil && s.GitWorkspace.Head != "" && s.GitWorkspace.Branch != "" {
+		return s.GitWorkspace.Head, s.GitWorkspace.Branch
+	}
+	return "", ""
+}
+
+func (s *State) dispatchDismissFinding(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if act.Issue == nil || act.Issue.ID == "" {
+		return nil
+	}
+	kind := firstNonEmpty(act.Issue.Kind, "semantic")
+	body := map[string]string{
+		"project_revision": s.projectRevision(),
+		"status":           "dismissed",
+		"kind":             kind,
+		"path":             act.Issue.Path,
+	}
+	if kind == "security" {
+		body["source"] = firstNonEmpty(act.Issue.Source, "deterministic")
+	}
+	target := "/api/projects/current/findings/" + url.PathEscape(act.Issue.ID)
+	if err := client.DoJSON(ctx, reqID, http.MethodPatch, target, body, nil); err != nil {
+		return err
+	}
+	s.markFindingDismissed(*act.Issue)
+	return nil
+}
+
+func (s *State) markFindingDismissed(target FindingTarget) {
+	for i := range s.Findings {
+		if s.Findings[i].ID == target.ID {
+			s.Findings[i].Status = "dismissed"
+		}
+	}
+	if s.SecurityReport != nil {
+		for i := range s.SecurityReport.Findings {
+			if s.SecurityReport.Findings[i].ID == target.ID {
+				s.SecurityReport.Findings[i].Triage = "dismissed"
+			}
+		}
+	}
+}
+
+func (s *State) dispatchDismissFeature(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if act.Target == "" {
+		return nil
+	}
+	expectedHash := ""
+	if s.Features != nil {
+		expectedHash = s.Features.Hash
+	}
+	body := map[string]string{
+		"project_id":       s.projectID(),
+		"project_revision": s.projectRevision(),
+		"expected_hash":    expectedHash,
+		"status":           "dismissed",
+	}
+	var report FeatureReport
+	target := "/api/projects/current/features/" + url.PathEscape(act.Target)
+	if err := client.DoJSON(ctx, reqID, http.MethodPatch, target, body, &report); err != nil {
+		return err
+	}
+	if report.Hash != "" || len(report.Suggestions) > 0 {
+		s.Features = &report
+		return nil
+	}
+	if s.Features != nil {
+		for i := range s.Features.Suggestions {
+			if s.Features.Suggestions[i].ID == act.Target {
+				s.Features.Suggestions[i].Status = "dismissed"
+			}
+		}
+	}
+	return nil
+}
+
+func (s *State) dispatchSetTrust(ctx context.Context, client *Client, reqID string) error {
+	if !s.WorkspaceTrust {
+		return nil
+	}
+	body := map[string]any{
+		"project_revision": s.projectRevision(),
+		"confirm":          true,
+	}
+	var trust ExecutionTrust
+	return client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+}
+
+func (s *State) dispatchUndo(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if act.Target == "" {
+		return nil
+	}
+	undoHash := ""
+	if s.ChangeReceipt != nil && s.ChangeReceipt.Hash != "" {
+		undoHash = s.ChangeReceipt.Hash
+	} else if s.Change != nil {
+		undoHash = s.Change.Hash
+	}
+	body := map[string]any{
+		"project_id":       s.projectID(),
+		"project_revision": s.projectRevision(),
+		"hash":             undoHash,
+		"confirm":          true,
+	}
+	var receipt ChangeMutation
+	target := "/api/projects/current/changes/" + url.PathEscape(act.Target) + "/undo"
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, body, &receipt); err != nil {
+		return err
+	}
+	s.ChangeReceipt = &receipt
+	if s.Change != nil && s.Change.ID == act.Target {
+		s.Change.State = firstNonEmpty(receipt.State, "reverted")
+	}
+	if receipt.ProjectRevision != "" && s.Project != nil {
+		s.Project.ProjectRevision = receipt.ProjectRevision
+	}
+	return nil
+}
+
+func (s *State) dispatchCheckChange(ctx context.Context, client *Client, reqID string) error {
+	return s.postChangeSessionAction(ctx, client, reqID, "/checks", map[string]any{
+		"run_tests": true,
+		"run_lint":  true,
+	})
+}
+
+func (s *State) dispatchRepairChange(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	return s.postChangeSessionAction(ctx, client, reqID, "/messages", map[string]any{
+		"message":                 firstNonEmpty(act.Message, "Repair the current proposal to satisfy failed checks."),
+		"confirm_remote_provider": true,
+		"repair":                  true,
+	})
+}
+
+func (s *State) postChangeSessionAction(ctx context.Context, client *Client, reqID, suffix string, extra map[string]any) error {
+	if s.Change == nil || s.Project == nil {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+	}
+	for k, v := range extra {
+		req[k] = v
+	}
+	var updated ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + suffix
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
+		return err
+	}
+	s.Change = &updated
+	return nil
+}
+
+func (s *State) dispatchMergeWorktree(ctx context.Context, client *Client, reqID, wtPath string) error {
+	if s.GitWorkspace == nil || s.Project == nil || wtPath == "" {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	var srcHead, srcBranch string
+	for _, wt := range s.GitWorkspace.Worktrees {
+		if wt.Path == wtPath {
+			srcHead = wt.Head
+			srcBranch = wt.Branch
+			break
+		}
+	}
+	req := map[string]any{
+		"project_id":        s.Project.ProjectID,
+		"project_revision":  s.Project.ProjectRevision,
+		"head":              s.GitWorkspace.Head,
+		"branch":            s.GitWorkspace.Branch,
+		"path":              wtPath,
+		"source_head":       srcHead,
+		"source_branch":     srcBranch,
+		"confirm":           true,
+		"confirm_execution": true,
+	}
+	var result struct {
+		State      string         `json:"state"`
+		Error      string         `json:"error"`
+		Index      *ProjectIndex  `json:"index"`
+		Repository *GitRepository `json:"repository"`
+	}
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/git/merge", req, &result); err != nil {
+		return err
+	}
+	if result.Error != "" {
+		return fmt.Errorf("%s", result.Error)
+	}
+	if result.Index != nil {
+		s.Index = result.Index
+		if result.Index.ProjectRevision != "" {
+			s.Project.ProjectRevision = result.Index.ProjectRevision
+		}
+	}
+	if result.Repository != nil {
+		s.Repository = result.Repository
+	}
+	return nil
+}
+
+func (s *State) dispatchLoadChange(ctx context.Context, client *Client, reqID, sessionID string) error {
+	if sessionID == "" || s.Project == nil {
+		return nil
+	}
+	_, idQuery := s.resourceQueries()
+	var chg ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(sessionID) + idQuery
+	if err := client.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err != nil {
+		return err
+	}
+	if chg.ID != "" {
+		s.Change = &chg
+	}
+	return nil
+}
+
+func (s *State) dispatchSaveSelection(ctx context.Context, client *Client, reqID string) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	if s.Selection == nil || s.Selection.SelectionID == "" {
+		_, idQuery := s.resourceQueries()
+		var sel Selection
+		if err := client.DoJSON(ctx, reqID+"-get", http.MethodGet, "/api/projects/current/analysis/selection"+idQuery, nil, &sel); err == nil {
+			s.Selection = &sel
+		}
+	}
+	if s.Selection == nil || s.Selection.SelectionID == "" {
+		return nil
+	}
+	excluded := s.ExcludedPaths
+	if excluded == nil {
+		excluded = []string{}
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"selection_id":     s.Selection.SelectionID,
+		"excluded_paths":   excluded,
+	}
+	var updated Selection
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/selection", req, &updated); err != nil {
+		return err
+	}
+	s.Selection = &updated
+	s.ExcludedPaths = updated.ExcludedPaths
+	return nil
+}
+
+func (s *State) dispatchProposeInstructions(ctx context.Context, client *Client, reqID, path, content string) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	targetPath := firstNonEmpty(path, "AGENTS.md")
+	draft := firstNonEmpty(content, s.InstructionDraft)
+	if draft == "" {
+		return nil
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"title":            "Update " + targetPath,
+		"paths":            []string{targetPath},
+		"content":          draft,
+	}
+	var session ChangeSession
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/instructions/proposal", req, &session); err != nil {
+		return err
+	}
+	s.Change = &session
+	return nil
+}
+
+func (s *State) dispatchBootstrap(ctx context.Context, client *Client, reqID, pillarID string) error {
+	if s.Project == nil || s.Project.ProjectRevision == "" {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	if pillarID == "agents-md" {
+		draft := s.InstructionDraft
+		if draft == "" && s.Instructions != nil && len(s.Instructions.Presets) > 0 {
+			draft = s.Instructions.Presets[0].Content
+		}
+		if draft == "" {
+			draft = "# Project instructions\n\n## Verification\n- Run tests before committing changes.\n"
+		}
+		return s.dispatchProposeInstructions(ctx, client, reqID, "AGENTS.md", draft)
+	}
+	body := map[string]any{
+		"project_revision": s.Project.ProjectRevision,
+		"confirm":          true,
+	}
+	return client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/bootstrap/exec", body, nil)
+}
+
+type pollTickMsg time.Time
+
+func pollTickCmd() tea.Cmd {
+	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
+		return pollTickMsg(t)
+	})
 }
 
 // BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
@@ -371,10 +832,13 @@ func NewBubbleModel(ctx context.Context, state *State, client *Client, width, he
 
 // Init implements tea.Model.
 func (m *BubbleModel) Init() tea.Cmd {
+	if m.client != nil && m.state.hasActiveBackgroundJob() {
+		return pollTickCmd()
+	}
 	return nil
 }
 
-// Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, and KeyEvent.
+// Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, KeyEvent, and poll ticks.
 func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch ev := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -386,9 +850,14 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyKeyEvent(keyEventFromTea(ev))
 	case KeyEvent:
 		m.applyKeyEvent(ev)
+	case pollTickMsg:
+		m.state.PollActiveJobs(m.ctx, m.client)
 	}
 	if m.state.Quitting {
 		return m, tea.Quit
+	}
+	if m.client != nil && m.state.hasActiveBackgroundJob() {
+		return m, pollTickCmd()
 	}
 	return m, nil
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -114,6 +115,25 @@ func RejectHunkFromDiff(allLines []DiffLine, hunk DiffHunk) string {
 		}
 	}
 	return strings.Join(kept, "\n")
+}
+
+// RejectHunkLines returns an updated diff line slice with the specified hunk reverted to context.
+func RejectHunkLines(allLines []DiffLine, hunk DiffHunk) []DiffLine {
+	hunkRange := findHunkSliceBounds(allLines, hunk)
+	out := make([]DiffLine, 0, len(allLines))
+	for idx, line := range allLines {
+		if idx >= hunkRange[0] && idx <= hunkRange[1] {
+			if IsAddedLine(line.Kind) {
+				continue
+			}
+			if IsRemovedLine(line.Kind) {
+				line.Kind = "context"
+				line.NewLine = line.OldLine
+			}
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 func findHunkSliceBounds(allLines []DiffLine, hunk DiffHunk) [2]int {
@@ -689,4 +709,143 @@ func RenderArchitectureASCII(docs ProjectDocsReport) []string {
 		}
 	}
 	return lines
+}
+
+var testNameSuffixes = []string{
+	"_test.go", "_test.py", "test.java", "tests.java",
+	"test.kt", "test.rs", "test.rb", "test.php", "test.cs",
+}
+
+// IsTestFilePath reports whether a project-relative path matches the daemon's Stage 2 test-path rules.
+func IsTestFilePath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	base := strings.ToLower(filepath.Base(clean))
+	if strings.HasPrefix(base, "test_") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") {
+		return true
+	}
+	for _, suf := range testNameSuffixes {
+		if strings.HasSuffix(base, suf) {
+			return true
+		}
+	}
+	return hasTestDirSegment(clean)
+}
+
+func hasTestDirSegment(clean string) bool {
+	for _, seg := range strings.Split(strings.ToLower(clean), "/") {
+		switch seg {
+		case "test", "tests", "__tests__", "spec", "specs":
+			return true
+		}
+	}
+	return false
+}
+
+// DeriveCompanionTestPath returns a canonical companion test file path for a source path.
+func DeriveCompanionTestPath(path string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" || IsTestFilePath(clean) {
+		return clean
+	}
+	dir := filepath.ToSlash(filepath.Dir(clean))
+	base := filepath.Base(clean)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	if stem == "" {
+		stem = base
+	}
+	testBase := companionTestBase(stem, ext)
+	if dir == "." || dir == "" {
+		return testBase
+	}
+	return dir + "/" + testBase
+}
+
+func companionTestBase(stem, ext string) string {
+	switch strings.ToLower(ext) {
+	case ".go":
+		return stem + "_test.go"
+	case ".py":
+		return "test_" + stem + ".py"
+	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs":
+		return stem + ".test" + ext
+	default:
+		return stem + "_test.go"
+	}
+}
+
+// EnsureChangeTestPaths deduplicates captured paths, caps scope at 8 files, and guarantees at least one test path.
+func EnsureChangeTestPaths(paths []string, index *ProjectIndex) []string {
+	var clean []string
+	for _, raw := range paths {
+		p := filepath.ToSlash(strings.TrimSpace(raw))
+		if p != "" && !containsString(clean, p) && len(clean) < 8 {
+			clean = append(clean, p)
+		}
+	}
+	if len(clean) == 0 && index != nil && len(index.Files) > 0 {
+		clean = append(clean, index.Files[0].Path)
+	}
+	if len(clean) == 0 || hasAnyTestPath(clean) {
+		return clean
+	}
+	testPath := DeriveCompanionTestPath(clean[0])
+	if testPath == "" {
+		return clean
+	}
+	if len(clean) >= 8 {
+		clean[7] = testPath
+		return clean
+	}
+	return append(clean, testPath)
+}
+
+func hasAnyTestPath(paths []string) bool {
+	for _, p := range paths {
+		if IsTestFilePath(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeFindingTargets validates and canonicalizes finding targets for OpenChangeSession.
+func NormalizeFindingTargets(targets []FindingTarget, projectID string, allowedPaths []string) []FindingTarget {
+	var out []FindingTarget
+	for _, t := range targets {
+		norm, ok := normalizeSingleTarget(t, projectID, allowedPaths)
+		if ok {
+			out = append(out, norm)
+		}
+	}
+	return out
+}
+
+func normalizeSingleTarget(t FindingTarget, projectID string, allowedPaths []string) (FindingTarget, bool) {
+	t.ID = strings.TrimSpace(t.ID)
+	t.Path = filepath.ToSlash(strings.TrimSpace(t.Path))
+	if t.ID == "" || t.Path == "" {
+		return FindingTarget{}, false
+	}
+	if len(allowedPaths) > 0 && !containsString(allowedPaths, t.Path) {
+		return FindingTarget{}, false
+	}
+	if t.ProjectID == "" {
+		t.ProjectID = projectID
+	}
+	if t.ProjectID == "" {
+		return FindingTarget{}, false
+	}
+	switch t.Kind {
+	case "security":
+		if t.Source != "ai" && t.Source != "deterministic" {
+			t.Source = "deterministic"
+		}
+	case "performance":
+		t.Source = ""
+	default:
+		t.Kind = "semantic"
+		t.Source = ""
+	}
+	return t, true
 }
