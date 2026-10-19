@@ -29,7 +29,7 @@ func (s *State) Render(width, height int) string {
 	} else if s.ShowKeybindsModal {
 		lines = append(lines, s.renderKeybindsModal(th, frameWidth)...)
 	} else {
-		lines = append(lines, s.renderActivePage(th)...)
+		lines = append(lines, s.renderActivePage(th, frameWidth)...)
 	}
 
 	lines = append(lines, s.renderHorizontalRule(th, frameWidth, "├", "┤", "─"))

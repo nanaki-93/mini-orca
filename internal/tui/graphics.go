@@ -182,6 +182,27 @@ func (th ansiTheme) renderProgressBar(done, total, barWidth int) string {
 	return fmt.Sprintf("%s %3d%%", bar, pct)
 }
 
+// severityBadge formats a color-coded enterprise severity badge.
+func (th ansiTheme) severityBadge(sev string) string {
+	upper := strings.ToUpper(strings.TrimSpace(sev))
+	if upper == "" {
+		upper = "INFO"
+	}
+	label := fmt.Sprintf("[%-8s]", truncatePlain(upper, 8))
+	switch upper {
+	case "CRITICAL":
+		return th.bold + th.red + label + th.reset
+	case "HIGH":
+		return th.amber + label + th.reset
+	case "MEDIUM", "MED":
+		return th.purple + label + th.reset
+	case "LOW":
+		return th.cyan + label + th.reset
+	default:
+		return th.muted + label + th.reset
+	}
+}
+
 // statusBadge formats a lifecycle or check state badge with semantic coloring.
 func (th ansiTheme) statusBadge(state string) string {
 	upper := strings.ToUpper(strings.TrimSpace(state))
@@ -224,4 +245,42 @@ func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body
 	bottom := fmt.Sprintf("  %s╰%s╯%s", th.border, strings.Repeat("─", innerWidth), th.reset)
 	out = append(out, bottom)
 	return out
+}
+
+// renderKPICards renders a horizontal strip of compact enterprise KPI cards.
+func (th ansiTheme) renderKPICards(cards [][2]string, totalWidth int) []string {
+	if len(cards) == 0 {
+		return nil
+	}
+	cardWidth := max(18, (totalWidth-4)/len(cards)-2)
+	var tops, mids, bots []string
+	for _, c := range cards {
+		label := truncatePlain(strings.ToUpper(c[0]), cardWidth-4)
+		val := padVisibleRight(c[1], cardWidth-2)
+		tops = append(tops, fmt.Sprintf("%s╭─ %s%-*s%s ─╮%s", th.border, th.muted, cardWidth-4, label, th.border, th.reset))
+		mids = append(mids, fmt.Sprintf("%s│%s %s %s│%s", th.border, th.reset, val, th.border, th.reset))
+		bots = append(bots, fmt.Sprintf("%s╰%s╯%s", th.border, strings.Repeat("─", cardWidth), th.reset))
+	}
+	return []string{
+		"  " + strings.Join(tops, " "),
+		"  " + strings.Join(mids, " "),
+		"  " + strings.Join(bots, " "),
+	}
+}
+
+// renderTableHeader formats an aligned enterprise table header row with underline rule.
+func (th ansiTheme) renderTableHeader(columns string, width int) []string {
+	ruleWidth := max(30, width-6)
+	return []string{
+		fmt.Sprintf("  %s%s%s", th.bold+th.muted, columns, th.reset),
+		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", ruleWidth), th.reset),
+	}
+}
+
+// renderCursorPrefix returns the row selection cursor indicator.
+func (th ansiTheme) renderCursorPrefix(selected bool) string {
+	if selected {
+		return th.accent + "▸ " + th.reset
+	}
+	return "  "
 }
