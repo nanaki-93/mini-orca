@@ -17,25 +17,26 @@ func init() {
 }
 
 type ansiTheme struct {
-	name    string
-	accent  string
-	fg      string
-	muted   string
-	border  string
-	surface string
-	selBg   string
-	critBg  string
-	warnBg  string
-	okBg    string
-	infoBg  string
-	green   string
-	amber   string
-	red     string
-	purple  string
-	cyan    string
-	bold    string
-	dim     string
-	reset   string
+	name     string
+	accent   string
+	accentBg string
+	fg       string
+	muted    string
+	border   string
+	surface  string
+	selBg    string
+	critBg   string
+	warnBg   string
+	okBg     string
+	infoBg   string
+	green    string
+	amber    string
+	red      string
+	purple   string
+	cyan     string
+	bold     string
+	dim      string
+	reset    string
 
 	cardStyle      lipgloss.Style
 	activeTabStyle lipgloss.Style
@@ -51,48 +52,49 @@ type ansiTheme struct {
 }
 
 type paletteColors struct {
-	name       string
-	accentCode string
-	fgCode     string
-	mutedCode  string
-	borderCode string
-	selBgCode  string
-	greenCode  string
-	amberCode  string
-	redCode    string
-	purpleCode string
-	cyanCode   string
-	progStart  string
-	progEnd    string
+	name         string
+	accentCode   string
+	accentBgCode string
+	fgCode       string
+	mutedCode    string
+	borderCode   string
+	selBgCode    string
+	greenCode    string
+	amberCode    string
+	redCode      string
+	purpleCode   string
+	cyanCode     string
+	progStart    string
+	progEnd      string
 }
 
 func colorsForPalette(p Palette) paletteColors {
 	switch p {
 	case PaletteCRT:
 		return paletteColors{
-			name: "CRT PHOSPHOR", accentCode: "46", fgCode: "120", mutedCode: "28",
+			name: "CRT PHOSPHOR", accentCode: "46", accentBgCode: "28", fgCode: "120", mutedCode: "28",
 			borderCode: "28", selBgCode: "22", greenCode: "46", amberCode: "226",
 			redCode: "196", purpleCode: "83", cyanCode: "50",
 			progStart: "#00aa00", progEnd: "#00ff66",
 		}
 	case PaletteAmber:
 		return paletteColors{
-			name: "AMBER TERMINAL", accentCode: "214", fgCode: "222", mutedCode: "136",
+			name: "AMBER TERMINAL", accentCode: "214", accentBgCode: "130", fgCode: "222", mutedCode: "136",
 			borderCode: "136", selBgCode: "236", greenCode: "142", amberCode: "214",
 			redCode: "203", purpleCode: "179", cyanCode: "215",
 			progStart: "#d78700", progEnd: "#ffd75f",
 		}
 	case PalettePaper:
 		return paletteColors{
-			name: "PAPER LIGHT", accentCode: "25", fgCode: "235", mutedCode: "242",
+			name: "PAPER LIGHT", accentCode: "25", accentBgCode: "25", fgCode: "235", mutedCode: "242",
 			borderCode: "247", selBgCode: "252", greenCode: "28", amberCode: "130",
 			redCode: "160", purpleCode: "91", cyanCode: "31",
 			progStart: "#005f87", progEnd: "#0087af",
 		}
 	default:
 		return paletteColors{
-			name: "TOKYO ENTERPRISE", accentCode: "111", fgCode: "253", mutedCode: "245",
-			borderCode: "240", selBgCode: "236", greenCode: "114", amberCode: "215",
+			name: "TOKYO ENTERPRISE", accentCode: "111", accentBgCode: "62", fgCode: "253", mutedCode: "244",
+			borderCode: "239", selBgCode: "236", greenCode: "114", amberCode: "215",
 			redCode: "203", purpleCode: "176", cyanCode: "117",
 			progStart: "#5f87ff", progEnd: "#87d7ff",
 		}
@@ -109,25 +111,26 @@ func themeForPalette(p Palette) ansiTheme {
 	redCol := lipgloss.Color(c.redCode)
 
 	return ansiTheme{
-		name:    c.name,
-		accent:  "\033[1;38;5;" + c.accentCode + "m",
-		fg:      "\033[38;5;" + c.fgCode + "m",
-		muted:   "\033[38;5;" + c.mutedCode + "m",
-		border:  "\033[38;5;" + c.borderCode + "m",
-		surface: "\033[48;5;" + c.selBgCode + "m",
-		selBg:   "\033[48;5;" + c.selBgCode + "m",
-		critBg:  "\033[1;38;5;255;48;5;160m",
-		warnBg:  "\033[1;38;5;232;48;5;" + c.amberCode + "m",
-		okBg:    "\033[1;38;5;232;48;5;" + c.greenCode + "m",
-		infoBg:  "\033[1;38;5;255;48;5;62m",
-		green:   "\033[1;38;5;" + c.greenCode + "m",
-		amber:   "\033[1;38;5;" + c.amberCode + "m",
-		red:     "\033[1;38;5;" + c.redCode + "m",
-		purple:  "\033[1;38;5;" + c.purpleCode + "m",
-		cyan:    "\033[1;38;5;" + c.cyanCode + "m",
-		bold:    "\033[1m",
-		dim:     "\033[2m",
-		reset:   "\033[0m",
+		name:     c.name,
+		accent:   "\033[1;38;5;" + c.accentCode + "m",
+		accentBg: "\033[1;38;5;255;48;5;" + c.accentBgCode + "m",
+		fg:       "\033[38;5;" + c.fgCode + "m",
+		muted:    "\033[38;5;" + c.mutedCode + "m",
+		border:   "\033[38;5;" + c.borderCode + "m",
+		surface:  "\033[48;5;" + c.selBgCode + "m",
+		selBg:    "\033[48;5;" + c.selBgCode + "m",
+		critBg:   "\033[1;38;5;255;48;5;160m",
+		warnBg:   "\033[1;38;5;232;48;5;" + c.amberCode + "m",
+		okBg:     "\033[1;38;5;232;48;5;" + c.greenCode + "m",
+		infoBg:   "\033[1;38;5;255;48;5;" + c.accentBgCode + "m",
+		green:    "\033[1;38;5;" + c.greenCode + "m",
+		amber:    "\033[1;38;5;" + c.amberCode + "m",
+		red:      "\033[1;38;5;" + c.redCode + "m",
+		purple:   "\033[1;38;5;" + c.purpleCode + "m",
+		cyan:     "\033[1;38;5;" + c.cyanCode + "m",
+		bold:     "\033[1m",
+		dim:      "\033[2m",
+		reset:    "\033[0m",
 
 		cardStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -136,7 +139,7 @@ func themeForPalette(p Palette) ansiTheme {
 		activeTabStyle: lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("255")).
-			Background(lipgloss.Color("62")).
+			Background(lipgloss.Color(c.accentBgCode)).
 			Padding(0, 1),
 		idleTabStyle: lipgloss.NewStyle().
 			Foreground(mutedCol).
@@ -243,7 +246,7 @@ func (th ansiTheme) renderCommandInput(value string) string {
 	ti.Prompt = ":"
 	ti.SetValue(value)
 	ti.Focus()
-	return fmt.Sprintf("  %sCOMMAND ▸ %s%s   %s(Enter to execute · Esc to cancel)%s", th.green, ti.View(), th.reset, th.muted, th.reset)
+	return fmt.Sprintf(" %s : COMMAND %s  %s%s%s", th.accentBg, th.reset, th.bold+th.fg, ti.View(), th.reset)
 }
 
 // renderProgressBar draws a smooth Bubbles progress.Model bar with percentage.
@@ -315,8 +318,11 @@ func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body
 		gap := max(2, innerWidth-4-lipgloss.Width(header)-lipgloss.Width(meta))
 		header = header + strings.Repeat(" ", gap) + meta
 	}
-	allLines := make([]string, 0, len(body)+1)
+	allLines := make([]string, 0, len(body)+2)
 	allLines = append(allLines, header)
+	if len(body) > 0 {
+		allLines = append(allLines, th.border+strings.Repeat("─", max(10, innerWidth-4))+th.reset)
+	}
 	for _, line := range body {
 		allLines = append(allLines, padVisibleRight(line, innerWidth-4))
 	}
@@ -334,9 +340,8 @@ func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
-	head := fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s   %s[Esc] Dismiss · [:reconnect] Retry%s",
-		th.critBg, th.reset, th.amber, th.reset)
-	msg := fmt.Sprintf("%s%s%s", th.red, truncatePlain(strings.TrimSpace(errText), innerWidth-6), th.reset)
+	head := fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s", th.critBg, th.reset)
+	msg := fmt.Sprintf("%s%s%s", th.bold+th.red, truncatePlain(strings.TrimSpace(errText), innerWidth-6), th.reset)
 	box := th.errorBoxStyle.Width(innerWidth).Render(head + "\n" + msg)
 	var out []string
 	for _, line := range strings.Split(box, "\n") {
