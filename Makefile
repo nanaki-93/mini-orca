@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -42,7 +42,26 @@ build: ## Build the daemon and TUI binaries locally
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
-	@echo "$(COLOR_GREEN)Build complete: $(BUILD_DIR)/$(APP_NAME)-daemon, $(BUILD_DIR)/$(APP_NAME)-tui$(COLOR_RESET)"
+	@cp -f $(BUILD_DIR)/$(APP_NAME)-tui ./$(APP_NAME)
+	@cp -f $(BUILD_DIR)/$(APP_NAME)-daemon ./$(APP_NAME)-daemon
+	@echo "$(COLOR_GREEN)Build complete: ./$(APP_NAME), ./$(APP_NAME)-daemon ($(BUILD_DIR)/)$(COLOR_RESET)"
+
+install: build ## Build and substitute mini-orca into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME if present)
+	@target_dir="$$HOME/DEV/lab/mini-orca"; \
+	if [ -d "$$target_dir" ] && [ "$$(cd "$$target_dir" && pwd)" != "$$(pwd)" ]; then \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$$target_dir/$(APP_NAME)"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$target_dir/$(APP_NAME)-daemon"; \
+	fi
+	@if [ -n "$${MINI_ORCA_HOME:-}" ] && [ -d "$${MINI_ORCA_HOME}" ]; then \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$${MINI_ORCA_HOME}/$(APP_NAME)"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$${MINI_ORCA_HOME}/$(APP_NAME)-daemon"; \
+		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $${MINI_ORCA_HOME}$(COLOR_RESET)"; \
+	elif [ -d "$$HOME/DEV/programs/mini-orca" ]; then \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$$HOME/DEV/programs/mini-orca/$(APP_NAME)"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$HOME/DEV/programs/mini-orca/$(APP_NAME)-daemon"; \
+		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $$HOME/DEV/programs/mini-orca$(COLOR_RESET)"; \
+	fi
+	@echo "$(COLOR_GREEN)Updated $(APP_NAME) in $$HOME/DEV/lab/mini-orca/$(APP_NAME)$(COLOR_RESET)"
 
 build-linux: ## Build the Linux amd64 release daemon and TUI
 	@mkdir -p $(BUILD_DIR)

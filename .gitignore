@@ -21,6 +21,8 @@ profile.cov
 # vendor/
 node_modules/
 build/
+/mini-orca
+/mini-orca-daemon
 
 # Go workspace file
 go.work

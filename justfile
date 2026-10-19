@@ -62,6 +62,10 @@ check:
     ./scripts/quality.sh --go-only
     make check
 
-# Build the local daemon and TUI binaries
+# Build the local daemon and TUI binaries and substitute mini-orca into ~/DEV/lab/mini-orca
 build:
-    make build
+    make install
+
+# Build and substitute the mini-orca executable into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME)
+install:
+    make install

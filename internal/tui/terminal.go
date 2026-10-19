@@ -6,8 +6,39 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"strings"
 	"unicode/utf8"
 )
+
+func enableRawTerminal(in io.Reader) func() {
+	f, ok := in.(*os.File)
+	if !ok {
+		return func() {}
+	}
+	info, err := f.Stat()
+	if err != nil || (info.Mode()&os.ModeCharDevice) == 0 {
+		return func() {}
+	}
+	saveCmd := exec.Command("stty", "-g")
+	saveCmd.Stdin = f
+	savedBytes, err := saveCmd.Output()
+	if err != nil {
+		return func() {}
+	}
+	saved := strings.TrimSpace(string(savedBytes))
+	rawCmd := exec.Command("stty", "-icanon", "-echo", "min", "1", "time", "0")
+	rawCmd.Stdin = f
+	if err := rawCmd.Run(); err != nil {
+		return func() {}
+	}
+	return func() {
+		restoreCmd := exec.Command("stty", saved)
+		restoreCmd.Stdin = f
+		_ = restoreCmd.Run()
+	}
+}
 
 // DecodeInputBytes parses raw terminal input bytes into discrete KeyEvents.
 func DecodeInputBytes(data []byte) []KeyEvent {
@@ -150,6 +181,8 @@ func (s *State) dispatchMutationAction(ctx context.Context, client *Client, reqI
 
 // RunSession runs an interactive terminal session reading keystrokes from in and writing ANSI frames to out.
 func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
+	restore := enableRawTerminal(in)
+	defer restore()
 	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", s.Render(width, height)); err != nil {
 		return fmt.Errorf("render initial frame: %w", err)
 	}
