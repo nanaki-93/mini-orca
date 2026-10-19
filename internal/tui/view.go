@@ -40,9 +40,8 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 		s.renderBottomBorder(th, frameWidth),
 	}
 
-	targetBodyRows := max(max(len(sidebar), len(rightBody)), frameHeight-len(header)-len(footer))
-	lines := make([]string, 0, len(header)+targetBodyRows+len(footer))
-	lines = append(lines, header...)
+	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
+	body := make([]string, 0, targetBodyRows)
 	for i := 0; i < targetBodyRows; i++ {
 		var leftLine, rightLine string
 		if i < len(sidebar) {
@@ -51,13 +50,11 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 		if i < len(rightBody) {
 			rightLine = rightBody[i]
 		}
-		row := padVisibleRight(leftLine, sidebarMenuWidth) +
-			th.border + "│" + th.reset +
-			padVisibleRight(rightLine, contentWidth)
-		lines = append(lines, th.wrapFrameLine(row, frameWidth))
+		body = append(body, padVisibleRight(leftLine, sidebarMenuWidth)+
+			th.border+"│"+th.reset+
+			padVisibleRight(rightLine, contentWidth))
 	}
-	lines = append(lines, footer...)
-	return strings.Join(lines, "\n")
+	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
 }
 
 func (s *State) renderCompactFrame(th ansiTheme, frameWidth, frameHeight int) string {
@@ -82,16 +79,19 @@ func (s *State) renderCompactFrame(th ansiTheme, frameWidth, frameHeight int) st
 		th.wrapFrameLine(s.renderCommandBar(th, frameWidth), frameWidth),
 		s.renderBottomBorder(th, frameWidth),
 	}
+	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
+}
 
-	targetBodyRows := max(len(body), frameHeight-len(header)-len(footer))
+func assembleFrame(th ansiTheme, frameWidth, frameHeight int, header, body, footer []string) string {
+	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
 	lines := make([]string, 0, len(header)+targetBodyRows+len(footer))
 	lines = append(lines, header...)
 	for i := 0; i < targetBodyRows; i++ {
+		var row string
 		if i < len(body) {
-			lines = append(lines, th.wrapFrameLine(body[i], frameWidth))
-		} else {
-			lines = append(lines, th.wrapFrameLine("", frameWidth))
+			row = body[i]
 		}
+		lines = append(lines, th.wrapFrameLine(row, frameWidth))
 	}
 	lines = append(lines, footer...)
 	return strings.Join(lines, "\n")
@@ -141,10 +141,13 @@ func (s *State) renderSidebarMenu(th ansiTheme, width int) []string {
 func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []string {
 	var visible []HubSubPage
 	for _, sp := range tab.SubPages {
-		if sp.Page == PageIssueDetail && s.Page != PageIssueDetail {
-			continue
+		if sp.Page != PageIssueDetail {
+			visible = append(visible, sp)
 		}
-		visible = append(visible, sp)
+	}
+	curPage := s.EffectivePage()
+	if curPage == PageIssueDetail {
+		curPage = PageBugs
 	}
 	var out []string
 	for idx, sp := range visible {
@@ -153,7 +156,7 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 			branch = "└─"
 		}
 		label := truncatePlain(sp.Label, width-9)
-		if sp.Page == s.Page {
+		if sp.Page == curPage {
 			out = append(out, fmt.Sprintf("  %s%s%s %s◆ %s%s", th.border, branch, th.reset, th.bold+th.accent, label, th.reset))
 		} else {
 			out = append(out, fmt.Sprintf("  %s%s%s %s◇ %s%s", th.border, branch, th.reset, th.muted, label, th.reset))
@@ -265,9 +268,13 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 	if len(hub.SubPages) == 0 {
 		return ""
 	}
+	curPage := s.EffectivePage()
 	var parts []string
 	for _, sp := range hub.SubPages {
-		if sp.Page == s.Page {
+		if sp.Page == PageIssueDetail && curPage != PageIssueDetail {
+			continue
+		}
+		if sp.Page == curPage {
 			parts = append(parts, th.subActiveStyle.Render("◆ "+sp.Label))
 		} else {
 			parts = append(parts, th.subIdleStyle.Render("◇ "+sp.Label))
@@ -364,8 +371,9 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 
 func (s *State) activeBreadcrumb() string {
 	hub := s.ActiveHub()
+	curPage := s.EffectivePage()
 	for _, sp := range hub.SubPages {
-		if sp.Page == s.Page {
+		if sp.Page == curPage {
 			return fmt.Sprintf("%s / %s", strings.ToUpper(hub.Label), sp.Label)
 		}
 	}

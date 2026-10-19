@@ -408,22 +408,22 @@ func (s *State) activateAnalysisRunRow() {
 }
 
 func (s *State) activateInstructionsRow() {
-	switch s.RulesSection {
-	case "models":
+	switch s.EffectivePage() {
+	case PageModels:
 		presets := DefaultModelPresets()
 		if idx := s.ClampedIdx(); idx < len(presets) {
 			s.ActivePresetID = presets[idx].ID
 			s.CmdOutput = fmt.Sprintf("Applied model preset: %s", presets[idx].Name)
 		}
-	case "bootstrap":
+	case PageBootstrap:
 		pillars := EvaluateBootstrapChecklist(s.Index, s.Instructions)
 		if idx := s.ClampedIdx(); idx < len(pillars) && !pillars[idx].Ready {
 			s.CmdOutput = fmt.Sprintf("Bootstrapping %s...", pillars[idx].Title)
 			s.enqueueAction(ActionRequest{Kind: "bootstrap", Target: pillars[idx].ID})
 		}
-	case "lessons":
+	case PageLessons:
 		s.graduateSelectedLesson()
-	case "trust":
+	default:
 		s.toggleWorkspaceTrust()
 	}
 }

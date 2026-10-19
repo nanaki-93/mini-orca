@@ -209,44 +209,52 @@ func (s *State) cycleHub(forward bool) {
 
 func (s *State) cycleSubView(forward bool) {
 	hub := s.ActiveHub()
-	if len(hub.SubPages) > 0 {
-		cur := 0
-		for idx, sp := range hub.SubPages {
-			if sp.Page == s.Page {
-				cur = idx
-				break
-			}
+	var subPages []HubSubPage
+	for _, sp := range hub.SubPages {
+		if sp.Page != PageIssueDetail {
+			subPages = append(subPages, sp)
 		}
-		delta := -1
-		if forward {
-			delta = 1
-		}
-		next := hub.SubPages[(cur+delta+len(hub.SubPages))%len(hub.SubPages)]
-		s.Navigate(next.Page)
-		s.CmdOutput = fmt.Sprintf("Sub-view: %s", next.Label)
+	}
+	if len(subPages) == 0 {
 		return
 	}
-	if s.Page == PageInstructions {
-		s.cycleRulesSection(forward)
+	curPage := s.EffectivePage()
+	if curPage == PageIssueDetail {
+		if !forward {
+			s.Navigate(PageBugs)
+			s.CmdOutput = "Sub-view: Issues"
+			return
+		}
+		curPage = PageBugs
 	}
+	cur := 0
+	for idx, sp := range subPages {
+		if sp.Page == curPage {
+			cur = idx
+			break
+		}
+	}
+	delta := -1
+	if forward {
+		delta = 1
+	}
+	next := subPages[(cur+delta+len(subPages))%len(subPages)]
+	s.Navigate(next.Page)
+	s.CmdOutput = fmt.Sprintf("Sub-view: %s", next.Label)
 }
 
 func (s *State) stepHorizontalSection(forward bool) {
-	switch s.Page {
-	case PageBugs:
-		s.cycleIssueStatusView(forward)
-	case PageDocs:
-		s.cycleDocsSection(forward)
-	case PageInstructions:
-		s.cycleRulesSection(forward)
-	default:
-		if len(s.ActiveHub().SubPages) > 1 {
-			s.cycleSubView(forward)
-		}
+	if len(s.ActiveHub().SubPages) > 1 {
+		s.cycleSubView(forward)
 	}
 }
 
 func (s *State) moveSelection(delta int) {
+	switch s.EffectivePage() {
+	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
+		s.cycleSubView(delta > 0)
+		return
+	}
 	maxIdx := max(0, s.ActiveListLength()-1)
 	next := s.ClampedIdx() + delta
 	if next < 0 {
@@ -270,18 +278,6 @@ func (s *State) cycleIssueStatusView(forward bool) {
 	s.IssueView = stepStringSlice(views, s.IssueView, forward)
 	s.SelectedIdx = 0
 	s.CmdOutput = fmt.Sprintf("Issue status view: %s", strings.ToUpper(s.IssueView))
-}
-
-func (s *State) cycleDocsSection(forward bool) {
-	sections := []string{"context", "components", "scenarios", "decisions"}
-	s.DocsSection = stepStringSlice(sections, s.DocsSection, forward)
-	s.SelectedIdx = 0
-}
-
-func (s *State) cycleRulesSection(forward bool) {
-	sections := []string{"trust", "models", "bootstrap", "lessons"}
-	s.RulesSection = stepStringSlice(sections, s.RulesSection, forward)
-	s.SelectedIdx = 0
 }
 
 func stepStringSlice(items []string, current string, forward bool) string {

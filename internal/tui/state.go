@@ -248,6 +248,29 @@ func (s *State) Navigate(page Page) {
 	}
 }
 
+// EffectivePage resolves the active sub-page, accounting for DocsSection and RulesSection overrides.
+func (s *State) EffectivePage() Page {
+	if s.Page == PageDocs {
+		switch s.DocsSection {
+		case "components":
+			return PageDocsComponents
+		case "scenarios", "decisions":
+			return PageDocsDecisions
+		}
+	}
+	if s.Page == PageInstructions {
+		switch s.RulesSection {
+		case "models":
+			return PageModels
+		case "bootstrap":
+			return PageBootstrap
+		case "lessons":
+			return PageLessons
+		}
+	}
+	return s.Page
+}
+
 // AcceptProjectResponse verifies that a late response still matches the active project identity.
 func (s *State) AcceptProjectResponse(id ProjectIdentity) bool {
 	if s.Project == nil || id.ProjectID == "" {
@@ -552,11 +575,23 @@ func (s *State) ActiveListLength() int {
 		return len(s.activeFeatures())
 	case PageAnalysisRun:
 		return s.analysisRunListLen()
-	case PageAnalysisFiles, PageEditor:
+	case PageAnalysisFiles:
 		return s.indexedFileCount()
+	case PageEditor:
+		return s.editorListLength()
 	default:
 		return s.secondaryListLength()
 	}
+}
+
+func (s *State) editorListLength() int {
+	if s.Change != nil && len(s.Change.Changes) > 0 {
+		return max(1, len(s.Change.Changes[0].Diff.Lines))
+	}
+	if s.File != nil && s.File.Content != "" {
+		return max(1, len(strings.Split(s.File.Content, "\n")))
+	}
+	return s.indexedFileCount()
 }
 
 func (s *State) secondaryListLength() int {
@@ -620,13 +655,10 @@ func (s *State) indexedFileCount() int {
 
 func (s *State) docsListLength() int {
 	docs := ResolveProjectDocs(s.Overview, s.Project)
-	if s.Page == PageDiagrams || s.DocsSection == "components" {
+	switch s.EffectivePage() {
+	case PageDiagrams, PageDocsComponents:
 		return len(docs.Components)
-	}
-	switch s.DocsSection {
-	case "scenarios":
-		return len(docs.Scenarios)
-	case "decisions":
+	case PageDocsDecisions:
 		return len(docs.Decisions)
 	default:
 		return len(docs.Dependencies)
@@ -634,12 +666,12 @@ func (s *State) docsListLength() int {
 }
 
 func (s *State) instructionsListLength() int {
-	switch s.RulesSection {
-	case "models":
+	switch s.EffectivePage() {
+	case PageModels:
 		return len(DefaultModelPresets())
-	case "bootstrap":
+	case PageBootstrap:
 		return len(EvaluateBootstrapChecklist(s.Index, s.Instructions))
-	case "lessons":
+	case PageLessons:
 		return len(s.AllHarnessLessons())
 	default:
 		return 1
