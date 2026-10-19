@@ -302,9 +302,9 @@ func (s *State) triggerOrResumeAnalysis() {
 // ActivateCurrentRow performs the primary Enter action for the currently highlighted row.
 func (s *State) ActivateCurrentRow() {
 	switch s.Page {
-	case PageSummary, PageBugs:
+	case PageSummary, PageBugs, PageIssueDetail:
 		s.activateIssueRow()
-	case PageProject:
+	case PageRepo, PageProject:
 		s.CmdOutput = "Running project verification checks..."
 		s.enqueueAction(ActionRequest{Kind: "scan"})
 	case PageEditor:
@@ -326,6 +326,10 @@ func (s *State) ActivateCurrentRow() {
 func (s *State) activateIssueRow() {
 	issue := s.SelectedIssue()
 	if issue == nil {
+		if s.Page == PageSummary {
+			s.Navigate(PageBugs)
+			s.CmdOutput = "Switched to [2] Agent Studio · Issues"
+		}
 		return
 	}
 	if issue.AgentPath != "" {
@@ -370,7 +374,7 @@ func (s *State) activateSecondaryRow() {
 			s.CmdOutput = fmt.Sprintf("Loaded proposal %s", entry.Title)
 			s.Navigate(PageEditor)
 		}
-	case PageInstructions:
+	case PageInstructions, PageModels, PageBootstrap, PageLessons:
 		s.activateInstructionsRow()
 	}
 }

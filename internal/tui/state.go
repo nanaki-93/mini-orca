@@ -12,19 +12,26 @@ import (
 type Page string
 
 const (
-	PageSummary       Page = "summary"
-	PageProject       Page = "project"
-	PageAgents        Page = "agents"
-	PageBugs          Page = "bugs"
-	PageFeatures      Page = "features"
-	PageAnalysisRun   Page = "analysis-run"
-	PageAnalysisFiles Page = "analysis-files"
-	PageEditor        Page = "editor"
-	PageGit           Page = "git"
-	PageHistory       Page = "history"
-	PageDocs          Page = "docs"
-	PageDiagrams      Page = "diagrams"
-	PageInstructions  Page = "instructions"
+	PageSummary        Page = "summary"
+	PageRepo           Page = "repo"
+	PageProject        Page = "project"
+	PageAgents         Page = "agents"
+	PageBugs           Page = "bugs"
+	PageIssueDetail    Page = "issue-detail"
+	PageFeatures       Page = "features"
+	PageAnalysisRun    Page = "analysis-run"
+	PageAnalysisFiles  Page = "analysis-files"
+	PageEditor         Page = "editor"
+	PageGit            Page = "git"
+	PageHistory        Page = "history"
+	PageDocs           Page = "docs"
+	PageDocsComponents Page = "docs-components"
+	PageDocsDecisions  Page = "docs-decisions"
+	PageDiagrams       Page = "diagrams"
+	PageInstructions   Page = "instructions"
+	PageModels         Page = "models"
+	PageBootstrap      Page = "bootstrap"
+	PageLessons        Page = "lessons"
 )
 
 // Palette identifies one of the four terminal color themes.
@@ -123,7 +130,7 @@ type State struct {
 	Models            *ModelCatalog
 }
 
-// HubTabs returns the 5 canonical Mini-Orca TUI hubs and their sub-views.
+// HubTabs returns the 5 canonical Mini-Orca TUI hubs and their focused sub-views.
 func HubTabs() []HubTab {
 	return []HubTab{
 		{
@@ -132,7 +139,8 @@ func HubTabs() []HubTab {
 			Label: "Overview",
 			SubPages: []HubSubPage{
 				{Page: PageSummary, Label: "Dashboard"},
-				{Page: PageProject, Label: "Project & Tests"},
+				{Page: PageRepo, Label: "Repository"},
+				{Page: PageProject, Label: "Tests & Checks"},
 			},
 		},
 		{
@@ -140,8 +148,9 @@ func HubTabs() []HubTab {
 			Page:  PageAgents,
 			Label: "Agent Studio",
 			SubPages: []HubSubPage{
-				{Page: PageAgents, Label: "Agents"},
+				{Page: PageAgents, Label: "Pipeline"},
 				{Page: PageBugs, Label: "Issues"},
+				{Page: PageIssueDetail, Label: "Issue Detail"},
 				{Page: PageFeatures, Label: "Features"},
 				{Page: PageAnalysisRun, Label: "Last Run"},
 				{Page: PageAnalysisFiles, Label: "File Scope"},
@@ -152,9 +161,9 @@ func HubTabs() []HubTab {
 			Page:  PageEditor,
 			Label: "Code & Diff",
 			SubPages: []HubSubPage{
-				{Page: PageEditor, Label: "Code & Diff"},
-				{Page: PageGit, Label: "Git & Worktrees"},
-				{Page: PageHistory, Label: "Saved Proposals"},
+				{Page: PageEditor, Label: "Inspector"},
+				{Page: PageGit, Label: "Worktrees"},
+				{Page: PageHistory, Label: "Proposals"},
 			},
 		},
 		{
@@ -162,15 +171,22 @@ func HubTabs() []HubTab {
 			Page:  PageDocs,
 			Label: "Handbook & Arch",
 			SubPages: []HubSubPage{
-				{Page: PageDocs, Label: "Handbook / Docs"},
+				{Page: PageDocs, Label: "Context & Deps"},
+				{Page: PageDocsComponents, Label: "Components"},
+				{Page: PageDocsDecisions, Label: "Scenarios & ADRs"},
 				{Page: PageDiagrams, Label: "Architecture"},
 			},
 		},
 		{
-			Key:      "5",
-			Page:     PageInstructions,
-			Label:    "Governance & Rules",
-			SubPages: nil,
+			Key:   "5",
+			Page:  PageInstructions,
+			Label: "Governance & Rules",
+			SubPages: []HubSubPage{
+				{Page: PageInstructions, Label: "Trust Policy"},
+				{Page: PageModels, Label: "Model Routing"},
+				{Page: PageBootstrap, Label: "Bootstrap"},
+				{Page: PageLessons, Label: "Lessons"},
+			},
 		},
 	}
 }
@@ -188,7 +204,7 @@ func NewState() *State {
 		ActivePresetID: "local-default",
 		WorkspaceTrust: true,
 		Results:        make(map[string]SectionResults),
-		CmdOutput:      "Press [?] or type :keys for keyboard shortcuts · [1-5] switch hubs · [Tab] sub-view · [j/k] move · [Enter] select · [:q] quit",
+		CmdOutput:      "Press [1-5] to switch hubs · [Tab] sub-page · [j/k] move · [Enter/a] start Agent · [?] help · [:q] quit",
 	}
 }
 
@@ -208,10 +224,28 @@ func (s *State) ActiveHub() HubTab {
 	return tabs[0]
 }
 
-// Navigate switches the active page and resets the row selection index.
+// Navigate switches the active page, synchronizes section state, and resets selection when switching lists.
 func (s *State) Navigate(page Page) {
+	if s.Page != page && page != PageIssueDetail {
+		s.SelectedIdx = 0
+	}
 	s.Page = page
-	s.SelectedIdx = 0
+	switch page {
+	case PageDocs:
+		s.DocsSection = "context"
+	case PageDocsComponents:
+		s.DocsSection = "components"
+	case PageDocsDecisions:
+		s.DocsSection = "decisions"
+	case PageInstructions:
+		s.RulesSection = "trust"
+	case PageModels:
+		s.RulesSection = "models"
+	case PageBootstrap:
+		s.RulesSection = "bootstrap"
+	case PageLessons:
+		s.RulesSection = "lessons"
+	}
 }
 
 // AcceptProjectResponse verifies that a late response still matches the active project identity.
@@ -533,12 +567,12 @@ func (s *State) secondaryListLength() int {
 		return 0
 	case PageHistory:
 		return len(s.ChangeHistory)
-	case PageDocs, PageDiagrams:
+	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		return s.docsListLength()
-	case PageInstructions:
+	case PageInstructions, PageModels, PageBootstrap, PageLessons:
 		return s.instructionsListLength()
 	default:
-		return 0
+		return 1
 	}
 }
 

@@ -137,25 +137,44 @@ func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 }
 
 func (s *State) handleBackOrHorizontalKey(ev KeyEvent) bool {
-	if ev.Key == "Escape" && s.Error != "" {
+	if s.handleEscapeOrBackKey(ev.Key) {
+		return true
+	}
+	return s.handleHorizontalStepKey(ev)
+}
+
+func (s *State) handleEscapeOrBackKey(key string) bool {
+	if key == "Escape" && s.Error != "" {
 		s.Error = ""
 		s.CmdOutput = "Dismissed error alert."
 		return true
 	}
-	if (ev.Key == "Escape" || ev.Key == "Backspace") && s.Page == PageAgents && s.AgentDetailOpen {
+	if key != "Escape" && key != "Backspace" {
+		return false
+	}
+	if s.Page == PageIssueDetail {
+		s.Page = PageBugs
+		s.CmdOutput = "Returned to Issues list"
+		return true
+	}
+	if s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
 		s.CmdOutput = "Returned to Agents in Progress Dashboard"
 		return true
 	}
-	if ev.Key == "h" || ev.Key == "ArrowLeft" || ev.Key == "l" || ev.Key == "ArrowRight" {
-		if ev.Shift && s.Page == PageBugs {
-			s.cycleIssueCategory(ev.Key == "ArrowRight")
-			return true
-		}
-		s.stepHorizontalSection(ev.Key == "l" || ev.Key == "ArrowRight")
+	return false
+}
+
+func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
+	if ev.Key != "h" && ev.Key != "ArrowLeft" && ev.Key != "l" && ev.Key != "ArrowRight" {
+		return false
+	}
+	if ev.Shift && s.Page == PageBugs {
+		s.cycleIssueCategory(ev.Key == "ArrowRight")
 		return true
 	}
-	return false
+	s.stepHorizontalSection(ev.Key == "l" || ev.Key == "ArrowRight")
+	return true
 }
 
 func (s *State) switchHubByKey(key string) bool {
@@ -294,36 +313,53 @@ func isAnalysisTriggerPage(p Page) bool {
 }
 
 func (s *State) handleBugsPageKey(ev KeyEvent) bool {
-	if s.Page == PageBugs {
-		switch ev.Key {
-		case "t", "c", "f", ".", ">", "L":
-			s.cycleIssueCategory(true)
-			return true
-		case "T", "C", "F", ",", "<", "H":
-			s.cycleIssueCategory(false)
-			return true
-		case "s", "v":
-			s.cycleIssueStatusView(true)
-			return true
-		case "S", "V":
-			s.cycleIssueStatusView(false)
-			return true
-		case "x", " ":
-			s.toggleSelectedIssue()
-			return true
-		case "d":
-			s.dismissSelectedIssue()
-			return true
-		}
+	if s.Page == PageBugs && s.handleIssueListKey(ev.Key) {
+		return true
 	}
-	if (s.Page == PageBugs || s.Page == PageSummary) && ev.Key == "a" {
+	return s.handleIssueActionKey(ev.Key)
+}
+
+func (s *State) handleIssueListKey(key string) bool {
+	switch key {
+	case "i":
+		s.Navigate(PageIssueDetail)
+		s.CmdOutput = "Opened Issue Detail view ([Enter/a] Fix with Agent · [Esc] Back)"
+		return true
+	case "t", "c", "f", ".", ">", "L":
+		s.cycleIssueCategory(true)
+		return true
+	case "T", "C", "F", ",", "<", "H":
+		s.cycleIssueCategory(false)
+		return true
+	case "s", "v":
+		s.cycleIssueStatusView(true)
+		return true
+	case "S", "V":
+		s.cycleIssueStatusView(false)
+		return true
+	case "x", " ":
+		s.toggleSelectedIssue()
+		return true
+	case "d":
+		s.dismissSelectedIssue()
+		return true
+	}
+	return false
+}
+
+func (s *State) handleIssueActionKey(key string) bool {
+	if (s.Page == PageBugs || s.Page == PageIssueDetail || s.Page == PageSummary) && key == "a" {
 		s.dispatchSelectedIssues()
 		return true
 	}
-	if s.Page == PageFeatures {
-		return s.handleFeaturesKey(ev.Key)
+	if s.Page == PageIssueDetail && key == "d" {
+		s.dismissSelectedIssue()
+		return true
 	}
-	if s.Page == PageAnalysisFiles && (ev.Key == "x" || ev.Key == " ") {
+	if s.Page == PageFeatures {
+		return s.handleFeaturesKey(key)
+	}
+	if s.Page == PageAnalysisFiles && (key == "x" || key == " ") {
 		s.toggleCurrentFileExclusion()
 		return true
 	}
@@ -408,11 +444,15 @@ func (s *State) handleEditorKey(key string) bool {
 	return false
 }
 
+func isGovernancePage(p Page) bool {
+	return p == PageInstructions || p == PageModels || p == PageBootstrap || p == PageLessons
+}
+
 func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
-	if s.Page == PageInstructions {
+	if isGovernancePage(s.Page) {
 		switch ev.Key {
 		case "b":
-			s.RulesSection = "bootstrap"
+			s.Navigate(PageBootstrap)
 			s.CmdOutput = "Bootstrapping missing repository workflow pillars..."
 			s.enqueueAction(ActionRequest{Kind: "bootstrap"})
 			return true
@@ -420,12 +460,12 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 			s.toggleWorkspaceTrust()
 			return true
 		case "g":
-			s.RulesSection = "lessons"
+			s.Navigate(PageLessons)
 			s.graduateSelectedLesson()
 			return true
 		}
 	}
-	if (s.Page == PageSummary || s.Page == PageProject) && ev.Key == "t" {
+	if (s.Page == PageSummary || s.Page == PageRepo || s.Page == PageProject) && ev.Key == "t" {
 		s.CmdOutput = "Running project tests and checks..."
 		s.enqueueAction(ActionRequest{Kind: "scan"})
 		return true
