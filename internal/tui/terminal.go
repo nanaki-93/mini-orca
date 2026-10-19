@@ -784,12 +784,9 @@ func (s *State) dispatchDismissFeature(ctx context.Context, client *Client, reqI
 }
 
 func (s *State) dispatchSetTrust(ctx context.Context, client *Client, reqID string) error {
-	if !s.WorkspaceTrust {
-		return nil
-	}
 	body := map[string]any{
 		"project_revision": s.projectRevision(),
-		"confirm":          true,
+		"confirm":          s.WorkspaceTrust,
 	}
 	var trust ExecutionTrust
 	return client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust)

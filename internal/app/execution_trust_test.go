@@ -53,6 +53,13 @@ func TestProjectExecutionTrustDeniesCommandsUntilExplicitlyConfirmed(t *testing.
 	if unicodeTrust, err := service.ExecutionTrust(analysis.ProjectRevision, "TestÅ"); err != nil || strings.Join(unicodeTrust.Commands[0], " ") != "go test ./... -run ^TestÅ$" {
 		t.Fatalf("unicode task test scope = %+v, %v", unicodeTrust, err)
 	}
+	revoked, err := service.TrustProjectExecution(analysis.ProjectRevision, false)
+	if err != nil || revoked.Trusted {
+		t.Fatalf("revoked execution trust = %+v, %v", revoked, err)
+	}
+	if _, err := service.StartGoScan(analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
+		t.Fatalf("revoked scan error = %v", err)
+	}
 }
 
 func TestProjectExecutionTrustResetsAfterReindex(t *testing.T) {

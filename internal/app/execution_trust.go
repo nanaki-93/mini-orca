@@ -68,15 +68,20 @@ func (s *Service) ExecutionTrust(revision, taskName string) (*ExecutionTrust, er
 	return &ExecutionTrust{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Trusted: trusted, Commands: commands}, nil
 }
 
-// TrustProjectExecution records the user's current-session consent after the
-// client has shown the fixed command scope returned by ExecutionTrust.
+// TrustProjectExecution records or revokes the user's current-session consent
+// after the client has shown the fixed command scope returned by ExecutionTrust.
 func (s *Service) TrustProjectExecution(revision string, confirm bool) (*ExecutionTrust, error) {
-	if !confirm {
-		return nil, fmt.Errorf("trusted local execution requires explicit confirmation")
-	}
 	trust, err := s.ExecutionTrust(revision, "")
 	if err != nil {
 		return nil, err
+	}
+	if !confirm {
+		if !trust.Trusted {
+			return nil, fmt.Errorf("trusted local execution requires explicit confirmation")
+		}
+		s.clearExecutionTrust()
+		trust.Trusted = false
+		return trust, nil
 	}
 	s.executionTrust.mu.Lock()
 	s.executionTrust.project = trust.ProjectID

@@ -310,14 +310,15 @@ func TestIdentityGuardsAndDaemonSync(t *testing.T) {
 
 func TestDaemonWireContractsAndActions(t *testing.T) {
 	var (
-		capturedPaths   []string
-		capturedLimits  map[string]int
-		reviewedHash    string
-		appliedHead     string
-		undoConfirmed   bool
-		mergedWorktree  string
-		savedExclusions []string
-		bootstrapped    bool
+		capturedPaths      []string
+		capturedLimits     map[string]int
+		reviewedHash       string
+		appliedHead        string
+		undoConfirmed      bool
+		mergedWorktree     string
+		savedExclusions    []string
+		bootstrapped       bool
+		trustConfirmations []bool
 	)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, r *http.Request) {
@@ -327,8 +328,13 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 		}
 		if r.Method == http.MethodPost {
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body.ProjectRevision == "" || !body.Confirm {
+			if body.ProjectRevision == "" {
 				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			trustConfirmations = append(trustConfirmations, body.Confirm)
+			if !body.Confirm {
+				_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","trusted":false}`))
 				return
 			}
 		}
@@ -501,6 +507,14 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 	s.FlushActions(context.Background(), cli)
 	if mergedWorktree != "/repo/.worktrees/fix" || !bootstrapped {
 		t.Fatalf("expected worktree merge and bootstrap exec, got merged=%q bootstrapped=%v", mergedWorktree, bootstrapped)
+	}
+
+	// 9. Revoking workspace trust sends confirm: false to daemon
+	s.WorkspaceTrust = true
+	s.ExecuteCommand(":trust")
+	s.FlushActions(context.Background(), cli)
+	if s.WorkspaceTrust || len(trustConfirmations) == 0 || trustConfirmations[len(trustConfirmations)-1] != false {
+		t.Fatalf("expected trust revocation to post confirm=false, got workspaceTrust=%v confirmations=%v", s.WorkspaceTrust, trustConfirmations)
 	}
 }
 

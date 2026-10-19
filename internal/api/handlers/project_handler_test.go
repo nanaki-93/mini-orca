@@ -434,6 +434,11 @@ func TestExecutionTrustIsExplicitAndRevisionBound(t *testing.T) {
 	if trusted.Code != http.StatusOK || !strings.Contains(trusted.Body.String(), `"trusted":true`) {
 		t.Fatalf("trusted scope = %d %s", trusted.Code, trusted.Body.String())
 	}
+	revoked := httptest.NewRecorder()
+	handler.TrustProjectExecution(revoked, httptest.NewRequest(http.MethodPost, "/api/projects/current/execution-trust", bytes.NewBufferString(`{"project_revision":"`+index.ProjectRevision+`","confirm":false}`)))
+	if revoked.Code != http.StatusOK || !strings.Contains(revoked.Body.String(), `"trusted":false`) {
+		t.Fatalf("revoked scope = %d %s", revoked.Code, revoked.Body.String())
+	}
 }
 
 func TestDeclarationExplanationHandlerRejectsUnknownRequestFields(t *testing.T) {
