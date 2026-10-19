@@ -117,6 +117,7 @@ type State struct {
 	AnalysisConfig    AnalysisRunConfig
 	PendingActions    []ActionRequest
 	Quitting          bool
+	viewportBodyRows  int
 
 	Project           *Project
 	Index             *ProjectIndex
@@ -230,6 +231,13 @@ func NewState() *State {
 // EffectiveAnalysisConfig returns the normalized analysis run configuration.
 func (s *State) EffectiveAnalysisConfig() AnalysisRunConfig {
 	return NormalizeAnalysisRunConfig(s.AnalysisConfig)
+}
+
+func (s *State) adaptiveWindowRows(overhead, defaultMin int) int {
+	if s.viewportBodyRows <= 0 {
+		return defaultMin
+	}
+	return max(defaultMin, s.viewportBodyRows-overhead)
 }
 
 // AllModelPresets returns the built-in presets followed by any user-saved custom presets.

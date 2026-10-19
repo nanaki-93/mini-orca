@@ -744,3 +744,57 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		t.Fatalf("expected 'c' in Handbook to open PageDocs, got %s", s.Page)
 	}
 }
+
+func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	s.Project = &Project{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p-full", ProjectRevision: "rev-full"},
+		Name:            "mini-orca",
+		Path:            "/repo",
+		Type:            "go",
+		FileCount:       40,
+		TotalLines:      8400,
+	}
+	var findings []Finding
+	for i := 1; i <= 30; i++ {
+		findings = append(findings, Finding{
+			ID:       strings.Repeat("f", 1) + string(rune('A'+i)),
+			Severity: "medium",
+			Title:    "Finding row item " + string(rune('A'+i)),
+			Message:  "Check error propagation",
+			Category: "bugs",
+			Status:   "open",
+			Location: SourceAnchor{Path: "internal/app/service.go", StartLine: i * 10},
+		})
+	}
+	s.Findings = findings
+
+	// Compare visible finding rows between compact height (26) and full-screen height (50)
+	s.Navigate(PageBugs)
+	compactFrame := s.Render(120, 26)
+	tallFrame := s.Render(180, 50)
+	compactFindingRows := strings.Count(compactFrame, "Finding row item")
+	tallFindingRows := strings.Count(tallFrame, "Finding row item")
+	if tallFindingRows <= compactFindingRows {
+		t.Fatalf("expected full-screen 180x50 viewport to display more finding rows (%d) than 120x26 (%d)", tallFindingRows, compactFindingRows)
+	}
+
+	// Verify sparse pages fill the bottom of full-screen viewports with the telemetry & routing dock
+	for _, p := range []Page{PageSummary, PageProject, PageGit, PageHistory, PageInstructions, PageLessons} {
+		s.Navigate(p)
+		frame := s.Render(160, 46)
+		if !strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") {
+			t.Fatalf("expected page %s on 160x46 full-screen viewport to render bottom-anchored WORKSPACE TELEMETRY & ROUTING DOCK:\n%s", p, frame)
+		}
+		if !strings.Contains(frame, "MODEL ROUTING") {
+			t.Fatalf("expected sidebar on page %s (160x46) to include expanded MODEL ROUTING section:\n%s", p, frame)
+		}
+		rows := strings.Split(frame, "\n")
+		// Check that the last body row right above the bottom border (rows[len(rows)-4]) has content in both sidebar and main pane
+		lastBodyRow := rows[len(rows)-4]
+		if !strings.Contains(lastBodyRow, "[?]  [:] Cmd") || !strings.Contains(lastBodyRow, "╰") {
+			t.Fatalf("expected bottom-anchored sidebar footer and panel dock on last body row of page %s, got: %q", p, lastBodyRow)
+		}
+	}
+}

@@ -31,9 +31,6 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 	}
 	header = append(header, s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┳", "┫", "━"))
 
-	sidebar := s.renderSidebarMenu(th, sidebarMenuWidth)
-	rightBody := s.renderWorkspaceContent(th, contentWidth)
-
 	footer := []string{
 		s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┻", "┫", "━"),
 		th.wrapFrameLine(s.renderCommandBar(th, frameWidth), frameWidth),
@@ -41,6 +38,10 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 	}
 
 	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
+	s.viewportBodyRows = targetBodyRows
+	sidebar := s.renderSidebarMenu(th, sidebarMenuWidth, targetBodyRows)
+	rightBody := s.renderWorkspaceContent(th, contentWidth, targetBodyRows)
+
 	body := make([]string, 0, targetBodyRows)
 	for i := 0; i < targetBodyRows; i++ {
 		var leftLine, rightLine string
@@ -72,13 +73,14 @@ func (s *State) renderCompactFrame(th ansiTheme, frameWidth, frameHeight int) st
 	}
 	header = append(header, s.renderHorizontalRule(th, frameWidth, "┠", "┨", "─"))
 
-	body := s.renderWorkspaceContent(th, frameWidth-2)
-
 	footer := []string{
 		s.renderHorizontalRule(th, frameWidth, "┣", "┫", "━"),
 		th.wrapFrameLine(s.renderCommandBar(th, frameWidth), frameWidth),
 		s.renderBottomBorder(th, frameWidth),
 	}
+	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
+	s.viewportBodyRows = targetBodyRows
+	body := s.renderWorkspaceContent(th, frameWidth-2, targetBodyRows)
 	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
 }
 
@@ -97,7 +99,7 @@ func assembleFrame(th ansiTheme, frameWidth, frameHeight int, header, body, foot
 	return strings.Join(lines, "\n")
 }
 
-func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth int) []string {
+func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRows int) []string {
 	var body []string
 	body = append(body, "")
 	if s.Error != "" {
@@ -111,11 +113,92 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth int) []string 
 		body = append(body, s.renderKeybindsModal(th, contentWidth)...)
 	default:
 		body = append(body, s.renderActivePage(th, contentWidth)...)
+		body = s.appendFullScreenWorkspaceDock(th, contentWidth, targetBodyRows, body)
 	}
 	return body
 }
 
-func (s *State) renderSidebarMenu(th ansiTheme, width int) []string {
+func (s *State) appendFullScreenWorkspaceDock(th ansiTheme, contentWidth, targetBodyRows int, body []string) []string {
+	panelW := adaptivePanelWidth(contentWidth)
+	rem := targetBodyRows - len(body)
+	if rem < 5 {
+		return body
+	}
+	if rem >= 10 {
+		body = append(body, "")
+		body = append(body, s.renderWorkspaceContextSupplement(th, panelW)...)
+		rem = targetBodyRows - len(body)
+	}
+	if rem < 4 {
+		return body
+	}
+	dockLines := s.buildFullScreenDockLines(th, panelW, rem >= 5)
+	dockBox := th.renderPanelBox("WORKSPACE TELEMETRY & ROUTING DOCK", strings.ToUpper(string(s.EffectivePage())), panelW, dockLines)
+	padRows := max(0, targetBodyRows-len(body)-len(dockBox))
+	for i := 0; i < padRows; i++ {
+		body = append(body, "")
+	}
+	return append(body, dockBox...)
+}
+
+func (s *State) renderWorkspaceContextSupplement(th ansiTheme, panelW int) []string {
+	cfg := s.EffectiveAnalysisConfig()
+	totalFiles := s.indexedFileCount()
+	inclFiles := max(0, totalFiles-len(s.ExcludedPaths))
+	runStatus := "IDLE"
+	if s.Run != nil && s.Run.Status != "" {
+		runStatus = s.Run.Status
+	}
+	chgStatus := "IDLE"
+	if s.Change != nil && s.Change.State != "" {
+		chgStatus = s.Change.State
+	}
+	lines := []string{
+		fmt.Sprintf("%sAnalysis Policy:%s %s · %sBatch:%s %d · %sBudget:%s %ds · %sTries:%s %d · %sScope:%s %d/%d indexed",
+			th.muted, th.reset, th.statusBadge(runStatus),
+			th.muted, th.reset, cfg.BatchFiles,
+			th.muted, th.reset, cfg.BudgetSeconds,
+			th.muted, th.reset, cfg.MaxAttemptsPerStage,
+			th.muted, th.reset, inclFiles, totalFiles),
+		fmt.Sprintf("%sChange Session:%s  %s · %sSaved Proposals:%s %d · %sGraduated Lessons:%s %d",
+			th.muted, th.reset, th.statusBadge(chgStatus),
+			th.muted, th.reset, len(s.ChangeHistory),
+			th.muted, th.reset, len(s.GraduatedLessons)),
+	}
+	return th.renderPanelBox("SESSION & PIPELINE CONTEXT", "LIVE STATE", panelW, lines)
+}
+
+func (s *State) buildFullScreenDockLines(th ansiTheme, panelW int, twoLines bool) []string {
+	cfg := s.EffectiveAnalysisConfig()
+	projName := "no-project"
+	if s.Project != nil && s.Project.Name != "" {
+		projName = truncatePlain(s.Project.Name, 20)
+	}
+	analyzeMod := firstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze"))
+	bugMod := firstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug"))
+	fnMod := firstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function"))
+	line1 := fmt.Sprintf("%sProject:%s %s%s%s · %sPreset:%s %s%s%s · %sRouting:%s analyze=%s%s%s bug=%s%s%s fn=%s%s%s",
+		th.muted, th.reset, th.bold+th.fg, projName, th.reset,
+		th.muted, th.reset, th.cyan, firstNonEmpty(s.ActivePresetID, "local-default"), th.reset,
+		th.muted, th.reset,
+		th.bold+th.fg, truncatePlain(analyzeMod, 14), th.reset,
+		th.bold+th.fg, truncatePlain(bugMod, 14), th.reset,
+		th.bold+th.fg, truncatePlain(fnMod, 14), th.reset)
+	if !twoLines {
+		return []string{line1}
+	}
+	branch := "main"
+	if s.Repository != nil && s.Repository.Branch != "" {
+		branch = truncatePlain(s.Repository.Branch, 16)
+	}
+	line2 := fmt.Sprintf("%sGit:%s %s%s%s · %sAnalysis Config:%s batch=%d budget=%ds attempts=%d features=%v · %sNav:%s [Tab/h/l] Sub-view [?] Help [:] Cmd",
+		th.muted, th.reset, th.purple, branch, th.reset,
+		th.muted, th.reset, cfg.BatchFiles, cfg.BudgetSeconds, cfg.MaxAttemptsPerStage, cfg.IncludeFeatures,
+		th.muted, th.reset)
+	return []string{line1, truncatePlain(line2, max(36, panelW-4))}
+}
+
+func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {
 	active := s.ActiveHub()
 	lines := []string{
 		"",
@@ -135,7 +218,43 @@ func (s *State) renderSidebarMenu(th ansiTheme, width int) []string {
 		}
 	}
 	lines = append(lines, s.renderSidebarPulse(th, width)...)
+	if targetBodyRows-len(lines) >= 7 {
+		lines = append(lines, "")
+		lines = append(lines, s.renderSidebarRouting(th, width)...)
+	}
+	if rem := targetBodyRows - len(lines); rem >= 5 {
+		footer := s.renderSidebarFooter(th, width)
+		padRows := max(0, targetBodyRows-len(lines)-len(footer))
+		for i := 0; i < padRows; i++ {
+			lines = append(lines, "")
+		}
+		lines = append(lines, footer...)
+	}
 	return lines
+}
+
+func (s *State) renderSidebarRouting(th ansiTheme, width int) []string {
+	preset := truncatePlain(firstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-11))
+	aMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-11))
+	bMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-11))
+	fMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-11))
+	return []string{
+		fmt.Sprintf("  %sMODEL ROUTING%s", th.bold+th.cyan, th.reset),
+		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
+		fmt.Sprintf("  %sPreset%s   %s%s%s", th.muted, th.reset, th.green, preset, th.reset),
+		fmt.Sprintf("  %sAnalyze%s  %s%s%s", th.muted, th.reset, th.fg, aMod, th.reset),
+		fmt.Sprintf("  %sBug%s      %s%s%s", th.muted, th.reset, th.fg, bMod, th.reset),
+		fmt.Sprintf("  %sFunc%s     %s%s%s", th.muted, th.reset, th.fg, fMod, th.reset),
+	}
+}
+
+func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
+	cfg := s.EffectiveAnalysisConfig()
+	return []string{
+		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
+		fmt.Sprintf("  %sBatch%s    %s%d · %ds%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, cfg.BudgetSeconds, th.reset),
+		fmt.Sprintf("  %sHelp%s     %s[?]  [:] Cmd%s", th.muted, th.reset, th.purple, th.reset),
+	}
 }
 
 func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []string {

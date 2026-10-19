@@ -152,7 +152,7 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderPanelBox("WORKSPACE IDENTITY & FOOTPRINT", "REPOSITORY", panelW, meta)...)
 	if s.Index != nil && len(s.Index.Files) > 0 {
 		lines = append(lines, "", fmt.Sprintf("  %sINDEXED FILES SAMPLE (%d TOTAL)%s", th.bold+th.cyan, len(s.Index.Files), th.reset))
-		limit := min(8, len(s.Index.Files))
+		limit := min(s.adaptiveWindowRows(14, 8), len(s.Index.Files))
 		for i := 0; i < limit; i++ {
 			f := s.Index.Files[i]
 			lines = append(lines, fmt.Sprintf("  %s•%s %-42s %s%s · %d lines%s",
@@ -465,7 +465,7 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	}
 	nameCol := max(18, width-62)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(filtered), selected, 9)
+	start, end := windowBounds(len(filtered), selected, s.adaptiveWindowRows(15, 9))
 	for idx := start; idx < end; idx++ {
 		row := filtered[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -577,7 +577,7 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderTableHeader("   EFFORT      FEATURE PROPOSAL                    STRATEGIC BENEFIT", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(features), selected, 9)
+	start, end := windowBounds(len(features), selected, s.adaptiveWindowRows(15, 9))
 	for idx := start; idx < end; idx++ {
 		f := features[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -717,7 +717,7 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderTableHeader("   SCOPE     REPOSITORY PATH                             LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
 	pathCol := max(24, width-34)
-	start, end := windowBounds(total, selected, 14)
+	start, end := windowBounds(total, selected, s.adaptiveWindowRows(10, 14))
 	for idx := start; idx < end; idx++ {
 		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -756,7 +756,7 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 		if s.File.Content != "" {
 			rawLines := strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")
 			codeCol := max(16, width-12)
-			start, end := windowBounds(len(rawLines), s.ClampedIdx(), 14)
+			start, end := windowBounds(len(rawLines), s.ClampedIdx(), s.adaptiveWindowRows(10, 14))
 			for idx := start; idx < end; idx++ {
 				codeText := truncatePlain(sanitizeCodeText(rawLines[idx]), codeCol)
 				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, codeText))
@@ -775,7 +775,7 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 	lines = append(lines, th.renderTableHeader("   REPOSITORY FILE PATH                        LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
 	total := len(s.Index.Files)
-	start, end := windowBounds(total, selected, 14)
+	start, end := windowBounds(total, selected, s.adaptiveWindowRows(8, 14))
 	for idx := start; idx < end; idx++ {
 		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -793,7 +793,7 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderTableHeader("   ROLE          BRANCH               WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, 12)
+	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(12, 12))
 	for idx := start; idx < end; idx++ {
 		wt := s.GitWorkspace.Worktrees[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -817,7 +817,7 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderTableHeader("   STATE        PROPOSAL TITLE                        REVISION    FRESHNESS", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.ChangeHistory), selected, 12)
+	start, end := windowBounds(len(s.ChangeHistory), selected, s.adaptiveWindowRows(12, 12))
 	for idx := start; idx < end; idx++ {
 		entry := s.ChangeHistory[idx]
 		cursor := th.renderCursorPrefix(idx == selected)

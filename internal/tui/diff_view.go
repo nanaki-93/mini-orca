@@ -194,7 +194,7 @@ func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHu
 	hunkLines := active.Hunk.Lines
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(hunkLines), selected, 14)
+	start, end := windowBounds(len(hunkLines), selected, s.adaptiveWindowRows(10, 14))
 	for idx := start; idx < end; idx++ {
 		lines = append(lines, formatDualNumberDiffLine(th, hunkLines[idx], idx == selected, codeCol))
 	}
@@ -229,7 +229,7 @@ func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk
 
 	splitRows := BuildSplitDiffRows(active.Hunk.Lines)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(splitRows), selected, 14)
+	start, end := windowBounds(len(splitRows), selected, s.adaptiveWindowRows(10, 14))
 	for idx := start; idx < end; idx++ {
 		r := splitRows[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -267,7 +267,7 @@ func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiff
 	uRows := s.unifiedDiffRows()
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(uRows), selected, 14)
+	start, end := windowBounds(len(uRows), selected, s.adaptiveWindowRows(10, 14))
 	for idx := start; idx < end; idx++ {
 		r := uRows[idx]
 		if r.IsHeader {
