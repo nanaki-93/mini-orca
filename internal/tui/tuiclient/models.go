@@ -332,12 +332,23 @@ type RunIdentity struct {
 	Generation          string `json:"generation"`
 }
 
+// AnalysisRunConfig holds user-editable parameters for project analysis runs.
+type AnalysisRunConfig struct {
+	BatchFiles          int  `json:"batch_files"`
+	BudgetSeconds       int  `json:"budget_seconds"`
+	MaxAttemptsPerStage int  `json:"max_attempts_per_stage"`
+	IncludeFeatures     bool `json:"include_features"`
+	Refresh             bool `json:"refresh"`
+	ClearResults        bool `json:"clear_results"`
+}
+
 // AnalysisPreview holds a pre-dispatch plan for unified project analysis.
 type AnalysisPreview struct {
 	PreviewID                    string         `json:"preview_id"`
 	Scope                        string         `json:"scope"`
 	Refresh                      bool           `json:"refresh"`
 	ClearResults                 bool           `json:"clear_results,omitempty"`
+	IncludeFeatures              *bool          `json:"include_features,omitempty"`
 	RetryStaleFailed             bool           `json:"retry_stale_failed,omitempty"`
 	RecoverIncomplete            bool           `json:"recover_incomplete,omitempty"`
 	StaleOnly                    bool           `json:"stale_only,omitempty"`

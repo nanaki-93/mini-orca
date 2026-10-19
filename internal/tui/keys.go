@@ -390,11 +390,57 @@ func (s *State) handleIssueActionKey(key string) bool {
 		return s.handleIssueShortcut(key)
 	case PageFeatures:
 		return s.handleFeaturesKey(key)
+	case PageAnalysisRun:
+		return s.handleAnalysisRunConfigKey(key)
 	case PageAnalysisFiles:
 		if key == "x" || key == " " {
 			s.toggleCurrentFileExclusion()
 			return true
 		}
+	}
+	return false
+}
+
+func (s *State) handleAnalysisRunConfigKey(key string) bool {
+	switch key {
+	case " ":
+		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
+			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), true)
+		} else {
+			s.stepAnalysisBatch(true)
+		}
+		return true
+	case "b":
+		s.stepAnalysisBatch(true)
+		return true
+	case "B":
+		s.stepAnalysisBatch(false)
+		return true
+	case "t":
+		s.stepAnalysisBudget(true)
+		return true
+	case "T":
+		s.stepAnalysisBudget(false)
+		return true
+	case "a":
+		s.stepAnalysisAttempts(true)
+		return true
+	case "A":
+		s.stepAnalysisAttempts(false)
+		return true
+	case "f":
+		s.toggleAnalysisFeatures()
+		return true
+	case "c":
+		s.cycleAnalysisCachePolicy()
+		return true
+	case "x":
+		s.resetAnalysisConfig()
+		return true
+	case "m":
+		s.Navigate(PageModels)
+		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing"
+		return true
 	}
 	return false
 }

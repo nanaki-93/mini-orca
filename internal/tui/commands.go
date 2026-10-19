@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuidomain"
@@ -542,17 +543,93 @@ func (s *State) activateSecondaryRow() {
 }
 
 func (s *State) activateAnalysisRunRow() {
-	if s.Run == nil || s.Run.Status == "paused" || s.Run.Status == "interrupted" {
+	secCount := s.analysisRunSectionCount()
+	idx := s.ClampedIdx()
+	if s.Run != nil && (s.Run.Status == "paused" || s.Run.Status == "interrupted") && idx <= secCount {
 		s.triggerOrResumeAnalysis()
 		return
 	}
-	idx := s.ClampedIdx()
-	if idx < len(s.Run.Sections) {
-		s.IssueCategory = s.Run.Sections[idx].Category
-		s.Navigate(PageBugs)
-	} else if s.Run.Features != nil {
-		s.Navigate(PageFeatures)
+	if s.Run != nil && idx < secCount {
+		if idx < len(s.Run.Sections) {
+			s.IssueCategory = s.Run.Sections[idx].Category
+			s.Navigate(PageBugs)
+		} else if s.Run.Features != nil {
+			s.Navigate(PageFeatures)
+		}
+		return
 	}
+	s.stepAnalysisConfigByIndex(idx-secCount, true)
+}
+
+func (s *State) stepAnalysisConfigByIndex(cfgIdx int, forward bool) {
+	switch cfgIdx {
+	case 0:
+		s.stepAnalysisBatch(forward)
+	case 1:
+		s.stepAnalysisBudget(forward)
+	case 2:
+		s.stepAnalysisAttempts(forward)
+	case 3:
+		s.toggleAnalysisFeatures()
+	case 4:
+		s.cycleAnalysisCachePolicy()
+	}
+}
+
+func (s *State) stepAnalysisBatch(forward bool) {
+	cfg := s.EffectiveAnalysisConfig()
+	cfg.BatchFiles = StepAnalysisBatchFiles(cfg.BatchFiles, forward)
+	s.AnalysisConfig = cfg
+	s.CmdOutput = fmt.Sprintf("Analysis batch limit set to %d files/batch", cfg.BatchFiles)
+}
+
+func (s *State) stepAnalysisBudget(forward bool) {
+	cfg := s.EffectiveAnalysisConfig()
+	cfg.BudgetSeconds = StepAnalysisBudgetSeconds(cfg.BudgetSeconds, forward)
+	s.AnalysisConfig = cfg
+	s.CmdOutput = fmt.Sprintf("Analysis execution budget set to %ds (%dm %ds)", cfg.BudgetSeconds, cfg.BudgetSeconds/60, cfg.BudgetSeconds%60)
+}
+
+func (s *State) stepAnalysisAttempts(forward bool) {
+	cfg := s.EffectiveAnalysisConfig()
+	cfg.MaxAttemptsPerStage = StepAnalysisMaxAttempts(cfg.MaxAttemptsPerStage, forward)
+	s.AnalysisConfig = cfg
+	s.CmdOutput = fmt.Sprintf("Analysis max attempts per stage set to %d", cfg.MaxAttemptsPerStage)
+}
+
+func (s *State) toggleAnalysisFeatures() {
+	cfg := s.EffectiveAnalysisConfig()
+	cfg.IncludeFeatures = !cfg.IncludeFeatures
+	s.AnalysisConfig = cfg
+	status := "ENABLED"
+	if !cfg.IncludeFeatures {
+		status = "SKIPPED"
+	}
+	s.CmdOutput = fmt.Sprintf("Analysis feature discovery %s", status)
+}
+
+func (s *State) cycleAnalysisCachePolicy() {
+	cfg := s.EffectiveAnalysisConfig()
+	switch {
+	case !cfg.Refresh && !cfg.ClearResults:
+		cfg.Refresh = true
+		cfg.ClearResults = false
+		s.CmdOutput = "Analysis cache policy: REFRESH (bypass cache, preserve prior findings)"
+	case cfg.Refresh && !cfg.ClearResults:
+		cfg.Refresh = true
+		cfg.ClearResults = true
+		s.CmdOutput = "Analysis cache policy: CLEAN REANALYZE (bypass cache & clear prior results)"
+	default:
+		cfg.Refresh = false
+		cfg.ClearResults = false
+		s.CmdOutput = "Analysis cache policy: INCREMENTAL (reuse cached unchanged files)"
+	}
+	s.AnalysisConfig = cfg
+}
+
+func (s *State) resetAnalysisConfig() {
+	s.AnalysisConfig = DefaultAnalysisRunConfig()
+	s.CmdOutput = "Reset analysis run configuration to defaults (64 files · 300s · 2 attempts · features:on · incremental)"
 }
 
 func (s *State) activateInstructionsRow() {
@@ -774,7 +851,102 @@ func (s *State) execAnalysisCommand(cmd, arg string) bool {
 		s.enqueueAction(ActionRequest{Kind: "scan"})
 		return true
 	}
+	return s.execAnalysisConfigCommand(cmd, arg)
+}
+
+func (s *State) execAnalysisConfigCommand(cmd, arg string) bool {
+	switch cmd {
+	case "batch", "batch-files":
+		if n, err := strconv.Atoi(strings.TrimSpace(arg)); err == nil && n > 0 {
+			cfg := s.EffectiveAnalysisConfig()
+			cfg.BatchFiles = n
+			s.AnalysisConfig = NormalizeAnalysisRunConfig(cfg)
+			s.CmdOutput = fmt.Sprintf("Analysis batch limit set to %d files/batch", s.AnalysisConfig.BatchFiles)
+		} else {
+			s.stepAnalysisBatch(true)
+		}
+		return true
+	case "budget", "budget-seconds":
+		if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(arg), "s"))); err == nil && n > 0 {
+			cfg := s.EffectiveAnalysisConfig()
+			cfg.BudgetSeconds = n
+			s.AnalysisConfig = NormalizeAnalysisRunConfig(cfg)
+			s.CmdOutput = fmt.Sprintf("Analysis execution budget set to %ds", s.AnalysisConfig.BudgetSeconds)
+		} else {
+			s.stepAnalysisBudget(true)
+		}
+		return true
+	case "attempts", "max-attempts":
+		if n, err := strconv.Atoi(strings.TrimSpace(arg)); err == nil && n > 0 {
+			cfg := s.EffectiveAnalysisConfig()
+			cfg.MaxAttemptsPerStage = n
+			s.AnalysisConfig = NormalizeAnalysisRunConfig(cfg)
+			s.CmdOutput = fmt.Sprintf("Analysis max attempts per stage set to %d", s.AnalysisConfig.MaxAttemptsPerStage)
+		} else {
+			s.stepAnalysisAttempts(true)
+		}
+		return true
+	case "analysis-config", "run-config":
+		s.Navigate(PageAnalysisRun)
+		s.SelectedIdx = s.analysisRunSectionCount()
+		s.applyAnalysisConfigArgs(arg)
+		return true
+	}
 	return false
+}
+
+func (s *State) applyAnalysisConfigArgs(arg string) {
+	trimmed := strings.TrimSpace(arg)
+	if trimmed == "" {
+		cfg := s.EffectiveAnalysisConfig()
+		s.CmdOutput = fmt.Sprintf("Analysis Run Config: batch=%d · budget=%ds · attempts=%d · features=%v · refresh=%v",
+			cfg.BatchFiles, cfg.BudgetSeconds, cfg.MaxAttemptsPerStage, cfg.IncludeFeatures, cfg.Refresh)
+		return
+	}
+	if strings.EqualFold(trimmed, "reset") || strings.EqualFold(trimmed, "default") {
+		s.resetAnalysisConfig()
+		return
+	}
+	cfg := s.EffectiveAnalysisConfig()
+	for _, tok := range strings.Fields(trimmed) {
+		if k, v, ok := strings.Cut(strings.ToLower(tok), "="); ok {
+			applySingleAnalysisConfigToken(&cfg, k, v)
+		}
+	}
+	s.AnalysisConfig = NormalizeAnalysisRunConfig(cfg)
+	s.CmdOutput = fmt.Sprintf("Updated analysis config: batch=%d · budget=%ds · attempts=%d · features=%v · refresh=%v · clear=%v",
+		s.AnalysisConfig.BatchFiles, s.AnalysisConfig.BudgetSeconds, s.AnalysisConfig.MaxAttemptsPerStage,
+		s.AnalysisConfig.IncludeFeatures, s.AnalysisConfig.Refresh, s.AnalysisConfig.ClearResults)
+}
+
+func applySingleAnalysisConfigToken(cfg *AnalysisRunConfig, k, v string) {
+	switch k {
+	case "batch", "batch_files":
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.BatchFiles = n
+		}
+	case "budget", "budget_seconds":
+		if n, err := strconv.Atoi(strings.TrimSuffix(v, "s")); err == nil && n > 0 {
+			cfg.BudgetSeconds = n
+		}
+	case "attempts", "max_attempts", "max_attempts_per_stage":
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxAttemptsPerStage = n
+		}
+	case "features", "include_features":
+		cfg.IncludeFeatures = isTruthyConfigValue(v)
+	case "refresh":
+		cfg.Refresh = isTruthyConfigValue(v)
+		if !cfg.Refresh {
+			cfg.ClearResults = false
+		}
+	case "clear", "clear_results":
+		cfg.ClearResults = isTruthyConfigValue(v)
+	}
+}
+
+func isTruthyConfigValue(v string) bool {
+	return v == "true" || v == "on" || v == "1" || v == "yes"
 }
 
 func (s *State) execNavigationCommand(cmd, arg string) bool {

@@ -3,11 +3,12 @@ package tui
 import "github.com/nanaki-93/mini-orca/v2/internal/tui/tuidomain"
 
 type (
-	DiffHunk        = tuidomain.DiffHunk
-	IssueRow        = tuidomain.IssueRow
-	IssueSummary    = tuidomain.IssueSummary
-	AgentItem       = tuidomain.AgentItem
-	BootstrapPillar = tuidomain.BootstrapPillar
+	DiffHunk              = tuidomain.DiffHunk
+	IssueRow              = tuidomain.IssueRow
+	IssueSummary          = tuidomain.IssueSummary
+	AgentItem             = tuidomain.AgentItem
+	BootstrapPillar       = tuidomain.BootstrapPillar
+	AnalysisConfigRowSpec = tuidomain.AnalysisConfigRowSpec
 )
 
 // IsAddedLine reports whether a diff line kind represents an insertion.
@@ -142,4 +143,34 @@ func EnsureChangeTestPaths(paths []string, index *ProjectIndex) []string {
 // NormalizeFindingTargets validates and canonicalizes finding targets for OpenChangeSession.
 func NormalizeFindingTargets(targets []FindingTarget, projectID string, allowedPaths []string) []FindingTarget {
 	return tuidomain.NormalizeFindingTargets(targets, projectID, allowedPaths)
+}
+
+// DefaultAnalysisRunConfig returns the default daemon limits and flags for project analysis runs.
+func DefaultAnalysisRunConfig() AnalysisRunConfig {
+	return tuidomain.DefaultAnalysisRunConfig()
+}
+
+// NormalizeAnalysisRunConfig clamps limits to daemon bounds and ensures valid flag combinations.
+func NormalizeAnalysisRunConfig(cfg AnalysisRunConfig) AnalysisRunConfig {
+	return tuidomain.NormalizeAnalysisRunConfig(cfg)
+}
+
+// StepAnalysisBatchFiles cycles through canonical batch file sizes (16..500).
+func StepAnalysisBatchFiles(cur int, forward bool) int {
+	return tuidomain.StepAnalysisBatchFiles(cur, forward)
+}
+
+// StepAnalysisBudgetSeconds cycles through canonical analysis time budgets (60s..3600s).
+func StepAnalysisBudgetSeconds(cur int, forward bool) int {
+	return tuidomain.StepAnalysisBudgetSeconds(cur, forward)
+}
+
+// StepAnalysisMaxAttempts cycles through canonical stage retry limits (1..4).
+func StepAnalysisMaxAttempts(cur int, forward bool) int {
+	return tuidomain.StepAnalysisMaxAttempts(cur, forward)
+}
+
+// BuildAnalysisConfigRows builds the 5 interactive configuration rows for PageAnalysisRun.
+func BuildAnalysisConfigRows(cfg AnalysisRunConfig) []AnalysisConfigRowSpec {
+	return tuidomain.BuildAnalysisConfigRows(cfg)
 }

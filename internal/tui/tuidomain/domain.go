@@ -1214,3 +1214,138 @@ func ContainsString(list []string, target string) bool {
 	}
 	return false
 }
+
+// DefaultAnalysisRunConfig returns the default daemon limits and flags for project analysis runs.
+func DefaultAnalysisRunConfig() tuiclient.AnalysisRunConfig {
+	return tuiclient.AnalysisRunConfig{
+		BatchFiles:          64,
+		BudgetSeconds:       300,
+		MaxAttemptsPerStage: 2,
+		IncludeFeatures:     true,
+		Refresh:             false,
+		ClearResults:        false,
+	}
+}
+
+// NormalizeAnalysisRunConfig clamps limits to daemon bounds and ensures valid flag combinations.
+func NormalizeAnalysisRunConfig(cfg tuiclient.AnalysisRunConfig) tuiclient.AnalysisRunConfig {
+	if cfg.BatchFiles <= 0 {
+		cfg.BatchFiles = 64
+	} else if cfg.BatchFiles > 500 {
+		cfg.BatchFiles = 500
+	}
+	if cfg.BudgetSeconds <= 0 {
+		cfg.BudgetSeconds = 300
+	} else if cfg.BudgetSeconds > 3600 {
+		cfg.BudgetSeconds = 3600
+	}
+	if cfg.MaxAttemptsPerStage <= 0 {
+		cfg.MaxAttemptsPerStage = 2
+	} else if cfg.MaxAttemptsPerStage > 4 {
+		cfg.MaxAttemptsPerStage = 4
+	}
+	if cfg.ClearResults {
+		cfg.Refresh = true
+	}
+	return cfg
+}
+
+// StepAnalysisBatchFiles cycles through canonical batch file sizes (16..500).
+func StepAnalysisBatchFiles(cur int, forward bool) int {
+	return stepIntChoices([]int{16, 32, 64, 128, 256, 500}, cur, forward)
+}
+
+// StepAnalysisBudgetSeconds cycles through canonical analysis time budgets (60s..3600s).
+func StepAnalysisBudgetSeconds(cur int, forward bool) int {
+	return stepIntChoices([]int{60, 120, 300, 600, 900, 1800, 3600}, cur, forward)
+}
+
+// StepAnalysisMaxAttempts cycles through canonical stage retry limits (1..4).
+func StepAnalysisMaxAttempts(cur int, forward bool) int {
+	return stepIntChoices([]int{1, 2, 3, 4}, cur, forward)
+}
+
+func stepIntChoices(choices []int, cur int, forward bool) int {
+	pos := 0
+	found := false
+	for i, v := range choices {
+		if v >= cur {
+			pos = i
+			found = true
+			break
+		}
+	}
+	if !found {
+		pos = len(choices) - 1
+	}
+	if forward {
+		return choices[(pos+1)%len(choices)]
+	}
+	return choices[(pos-1+len(choices))%len(choices)]
+}
+
+// AnalysisConfigRowSpec describes a single interactive row in the Analysis Run Configuration panel.
+type AnalysisConfigRowSpec struct {
+	Key         string
+	Label       string
+	Value       string
+	Badge       string
+	Description string
+}
+
+// BuildAnalysisConfigRows builds the 5 interactive configuration rows for PageAnalysisRun.
+func BuildAnalysisConfigRows(cfg tuiclient.AnalysisRunConfig) []AnalysisConfigRowSpec {
+	norm := NormalizeAnalysisRunConfig(cfg)
+	featBadge := "ENABLED"
+	featVal := "Synthesize feature proposals"
+	if !norm.IncludeFeatures {
+		featBadge = "SKIPPED"
+		featVal = "Skip feature generation stage"
+	}
+	cacheBadge := "INCREMENTAL"
+	cacheVal := "Reuse cached unchanged files"
+	if norm.ClearResults {
+		cacheBadge = "CLEAN"
+		cacheVal = "Force refresh & clear prior results"
+	} else if norm.Refresh {
+		cacheBadge = "REFRESH"
+		cacheVal = "Bypass cache & re-evaluate all files"
+	}
+	return []AnalysisConfigRowSpec{
+		{
+			Key:         "[b/B]",
+			Label:       "Batch Files Limit",
+			Value:       fmt.Sprintf("%d files / batch", norm.BatchFiles),
+			Badge:       fmt.Sprintf("%d FILES", norm.BatchFiles),
+			Description: "Max repository files dispatched per analysis batch (1..500, :batch <n>)",
+		},
+		{
+			Key:         "[t/T]",
+			Label:       "Execution Budget",
+			Value:       fmt.Sprintf("%ds (%dm %ds)", norm.BudgetSeconds, norm.BudgetSeconds/60, norm.BudgetSeconds%60),
+			Badge:       fmt.Sprintf("%ds", norm.BudgetSeconds),
+			Description: "Wall-clock execution time allowance before pausing run (1..3600s, :budget <s>)",
+		},
+		{
+			Key:         "[a/A]",
+			Label:       "Max Stage Attempts",
+			Value:       fmt.Sprintf("%d attempts / stage", norm.MaxAttemptsPerStage),
+			Badge:       fmt.Sprintf("%d TRIES", norm.MaxAttemptsPerStage),
+			Description: "Maximum LLM retry attempts per file analysis stage (1..4, :attempts <n>)",
+		},
+		{
+			Key:         "[f]",
+			Label:       "Feature Discovery",
+			Value:       featVal,
+			Badge:       featBadge,
+			Description: "Toggle goal-aligned feature & capability synthesis during project analysis",
+		},
+		{
+			Key:         "[c]",
+			Label:       "Cache & Refresh Policy",
+			Value:       cacheVal,
+			Badge:       cacheBadge,
+			Description: "Cycle Incremental (cached) -> Refresh (bypass cache) -> Clean Reanalyze (clear findings)",
+		},
+	}
+}

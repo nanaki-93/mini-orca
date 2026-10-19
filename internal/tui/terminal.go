@@ -244,11 +244,28 @@ func (s *State) dispatchAnalysisAction(ctx context.Context, client *Client, reqI
 	}
 }
 
-func defaultAnalysisLimits() map[string]int {
+func (s *State) analysisLimitsPayload() map[string]int {
+	cfg := s.EffectiveAnalysisConfig()
 	return map[string]int{
-		"batch_files":            64,
-		"budget_seconds":         300,
-		"max_attempts_per_stage": 2,
+		"batch_files":            cfg.BatchFiles,
+		"budget_seconds":         cfg.BudgetSeconds,
+		"max_attempts_per_stage": cfg.MaxAttemptsPerStage,
+	}
+}
+
+func (s *State) analysisModelsPayload() map[string]string {
+	analyzeSel := s.AssignedScopeModelID("analyze")
+	bugSel := s.AssignedScopeModelID("bug")
+	if (analyzeSel == "" || analyzeSel == "analyze") && (bugSel == "" || bugSel == "bug") {
+		return nil
+	}
+	codeModel := s.resolveDaemonModelSelection(firstNonEmpty(bugSel, "bug"), "bug")
+	analyzeModel := s.resolveDaemonModelSelection(firstNonEmpty(analyzeSel, "analyze"), "analyze")
+	return map[string]string{
+		"code":        codeModel,
+		"performance": analyzeModel,
+		"security":    analyzeModel,
+		"features":    analyzeModel,
 	}
 }
 
@@ -308,37 +325,19 @@ func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID s
 	if s.Project == nil || s.Project.ProjectID == "" {
 		return nil
 	}
-	if act.Kind == "run-analysis" && s.isAnalysisPausedOrInterrupted() {
+	cfg := s.EffectiveAnalysisConfig()
+	if act.Kind == "run-analysis" && s.isAnalysisPausedOrInterrupted() && !cfg.ClearResults {
 		return s.dispatchResumeAnalysis(ctx, client, reqID)
 	}
 	if act.Kind == "repair-analysis" && s.isAnalysisPausedOrInterrupted() {
 		s.cancelPausedAnalysis(ctx, client, reqID+"-cancel")
 	}
-	refresh := act.Kind == "reanalyze"
-	clearResults := refresh && s.isAnalysisPausedOrInterrupted()
-	retryStale := act.Kind == "repair-analysis" && act.Target == ""
-	staleOnly := act.Kind == "repair-analysis" && act.Target != ""
-	includeFeatures := !staleOnly
-
+	refresh, clearResults, includeFeatures, retryStale, staleOnly := s.resolveAnalysisDispatchFlags(act, cfg)
 	preview, err := s.requestAnalysisPreview(ctx, client, reqID, refresh, clearResults, includeFeatures, retryStale, staleOnly, act.Target)
 	if err != nil {
 		return err
 	}
-	startReq := map[string]any{
-		"identity":           preview.Identity,
-		"preview_id":         preview.PreviewID,
-		"limits":             preview.Limits,
-		"refresh":            refresh,
-		"clear_results":      clearResults,
-		"include_features":   includeFeatures,
-		"retry_stale_failed": retryStale,
-		"stale_only":         staleOnly,
-		"stale_path":         act.Target,
-		"confirmations": map[string]any{
-			"provider_ids":    preview.providerIDs(),
-			"security_review": true,
-		},
-	}
+	startReq := s.buildAnalysisStartRequest(preview, refresh, clearResults, includeFeatures, retryStale, staleOnly, act.Target)
 	var run AnalysisRun
 	if err := client.DoJSON(ctx, reqID+"-start", http.MethodPost, "/api/projects/current/analysis/run", startReq, &run); err != nil {
 		return err
@@ -347,9 +346,47 @@ func (s *State) dispatchAnalysisRun(ctx context.Context, client *Client, reqID s
 	return nil
 }
 
+func (s *State) resolveAnalysisDispatchFlags(act ActionRequest, cfg AnalysisRunConfig) (refresh, clearResults, includeFeatures, retryStale, staleOnly bool) {
+	refresh = act.Kind == "reanalyze" || cfg.Refresh
+	clearResults = (act.Kind == "reanalyze" && s.isAnalysisPausedOrInterrupted()) || cfg.ClearResults
+	if clearResults {
+		refresh = true
+	}
+	retryStale = act.Kind == "repair-analysis" && act.Target == ""
+	staleOnly = act.Kind == "repair-analysis" && act.Target != ""
+	includeFeatures = cfg.IncludeFeatures && !staleOnly
+	return
+}
+
+func (s *State) buildAnalysisStartRequest(preview analysisPreviewPayload, refresh, clearResults, includeFeatures, retryStale, staleOnly bool, stalePath string) map[string]any {
+	limitsPayload := any(preview.Limits)
+	if len(preview.Limits) == 0 {
+		limitsPayload = s.analysisLimitsPayload()
+	}
+	startReq := map[string]any{
+		"identity":           preview.Identity,
+		"preview_id":         preview.PreviewID,
+		"limits":             limitsPayload,
+		"refresh":            refresh,
+		"clear_results":      clearResults,
+		"include_features":   includeFeatures,
+		"retry_stale_failed": retryStale,
+		"stale_only":         staleOnly,
+		"stale_path":         stalePath,
+		"confirmations": map[string]any{
+			"provider_ids":    preview.providerIDs(),
+			"security_review": true,
+		},
+	}
+	if models := s.analysisModelsPayload(); len(models) > 0 {
+		startReq["models"] = models
+	}
+	return startReq
+}
+
 func (s *State) requestAnalysisPreview(ctx context.Context, client *Client, reqID string, refresh, clearResults, includeFeatures, retryStale, staleOnly bool, stalePath string) (analysisPreviewPayload, error) {
 	buildReq := func() map[string]any {
-		return map[string]any{
+		req := map[string]any{
 			"project_id":         s.Project.ProjectID,
 			"project_revision":   s.Project.ProjectRevision,
 			"scope":              "project",
@@ -359,8 +396,12 @@ func (s *State) requestAnalysisPreview(ctx context.Context, client *Client, reqI
 			"retry_stale_failed": retryStale,
 			"stale_only":         staleOnly,
 			"stale_path":         stalePath,
-			"limits":             defaultAnalysisLimits(),
+			"limits":             s.analysisLimitsPayload(),
 		}
+		if models := s.analysisModelsPayload(); len(models) > 0 {
+			req["models"] = models
+		}
+		return req
 	}
 	var preview analysisPreviewPayload
 	err := client.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", buildReq(), &preview)
@@ -403,7 +444,7 @@ func (s *State) dispatchResumeAnalysis(ctx context.Context, client *Client, reqI
 	}
 	limits := s.Run.Plan.Limits
 	if len(limits) == 0 {
-		limits = defaultAnalysisLimits()
+		limits = s.analysisLimitsPayload()
 	}
 	previewReq := map[string]any{
 		"project_id":         s.Project.ProjectID,

@@ -604,9 +604,11 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 
 func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · LAST ANALYSIS RUN", "Section coverage & execution telemetry")
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG", "Section coverage, execution telemetry & run parameters")
+	selected := s.ClampedIdx()
 	if s.Run == nil {
-		return append(lines, fmt.Sprintf("  %sNo analysis run recorded yet — press [r] or run :analyze to start.%s", th.muted, th.reset))
+		lines = append(lines, fmt.Sprintf("  %sNo analysis run recorded yet — press [r] or run :analyze to start.%s", th.muted, th.reset), "")
+		return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
 	}
 	done, total := runAggregateCoverage(s.Run)
 	telemetry := []string{
@@ -633,7 +635,6 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderPanelBox("ANALYSIS TELEMETRY", strings.ToUpper(s.Run.Status), panelW, telemetry)...)
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("   SECTION         STATUS        PROGRESS             SUCCEEDED    FAILED", width)...)
-	selected := s.ClampedIdx()
 	for idx, sec := range s.Run.Sections {
 		cursor := th.renderCursorPrefix(idx == selected)
 		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 10)
@@ -652,7 +653,55 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, truncatePlain(sec.Reason, max(24, width-12)), th.reset))
 		}
 	}
-	return lines
+	if s.Run.Features != nil {
+		featIdx := len(s.Run.Sections)
+		cursor := th.renderCursorPrefix(featIdx == selected)
+		tStyle := rowTitleStyle(th, featIdx == selected)
+		lines = append(lines, fmt.Sprintf(
+			"  %s%s%-14s%s  %-12s  %sattempts:%d%s",
+			cursor, tStyle, "FEATURES", th.reset,
+			th.statusBadge(s.Run.Features.Status),
+			th.muted, s.Run.Features.Attempts, th.reset,
+		))
+	}
+	lines = append(lines, "")
+	return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
+}
+
+func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selected int) []string {
+	cfg := s.EffectiveAnalysisConfig()
+	rows := BuildAnalysisConfigRows(cfg)
+	secCount := s.analysisRunSectionCount()
+	lines := th.renderTableHeader("   KEY      ANALYSIS RUN PARAMETER     ACTIVE VALUE                       DESCRIPTION", width)
+	for cIdx, row := range rows {
+		rowIdx := secCount + cIdx
+		cursor := th.renderCursorPrefix(rowIdx == selected)
+		tStyle := rowTitleStyle(th, rowIdx == selected)
+		lines = append(lines, fmt.Sprintf(
+			"  %s%s%-7s%s %s%-24s%s  %s%-32s%s  %s%s%s",
+			cursor, th.cyan, row.Key, th.reset,
+			tStyle, row.Label, th.reset,
+			th.bold+th.green, truncatePlain(row.Value, 32), th.reset,
+			th.muted, truncatePlain(row.Description, max(18, width-74)), th.reset,
+		))
+	}
+	codeMod := s.EffectiveScopeModel("bug")
+	analyzeMod := s.EffectiveScopeModel("analyze")
+	planLines := []string{
+		fmt.Sprintf("%sDispatch Limits:%s %s%d files/batch%s · %sBudget:%s %s%ds%s · %sMax Attempts:%s %s%d/stage%s · %sFeatures:%s %s",
+			th.muted, th.reset, th.bold+th.fg, cfg.BatchFiles, th.reset,
+			th.muted, th.reset, th.bold+th.fg, cfg.BudgetSeconds, th.reset,
+			th.muted, th.reset, th.bold+th.fg, cfg.MaxAttemptsPerStage, th.reset,
+			th.muted, th.reset, th.statusBadge(rows[3].Badge)),
+		fmt.Sprintf("%sStage Models:%s   %scode:%s%s · %sperf/sec/features:%s%s · %sCache:%s %s  %s([m] Model Routing · [x] Reset)%s",
+			th.muted, th.reset,
+			th.cyan, firstNonEmpty(codeMod.Model, "bug"), th.reset,
+			th.cyan, firstNonEmpty(analyzeMod.Model, "analyze"), th.reset,
+			th.muted, th.reset, th.statusBadge(rows[4].Badge),
+			th.muted, th.reset),
+	}
+	lines = append(lines, "")
+	return append(lines, th.renderPanelBox("ANALYSIS RUN CONFIGURATION & EXECUTION PLAN", "DISPATCH POLICY", panelW, planLines)...)
 }
 
 func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {

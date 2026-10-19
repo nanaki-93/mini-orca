@@ -1026,3 +1026,106 @@ func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+func TestAnalysisRunConfigKeysCommandsAndDispatch(t *testing.T) {
+	mux := http.NewServeMux()
+	var previewLimits map[string]int
+	var previewFeatures, previewRefresh, previewClear bool
+	var runLimits map[string]int
+	var runFeatures, runRefresh, runClear bool
+	var runModels map[string]string
+
+	mux.HandleFunc("/api/projects/current/analysis/preview", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Limits          map[string]int `json:"limits"`
+			IncludeFeatures bool           `json:"include_features"`
+			Refresh         bool           `json:"refresh"`
+			ClearResults    bool           `json:"clear_results"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		previewLimits = body.Limits
+		previewFeatures = body.IncludeFeatures
+		previewRefresh = body.Refresh
+		previewClear = body.ClearResults
+		_, _ = w.Write([]byte(`{"preview_id":"prev-cfg","identity":{"project_id":"p1","project_revision":"r1","queue_id":"q1"},"providers":[{"id":"local"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Limits          map[string]int    `json:"limits"`
+			IncludeFeatures bool              `json:"include_features"`
+			Refresh         bool              `json:"refresh"`
+			ClearResults    bool              `json:"clear_results"`
+			Models          map[string]string `json:"models"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		runLimits = body.Limits
+		runFeatures = body.IncludeFeatures
+		runRefresh = body.Refresh
+		runClear = body.ClearResults
+		runModels = body.Models
+		_, _ = w.Write([]byte(`{"identity":{"project_id":"p1","project_revision":"r1","id":"run-cfg","queue_id":"q1"},"status":"running"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	s.AvailableModels = &AvailableModels{
+		Models: []ModelChoice{{ID: "pi:qwen", Name: "Qwen"}},
+	}
+	s.Navigate(PageAnalysisRun)
+
+	// Hotkeys on PageAnalysisRun cycle batch, budget, attempts, features, and cache policy
+	s.HandleKey(KeyEvent{Key: "b"}) // 64 -> 128
+	s.HandleKey(KeyEvent{Key: "t"}) // 300 -> 600
+	s.HandleKey(KeyEvent{Key: "a"}) // 2 -> 3
+	s.HandleKey(KeyEvent{Key: "f"}) // true -> false
+	s.HandleKey(KeyEvent{Key: "c"}) // incremental -> refresh
+	s.HandleKey(KeyEvent{Key: "c"}) // refresh -> clean reanalyze (refresh=true, clear_results=true)
+
+	cfg := s.EffectiveAnalysisConfig()
+	if cfg.BatchFiles != 128 || cfg.BudgetSeconds != 600 || cfg.MaxAttemptsPerStage != 3 || cfg.IncludeFeatures || !cfg.Refresh || !cfg.ClearResults {
+		t.Fatalf("unexpected analysis config after hotkeys: %+v", cfg)
+	}
+
+	// Render PageAnalysisRun and verify config table + execution plan panel appear
+	frame := s.Render(120, 36)
+	for _, tok := range []string{"ANALYSIS RUN CONFIGURATION", "128 files / batch", "600s (10m 0s)", "3 attempts / stage", "CLEAN"} {
+		if !strings.Contains(frame, tok) {
+			t.Fatalf("expected PageAnalysisRun frame to contain %q:\n%s", tok, frame)
+		}
+	}
+
+	// Colon commands override individual or combined analysis config parameters
+	s.ExecuteCommand(":batch 256")
+	s.ExecuteCommand(":budget 900s")
+	s.ExecuteCommand(":attempts 4")
+	s.ExecuteCommand(":model bug pi:qwen")
+	s.ExecuteCommand(":analyze")
+	s.FlushActions(context.Background(), cli)
+
+	if previewLimits["batch_files"] != 256 || previewLimits["budget_seconds"] != 900 || previewLimits["max_attempts_per_stage"] != 4 {
+		t.Fatalf("expected custom preview limits 256/900/4, got %+v", previewLimits)
+	}
+	if previewFeatures || !previewRefresh || !previewClear {
+		t.Fatalf("expected preview flags features=false refresh=true clear=true, got features=%v refresh=%v clear=%v",
+			previewFeatures, previewRefresh, previewClear)
+	}
+	if runLimits["batch_files"] != 256 || !runRefresh || !runClear || runFeatures || runModels["code"] != "pi:qwen" {
+		t.Fatalf("expected run start payload to carry custom config and models, got limits=%+v refresh=%v clear=%v features=%v models=%+v",
+			runLimits, runRefresh, runClear, runFeatures, runModels)
+	}
+
+	// Reset via 'x' restores defaults
+	s.Navigate(PageAnalysisRun)
+	s.HandleKey(KeyEvent{Key: "x"})
+	if def := s.EffectiveAnalysisConfig(); def.BatchFiles != 64 || def.BudgetSeconds != 300 || def.MaxAttemptsPerStage != 2 || !def.IncludeFeatures || def.Refresh || def.ClearResults {
+		t.Fatalf("expected 'x' to reset analysis config to defaults, got %+v", def)
+	}
+}

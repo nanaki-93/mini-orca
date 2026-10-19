@@ -37,6 +37,7 @@ type (
 	RunStage                = tuiclient.RunStage
 	RunFile                 = tuiclient.RunFile
 	RunIdentity             = tuiclient.RunIdentity
+	AnalysisRunConfig       = tuiclient.AnalysisRunConfig
 	AnalysisPreview         = tuiclient.AnalysisPreview
 	AnalysisRunFeatures     = tuiclient.AnalysisRunFeatures
 	AnalysisRun             = tuiclient.AnalysisRun

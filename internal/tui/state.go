@@ -110,6 +110,7 @@ type State struct {
 	ExcludedPaths     []string
 	ActivePresetID    string
 	ScopeModels       map[string]string
+	AnalysisConfig    AnalysisRunConfig
 	PendingActions    []ActionRequest
 	Quitting          bool
 
@@ -215,10 +216,16 @@ func NewState() *State {
 			"bug":      "bug",
 			"function": "function",
 		},
+		AnalysisConfig: DefaultAnalysisRunConfig(),
 		WorkspaceTrust: true,
 		Results:        make(map[string]SectionResults),
 		CmdOutput:      "Workspace ready",
 	}
+}
+
+// EffectiveAnalysisConfig returns the normalized analysis run configuration.
+func (s *State) EffectiveAnalysisConfig() AnalysisRunConfig {
+	return NormalizeAnalysisRunConfig(s.AnalysisConfig)
 }
 
 // ActiveHub returns the HubTab owning the current Page.
@@ -720,7 +727,7 @@ func (s *State) activeFeatures() []FeatureSuggestion {
 	return out
 }
 
-func (s *State) analysisRunListLen() int {
+func (s *State) analysisRunSectionCount() int {
 	if s.Run == nil {
 		return 0
 	}
@@ -729,6 +736,10 @@ func (s *State) analysisRunListLen() int {
 		n++
 	}
 	return n
+}
+
+func (s *State) analysisRunListLen() int {
+	return s.analysisRunSectionCount() + len(BuildAnalysisConfigRows(s.EffectiveAnalysisConfig()))
 }
 
 func (s *State) indexedFileCount() int {

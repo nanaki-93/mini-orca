@@ -500,10 +500,10 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		commands:  ":features  :agent <prompt>  :analyze  :reanalyze",
 	},
 	PageAnalysisRun: {
-		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN",
-		primary:   []keyDesc{{"Enter/r", "Run/Resume Analysis"}, {"P", "Pause Run"}, {"n", "Reanalyze"}},
-		secondary: []keyDesc{{"R", "Retry Failed/Stale"}, {"j/k", "Select Section"}},
-		commands:  ":analyze  :resume  :pause  :repair [path]  :reanalyze",
+		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG",
+		primary:   []keyDesc{{"r", "Run/Resume Analysis"}, {"b/t/a", "Batch/Budget/Tries"}, {"f/c", "Features/Cache"}},
+		secondary: []keyDesc{{"Enter/Space", "Cycle Selected"}, {"x", "Reset Config"}, {"P", "Pause"}, {"R", "Retry Failed"}},
+		commands:  ":analyze  :analysis-config [batch=N budget=S attempts=N]  :batch <n>  :budget <s>  :attempts <n>",
 	},
 	PageAnalysisFiles: {
 		title:     "[2] AGENT STUDIO · FILE SCOPE",
