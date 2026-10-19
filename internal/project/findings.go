@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/insight"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -37,8 +37,6 @@ const (
 	FindingFreshnessFresh = "fresh"
 	FindingFreshnessStale = "stale"
 )
-
-var findingSecret = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential|authorization)\b\s*[:=]\s*[^\s,;]+`)
 
 // FindingLocation identifies an optional project-relative location.
 type FindingLocation struct {
@@ -402,11 +400,7 @@ func validFindingStatus(value string) bool {
 	return value == FindingStatusOpen || value == FindingStatusInProgress || value == FindingStatusDismissed || value == FindingStatusFixed || value == FindingStatusRetired
 }
 func sanitizeFindingText(value string, limit int) string {
-	value = strings.TrimSpace(findingSecret.ReplaceAllString(value, "[redacted]"))
-	if len(value) <= limit {
-		return value
-	}
-	return value[:limit-len("[truncated]")] + "[truncated]"
+	return insight.SanitizeFindingText(value, limit)
 }
 func cloneFindings(source []UnifiedFinding) []UnifiedFinding {
 	result := append([]UnifiedFinding(nil), source...)

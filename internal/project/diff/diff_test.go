@@ -1,4 +1,4 @@
-package project
+package diff
 
 import (
 	"math/rand"

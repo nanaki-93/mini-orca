@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 const (
@@ -325,8 +327,7 @@ func prioritize(files []string, target string) []string {
 }
 
 func contextCandidate(path string) bool {
-	extension := strings.ToLower(filepath.Ext(path))
-	if languageByExtension[extension] != "" {
+	if symbols.HasKnownExtension(path) {
 		return true
 	}
 	switch filepath.Base(path) {

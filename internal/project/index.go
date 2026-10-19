@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -40,24 +41,8 @@ type IndexFile struct {
 	AnalysisStatus string       `json:"analysis_status"`
 }
 
-// SymbolInfo is populated by language extractors in later tasks. Defining the
-// stable index shape now keeps persisted facts and API clients forward-compatible.
-type SymbolInfo struct {
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`
-	Signature    string `json:"signature"`
-	StartLine    int    `json:"start_line"`
-	EndLine      int    `json:"end_line"`
-	Visibility   string `json:"visibility"`
-	Confidence   string `json:"confidence"`
-	AtomicTarget bool   `json:"atomic_target"`
-}
-
-// Diagnostic records non-fatal deterministic extraction issues.
-type Diagnostic struct {
-	Message string `json:"message"`
-	Line    int    `json:"line,omitempty"`
-}
+type SymbolInfo = symbols.SymbolInfo
+type Diagnostic = symbols.Diagnostic
 
 // BuildIndex scans only context-policy-eligible project files and writes the
 // complete index atomically. Existing unchanged entries are reused by hash.

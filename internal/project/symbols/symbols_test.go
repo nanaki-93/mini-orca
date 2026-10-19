@@ -1,4 +1,4 @@
-package project
+package symbols
 
 import "testing"
 
@@ -16,7 +16,7 @@ func TestGenericExtractorsRemainApproximate(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.language, func(t *testing.T) {
-			imports, symbols := extractGenericFacts(test.language, []byte(test.source))
+			imports, symbols := ExtractGenericFacts(test.language, []byte(test.source))
 			if len(imports) != 1 || len(symbols) == 0 || symbols[0].Confidence != "approximate" {
 				t.Fatalf("facts = %#v %#v", imports, symbols)
 			}
@@ -34,7 +34,7 @@ func TestGenericExtractorsRemainApproximate(t *testing.T) {
 }
 
 func TestGenericJavaExtractorRejectsExpressions(t *testing.T) {
-	_, symbols := extractGenericFacts("Java", []byte("class App {\n  void run() {\n    new Worker().run();\n    return;\n  }\n}\n"))
+	_, symbols := ExtractGenericFacts("Java", []byte("class App {\n  void run() {\n    new Worker().run();\n    return;\n  }\n}\n"))
 	if len(symbols) != 2 || symbols[0].Name != "App" || symbols[1].Name != "run" {
 		t.Fatalf("Java symbols = %#v, want only declarations", symbols)
 	}
