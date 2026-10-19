@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuidomain"
 )
 
 func (s *State) enqueueAction(act ActionRequest) {
@@ -160,12 +162,7 @@ func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
 }
 
 func containsString(list []string, target string) bool {
-	for _, item := range list {
-		if item == target {
-			return true
-		}
-	}
-	return false
+	return tuidomain.ContainsString(list, target)
 }
 
 func (s *State) dispatchFeatureIdea(idea FeatureSuggestion) {

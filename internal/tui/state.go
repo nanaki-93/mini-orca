@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuiclient"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuitheme"
 )
 
 // Page identifies an active hub view or sub-view in the TUI.
@@ -35,13 +38,13 @@ const (
 )
 
 // Palette identifies one of the four terminal color themes.
-type Palette string
+type Palette = tuitheme.Palette
 
 const (
-	PaletteTokyo Palette = "tokyo"
-	PaletteCRT   Palette = "crt"
-	PaletteAmber Palette = "amber"
-	PalettePaper Palette = "paper"
+	PaletteTokyo = tuitheme.PaletteTokyo
+	PaletteCRT   = tuitheme.PaletteCRT
+	PaletteAmber = tuitheme.PaletteAmber
+	PalettePaper = tuitheme.PalettePaper
 )
 
 // HubSubPage pairs a sub-view Page with its human-readable tab label.
@@ -584,12 +587,7 @@ func issueStatus(done bool, agentPath string) string {
 }
 
 func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
+	return tuiclient.FirstNonEmpty(values...)
 }
 
 // FilteredIssues returns the issue list matching the current IssueCategory and IssueView filters.

@@ -1,4 +1,4 @@
-package tui
+package tuiclient
 
 import (
 	"context"

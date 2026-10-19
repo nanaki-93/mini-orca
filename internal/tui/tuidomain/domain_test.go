@@ -1,12 +1,14 @@
-package tui
+package tuidomain
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuiclient"
 )
 
 func TestSplitAndRejectDiffHunks(t *testing.T) {
-	lines := []DiffLine{
+	lines := []tuiclient.DiffLine{
 		{Kind: "context", OldLine: 1, NewLine: 1, Text: "package main"},
 		{Kind: "delete", OldLine: 2, NewLine: 0, Text: "var old = 1"},
 		{Kind: "add", OldLine: 0, NewLine: 2, Text: "var next = 2"},
@@ -34,7 +36,7 @@ func TestSplitAndRejectDiffHunks(t *testing.T) {
 		t.Fatalf("expected second hunk addition to remain, got:\n%s", reverted)
 	}
 
-	added, removed, badge := ClassifyDiffScope([]FileChange{{Diff: FileDiff{Lines: lines}}})
+	added, removed, badge := ClassifyDiffScope([]tuiclient.FileChange{{Diff: tuiclient.FileDiff{Lines: lines}}})
 	if added != 2 || removed != 1 || badge != "SURGICAL" {
 		t.Fatalf("unexpected diff scope: +%d -%d %s", added, removed, badge)
 	}
@@ -59,7 +61,7 @@ func TestFindingNormalizationAndDeduplication(t *testing.T) {
 			Severity: "high",
 			Category: "security",
 			Status:   "open",
-			Target:   FindingTarget{Kind: "semantic", ID: "sem-1", Path: "internal/db/query.go"},
+			Target:   tuiclient.FindingTarget{Kind: "semantic", ID: "sem-1", Path: "internal/db/query.go"},
 		},
 		{
 			ID:       "sec-1",
@@ -70,7 +72,7 @@ func TestFindingNormalizationAndDeduplication(t *testing.T) {
 			Severity: "critical",
 			Category: "security",
 			Status:   "open",
-			Target:   FindingTarget{Kind: "security", ID: "sec-1", Path: "internal/db/query.go", Source: "ai"},
+			Target:   tuiclient.FindingTarget{Kind: "security", ID: "sec-1", Path: "internal/db/query.go", Source: "ai"},
 		},
 		{
 			ID:       "bug-1",
@@ -81,7 +83,7 @@ func TestFindingNormalizationAndDeduplication(t *testing.T) {
 			Severity: "high",
 			Category: "bugs",
 			Status:   "in_progress",
-			Target:   FindingTarget{Kind: "semantic", ID: "bug-1", Path: "internal/app/run.go"},
+			Target:   tuiclient.FindingTarget{Kind: "semantic", ID: "bug-1", Path: "internal/app/run.go"},
 		},
 	}
 
@@ -94,8 +96,8 @@ func TestFindingNormalizationAndDeduplication(t *testing.T) {
 		t.Fatalf("expected critical issue first, got %s", deduped[0].ID)
 	}
 
-	summary := ComputeIssueSummary(deduped, &FeatureReport{
-		Suggestions: []FeatureSuggestion{
+	summary := ComputeIssueSummary(deduped, &tuiclient.FeatureReport{
+		Suggestions: []tuiclient.FeatureSuggestion{
 			{ID: "f1", Status: "open"},
 			{ID: "f2", Status: "dismissed"},
 		},
@@ -116,8 +118,8 @@ func TestGuidelineInsertionAndBootstrapChecklist(t *testing.T) {
 		t.Fatalf("expected duplicate guideline insertion to be idempotent")
 	}
 
-	pillars := EvaluateBootstrapChecklist(&ProjectIndex{
-		Files: []IndexedFile{
+	pillars := EvaluateBootstrapChecklist(&tuiclient.ProjectIndex{
+		Files: []tuiclient.IndexedFile{
 			{Path: "AGENTS.md"},
 			{Path: "Makefile"},
 			{Path: "scripts/validate.sh"},
@@ -132,25 +134,25 @@ func TestGuidelineInsertionAndBootstrapChecklist(t *testing.T) {
 }
 
 func TestAgentItemsAndArchitectureDiagram(t *testing.T) {
-	change := &ChangeSession{
+	change := &tuiclient.ChangeSession{
 		ID:    "chg-1",
 		Title: "Fix race condition",
 		State: "checked",
-		Changes: []FileChange{
+		Changes: []tuiclient.FileChange{
 			{
 				Path: "internal/app/service.go",
-				Diff: FileDiff{Lines: []DiffLine{{Kind: "add", NewLine: 10, Text: "mu.Lock()"}}},
+				Diff: tuiclient.FileDiff{Lines: []tuiclient.DiffLine{{Kind: "add", NewLine: 10, Text: "mu.Lock()"}}},
 			},
 		},
-		Checks: []Check{{Name: "test", State: "passed"}},
+		Checks: []tuiclient.Check{{Name: "test", State: "passed"}},
 	}
-	items := CollectAgentItems(change, &ChangeMutation{UndoAvailable: true}, nil)
+	items := CollectAgentItems(change, &tuiclient.ChangeMutation{UndoAvailable: true}, nil)
 	if len(items) != 1 || items[0].StageNumber != 3 || !items[0].UndoAvailable {
 		t.Fatalf("unexpected agent item: %+v", items)
 	}
 
-	docs := ResolveProjectDocs(&Overview{
-		Analysis: OverviewAnalysis{
+	docs := ResolveProjectDocs(&tuiclient.Overview{
+		Analysis: tuiclient.OverviewAnalysis{
 			Purpose:      "Local coding assistant",
 			Architecture: "Layered daemon + TUI",
 			Components:   []string{"cmd/tui", "internal/app"},

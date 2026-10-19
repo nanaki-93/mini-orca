@@ -3,179 +3,29 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuidomain"
 )
 
-// FileDiffHunk pairs a DiffHunk with its owning FileChange metadata across a multi-file proposal.
-type FileDiffHunk struct {
-	GlobalIndex   int
-	FileIndex     int
-	FileTotal     int
-	Path          string
-	Summary       string
-	FileAdded     int
-	FileRemoved   int
-	FileHunkIndex int
-	FileHunkTotal int
-	Hunk          DiffHunk
-}
-
-// SplitDiffRow represents a paired side-by-side diff row (before on left, after on right).
-type SplitDiffRow struct {
-	OldLine int
-	OldKind string
-	OldText string
-	NewLine int
-	NewKind string
-	NewText string
-}
-
-// UnifiedDiffRow represents a display row in the multi-file unified diff stream.
-type UnifiedDiffRow struct {
-	IsHeader      bool
-	HunkGlobalIdx int
-	FileIndex     int
-	HeaderText    string
-	Line          DiffLine
-}
+type (
+	FileDiffHunk   = tuidomain.FileDiffHunk
+	SplitDiffRow   = tuidomain.SplitDiffRow
+	UnifiedDiffRow = tuidomain.UnifiedDiffRow
+)
 
 // EffectiveSessionChanges returns all modified files in the proposal plus any captured target files not already in Changes.
 func EffectiveSessionChanges(change *ChangeSession) []FileChange {
-	if change == nil {
-		return nil
-	}
-	seen := make(map[string]bool, len(change.Changes))
-	out := make([]FileChange, 0, len(change.Changes)+len(change.Targets))
-	for _, fc := range change.Changes {
-		seen[fc.Path] = true
-		out = append(out, fc)
-	}
-	for _, t := range change.Targets {
-		if t.Path == "" || seen[t.Path] || !t.Exists || strings.TrimSpace(t.Content) == "" {
-			continue
-		}
-		seen[t.Path] = true
-		out = append(out, FileChange{
-			Path:    t.Path,
-			Summary: "Captured target file in scope (unchanged)",
-			Content: t.Content,
-			Diff:    FileDiff{Lines: buildContextDiffLines(t.Content)},
-		})
-	}
-	return out
-}
-
-func buildContextDiffLines(content string) []DiffLine {
-	raw := strings.Split(strings.ReplaceAll(strings.TrimRight(content, "\r\n"), "\r\n", "\n"), "\n")
-	lines := make([]DiffLine, 0, len(raw))
-	for idx, text := range raw {
-		lines = append(lines, DiffLine{
-			Kind:    "context",
-			OldLine: idx + 1,
-			NewLine: idx + 1,
-			Text:    text,
-		})
-	}
-	return lines
+	return tuidomain.EffectiveSessionChanges(change)
 }
 
 // CollectChangeHunks extracts all hunks across all files in a ChangeSession.
 func CollectChangeHunks(changes []FileChange) []FileDiffHunk {
-	if len(changes) == 0 {
-		return nil
-	}
-	var out []FileDiffHunk
-	for fIdx, fc := range changes {
-		fAdd, fRem := countFileDiffLines(fc.Diff.Lines)
-		hunks := SplitDiffIntoHunks(fc.Diff.Lines)
-		if len(hunks) == 0 && len(fc.Diff.Lines) > 0 {
-			oldStart, oldEnd := lineBounds(fc.Diff.Lines, true)
-			newStart, newEnd := lineBounds(fc.Diff.Lines, false)
-			hunks = []DiffHunk{{
-				Index:    0,
-				OldStart: oldStart,
-				OldEnd:   oldEnd,
-				NewStart: newStart,
-				NewEnd:   newEnd,
-				Lines:    fc.Diff.Lines,
-			}}
-		}
-		for hIdx, h := range hunks {
-			out = append(out, FileDiffHunk{
-				GlobalIndex:   len(out),
-				FileIndex:     fIdx,
-				FileTotal:     len(changes),
-				Path:          fc.Path,
-				Summary:       fc.Summary,
-				FileAdded:     fAdd,
-				FileRemoved:   fRem,
-				FileHunkIndex: hIdx,
-				FileHunkTotal: len(hunks),
-				Hunk:          h,
-			})
-		}
-	}
-	return out
-}
-
-func countFileDiffLines(lines []DiffLine) (added int, removed int) {
-	for _, dl := range lines {
-		if IsAddedLine(dl.Kind) {
-			added++
-		} else if IsRemovedLine(dl.Kind) {
-			removed++
-		}
-	}
-	return added, removed
+	return tuidomain.CollectChangeHunks(changes)
 }
 
 // BuildSplitDiffRows pairs consecutive removed and added lines into side-by-side comparison rows.
 func BuildSplitDiffRows(lines []DiffLine) []SplitDiffRow {
-	var rows []SplitDiffRow
-	for i := 0; i < len(lines); {
-		dl := lines[i]
-		if !IsRemovedLine(dl.Kind) && !IsAddedLine(dl.Kind) {
-			rows = append(rows, SplitDiffRow{
-				OldLine: dl.OldLine,
-				OldKind: "context",
-				OldText: dl.Text,
-				NewLine: dl.NewLine,
-				NewKind: "context",
-				NewText: dl.Text,
-			})
-			i++
-			continue
-		}
-		var dels, adds []DiffLine
-		for i < len(lines) && (IsRemovedLine(lines[i].Kind) || IsAddedLine(lines[i].Kind)) {
-			if IsRemovedLine(lines[i].Kind) {
-				dels = append(dels, lines[i])
-			} else {
-				adds = append(adds, lines[i])
-			}
-			i++
-		}
-		rows = appendPairedChangeRows(rows, dels, adds)
-	}
-	return rows
-}
-
-func appendPairedChangeRows(rows []SplitDiffRow, dels, adds []DiffLine) []SplitDiffRow {
-	count := max(len(dels), len(adds))
-	for k := 0; k < count; k++ {
-		var r SplitDiffRow
-		if k < len(dels) {
-			r.OldLine = dels[k].OldLine
-			r.OldKind = "delete"
-			r.OldText = dels[k].Text
-		}
-		if k < len(adds) {
-			r.NewLine = adds[k].NewLine
-			r.NewKind = "add"
-			r.NewText = adds[k].Text
-		}
-		rows = append(rows, r)
-	}
-	return rows
+	return tuidomain.BuildSplitDiffRows(lines)
 }
 
 // EffectiveDiffMode returns the active diff view mode ("hunk", "split", or "unified").
@@ -261,20 +111,7 @@ func (s *State) diffViewRowCount() int {
 }
 
 func firstChangedRowForMode(hunk DiffHunk, mode string) int {
-	if mode == "split" {
-		for idx, r := range BuildSplitDiffRows(hunk.Lines) {
-			if r.OldKind == "delete" || r.NewKind == "add" {
-				return idx
-			}
-		}
-		return 0
-	}
-	for idx, dl := range hunk.Lines {
-		if IsAddedLine(dl.Kind) || IsRemovedLine(dl.Kind) {
-			return idx
-		}
-	}
-	return 0
+	return tuidomain.FirstChangedRowForMode(hunk, mode)
 }
 
 func (s *State) syncDiffSelectionToHunk(hunkIdx int) {
