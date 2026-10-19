@@ -297,7 +297,7 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 		t.Fatalf("catalog workflow status: %+v", session.Workflow)
 	}
 	expectedProfiles := []string{catalog.Defaults["bug"], catalog.Defaults["analyze"], catalog.Defaults["function"]}
-	expectedScopes := []string{"function", "bug", "analyze"}
+	expectedScopes := []string{"bug", "function", "analyze"}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
 		stage := session.Workflow.Stages[i]
 		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] {

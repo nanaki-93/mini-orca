@@ -17,9 +17,9 @@ const changeWorkflowBudget = 30 * time.Minute
 func workflowStageScope(stage int) config.ModelScope {
 	switch stage {
 	case 0:
-		return config.FunctionModelScope
-	case 1:
 		return config.BugModelScope
+	case 1:
+		return config.FunctionModelScope
 	default:
 		return config.AnalyzeModelScope
 	}
