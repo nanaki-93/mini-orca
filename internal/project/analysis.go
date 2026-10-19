@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/handbook"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
@@ -31,24 +32,7 @@ type projectAnalysisClient interface {
 	ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error)
 }
 
-// Analysis is the persisted and API-facing summary for an imported project.
-type Analysis struct {
-	ProjectID       string                `json:"project_id"`
-	ProjectRevision string                `json:"project_revision"`
-	Name            string                `json:"name"`
-	Path            string                `json:"path"`
-	Type            string                `json:"type"`
-	BuildFile       string                `json:"build_file,omitempty"`
-	FileCount       int                   `json:"file_count"`
-	SourceFileCount int                   `json:"source_file_count"`
-	TotalLines      int                   `json:"total_lines"`
-	Languages       map[string]int        `json:"languages"`
-	Files           []string              `json:"files"`
-	Summary         string                `json:"summary"`
-	AIStatus        string                `json:"ai_status"`
-	AnalyzedAt      time.Time             `json:"analyzed_at"`
-	Report          ProjectAnalysisReport `json:"report"`
-}
+type Analysis = handbook.Analysis
 
 // FileInfo describes one selected project file.
 type FileInfo struct {

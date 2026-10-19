@@ -3,7 +3,32 @@ package symbols
 import (
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// ProjectIndex holds deterministic project facts. It never contains source text.
+type ProjectIndex struct {
+	SchemaVersion   string      `json:"schema_version"`
+	ProjectID       string      `json:"project_id"`
+	ProjectRevision string      `json:"project_revision"`
+	GeneratedAt     time.Time   `json:"generated_at"`
+	Files           []IndexFile `json:"files"`
+}
+
+// IndexFile is the persisted deterministic metadata for one eligible file.
+type IndexFile struct {
+	Path           string       `json:"path"`
+	ContentHash    string       `json:"content_hash"`
+	Language       string       `json:"language"`
+	SizeBytes      int64        `json:"size_bytes"`
+	LineCount      int          `json:"line_count"`
+	ModifiedAt     time.Time    `json:"modified_at"`
+	Binary         bool         `json:"binary"`
+	Imports        []string     `json:"imports"`
+	Symbols        []SymbolInfo `json:"symbols"`
+	Diagnostics    []Diagnostic `json:"diagnostics,omitempty"`
+	AnalysisStatus string       `json:"analysis_status"`
+}
 
 // SymbolInfo describes a deterministic or approximate source declaration span.
 type SymbolInfo struct {

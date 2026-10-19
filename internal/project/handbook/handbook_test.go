@@ -1,4 +1,4 @@
-package project
+package handbook
 
 import (
 	"testing"

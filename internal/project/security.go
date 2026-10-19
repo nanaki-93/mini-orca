@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/securityrules"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -24,7 +25,7 @@ const (
 	SecurityPromptVersion               = "security-file-v4"
 	SecurityMaxSourceBytes              = 64 * 1024
 	maxSecurityOutputBytes              = 64 * 1024
-	maxSecurityFindings                 = 5
+	maxSecurityFindings                 = securityrules.MaxSecurityFindings
 	maxSecurityTextBytes                = 2048
 	maxSecurityReasonBytes              = 1024
 	minSecurityEchoWordCharacters       = 4
@@ -39,11 +40,11 @@ const (
 	SecurityStatusFailed         = "failed"
 	SecurityStatusCanceled       = "canceled"
 
-	SecurityTriageOpen      = "open"
+	SecurityTriageOpen      = securityrules.SecurityTriageOpen
 	SecurityTriageDismissed = "dismissed"
 	SecurityTriageAccepted  = "accepted"
 
-	SecurityVerificationUnverified      = "unverified"
+	SecurityVerificationUnverified      = securityrules.SecurityVerificationUnverified
 	SecurityVerificationVerified        = "verified"
 	SecurityVerificationNotReproducible = "not_reproducible"
 
@@ -59,33 +60,8 @@ var (
 	securityCWE            = regexp.MustCompile(`^CWE-[1-9][0-9]*$`)
 )
 
-type SecuritySourceAnchor struct {
-	Path      string `json:"path"`
-	StartLine int    `json:"start_line"`
-	EndLine   int    `json:"end_line"`
-	Symbol    string `json:"symbol,omitempty"`
-}
-
-// SecurityFinding keeps the user's triage separate from verification evidence.
-type SecurityFinding struct {
-	ID                 string               `json:"id"`
-	Rule               string               `json:"rule"`
-	Category           string               `json:"category"`
-	Title              string               `json:"title"`
-	Anchor             SecuritySourceAnchor `json:"source_anchor"`
-	Severity           string               `json:"severity"`
-	Confidence         string               `json:"confidence"`
-	EvidenceKind       string               `json:"evidence_kind"`
-	ObservedCondition  string               `json:"observed_condition"`
-	Preconditions      string               `json:"preconditions_or_unknowns"`
-	Remediation        string               `json:"remediation"`
-	VerificationIdea   string               `json:"verification_idea"`
-	CWE                string               `json:"cwe,omitempty"`
-	Reference          string               `json:"reference,omitempty"`
-	Triage             string               `json:"triage"`
-	VerificationState  string               `json:"verification_state"`
-	EngineeringInsight *EngineeringInsight  `json:"engineering_insight,omitempty"`
-}
+type SecuritySourceAnchor = securityrules.SecuritySourceAnchor
+type SecurityFinding = securityrules.SecurityFinding
 
 // SecurityFileReport is owned by either deterministic rules or an AI review.
 // The source-specific provenance makes those evidence types unambiguous.
@@ -210,9 +186,7 @@ func securityFindingsFromWire(items []securityFindingWire, indexed IndexFile) ([
 
 // SecurityFindingID excludes model wording, insights, CWE, and references.
 func SecurityFindingID(f SecurityFinding) string {
-	parts := []string{f.Rule, f.Category, f.Anchor.Path, fmt.Sprint(f.Anchor.StartLine), fmt.Sprint(f.Anchor.EndLine), f.Anchor.Symbol, f.EvidenceKind}
-	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return "security:" + hex.EncodeToString(sum[:])
+	return securityrules.SecurityFindingID(f)
 }
 
 func validSecurityWireLengths(item securityFindingWire) bool {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/handbook"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -21,44 +22,14 @@ const (
 	maxProjectAnalysisItems      = 32
 	maxProjectAnalysisItemBytes  = 2048
 
-	ProjectAnalysisStatusFresh       = "fresh"
-	ProjectAnalysisStatusFailed      = "failed"
-	ProjectAnalysisStatusUnavailable = "unavailable"
-	ProjectAnalysisStatusStale       = "stale"
+	ProjectAnalysisStatusFresh       = handbook.ProjectAnalysisStatusFresh
+	ProjectAnalysisStatusFailed      = handbook.ProjectAnalysisStatusFailed
+	ProjectAnalysisStatusUnavailable = handbook.ProjectAnalysisStatusUnavailable
+	ProjectAnalysisStatusStale       = handbook.ProjectAnalysisStatusStale
 )
 
-// ProjectAnalysisRisk is a bounded model interpretation, not a verified issue.
-type ProjectAnalysisRisk struct {
-	Severity           string              `json:"severity"`
-	Summary            string              `json:"summary"`
-	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
-}
-
-// ProjectAnalysisReport is the authoritative, persisted interpretation of one
-// project revision.
-type ProjectAnalysisReport struct {
-	SchemaVersion      string                `json:"schema_version"`
-	ProjectID          string                `json:"project_id"`
-	ProjectRevision    string                `json:"project_revision"`
-	Purpose            string                `json:"purpose,omitempty"`
-	Architecture       string                `json:"architecture,omitempty"`
-	Components         []string              `json:"components"`
-	EntryPoints        []string              `json:"entry_points"`
-	Flows              []string              `json:"flows"`
-	Risks              []ProjectAnalysisRisk `json:"risks"`
-	NextSteps          []string              `json:"next_steps"`
-	EngineeringInsight *EngineeringInsight   `json:"engineering_insight,omitempty"`
-	Status             string                `json:"status"`
-	Failure            string                `json:"failure,omitempty"`
-	Model              string                `json:"model"`
-	ConfiguredModel    string                `json:"configured_model,omitempty"`
-	Profile            string                `json:"profile"`
-	Scope              string                `json:"scope,omitempty"`
-	ProviderOrigin     string                `json:"provider_origin,omitempty"`
-	ReasoningEffort    string                `json:"reasoning_effort,omitempty"`
-	PromptVersion      string                `json:"prompt_version"`
-	GeneratedAt        time.Time             `json:"generated_at"`
-}
+type ProjectAnalysisRisk = handbook.ProjectAnalysisRisk
+type ProjectAnalysisReport = handbook.ProjectAnalysisReport
 
 // ProjectAnalysisInput identifies the model and project state a persisted
 // report must match before it may be presented as fresh.
