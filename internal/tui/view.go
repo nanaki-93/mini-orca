@@ -264,7 +264,7 @@ func (s *State) renderShortcutHintBar(th ansiTheme) string {
 
 func (s *State) renderCommandBar(th ansiTheme) string {
 	if s.CmdActive {
-		return fmt.Sprintf("  %sCOMMAND ▸ :%s%s█   %s(Enter to execute · Esc to cancel)%s", th.green, s.CmdInput, th.reset, th.muted, th.reset)
+		return th.renderCommandInput(s.CmdInput)
 	}
 	if s.Error != "" {
 		return fmt.Sprintf("  %s ▲ ERROR %s %s%s%s   %s([Esc] Clear Error · [:reconnect] Retry)%s",

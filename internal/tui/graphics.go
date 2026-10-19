@@ -4,7 +4,17 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
+
+func init() {
+	lipgloss.SetColorProfile(termenv.ANSI256)
+}
 
 type ansiTheme struct {
 	name    string
@@ -26,98 +36,133 @@ type ansiTheme struct {
 	bold    string
 	dim     string
 	reset   string
+
+	cardStyle      lipgloss.Style
+	activeTabStyle lipgloss.Style
+	idleTabStyle   lipgloss.Style
+	subActiveStyle lipgloss.Style
+	subIdleStyle   lipgloss.Style
+	titleStyle     lipgloss.Style
+	labelStyle     lipgloss.Style
+	mutedStyle     lipgloss.Style
+	errorBoxStyle  lipgloss.Style
+	progStartHex   string
+	progEndHex     string
+}
+
+type paletteColors struct {
+	name       string
+	accentCode string
+	fgCode     string
+	mutedCode  string
+	borderCode string
+	selBgCode  string
+	greenCode  string
+	amberCode  string
+	redCode    string
+	purpleCode string
+	cyanCode   string
+	progStart  string
+	progEnd    string
+}
+
+func colorsForPalette(p Palette) paletteColors {
+	switch p {
+	case PaletteCRT:
+		return paletteColors{
+			name: "CRT PHOSPHOR", accentCode: "46", fgCode: "120", mutedCode: "28",
+			borderCode: "28", selBgCode: "22", greenCode: "46", amberCode: "226",
+			redCode: "196", purpleCode: "83", cyanCode: "50",
+			progStart: "#00aa00", progEnd: "#00ff66",
+		}
+	case PaletteAmber:
+		return paletteColors{
+			name: "AMBER TERMINAL", accentCode: "214", fgCode: "222", mutedCode: "136",
+			borderCode: "136", selBgCode: "236", greenCode: "142", amberCode: "214",
+			redCode: "203", purpleCode: "179", cyanCode: "215",
+			progStart: "#d78700", progEnd: "#ffd75f",
+		}
+	case PalettePaper:
+		return paletteColors{
+			name: "PAPER LIGHT", accentCode: "25", fgCode: "235", mutedCode: "242",
+			borderCode: "247", selBgCode: "252", greenCode: "28", amberCode: "130",
+			redCode: "160", purpleCode: "91", cyanCode: "31",
+			progStart: "#005f87", progEnd: "#0087af",
+		}
+	default:
+		return paletteColors{
+			name: "TOKYO ENTERPRISE", accentCode: "111", fgCode: "253", mutedCode: "245",
+			borderCode: "240", selBgCode: "236", greenCode: "114", amberCode: "215",
+			redCode: "203", purpleCode: "176", cyanCode: "117",
+			progStart: "#5f87ff", progEnd: "#87d7ff",
+		}
+	}
 }
 
 func themeForPalette(p Palette) ansiTheme {
-	switch p {
-	case PaletteCRT:
-		return ansiTheme{
-			name:    "CRT PHOSPHOR",
-			accent:  "\033[1;38;5;46m",
-			fg:      "\033[38;5;120m",
-			muted:   "\033[38;5;28m",
-			border:  "\033[38;5;28m",
-			surface: "\033[48;5;22m",
-			selBg:   "\033[48;5;22m",
-			critBg:  "\033[1;38;5;255;48;5;160m",
-			warnBg:  "\033[1;38;5;232;48;5;226m",
-			okBg:    "\033[1;38;5;232;48;5;46m",
-			infoBg:  "\033[1;38;5;46;48;5;22m",
-			green:   "\033[1;38;5;46m",
-			amber:   "\033[1;38;5;226m",
-			red:     "\033[1;38;5;196m",
-			purple:  "\033[38;5;83m",
-			cyan:    "\033[1;38;5;50m",
-			bold:    "\033[1m",
-			dim:     "\033[2m",
-			reset:   "\033[0m",
-		}
-	case PaletteAmber:
-		return ansiTheme{
-			name:    "AMBER TERMINAL",
-			accent:  "\033[1;38;5;214m",
-			fg:      "\033[38;5;222m",
-			muted:   "\033[38;5;136m",
-			border:  "\033[38;5;136m",
-			surface: "\033[48;5;52m",
-			selBg:   "\033[48;5;236m",
-			critBg:  "\033[1;38;5;255;48;5;160m",
-			warnBg:  "\033[1;38;5;232;48;5;214m",
-			okBg:    "\033[1;38;5;232;48;5;142m",
-			infoBg:  "\033[1;38;5;214;48;5;236m",
-			green:   "\033[1;38;5;142m",
-			amber:   "\033[1;38;5;214m",
-			red:     "\033[1;38;5;203m",
-			purple:  "\033[38;5;179m",
-			cyan:    "\033[1;38;5;215m",
-			bold:    "\033[1m",
-			dim:     "\033[2m",
-			reset:   "\033[0m",
-		}
-	case PalettePaper:
-		return ansiTheme{
-			name:    "PAPER LIGHT",
-			accent:  "\033[1;38;5;25m",
-			fg:      "\033[38;5;235m",
-			muted:   "\033[38;5;242m",
-			border:  "\033[38;5;247m",
-			surface: "\033[48;5;254m",
-			selBg:   "\033[48;5;252m",
-			critBg:  "\033[1;38;5;255;48;5;160m",
-			warnBg:  "\033[1;38;5;255;48;5;130m",
-			okBg:    "\033[1;38;5;255;48;5;28m",
-			infoBg:  "\033[1;38;5;255;48;5;25m",
-			green:   "\033[1;38;5;28m",
-			amber:   "\033[1;38;5;130m",
-			red:     "\033[1;38;5;160m",
-			purple:  "\033[1;38;5;91m",
-			cyan:    "\033[1;38;5;31m",
-			bold:    "\033[1m",
-			dim:     "\033[2m",
-			reset:   "\033[0m",
-		}
-	default:
-		return ansiTheme{
-			name:    "TOKYO ENTERPRISE",
-			accent:  "\033[1;38;5;111m",
-			fg:      "\033[38;5;253m",
-			muted:   "\033[38;5;245m",
-			border:  "\033[38;5;240m",
-			surface: "\033[48;5;236m",
-			selBg:   "\033[48;5;236m",
-			critBg:  "\033[1;38;5;255;48;5;160m",
-			warnBg:  "\033[1;38;5;232;48;5;215m",
-			okBg:    "\033[1;38;5;232;48;5;114m",
-			infoBg:  "\033[1;38;5;255;48;5;62m",
-			green:   "\033[1;38;5;114m",
-			amber:   "\033[1;38;5;215m",
-			red:     "\033[1;38;5;203m",
-			purple:  "\033[1;38;5;176m",
-			cyan:    "\033[1;38;5;117m",
-			bold:    "\033[1m",
-			dim:     "\033[2m",
-			reset:   "\033[0m",
-		}
+	c := colorsForPalette(p)
+	accentCol := lipgloss.Color(c.accentCode)
+	fgCol := lipgloss.Color(c.fgCode)
+	mutedCol := lipgloss.Color(c.mutedCode)
+	borderCol := lipgloss.Color(c.borderCode)
+	selBgCol := lipgloss.Color(c.selBgCode)
+	redCol := lipgloss.Color(c.redCode)
+
+	return ansiTheme{
+		name:    c.name,
+		accent:  "\033[1;38;5;" + c.accentCode + "m",
+		fg:      "\033[38;5;" + c.fgCode + "m",
+		muted:   "\033[38;5;" + c.mutedCode + "m",
+		border:  "\033[38;5;" + c.borderCode + "m",
+		surface: "\033[48;5;" + c.selBgCode + "m",
+		selBg:   "\033[48;5;" + c.selBgCode + "m",
+		critBg:  "\033[1;38;5;255;48;5;160m",
+		warnBg:  "\033[1;38;5;232;48;5;" + c.amberCode + "m",
+		okBg:    "\033[1;38;5;232;48;5;" + c.greenCode + "m",
+		infoBg:  "\033[1;38;5;255;48;5;62m",
+		green:   "\033[1;38;5;" + c.greenCode + "m",
+		amber:   "\033[1;38;5;" + c.amberCode + "m",
+		red:     "\033[1;38;5;" + c.redCode + "m",
+		purple:  "\033[1;38;5;" + c.purpleCode + "m",
+		cyan:    "\033[1;38;5;" + c.cyanCode + "m",
+		bold:    "\033[1m",
+		dim:     "\033[2m",
+		reset:   "\033[0m",
+
+		cardStyle: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderCol).
+			Padding(0, 1),
+		activeTabStyle: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("255")).
+			Background(lipgloss.Color("62")).
+			Padding(0, 1),
+		idleTabStyle: lipgloss.NewStyle().
+			Foreground(mutedCol).
+			Padding(0, 1),
+		subActiveStyle: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accentCol).
+			Background(selBgCol).
+			Padding(0, 1),
+		subIdleStyle: lipgloss.NewStyle().
+			Foreground(mutedCol).
+			Padding(0, 1),
+		titleStyle: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accentCol),
+		labelStyle: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(fgCol),
+		mutedStyle: lipgloss.NewStyle().
+			Foreground(mutedCol),
+		errorBoxStyle: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(redCol).
+			Padding(0, 1),
+		progStartHex: c.progStart,
+		progEndHex:   c.progEnd,
 	}
 }
 
@@ -149,28 +194,9 @@ func clampHeight(height int) int {
 	return height
 }
 
-// visibleRuneCount measures the printable column width of an ANSI-styled string.
+// visibleRuneCount measures the printable column width of an ANSI-styled string using lipgloss.Width.
 func visibleRuneCount(s string) int {
-	count := 0
-	inEsc := false
-	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			inEsc = true
-			i++
-			continue
-		}
-		if inEsc {
-			if (s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') {
-				inEsc = false
-			}
-			i++
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		count++
-		i += size
-	}
-	return count
+	return lipgloss.Width(s)
 }
 
 // padVisibleRight pads an ANSI-styled string with trailing spaces to target visible columns.
@@ -204,28 +230,39 @@ func (th ansiTheme) wrapFrameLine(line string, width int) string {
 	return fmt.Sprintf("%s┃%s%s%s┃%s", th.border, th.reset, padded, th.border, th.reset)
 }
 
-// keyPill formats a high-contrast keyboard shortcut pill with action label.
-func (th ansiTheme) keyPill(key, label string) string {
-	return fmt.Sprintf("%s[%s]%s %s%s%s", th.cyan, key, th.reset, th.fg, label, th.reset)
+// keyPill formats a Bubbles key.Binding shortcut pill with high-contrast styling.
+func (th ansiTheme) keyPill(k, desc string) string {
+	b := key.NewBinding(key.WithKeys(k), key.WithHelp(k, desc))
+	help := b.Help()
+	return fmt.Sprintf("%s[%s]%s %s%s%s", th.cyan, help.Key, th.reset, th.fg, help.Desc, th.reset)
 }
 
-// renderProgressBar draws a deterministic block progress bar with percentage.
+// renderCommandInput renders the colon command bar using Bubbles textinput.Model.
+func (th ansiTheme) renderCommandInput(value string) string {
+	ti := textinput.New()
+	ti.Prompt = ":"
+	ti.SetValue(value)
+	ti.Focus()
+	return fmt.Sprintf("  %sCOMMAND ▸ %s%s   %s(Enter to execute · Esc to cancel)%s", th.green, ti.View(), th.reset, th.muted, th.reset)
+}
+
+// renderProgressBar draws a smooth Bubbles progress.Model bar with percentage.
 func (th ansiTheme) renderProgressBar(done, total, barWidth int) string {
-	if barWidth < 6 {
-		barWidth = 6
+	if barWidth < 8 {
+		barWidth = 8
 	}
-	if total <= 0 {
-		return th.muted + strings.Repeat("░", barWidth) + "   0%" + th.reset
+	ratio := 0.0
+	if total > 0 {
+		clamped := min(max(0, done), total)
+		ratio = float64(clamped) / float64(total)
 	}
-	clamped := min(max(0, done), total)
-	filled := (clamped * barWidth) / total
-	pct := (clamped * 100) / total
-	color := th.accent
-	if clamped == total {
-		color = th.green
-	}
-	bar := color + strings.Repeat("█", filled) + th.muted + strings.Repeat("░", barWidth-filled) + th.reset
-	return fmt.Sprintf("%s %3d%%", bar, pct)
+	prog := progress.New(
+		progress.WithGradient(th.progStartHex, th.progEndHex),
+		progress.WithWidth(barWidth+6),
+		progress.WithoutPercentage(),
+	)
+	pct := int(ratio * 100)
+	return fmt.Sprintf("%s %3d%%", prog.ViewAs(ratio), pct)
 }
 
 // severityBadge formats a color-coded enterprise severity badge with high-contrast critical/high emphasis.
@@ -267,69 +304,66 @@ func (th ansiTheme) statusBadge(state string) string {
 	}
 }
 
-// renderPanelBox wraps content lines in a rounded enterprise panel frame.
+// renderPanelBox wraps content lines in a Lip Gloss rounded enterprise panel frame.
 func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body []string) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
-	titleSeg := " " + truncatePlain(strings.TrimSpace(title), innerWidth-12) + " "
-	metaSeg := ""
+	header := th.titleStyle.Render(strings.TrimSpace(title))
 	if strings.TrimSpace(rightMeta) != "" {
-		metaSeg = " " + strings.TrimSpace(rightMeta) + " "
+		meta := th.mutedStyle.Render(strings.TrimSpace(rightMeta))
+		gap := max(2, innerWidth-4-lipgloss.Width(header)-lipgloss.Width(meta))
+		header = header + strings.Repeat(" ", gap) + meta
 	}
-	dashCount := max(2, innerWidth-visibleRuneCount(titleSeg)-visibleRuneCount(metaSeg)-2)
-	top := fmt.Sprintf(
-		"  %s╭─%s%s%s%s%s%s─╮%s",
-		th.border, th.accent, titleSeg, th.border, strings.Repeat("─", dashCount), th.cyan, metaSeg, th.reset,
-	)
-	out := make([]string, 0, len(body)+2)
-	out = append(out, top)
+	allLines := make([]string, 0, len(body)+1)
+	allLines = append(allLines, header)
 	for _, line := range body {
-		padded := padVisibleRight(line, innerWidth-2)
-		out = append(out, fmt.Sprintf("  %s│%s %s %s│%s", th.border, th.reset, padded, th.border, th.reset))
+		allLines = append(allLines, padVisibleRight(line, innerWidth-4))
 	}
-	bottom := fmt.Sprintf("  %s╰%s╯%s", th.border, strings.Repeat("─", innerWidth), th.reset)
-	out = append(out, bottom)
+	rendered := th.cardStyle.Width(innerWidth).Render(strings.Join(allLines, "\n"))
+	rawLines := strings.Split(rendered, "\n")
+	out := make([]string, 0, len(rawLines))
+	for _, rl := range rawLines {
+		out = append(out, "  "+rl)
+	}
 	return out
 }
 
-// renderErrorBanner draws a high-contrast error callout box when s.Error is active.
+// renderErrorBanner draws a Lip Gloss error callout box when s.Error is active.
 func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
-	titleSeg := " ▲ ERROR / DIAGNOSTIC ALERT "
-	hintSeg := " [Esc] Dismiss · [:reconnect] Retry "
-	dashCount := max(2, innerWidth-visibleRuneCount(titleSeg)-visibleRuneCount(hintSeg)-2)
-	top := fmt.Sprintf(
-		"  %s┏━%s%s%s%s%s%s━┓%s",
-		th.red, th.critBg, titleSeg, th.reset+th.red, strings.Repeat("━", dashCount), th.amber, hintSeg, th.reset,
-	)
-	msg := fmt.Sprintf("%s%s%s", th.red, truncatePlain(strings.TrimSpace(errText), innerWidth-4), th.reset)
-	mid := fmt.Sprintf("  %s┃%s %s %s┃%s", th.red, th.reset, padVisibleRight(msg, innerWidth-2), th.red, th.reset)
-	bot := fmt.Sprintf("  %s┗%s┛%s", th.red, strings.Repeat("━", innerWidth), th.reset)
-	return []string{top, mid, bot}
+	head := fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s   %s[Esc] Dismiss · [:reconnect] Retry%s",
+		th.critBg, th.reset, th.amber, th.reset)
+	msg := fmt.Sprintf("%s%s%s", th.red, truncatePlain(strings.TrimSpace(errText), innerWidth-6), th.reset)
+	box := th.errorBoxStyle.Width(innerWidth).Render(head + "\n" + msg)
+	var out []string
+	for _, line := range strings.Split(box, "\n") {
+		out = append(out, "  "+line)
+	}
+	return out
 }
 
-// renderKPICards renders a horizontal strip of compact enterprise KPI cards adapted to totalWidth.
+// renderKPICards renders a horizontal strip of Lip Gloss KPI cards joined with lipgloss.JoinHorizontal.
 func (th ansiTheme) renderKPICards(cards [][2]string, totalWidth int) []string {
 	if len(cards) == 0 {
 		return nil
 	}
 	cardWidth := max(18, (totalWidth-8)/len(cards)-2)
-	var tops, mids, bots []string
+	var boxes []string
 	for _, c := range cards {
-		label := truncatePlain(strings.ToUpper(c[0]), cardWidth-4)
-		val := padVisibleRight(c[1], cardWidth-2)
-		tops = append(tops, fmt.Sprintf("%s╭─ %s%-*s%s ─╮%s", th.border, th.cyan, cardWidth-4, label, th.border, th.reset))
-		mids = append(mids, fmt.Sprintf("%s│%s %s %s│%s", th.border, th.reset, val, th.border, th.reset))
-		bots = append(bots, fmt.Sprintf("%s╰%s╯%s", th.border, strings.Repeat("─", cardWidth), th.reset))
+		label := th.mutedStyle.Render(truncatePlain(strings.ToUpper(c[0]), cardWidth-4))
+		val := padVisibleRight(c[1], cardWidth-4)
+		box := th.cardStyle.Width(cardWidth).Render(label + "\n" + val)
+		boxes = append(boxes, box)
 	}
-	return []string{
-		"  " + strings.Join(tops, " "),
-		"  " + strings.Join(mids, " "),
-		"  " + strings.Join(bots, " "),
+	joined := lipgloss.JoinHorizontal(lipgloss.Top, boxes...)
+	var out []string
+	for _, line := range strings.Split(joined, "\n") {
+		out = append(out, "  "+line)
 	}
+	return out
 }
 
 // renderTableHeader formats an aligned enterprise table header row with underline rule.
