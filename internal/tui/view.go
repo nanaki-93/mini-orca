@@ -114,12 +114,12 @@ func (s *State) renderHubBar(th ansiTheme, width int) string {
 	for _, tab := range HubTabs() {
 		label := fmt.Sprintf("[%s] %s", tab.Key, tab.Label)
 		if tab.Key == active.Key {
-			parts = append(parts, th.infoBg+" ▸ "+label+" "+th.reset)
+			parts = append(parts, th.activeTabStyle.Render("▸ "+label))
 		} else {
-			parts = append(parts, th.muted+" "+label+" "+th.reset)
+			parts = append(parts, th.idleTabStyle.Render(label))
 		}
 	}
-	row := fmt.Sprintf("  %sHUBS:%s %s", th.bold+th.muted, th.reset, strings.Join(parts, th.border+" │ "+th.reset))
+	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("HUBS:"), strings.Join(parts, th.border+"│"+th.reset))
 	return padVisibleRight(row, width-2)
 }
 
@@ -131,43 +131,56 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 	var parts []string
 	for _, sp := range hub.SubPages {
 		if sp.Page == s.Page {
-			parts = append(parts, th.selBg+th.accent+" ◆ ["+sp.Label+"] "+th.reset)
+			parts = append(parts, th.subActiveStyle.Render("◆ "+sp.Label))
 		} else {
-			parts = append(parts, th.muted+" ◇ "+sp.Label+" "+th.reset)
+			parts = append(parts, th.subIdleStyle.Render("◇ "+sp.Label))
 		}
 	}
-	row := fmt.Sprintf("  %sVIEW [Tab]:%s %s", th.bold+th.muted, th.reset, strings.Join(parts, th.border+" · "+th.reset))
+	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("PAGE [Tab]:"), strings.Join(parts, th.border+"·"+th.reset))
 	return padVisibleRight(row, width-2)
 }
 
 func (s *State) renderActionToolbar(th ansiTheme, width int) string {
-	var actions []string
+	actions := s.pageActionPills(th)
+	row := fmt.Sprintf("  %sACTIONS:%s %s", th.bold+th.amber, th.reset, strings.Join(actions, "   "))
+	return padVisibleRight(row, width-2)
+}
+
+func (s *State) pageActionPills(th ansiTheme) []string {
 	switch s.Page {
-	case PageSummary, PageBugs:
-		actions = []string{
-			th.okBg + " [Enter / a] FIX SELECTED BUG WITH AGENT " + th.reset,
-			th.keyPill("x/Space", "Batch Select"),
+	case PageSummary:
+		return []string{
+			th.okBg + " [b / Enter] OPEN ISSUES & FIX BUGS " + th.reset,
+			th.keyPill("f", "Feature Ideas"),
 			th.keyPill("r", "Run Analysis"),
-			th.keyPill("t", "Filter/Test"),
-			th.keyPill(":agent <goal>", "New Feature/Fix"),
+			th.keyPill("t", "Run Checks"),
+			th.keyPill("Tab", "Next Page"),
+		}
+	case PageBugs, PageIssueDetail:
+		return []string{
+			th.okBg + " [Enter / a] FIX SELECTED BUG WITH AGENT " + th.reset,
+			th.keyPill("i", "Issue Detail"),
+			th.keyPill("x/Space", "Batch Select"),
+			th.keyPill("t/s", "Filter"),
+			th.keyPill("o", "Open File"),
 		}
 	case PageFeatures:
-		actions = []string{
+		return []string{
 			th.okBg + " [Enter / a] BUILD FEATURE WITH AGENT " + th.reset,
 			th.keyPill(":agent <spec>", "Custom Feature"),
 			th.keyPill("d", "Dismiss Idea"),
 			th.keyPill("r", "Generate Features"),
 		}
 	case PageAgents:
-		actions = []string{
+		return []string{
 			th.okBg + " [c] APPLY & COMMIT FIX " + th.reset,
 			th.keyPill("r", "Repair / Re-check"),
 			th.keyPill("m", "Merge Worktree"),
 			th.keyPill("u", "Guarded Undo"),
-			th.keyPill("Tab", "Browse Bugs & Features"),
+			th.keyPill("Tab", "Browse Issues & Features"),
 		}
 	case PageEditor:
-		actions = []string{
+		return []string{
 			th.okBg + " [c] APPLY & COMMIT DIFF " + th.reset,
 			th.keyPill("x", "Reject Hunk"),
 			th.keyPill("e", "Toggle Why"),
@@ -175,15 +188,13 @@ func (s *State) renderActionToolbar(th ansiTheme, width int) string {
 			th.keyPill(":open <file>", "Open File"),
 		}
 	default:
-		actions = []string{
-			th.keyPill("Enter", "Execute Primary Action"),
-			th.keyPill("r", "Run/Refresh Analysis"),
-			th.keyPill("h/l", "Switch Section"),
+		return []string{
+			th.keyPill("Tab", "Next Sub-Page"),
+			th.keyPill("Enter", "Primary Action"),
+			th.keyPill("r", "Run/Refresh"),
 			th.keyPill(":agent <goal>", "Start Agent"),
 		}
 	}
-	row := fmt.Sprintf("  %sACTIONS:%s %s", th.bold+th.amber, th.reset, strings.Join(actions, "   "))
-	return padVisibleRight(row, width-2)
 }
 
 func (s *State) renderProgressStrip(th ansiTheme, width int) string {

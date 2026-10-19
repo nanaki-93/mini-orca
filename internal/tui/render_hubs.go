@@ -9,12 +9,16 @@ func (s *State) renderActivePage(th ansiTheme, width int) []string {
 	switch s.Page {
 	case PageSummary:
 		return s.renderSummaryPage(th, width)
+	case PageRepo:
+		return s.renderRepoPage(th, width)
 	case PageProject:
 		return s.renderProjectPage(th, width)
 	case PageAgents:
 		return s.renderAgentsPage(th, width)
 	case PageBugs:
 		return s.renderBugsPage(th, width)
+	case PageIssueDetail:
+		return s.renderIssueDetailPage(th, width)
 	case PageFeatures:
 		return s.renderFeaturesPage(th, width)
 	case PageAnalysisRun:
@@ -36,10 +40,14 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderHistoryPage(th, width)
 	case PageDocs:
 		return s.renderDocsPage(th, width)
+	case PageDocsComponents:
+		return s.renderDocsComponentsPage(th, width)
+	case PageDocsDecisions:
+		return s.renderDocsDecisionsPage(th, width)
 	case PageDiagrams:
 		return s.renderDiagramsPage(th, width)
-	case PageInstructions:
-		return s.renderInstructionsPage(th, width)
+	case PageInstructions, PageModels, PageBootstrap, PageLessons:
+		return s.renderGovernanceSubPage(th, width)
 	default:
 		return s.renderSummaryPage(th, width)
 	}
@@ -50,6 +58,7 @@ func adaptivePanelWidth(width int) int {
 }
 
 func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
 	allIssues := s.CollectAllIssues()
 	summary := ComputeIssueSummary(allIssues, s.Features)
 	cards := [][2]string{
@@ -60,93 +69,70 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 	}
 	lines := []string{
 		fmt.Sprintf(
-			"  %s[1] OVERVIEW · PROJECT HEALTH & BUG TRIAGE%s   %s(Select a bug with [j/k] and press [Enter] or [a] to start AI Agent Fix)%s",
+			"  %s[1] OVERVIEW · EXECUTIVE DASHBOARD%s   %s([b/Enter] Open Issues · [f] Feature Ideas · [Tab] Repository & Checks)%s",
 			th.accent, th.reset, th.cyan, th.reset,
 		),
 	}
 	lines = append(lines, th.renderKPICards(cards, width)...)
-	lines = append(lines,
-		fmt.Sprintf(
-			"  %sMETRICS:%s Open Issues: %d  │  In Progress: %d  │  Resolved: %d  │  Bugs: %d  Sec: %d  Perf: %d  Features: %d",
-			th.bold+th.muted, th.reset, summary.TotalOpen, summary.InProgress, summary.Done, summary.Bugs, summary.Security, summary.Performance, summary.Features,
-		),
-		"",
-	)
-	lines = append(lines, th.renderTableHeader("   SEVERITY    CATEGORY      FINDING TITLE                            LOCATION                     AGENT STATUS", width)...)
-	open := s.openIssues()
-	if len(open) > 8 {
-		open = open[:8]
-	}
-	if len(open) == 0 {
-		emptyBox := []string{
-			fmt.Sprintf("%sNo open issues detected.%s", th.green, th.reset),
-			fmt.Sprintf("▸ Press %s[r]%s or type %s:analyze%s to scan the project for bugs, security risks, and feature ideas.", th.cyan, th.reset, th.cyan, th.reset),
-			fmt.Sprintf("▸ Type %s:agent <objective>%s to start an AI Agent for a custom bug fix or new feature.", th.green, th.reset),
-		}
-		return append(lines, th.renderPanelBox("GETTING STARTED · ANALYZE OR START AGENT", "READY", adaptivePanelWidth(width), emptyBox)...)
-	}
-	nameCol := max(35, width-68)
-	selected := s.ClampedIdx()
-	for idx, row := range open {
-		cursor := th.renderCursorPrefix(idx == selected)
-		loc := truncatePlain(fmt.Sprintf("%s:%d", row.Path, row.Line), 26)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s  %-12s  %-*s  %-27s  %s",
-			cursor, th.severityBadge(row.Severity), strings.ToUpper(row.Category), nameCol, truncatePlain(row.Name, nameCol), loc, th.statusBadge(row.Status),
-		))
-	}
-	return s.appendSelectedIssueInspector(th, width, lines)
-}
-
-func (s *State) appendSelectedIssueInspector(th ansiTheme, width int, lines []string) []string {
-	cur := s.SelectedIssue()
-	if cur == nil {
-		return lines
+	denom := max(1, summary.TotalOpen+summary.Done)
+	distBody := []string{
+		fmt.Sprintf("Bugs & Defects      %s  (%d open)", th.renderProgressBar(summary.Bugs, denom, 16), summary.Bugs),
+		fmt.Sprintf("Security Risks      %s  (%d open)", th.renderProgressBar(summary.Security, denom, 16), summary.Security),
+		fmt.Sprintf("Performance         %s  (%d open)", th.renderProgressBar(summary.Performance, denom, 16), summary.Performance),
+		fmt.Sprintf("Resolved & Verified %s  (%d fixed)", th.renderProgressBar(summary.Done, denom, 16), summary.Done),
 	}
 	lines = append(lines, "")
-	return append(lines, th.renderIssueInspectorBox(width, *cur)...)
+	lines = append(lines, th.renderPanelBox("CATEGORY BREAKDOWN · HEALTH DISTRIBUTION", "BUBBLES TELEMETRY", panelW, distBody)...)
+	navBody := []string{
+		fmt.Sprintf("▸ %sTriage & Fix Bugs:%s   Press %s[b]%s or %s[Enter]%s to open %s[2] Agent Studio ▸ Issues%s (no duplicate list here).", th.bold+th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.accent, th.reset),
+		fmt.Sprintf("▸ %sBuild New Features:%s  Press %s[f]%s to open %s[2] Agent Studio ▸ Features%s or type %s:agent <goal>%s.", th.bold+th.purple, th.reset, th.cyan, th.reset, th.accent, th.reset, th.green, th.reset),
+		fmt.Sprintf("▸ %sWorkspace & Checks:%s  Press %s[Tab]%s for %sRepository%s profile or %sTests & Checks%s gate pipeline.", th.bold+th.cyan, th.reset, th.cyan, th.reset, th.accent, th.reset, th.accent, th.reset),
+	}
+	lines = append(lines, "")
+	return append(lines, th.renderPanelBox("WORKFLOW NAVIGATION · DEDICATED SUB-PAGES", "CLEAN LAYOUT", panelW, navBody)...)
 }
 
-func (th ansiTheme) renderIssueInspectorBox(width int, cur IssueRow) []string {
+func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	textW := max(44, panelW-18)
-	actionHint := fmt.Sprintf(
-		"%s ▶ FIX THIS BUG: Press [Enter] or [a] to start AI Agent %s   %s[x] Batch Select   [d] Dismiss   [:open %s] Inspect Code%s",
-		th.okBg, th.reset, th.cyan, cur.Path, th.reset,
-	)
-	if cur.Status == "in_progress" || cur.AgentPath != "" {
-		actionHint = fmt.Sprintf(
-			"%s ⟳ AGENT WORKING ON THIS ISSUE %s   Press %s[Enter]%s or %s[2]%s to open the live 4-Stage Agent Pipeline",
-			th.warnBg, th.reset, th.cyan, th.reset, th.cyan, th.reset,
-		)
+	lines := []string{
+		fmt.Sprintf("  %s[1] OVERVIEW · REPOSITORY PROFILE%s   %s([r/Enter] Reindex Workspace · :project <path>)%s", th.accent, th.reset, th.cyan, th.reset),
 	}
-	body := []string{
-		fmt.Sprintf("%sSelected:%s %s %s (%s:%d)", th.bold, th.reset, th.severityBadge(cur.Severity), cur.Title, cur.Path, cur.Line),
-		fmt.Sprintf("%s▲ Cause:%s    %s%s%s", th.bold+th.red, th.reset, th.amber, truncatePlain(cur.Cause, textW), th.reset),
-		fmt.Sprintf("%s✔ Solution:%s %s%s%s", th.bold+th.green, th.reset, th.fg, truncatePlain(cur.Solution, textW), th.reset),
-		actionHint,
+	if s.Project == nil {
+		return append(lines, "  No project loaded. Use :project <path> to open a repository.")
 	}
-	return th.renderPanelBox("BUG DIAGNOSTIC & AI AGENT DISPATCH", strings.ToUpper(cur.Category), panelW, body)
+	branch := "detached"
+	if s.Repository != nil && s.Repository.Branch != "" {
+		branch = s.Repository.Branch
+	}
+	meta := []string{
+		fmt.Sprintf("Repository:     %s%s%s", th.bold, s.Project.Name, th.reset),
+		fmt.Sprintf("Workspace Path: %s", s.Project.Path),
+		fmt.Sprintf("Stack & Build:  %s · Manifest: %s · Branch: %s", firstNonEmpty(s.Project.Type, "polyglot"), firstNonEmpty(s.Project.BuildFile, "auto"), branch),
+		fmt.Sprintf("Code Footprint: %d indexed files · %d total lines", s.Project.FileCount, s.Project.TotalLines),
+	}
+	lines = append(lines, th.renderPanelBox("WORKSPACE IDENTITY & FOOTPRINT", "REPOSITORY", panelW, meta)...)
+	if s.Index != nil && len(s.Index.Files) > 0 {
+		lines = append(lines, "", fmt.Sprintf("  %sIndexed Files Sample (%d total):%s   Press %s[2] -> File Scope%s to toggle inclusion.", th.muted, len(s.Index.Files), th.reset, th.cyan, th.reset))
+		limit := min(8, len(s.Index.Files))
+		for i := 0; i < limit; i++ {
+			f := s.Index.Files[i]
+			lines = append(lines, fmt.Sprintf("  • %-44s (%s, %d lines)", truncatePlain(f.Path, 44), firstNonEmpty(f.Language, "text"), f.LineCount))
+		}
+	}
+	return lines
 }
 
 func (s *State) renderProjectPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	lines := []string{
-		fmt.Sprintf("  %s[1] OVERVIEW · PROJECT & VERIFICATION TESTS%s   %s([t/Enter] Run Checks · :reindex · :project <path>)%s", th.accent, th.reset, th.cyan, th.reset),
-	}
-	if s.Project != nil {
-		meta := []string{
-			fmt.Sprintf("Repository: %s%s%s (%s) · %d files · %d lines", th.bold, s.Project.Name, th.reset, s.Project.Path, s.Project.FileCount, s.Project.TotalLines),
-		}
-		if s.Project.Type != "" || s.Project.BuildFile != "" {
-			meta = append(meta, fmt.Sprintf("Stack Type: %s · Build Manifest: %s", firstNonEmpty(s.Project.Type, "polyglot"), firstNonEmpty(s.Project.BuildFile, "auto")))
-		}
-		lines = append(lines, th.renderPanelBox("REPOSITORY PROFILE", "WORKSPACE", panelW, meta)...)
-	} else {
-		lines = append(lines, "  No project loaded. Use :project <path> to open a repository.")
+		fmt.Sprintf("  %s[1] OVERVIEW · VERIFICATION TESTS & CHECKS%s   %s([t/Enter] Run Checks · :test)%s", th.accent, th.reset, th.cyan, th.reset),
 	}
 	if s.Scan == nil || len(s.Scan.Phases) == 0 {
-		return append(lines, "  No scan phases recorded yet. Press [t] or :test to run verification checks.")
+		empty := []string{
+			"No verification check phases recorded yet.",
+			fmt.Sprintf("Press %s[t]%s or %s[Enter]%s (or type %s:test%s) to run the project verification suite.", th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
+		}
+		return append(lines, th.renderPanelBox("VERIFICATION GATE PIPELINE", "IDLE", panelW, empty)...)
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("   PHASE             STATUS        STATE         COMMAND", width)...)
@@ -234,6 +220,7 @@ func renderPipelineStepper(th ansiTheme, activeStage int) string {
 }
 
 func (s *State) renderBugsPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
 	batchBadge := ""
 	if len(s.SelectedIssueIDs) > 0 {
 		batchBadge = fmt.Sprintf("   %s BATCH SELECTED: %d (Press [a] to fix all) %s", th.warnBg, len(s.SelectedIssueIDs), th.reset)
@@ -264,7 +251,44 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			cursor, mark, th.severityBadge(row.Severity), row.Category, nameCol, truncatePlain(row.Name, nameCol), loc, th.statusBadge(row.Status),
 		))
 	}
-	return s.appendSelectedIssueInspector(th, width, lines)
+	if cur := s.SelectedIssue(); cur != nil {
+		footer := []string{
+			fmt.Sprintf("%sSelected:%s %s %s (%s:%d)", th.bold, th.reset, th.severityBadge(cur.Severity), truncatePlain(cur.Title, max(28, panelW-38)), cur.Path, cur.Line),
+			fmt.Sprintf("%s ▶ [Enter / a] Fix with AI Agent %s   %s[i] Open Full Issue Detail   [x] Select   [o] Inspect File%s", th.okBg, th.reset, th.cyan, th.reset),
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderPanelBox("SELECTED ISSUE QUICK ACTIONS", strings.ToUpper(cur.Category), panelW, footer)...)
+	}
+	return lines
+}
+
+func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
+	lines := []string{
+		fmt.Sprintf(
+			"  %s[2] AGENT STUDIO · ISSUE DETAIL & ROOT CAUSE%s   %s([Enter/a] Start AI Agent Fix · [o] Open File · [Esc] Back to Issues)%s",
+			th.accent, th.reset, th.cyan, th.reset,
+		),
+	}
+	cur := s.SelectedIssue()
+	if cur == nil {
+		return append(lines, "  No issue selected. Press [Esc] or [Shift+Tab] to return to the Issues list.")
+	}
+	textW := max(44, panelW-18)
+	meta := []string{
+		fmt.Sprintf("Finding:  %s%s%s", th.bold, cur.Title, th.reset),
+		fmt.Sprintf("Severity: %s   Category: %s   Status: %s", th.severityBadge(cur.Severity), strings.ToUpper(cur.Category), th.statusBadge(cur.Status)),
+		fmt.Sprintf("Location: %s%s:%d%s", th.cyan, cur.Path, cur.Line, th.reset),
+	}
+	lines = append(lines, th.renderPanelBox("ISSUE METADATA & LOCATION", cur.ID, panelW, meta)...)
+	diag := []string{
+		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, truncatePlain(cur.Cause, textW), th.reset),
+		fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.fg, truncatePlain(cur.Solution, textW), th.reset),
+		"",
+		fmt.Sprintf("%s ▶ FIX THIS BUG: Press [Enter] or [a] to start AI Agent %s   %s[o] Open %s   [Esc] Back to Issues%s", th.okBg, th.reset, th.cyan, cur.Path, th.reset),
+	}
+	lines = append(lines, "")
+	return append(lines, th.renderPanelBox("ROOT CAUSE DIAGNOSTIC & REMEDIATION", strings.ToUpper(cur.Category), panelW, diag)...)
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
@@ -474,13 +498,16 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderDocsPage(th ansiTheme, width int) []string {
+	if s.DocsSection == "components" {
+		return s.renderDocsComponentsPage(th, width)
+	}
+	if s.DocsSection == "scenarios" || s.DocsSection == "decisions" {
+		return s.renderDocsDecisionsPage(th, width)
+	}
 	panelW := adaptivePanelWidth(width)
 	docs := ResolveProjectDocs(s.Overview, s.Project)
 	lines := []string{
-		fmt.Sprintf(
-			"  %s[4] HANDBOOK & ARCH · ENGINEERING SPECIFICATION%s   Section [h/l]: %s[%s]%s",
-			th.accent, th.reset, th.purple, strings.ToUpper(s.DocsSection), th.reset,
-		),
+		fmt.Sprintf("  %s[4] HANDBOOK & ARCH · SYSTEM CONTEXT & DEPENDENCIES%s   %s([Tab] Components · Scenarios & ADRs · Architecture)%s", th.accent, th.reset, th.cyan, th.reset),
 	}
 	ctxLines := []string{
 		fmt.Sprintf("%sPurpose:%s  %s", th.bold, th.reset, docs.Context.Purpose),
@@ -488,27 +515,41 @@ func (s *State) renderDocsPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderPanelBox("SYSTEM CONTEXT & TOPOLOGY", strings.ToUpper(docs.Status), panelW, ctxLines)...)
 	lines = append(lines, "")
-	switch s.DocsSection {
-	case "components":
-		lines = append(lines, th.renderTableHeader("   LAYER          COMPONENT                 PATH                        SUMMARY", width)...)
-		for _, c := range docs.Components {
-			lines = append(lines, fmt.Sprintf("  • [%s] %s (%s) — %s", c.Layer, c.Name, c.Path, c.Summary))
-		}
-	case "scenarios":
-		lines = append(lines, th.renderTableHeader("   RUNTIME SCENARIO & INVARIANT SUMMARY", width)...)
-		for _, sc := range docs.Scenarios {
-			lines = append(lines, fmt.Sprintf("  • %s: %s", sc.Title, sc.Summary))
-		}
-	case "decisions":
-		lines = append(lines, th.renderTableHeader("   CATEGORY       ARCHITECTURAL DECISION RECORD (ADR)", width)...)
-		for _, d := range docs.Decisions {
-			lines = append(lines, fmt.Sprintf("  • [%s] %s — %s", d.Category, d.Title, d.Decision))
-		}
-	default:
-		lines = append(lines, th.renderTableHeader("   DEPENDENCY & SUBSYSTEM CATALOG", width)...)
-		for _, dep := range docs.Dependencies {
-			lines = append(lines, fmt.Sprintf("  • %s (%s): %s", dep.Name, dep.Kind, dep.Purpose))
-		}
+	lines = append(lines, th.renderTableHeader("   DEPENDENCY & SUBSYSTEM CATALOG", width)...)
+	for _, dep := range docs.Dependencies {
+		lines = append(lines, fmt.Sprintf("  • %s (%s): %s", dep.Name, dep.Kind, dep.Purpose))
+	}
+	return lines
+}
+
+func (s *State) renderDocsComponentsPage(th ansiTheme, width int) []string {
+	docs := ResolveProjectDocs(s.Overview, s.Project)
+	lines := []string{
+		fmt.Sprintf("  %s[4] HANDBOOK & ARCH · ARCHITECTURAL COMPONENTS%s   %s([Tab] Next Page · [r] Refresh)%s", th.accent, th.reset, th.cyan, th.reset),
+		"",
+	}
+	lines = append(lines, th.renderTableHeader("   LAYER          COMPONENT                 PATH                        SUMMARY", width)...)
+	for _, c := range docs.Components {
+		lines = append(lines, fmt.Sprintf("  • [%s] %s (%s) — %s", c.Layer, c.Name, c.Path, c.Summary))
+	}
+	return lines
+}
+
+func (s *State) renderDocsDecisionsPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
+	docs := ResolveProjectDocs(s.Overview, s.Project)
+	lines := []string{
+		fmt.Sprintf("  %s[4] HANDBOOK & ARCH · SCENARIOS & ARCHITECTURAL DECISIONS%s   %s([Tab] Next Page)%s", th.accent, th.reset, th.cyan, th.reset),
+	}
+	var scenBody []string
+	for _, sc := range docs.Scenarios {
+		scenBody = append(scenBody, fmt.Sprintf("• %s: %s", sc.Title, sc.Summary))
+	}
+	lines = append(lines, th.renderPanelBox("RUNTIME SCENARIOS & INVARIANTS", "BEHAVIOR", panelW, scenBody)...)
+	lines = append(lines, "")
+	lines = append(lines, th.renderTableHeader("   CATEGORY       ARCHITECTURAL DECISION RECORD (ADR)", width)...)
+	for _, d := range docs.Decisions {
+		lines = append(lines, fmt.Sprintf("  • [%s] %s — %s", d.Category, d.Title, d.Decision))
 	}
 	return lines
 }
@@ -524,58 +565,93 @@ func (s *State) renderDiagramsPage(th ansiTheme, width int) []string {
 	return lines
 }
 
-func (s *State) renderInstructionsPage(th ansiTheme, width int) []string {
+func (s *State) renderGovernanceSubPage(th ansiTheme, width int) []string {
+	section := s.RulesSection
+	switch s.Page {
+	case PageModels:
+		section = "models"
+	case PageBootstrap:
+		section = "bootstrap"
+	case PageLessons:
+		section = "lessons"
+	}
+	switch section {
+	case "models":
+		return s.renderModelsPage(th, width)
+	case "bootstrap":
+		return s.renderBootstrapPage(th, width)
+	case "lessons":
+		return s.renderLessonsPage(th, width)
+	default:
+		return s.renderTrustPage(th, width)
+	}
+}
+
+func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
+	trustBadge := th.statusBadge("TRUSTED")
+	if !s.WorkspaceTrust {
+		trustBadge = th.statusBadge("UNTRUSTED")
+	}
 	lines := []string{
-		fmt.Sprintf(
-			"  %s[5] GOVERNANCE & RULES%s   Section [Tab/h/l]: %s[%s]%s   %s([t] Trust · [b] Bootstrap · [g] Graduate Lesson)%s",
-			th.accent, th.reset, th.purple, strings.ToUpper(s.RulesSection), th.reset, th.cyan, th.reset,
-		),
+		fmt.Sprintf("  %s[5] GOVERNANCE & RULES · TRUST POLICY%s   %s([t/Enter] Toggle Trust · [Tab] Model Routing & Bootstrap)%s", th.accent, th.reset, th.cyan, th.reset),
+	}
+	body := []string{
+		fmt.Sprintf("Execution Trust: %v %s (Press [t] or [Enter] to toggle)", s.WorkspaceTrust, trustBadge),
+		"Policy: Project-code checks run in isolated worktrees with controlled argv and bounded output.",
+	}
+	return append(lines, th.renderPanelBox("EXECUTION TRUST GOVERNANCE", "SANDBOX POLICY", panelW, body)...)
+}
+
+func (s *State) renderModelsPage(th ansiTheme, width int) []string {
+	lines := []string{
+		fmt.Sprintf("  %s[5] GOVERNANCE & RULES · MODEL ROUTING%s   %s([j/k] Select · [Enter] Activate Preset)%s", th.accent, th.reset, th.cyan, th.reset),
 		"",
 	}
-	switch s.RulesSection {
-	case "models":
-		lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
-		for idx, p := range DefaultModelPresets() {
-			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
-			active := "         "
-			if p.ID == s.ActivePresetID {
-				active = th.green + "(ACTIVE) " + th.reset
-			}
-			lines = append(lines, fmt.Sprintf(
-				"  %s%-28s %s [analyze:%s bug:%s function:%s]",
-				cursor, p.Name, active, p.Analyze, p.Bug, p.Function,
-			))
+	lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
+	for idx, p := range DefaultModelPresets() {
+		cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+		active := "         "
+		if p.ID == s.ActivePresetID {
+			active = th.green + "(ACTIVE) " + th.reset
 		}
-	case "bootstrap":
-		pillars := EvaluateBootstrapChecklist(s.Index, s.Instructions)
-		readyCount := countReadyPillars(pillars)
-		lines = append(lines, fmt.Sprintf("  %sGovernance Readiness:%s %s (%d/%d pillars active)", th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), readyCount, len(pillars)), "")
-		lines = append(lines, th.renderTableHeader("   STATUS      GOVERNANCE PILLAR              DESCRIPTION", width)...)
-		for idx, pil := range pillars {
-			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
-			badge := th.statusBadge("MISSING")
-			if pil.Ready {
-				badge = th.statusBadge("READY")
-			}
-			lines = append(lines, fmt.Sprintf("  %s%-10s %-28s — %s", cursor, badge, pil.Title, pil.Description))
+		lines = append(lines, fmt.Sprintf(
+			"  %s%-28s %s [analyze:%s bug:%s function:%s]",
+			cursor, p.Name, active, p.Analyze, p.Bug, p.Function,
+		))
+	}
+	return lines
+}
+
+func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
+	pillars := EvaluateBootstrapChecklist(s.Index, s.Instructions)
+	readyCount := countReadyPillars(pillars)
+	lines := []string{
+		fmt.Sprintf("  %s[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST%s   %s([b/Enter] Bootstrap AGENTS.md)%s", th.accent, th.reset, th.cyan, th.reset),
+		fmt.Sprintf("  %sGovernance Readiness:%s %s (%d/%d pillars active)", th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), readyCount, len(pillars)),
+		"",
+	}
+	lines = append(lines, th.renderTableHeader("   STATUS      GOVERNANCE PILLAR              DESCRIPTION", width)...)
+	for idx, pil := range pillars {
+		cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+		badge := th.statusBadge("MISSING")
+		if pil.Ready {
+			badge = th.statusBadge("READY")
 		}
-	case "lessons":
-		lines = append(lines, th.renderTableHeader("   HARNESS² GUARDRAIL LESSONS (Press [g/Enter] to graduate into AGENTS.md)", width)...)
-		for idx, rule := range s.AllHarnessLessons() {
-			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
-			lines = append(lines, fmt.Sprintf("  %s• %s", cursor, rule))
-		}
-	default:
-		trustBadge := th.statusBadge("TRUSTED")
-		if !s.WorkspaceTrust {
-			trustBadge = th.statusBadge("UNTRUSTED")
-		}
-		body := []string{
-			fmt.Sprintf("Execution Trust: %v %s (Press [t] or [Enter] to toggle)", s.WorkspaceTrust, trustBadge),
-			"Policy: Project-code checks run in isolated worktrees with controlled argv and bounded output.",
-		}
-		lines = append(lines, th.renderPanelBox("EXECUTION TRUST GOVERNANCE", "SANDBOX POLICY", panelW, body)...)
+		lines = append(lines, fmt.Sprintf("  %s%-10s %-28s — %s", cursor, badge, pil.Title, pil.Description))
+	}
+	return lines
+}
+
+func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
+	lines := []string{
+		fmt.Sprintf("  %s[5] GOVERNANCE & RULES · HARNESS² LESSONS%s   %s([g/Enter] Graduate Lesson into AGENTS.md)%s", th.accent, th.reset, th.cyan, th.reset),
+		"",
+	}
+	lines = append(lines, th.renderTableHeader("   HARNESS² GUARDRAIL LESSONS (Press [g/Enter] to graduate into AGENTS.md)", width)...)
+	for idx, rule := range s.AllHarnessLessons() {
+		cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+		lines = append(lines, fmt.Sprintf("  %s• %s", cursor, rule))
 	}
 	return lines
 }
