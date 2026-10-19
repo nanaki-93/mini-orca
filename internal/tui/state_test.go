@@ -92,8 +92,36 @@ func TestIssuesFilteringSelectionAndAgentDispatch(t *testing.T) {
 	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "start-agent" {
 		t.Fatalf("expected start-agent action, got %+v", s.PendingActions)
 	}
+	if s.Page != PageAgents || s.Change == nil {
+		t.Fatalf("expected immediate transition to PageAgents with active ChangeSession, got page=%s change=%v", s.Page, s.Change)
+	}
 	if !strings.Contains(s.CmdOutput, "grouped agent fix for 2 issues") {
 		t.Fatalf("unexpected command output: %s", s.CmdOutput)
+	}
+
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	workflowStarted := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/current/changes":
+			_, _ = w.Write([]byte(`{"id":"chg-live","title":"Batch fix","state":"open","revision":1,"hash":"h1"}`))
+		case "/api/projects/current/changes/chg-live/workflow":
+			workflowStarted = true
+			_, _ = w.Write([]byte(`{"id":"chg-live","title":"Batch fix","state":"running","revision":1,"hash":"h1","workflow":{"id":"wf-1","status":"running"}}`))
+		default:
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	s.FlushActions(context.Background(), cli)
+	if !workflowStarted || s.Change.ID != "chg-live" {
+		t.Fatalf("expected start-agent to open session and start workflow on daemon, workflowStarted=%v change=%+v", workflowStarted, s.Change)
 	}
 }
 

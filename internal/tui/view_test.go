@@ -139,12 +139,27 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	}
 	s.Confirmation = nil
 
-	// Verify narrow and wide viewports render cleanly
-	for _, dims := range [][2]int{{60, 20}, {108, 32}, {150, 48}} {
+	// Verify Error Alert Banner and Escape dismissal
+	s.Error = "daemon connection refused on 127.0.0.1:9090"
+	errFrame := s.Render(110, 34)
+	if !strings.Contains(errFrame, "ERROR / DIAGNOSTIC ALERT") || !strings.Contains(errFrame, "daemon connection refused") {
+		t.Fatalf("expected prominent error alert banner:\n%s", errFrame)
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
+	if s.Error != "" {
+		t.Fatalf("expected Escape to clear active error, got %q", s.Error)
+	}
+
+	// Verify full-screen adaptive width and height filling across compact, standard, and ultrawide viewports
+	for _, dims := range [][2]int{{68, 24}, {120, 36}, {180, 50}} {
 		s.Navigate(PageSummary)
 		out := s.Render(dims[0], dims[1])
-		if visibleRuneCount(strings.Split(out, "\n")[0]) < 68 {
-			t.Fatalf("unexpected top border width for dims %v", dims)
+		rows := strings.Split(out, "\n")
+		if len(rows) < dims[1] {
+			t.Fatalf("expected full-screen frame height >= %d, got %d rows", dims[1], len(rows))
+		}
+		if gotW := visibleRuneCount(rows[0]); gotW != dims[0] {
+			t.Fatalf("expected exact full-screen width %d on top border, got %d", dims[0], gotW)
 		}
 	}
 }
