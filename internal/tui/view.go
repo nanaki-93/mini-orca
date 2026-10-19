@@ -453,9 +453,9 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
 		title:     "[3] CODE & DIFF · INSPECTOR",
-		primary:   []keyDesc{{"c", "Apply & Commit"}, {"u", "Guarded Undo"}, {"x", "Reject Hunk"}, {"e", "Toggle Why"}},
-		secondary: []keyDesc{{"n/N", "Next/Prev Hunk"}, {"w", "Agent Pipeline"}, {"b", "Issues"}, {"Enter", "Open"}},
-		commands:  ":apply [msg]  :undo  :open <file>  :diff  :proposals",
+		primary:   []keyDesc{{"n/N", "Next/Prev Hunk"}, {"f/F", "Next/Prev File"}, {"v", "Diff View Mode"}, {"c", "Apply & Commit"}},
+		secondary: []keyDesc{{"x", "Reject Hunk"}, {"e", "Toggle Why"}, {"u", "Guarded Undo"}, {"w", "Agent Pipeline"}},
+		commands:  ":diff [hunk|split|unified]  :hunk [next|prev]  :apply [msg]  :undo  :open <file>",
 	},
 	PageGit: {
 		title:     "[3] CODE & DIFF · GIT & WORKTREES",

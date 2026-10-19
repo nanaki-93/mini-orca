@@ -586,7 +586,8 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	if !s.ShowInlineWhy {
 		whyLabel = "Inline Rationale: OFF"
 	}
-	lines := renderPageHeader(th, "[3] CODE & DIFF · INSPECTOR", whyLabel)
+	subRight := fmt.Sprintf("View: %s · %s", diffModeDisplayName(s.EffectiveDiffMode()), whyLabel)
+	lines := renderPageHeader(th, "[3] CODE & DIFF · INSPECTOR", subRight)
 	if s.Change != nil && len(s.Change.Changes) > 0 {
 		lines = append(lines, s.renderChangeDiffLines(th, width)...)
 		return lines
@@ -609,50 +610,6 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 		return lines
 	}
 	return s.renderIndexedFilesInEditor(th, width, lines)
-}
-
-func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	fc := s.Change.Changes[0]
-	added, removed, badge := ClassifyDiffScope(s.Change.Changes)
-	hunks := SplitDiffIntoHunks(fc.Diff.Lines)
-	meta := []string{
-		fmt.Sprintf(
-			"%sProposal:%s %s%s%s · %sFile:%s %s%s%s %s (%s+%d%s/%s-%d%s) · %sHunks:%s %d",
-			th.muted, th.reset, th.bold+th.fg, truncatePlain(s.Change.Title, 36), th.reset,
-			th.muted, th.reset, th.cyan, truncatePlain(fc.Path, 36), th.reset,
-			th.statusBadge(badge),
-			th.green, added, th.reset, th.red, removed, th.reset,
-			th.muted, th.reset, len(hunks),
-		),
-	}
-	if s.ShowInlineWhy && fc.Summary != "" {
-		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, sanitizeCodeText(fc.Summary), th.reset))
-	}
-	lines := th.renderPanelBox("GUARDED DIFF REVIEW", badge, panelW, meta)
-	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("  SIGN  LINE │ UNIFIED DIFF CONTENT", width)...)
-	diffLines := s.displayDiffLines()
-	codeCol := max(16, width-14)
-	start, end := windowBounds(len(diffLines), s.ClampedIdx(), 14)
-	for idx := start; idx < end; idx++ {
-		lines = append(lines, formatDiffDisplayLine(th, diffLines[idx], codeCol))
-	}
-	return appendWindowFooter(th, lines, start, end, len(diffLines))
-}
-
-func formatDiffDisplayLine(th ansiTheme, dl DiffLine, codeCol int) string {
-	text := truncatePlain(sanitizeCodeText(dl.Text), codeCol)
-	switch {
-	case dl.Kind == "hunk":
-		return fmt.Sprintf("  %s@@   %4d │ %s%s", th.cyan, dl.NewLine, text, th.reset)
-	case IsAddedLine(dl.Kind):
-		return fmt.Sprintf("  %s+ %4d │ %s%s", th.green, dl.NewLine, text, th.reset)
-	case IsRemovedLine(dl.Kind):
-		return fmt.Sprintf("  %s- %4d │ %s%s", th.red, dl.OldLine, text, th.reset)
-	default:
-		return fmt.Sprintf("  %s  %4d │%s %s", th.muted, dl.NewLine, th.reset, text)
-	}
 }
 
 func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {

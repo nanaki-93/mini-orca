@@ -254,6 +254,11 @@ func (s *State) moveSelection(delta int) {
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		s.cycleSubView(delta > 0)
 		return
+	case PageEditor:
+		if s.Change != nil && len(s.Change.Changes) > 0 {
+			s.moveEditorDiffSelection(delta)
+			return
+		}
 	}
 	maxIdx := max(0, s.ActiveListLength()-1)
 	next := s.ClampedIdx() + delta
@@ -449,6 +454,9 @@ func (s *State) handleAgentsKey(key string) bool {
 }
 
 func (s *State) handleEditorKey(key string) bool {
+	if s.handleEditorDiffNavKey(key) {
+		return true
+	}
 	switch key {
 	case "e":
 		s.ShowInlineWhy = !s.ShowInlineWhy
@@ -457,9 +465,6 @@ func (s *State) handleEditorKey(key string) bool {
 			stateWord = "enabled"
 		}
 		s.CmdOutput = fmt.Sprintf("Inline diff explanations %s", stateWord)
-		return true
-	case "n", "N":
-		s.stepDiffHunk(key == "n")
 		return true
 	case "c":
 		s.applyAndCommitProposal("")
@@ -482,28 +487,111 @@ func (s *State) handleEditorKey(key string) bool {
 	return false
 }
 
-func (s *State) stepDiffHunk(forward bool) {
-	if s.Change == nil || len(s.Change.Changes) == 0 {
-		return
+func (s *State) handleEditorDiffNavKey(key string) bool {
+	switch key {
+	case "n", "N", "}", "{":
+		s.stepDiffHunk(key == "n" || key == "}")
+		return true
+	case "f", "F":
+		s.stepDiffFile(key == "f")
+		return true
+	case "v", "V":
+		s.cycleDiffViewMode(key == "v")
+		return true
 	}
-	hunks := SplitDiffIntoHunks(s.Change.Changes[0].Diff.Lines)
-	if len(hunks) == 0 {
+	return false
+}
+
+func (s *State) stepDiffHunk(forward bool) {
+	active, allHunks, ok := s.activeDiffHunk()
+	if !ok {
 		return
 	}
 	delta := -1
 	if forward {
 		delta = 1
 	}
-	s.HunkIdx = (s.HunkIdx + delta + len(hunks)) % len(hunks)
-	offset := 0
-	for i := 0; i < s.HunkIdx; i++ {
-		if len(hunks) > 1 {
-			offset++
-		}
-		offset += len(hunks[i].Lines)
+	nextIdx := (active.GlobalIndex + delta + len(allHunks)) % len(allHunks)
+	s.syncDiffSelectionToHunk(nextIdx)
+	s.CmdOutput = s.formatFocusedHunkStatus(allHunks[nextIdx], len(allHunks))
+}
+
+func (s *State) stepDiffFile(forward bool) {
+	active, allHunks, ok := s.activeDiffHunk()
+	if !ok {
+		return
 	}
-	s.SelectedIdx = offset
-	s.CmdOutput = fmt.Sprintf("Focused diff hunk #%d/%d (lines %d-%d)", s.HunkIdx+1, len(hunks), hunks[s.HunkIdx].NewStart, hunks[s.HunkIdx].NewEnd)
+	if active.FileTotal <= 1 {
+		s.CmdOutput = fmt.Sprintf("Single file in proposal: %s (use [n/N] to step hunks)", active.Path)
+		return
+	}
+	delta := -1
+	if forward {
+		delta = 1
+	}
+	targetFile := (active.FileIndex + delta + active.FileTotal) % active.FileTotal
+	for range active.FileTotal {
+		for _, fh := range allHunks {
+			if fh.FileIndex == targetFile {
+				s.syncDiffSelectionToHunk(fh.GlobalIndex)
+				s.CmdOutput = s.formatFocusedHunkStatus(fh, len(allHunks))
+				return
+			}
+		}
+		targetFile = (targetFile + delta + active.FileTotal) % active.FileTotal
+	}
+}
+
+func (s *State) cycleDiffViewMode(forward bool) {
+	modes := []string{"hunk", "split", "unified"}
+	next := stepStringSlice(modes, s.EffectiveDiffMode(), forward)
+	s.setDiffViewMode(next)
+}
+
+func (s *State) setDiffViewMode(mode string) {
+	s.DiffMode = mode
+	eff := s.EffectiveDiffMode()
+	if active, _, ok := s.activeDiffHunk(); ok {
+		s.syncDiffSelectionToHunk(active.GlobalIndex)
+	} else {
+		s.SelectedIdx = 0
+	}
+	s.CmdOutput = fmt.Sprintf("Switched diff inspector view to %s ([v] to cycle · [n/N] hunk · [f/F] file)", diffModeDisplayName(eff))
+}
+
+func (s *State) moveEditorDiffSelection(delta int) {
+	active, allHunks, ok := s.activeDiffHunk()
+	if !ok {
+		return
+	}
+	if s.EffectiveDiffMode() == "unified" {
+		uRows := s.unifiedDiffRows()
+		if len(uRows) == 0 {
+			return
+		}
+		next := min(max(0, s.ClampedIdx()+delta), len(uRows)-1)
+		s.SelectedIdx = next
+		s.HunkIdx = uRows[next].HunkGlobalIdx
+		s.CmdOutput = s.formatFocusedHunkStatus(allHunks[s.HunkIdx], len(allHunks))
+		return
+	}
+	rowCount := s.diffViewRowCount()
+	next := s.ClampedIdx() + delta
+	if next >= rowCount && delta > 0 && active.GlobalIndex+1 < len(allHunks) {
+		nextHunk := active.GlobalIndex + 1
+		s.HunkIdx = nextHunk
+		s.SelectedIdx = 0
+		s.CmdOutput = s.formatFocusedHunkStatus(allHunks[nextHunk], len(allHunks))
+		return
+	}
+	if next < 0 && delta < 0 && active.GlobalIndex > 0 {
+		prevHunk := active.GlobalIndex - 1
+		s.HunkIdx = prevHunk
+		s.SelectedIdx = max(0, s.diffViewRowCount()-1)
+		s.CmdOutput = s.formatFocusedHunkStatus(allHunks[prevHunk], len(allHunks))
+		return
+	}
+	s.SelectedIdx = min(max(0, next), max(0, rowCount-1))
 }
 
 func isGovernancePage(p Page) bool {

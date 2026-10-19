@@ -437,3 +437,101 @@ func TestCodeDiffAndSourceTabAndLongLineSanitization(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	s.Change = &ChangeSession{
+		ID:    "chg-multi",
+		Title: "Harden server and add regression test",
+		State: "checked",
+		Changes: []FileChange{
+			{
+				Path:    "internal/api/server.go",
+				Summary: "Add read header timeout",
+				Content: "package api\nvar ReadHeaderTimeout = 5\n",
+				Diff: FileDiff{
+					Lines: []DiffLine{
+						{Kind: "context", OldLine: 1, NewLine: 1, Text: "package api"},
+						{Kind: "delete", OldLine: 2, NewLine: 0, Text: "var ReadHeaderTimeout = 0"},
+						{Kind: "add", OldLine: 0, NewLine: 2, Text: "var ReadHeaderTimeout = 5"},
+					},
+				},
+			},
+			{
+				Path:    "internal/api/server_test.go",
+				Summary: "Verify timeout configuration in unit test",
+				Content: "package api\nfunc TestTimeout() {}\n",
+				Diff: FileDiff{
+					Lines: []DiffLine{
+						{Kind: "context", OldLine: 1, NewLine: 1, Text: "package api"},
+						{Kind: "add", OldLine: 0, NewLine: 2, Text: "func TestTimeout() {}"},
+					},
+				},
+			},
+		},
+	}
+
+	s.Navigate(PageEditor)
+
+	// 1. Initially focused on Hunk #1/2 in file 1/2 (server.go)
+	frameHunk1 := s.Render(120, 36)
+	if !strings.Contains(frameHunk1, "Hunk #1/2") || !strings.Contains(frameHunk1, "ReadHeaderTimeout = 5") {
+		t.Fatalf("expected Hunk #1/2 from server.go in initial view:\n%s", frameHunk1)
+	}
+
+	// 2. Press 'n' -> must advance to Hunk #2/2 in file 2/2 (server_test.go)
+	s.HandleKey(KeyEvent{Key: "n"})
+	if s.HunkIdx != 1 || !strings.Contains(s.CmdOutput, "hunk #2/2") || !strings.Contains(s.CmdOutput, "server_test.go") {
+		t.Fatalf("expected 'n' to focus hunk #2/2 in server_test.go, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	}
+	frameHunk2 := s.Render(120, 36)
+	if !strings.Contains(frameHunk2, "Hunk #2/2") || !strings.Contains(frameHunk2, "TestTimeout") || !strings.Contains(frameHunk2, "Verify timeout configuration") {
+		t.Fatalf("expected Hunk #2/2 and rationale from server_test.go:\n%s", frameHunk2)
+	}
+
+	// 3. Press 'f' -> cycles back to file 1/2 (server.go)
+	s.HandleKey(KeyEvent{Key: "f"})
+	if s.HunkIdx != 0 || !strings.Contains(s.CmdOutput, "server.go") {
+		t.Fatalf("expected 'f' to cycle back to file 1/2 (server.go), got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	}
+
+	// 4. Scroll down with 'j' past the end of Hunk #1 -> automatically advances into Hunk #2
+	for range 5 {
+		s.HandleKey(KeyEvent{Key: "j"})
+	}
+	if s.HunkIdx != 1 {
+		t.Fatalf("expected scrolling past end of hunk #1 with 'j' to advance to hunk #2, got HunkIdx=%d", s.HunkIdx)
+	}
+
+	// 5. Cycle diff view modes with 'v' (hunk -> split -> unified -> hunk) and verify geometry
+	for _, expectedMode := range []string{"split", "unified", "hunk"} {
+		s.HandleKey(KeyEvent{Key: "v"})
+		if got := s.EffectiveDiffMode(); got != expectedMode {
+			t.Fatalf("expected diff mode %q after 'v', got %q", expectedMode, got)
+		}
+		for _, dims := range [][2]int{{68, 24}, {120, 36}} {
+			frame := s.Render(dims[0], dims[1])
+			rows := strings.Split(frame, "\n")
+			if len(rows) != dims[1] {
+				t.Fatalf("mode %s (%dx%d): expected %d rows, got %d", expectedMode, dims[0], dims[1], dims[1], len(rows))
+			}
+			for rIdx, row := range rows {
+				if gotW := visibleRuneCount(row); gotW != dims[0] {
+					t.Fatalf("mode %s (%dx%d) row %d: expected width %d, got %d: %q", expectedMode, dims[0], dims[1], rIdx, dims[0], gotW, row)
+				}
+			}
+		}
+	}
+
+	// 6. Reject hunk #2 in file 2 (server_test.go) using 'x' without affecting file 1
+	s.ExecuteCommand(":diff hunk")
+	s.HunkIdx = 1
+	s.HandleKey(KeyEvent{Key: "x"})
+	if strings.Contains(s.Change.Changes[1].Content, "TestTimeout") {
+		t.Fatalf("expected rejecting hunk in file 2 to remove TestTimeout from file 2 content, got %q", s.Change.Changes[1].Content)
+	}
+	if !strings.Contains(s.Change.Changes[0].Content, "ReadHeaderTimeout = 5") {
+		t.Fatalf("expected file 1 content to remain intact after rejecting file 2 hunk, got %q", s.Change.Changes[0].Content)
+	}
+}
