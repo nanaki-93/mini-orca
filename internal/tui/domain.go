@@ -685,6 +685,25 @@ func pickPath(files map[string]bool, candidates ...string) string {
 	return ""
 }
 
+// CanonicalModelScopes returns the three primary LLM routing scopes in Mini-Orca.
+func CanonicalModelScopes() []string {
+	return []string{"analyze", "bug", "function"}
+}
+
+// ScopeRoleDescription returns the purpose of a model scope.
+func ScopeRoleDescription(scope string) string {
+	switch scope {
+	case "analyze":
+		return "Architecture, Security AI & Stage 3 Critic Review"
+	case "bug":
+		return "Semantic Bug Detection & Stage 1 Code Generation"
+	case "function":
+		return "Fast Scoped Tasks & Stage 2 Test Generation"
+	default:
+		return "Scoped LLM Runtime"
+	}
+}
+
 // DefaultModelPresets returns the built-in 3-scope model configuration presets.
 func DefaultModelPresets() []ModelPreset {
 	return []ModelPreset{
@@ -692,6 +711,98 @@ func DefaultModelPresets() []ModelPreset {
 		{ID: "hybrid-precision", Name: "Hybrid Precision", Analyze: "local", Bug: "remote-pro", Function: "local"},
 		{ID: "deep-audit", Name: "Deep Security & Bug Audit", Analyze: "remote-pro", Bug: "remote-pro", Function: "remote-fast"},
 	}
+}
+
+// AssignedScopeModelID returns the user-assigned model/profile ID for a scope.
+func (s *State) AssignedScopeModelID(scope string) string {
+	if s.ScopeModels != nil && s.ScopeModels[scope] != "" {
+		return s.ScopeModels[scope]
+	}
+	return scope
+}
+
+// AvailableModelIDs returns all selectable model IDs across configured scopes and discovered CLI catalogs.
+func (s *State) AvailableModelIDs() []string {
+	ids := append([]string(nil), CanonicalModelScopes()...)
+	if s.AvailableModels != nil {
+		for _, ch := range s.AvailableModels.Models {
+			if ch.ID != "" && !containsString(ids, ch.ID) {
+				ids = append(ids, ch.ID)
+			}
+		}
+	}
+	for _, fallback := range []string{"local", "remote-pro", "remote-fast"} {
+		if !containsString(ids, fallback) {
+			ids = append(ids, fallback)
+		}
+	}
+	return ids
+}
+
+// EffectiveScopeModel resolves the full runtime Model metadata for the given scope.
+func (s *State) EffectiveScopeModel(scope string) Model {
+	assigned := s.AssignedScopeModelID(scope)
+	if s.AvailableModels != nil {
+		for _, ch := range s.AvailableModels.Models {
+			if ch.ID == assigned {
+				m := ch.Model
+				m.Scope = scope
+				m.Profile = ch.ID
+				if m.Model == "" {
+					m.Model = ch.Name
+				}
+				return m
+			}
+		}
+	}
+	if s.Models != nil {
+		if m, ok := s.Models.Scopes[assigned]; ok {
+			m.Scope = scope
+			m.Profile = firstNonEmpty(m.Profile, assigned)
+			return m
+		}
+		if m, ok := s.Models.Scopes[scope]; ok {
+			m.Scope = scope
+			m.Profile = firstNonEmpty(assigned, m.Profile, scope)
+			return m
+		}
+	}
+	remote := strings.Contains(assigned, "remote") || strings.HasPrefix(assigned, "agy:")
+	origin := "http://127.0.0.1:11434"
+	if remote {
+		origin = "remote-provider"
+	}
+	return Model{
+		Scope:            scope,
+		Profile:          assigned,
+		Model:            assigned,
+		ProviderOrigin:   origin,
+		RemoteProvider:   remote,
+		ReasoningEffort:  "medium",
+		ContextMaxTokens: 32768,
+		Timeout:          "2m0s",
+		MaxRetries:       2,
+	}
+}
+
+// FormatModelParams formats a concise runtime parameter string for a Model.
+func FormatModelParams(m Model) string {
+	effort := firstNonEmpty(m.ReasoningEffort, "default")
+	ctxTok := "default"
+	if m.ContextMaxTokens > 0 {
+		ctxTok = fmt.Sprintf("%dk", max(1, m.ContextMaxTokens/1024))
+	}
+	maxTok := "auto"
+	if m.MaxTokens != nil && *m.MaxTokens > 0 {
+		maxTok = fmt.Sprintf("%d", *m.MaxTokens)
+	}
+	temp := "default"
+	if m.Temperature != nil {
+		temp = fmt.Sprintf("%.2f", *m.Temperature)
+	}
+	timeout := firstNonEmpty(m.Timeout, "2m0s")
+	return fmt.Sprintf("effort:%s · ctx:%s · max_tokens:%s · temp:%s · timeout:%s · retries:%d",
+		effort, ctxTok, maxTok, temp, timeout, m.MaxRetries)
 }
 
 // ResolveProjectDocs returns the project's structured handbook or synthesizes a fallback from Overview.

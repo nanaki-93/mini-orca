@@ -402,6 +402,9 @@ func (s *State) dispatchSecondaryMutation(ctx context.Context, client *Client, r
 		return s.dispatchBootstrap(ctx, client, reqID, act.Target)
 	case "cancel-workflow":
 		return s.dispatchCancelWorkflow(ctx, client, reqID, act.Target)
+	case "refresh-models":
+		s.RefreshModels(ctx, client)
+		return nil
 	default:
 		return nil
 	}
@@ -426,6 +429,39 @@ func (s *State) dispatchCancelWorkflow(ctx context.Context, client *Client, reqI
 		s.Change = &updated
 	}
 	return nil
+}
+
+func (s *State) workflowModelsPayload() (map[string]string, []string) {
+	createSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("bug"), "bug")
+	testSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("function"), "function")
+	reviewSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("analyze"), "analyze")
+	models := map[string]string{
+		"create": createSel,
+		"test":   testSel,
+		"review": reviewSel,
+	}
+	confirmed := []string{"analyze", "bug", "function"}
+	for _, sel := range []string{createSel, testSel, reviewSel} {
+		if !containsString(confirmed, sel) {
+			confirmed = append(confirmed, sel)
+		}
+	}
+	return models, confirmed
+}
+
+func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) string {
+	switch candidate {
+	case "analyze", "bug", "function":
+		return candidate
+	}
+	if s.AvailableModels != nil {
+		for _, ch := range s.AvailableModels.Models {
+			if ch.ID == candidate {
+				return candidate
+			}
+		}
+	}
+	return fallbackScope
 }
 
 func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
@@ -455,14 +491,15 @@ func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID st
 		return err
 	}
 	s.Change = &session
+	modelsMap, confirmedProfiles := s.workflowModelsPayload()
 	wfReq := map[string]any{
 		"project_id":         s.Project.ProjectID,
 		"project_revision":   s.Project.ProjectRevision,
 		"revision":           session.Revision,
 		"hash":               session.Hash,
 		"message":            firstNonEmpty(act.Seed.Message, act.Message, session.Title),
-		"models":             map[string]string{"create": "bug", "test": "function", "review": "analyze"},
-		"confirmed_profiles": []string{"analyze", "bug", "function"},
+		"models":             modelsMap,
+		"confirmed_profiles": confirmedProfiles,
 		"confirm_security":   true,
 		"auto_repair":        true,
 	}

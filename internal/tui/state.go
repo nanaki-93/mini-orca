@@ -104,6 +104,7 @@ type State struct {
 	InstructionDraft  string
 	ExcludedPaths     []string
 	ActivePresetID    string
+	ScopeModels       map[string]string
 	PendingActions    []ActionRequest
 	Quitting          bool
 
@@ -128,6 +129,7 @@ type State struct {
 	Scan              *Scan
 	WorkspaceTrust    bool
 	Models            *ModelCatalog
+	AvailableModels   *AvailableModels
 }
 
 // HubTabs returns the 5 canonical Mini-Orca TUI hubs and their focused sub-views.
@@ -202,6 +204,11 @@ func NewState() *State {
 		RulesSection:   "trust",
 		ShowInlineWhy:  true,
 		ActivePresetID: "local-default",
+		ScopeModels: map[string]string{
+			"analyze":  "analyze",
+			"bug":      "bug",
+			"function": "function",
+		},
 		WorkspaceTrust: true,
 		Results:        make(map[string]SectionResults),
 		CmdOutput:      "Workspace ready",
@@ -726,7 +733,7 @@ func (s *State) docsListLength() int {
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
 	case PageModels:
-		return len(DefaultModelPresets())
+		return len(CanonicalModelScopes()) + len(DefaultModelPresets())
 	case PageBootstrap:
 		return len(EvaluateBootstrapChecklist(s.Index, s.Instructions))
 	case PageLessons:
@@ -916,11 +923,22 @@ func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, r
 	if err := client.DoJSON(ctx, "sync-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && (scan.Status != "" || len(scan.Phases) > 0) {
 		s.Scan = &scan
 	}
+	_ = s.RefreshModels(ctx, client)
+	s.loadAnalysisSectionResults(ctx, client)
+}
+
+// RefreshModels fetches the active scoped models and discovered model catalog from the daemon.
+func (s *State) RefreshModels(ctx context.Context, client *Client) error {
 	var models ModelCatalog
-	if err := client.DoJSON(ctx, "sync-models", http.MethodGet, "/api/models/current", nil, &models); err == nil && len(models.Scopes) > 0 {
+	errCur := client.DoJSON(ctx, "sync-models", http.MethodGet, "/api/models/current", nil, &models)
+	if errCur == nil && len(models.Scopes) > 0 {
 		s.Models = &models
 	}
-	s.loadAnalysisSectionResults(ctx, client)
+	var avail AvailableModels
+	if err := client.DoJSON(ctx, "sync-models-avail", http.MethodGet, "/api/models/available", nil, &avail); err == nil {
+		s.AvailableModels = &avail
+	}
+	return errCur
 }
 
 func (s *State) loadAnalysisSectionResults(ctx context.Context, client *Client) {

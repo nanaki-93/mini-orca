@@ -491,6 +491,9 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 }
 
 func (s *State) handleGovernanceKey(key string) bool {
+	if s.EffectivePage() == PageModels && s.handleModelsPageKey(key) {
+		return true
+	}
 	switch key {
 	case "b":
 		s.Navigate(PageBootstrap)
@@ -503,6 +506,27 @@ func (s *State) handleGovernanceKey(key string) bool {
 	case "g":
 		s.Navigate(PageLessons)
 		s.graduateSelectedLesson()
+		return true
+	}
+	return false
+}
+
+func (s *State) handleModelsPageKey(key string) bool {
+	switch key {
+	case "m":
+		s.cycleSelectedScopeModel(true)
+		return true
+	case "M":
+		s.cycleSelectedScopeModel(false)
+		return true
+	case "v":
+		s.cycleModelPreset()
+		return true
+	case "x":
+		s.resetSelectedScopeModel()
+		return true
+	case "r":
+		s.requestRefreshModels()
 		return true
 	}
 	return false

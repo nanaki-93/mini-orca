@@ -171,20 +171,48 @@ type Overview struct {
 	AnalysisRun      *AnalysisRun       `json:"analysis_run,omitempty"`
 }
 
-// Model describes a configured LLM scope binding.
+// Model describes a configured LLM scope binding and its effective runtime parameters.
 type Model struct {
-	Scope           string `json:"scope"`
-	Profile         string `json:"profile"`
-	Model           string `json:"model"`
-	ProviderOrigin  string `json:"provider_origin"`
-	RemoteProvider  bool   `json:"remote_provider"`
-	ReasoningEffort string `json:"reasoning_effort"`
-	Timeout         string `json:"timeout"`
+	Scope            string   `json:"scope"`
+	Profile          string   `json:"profile"`
+	Model            string   `json:"model"`
+	ProviderOrigin   string   `json:"provider_origin"`
+	RemoteProvider   bool     `json:"remote_provider"`
+	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
+	Temperature      *float32 `json:"temperature,omitempty"`
+	MaxTokens        *int     `json:"max_tokens,omitempty"`
+	ContextMaxTokens int      `json:"context_max_tokens,omitempty"`
+	Timeout          string   `json:"timeout"`
+	MaxRetries       int      `json:"max_retries,omitempty"`
 }
 
 // ModelCatalog maps model scopes (analyze, bug, function) to configured models.
 type ModelCatalog struct {
 	Scopes map[string]Model `json:"scopes"`
+}
+
+// ModelChoice describes an assignable model from /api/models/available.
+type ModelChoice struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+	Source   string `json:"source"`
+	Location string `json:"location"`
+	Model    Model  `json:"model"`
+}
+
+// ModelDiscovery describes CLI model discovery status for Pi or Agy.
+type ModelDiscovery struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+// AvailableModels holds the discovered and configured model catalog from /api/models/available.
+type AvailableModels struct {
+	Models   []ModelChoice     `json:"models"`
+	Defaults map[string]string `json:"defaults"`
+	Pi       ModelDiscovery    `json:"pi"`
+	Agy      ModelDiscovery    `json:"agy"`
 }
 
 // ModelPreset represents a named 3-scope model configuration preset in the TUI.

@@ -809,22 +809,101 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · MODEL ROUTING", "Task-specific LLM preset profiles")
-	lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
+	panelW := adaptivePanelWidth(width)
+	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · MODEL ROUTING", "Per-scope LLM routing, runtime parameters & preset profiles")
+	lines = append(lines, fmt.Sprintf(
+		"  %sControls:%s %s  %s  %s  %s  %s",
+		th.muted, th.reset,
+		th.keyPill("j/k", "Select"),
+		th.keyPill("Enter/m/M", "Cycle Scope Model"),
+		th.keyPill("v", "Cycle Preset"),
+		th.keyPill("x", "Reset Scope"),
+		th.keyPill("r", "Refresh"),
+	), "")
+	lines = append(lines, th.renderTableHeader("   SCOPE         ASSIGNED MODEL               ORIGIN                  BOUNDARY   PARAMETERS", width)...)
 	selected := s.ClampedIdx()
-	for idx, p := range DefaultModelPresets() {
+	scopes := CanonicalModelScopes()
+	for idx, scope := range scopes {
 		cursor := th.renderCursorPrefix(idx == selected)
+		eff := s.EffectiveScopeModel(scope)
+		assigned := s.AssignedScopeModelID(scope)
+		modelLabel := firstNonEmpty(eff.Model, assigned)
+		if assigned != scope && assigned != eff.Model {
+			modelLabel = fmt.Sprintf("%s (%s)", assigned, eff.Model)
+		}
+		boundary := "LOCAL"
+		if eff.RemoteProvider {
+			boundary = "REMOTE"
+		}
+		ctxStr := "default"
+		if eff.ContextMaxTokens > 0 {
+			ctxStr = fmt.Sprintf("%dk", max(1, eff.ContextMaxTokens/1024))
+		}
+		tStyle := rowTitleStyle(th, idx == selected)
+		lines = append(lines, fmt.Sprintf(
+			"  %s%s%-12s%s  %-26s  %s%-22s%s  %-9s  %seffort:%s ctx:%s%s",
+			cursor, tStyle, strings.ToUpper(scope), th.reset,
+			truncatePlain(modelLabel, 26),
+			th.cyan, truncatePlain(eff.ProviderOrigin, 22), th.reset,
+			th.statusBadge(boundary),
+			th.muted, firstNonEmpty(eff.ReasoningEffort, "default"), ctxStr, th.reset,
+		))
+	}
+	lines = append(lines, "")
+	lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
+	for pIdx, p := range DefaultModelPresets() {
+		rowIdx := len(scopes) + pIdx
+		cursor := th.renderCursorPrefix(rowIdx == selected)
 		active := "         "
 		if p.ID == s.ActivePresetID {
 			active = th.green + "(ACTIVE) " + th.reset
 		}
-		tStyle := rowTitleStyle(th, idx == selected)
+		tStyle := rowTitleStyle(th, rowIdx == selected)
 		lines = append(lines, fmt.Sprintf(
 			"  %s%s%-28s%s %s %s[analyze:%s bug:%s function:%s]%s",
 			cursor, tStyle, p.Name, th.reset, active, th.muted, p.Analyze, p.Bug, p.Function, th.reset,
 		))
 	}
+	lines = append(lines, "")
+	lines = append(lines, s.renderSelectedModelInspector(th, panelW)...)
 	return lines
+}
+
+func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string {
+	selScope := s.selectedModelScope()
+	eff := s.EffectiveScopeModel(selScope)
+	assigned := s.AssignedScopeModelID(selScope)
+	boundary := "LOCAL"
+	if eff.RemoteProvider {
+		boundary = "REMOTE"
+	}
+	choices := s.AvailableModelIDs()
+	piStatus, agyStatus := "idle", "idle"
+	if s.AvailableModels != nil {
+		if s.AvailableModels.Pi.Status != "" {
+			piStatus = s.AvailableModels.Pi.Status
+		}
+		if s.AvailableModels.Agy.Status != "" {
+			agyStatus = s.AvailableModels.Agy.Status
+		}
+	}
+	body := []string{
+		fmt.Sprintf("%sScope:%s %s%s%s — %s%s%s",
+			th.muted, th.reset, th.bold+th.fg, strings.ToUpper(selScope), th.reset,
+			th.cyan, ScopeRoleDescription(selScope), th.reset),
+		fmt.Sprintf("%sAssigned:%s %s%s%s · %sModel:%s %s%s%s · %sOrigin:%s %s%s%s %s",
+			th.muted, th.reset, th.bold+th.accent, assigned, th.reset,
+			th.muted, th.reset, th.bold+th.fg, firstNonEmpty(eff.Model, assigned), th.reset,
+			th.muted, th.reset, th.cyan, eff.ProviderOrigin, th.reset,
+			th.statusBadge(boundary)),
+		fmt.Sprintf("%sRuntime Params:%s %s%s%s",
+			th.muted, th.reset, th.fg, FormatModelParams(eff), th.reset),
+		fmt.Sprintf("%sDiscovery:%s Pi(%s) Agy(%s) · %sCatalog (%d):%s %s%s%s",
+			th.muted, th.reset, piStatus, agyStatus,
+			th.muted, len(choices), th.reset,
+			th.muted, truncatePlain(strings.Join(choices, ", "), max(20, panelW-44)), th.reset),
+	}
+	return th.renderPanelBox("SELECTED SCOPE & MODEL INSPECTOR", strings.ToUpper(selScope)+" SCOPE", panelW, body)
 }
 
 func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {

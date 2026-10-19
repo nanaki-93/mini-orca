@@ -663,3 +663,91 @@ func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 		t.Fatalf("expected counts open=0 in_progress=0 done=1 after apply, got %d/%d/%d", openCnt, inProgCnt, doneCnt)
 	}
 }
+
+func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
+	s := NewState()
+	temp := float32(0.15)
+	maxTok := 4096
+	s.Models = &ModelCatalog{
+		Scopes: map[string]Model{
+			"analyze": {
+				Scope: "analyze", Profile: "analyze", Model: "qwen2.5-coder:32b",
+				ReasoningEffort: "high", ProviderOrigin: "http://127.0.0.1:11434",
+				RemoteProvider: false, Temperature: &temp, MaxTokens: &maxTok,
+				ContextMaxTokens: 32768, Timeout: "5m0s", MaxRetries: 3,
+			},
+			"bug": {
+				Scope: "bug", Profile: "bug", Model: "qwen2.5-coder:14b",
+				ReasoningEffort: "medium", ProviderOrigin: "http://127.0.0.1:11434",
+				RemoteProvider: false, ContextMaxTokens: 16384, Timeout: "3m0s", MaxRetries: 2,
+			},
+			"function": {
+				Scope: "function", Profile: "function", Model: "qwen2.5-coder:7b",
+				ReasoningEffort: "low", ProviderOrigin: "http://127.0.0.1:11434",
+				RemoteProvider: false, ContextMaxTokens: 8192, Timeout: "1m0s", MaxRetries: 1,
+			},
+		},
+	}
+	s.AvailableModels = &AvailableModels{
+		Models: []ModelChoice{
+			{
+				ID: "agy:gemini-2.5-pro", Name: "gemini-2.5-pro", Source: "discovered",
+				Model: Model{
+					Model: "gemini-2.5-pro", ReasoningEffort: "high",
+					ProviderOrigin: "cli://agy", RemoteProvider: true,
+					ContextMaxTokens: 131072, Timeout: "5m0s", MaxRetries: 2,
+				},
+			},
+		},
+		Pi:  ModelDiscovery{Status: "unavailable"},
+		Agy: ModelDiscovery{Status: "ok"},
+	}
+
+	s.ExecuteCommand(":models")
+	if s.Page != PageModels {
+		t.Fatalf("expected :models to navigate to PageModels, got %s", s.Page)
+	}
+
+	// Row 0 is ANALYZE scope; cycling model with 'm' should change analyze assignment
+	s.SelectedIdx = 0
+	s.HandleKey(KeyEvent{Key: "m"})
+	if s.AssignedScopeModelID("analyze") == "analyze" {
+		t.Fatalf("expected 'm' to cycle analyze scope model away from default, got %s", s.AssignedScopeModelID("analyze"))
+	}
+
+	// 'x' resets selected scope back to default
+	s.HandleKey(KeyEvent{Key: "x"})
+	if s.AssignedScopeModelID("analyze") != "analyze" {
+		t.Fatalf("expected 'x' to reset analyze scope to 'analyze', got %s", s.AssignedScopeModelID("analyze"))
+	}
+
+	// Direct colon command :model bug agy:gemini-2.5-pro
+	s.ExecuteCommand(":model bug agy:gemini-2.5-pro")
+	if got := s.AssignedScopeModelID("bug"); got != "agy:gemini-2.5-pro" {
+		t.Fatalf("expected bug scope assigned to agy:gemini-2.5-pro, got %s", got)
+	}
+	effBug := s.EffectiveScopeModel("bug")
+	if !effBug.RemoteProvider || effBug.ProviderOrigin != "cli://agy" || effBug.ContextMaxTokens != 131072 {
+		t.Fatalf("unexpected effective bug model metadata: %+v", effBug)
+	}
+
+	// Verify workflowModelsPayload passes discovered catalog model ID to daemon
+	wfModels, confirmed := s.workflowModelsPayload()
+	if wfModels["create"] != "agy:gemini-2.5-pro" || !containsString(confirmed, "agy:gemini-2.5-pro") {
+		t.Fatalf("expected workflowModelsPayload to include agy:gemini-2.5-pro, got models=%v confirmed=%v", wfModels, confirmed)
+	}
+
+	// Render PageModels and verify Model Inspector details are visible
+	frame := s.Render(120, 36)
+	for _, token := range []string{"SELECTED SCOPE & MODEL INSPECTOR", "agy:gemini-2.5-pro", "cli://agy", "Agy(ok)"} {
+		if !strings.Contains(frame, token) {
+			t.Fatalf("expected PageModels render to contain %q:\n%s", token, frame)
+		}
+	}
+
+	// Apply preset via :preset deep-audit
+	s.ExecuteCommand(":preset deep-audit")
+	if s.ActivePresetID != "deep-audit" || s.AssignedScopeModelID("analyze") != "remote-pro" {
+		t.Fatalf("expected deep-audit preset active, got preset=%s analyze=%s", s.ActivePresetID, s.AssignedScopeModelID("analyze"))
+	}
+}

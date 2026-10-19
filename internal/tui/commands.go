@@ -441,10 +441,15 @@ func (s *State) activateAnalysisRunRow() {
 func (s *State) activateInstructionsRow() {
 	switch s.EffectivePage() {
 	case PageModels:
+		scopes := CanonicalModelScopes()
 		presets := DefaultModelPresets()
-		if idx := s.ClampedIdx(); idx < len(presets) {
-			s.ActivePresetID = presets[idx].ID
-			s.CmdOutput = fmt.Sprintf("Applied model preset: %s", presets[idx].Name)
+		idx := s.ClampedIdx()
+		if idx < len(scopes) {
+			s.cycleSelectedScopeModel(true)
+			return
+		}
+		if pIdx := idx - len(scopes); pIdx >= 0 && pIdx < len(presets) {
+			s.applyModelPreset(presets[pIdx])
 		}
 	case PageBootstrap:
 		pillars := EvaluateBootstrapChecklist(s.Index, s.Instructions)
@@ -457,6 +462,88 @@ func (s *State) activateInstructionsRow() {
 	default:
 		s.toggleWorkspaceTrust()
 	}
+}
+
+func (s *State) selectedModelScope() string {
+	scopes := CanonicalModelScopes()
+	idx := s.ClampedIdx()
+	if idx >= 0 && idx < len(scopes) {
+		return scopes[idx]
+	}
+	return "analyze"
+}
+
+func (s *State) cycleSelectedScopeModel(forward bool) {
+	scope := s.selectedModelScope()
+	choices := s.AvailableModelIDs()
+	if len(choices) == 0 {
+		return
+	}
+	cur := s.AssignedScopeModelID(scope)
+	pos := 0
+	for i, c := range choices {
+		if c == cur {
+			pos = i
+			break
+		}
+	}
+	if forward {
+		pos = (pos + 1) % len(choices)
+	} else {
+		pos = (pos - 1 + len(choices)) % len(choices)
+	}
+	s.setScopeModel(scope, choices[pos])
+}
+
+func (s *State) setScopeModel(scope, modelID string) {
+	if s.ScopeModels == nil {
+		s.ScopeModels = make(map[string]string)
+	}
+	s.ScopeModels[scope] = modelID
+	eff := s.EffectiveScopeModel(scope)
+	s.CmdOutput = fmt.Sprintf("Assigned scope [%s] -> %s (%s · %s)",
+		strings.ToUpper(scope), firstNonEmpty(eff.Model, modelID), eff.ProviderOrigin, FormatModelParams(eff))
+}
+
+func (s *State) resetSelectedScopeModel() {
+	scope := s.selectedModelScope()
+	if s.ScopeModels == nil {
+		s.ScopeModels = make(map[string]string)
+	}
+	s.ScopeModels[scope] = scope
+	s.CmdOutput = fmt.Sprintf("Reset scope [%s] routing to default profile (%s)", strings.ToUpper(scope), scope)
+}
+
+func (s *State) cycleModelPreset() {
+	presets := DefaultModelPresets()
+	if len(presets) == 0 {
+		return
+	}
+	pos := 0
+	for i, p := range presets {
+		if p.ID == s.ActivePresetID {
+			pos = (i + 1) % len(presets)
+			break
+		}
+	}
+	s.applyModelPreset(presets[pos])
+}
+
+func (s *State) applyModelPreset(p ModelPreset) {
+	s.ActivePresetID = p.ID
+	if s.ScopeModels == nil {
+		s.ScopeModels = make(map[string]string)
+	}
+	s.ScopeModels["analyze"] = p.Analyze
+	s.ScopeModels["bug"] = p.Bug
+	s.ScopeModels["function"] = p.Function
+	s.CmdOutput = fmt.Sprintf("Applied model preset: %s (analyze:%s · bug:%s · function:%s)",
+		p.Name, p.Analyze, p.Bug, p.Function)
+}
+
+func (s *State) requestRefreshModels() {
+	s.CmdOutput = "Refreshing configured & discovered LLM models..."
+	s.enqueueAction(ActionRequest{Kind: "refresh-models"})
 }
 
 func (s *State) openFileInEditor(path string) {
@@ -573,7 +660,7 @@ func (s *State) execAnalysisCommand(cmd, arg string) bool {
 }
 
 func (s *State) execNavigationCommand(cmd, arg string) bool {
-	if s.execIssueFilterCommand(cmd, arg) {
+	if s.execIssueFilterCommand(cmd, arg) || s.execModelCommand(cmd, arg) {
 		return true
 	}
 	switch cmd {
@@ -713,6 +800,73 @@ func (s *State) navigateToIssuesCategory(cmd string) {
 	s.IssueCategory = cat
 	s.SelectedIdx = 0
 	s.CmdOutput = fmt.Sprintf("Switched to [2] Agent Studio · Issues (%s).", strings.ToUpper(cat))
+}
+
+func (s *State) execModelCommand(cmd, arg string) bool {
+	switch cmd {
+	case "models":
+		s.Navigate(PageModels)
+		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing (Keys: [m/M] Cycle Model · [v] Cycle Preset · [x] Reset · [r] Refresh)."
+		return true
+	case "model":
+		s.Navigate(PageModels)
+		s.execSetModelArg(arg)
+		return true
+	case "preset", "presets", "profile":
+		s.Navigate(PageModels)
+		s.execSetPresetArg(arg)
+		return true
+	}
+	return false
+}
+
+func (s *State) execSetModelArg(arg string) {
+	fields := strings.Fields(strings.TrimSpace(arg))
+	if len(fields) == 0 {
+		s.cycleSelectedScopeModel(true)
+		return
+	}
+	scopes := CanonicalModelScopes()
+	if len(fields) == 1 {
+		target := strings.ToLower(fields[0])
+		for idx, sc := range scopes {
+			if sc == target {
+				s.SelectedIdx = idx
+				s.cycleSelectedScopeModel(true)
+				return
+			}
+		}
+		s.setScopeModel(s.selectedModelScope(), fields[0])
+		return
+	}
+	scope := strings.ToLower(fields[0])
+	if !containsString(scopes, scope) {
+		s.CmdOutput = fmt.Sprintf("Unknown model scope %q (use: analyze, bug, function)", fields[0])
+		return
+	}
+	for idx, sc := range scopes {
+		if sc == scope {
+			s.SelectedIdx = idx
+			break
+		}
+	}
+	s.setScopeModel(scope, fields[1])
+}
+
+func (s *State) execSetPresetArg(arg string) {
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	if norm == "" {
+		s.cycleModelPreset()
+		return
+	}
+	for idx, p := range DefaultModelPresets() {
+		if p.ID == norm || strings.Contains(strings.ToLower(p.ID), norm) || strings.Contains(strings.ToLower(p.Name), norm) {
+			s.SelectedIdx = len(CanonicalModelScopes()) + idx
+			s.applyModelPreset(p)
+			return
+		}
+	}
+	s.CmdOutput = fmt.Sprintf("Unknown model preset %q (use: local-default, hybrid-precision, deep-audit)", arg)
 }
 
 func (s *State) execHubMatchCommand(cmd string) bool {
