@@ -464,7 +464,7 @@ func buildAgentItemFromSession(change *ChangeSession, receipt *ChangeMutation, g
 		Path:           firstChangedPath(change),
 		Stage:          stageName,
 		StageNumber:    stageNum,
-		Status:         change.State,
+		Status:         effectiveAgentSessionStatus(change),
 		ScopeBadge:     badge,
 		AddedLines:     added,
 		RemovedLines:   removed,
@@ -474,6 +474,27 @@ func buildAgentItemFromSession(change *ChangeSession, receipt *ChangeMutation, g
 		UndoAvailable:  undo,
 		FindingTargets: change.FindingTargets,
 	}
+}
+
+func effectiveAgentSessionStatus(change *ChangeSession) string {
+	if change == nil {
+		return "idle"
+	}
+	if change.State == "applied" || change.State == "reverted" || change.State == "failed" {
+		return change.State
+	}
+	if change.Workflow != nil && change.Workflow.Status != "" {
+		switch change.Workflow.Status {
+		case "awaiting_human_review":
+			return "ready"
+		case "running", "queued", "canceling", "failed", "canceled", "changes_requested":
+			return change.Workflow.Status
+		}
+	}
+	if change.State != "" {
+		return change.State
+	}
+	return "working"
 }
 
 func buildAgentItemFromWorktree(wt GitWorktree) AgentItem {
@@ -522,7 +543,11 @@ func classifyAgentStage(change *ChangeSession, passed, total int) (int, string) 
 	}
 	if change.Workflow != nil {
 		switch change.Workflow.Status {
-		case "running", "queued":
+		case "awaiting_human_review":
+			return 4, "Human Review"
+		case "changes_requested":
+			return 3, "Critic Review"
+		case "running", "queued", "failed":
 			return activeWorkflowStage(change.Workflow.Stages)
 		}
 	}
@@ -540,11 +565,35 @@ func classifyAgentStage(change *ChangeSession, passed, total int) (int, string) 
 
 func activeWorkflowStage(stages []ChangeWorkflowStage) (int, string) {
 	for idx, st := range stages {
-		if st.Status == "running" {
-			return min(4, idx+1), st.Name
+		if st.Status == "running" || st.Status == "failed" {
+			return min(4, idx+1), CanonicalStageLabel(idx, st.Name)
+		}
+	}
+	for idx, st := range stages {
+		if st.Status == "pending" || st.Status == "queued" {
+			return min(4, idx+1), CanonicalStageLabel(idx, st.Name)
 		}
 	}
 	return 1, "Architect & Code"
+}
+
+// CanonicalStageLabel maps daemon stage indices and names (create, test, review, human_review) to display labels.
+func CanonicalStageLabel(idx int, rawName string) string {
+	switch strings.ToLower(strings.TrimSpace(rawName)) {
+	case "create", "architect & code", "architect":
+		return "Architect & Code"
+	case "test", "verify & test", "verify":
+		return "Verify & Test"
+	case "review", "critic review", "critic":
+		return "Critic Review"
+	case "human_review", "human review":
+		return "Human Review"
+	}
+	labels := []string{"Architect & Code", "Verify & Test", "Critic Review", "Human Review"}
+	if idx >= 0 && idx < len(labels) {
+		return labels[idx]
+	}
+	return firstNonEmpty(rawName, "Architect & Code")
 }
 
 func firstChangedPath(change *ChangeSession) string {

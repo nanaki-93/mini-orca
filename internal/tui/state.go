@@ -956,6 +956,7 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 		target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + idQuery
 		if err := client.DoJSON(ctx, "poll-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
 			s.Change = &chg
+			s.announceWorkflowTransition(&chg)
 		}
 	}
 	if s.hasRunningAnalysis() {
@@ -973,6 +974,20 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 	}
 }
 
+func (s *State) announceWorkflowTransition(chg *ChangeSession) {
+	if chg == nil || chg.Workflow == nil {
+		return
+	}
+	switch chg.Workflow.Status {
+	case "awaiting_human_review", "completed":
+		s.CmdOutput = fmt.Sprintf("Agent completed %q — press [d/Enter] to inspect diff or [c] to Apply & Commit", chg.Title)
+	case "changes_requested", "failed":
+		s.CmdOutput = fmt.Sprintf("Agent workflow %s for %q — press [r] to self-repair or [d] to inspect diff", chg.Workflow.Status, chg.Title)
+	case "canceled":
+		s.CmdOutput = fmt.Sprintf("Canceled agent workflow for %q", chg.Title)
+	}
+}
+
 func (s *State) hasActiveBackgroundJob() bool {
 	return s.hasRunningWorkflow() || s.hasRunningAnalysis() || (s.Scan != nil && s.Scan.Status == "running")
 }
@@ -982,7 +997,7 @@ func (s *State) hasRunningWorkflow() bool {
 		return false
 	}
 	st := s.Change.Workflow.Status
-	return st == "running" || st == "queued"
+	return st == "running" || st == "queued" || st == "canceling"
 }
 
 func (s *State) hasRunningAnalysis() bool {

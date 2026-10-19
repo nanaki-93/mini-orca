@@ -207,13 +207,16 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if len(items) > 0 {
 		activeStage = items[s.ClampedIdx()].StageNumber
 	}
-	stepper := renderPipelineStepper(th, activeStage)
+	pipelineLines := []string{renderPipelineStepper(th, activeStage)}
+	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
+		pipelineLines = append(pipelineLines, stageSummary)
+	}
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · 4-STAGE AUTONOMOUS PIPELINE", "Guarded code generation & verification")
-	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, []string{stepper})...)
+	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, pipelineLines)...)
 	if len(items) == 0 {
 		guide := []string{
 			fmt.Sprintf("%sStatus:%s No active autonomous missions running.", th.bold+th.cyan, th.reset),
-			fmt.Sprintf("• %sIssue Remediation:%s Select a finding in %sIssues%s to generate a guarded fix.", th.bold+th.fg, th.reset, th.accent, th.reset),
+			fmt.Sprintf("• %sIssue Remediation:%s Press %s[b]%s or open %sIssues%s and press %s[Enter/a]%s on a finding.", th.bold+th.fg, th.reset, th.cyan, th.reset, th.accent, th.reset, th.cyan, th.reset),
 			fmt.Sprintf("• %sFeature Delivery:%s  Select a proposal in %sFeatures%s or run %s:agent <goal>%s.", th.bold+th.fg, th.reset, th.accent, th.reset, th.purple, th.reset),
 		}
 		lines = append(lines, "")
@@ -223,7 +226,7 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderTableHeader("   STAGE              MISSION TITLE               SCOPE      DELTA       CHECKS", width)...)
 	selected := s.ClampedIdx()
 	titleCol := max(16, width-60)
-	start, end := windowBounds(len(items), selected, 8)
+	start, end := windowBounds(len(items), selected, 5)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -240,15 +243,86 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	lines = appendWindowFooter(th, lines, start, end, len(items))
 	curItem := items[selected]
 	detail := []string{
-		fmt.Sprintf("%sMission:%s  %s%s%s", th.muted, th.reset, th.bold+th.fg, curItem.Title, th.reset),
-		fmt.Sprintf("%sScope:%s    %s%s%s   %sBranch:%s %s%s%s   %sStatus:%s %s",
+		fmt.Sprintf("%sMission:%s   %s%s%s", th.muted, th.reset, th.bold+th.fg, curItem.Title, th.reset),
+		fmt.Sprintf("%sScope:%s     %s%s%s   %sBranch:%s %s%s%s   %sStatus:%s %s   %sChecks:%s %d/%d",
 			th.muted, th.reset, th.cyan, firstNonEmpty(curItem.Path, "workspace"), th.reset,
 			th.muted, th.reset, th.purple, curItem.Branch, th.reset,
-			th.muted, th.reset, th.statusBadge(curItem.Status)),
+			th.muted, th.reset, th.statusBadge(curItem.Status),
+			th.muted, th.reset, curItem.ChecksPassed, curItem.ChecksTotal),
+		s.renderAgentTelemetryLine(th, curItem, max(24, panelW-18)),
+		s.renderAgentNextStepLine(th, curItem),
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("ACTIVE AGENT MISSION CONTROL", strings.ToUpper(curItem.Stage), panelW, detail)...)
 	return lines
+}
+
+func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
+	if s.Change == nil || s.Change.Workflow == nil || len(s.Change.Workflow.Stages) == 0 {
+		return ""
+	}
+	shortNames := []string{"1.Code", "2.Test", "3.Critic", "4.Review"}
+	var parts []string
+	for idx, st := range s.Change.Workflow.Stages {
+		if idx >= len(shortNames) {
+			break
+		}
+		label := shortNames[idx]
+		if st.Model != nil && st.Model.Model != "" {
+			label += "(" + truncatePlain(st.Model.Model, 10) + ")"
+		}
+		parts = append(parts, fmt.Sprintf("%s%s%s %s", th.muted, label, th.reset, th.statusBadge(st.Status)))
+	}
+	if s.Change.Workflow.AutoRepairAttempts > 0 {
+		parts = append(parts, fmt.Sprintf("%srepair:#%d%s", th.amber, s.Change.Workflow.AutoRepairAttempts, th.reset))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, maxText int) string {
+	if s.Change != nil {
+		if s.Change.Workflow != nil && s.Change.Workflow.Review != nil {
+			rev := s.Change.Workflow.Review
+			return fmt.Sprintf("%sCritic:%s    %s  %s%s%s",
+				th.muted, th.reset, th.statusBadge(rev.Verdict),
+				th.fg, truncatePlain(rev.Summary, max(16, maxText-14)), th.reset)
+		}
+		for _, chk := range s.Change.Checks {
+			if strings.EqualFold(chk.State, "failed") && strings.TrimSpace(chk.Output) != "" {
+				return fmt.Sprintf("%sFailure:%s   %s▲ %s:%s %s",
+					th.muted, th.reset, th.bold+th.red, chk.Name, th.reset,
+					truncatePlain(strings.TrimSpace(chk.Output), max(16, maxText-14)))
+			}
+		}
+		if s.Change.Workflow != nil && strings.TrimSpace(s.Change.Workflow.Reason) != "" {
+			return fmt.Sprintf("%sReason:%s    %s%s%s",
+				th.muted, th.reset, th.amber, truncatePlain(s.Change.Workflow.Reason, maxText), th.reset)
+		}
+	}
+	return fmt.Sprintf("%sProgress:%s  Stage %d/4 (%s) · Delta: %s+%d%s/%s-%d%s (%s)",
+		th.muted, th.reset, item.StageNumber, item.Stage,
+		th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset, item.ScopeBadge)
+}
+
+func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
+	st := strings.ToLower(strings.TrimSpace(item.Status))
+	switch {
+	case st == "applied":
+		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
+			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	case st == "running" || st == "queued" || st == "canceling":
+		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[d/Enter]%s Inspect · %s[r]%s Refresh · %s[x]%s Cancel · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
+		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[r]%s Self-Repair/Recheck · %s[d/Enter]%s Inspect Diff · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
+		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[d/Enter]%s Inspect Diff · %s[c]%s Apply & Commit · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	default:
+		return fmt.Sprintf("%sNext Step:%s %s[d/Enter]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply & Commit · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	}
 }
 
 func renderPipelineStepper(th ansiTheme, activeStage int) string {
@@ -381,9 +455,28 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	diag := []string{
 		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, truncatePlain(cur.Cause, textW), th.reset),
 		fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.bold+th.fg, truncatePlain(cur.Solution, textW), th.reset),
+		s.renderIssueDetailWorkflowLine(th, *cur),
 	}
 	lines = append(lines, "")
 	return append(lines, th.renderPanelBox("ROOT CAUSE DIAGNOSTIC & REMEDIATION", strings.ToUpper(cur.Category), panelW, diag)...)
+}
+
+func (s *State) renderIssueDetailWorkflowLine(th ansiTheme, cur IssueRow) string {
+	switch cur.Status {
+	case "in_progress":
+		return fmt.Sprintf("%s⟳ Agent Status:%s    In Progress (%s) · %s[Enter/w]%s Watch Agent Pipeline · %s[Esc]%s Back",
+			th.bold+th.amber, th.reset, firstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset)
+	case "done":
+		oid := ""
+		if cur.CommitOID != "" {
+			oid = " (" + truncatePlain(cur.CommitOID, 8) + ")"
+		}
+		return fmt.Sprintf("%s✔ Resolution:%s      Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[Esc]%s Back",
+			th.bold+th.green, th.reset, oid, th.cyan, th.reset, th.cyan, th.reset)
+	default:
+		return fmt.Sprintf("%s▸ Next Action:%s     %s[Enter/a]%s Fix Bug with Agent · %s[d]%s Dismiss · %s[o]%s Open File · %s[Esc]%s Back",
+			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	}
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {

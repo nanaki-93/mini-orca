@@ -582,3 +582,84 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
 	}
 }
+
+func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
+	s.Index = &ProjectIndex{Files: []IndexedFile{{Path: "internal/app/fix.go", Language: "Go"}}}
+	s.Findings = []Finding{
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "bug-42",
+			Severity:        "high",
+			Title:           "Context leak in worker",
+			Message:         "Always defer cancel()",
+			Category:        "bugs",
+			Status:          "open",
+			Location:        SourceAnchor{Path: "internal/app/fix.go", StartLine: 18},
+		},
+	}
+
+	// 1. Start on PageBugs: 1 open issue
+	s.Navigate(PageBugs)
+	if len(s.FilteredIssues()) != 1 {
+		t.Fatalf("expected 1 open bug initially, got %d", len(s.FilteredIssues()))
+	}
+
+	// 2. Press Enter to fix the bug -> navigates to PageAgents, bug becomes in_progress (hidden from open)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PageAgents {
+		t.Fatalf("expected PageAgents after Enter on bug, got %s", s.Page)
+	}
+	openCnt, inProgCnt, doneCnt := s.IssueStatusCounts()
+	if openCnt != 0 || inProgCnt != 1 || doneCnt != 0 {
+		t.Fatalf("expected counts open=0 in_progress=1 done=0, got %d/%d/%d", openCnt, inProgCnt, doneCnt)
+	}
+
+	// 3. Simulate workflow reaching awaiting_human_review with diff and passed checks
+	s.Change = &ChangeSession{
+		ID:             "chg-42",
+		Title:          "Context leak in worker",
+		State:          "checked",
+		Revision:       2,
+		Hash:           "h-42",
+		ReviewedHash:   "h-42",
+		FindingTargets: []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "bug-42", Path: "internal/app/fix.go"}},
+		Changes: []FileChange{
+			{
+				Path: "internal/app/fix.go",
+				Diff: FileDiff{Lines: []DiffLine{{Kind: "add", NewLine: 19, Text: "defer cancel()"}}},
+			},
+		},
+		Checks: []Check{{Name: "go test", State: "passed"}},
+		Workflow: &ChangeWorkflow{
+			ID:     "wf-42",
+			Status: "awaiting_human_review",
+			Stages: []ChangeWorkflowStage{
+				{Name: "create", Status: "completed"},
+				{Name: "test", Status: "completed"},
+				{Name: "review", Status: "completed"},
+				{Name: "human_review", Status: "awaiting_human_review"},
+			},
+			Review: &ChangeWorkflowReview{Verdict: "approve", Summary: "Clean context cancellation fix"},
+		},
+	}
+	agentFrame := s.Render(120, 36)
+	if !strings.Contains(agentFrame, "Ready to Review & Apply") || !strings.Contains(agentFrame, "Clean context cancellation fix") {
+		t.Fatalf("expected PageAgents to display critic summary and Ready to Review & Apply:\n%s", agentFrame)
+	}
+
+	// 4. Press Enter (or 'd') on PageAgents -> opens Diff Inspector (PageEditor)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PageEditor {
+		t.Fatalf("expected PageEditor after Enter on ready agent, got %s", s.Page)
+	}
+
+	// 5. Apply & commit -> bug moves to 'done'
+	s.recordAppliedFindingCompletions(s.Change.FindingTargets, &ChangeCommit{OID: "deadbeef"})
+	s.Change.State = "applied"
+	openCnt, inProgCnt, doneCnt = s.IssueStatusCounts()
+	if openCnt != 0 || inProgCnt != 0 || doneCnt != 1 {
+		t.Fatalf("expected counts open=0 in_progress=0 done=1 after apply, got %d/%d/%d", openCnt, inProgCnt, doneCnt)
+	}
+}

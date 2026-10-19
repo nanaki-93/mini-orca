@@ -359,19 +359,26 @@ func (s *State) handleIssueActionKey(key string) bool {
 }
 
 func (s *State) handleIssueShortcut(key string) bool {
-	if key == "a" {
+	switch key {
+	case "a":
 		s.dispatchSelectedIssues()
 		return true
-	}
-	if key == "o" && s.Page != PageSummary {
-		if issue := s.SelectedIssue(); issue != nil && issue.Path != "" {
-			s.openFileInEditor(issue.Path)
+	case "w":
+		s.Navigate(PageAgents)
+		s.CmdOutput = "Switched to [2] Agent Studio · Pipeline to watch active agent."
+		return true
+	case "o":
+		if s.Page != PageSummary {
+			if issue := s.SelectedIssue(); issue != nil && issue.Path != "" {
+				s.openFileInEditor(issue.Path)
+				return true
+			}
+		}
+	case "d":
+		if s.Page == PageIssueDetail {
+			s.dismissSelectedIssue()
 			return true
 		}
-	}
-	if key == "d" && s.Page == PageIssueDetail {
-		s.dismissSelectedIssue()
-		return true
 	}
 	return false
 }
@@ -415,6 +422,13 @@ func (s *State) handleAgentsKey(key string) bool {
 	case "n":
 		s.CmdOutput = "Use :agent <objective> to dispatch a new precision agent mission"
 		return true
+	case "d", "i":
+		s.openAgentDiffInspector()
+		return true
+	case "b":
+		s.Navigate(PageBugs)
+		s.CmdOutput = "Returned to [2] Agent Studio · Issues"
+		return true
 	case "c":
 		s.applyAndCommitProposal("")
 		return true
@@ -426,6 +440,9 @@ func (s *State) handleAgentsKey(key string) bool {
 		return true
 	case "r":
 		s.triggerAgentRecheckOrRepair()
+		return true
+	case "x":
+		s.cancelActiveWorkflow()
 		return true
 	}
 	return false
@@ -449,6 +466,14 @@ func (s *State) handleEditorKey(key string) bool {
 		return true
 	case "x":
 		s.rejectCurrentDiffHunk()
+		return true
+	case "w":
+		s.Navigate(PageAgents)
+		s.CmdOutput = "Returned to [2] Agent Studio · Pipeline"
+		return true
+	case "b":
+		s.Navigate(PageBugs)
+		s.CmdOutput = "Returned to [2] Agent Studio · Issues"
 		return true
 	}
 	return false

@@ -400,9 +400,32 @@ func (s *State) dispatchSecondaryMutation(ctx context.Context, client *Client, r
 		return s.dispatchProposeInstructions(ctx, client, reqID, act.Target, act.Message)
 	case "bootstrap":
 		return s.dispatchBootstrap(ctx, client, reqID, act.Target)
+	case "cancel-workflow":
+		return s.dispatchCancelWorkflow(ctx, client, reqID, act.Target)
 	default:
 		return nil
 	}
+}
+
+func (s *State) dispatchCancelWorkflow(ctx context.Context, client *Client, reqID, sessionID string) error {
+	if s.Change == nil || s.Change.Workflow == nil || s.Project == nil {
+		return nil
+	}
+	id := firstNonEmpty(sessionID, s.Change.ID)
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"workflow_id":      s.Change.Workflow.ID,
+	}
+	var updated ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(id) + "/workflow/cancel"
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
+		return err
+	}
+	if updated.ID != "" {
+		s.Change = &updated
+	}
+	return nil
 }
 
 func (s *State) dispatchStartAgent(ctx context.Context, client *Client, reqID string, act ActionRequest) error {

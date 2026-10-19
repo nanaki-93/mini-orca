@@ -369,13 +369,44 @@ func (s *State) activateEditorFileRow() {
 	}
 }
 
+func (s *State) openAgentDiffInspector() {
+	if s.Change != nil && len(s.Change.Changes) > 0 {
+		s.Navigate(PageEditor)
+		s.CmdOutput = fmt.Sprintf("Inspecting diff for %s ([c] Apply & Commit · [x] Reject Hunk · [w] Back to Pipeline)", s.Change.Title)
+		return
+	}
+	if s.Change != nil && len(s.Change.Targets) > 0 && s.Change.Targets[0].Path != "" {
+		s.openFileInEditor(s.Change.Targets[0].Path)
+		return
+	}
+	s.Navigate(PageEditor)
+	s.CmdOutput = "Switched to [3] Code & Diff · Inspector"
+}
+
+func (s *State) cancelActiveWorkflow() {
+	if s.Change == nil || !s.hasRunningWorkflow() {
+		s.CmdOutput = "No running agent workflow to cancel."
+		return
+	}
+	s.CmdOutput = fmt.Sprintf("Canceling active workflow for %s...", s.Change.Title)
+	s.enqueueAction(ActionRequest{Kind: "cancel-workflow", Target: s.Change.ID})
+}
+
 func (s *State) activateAgentRow() {
 	items := CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
 	idx := s.ClampedIdx()
-	if idx < len(items) {
-		s.AgentDetailOpen = true
-		s.CmdOutput = fmt.Sprintf("Opened agent %s (%s)", items[idx].Title, items[idx].Branch)
+	if idx >= len(items) {
+		return
 	}
+	if s.Change != nil && len(s.Change.Changes) > 0 {
+		s.openAgentDiffInspector()
+		return
+	}
+	s.AgentDetailOpen = true
+	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
+	}
+	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s) — press [d] for Diff Inspector or [r] to refresh", items[idx].Title, items[idx].Branch)
 }
 
 func (s *State) activateSecondaryRow() {
@@ -716,6 +747,12 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 		return true
 	case "apply", "commit":
 		s.applyAndCommitProposal(arg)
+		return true
+	case "diff", "inspect":
+		s.openAgentDiffInspector()
+		return true
+	case "cancel":
+		s.cancelActiveWorkflow()
 		return true
 	case "merge":
 		s.mergeSelectedWorktree()
