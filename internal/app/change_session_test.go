@@ -318,4 +318,15 @@ func TestChangeUnlocksAllTextFileTypesAndHunkProposalUpdates(t *testing.T) {
 	if err != nil || updated.Revision != 2 || len(updated.Changes) != 1 || !strings.Contains(updated.Changes[0].Content, "--fg: #fff;") {
 		t.Fatalf("hunk proposal update failed: %+v, %v", updated, err)
 	}
+	reverted, err := service.SendChangeMessage(context.Background(), proposal.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(updated),
+		Message:        "Reject remaining hunk",
+		Changes: []ChangeEditInput{{
+			Path:    "style.css",
+			Content: ":root {\n  --bg: #000;\n  --fg: #fff;\n}\n",
+		}},
+	})
+	if err != nil || reverted.Revision != 3 || len(reverted.Changes) != 0 {
+		t.Fatalf("reverting all hunks failed: %+v, %v", reverted, err)
+	}
 }

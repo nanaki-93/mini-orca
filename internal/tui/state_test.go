@@ -200,13 +200,27 @@ func TestEditorDiffHunkAndGuardedApplyUndo(t *testing.T) {
 		t.Fatal("expected ShowInlineWhy to toggle false")
 	}
 
-	// Reject current hunk with 'x'
+	// Reject current hunk with 'x' -> clears stale review/checks and enqueues update-proposal
+	s.Change.ReviewedHash = "h-old"
 	s.HandleKey(KeyEvent{Key: "x"})
 	if !strings.Contains(s.Change.Changes[0].Content, "var timeout = 5") {
 		t.Fatalf("expected hunk rejection to restore old line, got %q", s.Change.Changes[0].Content)
 	}
+	if s.Change.ReviewedHash != "" || len(s.Change.Checks) != 0 {
+		t.Fatalf("expected hunk rejection to invalidate local review and checks, got reviewed=%q checks=%v", s.Change.ReviewedHash, s.Change.Checks)
+	}
+	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "update-proposal" {
+		t.Fatalf("expected update-proposal action after hunk rejection, got %+v", s.PendingActions)
+	}
 
-	// Apply and commit with 'c'
+	// Apply and commit with 'c' is blocked until re-verification checks pass
+	s.HandleKey(KeyEvent{Key: "c"})
+	if s.PendingActions[len(s.PendingActions)-1].Kind == "apply-commit" {
+		t.Fatal("expected apply-commit to be blocked while verification checks are invalidated")
+	}
+
+	// Once verification checks pass on the updated diff, 'c' enqueues apply-commit
+	s.Change.Checks = []Check{{Name: "go test", State: "passed"}}
 	s.HandleKey(KeyEvent{Key: "c"})
 	last := s.PendingActions[len(s.PendingActions)-1]
 	if last.Kind != "apply-commit" || last.Target != "chg-42" {
@@ -319,6 +333,7 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 		savedExclusions    []string
 		bootstrapped       bool
 		trustConfirmations []bool
+		updatedProposal    string
 	)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, r *http.Request) {
@@ -353,6 +368,19 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":2,"hash":"h-2","checks":[{"name":"test","state":"passed"}],"workflow":{"id":"wf-1","status":"completed"}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/messages", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Changes []struct {
+				Path    string `json:"path"`
+				Content string `json:"content"`
+			} `json:"changes"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Changes) > 0 {
+			updatedProposal = body.Changes[0].Content
+		}
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"draft","revision":3,"hash":"h-3","changes":[{"path":"internal/app/a.go","content":"package app\n"}]}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1/review", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -515,6 +543,28 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 	s.FlushActions(context.Background(), cli)
 	if s.WorkspaceTrust || len(trustConfirmations) == 0 || trustConfirmations[len(trustConfirmations)-1] != false {
 		t.Fatalf("expected trust revocation to post confirm=false, got workspaceTrust=%v confirmations=%v", s.WorkspaceTrust, trustConfirmations)
+	}
+
+	// 10. Rejecting a hunk in PageEditor persists updated proposal to daemon and updates session hash/revision
+	s.Project.ProjectRevision = "r1"
+	s.Change = &ChangeSession{
+		ID:       "chg-1",
+		Revision: 2,
+		Hash:     "h-2",
+		Changes: []FileChange{{
+			Path:    "internal/app/a.go",
+			Content: "package app\nfunc Bad() {}\n",
+			Diff: FileDiff{Lines: []DiffLine{
+				{Kind: "context", OldLine: 1, NewLine: 1, Text: "package app"},
+				{Kind: "add", OldLine: 0, NewLine: 2, Text: "func Bad() {}"},
+			}},
+		}},
+	}
+	s.Navigate(PageEditor)
+	s.HandleKey(KeyEvent{Key: "x"})
+	s.FlushActions(context.Background(), cli)
+	if !strings.Contains(updatedProposal, "package app") || strings.Contains(updatedProposal, "Bad") || s.Change.Revision != 3 || s.Change.Hash != "h-3" {
+		t.Fatalf("expected hunk rejection to sync proposal with daemon, got content=%q rev=%d hash=%q", updatedProposal, s.Change.Revision, s.Change.Hash)
 	}
 }
 

@@ -323,9 +323,6 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 			edits = append(edits, *edit)
 		}
 	}
-	if len(edits) == 0 {
-		return nil, fmt.Errorf("proposal contains no changes")
-	}
 	return edits, nil
 }
 

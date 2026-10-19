@@ -324,6 +324,9 @@ func parseChangeResponse(output string, session *ChangeSession) (string, []Chang
 	if err != nil {
 		return "", nil, err
 	}
+	if len(changes) == 0 {
+		return "", nil, fmt.Errorf("proposal contains no changes")
+	}
 	return strings.TrimSpace(response.Explanation), changes, nil
 }
 

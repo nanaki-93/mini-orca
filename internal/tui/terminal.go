@@ -463,6 +463,8 @@ func (s *State) dispatchMutationAction(ctx context.Context, client *Client, reqI
 
 func (s *State) dispatchSecondaryMutation(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
 	switch act.Kind {
+	case "update-proposal":
+		return s.dispatchUpdateProposal(ctx, client, reqID, act)
 	case "check-change":
 		return s.dispatchCheckChange(ctx, client, reqID)
 	case "repair-change":
@@ -634,6 +636,37 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 		s.Project.ProjectRevision = receipt.ProjectRevision
 	}
 	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q", s.Change.Title)
+	return nil
+}
+
+func (s *State) dispatchUpdateProposal(ctx context.Context, client *Client, reqID string, act ActionRequest) error {
+	if s.Change == nil || s.Project == nil || s.Change.ID == "" {
+		return nil
+	}
+	changes := make([]map[string]string, 0, len(s.Change.Changes))
+	for _, ch := range s.Change.Changes {
+		changes = append(changes, map[string]string{
+			"path":    ch.Path,
+			"content": ch.Content,
+			"summary": ch.Summary,
+		})
+	}
+	body := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"message":          firstNonEmpty(act.Message, "Updated proposal hunks in diff editor"),
+		"changes":          changes,
+	}
+	var updated ChangeSession
+	sessionID := url.PathEscape(s.Change.ID)
+	if err := client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/changes/"+sessionID+"/messages", body, &updated); err != nil {
+		return err
+	}
+	if updated.ID != "" {
+		s.Change = &updated
+	}
 	return nil
 }
 

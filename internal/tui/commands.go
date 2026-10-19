@@ -337,13 +337,21 @@ func (s *State) rejectCurrentDiffHunk() {
 	fc := &s.Change.Changes[active.FileIndex]
 	fc.Content = RejectHunkFromDiff(fc.Diff.Lines, active.Hunk)
 	fc.Diff.Lines = RejectHunkLines(fc.Diff.Lines, active.Hunk)
+	s.Change.ReviewedHash = ""
+	s.Change.Checks = nil
 	if _, all, hasNext := s.activeDiffHunk(); hasNext {
 		s.syncDiffSelectionToHunk(min(active.GlobalIndex, len(all)-1))
 	} else {
 		s.HunkIdx = 0
 		s.SelectedIdx = 0
 	}
-	s.CmdOutput = fmt.Sprintf("Rejected hunk #%d in %s", active.GlobalIndex+1, fc.Path)
+	msg := fmt.Sprintf("Rejected hunk #%d in %s", active.GlobalIndex+1, fc.Path)
+	s.CmdOutput = msg
+	if n := len(s.PendingActions); n > 0 && s.PendingActions[n-1].Kind == "update-proposal" {
+		s.PendingActions[n-1].Message = msg
+		return
+	}
+	s.enqueueAction(ActionRequest{Kind: "update-proposal", Target: s.Change.ID, Message: msg})
 }
 
 func (s *State) toggleWorkspaceTrust() {
