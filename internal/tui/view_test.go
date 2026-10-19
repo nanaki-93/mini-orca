@@ -12,10 +12,13 @@ import (
 func TestRenderAllHubsAndPalettes(t *testing.T) {
 	s := NewState()
 	s.Connected = true
+	s.Version = "2.4.0"
 	s.Project = &Project{
 		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "rev1"},
 		Name:            "mini-orca",
 		Path:            "/repo",
+		Type:            "go",
+		BuildFile:       "go.mod",
 		FileCount:       24,
 		TotalLines:      4200,
 	}
@@ -71,6 +74,9 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		if !strings.Contains(frame, "MINI-ORCA // TUI") {
 			t.Fatalf("expected status bar on page %s", p)
 		}
+		if !strings.Contains(frame, "┏") || !strings.Contains(frame, "┗") {
+			t.Fatalf("expected enterprise frame borders on page %s", p)
+		}
 	}
 
 	for _, pal := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
@@ -78,6 +84,67 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		frame := s.Render(100, 30)
 		if !strings.Contains(frame, string(pal)) {
 			t.Fatalf("expected palette %s in status bar", pal)
+		}
+	}
+}
+
+func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	s.Change = &ChangeSession{
+		ID:    "chg-9",
+		Title: "Harden HTTP timeout",
+		State: "checked",
+		Changes: []FileChange{
+			{
+				Path:    "internal/api/server.go",
+				Summary: "Enforce explicit read header timeout",
+				Diff: FileDiff{
+					Lines: []DiffLine{
+						{Kind: "delete", OldLine: 10, Text: "ReadTimeout: 0,"},
+						{Kind: "add", NewLine: 10, Text: "ReadHeaderTimeout: 5 * time.Second,"},
+					},
+				},
+			},
+		},
+		Checks: []Check{{Name: "go test", State: "passed"}},
+	}
+
+	// Verify Diff Inspector panel & inline Why
+	s.Navigate(PageEditor)
+	diffFrame := s.Render(110, 34)
+	if !strings.Contains(diffFrame, "GUARDED DIFF REVIEW") || !strings.Contains(diffFrame, "Enforce explicit read header timeout") {
+		t.Fatalf("expected enterprise diff review panel and inline why:\n%s", diffFrame)
+	}
+
+	// Verify Governance sections (trust, models, bootstrap, lessons)
+	s.Navigate(PageInstructions)
+	for _, sec := range []string{"trust", "models", "bootstrap", "lessons"} {
+		s.RulesSection = sec
+		govFrame := s.Render(110, 34)
+		if !strings.Contains(govFrame, "[5] GOVERNANCE & RULES") {
+			t.Fatalf("expected governance header for section %s", sec)
+		}
+	}
+
+	// Verify Confirmation Modal
+	s.Confirmation = &Confirmation{
+		Title:       "Apply Guarded Proposal",
+		Message:     "Write verified changes to internal/api/server.go?",
+		AcceptLabel: "Apply",
+	}
+	modalFrame := s.Render(90, 28)
+	if !strings.Contains(modalFrame, "CONFIRMATION REQUIRED") || !strings.Contains(modalFrame, "Apply Guarded Proposal") {
+		t.Fatalf("expected confirmation modal panel:\n%s", modalFrame)
+	}
+	s.Confirmation = nil
+
+	// Verify narrow and wide viewports render cleanly
+	for _, dims := range [][2]int{{60, 20}, {108, 32}, {150, 48}} {
+		s.Navigate(PageSummary)
+		out := s.Render(dims[0], dims[1])
+		if visibleRuneCount(strings.Split(out, "\n")[0]) < 68 {
+			t.Fatalf("unexpected top border width for dims %v", dims)
 		}
 	}
 }
