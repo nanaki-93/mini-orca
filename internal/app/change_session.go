@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/features"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -104,15 +105,7 @@ func validChangeKind(kind string) bool {
 }
 
 func validateChangeCriteria(criteria []string) error {
-	if len(criteria) > 16 {
-		return fmt.Errorf("at most sixteen acceptance criteria are supported")
-	}
-	for _, criterion := range criteria {
-		if strings.TrimSpace(criterion) == "" || len(criterion) > 1024 {
-			return fmt.Errorf("acceptance criteria must be non-empty bounded text")
-		}
-	}
-	return nil
+	return features.ValidateCriteria(criteria)
 }
 
 func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session *ChangeSession) error {

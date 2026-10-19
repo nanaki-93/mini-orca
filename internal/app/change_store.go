@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/features"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -18,21 +18,7 @@ var changeIDPattern = regexp.MustCompile(`^change-[a-f0-9]{32}$`)
 // changeMetadataPath disallows metadata-directory aliases before either reads
 // or writes. Source-write path policy deliberately does not admit metadata.
 func changeMetadataPath(root, name string) (string, error) {
-	current := root
-	for _, part := range []string{".mini-orca", "changes", name} {
-		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("change history contains a symlink")
-		}
-	}
-	return current, nil
+	return features.MetadataPath(root, name)
 }
 
 func readChangeSession(root, id string) (*ChangeSession, error) {
