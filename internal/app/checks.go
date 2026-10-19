@@ -14,15 +14,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
 )
 
 const (
-	CheckNotRun         = "not-run"
-	CheckPassed         = "passed"
-	CheckFailed         = "failed"
-	CheckSkipped        = "skipped"
-	CheckCanceled       = "canceled"
-	CheckUnavailable    = "unavailable"
+	CheckNotRun         = archcheck.CheckNotRun
+	CheckPassed         = archcheck.CheckPassed
+	CheckFailed         = archcheck.CheckFailed
+	CheckSkipped        = archcheck.CheckSkipped
+	CheckCanceled       = archcheck.CheckCanceled
+	CheckUnavailable    = archcheck.CheckUnavailable
 	checkCopyBufferSize = 32 * 1024
 )
 
@@ -48,23 +50,8 @@ var (
 	checkSecret        = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential)\b\s*[:=]\s*[^\s,;]+`)
 )
 
-// CheckResult is one parser, formatter, lint, or test result. Command is a
-// display-only argv preview; it is never executed through a shell.
-type CheckResult struct {
-	Name     string   `json:"name"`
-	Required bool     `json:"required"`
-	State    string   `json:"state"`
-	Command  []string `json:"command,omitempty"`
-	Output   string   `json:"output,omitempty"`
-	ExitCode int      `json:"exit_code,omitempty"`
-}
-
-// CheckOptions keeps expensive checks explicit. Parsing and formatting
-// are required where supported; lint and tests run only when requested.
-type CheckOptions struct {
-	RunLint  bool `json:"run_lint,omitempty"`
-	RunTests bool `json:"run_tests,omitempty"`
-}
+type CheckResult = archcheck.CheckResult
+type CheckOptions = archcheck.CheckOptions
 
 func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) CheckResult {
 	check, err := s.executeCheck(ctx, workspace, revision, CheckResult{Name: name, Required: true, Command: append([]string(nil), command...)}, true)

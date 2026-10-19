@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -12,21 +13,8 @@ const (
 	maxChangeMessages = 40
 )
 
-type ChangeTarget struct {
-	Path    string `json:"path"`
-	Hash    string `json:"hash"`
-	Exists  bool   `json:"exists"`
-	Content string `json:"content"`
-	Mode    uint32 `json:"mode"`
-}
-
-type ChangeEdit struct {
-	Path    string              `json:"path"`
-	Content string              `json:"content"`
-	Hash    string              `json:"hash"`
-	Summary string              `json:"summary,omitempty"`
-	Diff    project.UnifiedDiff `json:"diff"`
-}
+type ChangeTarget = archcheck.ChangeTarget
+type ChangeEdit = archcheck.ChangeEdit
 
 // ChangeSession is private project-local history, unlike source-free findings
 // and audits. Restored check/review evidence is cleared before reuse.
