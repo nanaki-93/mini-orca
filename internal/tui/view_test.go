@@ -194,6 +194,22 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 			t.Fatalf("expected exact full-screen width %d on top border, got %d", dims[0], gotW)
 		}
 	}
+
+	// Verify split-screen sidebar menu division and hidden keymappings on standard screen
+	s.Navigate(PageSummary)
+	splitOut := s.Render(120, 36)
+	if !strings.Contains(splitOut, "NAVIGATION") || !strings.Contains(splitOut, "WORKSPACE PULSE") || !strings.Contains(splitOut, "┳") {
+		t.Fatalf("expected split-screen sidebar menu and divider on 120x36 viewport:\n%s", splitOut)
+	}
+	if strings.Contains(splitOut, "ACTIONS:") || strings.Contains(splitOut, "[b/Enter]") || strings.Contains(splitOut, "Press [1-5]") {
+		t.Fatalf("expected keymappings to be hidden from main screen:\n%s", splitOut)
+	}
+	s.HandleKey(KeyEvent{Key: "?"})
+	helpOut := s.Render(120, 36)
+	if !strings.Contains(helpOut, "KEYBINDINGS & COLON COMMANDS REFERENCE") {
+		t.Fatalf("expected on-demand keybindings modal when pressing '?':\n%s", helpOut)
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
 }
 
 func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
