@@ -180,6 +180,26 @@ func (s *State) renderProjectPage(th ansiTheme, width int) []string {
 	return lines
 }
 
+func windowBounds(total, selected, maxRows int) (int, int) {
+	if total <= maxRows || maxRows <= 0 {
+		return 0, total
+	}
+	start := max(0, selected-maxRows/2)
+	end := start + maxRows
+	if end > total {
+		end = total
+		start = max(0, end-maxRows)
+	}
+	return start, end
+}
+
+func appendWindowFooter(th ansiTheme, lines []string, start, end, total int) []string {
+	if total <= end-start {
+		return lines
+	}
+	return append(lines, fmt.Sprintf("  %sShowing %d–%d of %d items%s", th.muted, start+1, end, total, th.reset))
+}
+
 func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	items := CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
@@ -193,29 +213,31 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if len(items) == 0 {
 		guide := []string{
 			fmt.Sprintf("%sStatus:%s No active autonomous missions running.", th.bold+th.cyan, th.reset),
-			fmt.Sprintf("• %sIssue Remediation:%s Select an open finding in the %sIssues%s view to generate a guarded fix.", th.bold+th.fg, th.reset, th.accent, th.reset),
-			fmt.Sprintf("• %sFeature Delivery:%s  Select a proposal in %sFeatures%s or dispatch a custom prompt via %s:agent%s.", th.bold+th.fg, th.reset, th.accent, th.reset, th.purple, th.reset),
+			fmt.Sprintf("• %sIssue Remediation:%s Select a finding in %sIssues%s to generate a guarded fix.", th.bold+th.fg, th.reset, th.accent, th.reset),
+			fmt.Sprintf("• %sFeature Delivery:%s  Select a proposal in %sFeatures%s or run %s:agent <goal>%s.", th.bold+th.fg, th.reset, th.accent, th.reset, th.purple, th.reset),
 		}
 		lines = append(lines, "")
 		return append(lines, th.renderPanelBox("AUTONOMOUS MISSION STANDBY", "IDLE", panelW, guide)...)
 	}
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("   STAGE                     MISSION TITLE                    SCOPE        DELTA        VERIFICATION", width)...)
+	lines = append(lines, th.renderTableHeader("   STAGE              MISSION TITLE               SCOPE      DELTA       CHECKS", width)...)
 	selected := s.ClampedIdx()
-	titleCol := max(22, width-72)
-	for idx, item := range items {
+	titleCol := max(16, width-60)
+	start, end := windowBounds(len(items), selected, 8)
+	for idx := start; idx < end; idx++ {
+		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
-		stageLabel := fmt.Sprintf("Stage %d (%s)", item.StageNumber, item.Stage)
+		stageLabel := truncatePlain(fmt.Sprintf("%d. %s", item.StageNumber, item.Stage), 16)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-24s · %s%-*s%s %s (%s+%d%s/%s-%d%s) %schecks:%d/%d%s %s",
+			"  %s%-16s  %s%-*s%s  %s  %s+%d%s/%s-%d%s  %schecks:%d/%d%s",
 			cursor, stageLabel, tStyle, titleCol, truncatePlain(item.Title, titleCol), th.reset,
 			th.statusBadge(item.ScopeBadge),
 			th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset,
 			th.muted, item.ChecksPassed, item.ChecksTotal, th.reset,
-			th.renderProgressBar(item.ChecksPassed, max(1, item.ChecksTotal), 8),
 		))
 	}
+	lines = appendWindowFooter(th, lines, start, end, len(items))
 	curItem := items[selected]
 	detail := []string{
 		fmt.Sprintf("%sMission:%s  %s%s%s", th.muted, th.reset, th.bold+th.fg, curItem.Title, th.reset),
@@ -234,10 +256,10 @@ func renderPipelineStepper(th ansiTheme, activeStage int) string {
 		num   int
 		label string
 	}{
-		{1, "1. Architect & Code"},
-		{2, "2. Verify & Test"},
-		{3, "3. Critic Review"},
-		{4, "4. Human Review"},
+		{1, "1. Architect"},
+		{2, "2. Verify"},
+		{3, "3. Critic"},
+		{4, "4. Review"},
 	}
 	var parts []string
 	for _, st := range stages {
@@ -250,7 +272,7 @@ func renderPipelineStepper(th ansiTheme, activeStage int) string {
 			parts = append(parts, fmt.Sprintf("%s[%s]%s", th.muted, st.label, th.reset))
 		}
 	}
-	return "Pipeline: " + strings.Join(parts, th.border+" ──▶ "+th.reset)
+	return strings.Join(parts, th.border+" ──▶ "+th.reset)
 }
 
 func (s *State) renderBugsPage(th ansiTheme, width int) []string {
@@ -269,37 +291,41 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 		),
 		"",
 	}
-	lines = append(lines, th.renderTableHeader("   SEL  SEVERITY    CATEGORY    FINDING                            LOCATION                  STATUS", width)...)
+	lines = append(lines, th.renderTableHeader("   SEL  SEVERITY    CATEGORY   FINDING                        LOCATION            STATUS", width)...)
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo findings match the active filter.%s", th.muted, th.reset))
 	}
-	nameCol := max(24, width-68)
+	nameCol := max(18, width-62)
 	selected := s.ClampedIdx()
-	for idx, row := range filtered {
+	start, end := windowBounds(len(filtered), selected, 9)
+	for idx := start; idx < end; idx++ {
+		row := filtered[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		mark := th.muted + "[ ]" + th.reset
 		if containsString(s.SelectedIssueIDs, row.ID) {
 			mark = th.amber + "[x]" + th.reset
 		}
-		loc := truncatePlain(fmt.Sprintf("%s:%d", row.Path, row.Line), 22)
+		loc := truncatePlain(fmt.Sprintf("%s:%d", row.Path, row.Line), 18)
+		cat := truncatePlain(row.Category, 9)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s %s  %s%-10s%s  %s%-*s%s  %s%-22s%s  %s",
+			"  %s%s %s  %s%-9s%s  %s%-*s%s  %s%-18s%s  %s",
 			cursor, mark, th.severityBadge(row.Severity),
-			th.purple, row.Category, th.reset,
+			th.purple, cat, th.reset,
 			tStyle, nameCol, truncatePlain(row.Name, nameCol), th.reset,
 			th.muted, loc, th.reset,
 			th.statusBadge(row.Status),
 		))
 	}
+	lines = appendWindowFooter(th, lines, start, end, len(filtered))
 	if cur := s.SelectedIssue(); cur != nil {
 		footer := []string{
 			fmt.Sprintf("%sFinding:%s   %s  %s%s%s",
-				th.muted, th.reset, th.severityBadge(cur.Severity), th.bold+th.fg, truncatePlain(cur.Title, max(24, panelW-22)), th.reset),
+				th.muted, th.reset, th.severityBadge(cur.Severity), th.bold+th.fg, truncatePlain(cur.Title, max(20, panelW-22)), th.reset),
 			fmt.Sprintf("%sLocation:%s  %s%s:%d%s   %sSummary:%s %s",
 				th.muted, th.reset, th.cyan, cur.Path, cur.Line, th.reset,
-				th.muted, th.reset, truncatePlain(cur.Cause, max(20, panelW-38))),
+				th.muted, th.reset, truncatePlain(cur.Cause, max(16, panelW-38))),
 		}
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
@@ -314,7 +340,7 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	if cur == nil {
 		return append(lines, fmt.Sprintf("  %sNo finding selected.%s", th.muted, th.reset))
 	}
-	textW := max(36, panelW-22)
+	textW := max(28, panelW-22)
 	meta := []string{
 		fmt.Sprintf("%sFinding:%s  %s%s%s", th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset),
 		fmt.Sprintf("%sSeverity:%s %s   %sCategory:%s %s%s%s   %sStatus:%s %s",
@@ -339,24 +365,27 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 	if len(features) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo active feature proposals queued.%s", th.muted, th.reset))
 	}
-	lines = append(lines, th.renderTableHeader("   EFFORT     FEATURE PROPOSAL                        STRATEGIC BENEFIT", width)...)
+	lines = append(lines, th.renderTableHeader("   EFFORT      FEATURE PROPOSAL                    STRATEGIC BENEFIT", width)...)
 	selected := s.ClampedIdx()
-	for idx, f := range features {
+	start, end := windowBounds(len(features), selected, 9)
+	for idx := start; idx < end; idx++ {
+		f := features[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		effort := strings.ToUpper(firstNonEmpty(f.Effort, "med"))
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s  %s%-36s%s  %s%s%s",
-			cursor, th.severityBadge(effort), tStyle, truncatePlain(f.Title, 36), th.reset,
-			th.muted, truncatePlain(f.Benefit, max(20, width-56)), th.reset,
+			"  %s%s  %s%-32s%s  %s%s%s",
+			cursor, th.severityBadge(effort), tStyle, truncatePlain(f.Title, 32), th.reset,
+			th.muted, truncatePlain(f.Benefit, max(18, width-52)), th.reset,
 		))
 	}
+	lines = appendWindowFooter(th, lines, start, end, len(features))
 	cur := features[selected]
 	featBox := []string{
 		fmt.Sprintf("%sProposal:%s %s%s%s   %sEffort:%s %s",
 			th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset,
 			th.muted, th.reset, th.severityBadge(firstNonEmpty(cur.Effort, "med"))),
-		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, truncatePlain(cur.Benefit, max(32, panelW-14)), th.reset),
+		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, truncatePlain(cur.Benefit, max(28, panelW-14)), th.reset),
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("FEATURE IMPLEMENTATION WORKBENCH", "CAPABILITY SPEC", panelW, featBox)...)
@@ -375,7 +404,7 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 		th.muted, th.reset, th.bold+th.fg, s.Run.Identity.ID, th.reset,
 		th.muted, th.reset, th.statusBadge(s.Run.Status),
 		th.muted, th.reset, s.Run.ElapsedSeconds,
-		th.muted, th.reset, th.renderProgressBar(done, total, 14),
+		th.muted, th.reset, th.renderProgressBar(done, total, 12),
 	)
 	lines = append(lines, th.renderPanelBox("ANALYSIS TELEMETRY", strings.ToUpper(s.Run.Status), panelW, []string{summaryLine})...)
 	lines = append(lines, "")
@@ -383,7 +412,7 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	selected := s.ClampedIdx()
 	for idx, sec := range s.Run.Sections {
 		cursor := th.renderCursorPrefix(idx == selected)
-		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 12)
+		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 10)
 		failStr := fmt.Sprintf("%sfailed:%d%s", th.muted, sec.Coverage.Failed, th.reset)
 		if sec.Coverage.Failed > 0 {
 			failStr = th.critBg + fmt.Sprintf(" failed:%d ", sec.Coverage.Failed) + th.reset
@@ -411,8 +440,10 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 		th.muted, th.reset, th.bold+th.green, incl, th.reset, th.amber, excl, th.reset, total), "")
 	lines = append(lines, th.renderTableHeader("   SCOPE     REPOSITORY PATH                             LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
-	pathCol := max(28, width-36)
-	for idx, f := range s.Index.Files {
+	pathCol := max(24, width-34)
+	start, end := windowBounds(total, selected, 14)
+	for idx := start; idx < end; idx++ {
+		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		scopeTag := th.statusBadge("INCL")
 		if containsString(s.ExcludedPaths, f.Path) {
@@ -425,7 +456,7 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 			th.muted, firstNonEmpty(f.Language, "text"), f.LineCount, th.reset,
 		))
 	}
-	return lines
+	return appendWindowFooter(th, lines, start, end, total)
 }
 
 func (s *State) renderEditorPage(th ansiTheme, width int) []string {
@@ -445,12 +476,12 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 			th.muted, firstNonEmpty(s.File.Language, "text"), s.File.LineCount, th.reset)
 		lines = append(lines, th.renderPanelBox("READ-ONLY SOURCE VIEWER", "SOURCE", panelW, []string{header})...)
 		if s.File.Content != "" {
-			for idx, l := range strings.Split(s.File.Content, "\n") {
-				if idx >= 16 {
-					break
-				}
-				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, l))
+			rawLines := strings.Split(s.File.Content, "\n")
+			start, end := windowBounds(len(rawLines), s.ClampedIdx(), 14)
+			for idx := start; idx < end; idx++ {
+				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, rawLines[idx]))
 			}
+			lines = appendWindowFooter(th, lines, start, end, len(rawLines))
 		}
 		return lines
 	}
@@ -478,7 +509,9 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	lines := th.renderPanelBox("GUARDED DIFF REVIEW", badge, panelW, meta)
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("  SIGN  LINE │ UNIFIED DIFF CONTENT", width)...)
-	for _, dl := range fc.Diff.Lines {
+	start, end := windowBounds(len(fc.Diff.Lines), s.ClampedIdx(), 14)
+	for idx := start; idx < end; idx++ {
+		dl := fc.Diff.Lines[idx]
 		switch {
 		case IsAddedLine(dl.Kind):
 			lines = append(lines, fmt.Sprintf("  %s+ %4d │ %s%s", th.green, dl.NewLine, dl.Text, th.reset))
@@ -488,7 +521,7 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 			lines = append(lines, fmt.Sprintf("  %s  %4d │%s %s", th.muted, dl.NewLine, th.reset, dl.Text))
 		}
 	}
-	return lines
+	return appendWindowFooter(th, lines, start, end, len(fc.Diff.Lines))
 }
 
 func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {
@@ -497,13 +530,16 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 	}
 	lines = append(lines, th.renderTableHeader("   REPOSITORY FILE PATH                        LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
-	for idx, f := range s.Index.Files {
+	total := len(s.Index.Files)
+	start, end := windowBounds(total, selected, 14)
+	for idx := start; idx < end; idx++ {
+		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%s%-42s%s %s(%s)  %d lines%s",
-			cursor, tStyle, truncatePlain(f.Path, 42), th.reset, th.muted, firstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%s%-40s%s %s(%s)  %d lines%s",
+			cursor, tStyle, truncatePlain(f.Path, 40), th.reset, th.muted, firstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
 	}
-	return lines
+	return appendWindowFooter(th, lines, start, end, total)
 }
 
 func (s *State) renderGitPage(th ansiTheme, width int) []string {
@@ -513,7 +549,9 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderTableHeader("   ROLE          BRANCH               WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
-	for idx, wt := range s.GitWorkspace.Worktrees {
+	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, 12)
+	for idx := start; idx < end; idx++ {
+		wt := s.GitWorkspace.Worktrees[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		role := "WORKTREE"
 		if wt.Current {
@@ -525,7 +563,7 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 		lines = append(lines, fmt.Sprintf("  %s%-12s  %sbranch:%-18s%s %spath:%s%s",
 			cursor, th.statusBadge(role), tStyle, wt.Branch, th.reset, th.muted, wt.Path, th.reset))
 	}
-	return lines
+	return appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
 }
 
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
@@ -535,16 +573,18 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderTableHeader("   STATE        PROPOSAL TITLE                        REVISION    FRESHNESS", width)...)
 	selected := s.ClampedIdx()
-	for idx, entry := range s.ChangeHistory {
+	start, end := windowBounds(len(s.ChangeHistory), selected, 12)
+	for idx := start; idx < end; idx++ {
+		entry := s.ChangeHistory[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-12s %s%-34s%s %srev:%d (%s)%s",
-			cursor, th.statusBadge(entry.State), tStyle, truncatePlain(entry.Title, 34), th.reset,
+			"  %s%-12s %s%-32s%s %srev:%d (%s)%s",
+			cursor, th.statusBadge(entry.State), tStyle, truncatePlain(entry.Title, 32), th.reset,
 			th.muted, entry.Revision, firstNonEmpty(entry.Freshness, "current"), th.reset,
 		))
 	}
-	return lines
+	return appendWindowFooter(th, lines, start, end, len(s.ChangeHistory))
 }
 
 func (s *State) renderDocsPage(th ansiTheme, width int) []string {

@@ -183,15 +183,33 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	}
 
 	// Verify full-screen adaptive width and height filling across compact, standard, and ultrawide viewports
-	for _, dims := range [][2]int{{68, 24}, {120, 36}, {180, 50}} {
-		s.Navigate(PageSummary)
-		out := s.Render(dims[0], dims[1])
-		rows := strings.Split(out, "\n")
-		if len(rows) < dims[1] {
-			t.Fatalf("expected full-screen frame height >= %d, got %d rows", dims[1], len(rows))
-		}
-		if gotW := visibleRuneCount(rows[0]); gotW != dims[0] {
-			t.Fatalf("expected exact full-screen width %d on top border, got %d", dims[0], gotW)
+	// across ALL pages (including 2-Agent Studio and large 150-row tables)
+	for i := 0; i < 60; i++ {
+		s.Index = &ProjectIndex{Files: append(s.IndexSafeFiles(), IndexedFile{
+			Path:      "internal/very/deep/nested/package/service_handler_implementation.go",
+			Language:  "Go",
+			LineCount: 420,
+		})}
+	}
+	allPages := []Page{
+		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
+		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
+		PageInstructions, PageModels, PageBootstrap, PageLessons,
+	}
+	for _, dims := range [][2]int{{68, 24}, {100, 30}, {120, 36}, {180, 50}} {
+		for _, p := range allPages {
+			s.Navigate(p)
+			out := s.Render(dims[0], dims[1])
+			rows := strings.Split(out, "\n")
+			if len(rows) != dims[1] {
+				t.Fatalf("page %s (%dx%d): expected exact frame height %d, got %d rows", p, dims[0], dims[1], dims[1], len(rows))
+			}
+			for rIdx, row := range rows {
+				if gotW := visibleRuneCount(row); gotW != dims[0] {
+					t.Fatalf("page %s (%dx%d) row %d: expected exact visible width %d, got %d: %q", p, dims[0], dims[1], rIdx, dims[0], gotW, row)
+				}
+			}
 		}
 	}
 
@@ -204,12 +222,38 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	if strings.Contains(splitOut, "ACTIONS:") || strings.Contains(splitOut, "[b/Enter]") || strings.Contains(splitOut, "Press [1-5]") {
 		t.Fatalf("expected keymappings to be hidden from main screen:\n%s", splitOut)
 	}
+
+	// Verify sidebar highlight moves in Sections 4 and 5 when stepping through submenus
+	s.HandleKey(KeyEvent{Key: "4"})
+	if !strings.Contains(s.Render(120, 36), "◆ Context & Deps") {
+		t.Fatal("expected Section 4 initial highlight on Context & Deps")
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if !strings.Contains(s.Render(120, 36), "◆ Components") {
+		t.Fatal("expected Section 4 highlight to move to Components after 'l'")
+	}
+	s.HandleKey(KeyEvent{Key: "5"})
+	if !strings.Contains(s.Render(120, 36), "◆ Trust Policy") {
+		t.Fatal("expected Section 5 initial highlight on Trust Policy")
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if !strings.Contains(s.Render(120, 36), "◆ Model Routing") {
+		t.Fatal("expected Section 5 highlight to move to Model Routing after 'l'")
+	}
+
 	s.HandleKey(KeyEvent{Key: "?"})
 	helpOut := s.Render(120, 36)
 	if !strings.Contains(helpOut, "KEYBINDINGS & COLON COMMANDS REFERENCE") {
 		t.Fatalf("expected on-demand keybindings modal when pressing '?':\n%s", helpOut)
 	}
 	s.HandleKey(KeyEvent{Key: "Escape"})
+}
+
+func (s *State) IndexSafeFiles() []IndexedFile {
+	if s.Index == nil {
+		return nil
+	}
+	return s.Index.Files
 }
 
 func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {

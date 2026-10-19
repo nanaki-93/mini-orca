@@ -488,3 +488,53 @@ func TestAgentStartFailureClearsPreviewAndSurfacesDetail(t *testing.T) {
 		t.Fatalf("expected detailed daemon error, got %q", s.Error)
 	}
 }
+
+func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
+	s := NewState()
+
+	// Section 2: Tab cycles cleanly across the 5 sidebar submenu items without getting stuck on PageIssueDetail
+	s.HandleKey(KeyEvent{Key: "2"})
+	wantSec2 := []Page{PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageAgents}
+	for _, want := range wantSec2 {
+		s.HandleKey(KeyEvent{Key: "Tab"})
+		if s.Page != want {
+			t.Fatalf("Section 2 Tab cycle: got %s, want %s", s.Page, want)
+		}
+	}
+
+	// Section 4: h/l and j/k update both Page and DocsSection
+	s.HandleKey(KeyEvent{Key: "4"})
+	if s.Page != PageDocs || s.DocsSection != "context" {
+		t.Fatalf("Section 4 initial state: page=%s section=%s", s.Page, s.DocsSection)
+	}
+	s.HandleKey(KeyEvent{Key: "j"})
+	if s.Page != PageDocsComponents || s.DocsSection != "components" {
+		t.Fatalf("Section 4 after 'j': page=%s section=%s", s.Page, s.DocsSection)
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if s.Page != PageDocsDecisions || s.DocsSection != "decisions" {
+		t.Fatalf("Section 4 after 'l': page=%s section=%s", s.Page, s.DocsSection)
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if s.Page != PageDiagrams {
+		t.Fatalf("Section 4 after second 'l': page=%s, want PageDiagrams", s.Page)
+	}
+
+	// Section 5: h/l and Tab update both Page and RulesSection
+	s.HandleKey(KeyEvent{Key: "5"})
+	if s.Page != PageInstructions || s.RulesSection != "trust" {
+		t.Fatalf("Section 5 initial state: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Page != PageModels || s.RulesSection != "models" {
+		t.Fatalf("Section 5 after ArrowRight: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageBootstrap || s.RulesSection != "bootstrap" {
+		t.Fatalf("Section 5 after Tab: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if s.Page != PageLessons || s.RulesSection != "lessons" {
+		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
+	}
+}
