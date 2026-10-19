@@ -204,7 +204,7 @@ func NewState() *State {
 		ActivePresetID: "local-default",
 		WorkspaceTrust: true,
 		Results:        make(map[string]SectionResults),
-		CmdOutput:      "Press [1-5] to switch hubs · [Tab] sub-page · [j/k] move · [Enter/a] start Agent · [?] help · [:q] quit",
+		CmdOutput:      "Workspace ready",
 	}
 }
 
