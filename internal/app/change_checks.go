@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -114,9 +116,9 @@ func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 		}
 		checks = append(checks, check)
 	}
-	checks = append(checks, changeArchitectureAndComplexityChecks(root, edits)...)
+	checks = append(checks, archcheck.ChangeArchitectureAndComplexityChecks(root, edits)...)
 	if len(edits) > 0 {
-		checks = append(checks, checkChangeSecretAndHygiene(edits))
+		checks = append(checks, archcheck.CheckChangeSecretAndHygiene(edits))
 	}
 	return checks
 }
@@ -149,8 +151,8 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	}
 	if options.RunLint {
 		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{"go", "vet", "./..."}, false, false))
-		if gitleaksCheck, ok := s.runOptionalGitleaksCheck(ctx, workspace, session.ProjectRevision); ok {
-			checks = append(checks, gitleaksCheck)
+		if archcheck.HasOptionalGitleaks(workspace) {
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "gitleaks", true, []string{"gitleaks", "detect", "--no-git", "--source", ".", "--redact"}, false, true))
 		}
 	}
 	if options.RunTests {
@@ -462,4 +464,20 @@ func changeCheckEvidence(checks []CheckResult) string {
 		result = result[:4096]
 	}
 	return result
+}
+
+type workspaceIdentity struct {
+	fingerprint string
+}
+
+func workspaceFingerprint(ctx context.Context, root string) (string, error) {
+	return checkexec.WorkspaceFingerprint(ctx, root)
+}
+
+func fingerprintCheckWorkspace(ctx context.Context, root string) (string, error) {
+	return checkexec.FingerprintWorkspace(ctx, root)
+}
+
+func (fixture workspaceIdentity) verifyCurrent(ctx context.Context, root string) error {
+	return checkexec.VerifyWorkspaceFingerprint(ctx, root, fixture.fingerprint)
 }

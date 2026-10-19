@@ -3,6 +3,8 @@ package project
 import (
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 func TestScanGoSecurityRulesRejectsUnsupportedAndStaleInput(t *testing.T) {
@@ -19,6 +21,6 @@ func TestScanGoSecurityRulesRejectsUnsupportedAndStaleInput(t *testing.T) {
 }
 
 func securityRuleIndexedFile(path, source string) IndexFile {
-	_, symbols, _ := extractGoFacts(path, []byte(source))
-	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Symbols: symbols}
+	_, syms, _ := symbols.ExtractGoFacts(path, []byte(source))
+	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Symbols: syms}
 }

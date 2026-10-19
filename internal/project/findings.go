@@ -405,7 +405,7 @@ func sanitizeFindingText(value string, limit int) string {
 func cloneFindings(source []UnifiedFinding) []UnifiedFinding {
 	result := append([]UnifiedFinding(nil), source...)
 	for index := range result {
-		result[index].TaskSpec = cloneBugTaskSpec(source[index].TaskSpec)
+		result[index].TaskSpec = insight.CloneBugTaskSpec(source[index].TaskSpec)
 		result[index].EngineeringInsight = CloneEngineeringInsight(source[index].EngineeringInsight)
 	}
 	return result
@@ -448,7 +448,7 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 				}
 			}
 		}
-		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: insight.CloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }

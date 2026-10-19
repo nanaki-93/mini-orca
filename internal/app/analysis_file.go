@@ -200,6 +200,15 @@ func (execution *analysisFileStageExecution) validatePrepared(root string, analy
 	return nil
 }
 
+func (execution *analysisFileStageExecution) bindPreparedRuntime(root string, analysis project.Analysis, file project.IndexFile, policyVersion string, runtime *modelRuntime, modelProfile *string) error {
+	if err := execution.validatePrepared(root, analysis, file, policyVersion); err != nil {
+		return err
+	}
+	*runtime = execution.runtime
+	*modelProfile = execution.request.Models.profile(execution.request.Stage)
+	return nil
+}
+
 func (execution *analysisFileStageExecution) check(ctx context.Context) error {
 	if err := execution.authority.Check(ctx, execution.request.Run); err != nil {
 		return &analysisStageAuthorityError{err}
@@ -358,11 +367,9 @@ func (execution *analysisFileStageExecution) performance(ctx context.Context, re
 	if err != nil {
 		return err
 	}
-	if err := execution.validatePrepared(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion); err != nil {
+	if err := execution.bindPreparedRuntime(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion, &snapshot.runtime, &snapshot.modelProfile); err != nil {
 		return err
 	}
-	snapshot.runtime = execution.runtime
-	snapshot.modelProfile = execution.request.Models.profile(execution.request.Stage)
 	if !execution.request.Refresh {
 		cached, err := project.LoadPerformanceFileReport(execution.root, execution.file.Path, execution.file.ContentHash, execution.policy)
 		if err != nil {
@@ -430,11 +437,9 @@ func (execution *analysisFileStageExecution) securityAI(ctx context.Context, res
 	if err != nil {
 		return err
 	}
-	if err := execution.validatePrepared(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion); err != nil {
+	if err := execution.bindPreparedRuntime(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion, &snapshot.runtime, &snapshot.modelProfile); err != nil {
 		return err
 	}
-	snapshot.runtime = execution.runtime
-	snapshot.modelProfile = execution.request.Models.profile(execution.request.Stage)
 	if !execution.request.Refresh {
 		input := analysisSecurityCacheInput(execution.analysis, execution.file, snapshot.runtime, execution.policy.Version())
 		cached, err := s.loadSecurityFileReport(execution.root, input)

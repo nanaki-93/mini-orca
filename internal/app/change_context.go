@@ -14,6 +14,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 func changeContextByteLimit(runtime modelRuntime) int {
@@ -186,9 +188,9 @@ func extractPolyglotFileDecls(relPath, absPath string) []string {
 	if err != nil || len(data) > 32768 {
 		return nil
 	}
-	_, _, symbols := project.ExtractFileFacts(relPath, data)
+	_, _, syms := symbols.ExtractFileFacts(relPath, data)
 	var decls []string
-	for _, sym := range symbols {
+	for _, sym := range syms {
 		if strings.TrimSpace(sym.Signature) != "" {
 			decls = append(decls, "  "+sym.Signature)
 		}
@@ -344,7 +346,7 @@ func makeChangeEdit(session *ChangeSession, path, content string) (*ChangeEdit, 
 			content = string(formatted)
 		}
 	}
-	return &ChangeEdit{Path: path, Content: content, Hash: contentHash([]byte(content)), Diff: project.BuildUnifiedDiff(path, target.Content, content)}, nil
+	return &ChangeEdit{Path: path, Content: content, Hash: contentHash([]byte(content)), Diff: diff.BuildUnifiedDiff(path, target.Content, content)}, nil
 }
 
 func changeTarget(session *ChangeSession, path string) *ChangeTarget {

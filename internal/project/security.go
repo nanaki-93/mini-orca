@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/insight"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/securityrules"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
@@ -120,7 +121,7 @@ func ParseSecurityFindings(output string, indexed IndexFile, source string) ([]S
 	if !validSecurityReviewInput(output, indexed, source) {
 		return nil, fmt.Errorf("security review input is invalid or too large")
 	}
-	wire, err := decodeSecurityWire(normalizeEmptyFindingsOutput(output))
+	wire, err := decodeSecurityWire(insight.NormalizeEmptyFindingsOutput(output))
 	if err != nil {
 		return nil, err
 	}

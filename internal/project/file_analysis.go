@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/insight"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -302,7 +303,7 @@ func cloneFileAnalysis(source *FileAnalysis) *FileAnalysis {
 	copy.SideEffects = append([]string(nil), source.SideEffects...)
 	copy.Risks = append([]Finding(nil), source.Risks...)
 	for index := range copy.Risks {
-		copy.Risks[index].TaskSpec = cloneBugTaskSpec(source.Risks[index].TaskSpec)
+		copy.Risks[index].TaskSpec = insight.CloneBugTaskSpec(source.Risks[index].TaskSpec)
 		copy.Risks[index].EngineeringInsight = CloneEngineeringInsight(source.Risks[index].EngineeringInsight)
 	}
 	copy.Suggestions = append([]Suggestion(nil), source.Suggestions...)

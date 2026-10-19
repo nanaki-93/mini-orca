@@ -12,7 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 const (
@@ -55,11 +56,11 @@ type ChangeTarget struct {
 
 // ChangeEdit holds one proposed file edit and its computed unified diff.
 type ChangeEdit struct {
-	Path    string              `json:"path"`
-	Content string              `json:"content"`
-	Hash    string              `json:"hash"`
-	Summary string              `json:"summary,omitempty"`
-	Diff    project.UnifiedDiff `json:"diff"`
+	Path    string           `json:"path"`
+	Content string           `json:"content"`
+	Hash    string           `json:"hash"`
+	Summary string           `json:"summary,omitempty"`
+	Diff    diff.UnifiedDiff `json:"diff"`
 }
 
 type architectureImportRule struct {
@@ -143,7 +144,7 @@ var defaultArchitectureImportRules = []architectureImportRule{
 type parsedEditFacts struct {
 	lang       string
 	rawImports []string
-	symbols    []project.SymbolInfo
+	symbols    []symbols.SymbolInfo
 }
 
 var (
@@ -185,11 +186,11 @@ func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
 		if filepath.Ext(edit.Path) == ".go" {
 			continue
 		}
-		lang, rawImports, symbols := project.ExtractFileFacts(edit.Path, []byte(edit.Content))
+		lang, rawImports, syms := symbols.ExtractFileFacts(edit.Path, []byte(edit.Content))
 		facts[edit.Path] = parsedEditFacts{
 			lang:       lang,
 			rawImports: rawImports,
-			symbols:    symbols,
+			symbols:    syms,
 		}
 	}
 	return facts
@@ -388,7 +389,7 @@ func extractEditImports(path, content string, rawImports []string) []string {
 	}
 	slashDir := filepath.Dir(strings.TrimPrefix(filepath.ToSlash(path), "./"))
 	if rawImports == nil {
-		_, rawImports, _ = project.ExtractFileFacts(path, []byte(content))
+		_, rawImports, _ = symbols.ExtractFileFacts(path, []byte(content))
 	}
 	imports := make([]string, 0, len(rawImports)*2)
 	appendNorm := func(raw string) {
@@ -401,7 +402,7 @@ func extractEditImports(path, content string, rawImports []string) []string {
 				}
 			}
 		}
-		if norm := project.NormalizeGenericImportPath(raw); norm != "" {
+		if norm := symbols.NormalizeGenericImportPath(raw); norm != "" {
 			imports = append(imports, norm)
 		}
 	}
@@ -505,16 +506,16 @@ func goEditComplexityViolations(path, content string, budgets architectureQualit
 	return violations
 }
 
-func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets, symbols []project.SymbolInfo) []string {
-	if symbols == nil {
-		_, _, symbols = project.ExtractFileFacts(path, []byte(content))
+func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets, syms []symbols.SymbolInfo) []string {
+	if syms == nil {
+		_, _, syms = symbols.ExtractFileFacts(path, []byte(content))
 	}
-	if len(symbols) == 0 {
+	if len(syms) == 0 {
 		return nil
 	}
 	lines := strings.Split(content, "\n")
 	var violations []string
-	for _, sym := range symbols {
+	for _, sym := range syms {
 		if !isCallableSymbolKind(sym.Kind) {
 			continue
 		}

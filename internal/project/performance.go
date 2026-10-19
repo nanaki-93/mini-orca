@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/project/insight"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -87,7 +88,7 @@ func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo)
 		return nil, "", PerformanceOutputTooLarge
 	}
 	var wire performanceWire
-	decoder := json.NewDecoder(strings.NewReader(normalizeEmptyFindingsOutput(output)))
+	decoder := json.NewDecoder(strings.NewReader(insight.NormalizeEmptyFindingsOutput(output)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&wire); err != nil {
 		return nil, "", PerformanceInvalidJSON

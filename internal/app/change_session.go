@@ -14,6 +14,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app/features"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
 )
 
 func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateRequest) (*ChangeSession, error) {
@@ -438,7 +439,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	if target.Exists && target.Content == request.Content {
 		return nil, fmt.Errorf("instructions are unchanged")
 	}
-	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: project.BuildUnifiedDiff(target.Path, target.Content, request.Content)}}
+	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: diff.BuildUnifiedDiff(target.Path, target.Content, request.Content)}}
 	session.Hash, session.Revision = changeProposalHash(session.Changes), 1
 	session.Messages = []ChangeMessage{{Role: "assistant", Content: "Review the file changes before applying them.", CreatedAt: time.Now().UTC()}}
 	s.changesMu.Lock()

@@ -146,9 +146,9 @@ func buildIndexFile(root, relative string, previous IndexFile) (IndexFile, error
 	} else if !entry.Binary && content.size > maxFileViewBytes {
 		entry.Diagnostics = []Diagnostic{{Message: fmt.Sprintf("File exceeds %d bytes; symbol extraction is unavailable.", maxFileViewBytes)}}
 	} else if entry.Language == "Go" && !entry.Binary {
-		entry.Imports, entry.Symbols, entry.Diagnostics = extractGoFacts(relative, content.source)
+		entry.Imports, entry.Symbols, entry.Diagnostics = symbols.ExtractGoFacts(relative, content.source)
 	} else if !entry.Binary {
-		entry.Imports, entry.Symbols = extractGenericFacts(entry.Language, content.source)
+		entry.Imports, entry.Symbols = symbols.ExtractGenericFacts(entry.Language, content.source)
 	}
 	return entry, nil
 }

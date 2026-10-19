@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 func TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases(t *testing.T) {
@@ -28,15 +30,15 @@ func TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, symbols, diagnostics := extractGoFacts("main.go", mainSource)
-	if len(symbols) != 3 || len(diagnostics) != 0 {
-		t.Fatalf("main fixture facts = symbols:%+v diagnostics:%+v", symbols, diagnostics)
+	_, syms, diagnostics := symbols.ExtractGoFacts("main.go", mainSource)
+	if len(syms) != 3 || len(diagnostics) != 0 {
+		t.Fatalf("main fixture facts = symbols:%+v diagnostics:%+v", syms, diagnostics)
 	}
 	brokenSource, err := os.ReadFile(filepath.Join(root, "malformed.go.fixture"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, diagnostics = extractGoFacts("malformed.go", brokenSource)
+	_, _, diagnostics = symbols.ExtractGoFacts("malformed.go", brokenSource)
 	if len(diagnostics) == 0 {
 		t.Fatal("expected malformed fixture diagnostics")
 	}
