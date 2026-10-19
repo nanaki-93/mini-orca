@@ -310,3 +310,38 @@ func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
 		t.Fatal("expected rendered frames in output")
 	}
 }
+
+func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
+	allPages := []Page{
+		PageSummary, PageRepo, PageProject,
+		PageAgents, PageBugs, PageIssueDetail, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
+		PageEditor, PageGit, PageHistory,
+		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
+		PageInstructions, PageModels, PageBootstrap, PageLessons,
+	}
+	seenTitles := make(map[string]Page, len(allPages))
+	s := NewState()
+	s.ShowKeybindsModal = true
+
+	for _, p := range allPages {
+		s.Navigate(p)
+		spec := lookupPageHelpSpec(s.EffectivePage())
+		if prev, exists := seenTitles[spec.title]; exists {
+			t.Fatalf("duplicate help spec title %q between %s and %s", spec.title, prev, p)
+		}
+		seenTitles[spec.title] = p
+
+		frame := s.Render(120, 36)
+		for _, token := range []string{
+			"KEYBINDINGS & COLON COMMANDS REFERENCE",
+			"PAGE SHORTCUTS · " + spec.title,
+			spec.primary[0].desc,
+			"GLOBAL NAV",
+			"GENERIC CMDS",
+		} {
+			if !strings.Contains(frame, token) {
+				t.Fatalf("page %s help overlay missing %q:\n%s", p, token, frame)
+			}
+		}
+	}
+}
