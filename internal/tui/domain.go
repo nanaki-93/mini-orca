@@ -660,9 +660,10 @@ func ResolveProjectDocs(overview *Overview, project *Project) ProjectDocsReport 
 func RenderArchitectureASCII(docs ProjectDocsReport) []string {
 	if len(docs.Components) == 0 {
 		return []string{
-			"┌──────────────────────────────────────────────┐",
-			"│  Run :analyze to synthesize component layers │",
-			"└──────────────────────────────────────────────┘",
+			"╭──────────────────────────────────────────────────────────╮",
+			"│  ◆ No architecture layers synthesized yet                │",
+			"│  ▸ Press [r] or run :analyze to map repository topology  │",
+			"╰──────────────────────────────────────────────────────────╯",
 		}
 	}
 	var lines []string
@@ -675,16 +676,16 @@ func RenderArchitectureASCII(docs ProjectDocsReport) []string {
 		if comp.Path != "" {
 			label += " (" + comp.Path + ")"
 		}
-		lines = append(lines, "┌─ "+label)
+		lines = append(lines, "╭── ◆ "+label)
 		if comp.Summary != "" {
-			lines = append(lines, "│  "+comp.Summary)
+			lines = append(lines, "│   "+comp.Summary)
 		}
 		if len(comp.Dependencies) > 0 {
-			lines = append(lines, "│  deps: "+strings.Join(comp.Dependencies, ", "))
+			lines = append(lines, "│   deps ──▶ "+strings.Join(comp.Dependencies, ", "))
 		}
-		lines = append(lines, "└──────────────────────────────────────────────")
+		lines = append(lines, "╰──────────────────────────────────────────────────────────")
 		if idx < len(docs.Components)-1 {
-			lines = append(lines, "        │", "        ▼")
+			lines = append(lines, "          │", "          ▼")
 		}
 	}
 	return lines

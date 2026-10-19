@@ -29,17 +29,17 @@ func (s *State) renderActivePage(th ansiTheme, width int) []string {
 func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 	switch s.Page {
 	case PageEditor:
-		return s.renderEditorPage(th)
+		return s.renderEditorPage(th, width)
 	case PageGit:
-		return s.renderGitPage(th)
+		return s.renderGitPage(th, width)
 	case PageHistory:
-		return s.renderHistoryPage(th)
+		return s.renderHistoryPage(th, width)
 	case PageDocs:
-		return s.renderDocsPage(th)
+		return s.renderDocsPage(th, width)
 	case PageDiagrams:
-		return s.renderDiagramsPage(th)
+		return s.renderDiagramsPage(th, width)
 	case PageInstructions:
-		return s.renderInstructionsPage(th)
+		return s.renderInstructionsPage(th, width)
 	default:
 		return s.renderSummaryPage(th, width)
 	}
@@ -297,38 +297,49 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 	return lines
 }
 
-func (s *State) renderEditorPage(th ansiTheme) []string {
+func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	lines := []string{
-		fmt.Sprintf("%s[3] CODE & DIFF · INSPECTOR%s  ([e] Inline Why: %v · [x] Reject Hunk · [c] Apply · [u] Undo)", th.accent, th.reset, s.ShowInlineWhy),
+		fmt.Sprintf(
+			"  %s[3] CODE & DIFF · INSPECTOR%s   %s([e] Inline Why: %v · [x] Reject Hunk · [c] Apply · [u] Undo)%s",
+			th.accent, th.reset, th.muted, s.ShowInlineWhy, th.reset,
+		),
 	}
 	if s.Change != nil && len(s.Change.Changes) > 0 {
-		lines = append(lines, s.renderChangeDiffLines(th)...)
+		lines = append(lines, s.renderChangeDiffLines(th, width)...)
 		return lines
 	}
 	if s.File != nil {
-		lines = append(lines, fmt.Sprintf("  File: %s (%s)", s.File.Path, s.File.Language))
+		header := fmt.Sprintf("File: %s%s%s (%s) · %d lines", th.bold, s.File.Path, th.reset, firstNonEmpty(s.File.Language, "text"), s.File.LineCount)
+		lines = append(lines, th.renderPanelBox("READ-ONLY SOURCE VIEWER", "SOURCE", min(104, width-6), []string{header})...)
 		if s.File.Content != "" {
 			for idx, l := range strings.Split(s.File.Content, "\n") {
 				if idx >= 12 {
 					break
 				}
-				lines = append(lines, fmt.Sprintf("  %4d │ %s", idx+1, l))
+				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, l))
 			}
 		}
 		return lines
 	}
-	return s.renderIndexedFilesInEditor(th, lines)
+	return s.renderIndexedFilesInEditor(th, width, lines)
 }
 
-func (s *State) renderChangeDiffLines(th ansiTheme) []string {
+func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	fc := s.Change.Changes[0]
 	added, removed, badge := ClassifyDiffScope(s.Change.Changes)
-	lines := []string{
-		fmt.Sprintf("  Proposal: %s · File: %s [%s +%d/-%d]", s.Change.Title, fc.Path, badge, added, removed),
+	hunks := SplitDiffIntoHunks(fc.Diff.Lines)
+	meta := []string{
+		fmt.Sprintf(
+			"Proposal: %s%s%s · File: %s %s (%s+%d%s/%s-%d%s) · Hunks: %d",
+			th.bold, s.Change.Title, th.reset, fc.Path, th.statusBadge(badge),
+			th.green, added, th.reset, th.red, removed, th.reset, len(hunks),
+		),
 	}
 	if s.ShowInlineWhy && fc.Summary != "" {
-		lines = append(lines, fmt.Sprintf("  %sWhy:%s %s", th.accent, th.reset, fc.Summary))
+		meta = append(meta, fmt.Sprintf("%sWhy:%s %s", th.accent, th.reset, fc.Summary))
 	}
+	lines := th.renderPanelBox("GUARDED DIFF REVIEW", badge, min(104, width-6), meta)
+	lines = append(lines, th.renderTableHeader("  SIGN  LINE │ UNIFIED DIFF CONTENT", width)...)
 	for _, dl := range fc.Diff.Lines {
 		switch {
 		case IsAddedLine(dl.Kind):
@@ -342,81 +353,95 @@ func (s *State) renderChangeDiffLines(th ansiTheme) []string {
 	return lines
 }
 
-func (s *State) renderIndexedFilesInEditor(th ansiTheme, lines []string) []string {
+func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {
 	if s.Index == nil || len(s.Index.Files) == 0 {
 		return append(lines, "  No file or diff loaded. Use :open <path> or select an indexed file.")
 	}
+	lines = append(lines, "")
+	lines = append(lines, th.renderTableHeader("   REPOSITORY FILE PATH                        LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
 	for idx, f := range s.Index.Files {
-		cursor := "  "
-		if idx == selected {
-			cursor = th.accent + "▸ " + th.reset
-		}
-		lines = append(lines, fmt.Sprintf("%s%-44s (%s)", cursor, f.Path, f.Language))
+		cursor := th.renderCursorPrefix(idx == selected)
+		lines = append(lines, fmt.Sprintf("  %s%-44s (%s)  %d lines", cursor, f.Path, firstNonEmpty(f.Language, "text"), f.LineCount))
 	}
 	return lines
 }
 
-func (s *State) renderGitPage(th ansiTheme) []string {
-	lines := []string{fmt.Sprintf("%s[3] CODE & DIFF · GIT & WORKTREES%s  ([m] Merge Worktree)", th.accent, th.reset)}
+func (s *State) renderGitPage(th ansiTheme, width int) []string {
+	lines := []string{
+		fmt.Sprintf("  %s[3] CODE & DIFF · GIT & WORKTREES%s   %s([m] Merge Worktree · :git)%s", th.accent, th.reset, th.muted, th.reset),
+	}
 	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
 		return append(lines, "  No Git worktrees reported.")
 	}
+	lines = append(lines, "")
+	lines = append(lines, th.renderTableHeader("   ROLE          BRANCH               WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
 	for idx, wt := range s.GitWorkspace.Worktrees {
-		cursor := "  "
-		if idx == selected {
-			cursor = th.accent + "▸ " + th.reset
-		}
+		cursor := th.renderCursorPrefix(idx == selected)
 		role := "WORKTREE"
 		if wt.Current {
 			role = "CURRENT"
 		} else if wt.Mergeable {
 			role = "MERGEABLE"
 		}
-		lines = append(lines, fmt.Sprintf("%s[%-9s] branch:%-18s path:%s", cursor, role, wt.Branch, wt.Path))
+		lines = append(lines, fmt.Sprintf("  %s%-12s  branch:%-18s path:%s", cursor, th.statusBadge(role), wt.Branch, wt.Path))
 	}
 	return lines
 }
 
-func (s *State) renderHistoryPage(th ansiTheme) []string {
-	lines := []string{fmt.Sprintf("%s[3] CODE & DIFF · SAVED PROPOSALS%s  ([Enter] Load Proposal)", th.accent, th.reset)}
+func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
+	lines := []string{
+		fmt.Sprintf("  %s[3] CODE & DIFF · SAVED PROPOSALS%s   %s([Enter] Load Proposal · :proposals)%s", th.accent, th.reset, th.muted, th.reset),
+	}
 	if len(s.ChangeHistory) == 0 {
 		return append(lines, "  No saved proposals in history.")
 	}
+	lines = append(lines, "")
+	lines = append(lines, th.renderTableHeader("   STATE        PROPOSAL TITLE                        REVISION    FRESHNESS", width)...)
 	selected := s.ClampedIdx()
 	for idx, entry := range s.ChangeHistory {
-		cursor := "  "
-		if idx == selected {
-			cursor = th.accent + "▸ " + th.reset
-		}
-		lines = append(lines, fmt.Sprintf("%s[%-8s] %-36s rev:%d (%s)", cursor, strings.ToUpper(entry.State), entry.Title, entry.Revision, entry.Freshness))
+		cursor := th.renderCursorPrefix(idx == selected)
+		lines = append(lines, fmt.Sprintf(
+			"  %s%-12s %-36s rev:%d (%s)",
+			cursor, th.statusBadge(entry.State), truncatePlain(entry.Title, 36), entry.Revision, firstNonEmpty(entry.Freshness, "current"),
+		))
 	}
 	return lines
 }
 
-func (s *State) renderDocsPage(th ansiTheme) []string {
+func (s *State) renderDocsPage(th ansiTheme, width int) []string {
 	docs := ResolveProjectDocs(s.Overview, s.Project)
 	lines := []string{
-		fmt.Sprintf("%s[4] HANDBOOK & ARCH · ENGINEERING SPECIFICATION%s  Section [h/l]: [%s]", th.accent, th.reset, strings.ToUpper(s.DocsSection)),
-		fmt.Sprintf("  Purpose:  %s", docs.Context.Purpose),
-		fmt.Sprintf("  Topology: %s", docs.Context.Topology),
-		"",
+		fmt.Sprintf(
+			"  %s[4] HANDBOOK & ARCH · ENGINEERING SPECIFICATION%s   Section [h/l]: %s[%s]%s",
+			th.accent, th.reset, th.purple, strings.ToUpper(s.DocsSection), th.reset,
+		),
 	}
+	ctxLines := []string{
+		fmt.Sprintf("%sPurpose:%s  %s", th.bold, th.reset, docs.Context.Purpose),
+		fmt.Sprintf("%sTopology:%s %s", th.bold, th.reset, docs.Context.Topology),
+	}
+	lines = append(lines, th.renderPanelBox("SYSTEM CONTEXT & TOPOLOGY", strings.ToUpper(docs.Status), min(104, width-6), ctxLines)...)
+	lines = append(lines, "")
 	switch s.DocsSection {
 	case "components":
+		lines = append(lines, th.renderTableHeader("   LAYER          COMPONENT                 PATH                        SUMMARY", width)...)
 		for _, c := range docs.Components {
 			lines = append(lines, fmt.Sprintf("  • [%s] %s (%s) — %s", c.Layer, c.Name, c.Path, c.Summary))
 		}
 	case "scenarios":
+		lines = append(lines, th.renderTableHeader("   RUNTIME SCENARIO & INVARIANT SUMMARY", width)...)
 		for _, sc := range docs.Scenarios {
 			lines = append(lines, fmt.Sprintf("  • %s: %s", sc.Title, sc.Summary))
 		}
 	case "decisions":
+		lines = append(lines, th.renderTableHeader("   CATEGORY       ARCHITECTURAL DECISION RECORD (ADR)", width)...)
 		for _, d := range docs.Decisions {
 			lines = append(lines, fmt.Sprintf("  • [%s] %s — %s", d.Category, d.Title, d.Decision))
 		}
 	default:
+		lines = append(lines, th.renderTableHeader("   DEPENDENCY & SUBSYSTEM CATALOG", width)...)
 		for _, dep := range docs.Dependencies {
 			lines = append(lines, fmt.Sprintf("  • %s (%s): %s", dep.Name, dep.Kind, dep.Purpose))
 		}
@@ -424,60 +449,77 @@ func (s *State) renderDocsPage(th ansiTheme) []string {
 	return lines
 }
 
-func (s *State) renderDiagramsPage(th ansiTheme) []string {
+func (s *State) renderDiagramsPage(th ansiTheme, width int) []string {
 	docs := ResolveProjectDocs(s.Overview, s.Project)
 	lines := []string{
-		fmt.Sprintf("%s[4] HANDBOOK & ARCH · ARCHITECTURE DIAGRAM%s", th.accent, th.reset),
+		fmt.Sprintf("  %s[4] HANDBOOK & ARCH · ARCHITECTURE DIAGRAM%s   %s([Tab] Specification · [r] Refresh)%s", th.accent, th.reset, th.muted, th.reset),
+	}
+	diagramLines := RenderArchitectureASCII(docs)
+	lines = append(lines, th.renderPanelBox("COMPONENT TOPOLOGY BLUEPRINT", docs.Context.Topology, min(104, width-6), diagramLines)...)
+	return lines
+}
+
+func (s *State) renderInstructionsPage(th ansiTheme, width int) []string {
+	lines := []string{
+		fmt.Sprintf(
+			"  %s[5] GOVERNANCE & RULES%s   Section [Tab/h/l]: %s[%s]%s   %s([t] Trust · [b] Bootstrap · [g] Graduate Lesson)%s",
+			th.accent, th.reset, th.purple, strings.ToUpper(s.RulesSection), th.reset, th.muted, th.reset,
+		),
 		"",
 	}
-	for _, line := range RenderArchitectureASCII(docs) {
-		lines = append(lines, "  "+line)
+	switch s.RulesSection {
+	case "models":
+		lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
+		for idx, p := range DefaultModelPresets() {
+			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+			active := "         "
+			if p.ID == s.ActivePresetID {
+				active = th.green + "(ACTIVE) " + th.reset
+			}
+			lines = append(lines, fmt.Sprintf(
+				"  %s%-28s %s [analyze:%s bug:%s function:%s]",
+				cursor, p.Name, active, p.Analyze, p.Bug, p.Function,
+			))
+		}
+	case "bootstrap":
+		pillars := EvaluateBootstrapChecklist(s.Index, s.Instructions)
+		readyCount := countReadyPillars(pillars)
+		lines = append(lines, fmt.Sprintf("  %sGovernance Readiness:%s %s (%d/%d pillars active)", th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), readyCount, len(pillars)), "")
+		lines = append(lines, th.renderTableHeader("   STATUS      GOVERNANCE PILLAR              DESCRIPTION", width)...)
+		for idx, pil := range pillars {
+			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+			badge := th.statusBadge("MISSING")
+			if pil.Ready {
+				badge = th.statusBadge("READY")
+			}
+			lines = append(lines, fmt.Sprintf("  %s%-10s %-28s — %s", cursor, badge, pil.Title, pil.Description))
+		}
+	case "lessons":
+		lines = append(lines, th.renderTableHeader("   HARNESS² GUARDRAIL LESSONS (Press [g/Enter] to graduate into AGENTS.md)", width)...)
+		for idx, rule := range s.AllHarnessLessons() {
+			cursor := th.renderCursorPrefix(idx == s.ClampedIdx())
+			lines = append(lines, fmt.Sprintf("  %s• %s", cursor, rule))
+		}
+	default:
+		trustBadge := th.statusBadge("TRUSTED")
+		if !s.WorkspaceTrust {
+			trustBadge = th.statusBadge("UNTRUSTED")
+		}
+		body := []string{
+			fmt.Sprintf("Execution Trust: %v %s (Press [t] or [Enter] to toggle)", s.WorkspaceTrust, trustBadge),
+			"Policy: Project-code checks run in isolated worktrees with controlled argv and bounded output.",
+		}
+		lines = append(lines, th.renderPanelBox("EXECUTION TRUST GOVERNANCE", "SANDBOX POLICY", min(104, width-6), body)...)
 	}
 	return lines
 }
 
-func (s *State) renderInstructionsPage(th ansiTheme) []string {
-	lines := []string{
-		fmt.Sprintf(
-			"%s[5] GOVERNANCE & RULES%s   Section [Tab/h/l]: [%s]   ([t] Trust · [b] Bootstrap · [g] Graduate Lesson)",
-			th.accent, th.reset, strings.ToUpper(s.RulesSection),
-		),
+func countReadyPillars(pillars []BootstrapPillar) int {
+	ready := 0
+	for _, p := range pillars {
+		if p.Ready {
+			ready++
+		}
 	}
-	switch s.RulesSection {
-	case "models":
-		for idx, p := range DefaultModelPresets() {
-			cursor := "  "
-			if idx == s.ClampedIdx() {
-				cursor = th.accent + "▸ " + th.reset
-			}
-			active := ""
-			if p.ID == s.ActivePresetID {
-				active = " (ACTIVE)"
-			}
-			lines = append(lines, fmt.Sprintf("%s%s%s [analyze:%s bug:%s function:%s]", cursor, p.Name, active, p.Analyze, p.Bug, p.Function))
-		}
-	case "bootstrap":
-		for idx, pil := range EvaluateBootstrapChecklist(s.Index, s.Instructions) {
-			cursor := "  "
-			if idx == s.ClampedIdx() {
-				cursor = th.accent + "▸ " + th.reset
-			}
-			badge := "[MISSING]"
-			if pil.Ready {
-				badge = "[READY]  "
-			}
-			lines = append(lines, fmt.Sprintf("%s%s %-28s — %s", cursor, badge, pil.Title, pil.Description))
-		}
-	case "lessons":
-		for idx, rule := range s.AllHarnessLessons() {
-			cursor := "  "
-			if idx == s.ClampedIdx() {
-				cursor = th.accent + "▸ " + th.reset
-			}
-			lines = append(lines, fmt.Sprintf("%s• %s", cursor, rule))
-		}
-	default:
-		lines = append(lines, fmt.Sprintf("  Execution Trust: %v (Press [t] or [Enter] to toggle)", s.WorkspaceTrust))
-	}
-	return lines
+	return ready
 }
