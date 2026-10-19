@@ -12,10 +12,14 @@ the backend guide for changes to `cmd/`.
   limits, unknown-field/trailing-value rejection and local request policy. Use
   typed errors or `errors.Is`/`errors.As` where available, with useful `%w` context.
 - Keep shared workflow policy in `app` and project facts/composition in `project`.
-  Avoid placing business rules in HTTP handlers or expanding `Service` with
-  unrelated responsibilities when an existing cohesive owner fits.
+  Place domain-specific logic in its dedicated subpackage rather than expanding root
+  packages (`internal/project/diff`, `internal/project/symbols`, `internal/project/insight`,
+  `internal/project/handbook`, `internal/project/securityrules`; `internal/app/archcheck`,
+  `internal/app/checkexec`, `internal/app/gitops`, `internal/app/features`;
+  `internal/tui/tuiclient`, `internal/tui/tuitheme`, `internal/tui/tuidomain`).
+  Subpackages must respect the acyclic import rules enforced by `internal/app/archcheck`.
 - For a wire-contract change, update Go request/response types, daemon route
-  registrations, TypeScript wire models, `docs/openapi.yaml` and
+  registrations, TUI wire models (`internal/tui/tuiclient`), `docs/openapi.yaml` and
   `docs/api-contract.md` as applicable. Cover both successful and rejected requests
   in handler/client contract tests. Never silently relax guards for convenience.
 

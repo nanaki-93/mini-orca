@@ -76,11 +76,67 @@ type architectureQualityBudgets struct {
 var defaultArchitectureImportRules = []architectureImportRule{
 	{
 		sourcePrefix: "internal/api",
-		forbidden:    []string{"internal/storage", "internal/llm"},
+		forbidden:    []string{"internal/storage", "internal/llm", "internal/tui"},
 	},
 	{
 		sourcePrefix: "internal/project",
-		forbidden:    []string{"internal/app", "internal/api"},
+		forbidden:    []string{"internal/app", "internal/api", "internal/tui"},
+	},
+	{
+		sourcePrefix: "internal/project/diff",
+		forbidden:    []string{"internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"},
+	},
+	{
+		sourcePrefix: "internal/project/symbols",
+		forbidden:    []string{"internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"},
+	},
+	{
+		sourcePrefix: "internal/project/insight",
+		forbidden:    []string{"internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"},
+	},
+	{
+		sourcePrefix: "internal/project/handbook",
+		forbidden:    []string{"internal/project/diff", "internal/project/securityrules", "internal/llm"},
+	},
+	{
+		sourcePrefix: "internal/project/securityrules",
+		forbidden:    []string{"internal/project/diff", "internal/project/handbook", "internal/storage", "internal/llm"},
+	},
+	{
+		sourcePrefix: "internal/app",
+		forbidden:    []string{"internal/api", "internal/tui"},
+	},
+	{
+		sourcePrefix: "internal/app/archcheck",
+		forbidden:    []string{"internal/app/checkexec", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"},
+	},
+	{
+		sourcePrefix: "internal/app/checkexec",
+		forbidden:    []string{"internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"},
+	},
+	{
+		sourcePrefix: "internal/app/gitops",
+		forbidden:    []string{"internal/app/archcheck", "internal/app/features", "internal/llm", "internal/storage"},
+	},
+	{
+		sourcePrefix: "internal/app/features",
+		forbidden:    []string{"internal/app/archcheck", "internal/app/gitops"},
+	},
+	{
+		sourcePrefix: "internal/tui",
+		forbidden:    []string{"internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"},
+	},
+	{
+		sourcePrefix: "internal/tui/tuiclient",
+		forbidden:    []string{"internal/tui/tuitheme", "internal/tui/tuidomain"},
+	},
+	{
+		sourcePrefix: "internal/tui/tuitheme",
+		forbidden:    []string{"internal/tui/tuiclient", "internal/tui/tuidomain"},
+	},
+	{
+		sourcePrefix: "internal/tui/tuidomain",
+		forbidden:    []string{"internal/tui/tuitheme"},
 	},
 }
 
@@ -208,7 +264,11 @@ func parseAgentsImportRuleLine(line string) (architectureImportRule, bool) {
 		return architectureImportRule{}, false
 	}
 	before := extractRulePaths(line[:idx])
-	after := extractRulePaths(line[idx+len("must never import"):])
+	afterClause := line[idx+len("must never import"):]
+	if semi := strings.IndexByte(afterClause, ';'); semi >= 0 {
+		afterClause = afterClause[:semi]
+	}
+	after := extractRulePaths(afterClause)
 	if len(before) == 0 || len(after) == 0 {
 		return architectureImportRule{}, false
 	}

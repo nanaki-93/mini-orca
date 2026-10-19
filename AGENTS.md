@@ -25,13 +25,13 @@ project-wide analysis and checked chat proposals across up to eight captured
 paths, with diff review, explicit Apply and guarded Undo.
 
 - `cmd/` owns startup, configuration wiring and command entry points (`cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`).
-- `internal/api/` owns HTTP decoding, local request policy and error responses. Handlers must never import `internal/storage` or `internal/llm` directly; always call `internal/app` service methods.
-- `internal/app/` owns workflow orchestration, model calls and guarded changes.
-- `internal/project/` owns project facts, indexing, context policy and composition. It must never import `internal/app` or `internal/api`.
+- `internal/api/` owns HTTP decoding, local request policy and error responses (`internal/api/handlers`). Handlers must never import `internal/storage` or `internal/llm` directly; always call `internal/app` service methods.
+- `internal/app/` owns workflow orchestration, model calls and guarded changes, with isolated domain subpackages for architecture/complexity checks (`internal/app/archcheck`), sandboxed workspace and check execution (`internal/app/checkexec`), Git repository/worktree/merge operations (`internal/app/gitops`), and feature suggestion parsing/history (`internal/app/features`).
+- `internal/project/` owns project facts, indexing, context policy and composition, with isolated domain subpackages for unified diff/impact analysis (`internal/project/diff`), multi-language symbol and import extraction (`internal/project/symbols`), heuristic code insight (`internal/project/insight`), engineering handbook generation (`internal/project/handbook`), and deterministic security rules (`internal/project/securityrules`). It must never import `internal/app` or `internal/api`.
 - `internal/storage/` owns durable file primitives; domain stores own their schemas.
 - `internal/llm/` owns provider transport; `internal/config/` owns configuration.
 - `internal/insighteval/` owns the evaluation runner, separate from normal app use.
-- `internal/tui/` owns the terminal UI state machine, guarded loopback client, keyboard/colon-command handling and ANSI rendering.
+- `internal/tui/` owns the terminal UI state machine, keyboard/colon-command handling and hub views, with isolated subpackages for the guarded loopback HTTP client and wire DTOs (`internal/tui/tuiclient`), ANSI palettes and Lip Gloss layout primitives (`internal/tui/tuitheme`), and pure TUI domain/diff/issue/model logic (`internal/tui/tuidomain`).
 
 ## Workspace & commit conventions
 
