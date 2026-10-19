@@ -47,19 +47,8 @@ func (s *Service) removeGitWorktree(ctx context.Context, root string, source *Gi
 }
 
 func (s *Service) stopWorktreeJobs(ctx context.Context) error {
-	s.invalidateJobsForProjectChange()
 	if err := s.ShutdownChangeWorkflows(ctx); err != nil {
 		return err
-	}
-	s.analysisRun.mu.Lock()
-	done := s.analysisRun.done
-	s.analysisRun.mu.Unlock()
-	if done != nil {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
 	}
 	s.goScan.mu.Lock()
 	scanning := s.goScan.cancel != nil

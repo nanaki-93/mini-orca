@@ -325,3 +325,26 @@ func newGoScanService(t *testing.T, files map[string]string) (*Service, string, 
 	}
 	return service, root, analysis.ProjectRevision
 }
+
+func TestGoScanDrainedOnServiceShutdown(t *testing.T) {
+	service, _, revision := newGoScanService(t, map[string]string{
+		"go.mod":  "module fixture\n\ngo 1.22\n",
+		"main.go": "package fixture\n",
+	})
+	started, err := service.StartGoScan(revision)
+	if err != nil || started == nil {
+		t.Fatalf("StartGoScan failed: %+v, %v", started, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := service.ShutdownChangeWorkflows(ctx); err != nil {
+		t.Fatalf("ShutdownChangeWorkflows failed: %v", err)
+	}
+	service.goScan.mu.Lock()
+	activeCancel := service.goScan.cancel
+	activeDone := service.goScan.done
+	service.goScan.mu.Unlock()
+	if activeCancel != nil || activeDone != nil {
+		t.Fatalf("expected active Go scan worker to be drained on shutdown, got cancel=%v done=%v", activeCancel != nil, activeDone != nil)
+	}
+}

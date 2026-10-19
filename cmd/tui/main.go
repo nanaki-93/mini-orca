@@ -98,7 +98,7 @@ func ensureLocalDaemon(ctx context.Context, client *tui.Client, once bool) func(
 	if daemonBin == "" {
 		return func() {}
 	}
-	cmd := exec.CommandContext(ctx, daemonBin)
+	cmd := exec.Command(daemonBin)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -106,10 +106,28 @@ func ensureLocalDaemon(ctx context.Context, client *tui.Client, once bool) func(
 	}
 	waitForDaemon(ctx, client)
 	return func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			_, _ = cmd.Process.Wait()
-		}
+		stopChildDaemon(cmd, 5*time.Second)
+	}
+}
+
+func stopChildDaemon(cmd *exec.Cmd, grace time.Duration) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		_ = cmd.Process.Kill()
+		<-done
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(grace):
+		_ = cmd.Process.Kill()
+		<-done
 	}
 }
 
@@ -135,7 +153,7 @@ func findDaemonBinary() string {
 
 func waitForDaemon(ctx context.Context, client *tui.Client) {
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	for time.Now().Before(deadline) && ctx.Err() == nil {
 		if daemonReachable(ctx, client) {
 			return
 		}

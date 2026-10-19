@@ -5,8 +5,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunOnceRendersSyncedWorkspace(t *testing.T) {
@@ -56,5 +58,22 @@ func TestRunRejectsInvalidDaemonURL(t *testing.T) {
 	err := run(context.Background(), []string{"-url", "ftp://bad", "-once"}, strings.NewReader(""), &out)
 	if err == nil {
 		t.Fatal("expected invalid daemon URL to fail")
+	}
+}
+
+func TestStopChildDaemonGracefulAndFallback(t *testing.T) {
+	stopChildDaemon(nil, 50*time.Millisecond)
+
+	cmd := exec.Command("sleep", "10")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child process: %v", err)
+	}
+	start := time.Now()
+	stopChildDaemon(cmd, 5*time.Second)
+	if elapsed := time.Since(start); elapsed >= 2*time.Second {
+		t.Fatalf("expected child process to stop promptly on SIGTERM, took %v", elapsed)
+	}
+	if cmd.ProcessState == nil {
+		t.Fatal("expected ProcessState to be populated after Wait")
 	}
 }

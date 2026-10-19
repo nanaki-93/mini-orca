@@ -59,17 +59,29 @@ func (s *Service) CancelChangeWorkflows() {
 }
 
 // ShutdownChangeWorkflows waits for process/workspace cleanup after revoking
-// the worker. Lifecycle mutations use cancellation alone to avoid lock waits.
+// active change workflows, analysis runs, and project scans. Lifecycle mutations
+// use cancellation alone to avoid lock waits.
 func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 	children := s.worktreeServices()
 	for _, child := range children {
-		child.CancelChangeWorkflows()
+		child.invalidateJobsForProjectChange()
 	}
 	for _, child := range children {
 		if err := child.ShutdownChangeWorkflows(ctx); err != nil {
 			return err
 		}
 	}
+	s.invalidateJobsForProjectChange()
+	if err := s.waitChangeWorkflowDone(ctx); err != nil {
+		return err
+	}
+	if err := s.waitAnalysisRunDone(ctx); err != nil {
+		return err
+	}
+	return s.waitGoScanDone(ctx)
+}
+
+func (s *Service) waitChangeWorkflowDone(ctx context.Context) error {
 	s.changeWorkflow.mu.Lock()
 	job := s.changeWorkflow.job
 	if job != nil {
@@ -81,6 +93,48 @@ func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 	}
 	select {
 	case <-job.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) waitAnalysisRunDone(ctx context.Context) error {
+	if s.analysisRun == nil {
+		return nil
+	}
+	s.analysisRun.mu.Lock()
+	done := s.analysisRun.done
+	if s.analysisRun.cancel != nil {
+		s.analysisRun.cancel()
+	}
+	s.analysisRun.mu.Unlock()
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) waitGoScanDone(ctx context.Context) error {
+	if s.goScan == nil {
+		return nil
+	}
+	s.goScan.mu.Lock()
+	done := s.goScan.done
+	if s.goScan.cancel != nil {
+		s.goScan.cancel()
+	}
+	s.goScan.mu.Unlock()
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

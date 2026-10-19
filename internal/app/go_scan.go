@@ -41,6 +41,7 @@ type goScanController struct {
 	mu                 sync.Mutex
 	report             *GoScanReport
 	cancel             context.CancelFunc
+	done               chan struct{}
 	writeFailureReport func(string, []byte) error
 }
 
@@ -200,8 +201,10 @@ func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
 	}
 	now := time.Now().UTC()
 	report := &GoScanReport{ProjectID: analysis.ProjectID, ProjectRevision: revision, Status: "running", StartedAt: now, UpdatedAt: now, Phases: []GoScanPhase{}}
+	done := make(chan struct{})
 	s.goScan.report = cloneGoScanReport(report)
 	s.goScan.cancel = cancel
+	s.goScan.done = done
 	s.goScan.mu.Unlock()
 	data, err := marshalGoScanReport(report)
 	if err != nil {
@@ -212,7 +215,10 @@ func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
 		s.clearStartedGoScan(report)
 		return nil, err
 	}
-	go s.runStartedGoScan(worker, report.ProjectID, revision)
+	go func() {
+		defer close(done)
+		s.runStartedGoScan(worker, report.ProjectID, revision)
+	}()
 	return cloneGoScanReport(report), nil
 }
 
@@ -220,11 +226,16 @@ func (s *Service) clearStartedGoScan(report *GoScanReport) {
 	s.goScan.mu.Lock()
 	if s.goScan.report != nil && s.goScan.report.ProjectID == report.ProjectID && s.goScan.report.ProjectRevision == report.ProjectRevision {
 		cancel := s.goScan.cancel
+		done := s.goScan.done
 		s.goScan.report = nil
 		s.goScan.cancel = nil
+		s.goScan.done = nil
 		s.goScan.mu.Unlock()
 		if cancel != nil {
 			cancel()
+		}
+		if done != nil {
+			close(done)
 		}
 		return
 	}
@@ -298,6 +309,7 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 	}
 	s.goScan.report = cloneGoScanReport(report)
 	s.goScan.cancel = nil
+	s.goScan.done = nil
 }
 
 func failedGoScanReport(projectID, revision, root string, failure error) *GoScanReport {
