@@ -965,17 +965,19 @@ func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
-	for pIdx, p := range DefaultModelPresets() {
+	for pIdx, p := range s.AllModelPresets() {
 		rowIdx := len(scopes) + pIdx
 		cursor := th.renderCursorPrefix(rowIdx == selected)
 		active := "         "
 		if p.ID == s.ActivePresetID {
 			active = th.green + "(ACTIVE) " + th.reset
+		} else if !IsBuiltinModelPreset(p.ID) {
+			active = th.cyan + "(CUSTOM) " + th.reset
 		}
 		tStyle := rowTitleStyle(th, rowIdx == selected)
 		lines = append(lines, fmt.Sprintf(
 			"  %s%s%-28s%s %s %s[analyze:%s bug:%s function:%s]%s",
-			cursor, tStyle, p.Name, th.reset, active, th.muted, p.Analyze, p.Bug, p.Function, th.reset,
+			cursor, tStyle, truncatePlain(p.Name, 28), th.reset, active, th.muted, p.Analyze, p.Bug, p.Function, th.reset,
 		))
 	}
 	lines = append(lines, "")
@@ -1016,6 +1018,9 @@ func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string 
 			th.muted, th.reset, piStatus, agyStatus,
 			th.muted, len(choices), th.reset,
 			th.muted, truncatePlain(strings.Join(choices, ", "), max(20, panelW-44)), th.reset),
+		fmt.Sprintf("%sPresets (%d, %d custom):%s %s[s]%s Save Preset · %s[n]%s Save Named (:preset-save <name>) · %s[d]%s Delete Custom",
+			th.muted, len(s.AllModelPresets()), len(s.CustomPresets), th.reset,
+			th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
 	}
 	return th.renderPanelBox("SELECTED SCOPE & MODEL INSPECTOR", strings.ToUpper(selScope)+" SCOPE", panelW, body)
 }

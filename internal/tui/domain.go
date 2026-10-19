@@ -105,6 +105,21 @@ func DefaultModelPresets() []ModelPreset {
 	return tuidomain.DefaultModelPresets()
 }
 
+// MergeModelPresets combines built-in presets with user-saved custom presets.
+func MergeModelPresets(custom []ModelPreset) []ModelPreset {
+	return tuidomain.MergeModelPresets(custom)
+}
+
+// IsBuiltinModelPreset reports whether the given preset ID is a built-in default preset.
+func IsBuiltinModelPreset(id string) bool {
+	return tuidomain.IsBuiltinModelPreset(id)
+}
+
+// BuildCustomModelPreset constructs a ModelPreset from the current 3-scope model routing.
+func BuildCustomModelPreset(name string, scopeModels map[string]string, existingCount int) ModelPreset {
+	return tuidomain.BuildCustomModelPreset(name, scopeModels, existingCount)
+}
+
 // AssignedScopeModelID returns the user-assigned model/profile ID for a scope.
 func (s *State) AssignedScopeModelID(scope string) string {
 	return tuidomain.AssignedScopeModelID(s.ScopeModels, scope)

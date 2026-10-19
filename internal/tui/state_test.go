@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -1127,5 +1129,79 @@ func TestAnalysisRunConfigKeysCommandsAndDispatch(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "x"})
 	if def := s.EffectiveAnalysisConfig(); def.BatchFiles != 64 || def.BudgetSeconds != 300 || def.MaxAttemptsPerStage != 2 || !def.IncludeFeatures || def.Refresh || def.ClearResults {
 		t.Fatalf("expected 'x' to reset analysis config to defaults, got %+v", def)
+	}
+}
+
+func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpDir, ".mini-orca"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewState()
+	s.Project = &Project{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		Name:            "mini-orca",
+		Path:            tmpDir,
+	}
+	s.AvailableModels = &AvailableModels{
+		Models: []ModelChoice{
+			{ID: "pi:qwen", Name: "Qwen 2.5 Coder"},
+			{ID: "agy:claude", Name: "Claude Sonnet"},
+		},
+	}
+
+	s.Navigate(PageModels)
+	s.ExecuteCommand(":model analyze pi:qwen")
+	s.ExecuteCommand(":model bug agy:claude")
+	s.ExecuteCommand(":model function local")
+
+	// 1. Save named preset via :preset-save
+	s.ExecuteCommand(":preset-save Rust Audit")
+	if len(s.CustomPresets) != 1 || s.CustomPresets[0].ID != "rust-audit" || s.ActivePresetID != "rust-audit" {
+		t.Fatalf("expected custom preset 'rust-audit' saved and active, got presets=%+v active=%q", s.CustomPresets, s.ActivePresetID)
+	}
+
+	// 2. Quick-save preset via 's' hotkey and prompt via 'n' hotkey
+	s.ExecuteCommand(":model bug pi:qwen")
+	s.HandleKey(KeyEvent{Key: "s"})
+	if len(s.CustomPresets) != 2 {
+		t.Fatalf("expected 's' hotkey to save a 2nd custom preset, got %+v", s.CustomPresets)
+	}
+	s.HandleKey(KeyEvent{Key: "n"})
+	if !s.CmdActive || s.CmdInput != "preset-save " {
+		t.Fatalf("expected 'n' hotkey to prefill :preset-save in command bar, got active=%v input=%q", s.CmdActive, s.CmdInput)
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
+
+	// 3. Switch to built-in preset, then re-apply custom preset via :preset rust-audit
+	s.ExecuteCommand(":preset local-default")
+	if s.AssignedScopeModelID("bug") != "local" {
+		t.Fatalf("expected local-default preset to set bug=local, got %q", s.AssignedScopeModelID("bug"))
+	}
+	s.ExecuteCommand(":preset rust-audit")
+	if s.AssignedScopeModelID("analyze") != "pi:qwen" || s.AssignedScopeModelID("bug") != "agy:claude" {
+		t.Fatalf("expected rust-audit preset to restore pi:qwen and agy:claude, got %+v", s.ScopeModels)
+	}
+
+	// 4. Verify custom presets are persisted in .mini-orca/tui-presets.json and reloaded
+	s2 := NewState()
+	s2.Project = s.Project
+	s2.loadCustomPresetsFromDisk()
+	if len(s2.CustomPresets) != 2 || s2.CustomPresets[0].ID != "rust-audit" {
+		t.Fatalf("expected custom presets to reload from .mini-orca/tui-presets.json, got %+v", s2.CustomPresets)
+	}
+
+	// 5. Render PageModels and verify custom preset row is displayed
+	frame := s.Render(120, 36)
+	if !strings.Contains(frame, "Rust Audit") || !strings.Contains(frame, "Save Preset") {
+		t.Fatalf("expected PageModels frame to display saved custom preset 'Rust Audit':\n%s", frame)
+	}
+
+	// 6. Delete custom preset via 'd' hotkey
+	s.SelectedIdx = len(CanonicalModelScopes()) + len(DefaultModelPresets())
+	s.HandleKey(KeyEvent{Key: "d"})
+	if len(s.CustomPresets) != 1 {
+		t.Fatalf("expected 'd' to delete selected custom preset, remaining=%+v", s.CustomPresets)
 	}
 }

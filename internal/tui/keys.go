@@ -859,6 +859,18 @@ func (s *State) handleModelsPageKey(key string) bool {
 	case "v":
 		s.cycleModelPreset()
 		return true
+	case "s":
+		s.SaveModelPreset("")
+		return true
+	case "n":
+		s.CmdActive = true
+		s.CmdInput = "preset-save "
+		s.CmdOutput = "Enter a name for the new model preset and press Enter"
+		return true
+	case "d":
+		if s.DeleteSelectedCustomPreset() {
+			return true
+		}
 	case "x":
 		s.resetSelectedScopeModel()
 		return true

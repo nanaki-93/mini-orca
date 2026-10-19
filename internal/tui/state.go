@@ -2,9 +2,12 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuiclient"
@@ -109,6 +112,7 @@ type State struct {
 	InstructionDraft  string
 	ExcludedPaths     []string
 	ActivePresetID    string
+	CustomPresets     []ModelPreset
 	ScopeModels       map[string]string
 	AnalysisConfig    AnalysisRunConfig
 	PendingActions    []ActionRequest
@@ -226,6 +230,47 @@ func NewState() *State {
 // EffectiveAnalysisConfig returns the normalized analysis run configuration.
 func (s *State) EffectiveAnalysisConfig() AnalysisRunConfig {
 	return NormalizeAnalysisRunConfig(s.AnalysisConfig)
+}
+
+// AllModelPresets returns the built-in presets followed by any user-saved custom presets.
+func (s *State) AllModelPresets() []ModelPreset {
+	return MergeModelPresets(s.CustomPresets)
+}
+
+func (s *State) customPresetsFilePath() string {
+	if s.Project == nil || strings.TrimSpace(s.Project.Path) == "" {
+		return ""
+	}
+	dir := filepath.Join(s.Project.Path, ".mini-orca")
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return ""
+	}
+	return filepath.Join(dir, "tui-presets.json")
+}
+
+func (s *State) loadCustomPresetsFromDisk() {
+	p := s.customPresetsFilePath()
+	if p == "" || len(s.CustomPresets) > 0 {
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var loaded []ModelPreset
+	if err := json.Unmarshal(data, &loaded); err == nil && len(loaded) > 0 {
+		s.CustomPresets = loaded
+	}
+}
+
+func (s *State) saveCustomPresetsToDisk() {
+	p := s.customPresetsFilePath()
+	if p == "" {
+		return
+	}
+	if data, err := json.MarshalIndent(s.CustomPresets, "", "  "); err == nil {
+		_ = os.WriteFile(p, data, 0o600)
+	}
 }
 
 // ActiveHub returns the HubTab owning the current Page.
@@ -764,7 +809,7 @@ func (s *State) docsListLength() int {
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
 	case PageModels:
-		return len(CanonicalModelScopes()) + len(DefaultModelPresets())
+		return len(CanonicalModelScopes()) + len(s.AllModelPresets())
 	case PageBootstrap:
 		return len(EvaluateBootstrapChecklist(s.Index, s.Instructions))
 	case PageLessons:
@@ -861,6 +906,7 @@ func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projec
 }
 
 func (s *State) loadProjectResources(ctx context.Context, client *Client) {
+	s.loadCustomPresetsFromDisk()
 	revQuery, idQuery := s.resourceQueries()
 	var idx ProjectIndex
 	if err := client.DoJSON(ctx, "sync-index", http.MethodGet, "/api/projects/current/index", nil, &idx); err == nil && s.AcceptProjectResponse(idx.ProjectIdentity) {

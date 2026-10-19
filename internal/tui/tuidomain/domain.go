@@ -909,6 +909,61 @@ func DefaultModelPresets() []tuiclient.ModelPreset {
 	}
 }
 
+// MergeModelPresets combines built-in presets with user-saved custom presets.
+func MergeModelPresets(custom []tuiclient.ModelPreset) []tuiclient.ModelPreset {
+	out := DefaultModelPresets()
+	out = append(out, custom...)
+	return out
+}
+
+// IsBuiltinModelPreset reports whether the given preset ID is a built-in default preset.
+func IsBuiltinModelPreset(id string) bool {
+	for _, p := range DefaultModelPresets() {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// SlugifyPresetID normalizes a preset name into a stable lowercase identifier.
+func SlugifyPresetID(raw string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// BuildCustomModelPreset constructs a ModelPreset from the current 3-scope model routing.
+func BuildCustomModelPreset(name string, scopeModels map[string]string, existingCount int) tuiclient.ModelPreset {
+	analyze := AssignedScopeModelID(scopeModels, "analyze")
+	bug := AssignedScopeModelID(scopeModels, "bug")
+	function := AssignedScopeModelID(scopeModels, "function")
+	cleanName := strings.TrimSpace(name)
+	id := SlugifyPresetID(cleanName)
+	if cleanName == "" {
+		cleanName = fmt.Sprintf("Custom Profile %d (%s/%s)", existingCount+1, analyze, bug)
+		id = fmt.Sprintf("custom-%d", existingCount+1)
+	} else if id == "" || IsBuiltinModelPreset(id) {
+		id = fmt.Sprintf("custom-%s-%d", tuiclient.FirstNonEmpty(id, "preset"), existingCount+1)
+	}
+	return tuiclient.ModelPreset{
+		ID:       id,
+		Name:     cleanName,
+		Analyze:  analyze,
+		Bug:      bug,
+		Function: function,
+	}
+}
+
 // AssignedScopeModelID returns the user-assigned model/profile ID for a scope.
 func AssignedScopeModelID(scopeModels map[string]string, scope string) string {
 	if scopeModels != nil && scopeModels[scope] != "" {

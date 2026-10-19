@@ -564,9 +564,9 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageModels: {
 		title:     "[5] GOVERNANCE & RULES · MODEL ROUTING",
-		primary:   []keyDesc{{"Enter/m/M", "Cycle Scope Model"}, {"v", "Cycle Preset"}, {"x", "Reset Scope"}},
-		secondary: []keyDesc{{"r", "Refresh Model Catalog"}, {"j/k", "Select Scope or Preset"}},
-		commands:  ":models  :model <scope> <id>  :preset <id>",
+		primary:   []keyDesc{{"Enter/m/M", "Cycle Scope Model"}, {"s/n", "Save New Preset"}, {"v", "Cycle Preset"}},
+		secondary: []keyDesc{{"d", "Delete Custom Preset"}, {"x", "Reset Scope"}, {"r", "Refresh Models"}},
+		commands:  ":models  :model <scope> <id>  :preset <id>  :preset-save [name]  :preset-delete [id]",
 	},
 	PageBootstrap: {
 		title:     "[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST",

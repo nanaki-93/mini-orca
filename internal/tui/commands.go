@@ -636,7 +636,7 @@ func (s *State) activateInstructionsRow() {
 	switch s.EffectivePage() {
 	case PageModels:
 		scopes := CanonicalModelScopes()
-		presets := DefaultModelPresets()
+		presets := s.AllModelPresets()
 		idx := s.ClampedIdx()
 		if idx < len(scopes) {
 			s.cycleSelectedScopeModel(true)
@@ -709,7 +709,7 @@ func (s *State) resetSelectedScopeModel() {
 }
 
 func (s *State) cycleModelPreset() {
-	presets := DefaultModelPresets()
+	presets := s.AllModelPresets()
 	if len(presets) == 0 {
 		return
 	}
@@ -733,6 +733,55 @@ func (s *State) applyModelPreset(p ModelPreset) {
 	s.ScopeModels["function"] = p.Function
 	s.CmdOutput = fmt.Sprintf("Applied model preset: %s (analyze:%s · bug:%s · function:%s)",
 		p.Name, p.Analyze, p.Bug, p.Function)
+}
+
+// SaveModelPreset saves the current 3-scope model assignment as a new or updated custom preset.
+func (s *State) SaveModelPreset(name string) ModelPreset {
+	preset := BuildCustomModelPreset(name, s.ScopeModels, len(s.CustomPresets))
+	updatedIdx := -1
+	for i, existing := range s.CustomPresets {
+		if existing.ID == preset.ID || strings.EqualFold(existing.Name, preset.Name) {
+			s.CustomPresets[i] = preset
+			updatedIdx = i
+			break
+		}
+	}
+	if updatedIdx < 0 {
+		s.CustomPresets = append(s.CustomPresets, preset)
+		updatedIdx = len(s.CustomPresets) - 1
+	}
+	s.ActivePresetID = preset.ID
+	s.SelectedIdx = len(CanonicalModelScopes()) + len(DefaultModelPresets()) + updatedIdx
+	s.saveCustomPresetsToDisk()
+	s.CmdOutput = fmt.Sprintf("Saved model preset %q (%s) [analyze:%s · bug:%s · function:%s]",
+		preset.Name, preset.ID, preset.Analyze, preset.Bug, preset.Function)
+	return preset
+}
+
+// DeleteSelectedCustomPreset removes the selected (or active) custom model preset.
+func (s *State) DeleteSelectedCustomPreset() bool {
+	baseOffset := len(CanonicalModelScopes()) + len(DefaultModelPresets())
+	cIdx := s.ClampedIdx() - baseOffset
+	if cIdx < 0 || cIdx >= len(s.CustomPresets) {
+		for i, p := range s.CustomPresets {
+			if p.ID == s.ActivePresetID {
+				cIdx = i
+				break
+			}
+		}
+	}
+	if cIdx < 0 || cIdx >= len(s.CustomPresets) {
+		return false
+	}
+	removed := s.CustomPresets[cIdx]
+	s.CustomPresets = append(s.CustomPresets[:cIdx], s.CustomPresets[cIdx+1:]...)
+	if s.ActivePresetID == removed.ID {
+		s.ActivePresetID = "local-default"
+	}
+	s.SelectedIdx = min(s.SelectedIdx, max(0, s.ActiveListLength()-1))
+	s.saveCustomPresetsToDisk()
+	s.CmdOutput = fmt.Sprintf("Deleted custom model preset %q (%s)", removed.Name, removed.ID)
+	return true
 }
 
 func (s *State) requestRefreshModels() {
@@ -1111,6 +1160,14 @@ func (s *State) execModelCommand(cmd, arg string) bool {
 		s.Navigate(PageModels)
 		s.execSetPresetArg(arg)
 		return true
+	case "preset-save", "save-preset":
+		s.Navigate(PageModels)
+		s.SaveModelPreset(arg)
+		return true
+	case "preset-delete", "delete-preset":
+		s.Navigate(PageModels)
+		s.deletePresetByArg(arg)
+		return true
 	}
 	return false
 }
@@ -1149,19 +1206,44 @@ func (s *State) execSetModelArg(arg string) {
 }
 
 func (s *State) execSetPresetArg(arg string) {
-	norm := strings.ToLower(strings.TrimSpace(arg))
+	trimmed := strings.TrimSpace(arg)
+	norm := strings.ToLower(trimmed)
 	if norm == "" {
 		s.cycleModelPreset()
 		return
 	}
-	for idx, p := range DefaultModelPresets() {
+	if norm == "save" || strings.HasPrefix(norm, "save ") {
+		s.SaveModelPreset(strings.TrimSpace(trimmed[4:]))
+		return
+	}
+	if norm == "delete" || strings.HasPrefix(norm, "delete ") {
+		s.deletePresetByArg(strings.TrimSpace(trimmed[6:]))
+		return
+	}
+	for idx, p := range s.AllModelPresets() {
 		if p.ID == norm || strings.Contains(strings.ToLower(p.ID), norm) || strings.Contains(strings.ToLower(p.Name), norm) {
 			s.SelectedIdx = len(CanonicalModelScopes()) + idx
 			s.applyModelPreset(p)
 			return
 		}
 	}
-	s.CmdOutput = fmt.Sprintf("Unknown model preset %q (use: local-default, hybrid-precision, deep-audit)", arg)
+	s.CmdOutput = fmt.Sprintf("Unknown model preset %q (use: local-default, hybrid-precision, deep-audit, or :preset-save <name>)", arg)
+}
+
+func (s *State) deletePresetByArg(arg string) {
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	if norm != "" {
+		baseOffset := len(CanonicalModelScopes()) + len(DefaultModelPresets())
+		for i, p := range s.CustomPresets {
+			if strings.ToLower(p.ID) == norm || strings.Contains(strings.ToLower(p.Name), norm) {
+				s.SelectedIdx = baseOffset + i
+				break
+			}
+		}
+	}
+	if !s.DeleteSelectedCustomPreset() {
+		s.CmdOutput = "No custom model preset selected to delete (built-in presets cannot be deleted)"
+	}
 }
 
 func (s *State) execHubMatchCommand(cmd string) bool {
