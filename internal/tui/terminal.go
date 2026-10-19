@@ -488,10 +488,49 @@ func (s *State) dispatchApplyCommit(ctx context.Context, client *Client, reqID s
 	}
 	s.ChangeReceipt = &receipt
 	s.Change.State = firstNonEmpty(receipt.State, "applied")
+	if receipt.Commit != nil {
+		s.Change.Commit = receipt.Commit
+	}
+	s.recordAppliedFindingCompletions(s.Change.FindingTargets, receipt.Commit)
 	if receipt.ProjectRevision != "" {
 		s.Project.ProjectRevision = receipt.ProjectRevision
 	}
 	return nil
+}
+
+func (s *State) recordAppliedFindingCompletions(targets []FindingTarget, commit *ChangeCommit) {
+	oid := ""
+	if commit != nil {
+		oid = commit.OID
+	}
+	for _, ft := range targets {
+		if s.findCompletion(ft) == nil {
+			s.CompletedFindings = append(s.CompletedFindings, FindingCompletion{
+				FindingTarget: ft,
+				CommitOID:     oid,
+			})
+		}
+	}
+}
+
+func (s *State) removeFindingCompletions(targets []FindingTarget) {
+	if len(targets) == 0 || len(s.CompletedFindings) == 0 {
+		return
+	}
+	var kept []FindingCompletion
+	for _, c := range s.CompletedFindings {
+		matched := false
+		for _, t := range targets {
+			if sameFindingTarget(c.FindingTarget, t) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			kept = append(kept, c)
+		}
+	}
+	s.CompletedFindings = kept
 }
 
 func (s *State) activeGitIdentity() (string, string) {
@@ -613,6 +652,7 @@ func (s *State) dispatchUndo(ctx context.Context, client *Client, reqID string, 
 	s.ChangeReceipt = &receipt
 	if s.Change != nil && s.Change.ID == act.Target {
 		s.Change.State = firstNonEmpty(receipt.State, "reverted")
+		s.removeFindingCompletions(s.Change.FindingTargets)
 	}
 	if receipt.ProjectRevision != "" && s.Project != nil {
 		s.Project.ProjectRevision = receipt.ProjectRevision

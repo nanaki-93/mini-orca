@@ -65,17 +65,61 @@ func TestIssuesFilteringSelectionAndAgentDispatch(t *testing.T) {
 			Status:          "open",
 			Location:        SourceAnchor{Path: "internal/app/b.go", StartLine: 44},
 		},
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "b-wip",
+			Severity:        "medium",
+			Title:           "Active in-progress bug",
+			Message:         "Being fixed",
+			Category:        "bugs",
+			Status:          "in_progress",
+			Location:        SourceAnchor{Path: "internal/app/c.go", StartLine: 20},
+		},
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "b-done",
+			Severity:        "low",
+			Title:           "Resolved bug",
+			Message:         "Already fixed",
+			Category:        "bugs",
+			Status:          "fixed",
+			Location:        SourceAnchor{Path: "internal/app/d.go", StartLine: 30},
+		},
 	}
 
 	s.Navigate(PageBugs)
+	// Default "open" filter must hide in_progress and done issues
 	if got := len(s.FilteredIssues()); got != 2 {
-		t.Fatalf("expected 2 issues in ALL category, got %d", got)
+		t.Fatalf("expected 2 open issues in ALL category (hiding in_progress and done), got %d", got)
+	}
+
+	// Cycle status filter with 's': open -> in_progress -> done -> open
+	s.HandleKey(KeyEvent{Key: "s"})
+	if s.IssueView != "in_progress" || len(s.FilteredIssues()) != 1 || s.FilteredIssues()[0].ID != "semantic:b-wip" {
+		t.Fatalf("expected 1 in_progress issue after 's', got view=%s len=%d", s.IssueView, len(s.FilteredIssues()))
+	}
+	s.HandleKey(KeyEvent{Key: "s"})
+	if s.IssueView != "done" || len(s.FilteredIssues()) != 1 || s.FilteredIssues()[0].ID != "semantic:b-done" {
+		t.Fatalf("expected 1 done issue after second 's', got view=%s len=%d", s.IssueView, len(s.FilteredIssues()))
+	}
+	// Colon commands for filters (:filter, :status, :in-progress, :done, :open)
+	s.ExecuteCommand(":in-progress")
+	if s.IssueView != "in_progress" || len(s.FilteredIssues()) != 1 {
+		t.Fatalf("expected :in-progress to switch to in_progress filter, got %s", s.IssueView)
+	}
+	s.ExecuteCommand(":filter done")
+	if s.IssueView != "done" || len(s.FilteredIssues()) != 1 {
+		t.Fatalf("expected :filter done to switch to done filter, got %s", s.IssueView)
+	}
+	s.ExecuteCommand(":status open")
+	if s.IssueView != "open" || len(s.FilteredIssues()) != 2 {
+		t.Fatalf("expected :status open to switch to open filter with 2 issues, got %s (%d)", s.IssueView, len(s.FilteredIssues()))
 	}
 
 	// Cycle issue type with 't': all -> bugs -> security -> performance
 	s.HandleKey(KeyEvent{Key: "t"})
 	if s.IssueCategory != "bugs" || len(s.FilteredIssues()) != 1 {
-		t.Fatalf("expected bugs category with 1 issue, got %s (%d)", s.IssueCategory, len(s.FilteredIssues()))
+		t.Fatalf("expected bugs category with 1 open issue, got %s (%d)", s.IssueCategory, len(s.FilteredIssues()))
 	}
 	s.HandleKey(KeyEvent{Key: "T"})
 	if s.IssueCategory != "all" {

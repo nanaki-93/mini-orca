@@ -357,10 +357,13 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	title := FindingTitle(f.Title, f.Message)
 	name := FindingName(f.Title, f.Message)
 	comp := s.findCompletion(target)
-	done := f.Status == "fixed" || comp != nil
+	done := f.Status == "fixed" || f.Status == "done" || comp != nil
 	agentPath := ""
 	if !done {
 		agentPath = matchAgentPath(agents, target, name, title)
+		if agentPath == "" && f.Status == "in_progress" {
+			agentPath = firstNonEmpty(f.Location.Path, f.ID)
+		}
 	}
 	cause := firstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
 	sol := "Synthesize a minimal, verified fix and unit test."
@@ -483,11 +486,43 @@ func containsIssueID(rows []IssueRow, id string) bool {
 	return false
 }
 
+func sameFindingTarget(a, b FindingTarget) bool {
+	if a.Kind != b.Kind || a.ID != b.ID || a.Path != b.Path {
+		return false
+	}
+	return a.Source == "" || b.Source == "" || a.Source == b.Source
+}
+
 func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 	for i := range s.CompletedFindings {
 		c := &s.CompletedFindings[i]
-		if c.Kind == target.Kind && c.ID == target.ID && c.Path == target.Path && c.Source == target.Source {
+		if sameFindingTarget(c.FindingTarget, target) {
 			return c
+		}
+	}
+	if s.Change != nil && s.Change.State == "applied" {
+		for _, t := range s.Change.FindingTargets {
+			if sameFindingTarget(t, target) {
+				oid := ""
+				if s.Change.Commit != nil {
+					oid = s.Change.Commit.OID
+				}
+				return &FindingCompletion{FindingTarget: target, CommitOID: oid}
+			}
+		}
+	}
+	for _, entry := range s.ChangeHistory {
+		if entry.State != "applied" {
+			continue
+		}
+		for _, t := range entry.FindingTargets {
+			if sameFindingTarget(t, target) {
+				oid := ""
+				if entry.Commit != nil {
+					oid = entry.Commit.OID
+				}
+				return &FindingCompletion{FindingTarget: target, CommitOID: oid}
+			}
 		}
 	}
 	return nil
@@ -497,8 +532,11 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 	lowName := strings.ToLower(strings.TrimSpace(name))
 	lowTitle := strings.ToLower(strings.TrimSpace(title))
 	for _, item := range agents {
+		if item.Status == "applied" || item.Status == "reverted" || item.Status == "canceled" {
+			continue
+		}
 		for _, t := range item.FindingTargets {
-			if t.Kind == target.Kind && t.ID == target.ID && t.Path == target.Path {
+			if sameFindingTarget(t, target) {
 				return firstNonEmpty(item.Path, item.ID)
 			}
 		}
@@ -545,14 +583,34 @@ func (s *State) FilteredIssues() []IssueRow {
 	return out
 }
 
+// IssueStatusCounts returns the count of open, in_progress, and done findings for the active IssueCategory.
+func (s *State) IssueStatusCounts() (openCount, inProgressCount, doneCount int) {
+	for _, item := range s.CollectAllIssues() {
+		if s.IssueCategory != "all" && item.Category != s.IssueCategory {
+			continue
+		}
+		switch item.Status {
+		case "in_progress":
+			inProgressCount++
+		case "done":
+			doneCount++
+		default:
+			openCount++
+		}
+	}
+	return openCount, inProgressCount, doneCount
+}
+
 func matchesIssueView(status, view string) bool {
 	switch view {
 	case "in_progress":
 		return status == "in_progress"
 	case "done":
 		return status == "done"
+	case "all":
+		return true
 	default:
-		return status != "done"
+		return status == "open"
 	}
 }
 
@@ -615,7 +673,7 @@ func (s *State) secondaryListLength() int {
 func (s *State) openIssues() []IssueRow {
 	var out []IssueRow
 	for _, item := range s.CollectAllIssues() {
-		if item.Status != "done" {
+		if item.Status == "open" {
 			out = append(out, item)
 		}
 	}

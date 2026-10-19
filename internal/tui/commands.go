@@ -542,6 +542,9 @@ func (s *State) execAnalysisCommand(cmd, arg string) bool {
 }
 
 func (s *State) execNavigationCommand(cmd, arg string) bool {
+	if s.execIssueFilterCommand(cmd, arg) {
+		return true
+	}
 	switch cmd {
 	case "scope", "files":
 		s.Navigate(PageAnalysisFiles)
@@ -550,9 +553,6 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 	case "proposals", "history":
 		s.Navigate(PageHistory)
 		s.CmdOutput = "Switched to [3] Code & Diff · Saved Proposals."
-		return true
-	case "issues", "all", "bugs", "security", "performance", "perf":
-		s.navigateToIssuesCategory(cmd)
 		return true
 	case "features":
 		s.Navigate(PageFeatures)
@@ -575,14 +575,104 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 			s.openFileInEditor(arg)
 			return true
 		}
+		s.setIssueStatusFilter("open")
+		return true
 	}
 	return s.execHubMatchCommand(cmd)
+}
+
+func (s *State) execIssueFilterCommand(cmd, arg string) bool {
+	switch cmd {
+	case "issues", "all", "bugs", "security", "performance", "perf":
+		s.navigateToIssuesCategory(cmd)
+		return true
+	case "in-progress", "in_progress", "wip":
+		s.setIssueStatusFilter("in_progress")
+		return true
+	case "done", "resolved", "fixed":
+		s.setIssueStatusFilter("done")
+		return true
+	case "status":
+		return s.applyStatusFilterArg(arg)
+	case "category", "cat":
+		return s.applyCategoryFilterArg(arg)
+	case "filter", "filters":
+		return s.applyCombinedFilterArg(arg)
+	}
+	return false
+}
+
+func (s *State) setIssueStatusFilter(view string) {
+	s.Navigate(PageBugs)
+	s.IssueView = view
+	s.SelectedIdx = 0
+	s.CmdOutput = fmt.Sprintf("Issue status filter: %s (Category: %s) · Keys: [s/v] Status · [f/t] Category",
+		strings.ToUpper(s.IssueView), strings.ToUpper(s.IssueCategory))
+}
+
+func (s *State) applyStatusFilterArg(arg string) bool {
+	s.Navigate(PageBugs)
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	switch norm {
+	case "":
+		s.cycleIssueStatusView(true)
+	case "open":
+		s.setIssueStatusFilter("open")
+	case "in_progress", "in-progress", "progress", "wip":
+		s.setIssueStatusFilter("in_progress")
+	case "done", "fixed", "resolved", "closed":
+		s.setIssueStatusFilter("done")
+	case "all":
+		s.setIssueStatusFilter("all")
+	default:
+		s.CmdOutput = fmt.Sprintf("Unknown status filter %q (use: open, in_progress, done, all)", arg)
+	}
+	return true
+}
+
+func (s *State) applyCategoryFilterArg(arg string) bool {
+	s.Navigate(PageBugs)
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	switch norm {
+	case "":
+		s.cycleIssueCategory(true)
+	case "all":
+		s.navigateToIssuesCategory("all")
+	case "bugs", "bug":
+		s.navigateToIssuesCategory("bugs")
+	case "security", "sec":
+		s.navigateToIssuesCategory("security")
+	case "performance", "perf":
+		s.navigateToIssuesCategory("performance")
+	default:
+		s.CmdOutput = fmt.Sprintf("Unknown category filter %q (use: all, bugs, security, perf)", arg)
+	}
+	return true
+}
+
+func (s *State) applyCombinedFilterArg(arg string) bool {
+	s.Navigate(PageBugs)
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	switch norm {
+	case "":
+		s.cycleIssueStatusView(true)
+		return true
+	case "open", "in_progress", "in-progress", "progress", "wip", "done", "fixed", "resolved", "closed":
+		return s.applyStatusFilterArg(norm)
+	case "all-status", "all_status":
+		return s.applyStatusFilterArg("all")
+	case "all", "bugs", "bug", "security", "sec", "performance", "perf":
+		return s.applyCategoryFilterArg(norm)
+	default:
+		s.CmdOutput = fmt.Sprintf("Unknown filter %q (use: open, in_progress, done, all, bugs, security, perf)", arg)
+		return true
+	}
 }
 
 func (s *State) navigateToIssuesCategory(cmd string) {
 	s.Navigate(PageBugs)
 	if cmd == "issues" {
-		s.CmdOutput = "Switched to [2] Agent Studio · Issues."
+		s.CmdOutput = "Switched to [2] Agent Studio · Issues (Keys: [s/v] Status · [f/t] Category)."
 		return
 	}
 	cat := cmd

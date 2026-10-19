@@ -281,20 +281,24 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	if len(s.SelectedIssueIDs) > 0 {
 		batchBadge = fmt.Sprintf("   %s BATCH SELECTED: %d %s", th.warnBg, len(s.SelectedIssueIDs), th.reset)
 	}
+	openCount, inProgCount, doneCount := s.IssueStatusCounts()
+	statusStrip := s.renderIssueStatusFilterStrip(th, openCount, inProgCount, doneCount)
 	lines := []string{
 		fmt.Sprintf(
-			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory:%s %s[%s]%s   %sStatus:%s %s[%s]%s%s",
+			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (f/t):%s %s[%s]%s   %sStatus (s/v):%s %s%s",
 			th.bold+th.accent, th.reset,
 			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(s.IssueCategory), th.reset,
-			th.muted, th.reset, th.bold+th.green, strings.ToUpper(s.IssueView), th.reset,
-			batchBadge,
+			th.muted, th.reset, statusStrip, batchBadge,
 		),
 		"",
 	}
 	lines = append(lines, th.renderTableHeader("   SEL  SEVERITY    CATEGORY   FINDING                        LOCATION            STATUS", width)...)
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
-		return append(lines, fmt.Sprintf("  %sNo findings match the active filter.%s", th.muted, th.reset))
+		return append(lines, fmt.Sprintf(
+			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s/v] for status or [f/t] for category.%s",
+			th.muted, strings.ToUpper(s.IssueView), openCount, inProgCount, doneCount, th.reset,
+		))
 	}
 	nameCol := max(18, width-62)
 	selected := s.ClampedIdx()
@@ -331,6 +335,30 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
 	}
 	return lines
+}
+
+func (s *State) renderIssueStatusFilterStrip(th ansiTheme, openCount, inProgCount, doneCount int) string {
+	tabs := []struct {
+		id    string
+		label string
+		count int
+	}{
+		{"open", "OPEN", openCount},
+		{"in_progress", "IN_PROGRESS", inProgCount},
+		{"done", "DONE", doneCount},
+	}
+	var parts []string
+	for _, t := range tabs {
+		if s.IssueView == t.id {
+			parts = append(parts, fmt.Sprintf("%s[%s:%d]%s", th.bold+th.green, t.label, t.count, th.reset))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s%s:%d%s", th.muted, t.label, t.count, th.reset))
+		}
+	}
+	if s.IssueView == "all" {
+		parts = append(parts, fmt.Sprintf("%s[ALL:%d]%s", th.bold+th.green, openCount+inProgCount+doneCount, th.reset))
+	}
+	return strings.Join(parts, th.border+" · "+th.reset)
 }
 
 func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
