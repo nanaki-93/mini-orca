@@ -37,20 +37,22 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 		return append(lines, th.renderPanelBox("AUTONOMOUS MISSION STANDBY", "IDLE", panelW, guide)...)
 	}
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("   STAGE              MISSION TITLE               SCOPE      DELTA       CHECKS", width)...)
 	selected := s.ClampedIdx()
 	titleCol := max(16, width-60)
+	headerCols := fmt.Sprintf("    %-16s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
+	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	start, end := windowBounds(len(items), selected, 5)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		stageLabel := theme.TruncatePlain(fmt.Sprintf("%d. %s", item.StageNumber, item.Stage), 16)
 		tStyle := rowTitleStyle(th, idx == selected)
+		deltaCol := theme.PadVisibleRight(fmt.Sprintf("%s+%d%s/%s-%d%s", th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset), 10)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-16s  %s%-*s%s  %s  %s+%d%s/%s-%d%s  %schecks:%d/%d%s",
+			"  %s%-16s  %s%-*s%s  %s  %s  %schecks:%d/%d%s",
 			cursor, stageLabel, tStyle, titleCol, theme.TruncatePlain(item.Title, titleCol), th.reset,
-			th.statusBadge(item.ScopeBadge),
-			th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset,
+			th.padBadge(item.ScopeBadge, 12),
+			deltaCol,
 			th.muted, item.ChecksPassed, item.ChecksTotal, th.reset,
 		))
 	}
@@ -238,9 +240,9 @@ func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, wfReason strin
 		if st.Model != nil && st.Model.Model != "" {
 			modelName = st.Model.Model
 		}
-		out = append(out, fmt.Sprintf("  %s%d. %-18s%s  %-12s  %smodel:%s%s",
+		out = append(out, fmt.Sprintf("  %s%d. %-18s%s  %s  %smodel:%s%s",
 			th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
-			th.statusBadge(st.Status), th.cyan, modelName, th.reset))
+			th.padBadge(st.Status, 14), th.cyan, modelName, th.reset))
 		stErr := strings.TrimSpace(st.Reason)
 		if stErr == "" && (st.Status == "failed" || st.Status == "interrupted") && strings.TrimSpace(wfReason) != "" {
 			stErr = strings.TrimSpace(wfReason)
@@ -505,7 +507,7 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo Git worktrees reported.%s", th.muted, th.reset))
 	}
-	lines = append(lines, th.renderTableHeader("   ROLE          BRANCH               WORKTREE PATH", width)...)
+	lines = append(lines, th.renderTableHeader("    ROLE          BRANCH                     WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
 	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(12, 12))
 	for idx := start; idx < end; idx++ {
@@ -518,8 +520,8 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 			role = "MERGEABLE"
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%-12s  %sbranch:%-18s%s %spath:%s%s",
-			cursor, th.statusBadge(role), tStyle, wt.Branch, th.reset, th.muted, wt.Path, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%s  %sbranch:%-18s%s  %spath:%s%s",
+			cursor, th.padBadge(role, 12), tStyle, wt.Branch, th.reset, th.muted, wt.Path, th.reset))
 	}
 	return appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
 }
@@ -530,7 +532,7 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	if len(s.ChangeHistory) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo saved proposals in history.%s", th.muted, th.reset))
 	}
-	lines = append(lines, th.renderTableHeader("   STATE        COMMIT CODE    PROPOSAL TITLE                        REVISION", width)...)
+	lines = append(lines, th.renderTableHeader("    STATE         COMMIT CODE    PROPOSAL TITLE                   REVISION", width)...)
 	selected := s.ClampedIdx()
 	start, end := windowBounds(len(s.ChangeHistory), selected, s.adaptiveWindowRows(12, 10))
 	for idx := start; idx < end; idx++ {
@@ -542,8 +544,8 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 			code = "—"
 		}
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-12s %s%-13s%s %s%-32s%s %srev:%d (%s)%s",
-			cursor, th.statusBadge(entry.State),
+			"  %s%s  %s%-13s%s  %s%-32s%s %srev:%d (%s)%s",
+			cursor, th.padBadge(entry.State, 12),
 			th.purple, code, th.reset,
 			tStyle, theme.TruncatePlain(entry.Title, 32), th.reset,
 			th.muted, entry.Revision, client.FirstNonEmpty(entry.Freshness, "current"), th.reset,

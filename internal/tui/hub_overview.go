@@ -114,40 +114,40 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderKPICards(cards, width)...)
 	denom := max(1, summary.TotalOpen+summary.Done)
 	distBody := []string{
-		fmt.Sprintf("%sBugs%s            %s  %s%d open%s", th.bold+th.fg, th.reset, th.renderProgressBar(summary.Bugs, denom, 16), th.red, summary.Bugs, th.reset),
-		fmt.Sprintf("%sSecurity%s        %s  %s%d open%s", th.bold+th.fg, th.reset, th.renderProgressBar(summary.Security, denom, 16), th.amber, summary.Security, th.reset),
-		fmt.Sprintf("%sPerformance%s     %s  %s%d open%s", th.fg, th.reset, th.renderProgressBar(summary.Performance, denom, 16), th.cyan, summary.Performance, th.reset),
-		fmt.Sprintf("%sResolved%s        %s  %s%d fixed%s", th.fg, th.reset, th.renderProgressBar(summary.Done, denom, 16), th.green, summary.Done, th.reset),
+		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.bold+th.fg, "Bugs", th.reset, th.renderProgressBar(summary.Bugs, denom, 16), th.red, summary.Bugs, th.reset),
+		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.bold+th.fg, "Security", th.reset, th.renderProgressBar(summary.Security, denom, 16), th.amber, summary.Security, th.reset),
+		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.fg, "Performance", th.reset, th.renderProgressBar(summary.Performance, denom, 16), th.cyan, summary.Performance, th.reset),
+		fmt.Sprintf("%s%-15s%s %s  %s%d fixed%s", th.fg, "Resolved", th.reset, th.renderProgressBar(summary.Done, denom, 16), th.green, summary.Done, th.reset),
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("", "", panelW, distBody)...)
 
-	focusStatus := fmt.Sprintf("%sWorkspace clean%s", th.green, th.reset)
+	focusStatus := fmt.Sprintf("%s  %sWorkspace clean%s", th.padBadge("CLEAN", 12), th.green, th.reset)
 	if summary.TotalOpen > 0 {
-		focusStatus = fmt.Sprintf("%s%d open%s (%s%d bugs%s · %s%d security%s)",
-			th.bold+th.amber, summary.TotalOpen, th.reset, th.red, summary.Bugs, th.reset, th.amber, summary.Security, th.reset)
+		focusStatus = fmt.Sprintf("%s  %s%d open%s (%s%d bugs%s · %s%d security%s)",
+			th.padBadge("OPEN", 12), th.bold+th.amber, summary.TotalOpen, th.reset, th.red, summary.Bugs, th.reset, th.amber, summary.Security, th.reset)
 	}
-	agentSummary := fmt.Sprintf("%s  None", th.statusBadge("IDLE"))
+	agentSummary := fmt.Sprintf("%s  %sNone%s", th.padBadge("IDLE", 12), th.muted, th.reset)
 	if s.HasActiveProposal() {
-		agentSummary = fmt.Sprintf("%s  %s%s%s", th.statusBadge(s.Change.State), th.bold+th.fg, s.Change.Title, th.reset)
+		agentSummary = fmt.Sprintf("%s  %s%s%s", th.padBadge(s.Change.State, 12), th.bold+th.fg, s.Change.Title, th.reset)
 	}
 	scanState := "IDLE"
 	if s.Scan != nil && s.Scan.Status != "" {
 		scanState = s.Scan.Status
 	}
 	focusBody := []string{
-		fmt.Sprintf("%sTriage:%s        %s", th.bold+th.cyan, th.reset, focusStatus),
-		fmt.Sprintf("%sAgent:%s         %s", th.bold+th.purple, th.reset, agentSummary),
-		fmt.Sprintf("%sVerification:%s  %s  %s(%d features)%s", th.bold+th.green, th.reset, th.statusBadge(scanState), th.muted, summary.Features, th.reset),
+		fmt.Sprintf("%s%-15s%s %s", th.bold+th.cyan, "Triage:", th.reset, focusStatus),
+		fmt.Sprintf("%s%-15s%s %s", th.bold+th.purple, "Agent:", th.reset, agentSummary),
+		fmt.Sprintf("%s%-15s%s %s  %s(%d features)%s", th.bold+th.green, "Verification:", th.reset, th.padBadge(scanState, 12), th.muted, summary.Features, th.reset),
 	}
 	if s.Run != nil && s.Run.Status != "" {
-		runNote := fmt.Sprintf("%s  (%ds)", th.statusBadge(s.Run.Status), s.Run.ElapsedSeconds)
+		runNote := fmt.Sprintf("%s  (%ds)", th.padBadge(s.Run.Status, 12), s.Run.ElapsedSeconds)
 		if s.isAnalysisPausedOrInterrupted() {
 			reason := client.FirstNonEmpty(s.Run.Reason, "Window allowance reached")
 			runNote = fmt.Sprintf("%s  %s%s%s · %s[r] Resume%s",
-				th.statusBadge(s.Run.Status), th.amber, reason, th.reset, th.bold+th.cyan, th.reset)
+				th.padBadge(s.Run.Status, 12), th.amber, reason, th.reset, th.bold+th.cyan, th.reset)
 		}
-		focusBody = append(focusBody, fmt.Sprintf("%sAnalysis:%s      %s", th.bold+th.amber, th.reset, runNote))
+		focusBody = append(focusBody, fmt.Sprintf("%s%-15s%s %s", th.bold+th.amber, "Analysis:", th.reset, runNote))
 	}
 	lines = append(lines, "")
 	return append(lines, th.renderPanelBox("", "", panelW, focusBody)...)
@@ -164,13 +164,13 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 		branch = s.Repository.Branch
 	}
 	meta := []string{
-		fmt.Sprintf("%sRepository:%s %s%s%s", th.muted, th.reset, th.bold+th.fg, s.Project.Name, th.reset),
-		fmt.Sprintf("%sPath:%s       %s%s%s", th.muted, th.reset, th.cyan, s.Project.Path, th.reset),
-		fmt.Sprintf("%sStack:%s      %s%s%s · Manifest: %s · Branch: %s%s%s",
-			th.muted, th.reset, th.bold+th.fg, client.FirstNonEmpty(s.Project.Type, "polyglot"), th.reset,
+		fmt.Sprintf("%s%-14s%s %s%s%s", th.muted, "Repository:", th.reset, th.bold+th.fg, s.Project.Name, th.reset),
+		fmt.Sprintf("%s%-14s%s %s%s%s", th.muted, "Path:", th.reset, th.cyan, s.Project.Path, th.reset),
+		fmt.Sprintf("%s%-14s%s %s%s%s · Manifest: %s · Branch: %s%s%s",
+			th.muted, "Stack:", th.reset, th.bold+th.fg, client.FirstNonEmpty(s.Project.Type, "polyglot"), th.reset,
 			client.FirstNonEmpty(s.Project.BuildFile, "auto"), th.purple, branch, th.reset),
-		fmt.Sprintf("%sFootprint:%s  %s%d%s indexed files · %s%d%s lines",
-			th.muted, th.reset, th.bold+th.green, s.Project.FileCount, th.reset, th.bold+th.fg, s.Project.TotalLines, th.reset),
+		fmt.Sprintf("%s%-14s%s %s%d%s indexed files · %s%d%s lines",
+			th.muted, "Footprint:", th.reset, th.bold+th.green, s.Project.FileCount, th.reset, th.bold+th.fg, s.Project.TotalLines, th.reset),
 	}
 	lines = append(lines, th.renderPanelBox("", "", panelW, meta)...)
 	if s.Index != nil && len(s.Index.Files) > 0 {
@@ -194,14 +194,14 @@ func (s *State) renderProjectPage(th ansiTheme, width int) []string {
 		}
 		return append(lines, th.renderPanelBox("", "", panelW, empty)...)
 	}
-	lines = append(lines, th.renderTableHeader("   PHASE             STATUS        STATE         COMMAND", width)...)
+	lines = append(lines, th.renderTableHeader("    PHASE             STATUS        STATE             COMMAND", width)...)
 	selected := s.ClampedIdx()
 	for idx, ph := range s.Scan.Phases {
 		cursor := th.renderCursorPrefix(idx == selected)
 		nameStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-16s%s  %-12s  %sstate:%-10s  cmd:%s%s",
-			cursor, nameStyle, ph.Name, th.reset, th.statusBadge(ph.State), th.muted, ph.State, strings.Join(ph.Command, " "), th.reset,
+			"  %s%s%-16s%s  %s  %sstate:%-10s  cmd:%s%s",
+			cursor, nameStyle, ph.Name, th.reset, th.padBadge(ph.State, 12), th.muted, ph.State, strings.Join(ph.Command, " "), th.reset,
 		))
 		if strings.EqualFold(ph.State, "failed") && strings.TrimSpace(ph.Output) != "" {
 			lines = append(lines, fmt.Sprintf("    %s▲ Check Failure:%s %s%s%s",

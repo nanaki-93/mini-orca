@@ -224,17 +224,17 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 }
 
 func (s *State) renderSidebarRouting(th ansiTheme, width int) []string {
-	preset := theme.TruncatePlain(client.FirstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-11))
-	aMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-11))
-	bMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-11))
-	fMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-11))
+	preset := theme.TruncatePlain(client.FirstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-13))
+	aMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-13))
+	bMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-13))
+	fMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-13))
 	return []string{
 		fmt.Sprintf("  %sMODEL ROUTING%s", th.bold+th.cyan, th.reset),
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %sPreset%s   %s%s%s", th.muted, th.reset, th.green, preset, th.reset),
-		fmt.Sprintf("  %sAnalyze%s  %s%s%s", th.muted, th.reset, th.fg, aMod, th.reset),
-		fmt.Sprintf("  %sBug%s      %s%s%s", th.muted, th.reset, th.fg, bMod, th.reset),
-		fmt.Sprintf("  %sFunc%s     %s%s%s", th.muted, th.reset, th.fg, fMod, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Preset", th.reset, th.green, preset, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Analyze", th.reset, th.fg, aMod, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Bug", th.reset, th.fg, bMod, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Func", th.reset, th.fg, fMod, th.reset),
 	}
 }
 
@@ -243,8 +243,8 @@ func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
 	mins := max(1, (cfg.BudgetSeconds+59)/60)
 	return []string{
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %sBatch%s    %s%d files · %dm%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, mins, th.reset),
-		fmt.Sprintf("  %sAttempts%s %s%d / stage%s", th.muted, th.reset, th.cyan, cfg.MaxAttemptsPerStage, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%d files · %dm%s", th.muted, "Batch", th.reset, th.cyan, cfg.BatchFiles, mins, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s%d / stage%s", th.muted, "Attempts", th.reset, th.cyan, cfg.MaxAttemptsPerStage, th.reset),
 	}
 }
 
@@ -288,10 +288,10 @@ func (s *State) renderSidebarPulse(th ansiTheme, width int) []string {
 	return []string{
 		fmt.Sprintf("  %sWORKSPACE PULSE%s", th.bold+th.cyan, th.reset),
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %sFindings%s   %s", th.muted, th.reset, openVal),
-		fmt.Sprintf("  %sResolved%s   %s%d%s", th.muted, th.reset, th.green, summary.Done, th.reset),
-		fmt.Sprintf("  %sAgent%s      %s", th.muted, th.reset, th.statusBadge(agentState)),
-		fmt.Sprintf("  %sFiles%s      %s%d%s", th.muted, th.reset, th.fg, s.indexedFileCount(), th.reset),
+		fmt.Sprintf("  %s%-10s%s %s", th.muted, "Findings", th.reset, openVal),
+		fmt.Sprintf("  %s%-10s%s %s%d%s", th.muted, "Resolved", th.reset, th.green, summary.Done, th.reset),
+		fmt.Sprintf("  %s%-10s%s %s", th.muted, "Agent", th.reset, th.statusBadge(agentState)),
+		fmt.Sprintf("  %s%-10s%s %s%d%s", th.muted, "Files", th.reset, th.fg, s.indexedFileCount(), th.reset),
 	}
 }
 

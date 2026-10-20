@@ -47,7 +47,7 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderAnalysisSectionsTable(th ansiTheme, width, selected int) []string {
-	lines := th.renderTableHeader("   SECTION         STATUS        PROGRESS             SUCCEEDED    FAILED", width)
+	lines := th.renderTableHeader("    SECTION         STATUS        PROGRESS       SUCCEEDED       FAILED", width)
 	for idx, sec := range s.Run.Sections {
 		cursor := th.renderCursorPrefix(idx == selected)
 		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 10)
@@ -56,11 +56,12 @@ func (s *State) renderAnalysisSectionsTable(th ansiTheme, width, selected int) [
 			failStr = th.critBg + fmt.Sprintf(" failed:%d ", sec.Coverage.Failed) + th.reset
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
+		succCol := theme.PadVisibleRight(fmt.Sprintf("%ssucceeded:%d/%d%s", th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset), 14)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-14s%s  %-12s  %s   %ssucceeded:%d/%d%s %s",
+			"  %s%s%-14s%s  %s  %s   %s  %s",
 			cursor, tStyle, strings.ToUpper(sec.Category), th.reset,
-			th.statusBadge(sec.Status), bar,
-			th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset, failStr,
+			th.padBadge(sec.Status, 12), bar,
+			succCol, failStr,
 		))
 		if strings.TrimSpace(sec.Reason) != "" {
 			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, sec.Reason, th.reset))
@@ -74,9 +75,9 @@ func (s *State) renderAnalysisSectionsTable(th ansiTheme, width, selected int) [
 		cursor := th.renderCursorPrefix(featIdx == selected)
 		tStyle := rowTitleStyle(th, featIdx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-14s%s  %-12s  %sattempts:%d%s",
+			"  %s%s%-14s%s  %s  %sattempts:%d%s",
 			cursor, tStyle, "FEATURES", th.reset,
-			th.statusBadge(s.Run.Features.Status),
+			th.padBadge(s.Run.Features.Status, 12),
 			th.muted, s.Run.Features.Attempts, th.reset,
 		))
 		if strings.TrimSpace(s.Run.Features.Reason) != "" {
@@ -116,7 +117,7 @@ func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selecte
 	cfg := s.EffectiveAnalysisConfig()
 	rows := domain.BuildAnalysisConfigRows(cfg)
 	secCount := s.analysisRunSectionCount()
-	lines := th.renderTableHeader("   KEY      ANALYSIS RUN PARAMETER     ACTIVE VALUE                       DESCRIPTION", width)
+	lines := th.renderTableHeader("    KEY     ANALYSIS RUN PARAMETER    ACTIVE VALUE                      DESCRIPTION", width)
 	for cIdx, row := range rows {
 		rowIdx := secCount + cIdx
 		cursor := th.renderCursorPrefix(rowIdx == selected)
@@ -158,9 +159,10 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 	incl := max(0, total-excl)
 	lines = append(lines, fmt.Sprintf("  %sScope Summary:%s %s%d Included%s · %s%d Excluded%s · %d Total Indexed Files",
 		th.muted, th.reset, th.bold+th.green, incl, th.reset, th.amber, excl, th.reset, total), "")
-	lines = append(lines, th.renderTableHeader("   SCOPE     REPOSITORY PATH                             LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
 	pathCol := max(24, width-48)
+	headerCols := fmt.Sprintf("    %-8s  %-*s  %s", "SCOPE", pathCol, "REPOSITORY PATH", "LANGUAGE / LINES")
+	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	winRows := s.adaptiveWindowRows(10, 14)
 	if s.Run != nil && len(s.Run.Files) > 0 {
 		winRows = s.adaptiveWindowRows(6, 10)
@@ -169,15 +171,15 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 	for idx := start; idx < end; idx++ {
 		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
-		scopeTag := th.statusBadge("INCL")
+		scopeState := "INCL"
 		if domain.ContainsString(s.ExcludedPaths, f.Path) {
-			scopeTag = th.statusBadge("EXCL")
+			scopeState = "EXCL"
 		}
 		runTag := s.fileRunStatusBadge(th, f.Path)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s   %s%-*s%s  %s%s · %d lines%s%s",
-			cursor, scopeTag, tStyle, pathCol, theme.TruncatePlain(f.Path, pathCol), th.reset,
+			"  %s%s  %s%-*s%s  %s%s · %d lines%s%s",
+			cursor, th.padBadge(scopeState, 8), tStyle, pathCol, theme.TruncatePlain(f.Path, pathCol), th.reset,
 			th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset, runTag,
 		))
 	}
@@ -231,8 +233,8 @@ func (s *State) renderSelectedFileStageInspector(th ansiTheme, panelW int, path 
 		} else if st.FindingCount != nil && *st.FindingCount > 0 {
 			findingsText = fmt.Sprintf("%d findings", *st.FindingCount)
 		}
-		row := fmt.Sprintf("%-22s  %-16s  %s%-18s%s  %sattempts:%d%s",
-			strings.ToUpper(st.Stage), th.statusBadge(st.Status),
+		row := fmt.Sprintf("%-22s  %s  %s%-18s%s  %sattempts:%d%s",
+			strings.ToUpper(st.Stage), th.padBadge(st.Status, 18),
 			th.fg, findingsText, th.reset,
 			th.muted, st.Attempts, th.reset)
 		body = append(body, row)
@@ -305,16 +307,16 @@ func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-12s%s  %-26s  %s%-22s%s  %-9s  %seffort:%s ctx:%s%s",
+			"  %s%s%-12s%s  %-26s  %s%-22s%s  %s  %seffort:%s ctx:%s%s",
 			cursor, tStyle, strings.ToUpper(scope), th.reset,
 			theme.TruncatePlain(modelLabel, 26),
 			th.cyan, theme.TruncatePlain(eff.ProviderOrigin, 22), th.reset,
-			th.statusBadge(boundary),
+			th.padBadge(boundary, 9),
 			th.muted, client.FirstNonEmpty(eff.ReasoningEffort, "default"), ctxStr, th.reset,
 		))
 	}
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("   PRESET PROFILE                 STATE       ANALYZE        BUG            FUNCTION", width)...)
+	lines = append(lines, th.renderTableHeader("    PRESET PROFILE                STATE       ANALYZE        BUG            FUNCTION", width)...)
 	for pIdx, p := range s.AllModelPresets() {
 		rowIdx := len(scopes) + pIdx
 		cursor := th.renderCursorPrefix(rowIdx == selected)
@@ -381,17 +383,17 @@ func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST", "Repository readiness & AGENTS.md pillars")
 	lines = append(lines, fmt.Sprintf("  %sGovernance Readiness:%s %s %s(%d/%d pillars active)%s",
 		th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), th.bold+th.fg, readyCount, len(pillars), th.reset), "")
-	lines = append(lines, th.renderTableHeader("   STATUS      GOVERNANCE PILLAR              DESCRIPTION", width)...)
+	lines = append(lines, th.renderTableHeader("    STATUS      GOVERNANCE PILLAR             DESCRIPTION", width)...)
 	selected := s.ClampedIdx()
 	for idx, pil := range pillars {
 		cursor := th.renderCursorPrefix(idx == selected)
-		badge := th.statusBadge("MISSING")
+		status := "MISSING"
 		if pil.Ready {
-			badge = th.statusBadge("READY")
+			status = "READY"
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%-10s %s%-28s%s %s— %s%s",
-			cursor, badge, tStyle, pil.Title, th.reset, th.muted, pil.Description, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%s %s%-28s%s %s— %s%s",
+			cursor, th.padBadge(status, 10), tStyle, pil.Title, th.reset, th.muted, pil.Description, th.reset))
 	}
 	return lines
 }
@@ -399,17 +401,17 @@ func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · HARNESS² LESSONS", "Graduated engineering guardrails & AGENTS.md rules")
-	lines = append(lines, th.renderTableHeader("   STATUS       HARNESS² GUARDRAIL LESSON", width)...)
+	lines = append(lines, th.renderTableHeader("    STATUS        HARNESS² GUARDRAIL LESSON", width)...)
 	lessons := s.AllHarnessLessons()
 	selected := s.ClampedIdx()
 	for idx, rule := range lessons {
 		cursor := th.renderCursorPrefix(idx == selected)
-		badge := th.statusBadge("CANDIDATE")
+		status := "CANDIDATE"
 		if s.IsLessonGraduated(rule) {
-			badge = th.statusBadge("GRADUATED")
+			status = "GRADUATED"
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%-12s %s%s%s", cursor, badge, tStyle, rule, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%s %s%s%s", cursor, th.padBadge(status, 12), tStyle, rule, th.reset))
 	}
 	if selected < len(lessons) {
 		selRule := lessons[selected]

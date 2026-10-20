@@ -26,7 +26,9 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 		),
 		"",
 	}
-	lines = append(lines, th.renderTableHeader("   SEL  SEVERITY    CATEGORY   FINDING                        LOCATION            STATUS", width)...)
+	nameCol := max(18, width-62)
+	headerCols := fmt.Sprintf("    %-3s %-10s  %-9s  %-*s  %-18s  %s", "SEL", "SEVERITY", "CATEGORY", nameCol, "FINDING", "LOCATION", "STATUS")
+	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
 		return append(lines, fmt.Sprintf(
@@ -34,7 +36,6 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			th.muted, strings.ToUpper(s.IssueView), openCount, inProgCount, doneCount, th.reset,
 		))
 	}
-	nameCol := max(18, width-62)
 	selected := s.ClampedIdx()
 	start, end := windowBounds(len(filtered), selected, s.adaptiveWindowRows(15, 9))
 	for idx := start; idx < end; idx++ {

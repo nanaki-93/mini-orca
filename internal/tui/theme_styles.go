@@ -161,6 +161,15 @@ func (th ansiTheme) statusBadge(state string) string {
 	}
 }
 
+func (th ansiTheme) padBadge(state string, width int) string {
+	b := th.statusBadge(state)
+	vis := theme.VisibleRuneCount(b)
+	if vis >= width {
+		return b
+	}
+	return b + strings.Repeat(" ", width-vis)
+}
+
 func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body []string) []string {
 	return theme.RenderPanelBox(th.titleStyle, th.mutedStyle, th.cardStyle, th.border, th.reset, title, rightMeta, innerWidth, body)
 }
