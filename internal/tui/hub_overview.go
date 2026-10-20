@@ -128,7 +128,7 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 			th.bold+th.amber, summary.TotalOpen, th.reset, th.red, summary.Bugs, th.reset, th.amber, summary.Security, th.reset)
 	}
 	agentSummary := fmt.Sprintf("%s  None", th.statusBadge("IDLE"))
-	if s.Change != nil {
+	if s.HasActiveProposal() {
 		agentSummary = fmt.Sprintf("%s  %s%s%s", th.statusBadge(s.Change.State), th.bold+th.fg, s.Change.Title, th.reset)
 	}
 	scanState := "IDLE"

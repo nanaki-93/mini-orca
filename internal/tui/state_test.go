@@ -1619,5 +1619,183 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	}
 }
 
+func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
+	tmpRoot := t.TempDir()
+	var createdWtPath, createdBranch, scopedOpenWt, appliedCommitMsg, mergedWtPath string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ExecutionTrust{Trusted: true})
+	})
+	mux.HandleFunc("/api/projects/current/git/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		createdWtPath, _ = body["path"].(string)
+		createdBranch, _ = body["target_branch"].(string)
+		_ = json.NewEncoder(w).Encode(map[string]any{"state": "created", "path": createdWtPath})
+	})
+	mux.HandleFunc("/api/projects/current", func(w http.ResponseWriter, r *http.Request) {
+		wt := r.URL.Query().Get("worktree_path")
+		if wt != "" {
+			_ = json.NewEncoder(w).Encode(Project{
+				ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-1"},
+				Name:            "demo-wt",
+				Path:            wt,
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(Project{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			Name:            "demo",
+			Path:            tmpRoot,
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, r *http.Request) {
+		scopedOpenWt = r.URL.Query().Get("worktree_path")
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-1"},
+			ID:              "chg-wt-1",
+			Title:           "Fix race condition",
+			Kind:            "fix",
+			Revision:        1,
+			Hash:            "h-wt-1",
+			State:           "draft",
+			FindingTargets:  []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"}},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-wt-1/workflow", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-1"},
+			ID:              "chg-wt-1",
+			Title:           "Fix race condition",
+			Kind:            "fix",
+			Revision:        2,
+			Hash:            "h-wt-2",
+			State:           "ready",
+			ReviewedHash:    "h-wt-2",
+			FindingTargets:  []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"}},
+			Changes:         []FileChange{{Path: "internal/app/a.go", Content: "package app\n"}},
+			Checks:          []Check{{Name: "go test", Required: true, State: "passed"}},
+			Workflow:        &ChangeWorkflow{ID: "wf-wt-1", Status: "awaiting_human_review"},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-wt-1/review", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-1"},
+			ID:              "chg-wt-1",
+			Title:           "Fix race condition",
+			Kind:            "fix",
+			Revision:        2,
+			Hash:            "h-wt-2",
+			State:           "ready",
+			ReviewedHash:    "h-wt-2",
+			FindingTargets:  []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"}},
+			Changes:         []FileChange{{Path: "internal/app/a.go", Content: "package app\n"}},
+			Checks:          []Check{{Name: "go test", Required: true, State: "passed"}},
+			Workflow:        &ChangeWorkflow{ID: "wf-wt-1", Status: "awaiting_human_review"},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-wt-1/apply", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		appliedCommitMsg, _ = body["commit_message"].(string)
+		_ = json.NewEncoder(w).Encode(ChangeMutation{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-2"},
+			SessionID:       "chg-wt-1",
+			State:           "applied",
+			Hash:            "h-wt-2",
+			UndoAvailable:   true,
+			Commit: &ChangeCommit{
+				GitIdentity: GitIdentity{Head: "commit999", Branch: createdBranch},
+				State:       "committed",
+				OID:         "commit999",
+				Message:     appliedCommitMsg,
+			},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/git/merge", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mergedWtPath, _ = body["path"].(string)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"state": "merged",
+			"index": ProjectIndex{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r2"}},
+			"repository": GitRepository{
+				GitIdentity:     GitIdentity{Head: "merged999", Branch: "main"},
+				ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r2"},
+				Available:       true,
+			},
+		})
+	})
 
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo", Path: tmpRoot}
+	s.Repository = &GitRepository{GitIdentity: GitIdentity{Head: "base123", Branch: "main"}, Available: true, Root: tmpRoot}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: *s.Repository,
+		Worktrees:     []GitWorktree{{GitIdentity: GitIdentity{Head: "base123", Branch: "main"}, Path: tmpRoot, Current: true}},
+	}
+	s.Findings = []Finding{{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		ID:              "b-race",
+		Category:        "bugs",
+		Severity:        "high",
+		Title:           "Fix race condition",
+		Status:          "open",
+		Location:        SourceAnchor{Path: "internal/app/a.go", StartLine: 10},
+	}}
+
+	// 1. Dispatch issue fix -> creates worktree & opens scoped session
+	s.dispatchSingleIssue(IssueRow{
+		ID:       "semantic:b-race",
+		Name:     "Fix race condition",
+		Title:    "Fix race condition",
+		Path:     "internal/app/a.go",
+		Category: "bugs",
+		Target:   FindingTarget{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"},
+	})
+	s.FlushActions(context.Background(), cli)
+
+	if createdWtPath == "" || !strings.HasPrefix(createdBranch, "orca/fix-") || scopedOpenWt != createdWtPath {
+		t.Fatalf("expected standard worktree creation on issue fix, got wt=%q branch=%q scoped=%q", createdWtPath, createdBranch, scopedOpenWt)
+	}
+	if !s.HasActiveProposal() || s.Change.WorktreePath != createdWtPath {
+		t.Fatalf("expected active proposal in worktree %q, got %+v", createdWtPath, s.Change)
+	}
+	if len(s.AgentItems()) != 1 {
+		t.Fatalf("expected 1 active pipeline item before commit, got %d", len(s.AgentItems()))
+	}
+
+	// 2. Apply & commit -> commits with unique code, merges worktree into main, deletes from pipeline, and clears active proposal
+	s.applyAndCommitProposal("Fix race condition")
+	s.FlushActions(context.Background(), cli)
+
+	if mergedWtPath != createdWtPath {
+		t.Fatalf("expected worktree %q to be merged, got %q", createdWtPath, mergedWtPath)
+	}
+	if !strings.Contains(appliedCommitMsg, "[ORC-") {
+		t.Fatalf("expected commit message to include unique ORC code, got %q", appliedCommitMsg)
+	}
+	if !strings.Contains(s.CmdOutput, "Committed & merged proposal") || !strings.Contains(s.CmdOutput, "into main") {
+		t.Fatalf("expected explicit commit & merge confirmation in CmdOutput, got %q", s.CmdOutput)
+	}
+	if s.HasActiveProposal() || s.Change != nil {
+		t.Fatalf("expected active proposal to be cleared after commit and merge, got %+v", s.Change)
+	}
+	if len(s.AgentItems()) != 0 {
+		t.Fatalf("expected completed issue to be deleted from pipeline items, got %+v", s.AgentItems())
+	}
+	frame := s.Render(120, 40)
+	if strings.Contains(frame, "Active Proposal:") {
+		t.Fatalf("expected Active Proposal banner to be gone after commit and merge:\n%s", frame)
+	}
+	if len(s.CompletedFindings) != 1 || s.CompletedFindings[0].CommitCode == "" {
+		t.Fatalf("expected persisted completed finding with commit code, got %+v", s.CompletedFindings)
+	}
+}

@@ -271,15 +271,17 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 	}
 }
 
-func (s *State) pollRunningWorkflowSessions(ctx context.Context, client *Client, idQuery string) {
+func (s *State) pollRunningWorkflowSessions(ctx context.Context, cl *Client, idQuery string) {
 	for idx, running := range s.runningWorkflowSessions() {
 		var chg ChangeSession
-		target := "/api/projects/current/changes/" + url.PathEscape(running.ID) + idQuery
+		query := client.FirstNonEmpty(s.changeResourceQuery(running), idQuery)
+		target := "/api/projects/current/changes/" + url.PathEscape(running.ID) + query
 		reqID := "poll-change"
 		if idx > 0 {
 			reqID = fmt.Sprintf("poll-change-%d", idx)
 		}
-		if err := client.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+		if err := cl.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+			chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, running.WorktreePath)
 			s.upsertActiveChange(&chg)
 			if s.Change != nil && s.Change.ID == chg.ID {
 				s.Change = &chg
@@ -489,6 +491,10 @@ func (s *State) activeGitIdentity() (string, string) {
 	if s.Change != nil && s.Change.Git != nil && s.Change.Git.Head != "" && s.Change.Git.Branch != "" {
 		return s.Change.Git.Head, s.Change.Git.Branch
 	}
+	return s.mainGitIdentity()
+}
+
+func (s *State) mainGitIdentity() (string, string) {
 	if s.Repository != nil && s.Repository.Head != "" && s.Repository.Branch != "" {
 		return s.Repository.Head, s.Repository.Branch
 	}

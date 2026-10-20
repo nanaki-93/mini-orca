@@ -316,33 +316,124 @@ type AgentItem struct {
 	FindingTargets []client.FindingTarget
 }
 
+// IsCompletedOrInactiveSession reports whether a change session has already finished or been canceled.
+func IsCompletedOrInactiveSession(chg *client.ChangeSession) bool {
+	if chg == nil {
+		return true
+	}
+	switch chg.State {
+	case "applied", "reverted", "undone", "canceled":
+		return true
+	}
+	if chg.Workflow != nil && chg.Workflow.Status == "canceled" {
+		return true
+	}
+	return false
+}
+
+// BuildWorktreeSpec generates a deterministic, collision-free branch name and .worktrees/<slug> path for a new issue fix.
+func BuildWorktreeSpec(seed *client.ChangeSeed, existing []client.GitWorktree) (branch, relPath string) {
+	rawTitle := "issue-fix"
+	if seed != nil && strings.TrimSpace(seed.Title) != "" {
+		rawTitle = seed.Title
+	}
+	slug := strings.Trim(nonAlphaNumPattern.ReplaceAllString(strings.ToLower(rawTitle), "-"), "-")
+	if len(slug) > 24 {
+		slug = strings.Trim(slug[:24], "-")
+	}
+	if slug == "" {
+		slug = "issue-fix"
+	}
+	var targets []client.FindingTarget
+	msg := rawTitle
+	if seed != nil {
+		targets = seed.FindingTargets
+		if seed.Message != "" {
+			msg = seed.Message
+		}
+	}
+	code := strings.ToLower(strings.TrimPrefix(GenerateCommitCode(rawTitle, msg, targets), "ORC-"))
+	if len(code) > 6 {
+		code = code[:6]
+	}
+	baseName := fmt.Sprintf("fix-%s-%s", slug, code)
+	candidateBranch := "orca/" + baseName
+	candidateRel := filepath.ToSlash(filepath.Join(".worktrees", baseName))
+	for suffix := 1; worktreeSpecCollides(existing, candidateBranch, candidateRel); suffix++ {
+		name := fmt.Sprintf("%s-%d", baseName, suffix+1)
+		candidateBranch = "orca/" + name
+		candidateRel = filepath.ToSlash(filepath.Join(".worktrees", name))
+	}
+	return candidateBranch, candidateRel
+}
+
+func worktreeSpecCollides(existing []client.GitWorktree, branch, relPath string) bool {
+	base := filepath.Base(relPath)
+	for _, wt := range existing {
+		if wt.Branch == branch || filepath.Base(wt.Path) == base {
+			return true
+		}
+	}
+	return false
+}
+
 // CollectAllAgentItems derives Agent Studio items from all tracked change sessions and Git worktrees.
 func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
+	items, seenIDs, seenWorktrees := collectSessionAgentItems(change, activeChanges, receipt, gitWS)
+	if shouldAppendPrimaryChange(change, len(items), seenIDs) {
+		if change.WorktreePath != "" {
+			seenWorktrees[change.WorktreePath] = true
+		}
+		items = append(items, buildAgentItemFromSession(change, receipt, gitWS))
+	}
+	return appendWorktreeAgentItems(items, gitWS, seenWorktrees)
+}
+
+func collectSessionAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) ([]AgentItem, map[string]bool, map[string]bool) {
 	var items []AgentItem
 	seenIDs := make(map[string]bool)
+	seenWorktrees := make(map[string]bool)
 	for _, chg := range activeChanges {
 		if chg == nil {
 			continue
 		}
-		cur := chg
-		if change != nil && change.ID != "" && chg.ID == change.ID {
-			cur = change
-		}
-		items = append(items, buildAgentItemFromSession(cur, receipt, gitWS))
+		cur := resolveCurrentSession(chg, change)
 		if cur.ID != "" {
 			seenIDs[cur.ID] = true
 		}
-	}
-	if change != nil && (len(items) == 0 || (change.ID != "" && !seenIDs[change.ID])) {
-		items = append(items, buildAgentItemFromSession(change, receipt, gitWS))
-	}
-	if gitWS != nil {
-		for _, wt := range gitWS.Worktrees {
-			if wt.Current || hasAgentPath(items, wt.Path) {
-				continue
-			}
-			items = append(items, buildAgentItemFromWorktree(wt))
+		if cur.WorktreePath != "" {
+			seenWorktrees[cur.WorktreePath] = true
 		}
+		if !IsCompletedOrInactiveSession(cur) {
+			items = append(items, buildAgentItemFromSession(cur, receipt, gitWS))
+		}
+	}
+	return items, seenIDs, seenWorktrees
+}
+
+func resolveCurrentSession(candidate, primary *client.ChangeSession) *client.ChangeSession {
+	if primary != nil && primary.ID != "" && candidate.ID == primary.ID {
+		return primary
+	}
+	return candidate
+}
+
+func shouldAppendPrimaryChange(change *client.ChangeSession, count int, seenIDs map[string]bool) bool {
+	if change == nil || IsCompletedOrInactiveSession(change) {
+		return false
+	}
+	return count == 0 || (change.ID != "" && !seenIDs[change.ID])
+}
+
+func appendWorktreeAgentItems(items []AgentItem, gitWS *client.GitWorkspace, seenWorktrees map[string]bool) []AgentItem {
+	if gitWS == nil {
+		return items
+	}
+	for _, wt := range gitWS.Worktrees {
+		if wt.Current || seenWorktrees[wt.Path] || hasAgentPath(items, wt.Path) {
+			continue
+		}
+		items = append(items, buildAgentItemFromWorktree(wt))
 	}
 	return items
 }

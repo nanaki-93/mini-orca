@@ -612,6 +612,7 @@ type ChangeSession struct {
 	ReviewedHash       string          `json:"reviewed_hash,omitempty"`
 	RepairAttempts     int             `json:"repair_attempts"`
 	Workflow           *ChangeWorkflow `json:"workflow,omitempty"`
+	WorktreePath       string          `json:"worktree_path,omitempty"`
 	UpdatedAt          string          `json:"updated_at"`
 }
 

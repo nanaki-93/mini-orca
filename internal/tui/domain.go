@@ -38,13 +38,25 @@ func isLocalPreviewChangeID(id string) bool {
 	return id == "agent-session" || (len(id) > 14 && id[:14] == "agent-session-")
 }
 
+// HasActiveProposal reports whether the TUI currently has an active, unapplied proposal.
+func (s *State) HasActiveProposal() bool {
+	return s.Change != nil && !domain.IsCompletedOrInactiveSession(s.Change)
+}
+
 func (s *State) upsertActiveChange(chg *ChangeSession) {
 	if chg == nil || chg.ID == "" || isLocalPreviewChangeID(chg.ID) {
+		return
+	}
+	if domain.IsCompletedOrInactiveSession(chg) {
+		s.removeActiveChangeByID(chg.ID)
 		return
 	}
 	cp := *chg
 	for i, existing := range s.ActiveChanges {
 		if existing != nil && existing.ID == chg.ID {
+			if cp.WorktreePath == "" {
+				cp.WorktreePath = existing.WorktreePath
+			}
 			s.ActiveChanges[i] = &cp
 			return
 		}
@@ -63,6 +75,58 @@ func (s *State) removeActiveChangeByID(id string) {
 		}
 	}
 	s.ActiveChanges = kept
+}
+
+func (s *State) removeWorktreeByPath(wtPath string) {
+	if wtPath == "" || s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
+		return
+	}
+	var kept []GitWorktree
+	for _, wt := range s.GitWorkspace.Worktrees {
+		if wt.Path != wtPath {
+			kept = append(kept, wt)
+		}
+	}
+	s.GitWorkspace.Worktrees = kept
+}
+
+func (s *State) archiveAndCompleteChange(chg *ChangeSession) {
+	if chg != nil && chg.ID != "" && !isLocalPreviewChangeID(chg.ID) {
+		entry := ChangeHistoryEntry{
+			ProjectIdentity: chg.ProjectIdentity,
+			ID:              chg.ID,
+			Kind:            chg.Kind,
+			Title:           chg.Title,
+			Revision:        chg.Revision,
+			Hash:            chg.Hash,
+			State:           chg.State,
+			Freshness:       chg.Freshness,
+			FindingTargets:  chg.FindingTargets,
+			Commit:          chg.Commit,
+			UpdatedAt:       chg.UpdatedAt,
+		}
+		updated := false
+		for i := range s.ChangeHistory {
+			if s.ChangeHistory[i].ID == entry.ID {
+				s.ChangeHistory[i] = entry
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			s.ChangeHistory = append([]ChangeHistoryEntry{entry}, s.ChangeHistory...)
+		}
+		s.removeActiveChangeByID(chg.ID)
+		s.removeWorktreeByPath(chg.WorktreePath)
+	}
+	s.Change = nil
+	for _, rem := range s.ActiveChanges {
+		if rem != nil && !domain.IsCompletedOrInactiveSession(rem) {
+			cp := *rem
+			s.Change = &cp
+			break
+		}
+	}
 }
 
 func (s *State) replacePreviewWithSession(chg *ChangeSession) {
@@ -117,4 +181,3 @@ func (s *State) syncSelectedIdxToCurrentChange() {
 		}
 	}
 }
-

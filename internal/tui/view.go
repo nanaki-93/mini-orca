@@ -156,7 +156,7 @@ func (s *State) renderWorkspaceFooter(th ansiTheme, panelW int, twoLines bool) [
 		runStatus = s.Run.Status
 	}
 	chgStatus := "IDLE"
-	if s.Change != nil && s.Change.State != "" {
+	if s.HasActiveProposal() && s.Change.State != "" {
 		chgStatus = s.Change.State
 	}
 	trust := th.statusBadge("TRUSTED")
@@ -282,7 +282,7 @@ func (s *State) renderSidebarPulse(th ansiTheme, width int) []string {
 		openVal = fmt.Sprintf("%s%d open%s", th.bold+th.amber, summary.TotalOpen, th.reset)
 	}
 	agentState := "IDLE"
-	if s.Change != nil && s.Change.State != "" {
+	if s.HasActiveProposal() && s.Change.State != "" {
 		agentState = s.Change.State
 	}
 	return []string{
@@ -400,7 +400,7 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 		}
 		parts = append(parts, runText)
 	}
-	if s.Change != nil {
+	if s.HasActiveProposal() {
 		added, removed, badge := domain.ClassifyDiffScope(s.Change.Changes)
 		parts = append(parts, fmt.Sprintf("Active Proposal: %s%s%s %s (%s+%d%s/%s-%d%s)",
 			th.bold, s.Change.Title, th.reset,
