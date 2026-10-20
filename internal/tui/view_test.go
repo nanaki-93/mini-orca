@@ -74,8 +74,8 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	for _, p := range pages {
 		s.Navigate(p)
 		frame := s.Render(120, 40)
-		if !strings.Contains(frame, "MINI-ORCA // TUI") {
-			t.Fatalf("expected status bar on page %s", p)
+		if got := strings.Count(frame, "MINI-ORCA // TUI"); got != 1 {
+			t.Fatalf("expected MINI-ORCA // TUI exactly once in header on page %s, got %d", p, got)
 		}
 		if !strings.Contains(frame, "┏") || !strings.Contains(frame, "┗") {
 			t.Fatalf("expected enterprise frame borders on page %s", p)

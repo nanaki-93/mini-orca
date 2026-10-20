@@ -355,11 +355,11 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	}
 	ver := ""
 	if s.Version != "" {
-		ver = th.muted + "v" + s.Version + " " + th.reset
+		ver = "  " + th.muted + "v" + s.Version + th.reset
 	}
 	content := fmt.Sprintf(
-		"  %sMINI-ORCA // TUI%s %s %s  %s%s%s   %sgit:%s %s%s%s   %strust:%s %s   %spalette:%s %s%s%s",
-		th.bold+th.accent, th.reset, ver, connBadge,
+		"  %s%s   %s%s%s   %sgit:%s %s%s%s   %strust:%s %s   %spalette:%s %s%s%s",
+		connBadge, ver,
 		th.bold+th.fg, projName, th.reset,
 		th.muted, th.reset, th.cyan, branch, dirty,
 		th.muted, th.reset, trust,
