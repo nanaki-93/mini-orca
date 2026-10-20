@@ -148,12 +148,14 @@ func (th ansiTheme) statusBadge(state string) string {
 		upper = "IDLE"
 	}
 	switch upper {
-	case "PASSED", "READY", "DONE", "FIXED", "APPLIED", "CURRENT", "ONLINE", "TRUSTED", "INCL", "COMPLETED", "COMPLETED_EMPTY", "CLEAN":
+	case "PASSED", "READY", "CHECKED", "DONE", "FIXED", "APPLIED", "MERGED", "CURRENT", "ONLINE", "TRUSTED", "INCL", "COMPLETED", "COMPLETED_EMPTY", "CLEAN", "APPROVE", "APPROVED", "GRADUATED", "CREATED":
 		return th.green + "[" + upper + "]" + th.reset
-	case "FAILED", "ERROR", "CRITICAL", "EXCL", "MISSING", "DIRTY":
+	case "FAILED", "ERROR", "CRITICAL", "EXCL", "MISSING", "DIRTY", "CHANGES_REQUESTED", "REJECTED", "CONFLICTS":
 		return th.critBg + "[" + upper + "]" + th.reset
-	case "RUNNING", "WORKING", "IN_PROGRESS", "PAUSED", "MERGEABLE", "UNTRUSTED":
+	case "RUNNING", "WORKING", "IN_PROGRESS", "PAUSED", "MERGEABLE", "UNTRUSTED", "WAITING", "AWAITING_HUMAN_REVIEW", "REVIEW", "STALE", "INTERRUPTED", "CANDIDATE", "CANCELING", "PAUSING":
 		return th.amber + "[" + upper + "]" + th.reset
+	case "IDLE", "PENDING", "QUEUED", "BLOCKED", "SKIPPED", "CANCELED", "STOPPED", "REVERTED", "UNDONE", "DISMISSED", "DISCARDED", "UNAVAILABLE":
+		return th.muted + "[" + upper + "]" + th.reset
 	default:
 		return th.cyan + "[" + upper + "]" + th.reset
 	}

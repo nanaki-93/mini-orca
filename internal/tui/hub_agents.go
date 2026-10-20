@@ -15,13 +15,15 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	}
 	panelW := adaptivePanelWidth(width)
 	items := s.AgentItems()
-	activeStage := 1
+	activeStage := 0
 	if len(items) > 0 {
 		activeStage = items[s.ClampedIdx()].StageNumber
 	}
-	pipelineLines := []string{renderPipelineStepper(th, activeStage)}
-	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
-		pipelineLines = append(pipelineLines, stageSummary)
+	pipelineLines := []string{renderPipelineStepper(th, activeStage, s.Change)}
+	if len(items) > 0 {
+		if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
+			pipelineLines = append(pipelineLines, stageSummary)
+		}
 	}
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · 4-STAGE AUTONOMOUS PIPELINE", "Guarded code generation & verification")
 	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, pipelineLines)...)
@@ -135,13 +137,9 @@ func (s *State) collectWorkflowStageErrorLines(th ansiTheme, chg *ChangeSession)
 		if st.Status != "failed" && st.Status != "interrupted" && st.Status != "stale" && strings.TrimSpace(st.Reason) == "" {
 			continue
 		}
-		modelName := "default"
-		if st.Model != nil && st.Model.Model != "" {
-			modelName = st.Model.Model
-		}
-		stageLine := fmt.Sprintf("%sStage:%s     %s%d. %s%s %s (%smodel:%s%s)",
+		stageLine := fmt.Sprintf("%sStage:%s     %s%d. %s%s %s",
 			th.muted, th.reset, th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
-			th.statusBadge(st.Status), th.cyan, modelName, th.reset)
+			th.statusBadge(st.Status))
 		out = append(out, stageLine)
 		if strings.TrimSpace(st.Reason) != "" {
 			hasStageReason = true
@@ -284,15 +282,26 @@ func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
 			break
 		}
 		label := shortNames[idx]
-		if st.Model != nil && st.Model.Model != "" {
-			label += "(" + st.Model.Model + ")"
-		}
-		parts = append(parts, fmt.Sprintf("%s%s%s %s", th.muted, label, th.reset, th.statusBadge(st.Status)))
+		stStatus := normalizePipelineStageBadge(idx+1, st.Status, s.Change)
+		parts = append(parts, fmt.Sprintf("%s%s%s %s", th.muted, label, th.reset, th.statusBadge(stStatus)))
 	}
 	if s.Change.Workflow.AutoRepairAttempts > 0 {
 		parts = append(parts, fmt.Sprintf("%srepair:#%d%s", th.amber, s.Change.Workflow.AutoRepairAttempts, th.reset))
 	}
 	return strings.Join(parts, "  ")
+}
+
+func normalizePipelineStageBadge(stageNum int, rawStatus string, chg *ChangeSession) string {
+	st := strings.ToLower(strings.TrimSpace(rawStatus))
+	if stageNum == 4 && (st == "waiting" || st == "awaiting_human_review") {
+		if chg != nil && (chg.State == "ready" || chg.State == "checked" || (chg.Workflow != nil && chg.Workflow.Status == "awaiting_human_review")) {
+			return "READY"
+		}
+	}
+	if st == "" {
+		return "PENDING"
+	}
+	return strings.ToUpper(st)
 }
 
 func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, _ int) string {
@@ -344,7 +353,7 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	}
 }
 
-func renderPipelineStepper(th ansiTheme, activeStage int) string {
+func renderPipelineStepper(th ansiTheme, activeStage int, chg *ChangeSession) string {
 	stages := []struct {
 		num   int
 		label string
@@ -356,16 +365,88 @@ func renderPipelineStepper(th ansiTheme, activeStage int) string {
 	}
 	var parts []string
 	for _, st := range stages {
-		switch {
-		case st.num == activeStage:
-			parts = append(parts, fmt.Sprintf("%s %s %s", th.infoBg, st.label, th.reset))
-		case st.num < activeStage:
-			parts = append(parts, fmt.Sprintf("%s[%s]%s", th.green, st.label, th.reset))
-		default:
-			parts = append(parts, fmt.Sprintf("%s[%s]%s", th.muted, st.label, th.reset))
-		}
+		stStatus := resolvePipelineStageStatus(activeStage, chg, st.num)
+		parts = append(parts, formatPipelineStepperNode(th, st.label, stStatus, st.num == activeStage))
 	}
 	return strings.Join(parts, th.border+" ──▶ "+th.reset)
+}
+
+func resolvePipelineStageStatus(activeStage int, chg *ChangeSession, stageNum int) string {
+	if activeStage <= 0 {
+		return "idle"
+	}
+	if fromWF := stageStatusFromWorkflow(chg, stageNum); fromWF != "" {
+		return fromWF
+	}
+	return stageStatusFallback(activeStage, chg, stageNum)
+}
+
+func stageStatusFromWorkflow(chg *ChangeSession, stageNum int) string {
+	if chg == nil || chg.Workflow == nil || stageNum-1 >= len(chg.Workflow.Stages) {
+		return ""
+	}
+	raw := strings.ToLower(strings.TrimSpace(chg.Workflow.Stages[stageNum-1].Status))
+	if stageNum == 4 && isChangeReadyForReview(chg, raw) {
+		return "ready"
+	}
+	return raw
+}
+
+func stageStatusFallback(activeStage int, chg *ChangeSession, stageNum int) string {
+	if stageNum < activeStage {
+		return "completed"
+	}
+	if stageNum > activeStage {
+		return "pending"
+	}
+	if isChangeFailedOrRejected(chg) {
+		return "failed"
+	}
+	if stageNum == 4 || isChangeReadyForReview(chg, "") {
+		return "ready"
+	}
+	return "running"
+}
+
+func isChangeReadyForReview(chg *ChangeSession, raw string) bool {
+	if raw == "waiting" || raw == "awaiting_human_review" {
+		return true
+	}
+	if chg == nil {
+		return false
+	}
+	if chg.State == "ready" || chg.State == "checked" {
+		return true
+	}
+	return chg.Workflow != nil && chg.Workflow.Status == "awaiting_human_review"
+}
+
+func isChangeFailedOrRejected(chg *ChangeSession) bool {
+	if chg == nil {
+		return false
+	}
+	if chg.State == "failed" {
+		return true
+	}
+	return chg.Workflow != nil && (chg.Workflow.Status == "failed" || chg.Workflow.Status == "changes_requested")
+}
+
+func formatPipelineStepperNode(th ansiTheme, label, stStatus string, isActive bool) string {
+	switch strings.ToLower(strings.TrimSpace(stStatus)) {
+	case "completed", "passed", "approve", "approved", "applied":
+		if isActive {
+			return fmt.Sprintf("%s %s %s", th.okBg, label, th.reset)
+		}
+		return fmt.Sprintf("%s[%s]%s", th.green, label, th.reset)
+	case "ready", "checked", "awaiting_human_review":
+		return fmt.Sprintf("%s %s %s", th.okBg, label, th.reset)
+	case "failed", "error", "changes_requested", "rejected", "stale", "interrupted":
+		return fmt.Sprintf("%s %s %s", th.critBg, label, th.reset)
+	case "running", "working", "in_progress", "waiting", "canceling":
+		return fmt.Sprintf("%s %s %s", th.warnBg, label, th.reset)
+	default:
+		return fmt.Sprintf("%s[%s]%s", th.muted, label, th.reset)
+	}
 }
 
 func (s *State) renderEditorPage(th ansiTheme, width int) []string {

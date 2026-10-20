@@ -1591,7 +1591,6 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	for _, want := range []string{
 		"ACTIVE AGENT MISSION CONTROL",
 		"2. Verify & Test",
-		"qwen2.5-coder",
 		"go test failed with exit code 1",
 		"--- FAIL: TestParse",
 		"Check failure in go test",
@@ -1599,6 +1598,9 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("expected PageAgents error diagnostics panel to contain %q:\n%s", want, frame)
 		}
+	}
+	if strings.Contains(frame, "qwen2.5-coder") {
+		t.Fatalf("expected Pipeline page to omit model names, got:\n%s", frame)
 	}
 
 	// Pressing Enter on a failed workflow opens the full Workflow Debug & Check Inspector instead of PageEditor
@@ -1609,6 +1611,7 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	debugFrame := s.Render(120, 44)
 	for _, want := range []string{
 		"WORKFLOW DEBUG & CHECK INSPECTOR",
+		"qwen2.5-coder",
 		"└─ Error:",
 		"go test failed with exit code 1",
 		"parser_test.go:42: expected nil error, got EOF",
