@@ -24,7 +24,7 @@ func (s *Service) gitMutationPreflight(ctx context.Context, request GitMutationR
 		expected.MergeHead = ""
 		expected.Conflicts = nil
 	}
-	if err := requireGitIdentity(&expected, request.GitIdentity); err != nil {
+	if err := requireMatchingGitIdentity(&expected, request.GitIdentity); err != nil {
 		return nil, err
 	}
 	if err := s.requireProjectExecutionTrust(request.ProjectRevision); err != nil {

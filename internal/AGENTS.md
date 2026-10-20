@@ -14,12 +14,13 @@ the backend guide for changes to `cmd/`.
 - Keep shared workflow policy in `app` and project facts/composition in `project`.
   Place domain-specific logic in its dedicated subpackage rather than expanding root
   packages (`internal/project/diff`, `internal/project/symbols`, `internal/project/insight`,
-  `internal/project/handbook`, `internal/project/securityrules`; `internal/app/archcheck`,
-  `internal/app/checkexec`, `internal/app/gitops`, `internal/app/features`;
-  `internal/tui/tuiclient`, `internal/tui/tuitheme`, `internal/tui/tuidomain`).
-  Subpackages must respect the acyclic import rules enforced by `internal/app/archcheck`.
+  `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`;
+  `internal/app/archgate`, `internal/app/sandbox`, `internal/app/changes`,
+  `internal/app/gitops`, `internal/app/features`;
+  `internal/tui/client`, `internal/tui/theme`, `internal/tui/domain`).
+  Subpackages must respect the acyclic import rules enforced by `internal/app/archgate`.
 - For a wire-contract change, update Go request/response types, daemon route
-  registrations, TUI wire models (`internal/tui/tuiclient`), `docs/openapi.yaml` and
+  registrations, TUI wire models (`internal/tui/client`), `docs/openapi.yaml` and
   `docs/api-contract.md` as applicable. Cover both successful and rejected requests
   in handler/client contract tests. Never silently relax guards for convenience.
 
@@ -30,7 +31,7 @@ the backend guide for changes to `cmd/`.
 - Carry project ID/revision, file hash and proposal/run identity through asynchronous
   operations. Recheck before publishing results or changing source; a late result
   must not become evidence for a different project, file, proposal or run.
-- Preserve the guarded Apply/Undo workflow in `app/change_apply.go`. Apply consumes a
+- Preserve the guarded Apply/Undo workflow in `app/change_apply_undo.go`. Apply consumes a
   stored, checked proposal identity, not arbitrary request source. Revising a proposal
   invalidates its previous checks; Undo requires the expected post-Apply hash.
 - Use existing atomic storage primitives and domain stores. Preserve permissions,

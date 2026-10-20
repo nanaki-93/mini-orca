@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 )
 
 // Command runs Git in root without inheriting host Git overrides, running hooks,
@@ -30,16 +30,16 @@ func Command(ctx context.Context, root, index string, input io.Reader, args ...s
 		args = append([]string{"diff", "--no-ext-diff", "--no-textconv"}, args[1:]...)
 	}
 	command := exec.CommandContext(timed, "git", append(flags, args...)...)
-	command.Env = append(checkexec.ChildEnvironment(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_MERGE_AUTOEDIT=no", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C")
+	command.Env = append(sandbox.ChildEnvironment(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_MERGE_AUTOEDIT=no", "GIT_LITERAL_PATHSPECS=1", "LC_ALL=C")
 	if index != "" {
 		command.Env = append(command.Env, "GIT_INDEX_FILE="+index)
 	}
-	if err := checkexec.ConfigureCommand(command); err != nil {
+	if err := sandbox.ConfigureCommand(command); err != nil {
 		return "", err
 	}
 	command.WaitDelay = time.Second
 	command.Stdin = input
-	out, diagnostics := checkexec.NewBoundedOutput(1024*1024), checkexec.NewBoundedOutput(8192)
+	out, diagnostics := sandbox.NewBoundedOutput(1024*1024), sandbox.NewBoundedOutput(8192)
 	command.Stdout, command.Stderr = out, diagnostics
 	err := command.Run()
 	if timed.Err() != nil {

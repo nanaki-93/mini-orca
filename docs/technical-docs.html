@@ -53,7 +53,7 @@
           <div class="flex items-center gap-2 text-xs text-[var(--muted-foreground)] font-mono">
             <span>3 Binaries</span>
             <span>·</span>
-            <span>19 Packages</span>
+            <span>21 Packages</span>
             <span>·</span>
             <span>5 TUI Hubs</span>
             <span>·</span>
@@ -166,7 +166,7 @@
                   <span class="font-mono text-xs font-bold">internal/app</span>
                   <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)]">Orchestrator</span>
                 </div>
-                <p class="text-xs text-[var(--muted-foreground)] mt-1">Unified analysis runs, 4-stage change workflows, Apply/Undo journals</p>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Unified analysis runs, 4-stage change pipelines, Apply/Undo journals</p>
               </button>
               <button data-topo="project" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
                 <div class="flex items-center justify-between">
@@ -181,8 +181,8 @@
 
             <div class="text-xs font-mono font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Execution, Transports &amp; Durable Storage</div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <button data-topo="checkexec" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
-                <div class="font-mono text-xs font-bold">checkexec + gitops</div>
+              <button data-topo="sandbox" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="font-mono text-xs font-bold">sandbox + gitops</div>
                 <p class="text-xs text-[var(--muted-foreground)] mt-1">Copied temp workspace, Unix pgrp, .worktrees/ &amp; CAS commits</p>
               </button>
               <button data-topo="llm" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
@@ -236,9 +236,9 @@
       <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h2 class="text-lg font-bold">Acyclic Package Ownership &amp; Import Boundary Matrix (<code class="font-mono">internal/app/archcheck</code>)</h2>
+            <h2 class="text-lg font-bold">Acyclic Package Ownership &amp; Import Boundary Matrix (<code class="font-mono">internal/app/archgate</code>)</h2>
             <p class="text-xs text-[var(--muted-foreground)]">
-              Mini-Orca enforces strict acyclic import rules and complexity budgets (<code class="font-mono">maxFunctionComplexity = 15</code>) both in CI (<code class="font-mono">scripts/quality.sh</code>) and on every AI proposal check (<code class="font-mono">archcheck.ChangeArchitectureAndComplexityChecks</code>). Select any package to inspect its boundary contract.
+              Mini-Orca enforces strict acyclic import rules and complexity budgets (<code class="font-mono">maxFunctionComplexity = 15</code>) both in CI (<code class="font-mono">scripts/quality.sh</code>) and on every AI proposal check (<code class="font-mono">archgate.ChangeArchitectureAndComplexityChecks</code>). Select any package to inspect its boundary contract.
             </p>
           </div>
         </div>
@@ -258,9 +258,9 @@
 
       <!-- Interactive Import Rule Checker -->
       <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
-        <h3 class="text-base font-bold">Interactive <code class="font-mono">archcheck</code> Import Boundary Simulator</h3>
+        <h3 class="text-base font-bold">Interactive <code class="font-mono">archgate</code> Import Boundary Simulator</h3>
         <p class="text-xs text-[var(--muted-foreground)]">
-          Test whether a hypothetical Go import between two repository packages is permitted or rejected by <code class="font-mono">defaultArchitectureImportRules</code> in <code class="font-mono">internal/app/archcheck/archcheck.go</code>.
+          Test whether a hypothetical Go import between two repository packages is permitted or rejected by <code class="font-mono">defaultArchitectureImportRules</code> in <code class="font-mono">internal/app/archgate/archgate.go</code>.
         </p>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           <div>
@@ -354,7 +354,7 @@
 
         <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="text-base font-bold">Colon Command Directory (<code class="font-mono">internal/tui/commands.go</code>)</h3>
+            <h3 class="text-base font-bold">Colon Command Directory (<code class="font-mono">internal/tui/colon_commands*.go</code>)</h3>
             <span class="text-xs text-[var(--muted-foreground)]">Click any command to run in simulator</span>
           </div>
           <div id="colon-cmd-list" class="space-y-1.5 max-h-80 overflow-y-auto pr-1 code-scroll">
@@ -371,9 +371,9 @@
       <!-- 4-Stage Change & Autonomous Agent Pipeline InteractiveStepper -->
       <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
         <div>
-          <h2 class="text-lg font-bold">4-Stage Verified Change &amp; Autonomous Agent Pipeline (<code class="font-mono">internal/app/change_workflow.go</code>)</h2>
+          <h2 class="text-lg font-bold">4-Stage Verified Change &amp; Autonomous Agent Pipeline (<code class="font-mono">internal/app/change_pipeline*.go</code>)</h2>
           <p class="text-xs text-[var(--muted-foreground)]">
-            Every change session captures 1–8 explicit Go/Markdown paths and up to 16 <code class="font-mono">finding_targets</code>. Only one autonomous change workflow runs per checkout at a time (30-minute total deadline). Click each stage to inspect its model profile, guards, and failure transitions.
+            Every change session captures 1–8 explicit Go/Markdown paths and up to 16 <code class="font-mono">finding_targets</code>. Only one autonomous change pipeline runs per checkout at a time (30-minute total deadline). Click each stage to inspect its model profile, guards, and failure transitions.
           </p>
         </div>
 
@@ -386,7 +386,7 @@
           <button data-stage="1" class="stage-btn text-left p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)]">
             <div class="text-xs font-mono font-bold text-[var(--muted-foreground)]">STAGE 02</div>
             <div class="text-sm font-bold mt-0.5">Verify &amp; Test</div>
-            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Default: bug + checkexec</div>
+            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Default: bug + sandbox</div>
           </button>
           <button data-stage="2" class="stage-btn text-left p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)]">
             <div class="text-xs font-mono font-bold text-[var(--muted-foreground)]">STAGE 03</div>
@@ -847,12 +847,17 @@
           "cmd/tui/main.go",
           "internal/tui/state.go",
           "internal/tui/keys.go",
-          "internal/tui/commands.go",
-          "internal/tui/render_hubs.go",
+          "internal/tui/colon_commands.go",
+          "internal/tui/colon_commands_actions.go",
+          "internal/tui/hub_overview.go",
+          "internal/tui/hub_agents.go",
+          "internal/tui/hub_issues.go",
+          "internal/tui/hub_architecture.go",
+          "internal/tui/hub_settings.go",
           "internal/tui/diff_view.go",
-          "internal/tui/tuiclient/client.go",
-          "internal/tui/tuidomain/domain.go",
-          "internal/tui/tuitheme/graphics.go"
+          "internal/tui/client/client.go",
+          "internal/tui/domain/domain.go",
+          "internal/tui/theme/graphics.go"
         ],
         summary: "Deterministic terminal state machine rendered with ANSI / Lip Gloss primitives across 5 canonical hubs and 20 sub-views. Connects to http://127.0.0.1:9090 (or MINI_ORCA_URL / -url) without sending a browser Origin header.",
         invariants: [
@@ -870,7 +875,13 @@
           "internal/api/local_policy.go",
           "internal/api/request.go",
           "internal/api/error.go",
-          "internal/api/handlers/*.go"
+          "internal/api/response.go",
+          "internal/api/handlers/project_lifecycle_handler.go",
+          "internal/api/handlers/findings_handler.go",
+          "internal/api/handlers/file_review_handler.go",
+          "internal/api/handlers/scan_trust_handler.go",
+          "internal/api/handlers/instructions_handler.go",
+          "internal/api/handlers/change_pipeline_handler.go"
         ],
         summary: "Registers all 63 live routes behind api.LocalOnly and the worktree router. Enforces strict JSON decoding (unknown fields & trailing tokens rejected, bounded body sizes) and structured error envelopes ({type, message, user_message}).",
         invariants: [
@@ -886,14 +897,18 @@
         files: [
           "internal/app/service.go",
           "internal/app/analysis_run.go",
+          "internal/app/analysis_queue.go",
+          "internal/app/analysis_stage_runner.go",
+          "internal/app/semantic_review.go",
           "internal/app/change_session.go",
-          "internal/app/change_workflow.go",
-          "internal/app/change_apply.go",
+          "internal/app/change_pipeline.go",
+          "internal/app/change_apply_undo.go",
           "internal/app/change_commit.go",
           "internal/app/execution_trust.go",
-          "internal/app/worktree_service.go"
+          "internal/app/worktree_service.go",
+          "internal/app/changes/source_io.go"
         ],
-        summary: "Coordinates project lifecycle, unified analysis runs, 4-stage change workflows, isolated Go scans, declaration explanations, feature discovery, and guarded Apply/Undo/Commit operations.",
+        summary: "Coordinates project lifecycle, unified analysis runs, 4-stage change pipelines, isolated Go scans, declaration explanations, feature discovery, and guarded Apply/Undo/Commit operations.",
         invariants: [
           "Rechecks project_id, project_revision, base_file_hash, policy fingerprint, and proposal hash before and after every asynchronous operation.",
           "Consumes provider consent and security_review intent per admission; never persists reusable consent into run.json.",
@@ -907,7 +922,11 @@
           "internal/project/manager.go",
           "internal/project/index.go",
           "internal/project/context_policy.go",
+          "internal/project/context_builder.go",
+          "internal/project/path_safety.go",
           "internal/project/instructions.go",
+          "internal/project/instructions/catalog.go",
+          "internal/project/instructions/presets.go",
           "internal/project/diff/diff.go",
           "internal/project/symbols/*.go",
           "internal/project/handbook/handbook.go",
@@ -921,12 +940,13 @@
           "Symlinks and paths escaping the project root are rejected before any read or write."
         ]
       },
-      checkexec: {
-        title: "internal/app/checkexec & gitops — Isolated Execution & Git",
+      sandbox: {
+        title: "internal/app/sandbox & gitops — Isolated Execution & Git",
         badge: "Execution & Git",
         files: [
-          "internal/app/checkexec/workspace.go",
-          "internal/app/checkexec/check_command_unix.go",
+          "internal/app/sandbox/runner.go",
+          "internal/app/sandbox/workspace.go",
+          "internal/app/sandbox/process_unix.go",
           "internal/app/gitops/repository.go",
           "internal/app/gitops/worktrees.go",
           "internal/app/gitops/merge.go",
@@ -1009,7 +1029,7 @@
     }
 
     // =========================================================================
-    // 2. PACKAGE BOUNDARIES & ARCHCHECK DATA (Section 2)
+    // 2. PACKAGE BOUNDARIES & ARCHGATE DATA (Section 2)
     // =========================================================================
     const PACKAGES = [
       {
@@ -1037,113 +1057,127 @@
         path: "internal/api",
         layer: "HTTP Boundary",
         summary: "Loopback/origin protection (LocalOnly), strict JSON decoding, size limits, and structured error responses ({type, message, user_message}).",
-        files: ["local_policy.go", "request.go", "error.go", "util.go", "handlers/*.go"],
+        files: ["local_policy.go", "request.go", "error.go", "response.go", "handlers/project_lifecycle_handler.go", "handlers/findings_handler.go", "handlers/file_review_handler.go", "handlers/scan_trust_handler.go", "handlers/instructions_handler.go", "handlers/change_pipeline_handler.go"],
         forbidden: ["internal/storage", "internal/llm", "internal/tui"]
       },
       {
         path: "internal/app",
         layer: "Application Orchestration",
-        summary: "Workflow orchestration, unified analysis controller, 4-stage change/agent sessions, guarded Apply/Undo/Commit, model catalog, and SSE events.",
-        files: ["service.go", "analysis_run*.go", "analysis_selection*.go", "change_*.go", "security_review*.go", "performance_review*.go", "execution_trust.go"],
+        summary: "Workflow orchestration, unified analysis controller, 4-stage change/agent pipelines, guarded Apply/Undo/Commit, model catalog, and SSE events.",
+        files: ["service.go", "analysis_run*.go", "analysis_queue*.go", "analysis_stage_runner.go", "semantic_review*.go", "change_pipeline*.go", "change_apply_undo.go", "security_review*.go", "performance_review*.go", "execution_trust.go"],
         forbidden: ["internal/api", "internal/tui"]
       },
       {
-        path: "internal/app/archcheck",
+        path: "internal/app/archgate",
         layer: "App Subpackage",
         summary: "Enforces acyclic import rules, cyclomatic complexity (<= 15), function/file line budgets, and codebase hygiene checks on proposed edits.",
-        files: ["archcheck.go", "hygiene.go"],
-        forbidden: ["internal/api", "internal/tui", "internal/app/checkexec", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
+        files: ["archgate.go", "secret_hygiene.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/sandbox", "internal/app/changes", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
       },
       {
-        path: "internal/app/checkexec",
+        path: "internal/app/sandbox",
         layer: "App Subpackage",
         summary: "Creates bounded temporary copied workspaces and executes fixed-argv Go parser/vet/test checks with Unix process-group ownership.",
-        files: ["checkexec.go", "workspace.go", "bootstrap.go", "check_command_unix.go", "check_command_unsupported.go"],
-        forbidden: ["internal/api", "internal/tui", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
+        files: ["runner.go", "workspace.go", "bootstrap.go", "process_unix.go", "process_unsupported.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/changes", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
+      },
+      {
+        path: "internal/app/changes",
+        layer: "App Subpackage",
+        summary: "Pure change source IO, SHA-256 content hashing, file language classification, and .mini-orca/changes/ metadata path helpers.",
+        files: ["source_io.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/archgate", "internal/app/sandbox", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
       },
       {
         path: "internal/app/gitops",
         layer: "App Subpackage",
         summary: "Guarded Git repository inspection, .worktrees/ management, clean branch switching, merge preview/merge/abort, and private-index git commit-tree.",
         files: ["command.go", "repository.go", "worktrees.go", "merge.go", "mutation.go"],
-        forbidden: ["internal/api", "internal/tui", "internal/app/archcheck", "internal/app/features", "internal/llm", "internal/storage"]
+        forbidden: ["internal/api", "internal/tui", "internal/app/archgate", "internal/app/changes", "internal/app/features", "internal/llm", "internal/storage"]
       },
       {
         path: "internal/app/features",
         layer: "App Subpackage",
         summary: "Parses structured feature suggestions, normalizes titles for duplicate detection, and manages additive schema_version 2 history (64 KiB cap).",
         files: ["suggestions.go", "history.go"],
-        forbidden: ["internal/api", "internal/tui", "internal/app/archcheck", "internal/app/gitops"]
+        forbidden: ["internal/api", "internal/tui", "internal/app/archgate", "internal/app/changes", "internal/app/gitops"]
       },
       {
         path: "internal/project",
         layer: "Domain Intelligence",
         summary: "Project indexing, .gitignore/.mini-orcaignore context policy v2, bounded context composition, AGENTS.md hierarchy/presets, and finding triage/completion.",
-        files: ["manager.go", "index.go", "context.go", "context_policy.go", "ignore.go", "instructions.go", "findings.go", "finding_completion.go"],
+        files: ["manager.go", "index.go", "context_builder.go", "context_policy.go", "ignore_rules.go", "path_safety.go", "instructions.go", "project_overview.go", "architecture_overview_report.go", "semantic_review_store.go", "performance_review_store.go", "security_review_store.go", "findings.go", "finding_completion.go"],
         forbidden: ["internal/app", "internal/api", "internal/tui"]
+      },
+      {
+        path: "internal/project/instructions",
+        layer: "Project Subpackage",
+        summary: "Curated AGENTS.md rule catalog and evidence-matched preset suggestion builder.",
+        files: ["catalog.go", "presets.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
       },
       {
         path: "internal/project/diff",
         layer: "Project Subpackage",
         summary: "Computes unified diffs, aligns unchanged lines between hunks, preserves literal/Markdown whitespace diffs, and evaluates symbol impact.",
         files: ["diff.go"],
-        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"]
       },
       {
         path: "internal/project/symbols",
         layer: "Project Subpackage",
         summary: "Detects 35+ languages and extracts exact Go AST symbols/imports plus conservative multi-language symbol spans within the 1 MiB limit.",
         files: ["language.go", "go_symbols.go", "generic_symbols.go"],
-        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"]
       },
       {
         path: "internal/project/insight",
         layer: "Project Subpackage",
         summary: "Validates structured EngineeringInsight records and bug task specifications.",
         files: ["engineering_insight.go", "bug_task_spec.go"],
-        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"]
       },
       {
         path: "internal/project/handbook",
         layer: "Project Subpackage",
         summary: "Synthesizes language-agnostic C4/Arc42/ADR ProjectDocsReport (.mini-orca/project-docs.json) and persists ProjectAnalysisReport.",
         files: ["handbook.go"],
-        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/securityrules", "internal/llm"]
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/securityrules", "internal/project/instructions", "internal/llm"]
       },
       {
         path: "internal/project/securityrules",
         layer: "Project Subpackage",
         summary: "Deterministic Go AST security rule scanner (go-rules-v1: go.tls.insecure-skip-verify & go.shell.dynamic-command).",
         files: ["security_rules.go"],
-        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/storage", "internal/llm"]
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/project/instructions", "internal/storage", "internal/llm"]
       },
       {
         path: "internal/tui",
         layer: "Terminal UI",
         summary: "5-hub TUI state machine, modal vim key handler, :command interpreter, diff viewer, and Lip Gloss hub renderers.",
-        files: ["state.go", "keys.go", "commands.go", "render_hubs.go", "diff_view.go", "view.go", "terminal.go"],
+        files: ["state.go", "keys.go", "colon_commands.go", "colon_commands_actions.go", "hub_overview.go", "hub_agents.go", "hub_issues.go", "hub_architecture.go", "hub_settings.go", "diff_view.go", "view.go", "terminal_loop.go", "daemon_actions.go", "sse_events.go", "theme_styles.go"],
         forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"]
       },
       {
-        path: "internal/tui/tuiclient",
+        path: "internal/tui/client",
         layer: "TUI Subpackage",
         summary: "Guarded loopback HTTP client, SSE event stream reader, and TUI wire DTOs.",
         files: ["client.go", "models.go"],
-        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuitheme", "internal/tui/tuidomain"]
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/theme", "internal/tui/domain"]
       },
       {
-        path: "internal/tui/tuidomain",
+        path: "internal/tui/domain",
         layer: "TUI Subpackage",
         summary: "Pure TUI domain models, issue filtering, diff hunk formatting, and model preset helpers.",
         files: ["domain.go"],
-        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuitheme"]
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/theme"]
       },
       {
-        path: "internal/tui/tuitheme",
+        path: "internal/tui/theme",
         layer: "TUI Subpackage",
         summary: "4 terminal color palettes (Tokyo, CRT Green, Amber, Paper) and ANSI / Lip Gloss layout primitives.",
         files: ["graphics.go"],
-        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuiclient", "internal/tui/tuidomain"]
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/client", "internal/tui/domain"]
       },
       {
         path: "internal/llm",
@@ -1170,7 +1204,7 @@
         path: "internal/insighteval",
         layer: "Evaluation Runner",
         summary: "Offline evaluation receipt validation, lock management, and authorized development/qualification campaign state.",
-        files: ["evaluation.go", "runner.go", "runner_lock_unix.go", "runner_lock_windows.go"],
+        files: ["evaluation.go", "runner.go", "campaign_collect.go", "campaign_development.go", "campaign_scoring.go", "runner_lock_unix.go", "runner_lock_windows.go"],
         forbidden: []
       }
     ];
@@ -1203,7 +1237,7 @@
           </div>
         </div>
         <div class="space-y-1.5">
-          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Forbidden Imports (Enforced by internal/app/archcheck)</div>
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Forbidden Imports (Enforced by internal/app/archgate)</div>
           ${pkg.forbidden.length === 0
             ? `<div class="text-xs font-mono text-[var(--muted-foreground)] p-2.5 rounded bg-[var(--card)] border border-[var(--border)]">Leaf / Entrypoint package — follows standard Go acyclic graph rules.</div>`
             : `<div class="flex flex-wrap gap-1.5">${pkg.forbidden.map(f => `<code class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">✗ ${f}</code>`).join("")}</div>`
@@ -1232,26 +1266,28 @@
         const rules = [
           { prefix: "internal/api", forbidden: ["internal/storage", "internal/llm", "internal/tui"] },
           { prefix: "internal/project", forbidden: ["internal/app", "internal/api", "internal/tui"] },
-          { prefix: "internal/project/diff", forbidden: ["internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
-          { prefix: "internal/project/symbols", forbidden: ["internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
-          { prefix: "internal/project/insight", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
-          { prefix: "internal/project/handbook", forbidden: ["internal/project/diff", "internal/project/securityrules", "internal/llm"] },
-          { prefix: "internal/project/securityrules", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/instructions", forbidden: ["internal/project/diff", "internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/diff", forbidden: ["internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/symbols", forbidden: ["internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/insight", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/handbook", forbidden: ["internal/project/diff", "internal/project/securityrules", "internal/project/instructions", "internal/llm"] },
+          { prefix: "internal/project/securityrules", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/project/instructions", "internal/storage", "internal/llm"] },
           { prefix: "internal/app", forbidden: ["internal/api", "internal/tui"] },
-          { prefix: "internal/app/archcheck", forbidden: ["internal/app/checkexec", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
-          { prefix: "internal/app/checkexec", forbidden: ["internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
-          { prefix: "internal/app/gitops", forbidden: ["internal/app/archcheck", "internal/app/features", "internal/llm", "internal/storage"] },
-          { prefix: "internal/app/features", forbidden: ["internal/app/archcheck", "internal/app/gitops"] },
+          { prefix: "internal/app/archgate", forbidden: ["internal/app/sandbox", "internal/app/changes", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/sandbox", forbidden: ["internal/app/changes", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/changes", forbidden: ["internal/app/archgate", "internal/app/sandbox", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/gitops", forbidden: ["internal/app/archgate", "internal/app/changes", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/features", forbidden: ["internal/app/archgate", "internal/app/changes", "internal/app/gitops"] },
           { prefix: "internal/tui", forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"] },
-          { prefix: "internal/tui/tuiclient", forbidden: ["internal/tui/tuitheme", "internal/tui/tuidomain"] },
-          { prefix: "internal/tui/tuitheme", forbidden: ["internal/tui/tuiclient", "internal/tui/tuidomain"] },
-          { prefix: "internal/tui/tuidomain", forbidden: ["internal/tui/tuitheme"] }
+          { prefix: "internal/tui/client", forbidden: ["internal/tui/theme", "internal/tui/domain"] },
+          { prefix: "internal/tui/theme", forbidden: ["internal/tui/client", "internal/tui/domain"] },
+          { prefix: "internal/tui/domain", forbidden: ["internal/tui/theme"] }
         ];
         for (const r of rules) {
           if (from === r.prefix || from.startsWith(r.prefix + "/")) {
             for (const bad of r.forbidden) {
               if (to === bad || to.startsWith(bad + "/")) {
-                resEl.innerHTML = `<span class="font-bold">[REJECTED by archcheck]</span> <code class="font-mono">${from}</code> cannot import <code class="font-mono">${to}</code> (rule on <code class="font-mono">${r.prefix}</code>).`;
+                resEl.innerHTML = `<span class="font-bold">[REJECTED by archgate]</span> <code class="font-mono">${from}</code> cannot import <code class="font-mono">${to}</code> (rule on <code class="font-mono">${r.prefix}</code>).`;
                 return;
               }
             }
@@ -1327,7 +1363,7 @@
             desc: "4-Stage Autonomous Change Workflow monitor (Architect & Code → Verify & Test → Critic Review → Human Review).",
             rows: [
               "▸ Stage 1 · Architect & Code  [COMPLETED] (model: function · 2 captured paths edited)",
-              "  Stage 2 · Verify & Test     [COMPLETED] (model: bug · go test ./... & archcheck passed, 1 repair used)",
+              "  Stage 2 · Verify & Test     [COMPLETED] (model: bug · go test ./... & archgate passed, 1 repair used)",
               "  Stage 3 · Critic Review     [APPROVED]  (model: analyze · 0 regressions, boundary rules respected)",
               "  Stage 4 · Human Review Gate [AWAITING]  Press [d] to inspect read-only diff, [a] to Accept & Commit"
             ],
@@ -1361,8 +1397,8 @@
             label: "Features",
             desc: "Goal-aligned additive feature suggestions (schema_version: 2, 0–5 per generation, 64 KiB history bound).",
             rows: [
-              "▸ [OPEN] [MEDIUM] Export SARIF findings report · Paths: internal/api/handlers/project_handler.go",
-              "  [SAVED] [SMALL] Add per-stage latency histogram to Last Run sub-view · Paths: internal/tui/render_hubs.go",
+              "▸ [OPEN] [MEDIUM] Export SARIF findings report · Paths: internal/api/handlers/findings_handler.go",
+              "  [SAVED] [SMALL] Add per-stage latency histogram to Last Run sub-view · Paths: internal/tui/hub_agents.go",
               "  Project Goals: Maintain strict loopback safety, deterministic checks, and fast keyboard workflows."
             ],
             keys: "[g] Generate New Feature Ideas · [Enter] Dispatch Selected Feature to Agent · [s] Save · [x] Dismiss"
@@ -1384,9 +1420,9 @@
             label: "File Scope",
             desc: "Per-file analysis checklist (.mini-orca/analysis/selection.json) and stage freshness inspector.",
             rows: [
-              "▸ [INCLUDED] cmd/daemon/main.go             · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:fresh",
-              "  [INCLUDED] internal/app/change_apply.go   · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:stale",
-              "  [EXCLUDED] internal/app/testdata/fx.go    · Reason: Excluded by user checklist selection"
+              "▸ [INCLUDED] cmd/daemon/main.go                 · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:fresh",
+              "  [INCLUDED] internal/app/change_apply_undo.go  · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:stale",
+              "  [EXCLUDED] internal/app/testdata/fx.go        · Reason: Excluded by user checklist selection"
             ],
             keys: "[Space / Enter / ← / →] Toggle File Exclusion · [i] Recover Incomplete Work"
           }
@@ -1402,7 +1438,7 @@
             label: "Inspector",
             desc: "Read-only source browser, atomic symbol inspector, and 3-mode proposal diff reviewer (Hunk / Split / Unified).",
             rows: [
-              "▸ Diff Mode: [FOCUSED HUNK 1/2] · Target: internal/app/change_apply.go (Checked Hash: 9b2e41...)",
+              "▸ Diff Mode: [FOCUSED HUNK 1/2] · Target: internal/app/change_apply_undo.go (Checked Hash: 9b2e41...)",
               "  - if session.ReviewedHash == \"\" {",
               "  + if session.ReviewedHash != session.Proposal.Hash {",
               "        return ErrProposalReviewRequired",
@@ -1445,7 +1481,7 @@
             desc: "Synthesized C4 Level 1–2 System Context, Goal Pursuit, Topology, Stack, and Runtime/Build Dependencies.",
             rows: [
               "▸ Purpose: Local-first Go coding assistant with 5-hub TUI and guarded loopback daemon.",
-              "  Topology: Pure Go CLI/TUI client <-> Loopback HTTP/SSE daemon <-> Scoped LLM & isolated checkexec.",
+              "  Topology: Pure Go CLI/TUI client <-> Loopback HTTP/SSE daemon <-> Scoped LLM & isolated sandbox.",
               "  Dependency: gopkg.in/yaml.v3 (Configuration & OpenAPI parsing) · Go 1.22 standard library"
             ],
             keys: "[h/l] Step Handbook Sections · [Tab] Components & ADRs"
@@ -1456,7 +1492,7 @@
             desc: "C4 Level 3 Bounded Contexts, Layer Ownership, Responsibilities, Contracts, and Internal Dependencies.",
             rows: [
               "▸ Component: internal/api     · Layer: HTTP Boundary · Contracts: LocalOnly, 63 REST/SSE Handlers",
-              "  Component: internal/app     · Layer: Orchestration · Contracts: Service, AnalysisRun, ChangeWorkflow",
+              "  Component: internal/app     · Layer: Orchestration · Contracts: Service, AnalysisRun, ChangePipeline",
               "  Component: internal/project · Layer: Domain Facts  · Contracts: Manager, BuildProjectDocs, ScanGoFile"
             ],
             keys: "[j/k] Browse Components · [Enter] View Component Contracts"
@@ -1519,7 +1555,7 @@
             desc: "Root-to-directory AGENTS.md instruction hierarchy preview and evidence-matched instruction presets.",
             rows: [
               "▸ Active Guide: AGENTS.md + internal/AGENTS.md + docs/AGENTS.md (Fingerprint: e4a912...)",
-              "  Matched Preset [Go Architecture]: Enforce acyclic subpackages via internal/app/archcheck (Evidence: go.mod)",
+              "  Matched Preset [Go Architecture]: Enforce acyclic subpackages via internal/app/archgate (Evidence: go.mod)",
               "  Matched Preset [Testing]: Use temporary projects and fake HTTP providers with -race"
             ],
             keys: "[Enter] Prepare Guided AGENTS.md Proposal (no model call, opens in Code & Diff for Review/Apply)"
@@ -1530,7 +1566,7 @@
             desc: "Graduated engineering lessons that can be promoted into durable AGENTS.md repository rules.",
             rows: [
               "▸ [GRADUATED] Always recheck project_id, project_revision, and base_file_hash after async LLM calls.",
-              "  [CANDIDATE] Never execute model output through a shell; use fixed argv in checkexec.",
+              "  [CANDIDATE] Never execute model output through a shell; use fixed argv in sandbox.",
               "  [CANDIDATE] Keep deterministic rule_match findings distinct from model_suspicion advisories."
             ],
             keys: "[Enter / ← / →] Graduate Selected Lesson into AGENTS.md Draft"
@@ -1767,10 +1803,10 @@
         ]
       },
       {
-        title: "Stage 2 · Verify & Test (Testing Worker + Isolated Checkexec)",
-        model: "models.test (default profile: bug · 32,000 context tokens) + internal/app/checkexec",
+        title: "Stage 2 · Verify & Test (Testing Worker + Isolated Sandbox)",
+        model: "models.test (default profile: bug · 32,000 context tokens) + internal/app/sandbox",
         route: "POST /api/projects/current/changes/{sessionID}/checks",
-        summary: "The testing agent writes or updates regression tests (strictly restricted to captured _test.go paths) and merges them with the Stage 1 implementation. The daemon then evaluates AST parse/format, archcheck import/complexity budgets, go vet ./..., and go test ./... inside a temporary copied workspace.",
+        summary: "The testing agent writes or updates regression tests (strictly restricted to captured _test.go paths) and merges them with the Stage 1 implementation. The daemon then evaluates AST parse/format, archgate import/complexity budgets, go vet ./..., and go test ./... inside a temporary copied workspace.",
         guards: [
           "Requires current-revision Execution Trust (GET/POST /api/projects/current/execution-trust) and at least one captured _test.go path before workflow dispatch.",
           "New tests are verified against both the base and candidate snapshots; a reviewed regression proof stays pinned across up to 3 bounded repair attempts.",
@@ -1884,7 +1920,7 @@
       { method: "GET", path: "/api/projects/current/changes/{sessionID}", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads full proposal, diff hunks, check results, 4-stage workflow state, and live source freshness." },
       { method: "POST", path: "/api/projects/current/changes/{sessionID}/resume", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Clears Authority (No LLM)", desc: "Restores historical session into view while clearing prior check/review authority and marking workflow evidence outdated." },
       { method: "POST", path: "/api/projects/current/changes/{sessionID}/messages", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, message, profile, confirm_remote_provider, optional repair", effect: "Scoped LLM Proposal / Repair", desc: "Generates a new proposal revision or performs one of 3 bounded check-driven repair attempts." },
-      { method: "POST", path: "/api/projects/current/changes/{sessionID}/checks", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, run_tests, run_lint", effect: "Isolated Temp Workspace Checks", desc: "Runs required Go parse/format/archcheck plus optional go vet and go test (with execution trust) in a copied workspace." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/checks", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, run_tests, run_lint", effect: "Isolated Temp Workspace Checks", desc: "Runs required Go parse/format/archgate plus optional go vet and go test (with execution trust) in a copied workspace." },
       { method: "POST", path: "/api/projects/current/changes/{sessionID}/workflow", cat: "Changes & 4-Stage Workflow", guards: "ChangeIdentity, message, models:{create,test,review}, confirmed_profiles, confirm_security, execution trust, _test.go path", effect: "Starts 4-Stage Agent (202)", desc: "Starts the bounded 4-stage autonomous workflow (Architect & Code → Verify & Test → Critic Review → Awaiting Human Review)." },
       { method: "POST", path: "/api/projects/current/changes/{sessionID}/workflow/cancel", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, workflow_id", effect: "Cancels Agent Worker", desc: "Cancels the exact running change workflow without applying source edits." },
       { method: "POST", path: "/api/projects/current/changes/{sessionID}/review", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash", effect: "Records Human Review", desc: "Records explicit human diff review for the current checked proposal hash (sets reviewed_hash)." },
@@ -2000,7 +2036,7 @@
         path: ".mini-orca/project-analysis.json",
         schema: "prompt_version: project-analysis-v5",
         classification: "Source-Free Project Summary",
-        owner: "internal/project/handbook",
+        owner: "internal/project (architecture_overview_report.go)",
         desc: "Stores Analysis & ProjectAnalysisReport (purpose, Mermaid architecture flowchart, components, entry_points, sequence/flow diagrams, risks, next_steps, and model provenance)."
       },
       {
@@ -2014,7 +2050,7 @@
         path: ".mini-orca/analysis/selection.json",
         schema: "schema_version: 1",
         classification: "Source-Free User Scope Checklist",
-        owner: "internal/app/analysis_selection_store.go",
+        owner: "internal/app/analysis_queue_store.go",
         desc: "Persists user-selected excluded_paths (up to 20,000 canonical project-relative paths) across daemon restarts. Corrupt selection metadata fails explicitly instead of silently selecting everything."
       },
       {
@@ -2028,21 +2064,21 @@
         path: ".mini-orca/file-analysis/<hash>.json",
         schema: "prompt_version: file-analysis-v16",
         classification: "Source-Free Semantic File Cache",
-        owner: "internal/project/file_analysis.go",
+        owner: "internal/project/semantic_review_store.go",
         desc: "Per-file semantic analysis cache bound to content hash, instructions_fingerprint, policy version, and model profile. Stores summary, classified risks (bugs/performance/security with 2-6 word titles), and engineering insights."
       },
       {
         path: ".mini-orca/performance/files/<hash>.json",
         schema: "prompt_version: performance-file-v7",
         classification: "Source-Free Performance Review Cache",
-        owner: "internal/project/performance.go",
+        owner: "internal/project/performance_review_store.go",
         desc: "Per-file Performance review report storing line-anchored bottlenecks, hypotheses, complexity impact, configured_model vs resolved model, and failure diagnostics."
       },
       {
         path: ".mini-orca/security/files/<hash>.json",
         schema: "rules: go-rules-v1 / prompt: security-file-v4",
         classification: "Source-Free Security Evidence",
-        owner: "internal/project/security.go",
+        owner: "internal/project/security_review_store.go",
         desc: "Stores deterministic AST rule_match findings and redacted AI model_suspicion findings with CWE, observed_condition, preconditions, remediation, verification_idea, and triage state."
       },
       {
@@ -2063,7 +2099,7 @@
         path: ".mini-orca/changes/recovery.json",
         schema: "Grouped Mutation Recovery Journal",
         classification: "Private Source-Bearing Recovery Receipt",
-        owner: "internal/app/change_apply.go",
+        owner: "internal/app/change_apply_undo.go",
         desc: "Written before any source replacement ('prepared' -> 'applied' / 'undoing' / 'recovery_required'). Holds pre-Apply snapshots, post-Apply hashes, commit status, and post-Apply verification evidence to power guarded Undo and crash recovery."
       },
       {

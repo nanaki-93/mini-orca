@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
 // KeyEvent represents a decoded terminal keystroke.
@@ -204,7 +206,7 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	case PageInstructions:
 		s.toggleWorkspaceTrust()
 	case PageModels:
-		if s.ClampedIdx() < len(CanonicalModelScopes()) {
+		if s.ClampedIdx() < len(domain.CanonicalModelScopes()) {
 			s.cycleSelectedScopeModel(forward)
 		} else {
 			s.stepModelPreset(forward)
@@ -696,7 +698,7 @@ func (s *State) stepDiffHunk(forward bool) {
 				active.GlobalIndex+1, len(allHunks), active.Path, s.SelectedIdx+1, rowCount)
 			return
 		}
-		if !forward && s.SelectedIdx > firstChangedRowForMode(active.Hunk, s.EffectiveDiffMode()) {
+		if !forward && s.SelectedIdx > domain.FirstChangedRowForMode(active.Hunk, s.EffectiveDiffMode()) {
 			s.SelectedIdx = max(0, s.SelectedIdx-12)
 			s.CmdOutput = fmt.Sprintf("Focused diff hunk #%d/%d · %s (line %d/%d)",
 				active.GlobalIndex+1, len(allHunks), active.Path, s.SelectedIdx+1, rowCount)

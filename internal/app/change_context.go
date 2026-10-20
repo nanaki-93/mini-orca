@@ -65,7 +65,7 @@ func captureChangeTarget(root, path string) (ChangeTarget, error) {
 	return target, nil
 }
 
-func changeContext(root string, session *ChangeSession) (string, project.ContextManifest, error) {
+func composeChangePromptContext(root string, session *ChangeSession) (string, project.ContextManifest, error) {
 	manifest := project.ContextManifest{Included: []project.ContextFile{}, Excluded: []project.ContextDecision{}, ByteLimit: maxChangeBytes}
 	var text strings.Builder
 	seenInstructions := map[string]bool{}

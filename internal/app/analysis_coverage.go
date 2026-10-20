@@ -1,10 +1,14 @@
 package app
 
-import "context"
+import (
+	"context"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
 
 // The overview uses the same current evidence and exclusions as the file checklist.
 // The caller holds jobLifecycleMu, keeping the project stable throughout the read.
-func (s *Service) analysisOverviewCoverage(id, revision string) (AnalysisCoverage, error) {
+func (s *Service) buildAnalysisCoverageSummary(id, revision string) (AnalysisCoverage, error) {
 	s.analysisRun.mu.Lock()
 	defer s.analysisRun.mu.Unlock()
 	selection, err := s.analysisSelectionLocked(context.Background(), id, revision)
@@ -77,4 +81,22 @@ func analysisFileCoverageStatus(stages []AnalysisFileStageStatus) string {
 		return "partial"
 	}
 	return "unavailable"
+}
+func (s *Service) analysisInputs() (*project.Analysis, *project.ProjectIndex, *project.ContextPolicy, error) {
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if index.ProjectID != analysis.ProjectID || index.ProjectRevision != analysis.ProjectRevision {
+		return nil, nil, nil, project.ErrRevisionConflict
+	}
+	policy, err := project.NewContextPolicy(s.manager.Root())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return analysis, index, policy, nil
 }

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
-	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -53,7 +53,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	current.CheckOptions = request.CheckOptions
 	if current.Workflow != nil {
 		if ctx.Value(changeWorkflowContextKey{}) == nil {
-			if requiredChecksPassed(checks) && !changeWorkflowReviewable(current) {
+			if requiredChecksPassed(checks) && !canHumanReviewProposal(current) {
 				current.Workflow.Status, current.Workflow.Reason = "awaiting_human_review", ""
 				for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
 					current.Workflow.Stages[i].Status = "completed"
@@ -71,7 +71,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 				}
 			}
 		}
-		if changeWorkflowReviewable(current) {
+		if canHumanReviewProposal(current) {
 			for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
 				current.Workflow.Stages[i].Status = "completed"
 			}
@@ -81,7 +81,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 		}
 	}
 	pinChangeRegression(current, checks)
-	if err := writeChangeSession(root, current); err != nil {
+	if err := storeChangeSession(root, current); err != nil {
 		return nil, err
 	}
 	s.changeAuthority[current.ProjectID+"/"+id] = "checks:" + current.Hash
@@ -116,9 +116,9 @@ func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 		}
 		checks = append(checks, check)
 	}
-	checks = append(checks, archcheck.ChangeArchitectureAndComplexityChecks(root, edits)...)
+	checks = append(checks, archgate.ChangeArchitectureAndComplexityChecks(root, edits)...)
 	if len(edits) > 0 {
-		checks = append(checks, archcheck.CheckChangeSecretAndHygiene(edits))
+		checks = append(checks, archgate.CheckChangeSecretAndHygiene(edits))
 	}
 	return checks
 }
@@ -151,7 +151,7 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	}
 	if options.RunLint {
 		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{"go", "vet", "./..."}, false, false))
-		if archcheck.HasOptionalGitleaks(workspace) {
+		if archgate.HasOptionalGitleaks(workspace) {
 			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "gitleaks", true, []string{"gitleaks", "detect", "--no-git", "--source", ".", "--redact"}, false, true))
 		}
 	}
@@ -393,14 +393,14 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 	if err != nil {
 		return nil, err
 	}
-	if !changeWorkflowReviewable(session) || len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) {
+	if !canHumanReviewProposal(session) || len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) {
 		return nil, fmt.Errorf("complete current proposal checks before review")
 	}
 	session.ReviewedHash = session.Hash
 	if session.Workflow != nil {
 		session.Workflow.Stages[3].Status = "completed"
 	}
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	s.changeAuthority[session.ProjectID+"/"+id] = "review:" + session.Hash
@@ -445,7 +445,7 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 			session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
 		}
 	}
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, root, err
 	}
 	return session, root, nil
@@ -471,13 +471,13 @@ type workspaceIdentity struct {
 }
 
 func workspaceFingerprint(ctx context.Context, root string) (string, error) {
-	return checkexec.WorkspaceFingerprint(ctx, root)
+	return sandbox.WorkspaceFingerprint(ctx, root)
 }
 
 func fingerprintCheckWorkspace(ctx context.Context, root string) (string, error) {
-	return checkexec.FingerprintWorkspace(ctx, root)
+	return sandbox.FingerprintWorkspace(ctx, root)
 }
 
 func (fixture workspaceIdentity) verifyCurrent(ctx context.Context, root string) error {
-	return checkexec.VerifyWorkspaceFingerprint(ctx, root, fixture.fingerprint)
+	return sandbox.VerifyWorkspaceFingerprint(ctx, root, fixture.fingerprint)
 }

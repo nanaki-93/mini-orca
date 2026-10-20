@@ -111,7 +111,7 @@ def installed_runtime_checks(candidate_dir: Path, runtime_config: dict[str, Any]
 
 
 def production_schema(source_root: Path) -> str:
-    source = (source_root / "internal/app/file_analysis.go").read_text(encoding="utf-8")
+    source = (source_root / "internal/app/semantic_review.go").read_text(encoding="utf-8")
     match = re.search(r"const fileAnalysisResponseSchemaDocument = `([^`]+)`", source)
     if match is None:
         raise AssertionError("production response schema literal was not found")

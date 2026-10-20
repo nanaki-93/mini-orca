@@ -1,17 +1,15 @@
 package tui
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuiclient"
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuitheme"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 // Page identifies an active hub view or sub-view in the TUI.
@@ -41,13 +39,13 @@ const (
 )
 
 // Palette identifies one of the four terminal color themes.
-type Palette = tuitheme.Palette
+type Palette = theme.Palette
 
 const (
-	PaletteTokyo = tuitheme.PaletteTokyo
-	PaletteCRT   = tuitheme.PaletteCRT
-	PaletteAmber = tuitheme.PaletteAmber
-	PalettePaper = tuitheme.PalettePaper
+	PaletteTokyo = theme.PaletteTokyo
+	PaletteCRT   = theme.PaletteCRT
+	PaletteAmber = theme.PaletteAmber
+	PalettePaper = theme.PalettePaper
 )
 
 // HubSubPage pairs a sub-view Page with its human-readable tab label.
@@ -221,7 +219,7 @@ func NewState() *State {
 			"bug":      "bug",
 			"function": "function",
 		},
-		AnalysisConfig: DefaultAnalysisRunConfig(),
+		AnalysisConfig: domain.DefaultAnalysisRunConfig(),
 		WorkspaceTrust: true,
 		Results:        make(map[string]SectionResults),
 		CmdOutput:      "Workspace ready",
@@ -230,7 +228,7 @@ func NewState() *State {
 
 // EffectiveAnalysisConfig returns the normalized analysis run configuration.
 func (s *State) EffectiveAnalysisConfig() AnalysisRunConfig {
-	return NormalizeAnalysisRunConfig(s.AnalysisConfig)
+	return domain.NormalizeAnalysisRunConfig(s.AnalysisConfig)
 }
 
 func (s *State) adaptiveWindowRows(overhead, defaultMin int) int {
@@ -242,7 +240,7 @@ func (s *State) adaptiveWindowRows(overhead, defaultMin int) int {
 
 // AllModelPresets returns the built-in presets followed by any user-saved custom presets.
 func (s *State) AllModelPresets() []ModelPreset {
-	return MergeModelPresets(s.CustomPresets)
+	return domain.MergeModelPresets(s.CustomPresets)
 }
 
 func (s *State) customPresetsFilePath() string {
@@ -380,12 +378,12 @@ func (s *State) AcceptFileResponse(path, contentHash string) bool {
 
 // CollectAllIssues returns all deduplicated, severity-sorted issues across semantic, performance, and security results.
 func (s *State) CollectAllIssues() []IssueRow {
-	agentItems := CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
+	agentItems := domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
 	var rows []IssueRow
 	rows = s.appendSemanticFindings(rows, agentItems)
 	rows = s.appendSectionResults(rows, agentItems)
-	deduped := DedupeIssues(rows)
-	SortIssuesBySeverity(deduped)
+	deduped := domain.DedupeIssues(rows)
+	domain.SortIssuesBySeverity(deduped)
 	return deduped
 }
 
@@ -432,19 +430,19 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	if containsIssueID(rows, id) {
 		return rows
 	}
-	target := FindingTarget{ProjectID: firstNonEmpty(f.ProjectID, s.projectID()), Kind: "semantic", ID: f.ID, Path: f.Location.Path}
-	title := FindingTitle(f.Title, f.Message)
-	name := FindingName(f.Title, f.Message)
+	target := FindingTarget{ProjectID: client.FirstNonEmpty(f.ProjectID, s.projectID()), Kind: "semantic", ID: f.ID, Path: f.Location.Path}
+	title := domain.FindingTitle(f.Title, f.Message)
+	name := domain.FindingName(f.Title, f.Message)
 	comp := s.findCompletion(target)
 	done := f.Status == "fixed" || f.Status == "done" || comp != nil
 	agentPath := ""
 	if !done {
 		agentPath = matchAgentPath(agents, target, name, title)
 		if agentPath == "" && f.Status == "in_progress" {
-			agentPath = firstNonEmpty(f.Location.Path, f.ID)
+			agentPath = client.FirstNonEmpty(f.Location.Path, f.ID)
 		}
 	}
-	cause := firstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
+	cause := client.FirstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
 	sol := "Synthesize a minimal, verified fix and unit test."
 	var criteria []string
 	if f.TaskSpec != nil && len(f.TaskSpec.AcceptanceCriteria) > 0 {
@@ -481,8 +479,8 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		if containsIssueID(rows, id) {
 			continue
 		}
-		target := FindingTarget{ProjectID: firstNonEmpty(rep.ProjectID, s.projectID()), Kind: "performance", ID: f.ID, Path: rep.Path}
-		name := FindingName(f.Title, f.ObservedPattern)
+		target := FindingTarget{ProjectID: client.FirstNonEmpty(rep.ProjectID, s.projectID()), Kind: "performance", ID: f.ID, Path: rep.Path}
+		name := domain.FindingName(f.Title, f.ObservedPattern)
 		comp := s.findCompletion(target)
 		done := comp != nil
 		agentPath := ""
@@ -505,8 +503,8 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			Status:    issueStatus(done, agentPath),
 			CommitOID: commitOID,
 			AgentPath: agentPath,
-			Cause:     firstNonEmpty(f.ObservedPattern, "No cause recorded."),
-			Solution:  firstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
+			Cause:     client.FirstNonEmpty(f.ObservedPattern, "No cause recorded."),
+			Solution:  client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
 			Target:    target,
 		})
 	}
@@ -518,14 +516,14 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 		if f.Triage == "dismissed" {
 			continue
 		}
-		path := firstNonEmpty(f.SourceAnchor.Path, rep.Path)
-		src := firstNonEmpty(rep.Source, "deterministic")
+		path := client.FirstNonEmpty(f.SourceAnchor.Path, rep.Path)
+		src := client.FirstNonEmpty(rep.Source, "deterministic")
 		id := fmt.Sprintf("security:%s:%s:%s", rep.Path, src, f.ID)
 		if containsIssueID(rows, id) {
 			continue
 		}
-		target := FindingTarget{ProjectID: firstNonEmpty(rep.ProjectID, s.projectID()), Kind: "security", ID: f.ID, Path: path, Source: src}
-		name := FindingName(f.Title, f.ObservedCondition)
+		target := FindingTarget{ProjectID: client.FirstNonEmpty(rep.ProjectID, s.projectID()), Kind: "security", ID: f.ID, Path: path, Source: src}
+		name := domain.FindingName(f.Title, f.ObservedCondition)
 		comp := s.findCompletion(target)
 		done := f.Triage == "fixed" || comp != nil
 		agentPath := ""
@@ -548,8 +546,8 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			Status:    issueStatus(done, agentPath),
 			CommitOID: commitOID,
 			AgentPath: agentPath,
-			Cause:     firstNonEmpty(f.ObservedCondition, "No cause recorded."),
-			Solution:  firstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
+			Cause:     client.FirstNonEmpty(f.ObservedCondition, "No cause recorded."),
+			Solution:  client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
 			Target:    target,
 		})
 	}
@@ -616,12 +614,12 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 		}
 		for _, t := range item.FindingTargets {
 			if sameFindingTarget(t, target) {
-				return firstNonEmpty(item.Path, item.ID)
+				return client.FirstNonEmpty(item.Path, item.ID)
 			}
 		}
 		lowItem := strings.ToLower(strings.TrimSpace(item.Title))
 		if lowItem != "" && (lowItem == lowName || lowItem == lowTitle) {
-			return firstNonEmpty(item.Path, item.ID)
+			return client.FirstNonEmpty(item.Path, item.ID)
 		}
 	}
 	return ""
@@ -644,10 +642,6 @@ func issueStatus(done bool, agentPath string) string {
 		return "in_progress"
 	}
 	return "open"
-}
-
-func firstNonEmpty(values ...string) string {
-	return tuiclient.FirstNonEmpty(values...)
 }
 
 // FilteredIssues returns the issue list matching the current IssueCategory and IssueView filters.
@@ -709,7 +703,7 @@ func (s *State) ActiveListLength() int {
 		}
 		return 1
 	case PageAgents:
-		return len(CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace))
+		return len(domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace))
 	case PageBugs:
 		return len(s.FilteredIssues())
 	case PageFeatures:
@@ -726,7 +720,7 @@ func (s *State) ActiveListLength() int {
 }
 
 func (s *State) isViewingDiff() bool {
-	return !s.BrowseFiles && s.File == nil && s.Change != nil && len(EffectiveSessionChanges(s.Change)) > 0
+	return !s.BrowseFiles && s.File == nil && s.Change != nil && len(domain.EffectiveSessionChanges(s.Change)) > 0
 }
 
 func (s *State) editorListLength() int {
@@ -792,7 +786,7 @@ func (s *State) analysisRunSectionCount() int {
 }
 
 func (s *State) analysisRunListLen() int {
-	return s.analysisRunSectionCount() + len(BuildAnalysisConfigRows(s.EffectiveAnalysisConfig()))
+	return s.analysisRunSectionCount() + len(domain.BuildAnalysisConfigRows(s.EffectiveAnalysisConfig()))
 }
 
 func (s *State) indexedFileCount() int {
@@ -803,7 +797,7 @@ func (s *State) indexedFileCount() int {
 }
 
 func (s *State) docsListLength() int {
-	docs := ResolveProjectDocs(s.Overview, s.Project)
+	docs := domain.ResolveProjectDocs(s.Overview, s.Project)
 	switch s.EffectivePage() {
 	case PageDiagrams, PageDocsComponents:
 		return len(docs.Components)
@@ -817,9 +811,9 @@ func (s *State) docsListLength() int {
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
 	case PageModels:
-		return len(CanonicalModelScopes()) + len(s.AllModelPresets())
+		return len(domain.CanonicalModelScopes()) + len(s.AllModelPresets())
 	case PageBootstrap:
-		return len(EvaluateBootstrapChecklist(s.Index, s.Instructions))
+		return len(domain.EvaluateBootstrapChecklist(s.Index, s.Instructions))
 	case PageLessons:
 		return len(s.AllHarnessLessons())
 	default:
@@ -869,320 +863,4 @@ func (s *State) projectRevision() string {
 		return s.Project.ProjectRevision
 	}
 	return ""
-}
-
-// SyncFromDaemon loads the initial workspace snapshot from the local daemon via Client.
-func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath string) error {
-	var status struct {
-		Version string `json:"version"`
-	}
-	if err := client.DoJSON(ctx, "sync-status", http.MethodGet, "/status", nil, &status); err != nil {
-		s.Connected = false
-		s.Error = err.Error()
-		return err
-	}
-	s.Connected = true
-	s.Version = status.Version
-	s.Error = ""
-
-	if projectPath != "" {
-		s.openOrRestoreProject(ctx, client, projectPath)
-	}
-	if s.Project == nil {
-		var proj Project
-		if err := client.DoJSON(ctx, "sync-project", http.MethodGet, "/api/projects/current", nil, &proj); err == nil {
-			s.Project = &proj
-		}
-	}
-	if s.Project != nil {
-		s.loadProjectResources(ctx, client)
-	}
-	return nil
-}
-
-func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projectPath string) {
-	var proj Project
-	body := map[string]string{"project_path": projectPath}
-	if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err == nil {
-		s.Project = &proj
-		return
-	}
-	importBody := map[string]any{"project_path": projectPath, "confirm_remote_provider": true}
-	if err := client.DoJSON(ctx, "sync-import", http.MethodPost, "/api/projects/import", importBody, &proj); err == nil {
-		s.Project = &proj
-	}
-}
-
-func (s *State) loadProjectResources(ctx context.Context, client *Client) {
-	s.loadCustomPresetsFromDisk()
-	revQuery, idQuery := s.resourceQueries()
-	var idx ProjectIndex
-	if err := client.DoJSON(ctx, "sync-index", http.MethodGet, "/api/projects/current/index", nil, &idx); err == nil && s.AcceptProjectResponse(idx.ProjectIdentity) {
-		s.Index = &idx
-	}
-	var ov Overview
-	if err := client.DoJSON(ctx, "sync-overview", http.MethodGet, "/api/projects/current/overview"+revQuery, nil, &ov); err == nil && s.AcceptProjectResponse(ov.ProjectIdentity) {
-		s.Overview = &ov
-		if ov.AnalysisRun != nil {
-			s.Run = ov.AnalysisRun
-		}
-	}
-	var fResp FindingsResponse
-	if err := client.DoJSON(ctx, "sync-findings", http.MethodGet, "/api/projects/current/findings"+revQuery, nil, &fResp); err == nil && s.AcceptProjectResponse(fResp.ProjectIdentity) {
-		s.Findings = fResp.Findings
-		s.CompletedFindings = fResp.Completed
-	}
-	var gitWS GitWorkspace
-	if err := client.DoJSON(ctx, "sync-git", http.MethodGet, "/api/projects/current/git/workspace"+idQuery, nil, &gitWS); err == nil {
-		s.GitWorkspace = &gitWS
-		s.Repository = &gitWS.GitRepository
-	}
-	s.syncExecutionTrust(ctx, client, revQuery)
-	if idQuery != "" {
-		s.loadGuardedProjectResources(ctx, client, idQuery, revQuery)
-	}
-}
-
-func (s *State) resourceQueries() (string, string) {
-	revQuery := ""
-	if s.Project.ProjectRevision != "" {
-		revQuery = "?project_revision=" + url.QueryEscape(s.Project.ProjectRevision)
-	}
-	idQuery := ""
-	if s.Project.ProjectID != "" && s.Project.ProjectRevision != "" {
-		idQuery = fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(s.Project.ProjectID), url.QueryEscape(s.Project.ProjectRevision))
-	}
-	return revQuery, idQuery
-}
-
-func (s *State) syncExecutionTrust(ctx context.Context, client *Client, revQuery string) {
-	var trust ExecutionTrust
-	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust"+revQuery, nil, &trust); err == nil {
-		if trust.Trusted {
-			s.WorkspaceTrust = true
-			return
-		}
-		if s.WorkspaceTrust && s.Project.ProjectRevision != "" {
-			_ = s.ensureExecutionTrust(ctx, client, "sync-trust-grant")
-			return
-		}
-		s.WorkspaceTrust = trust.Trusted
-	}
-}
-
-func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client, idQuery, revQuery string) {
-	var feat FeatureReport
-	if err := client.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
-		s.Features = &feat
-	}
-	var history []ChangeHistoryEntry
-	if err := client.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
-		s.ChangeHistory = history
-	}
-	var rec ChangeMutation
-	if err := client.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
-		s.ChangeReceipt = &rec
-	}
-	projRev := s.projectRevision()
-	if s.Change != nil && !isUsableInitialChange(s.Change, projRev) {
-		s.Change = nil
-	}
-	if s.Change == nil && len(s.ChangeHistory) > 0 {
-		if chgID := pickInitialChangeID(s.ChangeHistory, projRev); chgID != "" {
-			var chg ChangeSession
-			target := "/api/projects/current/changes/" + url.PathEscape(chgID) + idQuery
-			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
-				s.Change = &chg
-			}
-		}
-	}
-	s.loadAuxResources(ctx, client, idQuery, revQuery)
-}
-
-func pickInitialChangeID(history []ChangeHistoryEntry, projectRev string) string {
-	for _, entry := range history {
-		if isUsableHistoryEntry(entry, projectRev) {
-			return entry.ID
-		}
-	}
-	return ""
-}
-
-func isUsableHistoryEntry(entry ChangeHistoryEntry, projectRev string) bool {
-	if entry.ID == "" || entry.Revision <= 0 || entry.Freshness == "stale" {
-		return false
-	}
-	if isInactiveAgentStatus(entry.State) || isInactiveAgentStatus(entry.WorkflowStatus) {
-		return false
-	}
-	if projectRev != "" && entry.ProjectRevision != "" && entry.ProjectRevision != projectRev {
-		return false
-	}
-	return true
-}
-
-func isUsableInitialChange(chg *ChangeSession, projectRev string) bool {
-	if chg == nil || chg.ID == "" || chg.Freshness == "stale" {
-		return false
-	}
-	if isInactiveAgentStatus(chg.State) {
-		return false
-	}
-	if chg.Workflow != nil && isInactiveAgentStatus(chg.Workflow.Status) {
-		return false
-	}
-	if projectRev != "" && chg.ProjectRevision != "" && chg.ProjectRevision != projectRev {
-		return false
-	}
-	return true
-}
-
-func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, revQuery string) {
-	var instr InstructionPreview
-	instrTarget := "/api/projects/current/instructions" + idQuery + "&path=AGENTS.md"
-	if err := client.DoJSON(ctx, "sync-instructions", http.MethodGet, instrTarget, nil, &instr); err == nil && instr.Path != "" {
-		s.Instructions = &instr
-	}
-	var sel Selection
-	if err := client.DoJSON(ctx, "sync-selection", http.MethodGet, "/api/projects/current/analysis/selection"+idQuery, nil, &sel); err == nil && sel.SelectionID != "" {
-		s.Selection = &sel
-		s.ExcludedPaths = sel.ExcludedPaths
-	}
-	var scan Scan
-	if err := client.DoJSON(ctx, "sync-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && (scan.Status != "" || len(scan.Phases) > 0) {
-		s.Scan = &scan
-	}
-	_ = s.RefreshModels(ctx, client)
-	s.loadAnalysisSectionResults(ctx, client)
-}
-
-// RefreshModels fetches the active scoped models and discovered model catalog from the daemon.
-func (s *State) RefreshModels(ctx context.Context, client *Client) error {
-	var models ModelCatalog
-	errCur := client.DoJSON(ctx, "sync-models", http.MethodGet, "/api/models/current", nil, &models)
-	if errCur == nil && len(models.Scopes) > 0 {
-		s.Models = &models
-	}
-	var avail AvailableModels
-	if err := client.DoJSON(ctx, "sync-models-avail", http.MethodGet, "/api/models/available", nil, &avail); err == nil {
-		s.AvailableModels = &avail
-	}
-	return errCur
-}
-
-func (s *State) loadAnalysisSectionResults(ctx context.Context, client *Client) {
-	if s.Run == nil || s.Run.Identity.ID == "" || s.Run.Identity.QueueID == "" {
-		return
-	}
-	id := s.Run.Identity
-	base := fmt.Sprintf(
-		"/api/projects/current/analysis/results?project_id=%s&project_revision=%s&policy_fingerprint=%s&provider_fingerprint=%s&queue_id=%s&id=%s&generation=%s",
-		url.QueryEscape(id.ProjectID), url.QueryEscape(id.ProjectRevision),
-		url.QueryEscape(id.PolicyFingerprint), url.QueryEscape(id.ProviderFingerprint),
-		url.QueryEscape(id.QueueID), url.QueryEscape(id.ID), url.QueryEscape(id.Generation),
-	)
-	for _, cat := range []string{"bugs", "security", "performance"} {
-		var sec SectionResults
-		if err := client.DoJSON(ctx, "sync-res-"+cat, http.MethodGet, base+"&category="+cat, nil, &sec); err == nil {
-			if s.Results == nil {
-				s.Results = make(map[string]SectionResults)
-			}
-			s.Results[cat] = sec
-		}
-	}
-}
-
-// PollActiveJobs refreshes in-progress workflow, analysis, or scan states from the daemon.
-func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
-	if client == nil || s.Project == nil || s.Project.ProjectID == "" || s.Project.ProjectRevision == "" {
-		return
-	}
-	revQuery, idQuery := s.resourceQueries()
-	if s.hasRunningWorkflow() {
-		var chg ChangeSession
-		target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + idQuery
-		if err := client.DoJSON(ctx, "poll-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
-			s.Change = &chg
-			s.announceWorkflowTransition(&chg)
-		}
-	}
-	if s.hasRunningAnalysis() {
-		s.pollRunningAnalysis(ctx, client, idQuery, revQuery)
-	}
-	if s.Scan != nil && s.Scan.Status == "running" {
-		var scan Scan
-		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
-			s.Scan = &scan
-		}
-	}
-}
-
-func (s *State) pollRunningAnalysis(ctx context.Context, client *Client, idQuery, revQuery string) {
-	var run AnalysisRun
-	if err := client.DoJSON(ctx, "poll-analysis", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &run); err != nil || run.Identity.ID == "" {
-		return
-	}
-	s.Run = &run
-	s.loadAnalysisSectionResults(ctx, client)
-	if s.hasRunningAnalysis() {
-		return
-	}
-	s.announceAnalysisTransition(&run)
-	var fResp FindingsResponse
-	if err := client.DoJSON(ctx, "poll-findings", http.MethodGet, "/api/projects/current/findings"+revQuery, nil, &fResp); err == nil && s.AcceptProjectResponse(fResp.ProjectIdentity) {
-		s.Findings = fResp.Findings
-		s.CompletedFindings = fResp.Completed
-	}
-}
-
-func (s *State) announceAnalysisTransition(run *AnalysisRun) {
-	if run == nil {
-		return
-	}
-	switch run.Status {
-	case "paused", "interrupted":
-		s.CmdOutput = fmt.Sprintf("Analysis %s: %s — press [r] to resume", run.Status, firstNonEmpty(run.Reason, "window completed"))
-	case "completed":
-		s.CmdOutput = "Analysis completed — press [2] Agent Studio to inspect findings"
-	case "failed":
-		s.CmdOutput = fmt.Sprintf("Analysis failed: %s — press [r] to retry", firstNonEmpty(run.Reason, "inspect Last Run for details"))
-	}
-}
-
-func (s *State) announceWorkflowTransition(chg *ChangeSession) {
-	if chg == nil || chg.Workflow == nil {
-		return
-	}
-	switch chg.Workflow.Status {
-	case "awaiting_human_review", "completed":
-		s.CmdOutput = fmt.Sprintf("Agent completed %q — press [d/Enter] to inspect diff or [c] to Apply & Commit", chg.Title)
-	case "changes_requested", "failed":
-		s.CmdOutput = fmt.Sprintf("Agent workflow %s for %q — press [r] to self-repair or [g] to debug", chg.Workflow.Status, chg.Title)
-	case "canceled":
-		s.CmdOutput = fmt.Sprintf("Canceled agent workflow for %q", chg.Title)
-	}
-}
-
-func (s *State) hasActiveBackgroundJob() bool {
-	return s.hasRunningWorkflow() || s.hasRunningAnalysis() || (s.Scan != nil && s.Scan.Status == "running")
-}
-
-func (s *State) hasRunningWorkflow() bool {
-	if s.Change == nil || s.Change.ID == "" || s.Change.ID == "agent-session" || s.Change.Workflow == nil {
-		return false
-	}
-	st := s.Change.Workflow.Status
-	return st == "running" || st == "queued" || st == "canceling"
-}
-
-func (s *State) hasRunningAnalysis() bool {
-	if s.Run == nil {
-		return false
-	}
-	switch s.Run.Status {
-	case "running", "queued", "pausing", "canceling":
-		return true
-	default:
-		return false
-	}
 }

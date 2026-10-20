@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
@@ -303,7 +303,7 @@ func WorkspaceHash(ctx context.Context, root string, report *FeatureReport) (str
 	if report.Status == "not_generated" && len(report.Suggestions) == 0 {
 		return "", nil
 	}
-	return checkexec.WorkspaceFingerprint(ctx, root)
+	return sandbox.WorkspaceFingerprint(ctx, root)
 }
 
 // NormalizedTitle folds only case, spacing and punctuation differences.

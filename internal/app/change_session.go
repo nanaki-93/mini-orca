@@ -25,7 +25,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if index.ProjectID != request.ProjectID || index.ProjectRevision != request.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
-	if err := validateChangeRequest(request); err != nil {
+	if err := validateChangeCreateRequest(request); err != nil {
 		return nil, err
 	}
 	root := s.manager.Root()
@@ -47,7 +47,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if err != nil {
 		return nil, err
 	}
-	_, manifest, err := changeContext(root, session)
+	_, manifest, err := composeChangePromptContext(root, session)
 	if err != nil {
 		return nil, err
 	}
@@ -69,13 +69,13 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
 		return nil, err
 	}
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil
 }
 
-func validateChangeRequest(request ChangeCreateRequest) error {
+func validateChangeCreateRequest(request ChangeCreateRequest) error {
 	if len(request.Paths) == 0 || len(request.Paths) > maxChangePaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
 		return fmt.Errorf("provide a task title, kind and one to eight paths")
 	}
@@ -117,7 +117,7 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 	if s.manager.Root() != root || index.ProjectID != session.ProjectID || index.ProjectRevision != session.ProjectRevision {
 		return project.ErrRevisionConflict
 	}
-	if err := verifyChangeGit(ctx, root, session.Git); err != nil {
+	if err := verifySessionGitIdentity(ctx, root, session.Git); err != nil {
 		return err
 	}
 	policy, err := project.NewContextPolicy(root)
@@ -145,7 +145,7 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 
 func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession, error) {
 	root := s.manager.Root()
-	session, err := readChangeSession(root, id)
+	session, err := loadChangeSession(root, id)
 	if err != nil {
 		return nil, err
 	}
@@ -192,13 +192,13 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	if s.manager.Root() != root || session.ProjectID != index.ProjectID {
 		return nil, project.ErrRevisionConflict
 	}
-	if changeWorkflowActive(session.Workflow) {
+	if isChangePipelineActive(session.Workflow) {
 		return nil, fmt.Errorf("%w: cancel the workflow before restoring its conversation", project.ErrRevisionConflict)
 	}
 	session.Checks, session.ReviewedHash = []CheckResult{}, ""
 	invalidateChangeWorkflow(session, "Restored workflow evidence requires a new run.")
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil
@@ -235,14 +235,14 @@ func (s *Service) loadChangeForAction(ctx context.Context, id string, identity C
 	if err := ctx.Err(); err != nil {
 		return nil, root, err
 	}
-	session, err := readChangeSession(root, id)
+	session, err := loadChangeSession(root, id)
 	if err != nil {
 		return nil, root, err
 	}
 	if session.State != "draft" || identity.ProjectID != session.ProjectID || identity.ProjectRevision != session.ProjectRevision || identity.Revision != session.Revision || identity.Hash != session.Hash {
 		return nil, root, project.ErrRevisionConflict
 	}
-	if changeWorkflowActive(session.Workflow) && ctx.Value(changeWorkflowContextKey{}) != session.Workflow.ID {
+	if isChangePipelineActive(session.Workflow) && ctx.Value(changeWorkflowContextKey{}) != session.Workflow.ID {
 		return nil, root, fmt.Errorf("%w: this proposal belongs to an active workflow", project.ErrRevisionConflict)
 	}
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
@@ -297,7 +297,7 @@ func (s *Service) updateChangeProposal(ctx context.Context, id string, request C
 		session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: note, CreatedAt: now})
 	}
 	session.UpdatedAt = now
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil
@@ -342,7 +342,7 @@ func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessag
 }
 
 func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {
-	text, manifest, err := changeContext(root, session)
+	text, manifest, err := composeChangePromptContext(root, session)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	now := time.Now().UTC()
 	session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: request.Message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	session.UpdatedAt = now
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil
@@ -444,7 +444,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
 		return nil, err
 	}
-	if err := writeChangeSession(root, session); err != nil {
+	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil

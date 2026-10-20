@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -95,7 +95,7 @@ func BuildContext(ctx context.Context, root string, excluded []string) (string, 
 	if err != nil {
 		return "", manifest, "", err
 	}
-	fingerprint, err := checkexec.WorkspaceFingerprint(ctx, root)
+	fingerprint, err := sandbox.WorkspaceFingerprint(ctx, root)
 	return text, manifest, fingerprint, err
 }
 
@@ -181,7 +181,7 @@ func validateFeature(idea FeatureSuggestion, validatePath func(path string) erro
 
 func validateFeatureDescription(idea FeatureSuggestion) error {
 	for _, text := range []string{idea.Title, idea.Benefit, idea.Evidence} {
-		if strings.TrimSpace(text) == "" || len(text) > 1024 || checkexec.SanitizeOutput(text, false, "", "") != text {
+		if strings.TrimSpace(text) == "" || len(text) > 1024 || sandbox.SanitizeOutput(text, false, "", "") != text {
 			return fmt.Errorf("feature prose must be non-empty bounded text without credentials")
 		}
 	}

@@ -1,0 +1,276 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func isCharDevice(in io.Reader) (*os.File, bool) {
+	f, ok := in.(*os.File)
+	if !ok {
+		return nil, false
+	}
+	info, err := f.Stat()
+	if err != nil || (info.Mode()&os.ModeCharDevice) == 0 {
+		return nil, false
+	}
+	return f, true
+}
+
+// DetectTerminalSize inspects the active controlling terminal or environment for full-screen dimensions.
+func DetectTerminalSize(fallbackWidth, fallbackHeight int) (int, int) {
+	if fallbackWidth > 0 && fallbackHeight > 0 {
+		return fallbackWidth, fallbackHeight
+	}
+	cols, rows := querySttySize(os.Stdin)
+	if cols <= 0 || rows <= 0 {
+		if tty, err := os.Open("/dev/tty"); err == nil {
+			cols, rows = querySttySize(tty)
+			_ = tty.Close()
+		}
+	}
+	if cols <= 0 {
+		cols, _ = strconv.Atoi(os.Getenv("COLUMNS"))
+	}
+	if rows <= 0 {
+		rows, _ = strconv.Atoi(os.Getenv("LINES"))
+	}
+	if fallbackWidth > 0 {
+		cols = fallbackWidth
+	} else if cols <= 0 {
+		cols = 120
+	}
+	if fallbackHeight > 0 {
+		rows = fallbackHeight
+	} else if rows <= 0 {
+		rows = 36
+	}
+	return cols, rows
+}
+
+func querySttySize(f *os.File) (int, int) {
+	if f == nil {
+		return 0, 0
+	}
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = f
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return 0, 0
+	}
+	rows, err1 := strconv.Atoi(fields[0])
+	cols, err2 := strconv.Atoi(fields[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return cols, rows
+}
+
+// DecodeInputBytes parses raw terminal input bytes into discrete KeyEvents.
+func DecodeInputBytes(data []byte) []KeyEvent {
+	var events []KeyEvent
+	for i := 0; i < len(data); {
+		if ev, consumed := decodeEscapeSequence(data[i:]); consumed > 0 {
+			events = append(events, ev)
+			i += consumed
+			continue
+		}
+		ev, consumed := decodeSingleKey(data[i:])
+		events = append(events, ev)
+		i += consumed
+	}
+	return events
+}
+
+func decodeEscapeSequence(buf []byte) (KeyEvent, int) {
+	if len(buf) == 0 || buf[0] != 0x1b {
+		return KeyEvent{}, 0
+	}
+	if len(buf) >= 3 && buf[1] == '[' {
+		switch buf[2] {
+		case 'A':
+			return KeyEvent{Key: "ArrowUp"}, 3
+		case 'B':
+			return KeyEvent{Key: "ArrowDown"}, 3
+		case 'C':
+			return KeyEvent{Key: "ArrowRight"}, 3
+		case 'D':
+			return KeyEvent{Key: "ArrowLeft"}, 3
+		case 'Z':
+			return KeyEvent{Key: "Tab", Shift: true}, 3
+		}
+	}
+	return KeyEvent{Key: "Escape"}, 1
+}
+
+func decodeSingleKey(buf []byte) (KeyEvent, int) {
+	switch buf[0] {
+	case 0x03:
+		return KeyEvent{Key: "c", Ctrl: true}, 1
+	case '\r', '\n':
+		return KeyEvent{Key: "Enter"}, 1
+	case '\t':
+		return KeyEvent{Key: "Tab"}, 1
+	case 0x7f, 0x08:
+		return KeyEvent{Key: "Backspace"}, 1
+	}
+	r, size := utf8.DecodeRune(buf)
+	if r == utf8.RuneError && size <= 1 {
+		return KeyEvent{Key: string(buf[0])}, 1
+	}
+	return KeyEvent{Key: string(r)}, size
+}
+
+type pollTickMsg time.Time
+
+func pollTickCmd() tea.Cmd {
+	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
+		return pollTickMsg(t)
+	})
+}
+
+// BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
+type BubbleModel struct {
+	ctx    context.Context
+	state  *State
+	client *Client
+	width  int
+	height int
+}
+
+// NewBubbleModel constructs a Bubble Tea model wrapping State and Client.
+func NewBubbleModel(ctx context.Context, state *State, client *Client, width, height int) *BubbleModel {
+	w, h := DetectTerminalSize(width, height)
+	return &BubbleModel{
+		ctx:    ctx,
+		state:  state,
+		client: client,
+		width:  w,
+		height: h,
+	}
+}
+
+// Init implements tea.Model.
+func (m *BubbleModel) Init() tea.Cmd {
+	if m.client != nil && m.state.hasActiveBackgroundJob() {
+		return pollTickCmd()
+	}
+	return nil
+}
+
+// Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, KeyEvent, and poll ticks.
+func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch ev := msg.(type) {
+	case tea.WindowSizeMsg:
+		if ev.Width > 0 && ev.Height > 0 {
+			m.width = ev.Width
+			m.height = ev.Height
+		}
+	case tea.KeyMsg:
+		m.applyKeyEvent(keyEventFromTea(ev))
+	case KeyEvent:
+		m.applyKeyEvent(ev)
+	case pollTickMsg:
+		m.state.PollActiveJobs(m.ctx, m.client)
+	}
+	if m.state.Quitting {
+		return m, tea.Quit
+	}
+	if m.client != nil && m.state.hasActiveBackgroundJob() {
+		return m, pollTickCmd()
+	}
+	return m, nil
+}
+
+func (m *BubbleModel) applyKeyEvent(ev KeyEvent) {
+	m.state.HandleKey(ev)
+	m.state.FlushActions(m.ctx, m.client)
+}
+
+// View implements tea.Model, rendering the full-screen Lip Gloss / Bubbles frame.
+func (m *BubbleModel) View() string {
+	return m.state.Render(m.width, m.height)
+}
+
+func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
+	switch msg.Type {
+	case tea.KeyUp:
+		return KeyEvent{Key: "ArrowUp"}
+	case tea.KeyDown:
+		return KeyEvent{Key: "ArrowDown"}
+	case tea.KeyLeft:
+		return KeyEvent{Key: "ArrowLeft"}
+	case tea.KeyRight:
+		return KeyEvent{Key: "ArrowRight"}
+	case tea.KeyTab:
+		return KeyEvent{Key: "Tab"}
+	case tea.KeyShiftTab:
+		return KeyEvent{Key: "Tab", Shift: true}
+	case tea.KeyEnter:
+		return KeyEvent{Key: "Enter"}
+	case tea.KeyEsc:
+		return KeyEvent{Key: "Escape"}
+	case tea.KeyBackspace:
+		return KeyEvent{Key: "Backspace"}
+	case tea.KeySpace:
+		return KeyEvent{Key: " "}
+	case tea.KeyCtrlC:
+		return KeyEvent{Key: "c", Ctrl: true}
+	default:
+		return KeyEvent{Key: msg.String()}
+	}
+}
+
+// RunSession runs an interactive terminal session using Bubble Tea on TTYs or deterministic model updates on streams.
+func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
+	model := NewBubbleModel(ctx, s, client, width, height)
+	_ = model.Init()
+	if _, isTTY := isCharDevice(in); isTTY {
+		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
+		_, err := prog.Run()
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", model.View()); err != nil {
+		return fmt.Errorf("render initial frame: %w", err)
+	}
+	buf := make([]byte, 64)
+	for !s.Quitting {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		n, err := in.Read(buf)
+		if n > 0 {
+			for _, ev := range DecodeInputBytes(buf[:n]) {
+				_, _ = model.Update(ev)
+				if s.Quitting {
+					break
+				}
+			}
+			w, h := DetectTerminalSize(width, height)
+			_, _ = model.Update(tea.WindowSizeMsg{Width: w, Height: h})
+			if _, wErr := fmt.Fprintf(out, "\033[2J\033[H%s\n", model.View()); wErr != nil {
+				return fmt.Errorf("render frame: %w", wErr)
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return fmt.Errorf("read terminal input: %w", err)
+		}
+	}
+	return nil
+}

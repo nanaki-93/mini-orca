@@ -73,7 +73,7 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 	if err != nil {
 		return nil, err
 	}
-	coverage, err := s.analysisOverviewCoverage(analysis.ProjectID, analysis.ProjectRevision)
+	coverage, err := s.buildAnalysisCoverageSummary(analysis.ProjectID, analysis.ProjectRevision)
 	if err != nil {
 		return nil, err
 	}

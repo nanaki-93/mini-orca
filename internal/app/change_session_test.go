@@ -27,7 +27,7 @@ func TestChangeHistoryLimitCountsOnlyConversationsAndRejectsCorruption(t *testin
 	initialID := session.ID
 	for i := 0; i < 200; i++ {
 		session.ID = fmt.Sprintf("change-%032x", i)
-		if err := writeChangeSession(root, session); err != nil {
+		if err := storeChangeSession(root, session); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -51,7 +51,7 @@ func TestChangeHistoryLimitCountsOnlyConversationsAndRejectsCorruption(t *testin
 	session.Changes = []ChangeEdit{{Path: "main.go", Content: "package main\n", Hash: contentHash([]byte("package main\n"))}}
 	session.Hash = changeProposalHash(session.Changes)
 	session.Changes = append(session.Changes, session.Changes[0])
-	if err := writeChangeSession(root, session); err == nil {
+	if err := storeChangeSession(root, session); err == nil {
 		t.Fatal("duplicate persisted changes accepted")
 	}
 }
@@ -181,7 +181,7 @@ func TestChangeGenerationHistoryAndRevision(t *testing.T) {
 	}
 	first.Checks = []CheckResult{{Name: "parse", Required: true, State: CheckPassed}}
 	first.ReviewedHash = first.Hash
-	if err := writeChangeSession(root, first); err != nil {
+	if err := storeChangeSession(root, first); err != nil {
 		t.Fatal(err)
 	}
 	resumed, err := service.ResumeChange(context.Background(), session.ID)

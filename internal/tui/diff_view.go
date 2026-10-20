@@ -4,29 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/tuidomain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
-
-type (
-	FileDiffHunk   = tuidomain.FileDiffHunk
-	SplitDiffRow   = tuidomain.SplitDiffRow
-	UnifiedDiffRow = tuidomain.UnifiedDiffRow
-)
-
-// EffectiveSessionChanges returns all modified files in the proposal plus any captured target files not already in Changes.
-func EffectiveSessionChanges(change *ChangeSession) []FileChange {
-	return tuidomain.EffectiveSessionChanges(change)
-}
-
-// CollectChangeHunks extracts all hunks across all files in a ChangeSession.
-func CollectChangeHunks(changes []FileChange) []FileDiffHunk {
-	return tuidomain.CollectChangeHunks(changes)
-}
-
-// BuildSplitDiffRows pairs consecutive removed and added lines into side-by-side comparison rows.
-func BuildSplitDiffRows(lines []DiffLine) []SplitDiffRow {
-	return tuidomain.BuildSplitDiffRows(lines)
-}
 
 // EffectiveDiffMode returns the active diff view mode ("hunk", "split", or "unified").
 func (s *State) EffectiveDiffMode() string {
@@ -52,11 +33,11 @@ func diffModeDisplayName(mode string) string {
 }
 
 func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
-	changes := EffectiveSessionChanges(s.Change)
+	changes := domain.EffectiveSessionChanges(s.Change)
 	if len(changes) == 0 {
 		return FileDiffHunk{}, nil, false
 	}
-	all := CollectChangeHunks(changes)
+	all := domain.CollectChangeHunks(changes)
 	if len(all) == 0 {
 		return FileDiffHunk{}, nil, false
 	}
@@ -65,15 +46,15 @@ func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
 }
 
 func (s *State) unifiedDiffRows() []UnifiedDiffRow {
-	changes := EffectiveSessionChanges(s.Change)
+	changes := domain.EffectiveSessionChanges(s.Change)
 	if len(changes) == 0 {
 		return nil
 	}
-	allHunks := CollectChangeHunks(changes)
+	allHunks := domain.CollectChangeHunks(changes)
 	var rows []UnifiedDiffRow
 	for _, fh := range allHunks {
 		header := fmt.Sprintf("File %d/%d: %s · Hunk #%d/%d (@@ -%d,%d +%d,%d @@)",
-			fh.FileIndex+1, fh.FileTotal, sanitizeCodeText(fh.Path),
+			fh.FileIndex+1, fh.FileTotal, theme.SanitizeCodeText(fh.Path),
 			fh.GlobalIndex+1, len(allHunks),
 			fh.Hunk.OldStart, fh.Hunk.OldEnd, fh.Hunk.NewStart, fh.Hunk.NewEnd,
 		)
@@ -102,16 +83,12 @@ func (s *State) diffViewRowCount() int {
 	}
 	switch s.EffectiveDiffMode() {
 	case "split":
-		return max(1, len(BuildSplitDiffRows(active.Hunk.Lines)))
+		return max(1, len(domain.BuildSplitDiffRows(active.Hunk.Lines)))
 	case "unified":
 		return max(1, len(s.unifiedDiffRows()))
 	default:
 		return max(1, len(active.Hunk.Lines))
 	}
-}
-
-func firstChangedRowForMode(hunk DiffHunk, mode string) int {
-	return tuidomain.FirstChangedRowForMode(hunk, mode)
 }
 
 func (s *State) syncDiffSelectionToHunk(hunkIdx int) {
@@ -134,7 +111,7 @@ func (s *State) syncDiffSelectionToHunk(hunkIdx int) {
 		s.SelectedIdx = 0
 		return
 	}
-	s.SelectedIdx = firstChangedRowForMode(active.Hunk, mode)
+	s.SelectedIdx = domain.FirstChangedRowForMode(active.Hunk, mode)
 }
 
 func (s *State) formatFocusedHunkStatus(fh FileDiffHunk, totalHunks int) string {
@@ -152,10 +129,10 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	if !ok {
 		return []string{fmt.Sprintf("  %sNo diff lines available.%s", th.muted, th.reset)}
 	}
-	added, removed, _ := ClassifyDiffScope(s.Change.Changes)
+	added, removed, _ := domain.ClassifyDiffScope(s.Change.Changes)
 	mode := s.EffectiveDiffMode()
 	meta := s.buildDiffReviewMeta(th, active, len(allHunks), added, removed)
-	stateTag := strings.ToUpper(firstNonEmpty(s.Change.State, "draft"))
+	stateTag := strings.ToUpper(client.FirstNonEmpty(s.Change.State, "draft"))
 	rightTag := fmt.Sprintf("%s · +%d / -%d", stateTag, added, removed)
 	lines := th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, meta)
 
@@ -169,7 +146,7 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	}
 }
 
-func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, added, removed int) []string {
+func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, _, _ int) []string {
 	fileScope := fmt.Sprintf("%sFile %d/%d:%s %s%s%s",
 		th.muted, active.FileIndex+1, max(1, active.FileTotal), th.reset,
 		th.cyan, active.Path, th.reset)
@@ -182,14 +159,14 @@ func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunk
 		),
 	}
 	if s.ShowInlineWhy && active.Summary != "" {
-		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, sanitizeCodeText(active.Summary), th.reset))
+		meta = append(meta, fmt.Sprintf("%sRationale:%s %s%s%s", th.bold+th.accent, th.reset, th.fg, theme.SanitizeCodeText(active.Summary), th.reset))
 	}
 	return meta
 }
 
 func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
 	hdr := fmt.Sprintf("   OLD  NEW │ SIGN  FOCUSED HUNK #%d/%d · %s",
-		active.GlobalIndex+1, totalHunks, sanitizeCodeText(active.Path))
+		active.GlobalIndex+1, totalHunks, theme.SanitizeCodeText(active.Path))
 	lines := th.renderTableHeader(hdr, width)
 	hunkLines := active.Hunk.Lines
 	selected := s.ClampedIdx()
@@ -203,12 +180,12 @@ func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHu
 
 func formatDualNumberDiffLine(th ansiTheme, dl DiffLine, selected bool, codeCol int) string {
 	cursor := th.renderCursorPrefix(selected)
-	text := truncatePlain(sanitizeCodeText(dl.Text), codeCol)
+	text := theme.TruncatePlain(theme.SanitizeCodeText(dl.Text), codeCol)
 	switch {
-	case IsAddedLine(dl.Kind):
+	case domain.IsAddedLine(dl.Kind):
 		return fmt.Sprintf("  %s%s   · %4d%s %s┃ + %s%s",
 			cursor, th.green, dl.NewLine, th.reset, th.bold+th.green, text, th.reset)
-	case IsRemovedLine(dl.Kind):
+	case domain.IsRemovedLine(dl.Kind):
 		return fmt.Sprintf("  %s%s%4d    ·%s %s┃ - %s%s",
 			cursor, th.red, dl.OldLine, th.reset, th.bold+th.red, text, th.reset)
 	default:
@@ -223,11 +200,11 @@ func formatDualNumberDiffLine(th ansiTheme, dl DiffLine, selected bool, codeCol 
 
 func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
 	halfW := max(26, (width-7)/2)
-	leftHdr := padVisibleRight(" OLD │ BEFORE (ORIGINAL)", halfW)
-	rightHdr := padVisibleRight(fmt.Sprintf(" NEW │ AFTER (HUNK #%d/%d)", active.GlobalIndex+1, totalHunks), halfW)
+	leftHdr := theme.PadVisibleRight(" OLD │ BEFORE (ORIGINAL)", halfW)
+	rightHdr := theme.PadVisibleRight(fmt.Sprintf(" NEW │ AFTER (HUNK #%d/%d)", active.GlobalIndex+1, totalHunks), halfW)
 	lines := th.renderTableHeader("   "+leftHdr+" │ "+rightHdr, width)
 
-	splitRows := BuildSplitDiffRows(active.Hunk.Lines)
+	splitRows := domain.BuildSplitDiffRows(active.Hunk.Lines)
 	selected := s.ClampedIdx()
 	start, end := windowBounds(len(splitRows), selected, s.adaptiveWindowRows(10, 14))
 	for idx := start; idx < end; idx++ {
@@ -242,7 +219,7 @@ func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk
 
 func formatSplitHalfCell(th ansiTheme, lineNum int, kind, rawText string, colWidth int, selected bool) string {
 	codeCol := max(8, colWidth-9)
-	text := truncatePlain(sanitizeCodeText(rawText), codeCol)
+	text := theme.TruncatePlain(theme.SanitizeCodeText(rawText), codeCol)
 	var cell string
 	switch kind {
 	case "delete":
@@ -258,7 +235,7 @@ func formatSplitHalfCell(th ansiTheme, lineNum int, kind, rawText string, colWid
 	default:
 		cell = fmt.Sprintf("%s    · │%s", th.muted, th.reset)
 	}
-	return padVisibleRight(cell, colWidth)
+	return theme.PadVisibleRight(cell, colWidth)
 }
 
 func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
@@ -278,7 +255,7 @@ func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiff
 				activeTag = " [ACTIVE]"
 				style = th.bold + th.accent
 			}
-			banner := truncatePlain(r.HeaderText+activeTag, max(20, width-10))
+			banner := theme.TruncatePlain(r.HeaderText+activeTag, max(20, width-10))
 			lines = append(lines, fmt.Sprintf("  %s%s── %s ──%s", cursor, style, banner, th.reset))
 			continue
 		}

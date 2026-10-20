@@ -1,0 +1,927 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+)
+
+// FlushActions dispatches queued PendingActions to the daemon and clears the queue.
+func (s *State) FlushActions(ctx context.Context, cl *Client) {
+	if cl == nil || len(s.PendingActions) == 0 {
+		s.PendingActions = nil
+		return
+	}
+	actions := s.PendingActions
+	s.PendingActions = nil
+	for idx, act := range actions {
+		reqID := fmt.Sprintf("act-%d-%s", idx, act.Kind)
+		if err := s.dispatchAction(ctx, cl, reqID, act); err != nil {
+			s.Error = err.Error()
+		}
+	}
+}
+
+func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "reconnect":
+		return s.SyncFromDaemon(ctx, cl, "")
+	case "open-project":
+		return s.SyncFromDaemon(ctx, cl, act.Target)
+	case "reindex":
+		return s.dispatchReindex(ctx, cl, reqID)
+	case "scan":
+		return s.dispatchScan(ctx, cl, reqID)
+	case "open-file":
+		return s.fetchFileInfo(ctx, cl, reqID, act.Target)
+	case "run-analysis", "reanalyze", "repair-analysis", "pause-analysis", "resume-analysis":
+		return s.dispatchAnalysisAction(ctx, cl, reqID, act)
+	default:
+		return s.dispatchMutationAction(ctx, cl, reqID, act)
+	}
+}
+
+func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) error {
+	var idx ProjectIndex
+	body := map[string]any{"project_revision": s.projectRevision()}
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/reindex", body, &idx); err != nil {
+		return err
+	}
+	if s.Project != nil && (s.Project.ProjectID == "" || idx.ProjectID == s.Project.ProjectID) && idx.ProjectRevision != "" {
+		s.Project.ProjectRevision = idx.ProjectRevision
+	}
+	if s.AcceptProjectResponse(idx.ProjectIdentity) {
+		s.Index = &idx
+	}
+	return nil
+}
+
+func (s *State) dispatchScan(ctx context.Context, cl *Client, reqID string) error {
+	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
+	var scan Scan
+	body := map[string]any{"project_revision": s.projectRevision()}
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/scan", body, &scan); err != nil {
+		return err
+	}
+	if s.AcceptProjectResponse(scan.ProjectIdentity) {
+		s.Scan = &scan
+	}
+	return nil
+}
+
+func (s *State) dispatchAnalysisAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "pause-analysis":
+		return s.dispatchPauseAnalysis(ctx, cl, reqID)
+	case "resume-analysis":
+		return s.dispatchResumeAnalysis(ctx, cl, reqID)
+	default:
+		return s.dispatchAnalysisRun(ctx, cl, reqID, act)
+	}
+}
+
+func (s *State) analysisLimitsPayload() map[string]int {
+	cfg := s.EffectiveAnalysisConfig()
+	return map[string]int{
+		"batch_files":            cfg.BatchFiles,
+		"budget_seconds":         cfg.BudgetSeconds,
+		"max_attempts_per_stage": cfg.MaxAttemptsPerStage,
+	}
+}
+
+func (s *State) analysisModelsPayload() map[string]string {
+	analyzeSel := s.AssignedScopeModelID("analyze")
+	bugSel := s.AssignedScopeModelID("bug")
+	if (analyzeSel == "" || analyzeSel == "analyze") && (bugSel == "" || bugSel == "bug") {
+		return nil
+	}
+	codeModel := s.resolveDaemonModelSelection(client.FirstNonEmpty(bugSel, "bug"), "bug")
+	analyzeModel := s.resolveDaemonModelSelection(client.FirstNonEmpty(analyzeSel, "analyze"), "analyze")
+	return map[string]string{
+		"code":        codeModel,
+		"performance": analyzeModel,
+		"security":    analyzeModel,
+		"features":    analyzeModel,
+	}
+}
+
+type analysisPreviewPayload struct {
+	PreviewID string         `json:"preview_id"`
+	Identity  map[string]any `json:"identity"`
+	Limits    map[string]any `json:"limits"`
+	Providers []struct {
+		ID string `json:"id"`
+	} `json:"providers"`
+}
+
+func (p analysisPreviewPayload) providerIDs() []string {
+	ids := make([]string, 0, len(p.Providers))
+	for _, prov := range p.Providers {
+		if prov.ID != "" {
+			ids = append(ids, prov.ID)
+		}
+	}
+	return ids
+}
+
+func (s *State) isAnalysisPausedOrInterrupted() bool {
+	return s.Run != nil && (s.Run.Status == "paused" || s.Run.Status == "interrupted")
+}
+
+func isRevisionConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "project or file changed") ||
+		strings.Contains(msg, "active project changed") ||
+		strings.Contains(msg, "stale")
+}
+
+func (s *State) cancelPausedAnalysis(ctx context.Context, cl *Client, reqID string) {
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		return
+	}
+	ctrlReq := map[string]any{"identity": s.Run.Identity, "action": "cancel"}
+	var run AnalysisRun
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err == nil && run.Identity.ID != "" {
+		s.Run = &run
+	}
+}
+
+func (s *State) dispatchAnalysisRun(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	cfg := s.EffectiveAnalysisConfig()
+	if act.Kind == "run-analysis" && s.isAnalysisPausedOrInterrupted() && !cfg.ClearResults {
+		return s.dispatchResumeAnalysis(ctx, cl, reqID)
+	}
+	if act.Kind == "repair-analysis" && s.isAnalysisPausedOrInterrupted() {
+		s.cancelPausedAnalysis(ctx, cl, reqID+"-cancel")
+	}
+	refresh, clearResults, includeFeatures, retryStale, staleOnly := s.resolveAnalysisDispatchFlags(act, cfg)
+	preview, err := s.requestAnalysisPreview(ctx, cl, reqID, refresh, clearResults, includeFeatures, retryStale, staleOnly, act.Target)
+	if err != nil {
+		return err
+	}
+	startReq := s.buildAnalysisStartRequest(preview, refresh, clearResults, includeFeatures, retryStale, staleOnly, act.Target)
+	var run AnalysisRun
+	if err := cl.DoJSON(ctx, reqID+"-start", http.MethodPost, "/api/projects/current/analysis/run", startReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
+func (s *State) resolveAnalysisDispatchFlags(act ActionRequest, cfg AnalysisRunConfig) (refresh, clearResults, includeFeatures, retryStale, staleOnly bool) {
+	refresh = act.Kind == "reanalyze" || cfg.Refresh
+	clearResults = (act.Kind == "reanalyze" && s.isAnalysisPausedOrInterrupted()) || cfg.ClearResults
+	if clearResults {
+		refresh = true
+	}
+	retryStale = act.Kind == "repair-analysis" && act.Target == ""
+	staleOnly = act.Kind == "repair-analysis" && act.Target != ""
+	includeFeatures = cfg.IncludeFeatures && !staleOnly
+	return
+}
+
+func (s *State) buildAnalysisStartRequest(preview analysisPreviewPayload, refresh, clearResults, includeFeatures, retryStale, staleOnly bool, stalePath string) map[string]any {
+	limitsPayload := any(preview.Limits)
+	if len(preview.Limits) == 0 {
+		limitsPayload = s.analysisLimitsPayload()
+	}
+	startReq := map[string]any{
+		"identity":           preview.Identity,
+		"preview_id":         preview.PreviewID,
+		"limits":             limitsPayload,
+		"refresh":            refresh,
+		"clear_results":      clearResults,
+		"include_features":   includeFeatures,
+		"retry_stale_failed": retryStale,
+		"stale_only":         staleOnly,
+		"stale_path":         stalePath,
+		"confirmations": map[string]any{
+			"provider_ids":    preview.providerIDs(),
+			"security_review": true,
+		},
+	}
+	if models := s.analysisModelsPayload(); len(models) > 0 {
+		startReq["models"] = models
+	}
+	return startReq
+}
+
+func (s *State) requestAnalysisPreview(ctx context.Context, cl *Client, reqID string, refresh, clearResults, includeFeatures, retryStale, staleOnly bool, stalePath string) (analysisPreviewPayload, error) {
+	buildReq := func() map[string]any {
+		req := map[string]any{
+			"project_id":         s.Project.ProjectID,
+			"project_revision":   s.Project.ProjectRevision,
+			"scope":              "project",
+			"refresh":            refresh,
+			"clear_results":      clearResults,
+			"include_features":   includeFeatures,
+			"retry_stale_failed": retryStale,
+			"stale_only":         staleOnly,
+			"stale_path":         stalePath,
+			"limits":             s.analysisLimitsPayload(),
+		}
+		if models := s.analysisModelsPayload(); len(models) > 0 {
+			req["models"] = models
+		}
+		return req
+	}
+	var preview analysisPreviewPayload
+	err := cl.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", buildReq(), &preview)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, cl, reqID+"-sync")
+		err = cl.DoJSON(ctx, reqID+"-prev2", http.MethodPost, "/api/projects/current/analysis/preview", buildReq(), &preview)
+	}
+	return preview, err
+}
+
+func (s *State) dispatchPauseAnalysis(ctx context.Context, cl *Client, reqID string) error {
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		return nil
+	}
+	ctrlReq := map[string]any{
+		"identity": s.Run.Identity,
+		"action":   "pause",
+	}
+	var run AnalysisRun
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
+func (s *State) dispatchResumeAnalysis(ctx context.Context, cl *Client, reqID string) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	if s.Run == nil || s.Run.Identity.ID == "" {
+		_, idQuery := s.resourceQueries()
+		var latest AnalysisRun
+		if err := cl.DoJSON(ctx, reqID+"-fetch", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &latest); err == nil && latest.Identity.ID != "" {
+			s.Run = &latest
+		}
+	}
+	if s.Run == nil || s.Run.Identity.ID == "" || !s.isAnalysisPausedOrInterrupted() {
+		return s.dispatchAnalysisRun(ctx, cl, reqID, ActionRequest{Kind: "run-analysis"})
+	}
+	limits := s.Run.Plan.Limits
+	if len(limits) == 0 {
+		limits = s.analysisLimitsPayload()
+	}
+	previewReq := map[string]any{
+		"project_id":         s.Project.ProjectID,
+		"project_revision":   s.Project.ProjectRevision,
+		"scope":              "project",
+		"refresh":            s.Run.Plan.Refresh,
+		"retry_stale_failed": s.Run.Plan.RetryStaleFailed,
+		"stale_only":         s.Run.Plan.StaleOnly,
+		"stale_path":         s.Run.Plan.StalePath,
+		"resume_run":         s.Run.Identity,
+		"limits":             limits,
+	}
+	var preview analysisPreviewPayload
+	if err := cl.DoJSON(ctx, reqID+"-prev", http.MethodPost, "/api/projects/current/analysis/preview", previewReq, &preview); err != nil {
+		if isRevisionConflictError(err) {
+			s.syncProjectRevision(ctx, cl, reqID+"-sync")
+			s.cancelPausedAnalysis(ctx, cl, reqID+"-cancel")
+			return s.dispatchAnalysisRun(ctx, cl, reqID, ActionRequest{Kind: "run-analysis"})
+		}
+		return err
+	}
+	ctrlReq := map[string]any{
+		"identity":   s.Run.Identity,
+		"action":     "resume",
+		"preview_id": preview.PreviewID,
+		"confirmations": map[string]any{
+			"provider_ids":    preview.providerIDs(),
+			"security_review": true,
+		},
+	}
+	var run AnalysisRun
+	if err := cl.DoJSON(ctx, reqID+"-resume", http.MethodPost, "/api/projects/current/analysis/run/control", ctrlReq, &run); err != nil {
+		return err
+	}
+	s.Run = &run
+	return nil
+}
+
+func (s *State) dispatchMutationAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "start-agent":
+		return s.dispatchStartAgent(ctx, cl, reqID, act)
+	case "apply-commit":
+		return s.dispatchApplyCommit(ctx, cl, reqID, act)
+	case "dismiss-finding":
+		return s.dispatchDismissFinding(ctx, cl, reqID, act)
+	case "dismiss-feature":
+		return s.dispatchDismissFeature(ctx, cl, reqID, act)
+	case "set-trust":
+		return s.dispatchSetTrust(ctx, cl, reqID)
+	case "undo":
+		return s.dispatchUndo(ctx, cl, reqID, act)
+	default:
+		return s.dispatchSecondaryMutation(ctx, cl, reqID, act)
+	}
+}
+
+func (s *State) dispatchSecondaryMutation(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	switch act.Kind {
+	case "update-proposal":
+		return s.dispatchUpdateProposal(ctx, cl, reqID, act)
+	case "check-change":
+		return s.dispatchCheckChange(ctx, cl, reqID)
+	case "repair-change":
+		return s.dispatchRepairChange(ctx, cl, reqID, act)
+	case "merge-worktree":
+		return s.dispatchMergeWorktree(ctx, cl, reqID, act.Target)
+	case "load-change":
+		return s.dispatchLoadChange(ctx, cl, reqID, act.Target)
+	case "save-selection":
+		return s.dispatchSaveSelection(ctx, cl, reqID)
+	case "propose-instructions":
+		return s.dispatchProposeInstructions(ctx, cl, reqID, act.Target, act.Message)
+	case "bootstrap":
+		return s.dispatchBootstrap(ctx, cl, reqID, act.Target)
+	case "cancel-workflow":
+		return s.dispatchCancelWorkflow(ctx, cl, reqID, act.Target)
+	case "refresh-models":
+		_ = s.RefreshModels(ctx, cl)
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (s *State) dispatchCancelWorkflow(ctx context.Context, cl *Client, reqID, sessionID string) error {
+	if s.Change == nil || s.Change.Workflow == nil || s.Project == nil {
+		return nil
+	}
+	id := client.FirstNonEmpty(sessionID, s.Change.ID)
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"workflow_id":      s.Change.Workflow.ID,
+	}
+	var updated ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(id) + "/workflow/cancel"
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
+		return err
+	}
+	if updated.ID != "" {
+		s.Change = &updated
+	}
+	return nil
+}
+
+func (s *State) workflowModelsPayload() (map[string]string, []string) {
+	createSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("bug"), "bug")
+	testSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("function"), "function")
+	reviewSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("analyze"), "analyze")
+	models := map[string]string{
+		"create": createSel,
+		"test":   testSel,
+		"review": reviewSel,
+	}
+	confirmed := []string{"analyze", "bug", "function"}
+	for _, sel := range []string{createSel, testSel, reviewSel} {
+		if !domain.ContainsString(confirmed, sel) {
+			confirmed = append(confirmed, sel)
+		}
+	}
+	return models, confirmed
+}
+
+func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) string {
+	switch candidate {
+	case "analyze", "bug", "function":
+		return candidate
+	}
+	if s.AvailableModels != nil {
+		for _, ch := range s.AvailableModels.Models {
+			if ch.ID == candidate {
+				return candidate
+			}
+		}
+	}
+	return fallbackScope
+}
+
+func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
+	paths := domain.EnsureChangeTestPaths(act.Seed.Paths, s.Index)
+	if len(paths) == 0 {
+		return nil
+	}
+	session, err := s.openChangeSessionWithRetry(ctx, cl, reqID, act.Seed, paths)
+	if err != nil {
+		if s.Change != nil && s.Change.ID == "agent-session" {
+			s.Change = nil
+		}
+		return err
+	}
+	s.Change = &session
+	modelsMap, confirmedProfiles := s.workflowModelsPayload()
+	wfReq := map[string]any{
+		"project_id":         s.Project.ProjectID,
+		"project_revision":   s.Project.ProjectRevision,
+		"revision":           session.Revision,
+		"hash":               session.Hash,
+		"message":            client.FirstNonEmpty(act.Seed.Message, act.Message, session.Title),
+		"models":             modelsMap,
+		"confirmed_profiles": confirmedProfiles,
+		"confirm_security":   true,
+		"auto_repair":        true,
+	}
+	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow"
+	var wfSession ChangeSession
+	if err := cl.DoJSON(ctx, reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
+		s.Change.State = "failed"
+		return err
+	}
+	s.Change = &wfSession
+	return nil
+}
+
+func (s *State) openChangeSessionWithRetry(ctx context.Context, cl *Client, reqID string, seed *ChangeSeed, paths []string) (ChangeSession, error) {
+	buildReq := func() map[string]any {
+		return map[string]any{
+			"project_id":          s.Project.ProjectID,
+			"project_revision":    s.Project.ProjectRevision,
+			"kind":                client.FirstNonEmpty(seed.Kind, "fix"),
+			"title":               client.FirstNonEmpty(seed.Title, "Agent Mission"),
+			"paths":               paths,
+			"acceptance_criteria": seed.AcceptanceCriteria,
+			"finding_targets":     domain.NormalizeFindingTargets(seed.FindingTargets, s.Project.ProjectID, paths),
+		}
+	}
+	var session ChangeSession
+	err := cl.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes", buildReq(), &session)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, cl, reqID+"-sync")
+		_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust2")
+		err = cl.DoJSON(ctx, reqID+"-open2", http.MethodPost, "/api/projects/current/changes", buildReq(), &session)
+	}
+	return session, err
+}
+
+func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if s.Change == nil || s.Project == nil {
+		return nil
+	}
+	sessionID := url.PathEscape(s.Change.ID)
+	s.ensureChangeReviewed(ctx, cl, reqID, sessionID)
+	applyReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"confirm":          true,
+		"commit_message":   client.FirstNonEmpty(act.Message, s.Change.Title),
+	}
+	if head, branch := s.activeGitIdentity(); head != "" && branch != "" {
+		applyReq["head"] = head
+		applyReq["branch"] = branch
+	}
+	var receipt ChangeMutation
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/changes/"+sessionID+"/apply", applyReq, &receipt); err != nil {
+		return err
+	}
+	s.ChangeReceipt = &receipt
+	s.Change.State = client.FirstNonEmpty(receipt.State, "applied")
+	if receipt.Commit != nil {
+		s.Change.Commit = receipt.Commit
+	}
+	s.recordAppliedFindingCompletions(s.Change.FindingTargets, receipt.Commit)
+	if receipt.ProjectRevision != "" {
+		s.Project.ProjectRevision = receipt.ProjectRevision
+	}
+	if s.Instructions != nil && len(s.Change.Changes) > 0 && s.Change.Changes[0].Path == client.FirstNonEmpty(s.Instructions.Path, "AGENTS.md") {
+		s.Instructions.Exists = true
+		s.Instructions.ExistingContent = s.Change.Changes[0].Content
+	}
+	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q", s.Change.Title)
+	return nil
+}
+
+func (s *State) dispatchUpdateProposal(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if s.Change == nil || s.Project == nil || s.Change.ID == "" {
+		return nil
+	}
+	changes := make([]map[string]string, 0, len(s.Change.Changes))
+	for _, ch := range s.Change.Changes {
+		changes = append(changes, map[string]string{
+			"path":    ch.Path,
+			"content": ch.Content,
+			"summary": ch.Summary,
+		})
+	}
+	body := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"message":          client.FirstNonEmpty(act.Message, "Updated proposal hunks in diff editor"),
+		"changes":          changes,
+	}
+	var updated ChangeSession
+	sessionID := url.PathEscape(s.Change.ID)
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/changes/"+sessionID+"/messages", body, &updated); err != nil {
+		return err
+	}
+	if updated.ID != "" {
+		s.Change = &updated
+	}
+	return nil
+}
+
+func (s *State) ensureChangeReviewed(ctx context.Context, cl *Client, reqID, sessionID string) {
+	if s.Change == nil || s.Change.Hash == "" {
+		return
+	}
+	reviewReq := func() map[string]any {
+		return map[string]any{
+			"project_id":       s.Project.ProjectID,
+			"project_revision": s.Project.ProjectRevision,
+			"revision":         s.Change.Revision,
+			"hash":             s.Change.Hash,
+		}
+	}
+	var reviewed ChangeSession
+	if err := cl.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+		return
+	}
+	checkReq := reviewReq()
+	if s.Change.Kind != "instructions" {
+		checkReq["run_tests"] = true
+	}
+	var checked ChangeSession
+	if err := cl.DoJSON(ctx, reqID+"-chk", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/checks", checkReq, &checked); err == nil && checked.ID != "" {
+		s.Change = &checked
+	}
+	if err := cl.DoJSON(ctx, reqID+"-rev2", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review", reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+	}
+}
+
+func (s *State) dispatchDismissFinding(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Issue == nil || act.Issue.ID == "" {
+		return nil
+	}
+	kind := client.FirstNonEmpty(act.Issue.Kind, "semantic")
+	body := map[string]string{
+		"project_revision": s.projectRevision(),
+		"status":           "dismissed",
+		"kind":             kind,
+		"path":             act.Issue.Path,
+	}
+	if kind == "security" {
+		body["source"] = client.FirstNonEmpty(act.Issue.Source, "deterministic")
+	}
+	target := "/api/projects/current/findings/" + url.PathEscape(act.Issue.ID)
+	if err := cl.DoJSON(ctx, reqID, http.MethodPatch, target, body, nil); err != nil {
+		return err
+	}
+	s.markFindingDismissed(*act.Issue)
+	return nil
+}
+
+func (s *State) dispatchDismissFeature(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Target == "" {
+		return nil
+	}
+	expectedHash := ""
+	if s.Features != nil {
+		expectedHash = s.Features.Hash
+	}
+	body := map[string]string{
+		"project_id":       s.projectID(),
+		"project_revision": s.projectRevision(),
+		"expected_hash":    expectedHash,
+		"status":           "dismissed",
+	}
+	var report FeatureReport
+	target := "/api/projects/current/features/" + url.PathEscape(act.Target)
+	if err := cl.DoJSON(ctx, reqID, http.MethodPatch, target, body, &report); err != nil {
+		return err
+	}
+	if report.Hash != "" || len(report.Suggestions) > 0 {
+		s.Features = &report
+		return nil
+	}
+	if s.Features != nil {
+		for i := range s.Features.Suggestions {
+			if s.Features.Suggestions[i].ID == act.Target {
+				s.Features.Suggestions[i].Status = "dismissed"
+			}
+		}
+	}
+	return nil
+}
+
+func (s *State) dispatchSetTrust(ctx context.Context, cl *Client, reqID string) error {
+	body := map[string]any{
+		"project_revision": s.projectRevision(),
+		"confirm":          s.WorkspaceTrust,
+	}
+	var trust ExecutionTrust
+	return cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+}
+
+func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Target == "" {
+		return nil
+	}
+	undoHash := ""
+	if s.ChangeReceipt != nil && s.ChangeReceipt.Hash != "" {
+		undoHash = s.ChangeReceipt.Hash
+	} else if s.Change != nil {
+		undoHash = s.Change.Hash
+	}
+	body := map[string]any{
+		"project_id":       s.projectID(),
+		"project_revision": s.projectRevision(),
+		"hash":             undoHash,
+		"confirm":          true,
+	}
+	var receipt ChangeMutation
+	target := "/api/projects/current/changes/" + url.PathEscape(act.Target) + "/undo"
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, target, body, &receipt); err != nil {
+		return err
+	}
+	s.ChangeReceipt = &receipt
+	if s.Change != nil && s.Change.ID == act.Target {
+		s.Change.State = client.FirstNonEmpty(receipt.State, "reverted")
+		s.removeFindingCompletions(s.Change.FindingTargets)
+	}
+	if receipt.ProjectRevision != "" && s.Project != nil {
+		s.Project.ProjectRevision = receipt.ProjectRevision
+	}
+	return nil
+}
+
+func (s *State) dispatchCheckChange(ctx context.Context, cl *Client, reqID string) error {
+	return s.postChangeSessionAction(ctx, cl, reqID, "/checks", map[string]any{
+		"run_tests": true,
+		"run_lint":  true,
+	})
+}
+
+func (s *State) dispatchRepairChange(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	return s.postChangeSessionAction(ctx, cl, reqID, "/messages", map[string]any{
+		"message":                 client.FirstNonEmpty(act.Message, "Repair the current proposal to satisfy failed checks."),
+		"confirm_remote_provider": true,
+		"repair":                  true,
+	})
+}
+
+func (s *State) postChangeSessionAction(ctx context.Context, cl *Client, reqID, suffix string, extra map[string]any) error {
+	if s.Change == nil || s.Project == nil {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+	}
+	for k, v := range extra {
+		req[k] = v
+	}
+	var updated ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + suffix
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
+		if isRevisionConflictError(err) {
+			if seed := s.buildSeedFromCurrentChange(); seed != nil {
+				s.syncProjectRevision(ctx, cl, reqID+"-sync")
+				s.CmdOutput = fmt.Sprintf("Proposal was stale — started fresh agent mission for %q", seed.Title)
+				return s.dispatchStartAgent(ctx, cl, reqID+"-refresh", ActionRequest{Kind: "start-agent", Seed: seed})
+			}
+		}
+		return err
+	}
+	s.Change = &updated
+	return nil
+}
+
+func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wtPath string) error {
+	if s.GitWorkspace == nil || s.Project == nil || wtPath == "" {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
+	var srcHead, srcBranch string
+	for _, wt := range s.GitWorkspace.Worktrees {
+		if wt.Path == wtPath {
+			srcHead = wt.Head
+			srcBranch = wt.Branch
+			break
+		}
+	}
+	req := map[string]any{
+		"project_id":        s.Project.ProjectID,
+		"project_revision":  s.Project.ProjectRevision,
+		"head":              s.GitWorkspace.Head,
+		"branch":            s.GitWorkspace.Branch,
+		"path":              wtPath,
+		"source_head":       srcHead,
+		"source_branch":     srcBranch,
+		"confirm":           true,
+		"confirm_execution": true,
+	}
+	var result struct {
+		State      string         `json:"state"`
+		Error      string         `json:"error"`
+		Index      *ProjectIndex  `json:"index"`
+		Repository *GitRepository `json:"repository"`
+	}
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/git/merge", req, &result); err != nil {
+		return err
+	}
+	if result.Error != "" {
+		return fmt.Errorf("%s", result.Error)
+	}
+	if result.Index != nil {
+		s.Index = result.Index
+		if result.Index.ProjectRevision != "" {
+			s.Project.ProjectRevision = result.Index.ProjectRevision
+		}
+	}
+	if result.Repository != nil {
+		s.Repository = result.Repository
+	}
+	return nil
+}
+
+func (s *State) dispatchLoadChange(ctx context.Context, cl *Client, reqID, sessionID string) error {
+	if sessionID == "" || s.Project == nil {
+		return nil
+	}
+	_, idQuery := s.resourceQueries()
+	var chg ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(sessionID) + idQuery
+	if err := cl.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err != nil {
+		return err
+	}
+	if chg.ID != "" {
+		s.Change = &chg
+	}
+	return nil
+}
+
+func (s *State) dispatchSaveSelection(ctx context.Context, cl *Client, reqID string) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	if s.Selection == nil || s.Selection.SelectionID == "" {
+		_, idQuery := s.resourceQueries()
+		var sel Selection
+		if err := cl.DoJSON(ctx, reqID+"-get", http.MethodGet, "/api/projects/current/analysis/selection"+idQuery, nil, &sel); err == nil {
+			s.Selection = &sel
+		}
+	}
+	if s.Selection == nil || s.Selection.SelectionID == "" {
+		return nil
+	}
+	excluded := s.ExcludedPaths
+	if excluded == nil {
+		excluded = []string{}
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"selection_id":     s.Selection.SelectionID,
+		"excluded_paths":   excluded,
+	}
+	var updated Selection
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/analysis/selection", req, &updated); err != nil {
+		return err
+	}
+	s.Selection = &updated
+	s.ExcludedPaths = updated.ExcludedPaths
+	return nil
+}
+
+func (s *State) dispatchProposeInstructions(ctx context.Context, cl *Client, reqID, path, content string) error {
+	if s.Project == nil || s.Project.ProjectID == "" {
+		return nil
+	}
+	targetPath := client.FirstNonEmpty(path, "AGENTS.md")
+	content = s.syncInstructionDraft(ctx, cl, reqID, targetPath, content)
+	draft := client.FirstNonEmpty(content, s.InstructionDraft)
+	if draft == "" {
+		return nil
+	}
+	if s.Instructions != nil && s.Instructions.Exists && s.Instructions.ExistingContent == draft {
+		s.CmdOutput = fmt.Sprintf("%s already contains the selected guardrail", targetPath)
+		return nil
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"title":            "Update " + targetPath,
+		"kind":             "instructions",
+		"paths":            []string{targetPath},
+		"content":          draft,
+	}
+	var session ChangeSession
+	err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/instructions/proposal", req, &session)
+	if err != nil && isRevisionConflictError(err) {
+		s.syncProjectRevision(ctx, cl, reqID+"-sync")
+		req["project_revision"] = s.Project.ProjectRevision
+		err = cl.DoJSON(ctx, reqID+"-retry", http.MethodPost, "/api/projects/current/instructions/proposal", req, &session)
+	}
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "instructions are unchanged") {
+			s.CmdOutput = fmt.Sprintf("%s already contains the selected guardrail", targetPath)
+			return nil
+		}
+		return err
+	}
+	s.Change = &session
+	s.prepareInstructionProposal(ctx, cl, reqID)
+	s.CmdOutput = fmt.Sprintf("Prepared %s guardrail proposal — press [d] to inspect diff or [a/c] to apply & commit", targetPath)
+	return nil
+}
+
+func (s *State) syncInstructionDraft(ctx context.Context, cl *Client, reqID, targetPath, content string) string {
+	if s.Instructions != nil {
+		return content
+	}
+	_, idQuery := s.resourceQueries()
+	var inst InstructionPreview
+	instrTarget := "/api/projects/current/instructions" + idQuery + "&path=" + url.QueryEscape(targetPath)
+	if err := cl.DoJSON(ctx, reqID+"-inst", http.MethodGet, instrTarget, nil, &inst); err != nil {
+		return content
+	}
+	s.Instructions = &inst
+	if len(s.GraduatedLessons) == 0 {
+		return content
+	}
+	merged := inst.ExistingContent
+	for _, rule := range s.GraduatedLessons {
+		merged = domain.InsertGuidelineSection(merged, "Harness² Lessons & Guardrails", rule)
+	}
+	s.InstructionDraft = merged
+	return merged
+}
+
+func (s *State) prepareInstructionProposal(ctx context.Context, client *Client, reqID string) {
+	if s.Change == nil || s.Change.ID == "" || s.Change.Hash == "" || s.Project == nil {
+		return
+	}
+	req := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"revision":         s.Change.Revision,
+		"hash":             s.Change.Hash,
+		"run_tests":        false,
+	}
+	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID)
+	var checked ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-chk", http.MethodPost, target+"/checks", req, &checked); err == nil && checked.ID != "" {
+		s.Change = &checked
+		req["revision"] = s.Change.Revision
+		req["hash"] = s.Change.Hash
+	}
+	var reviewed ChangeSession
+	if err := client.DoJSON(ctx, reqID+"-rev", http.MethodPost, target+"/review", req, &reviewed); err == nil && reviewed.ID != "" {
+		s.Change = &reviewed
+	}
+}
+
+func (s *State) dispatchBootstrap(ctx context.Context, client *Client, reqID, pillarID string) error {
+	if s.Project == nil || s.Project.ProjectRevision == "" {
+		return nil
+	}
+	_ = s.ensureExecutionTrust(ctx, client, reqID+"-trust")
+	if pillarID == "agents-md" {
+		draft := s.InstructionDraft
+		if draft == "" && s.Instructions != nil && len(s.Instructions.Presets) > 0 {
+			draft = s.Instructions.Presets[0].Content
+		}
+		if draft == "" {
+			draft = "# Project instructions\n\n## Verification\n- Run tests before committing changes.\n"
+		}
+		return s.dispatchProposeInstructions(ctx, client, reqID, "AGENTS.md", draft)
+	}
+	body := map[string]any{
+		"project_revision": s.Project.ProjectRevision,
+		"confirm":          true,
+	}
+	return client.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/bootstrap/exec", body, nil)
+}

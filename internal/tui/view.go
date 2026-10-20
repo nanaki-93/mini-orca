@@ -3,14 +3,18 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 const sidebarMenuWidth = 26
 
 // Render generates a complete, full-screen adaptive ANSI terminal frame for the current TUI state.
 func (s *State) Render(width, height int) string {
-	frameWidth := clampWidth(width)
-	frameHeight := clampHeight(height)
+	frameWidth := theme.ClampWidth(width)
+	frameHeight := theme.ClampHeight(height)
 	th := themeForPalette(s.Palette)
 
 	if frameWidth < 96 {
@@ -51,9 +55,9 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 		if i < len(rightBody) {
 			rightLine = rightBody[i]
 		}
-		body = append(body, padVisibleRight(leftLine, sidebarMenuWidth)+
+		body = append(body, theme.PadVisibleRight(leftLine, sidebarMenuWidth)+
 			th.border+"│"+th.reset+
-			padVisibleRight(rightLine, contentWidth))
+			theme.PadVisibleRight(rightLine, contentWidth))
 	}
 	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
 }
@@ -187,12 +191,12 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 		isActiveHub := tab.Key == active.Key
 		if isActiveHub {
 			badge := fmt.Sprintf(" ▸ %s. %-18s", tab.Key, strings.ToUpper(tab.Label))
-			lines = append(lines, " "+th.accentBg+truncatePlain(badge, width-2)+th.reset)
+			lines = append(lines, " "+th.accentBg+theme.TruncatePlain(badge, width-2)+th.reset)
 			lines = append(lines, s.renderSidebarSubPages(th, tab, width)...)
 			lines = append(lines, "")
 		} else {
 			lines = append(lines, fmt.Sprintf("   %s%s.%s %s%s%s",
-				th.muted, tab.Key, th.reset, th.fg, truncatePlain(tab.Label, width-7), th.reset))
+				th.muted, tab.Key, th.reset, th.fg, theme.TruncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
 	if active.Key != "5" {
@@ -216,10 +220,10 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 }
 
 func (s *State) renderSidebarRouting(th ansiTheme, width int) []string {
-	preset := truncatePlain(firstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-11))
-	aMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-11))
-	bMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-11))
-	fMod := truncatePlain(firstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-11))
+	preset := theme.TruncatePlain(client.FirstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-11))
+	aMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-11))
+	bMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-11))
+	fMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-11))
 	return []string{
 		fmt.Sprintf("  %sMODEL ROUTING%s", th.bold+th.cyan, th.reset),
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
@@ -257,7 +261,7 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 		if idx == len(visible)-1 {
 			branch = "└─"
 		}
-		label := truncatePlain(sp.Label, width-9)
+		label := theme.TruncatePlain(sp.Label, width-9)
 		if sp.Page == curPage {
 			out = append(out, fmt.Sprintf("  %s%s%s %s◆ %s%s", th.border, branch, th.reset, th.bold+th.accent, label, th.reset))
 		} else {
@@ -268,7 +272,7 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 }
 
 func (s *State) renderSidebarPulse(th ansiTheme, width int) []string {
-	summary := ComputeIssueSummary(s.CollectAllIssues(), s.Features)
+	summary := domain.ComputeIssueSummary(s.CollectAllIssues(), s.Features)
 	openVal := fmt.Sprintf("%s0%s", th.green, th.reset)
 	if summary.TotalOpen > 0 {
 		openVal = fmt.Sprintf("%s%d open%s", th.bold+th.amber, summary.TotalOpen, th.reset)
@@ -289,7 +293,7 @@ func (s *State) renderSidebarPulse(th ansiTheme, width int) []string {
 
 func (s *State) renderTopBorder(th ansiTheme, width, height int) string {
 	tag := fmt.Sprintf(" ◆ MINI-ORCA // TUI · %s · %dx%d ", th.name, width, height)
-	fill := max(4, width-visibleRuneCount(tag)-2)
+	fill := max(4, width-theme.VisibleRuneCount(tag)-2)
 	return fmt.Sprintf("%s┏%s%s%s%s┓%s", th.border, th.accent, tag, th.border, strings.Repeat("━", fill), th.reset)
 }
 
@@ -322,11 +326,11 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	}
 	projName := "no-project"
 	if s.Project != nil && s.Project.Name != "" {
-		projName = truncatePlain(s.Project.Name, 26)
+		projName = theme.TruncatePlain(s.Project.Name, 26)
 	}
 	branch := "main"
 	if s.Repository != nil && s.Repository.Branch != "" {
-		branch = truncatePlain(s.Repository.Branch, 20)
+		branch = theme.TruncatePlain(s.Repository.Branch, 20)
 	}
 	dirty := ""
 	if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
@@ -342,7 +346,7 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 		th.bold+th.fg, projName, th.reset,
 		th.muted, th.reset, th.cyan, branch, dirty,
 	)
-	return padVisibleRight(content, width-2)
+	return theme.PadVisibleRight(content, width-2)
 }
 
 func (s *State) renderHubBar(th ansiTheme, width int) string {
@@ -356,7 +360,7 @@ func (s *State) renderHubBar(th ansiTheme, width int) string {
 		}
 	}
 	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("MENU:"), strings.Join(parts, th.border+"│"+th.reset))
-	return padVisibleRight(row, width-2)
+	return theme.PadVisibleRight(row, width-2)
 }
 
 func (s *State) renderSubViewBar(th ansiTheme, width int) string {
@@ -377,7 +381,7 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 		}
 	}
 	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("VIEW:"), strings.Join(parts, th.border+"·"+th.reset))
-	return padVisibleRight(row, width-2)
+	return theme.PadVisibleRight(row, width-2)
 }
 
 func (s *State) renderProgressStrip(th ansiTheme, width int) string {
@@ -387,13 +391,13 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 		bar := th.renderProgressBar(done, total, 12)
 		runText := fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds)
 		if s.isAnalysisPausedOrInterrupted() {
-			reason := firstNonEmpty(s.Run.Reason, "window paused")
+			reason := client.FirstNonEmpty(s.Run.Reason, "window paused")
 			runText += fmt.Sprintf(" %s%s · [r] Resume%s", th.amber, reason, th.reset)
 		}
 		parts = append(parts, runText)
 	}
 	if s.Change != nil {
-		added, removed, badge := ClassifyDiffScope(s.Change.Changes)
+		added, removed, badge := domain.ClassifyDiffScope(s.Change.Changes)
 		parts = append(parts, fmt.Sprintf("Active Proposal: %s%s%s %s (%s+%d%s/%s-%d%s)",
 			th.bold, s.Change.Title, th.reset,
 			th.statusBadge(badge), th.green, added, th.reset, th.red, removed, th.reset,
@@ -406,7 +410,7 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 		return ""
 	}
 	row := "  " + strings.Join(parts, th.border+"  │  "+th.reset)
-	return padVisibleRight(row, width-2)
+	return theme.PadVisibleRight(row, width-2)
 }
 
 func runAggregateCoverage(run *AnalysisRun) (int, int) {
@@ -431,7 +435,7 @@ func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
 		c.Message,
 		"",
 		fmt.Sprintf("Confirm: %s  ·  Cancel: %s",
-			th.keyPill("y/Enter", firstNonEmpty(c.AcceptLabel, "Confirm")),
+			th.keyPill("y/Enter", client.FirstNonEmpty(c.AcceptLabel, "Confirm")),
 			th.keyPill("n/Esc", "Cancel")),
 	}
 	return th.renderPanelBox("CONFIRMATION REQUIRED", "SECURITY & GOVERNANCE GATE", min(82, width-6), body)
@@ -455,7 +459,7 @@ func renderWrappedKeyPillRows(th ansiTheme, labelStyle, label string, items []ke
 	curW := 0
 	for _, it := range items {
 		pill := th.keyPill(it.key, it.desc)
-		pillW := visibleRuneCount(pill)
+		pillW := theme.VisibleRuneCount(pill)
 		if curW > 0 && curW+2+pillW > availW {
 			lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, curLine))
 			curLine = pill
@@ -491,7 +495,7 @@ func renderWrappedCommandRows(th ansiTheme, labelStyle, label, raw string, avail
 	curLine := ""
 	curW := 0
 	for _, tok := range tokens {
-		tokW := visibleRuneCount(tok)
+		tokW := theme.VisibleRuneCount(tok)
 		if curW > 0 && curW+2+tokW > availW {
 			lines = append(lines, formatKeybindRow(th, labelStyle, label, len(lines) == 0, th.fg+curLine+th.reset))
 			curLine = tok
@@ -692,6 +696,6 @@ func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	}
 	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, s.CmdOutput, th.reset)
 	right := fmt.Sprintf("%s[?] Keys  [:] Cmd%s ", th.muted, th.reset)
-	gap := max(2, width-2-visibleRuneCount(left)-visibleRuneCount(right))
+	gap := max(2, width-2-theme.VisibleRuneCount(left)-theme.VisibleRuneCount(right))
 	return left + strings.Repeat(" ", gap) + right
 }

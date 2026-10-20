@@ -1,0 +1,267 @@
+package handlers
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+type ProjectHandler struct {
+	manager *project.Manager
+	service *app.Service
+}
+
+type projectImportRequest struct {
+	ProjectPath           string `json:"project_path"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+}
+
+type projectRestoreRequest struct {
+	ProjectPath string `json:"project_path"`
+}
+
+type reindexRequest struct {
+	ProjectRevision string `json:"project_revision"`
+}
+
+type symbolsResponse struct {
+	ProjectID       string               `json:"project_id"`
+	ProjectRevision string               `json:"project_revision"`
+	Path            string               `json:"path"`
+	Language        string               `json:"language"`
+	Symbols         []project.SymbolInfo `json:"symbols"`
+}
+
+func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
+	return &ProjectHandler{manager: manager, service: service}
+}
+
+func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
+	var request projectImportRequest
+	if err := api.DecodeJSON(w, r, &request); err != nil {
+		api.WriteRequestError(w, err, "invalid project import request", "Provide a JSON project_path.")
+		return
+	}
+	if err := h.service.RequireRemoteConfirmation(config.AnalyzeModelScope, request.ConfirmRemoteProvider); err != nil {
+		api.WriteAppError(w, api.BadRequest("remote provider confirmation required", "Confirm use of the remote analyze provider before continuing.", err))
+		return
+	}
+	analysis, err := h.service.AnalyzeProject(r.Context(), request.ProjectPath)
+	if err != nil {
+		if writeContextError(w, "project import", err) {
+			return
+		}
+		api.WriteAppError(w, api.BadRequest("project import failed", "The selected project could not be imported.", err))
+		return
+	}
+	if err := h.service.ActivateProject(analysis.Path, analysis); err != nil {
+		api.WriteAppError(w, api.Internal("project activation failed", "The analysis was created but the project could not be activated.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+func (h *ProjectHandler) Restore(w http.ResponseWriter, r *http.Request) {
+	var request projectRestoreRequest
+	if err := api.DecodeJSON(w, r, &request); err != nil {
+		api.WriteRequestError(w, err, "invalid project restore request", "Provide a JSON project_path.")
+		return
+	}
+	analysis, err := h.service.RestoreProject(request.ProjectPath)
+	if err != nil {
+		api.WriteAppError(w, api.BadRequest("project restore failed", "The selected project could not be restored.", err))
+		return
+	}
+	if err := h.service.RestoreActiveProject(analysis.Path, analysis); err != nil {
+		api.WriteAppError(w, api.Internal("project restoration failed", "The stored analysis was loaded but the project could not be activated.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, analysis)
+}
+
+// Overview combines source-free deterministic metrics with optional model and
+// scan state for the project-level workspaces.
+func (h *ProjectHandler) Overview(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	overview, err := h.service.ProjectOverview()
+	if err != nil {
+		writeProjectError(w, "project overview failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, overview)
+}
+
+func (h *ProjectHandler) FileInfo(w http.ResponseWriter, r *http.Request) {
+	info, err := project.GetFileInfo(h.manager.Root(), r.URL.Query().Get("path"))
+	if err != nil {
+		api.WriteAppError(w, api.BadRequest("file information failed", "Choose an eligible project file and try again.", err))
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, info)
+}
+
+// Index returns deterministic facts for the active project. The index contains
+// only context-policy-eligible, project-relative paths and never source text.
+func (h *ProjectHandler) Index(w http.ResponseWriter, _ *http.Request) {
+	index, err := h.manager.Index()
+	if err != nil {
+		writeProjectError(w, "project index unavailable", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, index)
+}
+
+// Symbols returns valid atomic targets for one policy-eligible project file.
+func (h *ProjectHandler) Symbols(w http.ResponseWriter, r *http.Request) {
+	file, err := h.manager.IndexedFile(r.URL.Query().Get("path"))
+	if err != nil {
+		writeProjectError(w, "symbol lookup failed", err)
+		return
+	}
+	if file.Binary {
+		writeProjectError(w, "symbol lookup failed", project.ErrUnsupportedFile)
+		return
+	}
+	index, err := h.manager.Index()
+	if err != nil {
+		writeProjectError(w, "symbol lookup failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, symbolsResponse{
+		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
+		Path: file.Path, Language: file.Language, Symbols: file.Symbols,
+	})
+}
+
+func (h *ProjectHandler) Impact(w http.ResponseWriter, r *http.Request) {
+	preview, err := h.manager.ImpactPreview(r.URL.Query().Get("path"), r.URL.Query().Get("symbol"))
+	if err != nil {
+		writeProjectError(w, "impact preview failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, preview)
+}
+
+func (h *ProjectHandler) GitStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.manager.GitStatus(r.URL.Query().Get("path"))
+	if err != nil {
+		writeProjectError(w, "Git status failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, status)
+}
+
+// Reindex refreshes deterministic facts without contacting the model.
+func (h *ProjectHandler) Reindex(w http.ResponseWriter, r *http.Request) {
+	var request reindexRequest
+	if err := api.DecodeJSON(w, r, &request); err != nil {
+		api.WriteRequestError(w, err, "invalid reindex request", "Provide project_revision.")
+		return
+	}
+	if !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
+		return
+	}
+	var (
+		index *project.ProjectIndex
+		err   error
+	)
+	if h.service != nil {
+		index, err = h.service.Reindex()
+	} else {
+		index, err = h.manager.Reindex()
+	}
+	if err != nil {
+		writeProjectError(w, "project reindex failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, index)
+}
+
+// Events streams Server-Sent Events (SSE) when analysis runs, scans, or
+// change workflows transition state for the active project.
+func (h *ProjectHandler) Events(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		api.WriteError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	ch, unsubscribe := h.service.SubscribeEvents()
+	defer unsubscribe()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("event: ready\ndata: {\"status\":\"connected\"}\n\n"))
+	flusher.Flush()
+
+	if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") || r.URL.Query().Get("once") == "true" {
+		return
+	}
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case kind := <-ch:
+			_, _ = w.Write([]byte("event: update\ndata: {\"kind\":\"" + kind + "\"}\n\n"))
+			flusher.Flush()
+		case <-ticker.C:
+			_, _ = w.Write([]byte(": heartbeat\n\n"))
+			flusher.Flush()
+		}
+	}
+}
+
+func writeContextError(w http.ResponseWriter, action string, err error) bool {
+	switch {
+	case errors.Is(err, context.Canceled):
+		api.WriteError(w, http.StatusRequestTimeout, action+" canceled")
+	case errors.Is(err, context.DeadlineExceeded):
+		api.WriteError(w, http.StatusGatewayTimeout, action+" timed out")
+	default:
+		return false
+	}
+	return true
+}
+
+func decodeStrictJSON(w http.ResponseWriter, r *http.Request, value any, message, userMessage string) bool {
+	if err := api.DecodeJSON(w, r, value); err != nil {
+		api.WriteRequestError(w, err, message, userMessage)
+		return false
+	}
+	return true
+}
+
+func writeProjectError(w http.ResponseWriter, action string, err error) {
+	switch {
+	case errors.Is(err, app.ErrAnalysisProgressUnavailable):
+		api.WriteAppError(w, api.Internal(action, "Analysis progress could not be saved. Read the retained overview, then resume or cancel explicitly.", err))
+	case errors.Is(err, app.ErrAnalysisRunBusy):
+		api.WriteAppError(w, api.Conflict(action, "An analysis run is already active or paused. Continue or cancel it before starting a new analysis.", err))
+	case errors.Is(err, project.ErrNoActiveProject):
+		api.WriteAppError(w, api.NotFound(action, "Import a project before using this endpoint.", err))
+	case errors.Is(err, project.ErrExcludedFile):
+		api.WriteAppError(w, api.Forbidden(action, "This file is excluded by the project context policy.", err))
+	case errors.Is(err, project.ErrRevisionConflict):
+		api.WriteAppError(w, api.Conflict(action, "The active project changed. Refresh and try again.", err))
+	case errors.Is(err, project.ErrUnsupportedFile):
+		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "This file does not support symbol extraction.", http.StatusUnprocessableEntity, err))
+	case errors.Is(err, project.ErrSecurityRulesUnavailable):
+		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "Security source-only scanning is unavailable for this file language.", http.StatusUnprocessableEntity, err))
+	default:
+		api.WriteAppError(w, api.BadRequest(action, "Review the request and try again.", err))
+	}
+}

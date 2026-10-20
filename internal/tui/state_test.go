@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
 func TestHubAndSubViewKeyboardNavigation(t *testing.T) {
@@ -827,7 +829,7 @@ func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
 
 	// Verify workflowModelsPayload passes discovered catalog model ID to daemon
 	wfModels, confirmed := s.workflowModelsPayload()
-	if wfModels["create"] != "agy:gemini-2.5-pro" || !containsString(confirmed, "agy:gemini-2.5-pro") {
+	if wfModels["create"] != "agy:gemini-2.5-pro" || !domain.ContainsString(confirmed, "agy:gemini-2.5-pro") {
 		t.Fatalf("expected workflowModelsPayload to include agy:gemini-2.5-pro, got models=%v confirmed=%v", wfModels, confirmed)
 	}
 
@@ -1227,7 +1229,7 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 	}
 
 	// 6. Delete custom preset via 'd' hotkey
-	s.SelectedIdx = len(CanonicalModelScopes()) + len(DefaultModelPresets())
+	s.SelectedIdx = len(domain.CanonicalModelScopes()) + len(domain.DefaultModelPresets())
 	s.HandleKey(KeyEvent{Key: "d"})
 	if len(s.CustomPresets) != 1 {
 		t.Fatalf("expected 'd' to delete selected custom preset, remaining=%+v", s.CustomPresets)

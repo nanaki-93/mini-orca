@@ -3,7 +3,7 @@ package app
 import (
 	"time"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -14,8 +14,8 @@ const (
 	maxChangeMessages = 40
 )
 
-type ChangeTarget = archcheck.ChangeTarget
-type ChangeEdit = archcheck.ChangeEdit
+type ChangeTarget = archgate.ChangeTarget
+type ChangeEdit = archgate.ChangeEdit
 
 // ChangeSession is private project-local history, unlike source-free findings
 // and audits. Restored check/review evidence is cleared before reuse.
@@ -115,4 +115,11 @@ type ChangeMutationResult struct {
 	Warnings        []string              `json:"warnings"`
 	Verification    *ChangeVerification   `json:"verification,omitempty"`
 	Commit          *ChangeCommit         `json:"commit,omitempty"`
+}
+
+// ChangeMessage is retained in its private proposal conversation.
+type ChangeMessage struct {
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
 }

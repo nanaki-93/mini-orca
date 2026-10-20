@@ -115,18 +115,18 @@ func (receipt EngineeringInsightEvaluationReceipt) DevelopmentGatePassed() bool 
 	seen := make(map[string]bool, 12)
 	counts := developmentGateCounts{}
 	for _, attempt := range receipt.Attempts {
-		if !counts.record(attempt, seen) {
+		if !counts.recordAttempt(attempt, seen) {
 			return false
 		}
 	}
-	return counts.valid(len(seen))
+	return counts.isValid(len(seen))
 }
 
 type developmentGateCounts struct{ usable, complete, useful, omitted, substantive, controls int }
 
-func (counts *developmentGateCounts) record(attempt EngineeringInsightEvaluationAttempt, seen map[string]bool) bool {
-	id := attemptScoreID(attempt)
-	if seen[id] || !validDevelopmentGateAttempt(attempt) {
+func (counts *developmentGateCounts) recordAttempt(attempt EngineeringInsightEvaluationAttempt, seen map[string]bool) bool {
+	id := buildAttemptScoreID(attempt)
+	if seen[id] || !isValidDevelopmentGateAttempt(attempt) {
 		return false
 	}
 	seen[id] = true
@@ -149,11 +149,11 @@ func (counts *developmentGateCounts) record(attempt EngineeringInsightEvaluation
 	return false
 }
 
-func (counts developmentGateCounts) valid(unique int) bool {
+func (counts developmentGateCounts) isValid(unique int) bool {
 	return unique == 12 && counts.usable == 12 && counts.complete == 12 && counts.substantive == 8 && counts.controls == 4 && counts.useful == 8 && counts.omitted == 4
 }
 
-func validDevelopmentGateAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
+func isValidDevelopmentGateAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
 	return attempt.Partition == "development" && attempt.Repetition == 1 && attempt.Attempt == 1 && attempt.EmittedResponse && attempt.UsableSummary && attempt.CompleteSummary && attempt.Score != nil && !attempt.Score.CriticalFalseClaim
 }
 
@@ -205,16 +205,16 @@ type EngineeringInsightEvaluationReport struct {
 // DecodeEngineeringInsightEvaluationReceipt rejects malformed evidence without
 // echoing arbitrary receipt content.
 func DecodeEngineeringInsightEvaluationReceipt(data []byte) (EngineeringInsightEvaluationReceipt, error) {
-	if err := rejectDuplicateJSONKeys(data); err != nil {
+	if err := validateNoDuplicateJSONKeys(data); err != nil {
 		return EngineeringInsightEvaluationReceipt{}, fmt.Errorf("invalid evaluation receipt")
 	}
-	if err := requireReceiptFields(data); err != nil {
+	if err := validateReceiptFields(data); err != nil {
 		return EngineeringInsightEvaluationReceipt{}, fmt.Errorf("invalid evaluation receipt")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var receipt EngineeringInsightEvaluationReceipt
-	if err := decoder.Decode(&receipt); err != nil || requireJSONEOF(decoder) != nil {
+	if err := decoder.Decode(&receipt); err != nil || validateJSONEOF(decoder) != nil {
 		return EngineeringInsightEvaluationReceipt{}, fmt.Errorf("invalid evaluation receipt")
 	}
 	return receipt, nil
@@ -223,24 +223,24 @@ func DecodeEngineeringInsightEvaluationReceipt(data []byte) (EngineeringInsightE
 // DecodeEngineeringInsightScores accepts only digest-bound reviewer scores.
 // It applies the receipt's strict JSON rules before any private handoff is joined.
 func DecodeEngineeringInsightScores(data []byte) (map[string]EngineeringInsightAttemptScore, error) {
-	if rejectDuplicateJSONKeys(data) != nil {
+	if validateNoDuplicateJSONKeys(data) != nil {
 		return nil, fmt.Errorf("invalid evaluation scores")
 	}
 	var raw map[string]json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	if decoder.Decode(&raw) != nil || requireJSONEOF(decoder) != nil || len(raw) == 0 {
+	if decoder.Decode(&raw) != nil || validateJSONEOF(decoder) != nil || len(raw) == 0 {
 		return nil, fmt.Errorf("invalid evaluation scores")
 	}
 	result := make(map[string]EngineeringInsightAttemptScore, len(raw))
 	for id, value := range raw {
 		var fields map[string]json.RawMessage
-		if strings.TrimSpace(id) == "" || json.Unmarshal(value, &fields) != nil || !validRequiredJSONObject(fields, scoreJSONFields) {
+		if strings.TrimSpace(id) == "" || json.Unmarshal(value, &fields) != nil || !isValidRequiredJSONObject(fields, scoreJSONFields) {
 			return nil, fmt.Errorf("invalid evaluation scores")
 		}
 		valueDecoder := json.NewDecoder(bytes.NewReader(value))
 		valueDecoder.DisallowUnknownFields()
 		var score EngineeringInsightAttemptScore
-		if valueDecoder.Decode(&score) != nil || requireJSONEOF(valueDecoder) != nil || !validDigest(score.ResponseDigest) || !validScore(score) {
+		if valueDecoder.Decode(&score) != nil || validateJSONEOF(valueDecoder) != nil || !isValidDigest(score.ResponseDigest) || !isValidScore(score) {
 			return nil, fmt.Errorf("invalid evaluation scores")
 		}
 		result[id] = score
@@ -251,65 +251,65 @@ func DecodeEngineeringInsightScores(data []byte) (map[string]EngineeringInsightA
 // ValidateStrictJSONDocument rejects duplicate object keys and trailing JSON.
 // Callers can combine it with their own schema validation without revealing input.
 func ValidateStrictJSONDocument(data []byte) error {
-	return rejectDuplicateJSONKeys(data)
+	return validateNoDuplicateJSONKeys(data)
 }
 
-func requireReceiptFields(data []byte) error {
+func validateReceiptFields(data []byte) error {
 	var receipt map[string]json.RawMessage
-	if err := json.Unmarshal(data, &receipt); err != nil || !hasJSONFields(receipt, receiptJSONFields...) || !nonNullJSONFields(receipt, receiptJSONFields...) {
+	if err := json.Unmarshal(data, &receipt); err != nil || !hasJSONFields(receipt, receiptJSONFields...) || !hasNonNullJSONFields(receipt, receiptJSONFields...) {
 		return fmt.Errorf("missing receipt field")
 	}
 	version, versioned := receipt["protocol_version"]
 	if !versioned {
-		if !onlyJSONFields(receipt, receiptJSONFields...) {
+		if !hasOnlyJSONFields(receipt, receiptJSONFields...) {
 			return fmt.Errorf("invalid receipt field")
 		}
-	} else if string(version) != `"v2"` || !onlyJSONFields(receipt, append(receiptJSONFields, "protocol_version")...) {
+	} else if string(version) != `"v2"` || !hasOnlyJSONFields(receipt, append(receiptJSONFields, "protocol_version")...) {
 		return fmt.Errorf("invalid protocol version")
 	}
-	if err := requireConsumptionFields(receipt["consumption"]); err != nil {
+	if err := validateConsumptionFields(receipt["consumption"]); err != nil {
 		return err
 	}
-	return requireAttemptFields(receipt["attempts"])
+	return validateAttemptFields(receipt["attempts"])
 }
 
-func requireConsumptionFields(data json.RawMessage) error {
+func validateConsumptionFields(data json.RawMessage) error {
 	var consumption map[string]json.RawMessage
-	if err := json.Unmarshal(data, &consumption); err != nil || !validRequiredJSONObject(consumption, consumptionJSONFields) {
+	if err := json.Unmarshal(data, &consumption); err != nil || !isValidRequiredJSONObject(consumption, consumptionJSONFields) {
 		return fmt.Errorf("missing consumption field")
 	}
 	return nil
 }
 
-func requireAttemptFields(data json.RawMessage) error {
+func validateAttemptFields(data json.RawMessage) error {
 	var attempts []map[string]json.RawMessage
 	if err := json.Unmarshal(data, &attempts); err != nil {
 		return fmt.Errorf("invalid attempts")
 	}
 	for _, attempt := range attempts {
-		if !hasJSONFields(attempt, attemptJSONFields...) || !onlyJSONFields(attempt, attemptJSONFields...) || !nonNullJSONFields(attempt, attemptJSONFields[:len(attemptJSONFields)-1]...) {
+		if !hasJSONFields(attempt, attemptJSONFields...) || !hasOnlyJSONFields(attempt, attemptJSONFields...) || !hasNonNullJSONFields(attempt, attemptJSONFields[:len(attemptJSONFields)-1]...) {
 			return fmt.Errorf("missing attempt field")
 		}
-		if err := requireScoreFields(attempt["score"]); err != nil {
+		if err := validateScoreFields(attempt["score"]); err != nil {
 			return fmt.Errorf("missing score field")
 		}
 	}
 	return nil
 }
 
-func requireScoreFields(data json.RawMessage) error {
+func validateScoreFields(data json.RawMessage) error {
 	if string(data) == "null" {
 		return nil
 	}
 	var score map[string]json.RawMessage
-	if err := json.Unmarshal(data, &score); err != nil || !validRequiredJSONObject(score, scoreJSONFields) {
+	if err := json.Unmarshal(data, &score); err != nil || !isValidRequiredJSONObject(score, scoreJSONFields) {
 		return fmt.Errorf("invalid score")
 	}
 	return nil
 }
 
-func validRequiredJSONObject(values map[string]json.RawMessage, fields []string) bool {
-	return hasJSONFields(values, fields...) && onlyJSONFields(values, fields...) && nonNullJSONFields(values, fields...)
+func isValidRequiredJSONObject(values map[string]json.RawMessage, fields []string) bool {
+	return hasJSONFields(values, fields...) && hasOnlyJSONFields(values, fields...) && hasNonNullJSONFields(values, fields...)
 }
 
 func hasJSONFields(values map[string]json.RawMessage, fields ...string) bool {
@@ -321,7 +321,7 @@ func hasJSONFields(values map[string]json.RawMessage, fields ...string) bool {
 	return true
 }
 
-func onlyJSONFields(values map[string]json.RawMessage, fields ...string) bool {
+func hasOnlyJSONFields(values map[string]json.RawMessage, fields ...string) bool {
 	allowed := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
 		allowed[field] = struct{}{}
@@ -334,7 +334,7 @@ func onlyJSONFields(values map[string]json.RawMessage, fields ...string) bool {
 	return true
 }
 
-func nonNullJSONFields(values map[string]json.RawMessage, fields ...string) bool {
+func hasNonNullJSONFields(values map[string]json.RawMessage, fields ...string) bool {
 	for _, field := range fields {
 		if string(values[field]) == "null" {
 			return false
@@ -360,7 +360,7 @@ func ValidateEngineeringInsightEvaluationReceipt(receipt EngineeringInsightEvalu
 	if err != nil {
 		return EngineeringInsightEvaluationReport{}, err
 	}
-	report := evaluationReport(expected, recorded)
+	report := buildEvaluationReport(expected, recorded)
 	if receipt.Mode == EngineeringInsightCollectionMode {
 		report.Outcome = EngineeringInsightCollectionOutcome
 		return report, nil
@@ -378,7 +378,7 @@ func ValidateEngineeringInsightEvaluationReceipt(receipt EngineeringInsightEvalu
 }
 
 func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectation) error {
-	if !completeExpectationIdentity(expected) {
+	if !hasCompleteExpectationIdentity(expected) {
 		return fmt.Errorf("evaluation expectation is incomplete")
 	}
 	if expected.ProtocolVersion == "v2" {
@@ -394,7 +394,7 @@ func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectat
 		return fmt.Errorf("evaluation expectation has invalid limits")
 	}
 	for _, attempt := range expected.Schedule {
-		if !validExpectedAttempt(attempt) {
+		if !isValidExpectedAttempt(attempt) {
 			return fmt.Errorf("evaluation expectation has an invalid schedule")
 		}
 	}
@@ -402,7 +402,7 @@ func validateEvaluationExpectation(expected EngineeringInsightEvaluationExpectat
 }
 
 func validateV2EvaluationExpectation(expected EngineeringInsightEvaluationExpectation) error {
-	if expected.CorpusID != recoveryV2CorpusID || expected.CandidateID != recoveryV2CandidateID || expected.Provider != recoveryV2Provider || expected.Model != recoveryV2Model || expected.PromptVersion != recoveryV2PromptVersion || !validRecoveryV2BaseRevision(expected.BaseRevision) || expected.MaxOutputTokens != qualificationOutputTokenCap || expected.AttemptTimeoutSeconds != qualificationAttemptTimeoutSeconds {
+	if expected.CorpusID != recoveryV2CorpusID || expected.CandidateID != recoveryV2CandidateID || expected.Provider != recoveryV2Provider || expected.Model != recoveryV2Model || expected.PromptVersion != recoveryV2PromptVersion || !isValidRecoveryV2BaseRevision(expected.BaseRevision) || expected.MaxOutputTokens != qualificationOutputTokenCap || expected.AttemptTimeoutSeconds != qualificationAttemptTimeoutSeconds {
 		return fmt.Errorf("evaluation expectation has an invalid v2 identity")
 	}
 	if expected.MaxRequests == recoveryV2DevelopmentRequests && expected.CorpusDigest == recoveryV2DevelopmentDigest {
@@ -439,7 +439,7 @@ func validateV2Schedule(schedule []EngineeringInsightExpectedAttempt, partition 
 	return nil
 }
 
-func completeExpectationIdentity(expected EngineeringInsightEvaluationExpectation) bool {
+func hasCompleteExpectationIdentity(expected EngineeringInsightEvaluationExpectation) bool {
 	for _, value := range []string{expected.CandidateID, expected.Provider, expected.Model, expected.PromptVersion, expected.CorpusID, expected.CorpusDigest, expected.BaseRevision} {
 		if strings.TrimSpace(value) == "" {
 			return false
@@ -460,11 +460,11 @@ type expectedCaseSchedule struct {
 func validateQualificationSchedule(schedule []EngineeringInsightExpectedAttempt) error {
 	cases := make(map[string]expectedCaseSchedule, 12)
 	for _, scheduled := range schedule {
-		if err := recordExpectedAttempt(cases, scheduled); err != nil {
+		if err := validateAndRecordExpectedAttempt(cases, scheduled); err != nil {
 			return err
 		}
 	}
-	if len(cases) != 12 || scheduleIntentCount(cases, "substantive") != 8 || scheduleIntentCount(cases, "control") != 4 {
+	if len(cases) != 12 || buildScheduleIntentCount(cases, "substantive") != 8 || buildScheduleIntentCount(cases, "control") != 4 {
 		return fmt.Errorf("evaluation expectation has an invalid schedule")
 	}
 	for _, scheduled := range cases {
@@ -475,8 +475,8 @@ func validateQualificationSchedule(schedule []EngineeringInsightExpectedAttempt)
 	return nil
 }
 
-func recordExpectedAttempt(cases map[string]expectedCaseSchedule, attempt EngineeringInsightExpectedAttempt) error {
-	if !validQualificationExpectedAttempt(attempt) {
+func validateAndRecordExpectedAttempt(cases map[string]expectedCaseSchedule, attempt EngineeringInsightExpectedAttempt) error {
+	if !isValidQualificationExpectedAttempt(attempt) {
 		return fmt.Errorf("evaluation expectation has an invalid schedule")
 	}
 	scheduled, exists := cases[attempt.CaseName]
@@ -491,11 +491,11 @@ func recordExpectedAttempt(cases map[string]expectedCaseSchedule, attempt Engine
 	return nil
 }
 
-func validQualificationExpectedAttempt(attempt EngineeringInsightExpectedAttempt) bool {
+func isValidQualificationExpectedAttempt(attempt EngineeringInsightExpectedAttempt) bool {
 	return strings.TrimSpace(attempt.CaseName) != "" && attempt.Partition == "qualification" && (attempt.Intent == "substantive" || attempt.Intent == "control") && (attempt.Repetition == 1 || attempt.Repetition == 2) && attempt.Attempt == 1
 }
 
-func scheduleIntentCount(cases map[string]expectedCaseSchedule, intent string) int {
+func buildScheduleIntentCount(cases map[string]expectedCaseSchedule, intent string) int {
 	count := 0
 	for _, scheduled := range cases {
 		if scheduled.intent == intent {
@@ -524,7 +524,7 @@ func validateReceiptConsumption(receipt EngineeringInsightEvaluationReceipt) err
 	}
 	totalTokens := 0
 	for _, attempt := range receipt.Attempts {
-		if !attempt.InvalidProviderMetadata && (attempt.OutputTokens < 0 || attempt.OutputTokens > receipt.MaxOutputTokens) || attempt.ElapsedMilliseconds > float64(receipt.AttemptTimeoutSeconds)*1000 && !censoredAttempt(attempt) {
+		if !attempt.InvalidProviderMetadata && (attempt.OutputTokens < 0 || attempt.OutputTokens > receipt.MaxOutputTokens) || attempt.ElapsedMilliseconds > float64(receipt.AttemptTimeoutSeconds)*1000 && !isCensoredAttempt(attempt) {
 			return fmt.Errorf("evaluation attempt consumption is invalid")
 		}
 		totalTokens += attempt.OutputTokens
@@ -535,15 +535,15 @@ func validateReceiptConsumption(receipt EngineeringInsightEvaluationReceipt) err
 	return nil
 }
 
-func censoredAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
+func isCensoredAttempt(attempt EngineeringInsightEvaluationAttempt) bool {
 	return attempt.Outcome == "timeout" || attempt.Outcome == "failed" && attempt.FinishReason == "canceled" || attempt.Outcome == "unknown"
 }
 
 func validateAttempts(receipt EngineeringInsightEvaluationReceipt, expected EngineeringInsightEvaluationExpectation) (map[string]EngineeringInsightEvaluationAttempt, error) {
 	expectedByID := make(map[string]EngineeringInsightExpectedAttempt, len(expected.Schedule))
 	for _, scheduled := range expected.Schedule {
-		id := expectedAttemptID(scheduled)
-		if _, duplicate := expectedByID[id]; duplicate || !validExpectedAttempt(scheduled) {
+		id := buildExpectedAttemptID(scheduled)
+		if _, duplicate := expectedByID[id]; duplicate || !isValidExpectedAttempt(scheduled) {
 			return nil, fmt.Errorf("evaluation expectation has an invalid schedule")
 		}
 		expectedByID[id] = scheduled
@@ -553,8 +553,8 @@ func validateAttempts(receipt EngineeringInsightEvaluationReceipt, expected Engi
 		return nil, fmt.Errorf("evaluation receipt contains evidence outside the selected schedule")
 	}
 	for index, attempt := range receipt.Attempts {
-		id := expectedAttemptID(EngineeringInsightExpectedAttempt{CaseName: attempt.CaseName, Partition: attempt.Partition, Intent: attempt.Intent, Repetition: attempt.Repetition, Attempt: attempt.Attempt})
-		if _, known := expectedByID[id]; !known || id != expectedAttemptID(expected.Schedule[index]) || attempt.CandidateID != expected.CandidateID {
+		id := buildExpectedAttemptID(EngineeringInsightExpectedAttempt{CaseName: attempt.CaseName, Partition: attempt.Partition, Intent: attempt.Intent, Repetition: attempt.Repetition, Attempt: attempt.Attempt})
+		if _, known := expectedByID[id]; !known || id != buildExpectedAttemptID(expected.Schedule[index]) || attempt.CandidateID != expected.CandidateID {
 			return nil, fmt.Errorf("evaluation receipt contains evidence outside the selected schedule")
 		}
 		if _, duplicate := recorded[id]; duplicate {
@@ -568,19 +568,19 @@ func validateAttempts(receipt EngineeringInsightEvaluationReceipt, expected Engi
 	return recorded, nil
 }
 
-func validExpectedAttempt(attempt EngineeringInsightExpectedAttempt) bool {
+func isValidExpectedAttempt(attempt EngineeringInsightExpectedAttempt) bool {
 	return strings.TrimSpace(attempt.CaseName) != "" && (attempt.Partition == "development" || attempt.Partition == "qualification") && (attempt.Intent == "substantive" || attempt.Intent == "control") && attempt.Repetition > 0 && attempt.Attempt > 0
 }
 
-func expectedAttemptID(attempt EngineeringInsightExpectedAttempt) string {
+func buildExpectedAttemptID(attempt EngineeringInsightExpectedAttempt) string {
 	return fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%d", attempt.CaseName, attempt.Partition, attempt.Intent, attempt.Repetition, attempt.Attempt)
 }
 
 func validateAttempt(attempt EngineeringInsightEvaluationAttempt, mode EngineeringInsightEvaluationMode) error {
-	if !validAttemptValues(attempt) {
+	if !isValidAttemptValues(attempt) {
 		return fmt.Errorf("evaluation attempt has invalid evidence")
 	}
-	if !validOutcomeFinishReason(attempt.Outcome, attempt.FinishReason) {
+	if !isValidOutcomeFinishReason(attempt.Outcome, attempt.FinishReason) {
 		return fmt.Errorf("evaluation attempt has inconsistent outcome evidence")
 	}
 	if err := validateAttemptSummary(attempt); err != nil {
@@ -589,11 +589,11 @@ func validateAttempt(attempt EngineeringInsightEvaluationAttempt, mode Engineeri
 	return validateAttemptScore(attempt, mode)
 }
 
-func validAttemptValues(attempt EngineeringInsightEvaluationAttempt) bool {
-	return validOutcome(attempt.Outcome) && validOptionalInsight(attempt.OptionalInsight) && validFinishReason(attempt.FinishReason) && finiteNonNegative(attempt.ElapsedMilliseconds)
+func isValidAttemptValues(attempt EngineeringInsightEvaluationAttempt) bool {
+	return isValidOutcome(attempt.Outcome) && isValidOptionalInsight(attempt.OptionalInsight) && isValidFinishReason(attempt.FinishReason) && isFiniteNonNegative(attempt.ElapsedMilliseconds)
 }
 
-func validOutcomeFinishReason(outcome, finishReason string) bool {
+func isValidOutcomeFinishReason(outcome, finishReason string) bool {
 	switch outcome {
 	case "completed", "malformed", "abstained":
 		return finishReason == "stop"
@@ -666,7 +666,7 @@ func validateAttemptScore(attempt EngineeringInsightEvaluationAttempt, mode Engi
 		}
 		return nil
 	}
-	if !attempt.EmittedResponse || attempt.Score.ResponseDigest != attempt.ResponseDigest || !validDigest(attempt.Score.ResponseDigest) || !validScore(*attempt.Score) {
+	if !attempt.EmittedResponse || attempt.Score.ResponseDigest != attempt.ResponseDigest || !isValidDigest(attempt.Score.ResponseDigest) || !isValidScore(*attempt.Score) {
 		return fmt.Errorf("evaluation attempt has invalid score evidence")
 	}
 	if attempt.Score.RetainExample && (attempt.Score.CriticalFalseClaim || attempt.Score.Total() < minimumRetainedEngineeringInsightScore) {
@@ -679,22 +679,22 @@ func validateResponseDigest(attempt EngineeringInsightEvaluationAttempt) error {
 	if attempt.EmittedResponse == (attempt.ResponseDigest == "") {
 		return fmt.Errorf("evaluation attempt has invalid response evidence")
 	}
-	if attempt.EmittedResponse && !validDigest(attempt.ResponseDigest) {
+	if attempt.EmittedResponse && !isValidDigest(attempt.ResponseDigest) {
 		return fmt.Errorf("evaluation attempt has invalid response evidence")
 	}
 	return nil
 }
 
-func validOutcome(value string) bool {
+func isValidOutcome(value string) bool {
 	return value == "completed" || value == "timeout" || value == "malformed" || value == "truncated" || value == "abstained" || value == "failed" || value == "budget_exhausted" || value == "unknown"
 }
-func validOptionalInsight(value string) bool {
+func isValidOptionalInsight(value string) bool {
 	return value == "present" || value == "omitted" || value == "rejected" || value == "not_evaluated"
 }
-func validFinishReason(value string) bool {
+func isValidFinishReason(value string) bool {
 	return value == "stop" || value == "length" || value == "error" || value == "timeout" || value == "canceled" || value == "unknown"
 }
-func validScore(score EngineeringInsightAttemptScore) bool {
+func isValidScore(score EngineeringInsightAttemptScore) bool {
 	for _, value := range []int{score.Correctness, score.LocalRelevance, score.TradeoffClarity, score.UsefulVerification} {
 		if value < 0 || value > 2 {
 			return false
@@ -705,37 +705,37 @@ func validScore(score EngineeringInsightAttemptScore) bool {
 
 var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-func validDigest(value string) bool { return digestPattern.MatchString(value) }
-func finiteNonNegative(value float64) bool {
+func isValidDigest(value string) bool { return digestPattern.MatchString(value) }
+func isFiniteNonNegative(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0
 }
 
-func evaluationReport(expected EngineeringInsightEvaluationExpectation, recorded map[string]EngineeringInsightEvaluationAttempt) EngineeringInsightEvaluationReport {
-	report := newEvaluationReport(expected, recorded)
+func buildEvaluationReport(expected EngineeringInsightEvaluationExpectation, recorded map[string]EngineeringInsightEvaluationAttempt) EngineeringInsightEvaluationReport {
+	report := buildEmptyEvaluationReport(expected, recorded)
 	var successful []float64
 	for _, scheduled := range expected.Schedule {
-		attempt, present := recorded[expectedAttemptID(scheduled)]
+		attempt, present := recorded[buildExpectedAttemptID(scheduled)]
 		if present {
-			successful = recordEvaluationAttempt(&report, scheduled, attempt, successful)
+			successful = buildRecordedEvaluationAttempt(&report, scheduled, attempt, successful)
 		}
 	}
 	report.Latency.SuccessfulCount = len(successful)
-	report.Latency.MedianMilliseconds = median(successful)
-	report.Latency.P95Milliseconds = nearestRank(successful, 0.95)
+	report.Latency.MedianMilliseconds = buildMedianLatency(successful)
+	report.Latency.P95Milliseconds = buildNearestRankLatency(successful, 0.95)
 	return report
 }
 
-func newEvaluationReport(expected EngineeringInsightEvaluationExpectation, recorded map[string]EngineeringInsightEvaluationAttempt) EngineeringInsightEvaluationReport {
+func buildEmptyEvaluationReport(expected EngineeringInsightEvaluationExpectation, recorded map[string]EngineeringInsightEvaluationAttempt) EngineeringInsightEvaluationReport {
 	return EngineeringInsightEvaluationReport{ScheduledAttempts: len(expected.Schedule), RecordedAttempts: len(recorded), OutcomeCounts: map[string]int{"completed": 0, "timeout": 0, "malformed": 0, "truncated": 0, "abstained": 0, "failed": 0, "budget_exhausted": 0, "unknown": 0}}
 }
 
-func recordEvaluationAttempt(report *EngineeringInsightEvaluationReport, scheduled EngineeringInsightExpectedAttempt, attempt EngineeringInsightEvaluationAttempt, successful []float64) []float64 {
+func buildRecordedEvaluationAttempt(report *EngineeringInsightEvaluationReport, scheduled EngineeringInsightExpectedAttempt, attempt EngineeringInsightEvaluationAttempt, successful []float64) []float64 {
 	report.OutcomeCounts[attempt.Outcome]++
 	if attempt.InvalidProviderMetadata {
 		report.InvalidProviderMetadata++
 	}
-	recordSummaryCounts(report, attempt)
-	recordScoreCounts(report, scheduled, attempt)
+	buildSummaryCounts(report, attempt)
+	buildScoreCounts(report, scheduled, attempt)
 	if attempt.Outcome == "completed" && attempt.UsableSummary {
 		return append(successful, attempt.ElapsedMilliseconds)
 	}
@@ -743,7 +743,7 @@ func recordEvaluationAttempt(report *EngineeringInsightEvaluationReport, schedul
 	return successful
 }
 
-func recordSummaryCounts(report *EngineeringInsightEvaluationReport, attempt EngineeringInsightEvaluationAttempt) {
+func buildSummaryCounts(report *EngineeringInsightEvaluationReport, attempt EngineeringInsightEvaluationAttempt) {
 	if attempt.UsableSummary {
 		report.UsableAttempts++
 	}
@@ -752,7 +752,7 @@ func recordSummaryCounts(report *EngineeringInsightEvaluationReport, attempt Eng
 	}
 }
 
-func recordScoreCounts(report *EngineeringInsightEvaluationReport, scheduled EngineeringInsightExpectedAttempt, attempt EngineeringInsightEvaluationAttempt) {
+func buildScoreCounts(report *EngineeringInsightEvaluationReport, scheduled EngineeringInsightExpectedAttempt, attempt EngineeringInsightEvaluationAttempt) {
 	if attempt.Score != nil && attempt.Score.CriticalFalseClaim {
 		report.CriticalFalseClaims++
 	}
@@ -768,7 +768,7 @@ func hasUsefulSubstantiveInsight(attempt EngineeringInsightEvaluationAttempt) bo
 	return attempt.UsableSummary && attempt.OptionalInsight == "present" && attempt.Score != nil && attempt.Score.Total() >= minimumRetainedEngineeringInsightScore
 }
 
-func nearestRank(values []float64, percentile float64) float64 {
+func buildNearestRankLatency(values []float64, percentile float64) float64 {
 	if len(values) == 0 {
 		return 0
 	}
@@ -777,7 +777,7 @@ func nearestRank(values []float64, percentile float64) float64 {
 	return sorted[int(math.Ceil(percentile*float64(len(sorted))))-1]
 }
 
-func median(values []float64) float64 {
+func buildMedianLatency(values []float64) float64 {
 	if len(values) == 0 {
 		return 0
 	}
@@ -790,15 +790,15 @@ func median(values []float64) float64 {
 	return sorted[middle]
 }
 
-func rejectDuplicateJSONKeys(data []byte) error {
+func validateNoDuplicateJSONKeys(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := consumeJSONValue(decoder); err != nil {
+	if err := validateJSONValue(decoder); err != nil {
 		return err
 	}
-	return requireJSONEOF(decoder)
+	return validateJSONEOF(decoder)
 }
 
-func consumeJSONValue(decoder *json.Decoder) error {
+func validateJSONValue(decoder *json.Decoder) error {
 	token, err := decoder.Token()
 	if err != nil {
 		return err
@@ -823,7 +823,7 @@ func consumeJSONValue(decoder *json.Decoder) error {
 				return fmt.Errorf("duplicate key")
 			}
 			seen[name] = struct{}{}
-			if err := consumeJSONValue(decoder); err != nil {
+			if err := validateJSONValue(decoder); err != nil {
 				return err
 			}
 		}
@@ -831,7 +831,7 @@ func consumeJSONValue(decoder *json.Decoder) error {
 		return err
 	case '[':
 		for decoder.More() {
-			if err := consumeJSONValue(decoder); err != nil {
+			if err := validateJSONValue(decoder); err != nil {
 				return err
 			}
 		}
@@ -842,7 +842,7 @@ func consumeJSONValue(decoder *json.Decoder) error {
 	}
 }
 
-func requireJSONEOF(decoder *json.Decoder) error {
+func validateJSONEOF(decoder *json.Decoder) error {
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return fmt.Errorf("trailing data")

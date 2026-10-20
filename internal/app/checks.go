@@ -3,21 +3,21 @@ package app
 import (
 	"context"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/archcheck"
-	"github.com/nanaki-93/mini-orca/v2/internal/app/checkexec"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 )
 
 const (
-	CheckNotRun      = archcheck.CheckNotRun
-	CheckPassed      = archcheck.CheckPassed
-	CheckFailed      = archcheck.CheckFailed
-	CheckSkipped     = archcheck.CheckSkipped
-	CheckCanceled    = archcheck.CheckCanceled
-	CheckUnavailable = archcheck.CheckUnavailable
+	CheckNotRun      = archgate.CheckNotRun
+	CheckPassed      = archgate.CheckPassed
+	CheckFailed      = archgate.CheckFailed
+	CheckSkipped     = archgate.CheckSkipped
+	CheckCanceled    = archgate.CheckCanceled
+	CheckUnavailable = archgate.CheckUnavailable
 )
 
-type CheckResult = archcheck.CheckResult
-type CheckOptions = archcheck.CheckOptions
+type CheckResult = archgate.CheckResult
+type CheckOptions = archgate.CheckOptions
 
 func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) CheckResult {
 	check, err := s.executeCheck(ctx, workspace, revision, CheckResult{Name: name, Required: true, Command: append([]string(nil), command...)}, true)
@@ -34,7 +34,7 @@ func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, nam
 }
 
 func parseGoSource(path, source string) CheckResult {
-	return checkexec.ParseGoSource(path, source)
+	return sandbox.ParseGoSource(path, source)
 }
 
 func (s *Service) runCheck(ctx context.Context, workspace, revision, name string, required bool, command []string, failOnOutput, executesProjectCode bool) CheckResult {
@@ -69,23 +69,23 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 	return check, err
 }
 
-func (s *Service) runCheckCommand(ctx context.Context, workspace string, command []string, revision string, executesProjectCode bool) (checkexec.CommandResult, error) {
+func (s *Service) runCheckCommand(ctx context.Context, workspace string, command []string, revision string, executesProjectCode bool) (sandbox.CommandResult, error) {
 	if !executesProjectCode {
-		return checkexec.RunCommand(ctx, workspace, command)
+		return sandbox.RunCommand(ctx, workspace, command)
 	}
-	return checkexec.RunCommandWithStart(ctx, workspace, command, true, func() error {
+	return sandbox.RunCommandWithStart(ctx, workspace, command, true, func() error {
 		return s.requireProjectExecutionTrust(revision)
 	})
 }
 
 func requiredChecksPassed(checks []CheckResult) bool {
-	return checkexec.RequiredChecksPassed(checks)
+	return sandbox.RequiredChecksPassed(checks)
 }
 
 func sanitizeCheckOutput(output string, truncated bool, workspace, root string) string {
-	return checkexec.SanitizeOutput(output, truncated, workspace, root)
+	return sandbox.SanitizeOutput(output, truncated, workspace, root)
 }
 
 func copyCheckWorkspace(ctx context.Context, source, destination string) error {
-	return checkexec.CopyWorkspace(ctx, source, destination)
+	return sandbox.CopyWorkspace(ctx, source, destination)
 }

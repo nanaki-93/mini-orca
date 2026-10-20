@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 func TestRenderAllHubsAndPalettes(t *testing.T) {
@@ -206,7 +207,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 				t.Fatalf("page %s (%dx%d): expected exact frame height %d, got %d rows", p, dims[0], dims[1], dims[1], len(rows))
 			}
 			for rIdx, row := range rows {
-				if gotW := visibleRuneCount(row); gotW != dims[0] {
+				if gotW := theme.VisibleRuneCount(row); gotW != dims[0] {
 					t.Fatalf("page %s (%dx%d) row %d: expected exact visible width %d, got %d: %q", p, dims[0], dims[1], rIdx, dims[0], gotW, row)
 				}
 			}
@@ -410,7 +411,7 @@ func TestCodeDiffAndSourceTabAndLongLineSanitization(t *testing.T) {
 			t.Fatalf("diff frame (%dx%d): expected %d rows, got %d", dims[0], dims[1], dims[1], len(rows))
 		}
 		for rIdx, row := range rows {
-			if gotW := visibleRuneCount(row); gotW != dims[0] {
+			if gotW := theme.VisibleRuneCount(row); gotW != dims[0] {
 				t.Fatalf("diff frame (%dx%d) row %d: expected width %d, got %d: %q", dims[0], dims[1], rIdx, dims[0], gotW, row)
 			}
 		}
@@ -443,7 +444,7 @@ func TestCodeDiffAndSourceTabAndLongLineSanitization(t *testing.T) {
 		t.Fatal("source viewer frame must not contain raw tab or CR characters")
 	}
 	for rIdx, row := range strings.Split(sourceFrame, "\n") {
-		if gotW := visibleRuneCount(row); gotW != 120 {
+		if gotW := theme.VisibleRuneCount(row); gotW != 120 {
 			t.Fatalf("source frame row %d: expected width 120, got %d: %q", rIdx, gotW, row)
 		}
 	}
@@ -528,7 +529,7 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 				t.Fatalf("mode %s (%dx%d): expected %d rows, got %d", expectedMode, dims[0], dims[1], dims[1], len(rows))
 			}
 			for rIdx, row := range rows {
-				if gotW := visibleRuneCount(row); gotW != dims[0] {
+				if gotW := theme.VisibleRuneCount(row); gotW != dims[0] {
 					t.Fatalf("mode %s (%dx%d) row %d: expected width %d, got %d: %q", expectedMode, dims[0], dims[1], rIdx, dims[0], gotW, row)
 				}
 			}

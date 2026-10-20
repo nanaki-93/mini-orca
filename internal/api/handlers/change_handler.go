@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"path/filepath"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -25,6 +24,7 @@ func decodeWorkflowBody(w http.ResponseWriter, r *http.Request, body any) bool {
 	}
 	return true
 }
+
 func respondWorkflow(w http.ResponseWriter, value any, err error) {
 	if err != nil {
 		writeWorkflowError(w, "AI workflow request failed", err)
@@ -32,6 +32,7 @@ func respondWorkflow(w http.ResponseWriter, value any, err error) {
 	}
 	api.WriteJSON(w, http.StatusOK, value)
 }
+
 func guardedWorkflowRead(w http.ResponseWriter, r *http.Request, manager *project.Manager) bool {
 	index, err := manager.Index()
 	if err != nil {
@@ -44,6 +45,7 @@ func guardedWorkflowRead(w http.ResponseWriter, r *http.Request, manager *projec
 	}
 	return true
 }
+
 func (h *ChangeHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
 		return
@@ -51,6 +53,7 @@ func (h *ChangeHandler) List(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ChangeHistory(r.Context())
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
 		return
@@ -58,6 +61,7 @@ func (h *ChangeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ChangeSession(r.Context(), r.PathValue("sessionID"))
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Open(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeCreateRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -66,6 +70,7 @@ func (h *ChangeHandler) Open(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.OpenChangeSession(r.Context(), request)
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeIdentity
 	if !decodeWorkflowBody(w, r, &request) {
@@ -83,6 +88,7 @@ func (h *ChangeHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ResumeChange(r.Context(), r.PathValue("sessionID"))
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Message(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeMessageRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -97,6 +103,7 @@ func (h *ChangeHandler) Message(w http.ResponseWriter, r *http.Request) {
 	}
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Checks(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeCheckRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -105,6 +112,7 @@ func (h *ChangeHandler) Checks(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.CheckChange(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Review(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeIdentity
 	if !decodeWorkflowBody(w, r, &request) {
@@ -113,6 +121,7 @@ func (h *ChangeHandler) Review(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ReviewChange(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -125,6 +134,7 @@ func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -133,6 +143,7 @@ func (h *ChangeHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.UndoChange(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Commit(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {
@@ -141,6 +152,7 @@ func (h *ChangeHandler) Commit(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.RetryChangeCommit(r.Context(), r.PathValue("sessionID"), request)
 	respondGit(w, value, err)
 }
+
 func (h *ChangeHandler) Recovery(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
 		return
@@ -148,72 +160,12 @@ func (h *ChangeHandler) Recovery(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ChangeRecovery()
 	respondWorkflow(w, value, err)
 }
+
 func (h *ChangeHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeIdentity
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
 	value, err := h.service.VerifyChange(r.Context(), r.PathValue("sessionID"), request)
-	respondWorkflow(w, value, err)
-}
-
-type InstructionPreview struct {
-	ProjectID       string                        `json:"project_id"`
-	ProjectRevision string                        `json:"project_revision"`
-	Path            string                        `json:"path"`
-	ExistingContent string                        `json:"existing_content"`
-	Exists          bool                          `json:"exists"`
-	Effective       project.EffectiveInstructions `json:"effective"`
-	Presets         []project.InstructionPreset   `json:"presets"`
-}
-
-func (h *ChangeHandler) Instructions(w http.ResponseWriter, r *http.Request) {
-	if !guardedWorkflowRead(w, r, h.manager) {
-		return
-	}
-	path := r.URL.Query().Get("path")
-	if filepath.Base(path) != "AGENTS.md" {
-		api.WriteError(w, http.StatusBadRequest, "choose a project-relative AGENTS.md path")
-		return
-	}
-	index, err := h.manager.Index()
-	if err != nil {
-		respondWorkflow(w, nil, err)
-		return
-	}
-	root := h.manager.Root()
-	effective, err := project.ResolveInstructions(root, path)
-	if err != nil {
-		respondWorkflow(w, nil, err)
-		return
-	}
-	presets, err := project.SuggestInstructionPresets(root, path, index.Files)
-	if err != nil {
-		respondWorkflow(w, nil, err)
-		return
-	}
-	current, err := h.manager.Index()
-	if err != nil {
-		respondWorkflow(w, nil, err)
-		return
-	}
-	if h.manager.Root() != root || current.ProjectID != index.ProjectID || current.ProjectRevision != index.ProjectRevision {
-		respondWorkflow(w, nil, project.ErrRevisionConflict)
-		return
-	}
-	preview := InstructionPreview{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Path: path, Effective: effective, Presets: presets}
-	for _, file := range effective.Files {
-		if file.Path == path {
-			preview.Exists, preview.ExistingContent = true, file.Content
-		}
-	}
-	api.WriteJSON(w, http.StatusOK, preview)
-}
-func (h *ChangeHandler) ProposeInstructions(w http.ResponseWriter, r *http.Request) {
-	var request app.InstructionProposalRequest
-	if !decodeWorkflowBody(w, r, &request) {
-		return
-	}
-	value, err := h.service.ProposeInstructions(r.Context(), request)
 	respondWorkflow(w, value, err)
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -340,4 +341,7 @@ func duration(value string) time.Duration {
 		return 5 * time.Minute
 	}
 	return parsed
+}
+func newOpaqueID(prefix string) string {
+	return changes.NewOpaqueID(prefix)
 }

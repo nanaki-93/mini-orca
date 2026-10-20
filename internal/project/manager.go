@@ -29,14 +29,23 @@ func (m *Manager) Root() string {
 	return m.root
 }
 
-func (m *Manager) Set(root string, analysis *Analysis) error {
+// ActivateProject activates an imported project and persists its deterministic index.
+func (m *Manager) ActivateProject(root string, analysis *Analysis) error {
 	return m.activate(root, analysis, true)
 }
 
-// Restore activates a previously imported project while keeping startup
+func (m *Manager) Set(root string, analysis *Analysis) error {
+	return m.ActivateProject(root, analysis)
+}
+
+// RestoreProject activates a previously imported project while keeping startup
 // restoration free from persisted index rewrites.
-func (m *Manager) Restore(root string, analysis *Analysis) error {
+func (m *Manager) RestoreProject(root string, analysis *Analysis) error {
 	return m.activate(root, analysis, false)
+}
+
+func (m *Manager) Restore(root string, analysis *Analysis) error {
+	return m.RestoreProject(root, analysis)
 }
 
 func (m *Manager) activate(root string, analysis *Analysis, persistIndex bool) error {

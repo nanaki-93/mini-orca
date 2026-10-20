@@ -27,7 +27,7 @@ func TestEngineeringInsightRunnerMetadataReplacesCompactPrivateJSON(t *testing.T
 	directory := t.TempDir()
 	path := filepath.Join(directory, "campaign.json")
 	for _, requests := range []int{1, 2} {
-		if err := writeRunnerJSON(path, engineeringInsightCampaign{DevelopmentRequests: requests}); err != nil {
+		if err := storeRunnerJSON(path, engineeringInsightCampaign{DevelopmentRequests: requests}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestEngineeringInsightRunnerMetadataMarshalFailureRetainsPriorData(t *testi
 		t.Fatal(err)
 	}
 	failure := errors.New("private source and provider response")
-	err := writeRunnerJSON(path, failingRunnerMetadata{err: failure})
+	err := storeRunnerJSON(path, failingRunnerMetadata{err: failure})
 	if err == nil || err.Error() != "write evaluation run" || fmt.Sprintf("%+v", err) != "write evaluation run" {
 		t.Fatalf("public write error = %v", err)
 	}
@@ -86,7 +86,7 @@ func TestEngineeringInsightRunnerMetadataRequiresExistingDirectory(t *testing.T)
 					t.Fatal(err)
 				}
 			}
-			err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{})
+			err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{})
 			if err == nil || err.Error() != "write evaluation run" {
 				t.Fatalf("public directory error = %v", err)
 			}
@@ -117,7 +117,7 @@ func TestEngineeringInsightRunnerMetadataReplacementFailureCleansTemp(t *testing
 	if err := os.WriteFile(priorPath, []byte("prior"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := writeRunnerJSON(path, engineeringInsightCampaign{})
+	err := storeRunnerJSON(path, engineeringInsightCampaign{})
 	if err == nil || err.Error() != "write evaluation run" {
 		t.Fatalf("public replacement error = %v", err)
 	}
@@ -137,10 +137,10 @@ func TestEngineeringInsightRunnerMetadataReplacementFailureCleansTemp(t *testing
 func TestEngineeringInsightRunnerPrivateArtifactCollisionRetainsPriorData(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "response.json")
-	if err := writePrivateArtifact(path, []byte("prior response")); err != nil {
+	if err := storePrivateArtifact(path, []byte("prior response")); err != nil {
 		t.Fatal(err)
 	}
-	if err := writePrivateArtifact(path, []byte("next response")); !errors.Is(err, os.ErrExist) {
+	if err := storePrivateArtifact(path, []byte("next response")); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("immutable artifact collision = %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -354,21 +354,21 @@ func TestEngineeringInsightRunnerRetainsReasoningOnlyStoppedResponseForPrivateSc
 
 func TestEngineeringInsightRunnerFingerprintBindsOptionalSamplingControls(t *testing.T) {
 	cfg := runnerTestConfig(t, "sampling-fingerprint", EngineeringInsightCollectRunMode, 3, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
-	baseline := runnerFingerprint(cfg)
+	baseline := buildRunnerFingerprint(cfg)
 	topP := float32(0)
 	cfg.Profile.TopP = &topP
-	withTopP := runnerFingerprint(cfg)
+	withTopP := buildRunnerFingerprint(cfg)
 	if baseline == withTopP {
 		t.Fatal("omitted and explicit zero top_p have the same fingerprint")
 	}
 	topP = 0.95
-	changed := runnerFingerprint(cfg)
+	changed := buildRunnerFingerprint(cfg)
 	if withTopP == changed {
 		t.Fatal("top_p value change did not change fingerprint")
 	}
 	cloneValue := float32(0.95)
 	cfg.Profile.TopP = &cloneValue
-	if changed == baseline || runnerFingerprint(cfg) != changed {
+	if changed == baseline || buildRunnerFingerprint(cfg) != changed {
 		t.Fatal("sampling fingerprint did not deterministically bind the configured value")
 	}
 }
@@ -379,7 +379,7 @@ func TestEngineeringInsightRunnerFingerprintBindsResponseSchemaIdentity(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runnerFingerprintWithSchemaIdentity(cfg, identity) == runnerFingerprintWithSchemaIdentity(cfg, identity+"-changed") {
+	if buildRunnerFingerprintWithSchemaIdentity(cfg, identity) == buildRunnerFingerprintWithSchemaIdentity(cfg, identity+"-changed") {
 		t.Fatal("response schema identity did not change the resumable-run fingerprint")
 	}
 }
@@ -592,7 +592,7 @@ func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *tes
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: defaultDevelopmentRequestCap}); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: defaultDevelopmentRequestCap}); err != nil {
 		t.Fatal(err)
 	}
 	if err := GrantEngineeringInsightDevelopmentBudget(root, recoveryDevelopmentAuthorizationID, developmentGrantRequestCount); err == nil {
@@ -608,7 +608,7 @@ func TestEngineeringInsightRunnerRejectsRecoveryAuthorizationAsFirstGrant(t *tes
 
 func TestEngineeringInsightRunnerRejectsUnboundRecoveryAuthorizationInPersistedLedger(t *testing.T) {
 	directory := t.TempDir()
-	if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(`{"grants":[{"authorization_id":"qual05-qwen38-recovery-1","requests":6}]}`), 0600); err != nil {
+	if err := os.WriteFile(buildDevelopmentGrantLedgerPath(directory), []byte(`{"grants":[{"authorization_id":"qual05-qwen38-recovery-1","requests":6}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := loadDevelopmentGrantLedger(directory); err == nil {
@@ -627,18 +627,18 @@ func TestEngineeringInsightRunnerDoesNotReplayInterruptedBoundRecovery(t *testin
 		{AuthorizationID: "extension-one", Requests: 6},
 		{AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel},
 	}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+	if err := storeRunnerJSON(buildDevelopmentGrantLedgerPath(directory), ledger); err != nil {
 		t.Fatal(err)
 	}
-	manifest := engineeringInsightRunManifest{Fingerprint: runnerFingerprint(cfg), Receipt: runnerReceipt(cfg)}
+	manifest := engineeringInsightRunManifest{Fingerprint: buildRunnerFingerprint(cfg), Receipt: buildRunnerReceipt(cfg)}
 	for _, item := range cfg.Cases {
-		manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, unknownReservedAttempt(item.Expected, cfg.CandidateID))
+		manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, buildUnknownReservedAttempt(item.Expected, cfg.CandidateID))
 	}
 	manifest.Receipt.Consumption.Requests = len(cfg.Cases)
-	if err := writeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 15}); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 15}); err != nil {
 		t.Fatal(err)
 	}
 	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
@@ -659,10 +659,10 @@ func TestEngineeringInsightRunnerLocksBoundRecoveryGrantAndDispatchTogether(t *t
 		t.Fatal(err)
 	}
 	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{{AuthorizationID: "extension-one", Requests: 6}}}
-	if err := writeRunnerJSON(developmentGrantLedgerPath(directory), ledger); err != nil {
+	if err := storeRunnerJSON(buildDevelopmentGrantLedgerPath(directory), ledger); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 12}); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 12}); err != nil {
 		t.Fatal(err)
 	}
 	lock, err := lockRunnerFile(filepath.Join(directory, "campaign.lock"))
@@ -696,10 +696,10 @@ func TestEngineeringInsightRunnerRejectsCorruptDevelopmentGrantLedgerBeforeDispa
 			if err := os.MkdirAll(directory, 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 6}); err != nil {
+			if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 6}); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(developmentGrantLedgerPath(directory), []byte(ledger), 0600); err != nil {
+			if err := os.WriteFile(buildDevelopmentGrantLedgerPath(directory), []byte(ledger), 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
@@ -756,15 +756,15 @@ func TestEngineeringInsightRunnerResumesReservedAttemptAsConsumedWithoutReplay(t
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	manifest := engineeringInsightRunManifest{Fingerprint: runnerFingerprint(cfg), Receipt: runnerReceipt(cfg)}
+	manifest := engineeringInsightRunManifest{Fingerprint: buildRunnerFingerprint(cfg), Receipt: buildRunnerReceipt(cfg)}
 	for _, item := range cfg.Cases {
-		manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, unknownReservedAttempt(item.Expected, cfg.CandidateID))
+		manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, buildUnknownReservedAttempt(item.Expected, cfg.CandidateID))
 	}
 	manifest.Receipt.Consumption.Requests = 3
-	if err := writeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 3}); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 3}); err != nil {
 		t.Fatal(err)
 	}
 	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
@@ -868,7 +868,7 @@ func TestEngineeringInsightRunnerStoresOnlyDigestBoundScores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := expectedAttemptID(cfg.Cases[0].Expected)
+	id := buildExpectedAttemptID(cfg.Cases[0].Expected)
 	score := EngineeringInsightAttemptScore{ResponseDigest: receipt.Attempts[0].ResponseDigest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2}
 	updated, err := StoreEngineeringInsightScores(cfg.Root, cfg.RunID, map[string]EngineeringInsightAttemptScore{id: score})
 	if err != nil || updated.Attempts[0].Score == nil {
@@ -894,8 +894,8 @@ func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwr
 		t.Fatal(err)
 	}
 	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	id := expectedAttemptID(cfg.Cases[0].Expected)
-	path := privateOptionalDiagnosticsPath(privateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
+	id := buildExpectedAttemptID(cfg.Cases[0].Expected)
+	path := buildPrivateOptionalDiagnosticsPath(buildPrivateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -915,10 +915,10 @@ func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwr
 			t.Fatalf("diagnostic artifact retained private text %q: %s", forbidden, data)
 		}
 	}
-	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
+	if err := storePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id + "-invalid", ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightReason(privateText), Presence: project.OptionalEngineeringInsightValuePresence}}}); err == nil {
 		t.Fatal("diagnostic artifact accepted arbitrary model text as a reason")
 	}
-	if err := writePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: nil}); err == nil {
+	if err := storePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: receipt.Attempts[0].ResponseDigest, Insights: nil}); err == nil {
 		t.Fatal("diagnostic artifact overwrite was accepted")
 	}
 	unchanged, err := os.ReadFile(path)
@@ -938,28 +938,28 @@ func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknow
 		t.Fatal(err)
 	}
 	first := cfg.Cases[0].Expected
-	manifest := engineeringInsightRunManifest{Fingerprint: runnerFingerprint(cfg), Receipt: runnerReceipt(cfg)}
-	manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, unknownReservedAttempt(first, cfg.CandidateID))
+	manifest := engineeringInsightRunManifest{Fingerprint: buildRunnerFingerprint(cfg), Receipt: buildRunnerReceipt(cfg)}
+	manifest.Receipt.Attempts = append(manifest.Receipt.Attempts, buildUnknownReservedAttempt(first, cfg.CandidateID))
 	manifest.Receipt.Consumption.Requests = 1
-	if err := writeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, cfg.RunID+".json"), manifest); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 1}); err != nil {
+	if err := storeRunnerJSON(filepath.Join(directory, "campaign.json"), engineeringInsightCampaign{DevelopmentRequests: 1}); err != nil {
 		t.Fatal(err)
 	}
-	id := expectedAttemptID(first)
+	id := buildExpectedAttemptID(first)
 	priorResponse := "private interrupted response"
 	digest := sha256.Sum256([]byte(priorResponse))
-	responseDirectory := privateResponseDirectory(directory, cfg.RunID)
-	diagnosticsDirectory := privateOptionalDiagnosticsDirectory(directory, cfg.RunID)
-	if err := writePrivateResponse(responseDirectory, id, priorResponse); err != nil {
+	responseDirectory := buildPrivateResponseDirectory(directory, cfg.RunID)
+	diagnosticsDirectory := buildPrivateOptionalDiagnosticsDirectory(directory, cfg.RunID)
+	if err := storePrivateResponse(responseDirectory, id, priorResponse); err != nil {
 		t.Fatal(err)
 	}
 	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
-	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
+	if err := storePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
-	diagnosticPath := privateOptionalDiagnosticsPath(diagnosticsDirectory, id)
+	diagnosticPath := buildPrivateOptionalDiagnosticsPath(diagnosticsDirectory, id)
 	before, err := os.ReadFile(diagnosticPath)
 	if err != nil {
 		t.Fatal(err)
@@ -970,7 +970,7 @@ func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknow
 			t.Fatalf("private directory mode %q = %v, %v", path, info.Mode(), err)
 		}
 	}
-	for _, artifactPath := range []string{privateResponsePath(responseDirectory, id), diagnosticPath} {
+	for _, artifactPath := range []string{buildPrivateResponsePath(responseDirectory, id), diagnosticPath} {
 		info, err := os.Stat(artifactPath)
 		if err != nil || info.Mode().Perm()&0077 != 0 {
 			t.Fatalf("private artifact mode %q = %v, %v", artifactPath, info.Mode(), err)
@@ -985,7 +985,7 @@ func TestEngineeringInsightRunnerDoesNotReplaceDiagnosticsForAnInterruptedUnknow
 	if err != nil || string(after) != string(before) || strings.Contains(string(after), priorResponse) {
 		t.Fatalf("resume replaced or exposed interrupted diagnostic: %s, %v", after, err)
 	}
-	storedResponse, err := readPrivateResponse(responseDirectory, id)
+	storedResponse, err := loadPrivateResponse(responseDirectory, id)
 	if err != nil || storedResponse != priorResponse {
 		t.Fatalf("resume replaced interrupted response: %q, %v", storedResponse, err)
 	}
@@ -1003,13 +1003,13 @@ func TestEngineeringInsightRunnerLeavesAnUnknownReservationWhenDiagnosticPublish
 		t.Fatal(err)
 	}
 	first := cfg.Cases[0].Expected
-	id := expectedAttemptID(first)
+	id := buildExpectedAttemptID(first)
 	digest := sha256.Sum256([]byte(runnerValidResponse()))
 	prior := engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: id, ResponseDigest: hex.EncodeToString(digest[:]), Insights: []app.FileAnalysisInsightDiagnostic{{Location: "top_level", Reason: project.OptionalEngineeringInsightAbsent, Presence: project.OptionalEngineeringInsightAbsentPresence}}}
-	if err := writePrivateOptionalDiagnostics(directory, prior); err != nil {
+	if err := storePrivateOptionalDiagnostics(directory, prior); err != nil {
 		t.Fatal(err)
 	}
-	diagnosticPath := privateOptionalDiagnosticsPath(privateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
+	diagnosticPath := buildPrivateOptionalDiagnosticsPath(buildPrivateOptionalDiagnosticsDirectory(directory, cfg.RunID), id)
 	before, err := os.ReadFile(diagnosticPath)
 	if err != nil {
 		t.Fatal(err)
@@ -1019,7 +1019,7 @@ func TestEngineeringInsightRunnerLeavesAnUnknownReservationWhenDiagnosticPublish
 	if err == nil || client.calls.Load() != 1 || len(receipt.Attempts) != 1 || receipt.Attempts[0].Outcome != "unknown" {
 		t.Fatalf("diagnostic write failure did not preserve the unknown reservation: receipt=%+v calls=%d err=%v", receipt, client.calls.Load(), err)
 	}
-	if _, err := os.Stat(privateResponsePath(privateResponseDirectory(directory, cfg.RunID), id)); !os.IsNotExist(err) {
+	if _, err := os.Stat(buildPrivateResponsePath(buildPrivateResponseDirectory(directory, cfg.RunID), id)); !os.IsNotExist(err) {
 		t.Fatalf("response was published before its diagnostic: %v", err)
 	}
 	after, err := os.ReadFile(diagnosticPath)
@@ -1083,7 +1083,7 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 		t.Fatalf("control attempt treated incomplete insight as complete or omitted: %+v", control)
 	}
 	report := EngineeringInsightEvaluationReport{}
-	recordScoreCounts(&report, cfg.Cases[2].Expected, control)
+	buildScoreCounts(&report, cfg.Cases[2].Expected, control)
 	if report.OmittedControls != 0 {
 		t.Fatalf("incomplete control insight counted as intentional omission: %+v", report)
 	}
@@ -1146,7 +1146,7 @@ func TestEngineeringInsightRunnerRejectsHistoricalPromptDispatch(t *testing.T) {
 		t.Fatalf("historical v12 prompt dispatched: %v, calls=%d", err, client.calls.Load())
 	}
 	ledger := engineeringInsightDevelopmentGrantLedger{Grants: []engineeringInsightDevelopmentGrant{{AuthorizationID: "extension-one", Requests: 6}, {AuthorizationID: recoveryDevelopmentAuthorizationID, Requests: 6, CandidateID: recoveryDevelopmentCandidateID, Model: recoveryDevelopmentModel}, {AuthorizationID: v11DevelopmentAuthorizationID, Requests: 6, CandidateID: v11DevelopmentCandidateID, Model: v11DevelopmentModel, PromptVersion: v11DevelopmentPromptVersion}, {AuthorizationID: v12DevelopmentAuthorizationID, Requests: 6, CandidateID: v12DevelopmentCandidateID, Model: v12DevelopmentModel, PromptVersion: v12DevelopmentPromptVersion}}}
-	if !validDevelopmentGrantLedger(ledger) {
+	if !isValidDevelopmentGrantLedger(ledger) {
 		t.Fatal("historical grant ledger no longer validates")
 	}
 }
@@ -1156,7 +1156,7 @@ func TestEngineeringInsightRecoveryV2BindsCompleteHistoricalEvidenceSet(t *testi
 		t.Fatalf("predecessor evidence count = %d, want campaign, grant ledger, and 17 receipts", len(recoveryV2PredecessorFiles))
 	}
 	for name, digest := range recoveryV2PredecessorFiles {
-		if !validDigest(digest) {
+		if !isValidDigest(digest) {
 			t.Fatalf("predecessor %q has invalid digest %q", name, digest)
 		}
 	}
@@ -1184,7 +1184,7 @@ func TestEngineeringInsightRecoveryV2ReservesExactlyTwelveDevelopmentCases(t *te
 	if err := consumeRecoveryV2Request(&period, EngineeringInsightDevelopmentRunMode); err == nil {
 		t.Fatal("exceeded twelve-request budget")
 	}
-	manifest := engineeringInsightRunManifest{Receipt: runnerReceipt(cfg)}
+	manifest := engineeringInsightRunManifest{Receipt: buildRunnerReceipt(cfg)}
 	if err := validateRunnerManifest(manifest, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -1198,7 +1198,7 @@ func TestEngineeringInsightRecoveryV2RejectsRetiredPromptWithoutConsumption(t *t
 	client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 	cfg := recoveryV2DevelopmentTestConfig(t, client)
 	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	path := recoveryV2PeriodPath(directory)
+	path := buildRecoveryV2PeriodPath(directory)
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1243,11 +1243,11 @@ func TestEngineeringInsightRecoveryV2PreservesChargedReservationWithoutReplaceme
 	if err != nil {
 		t.Fatal(err)
 	}
-	period.DevelopmentSchedule = recoveryV2ScheduleIDs(cfg.Cases)
+	period.DevelopmentSchedule = buildRecoveryV2ScheduleIDs(cfg.Cases)
 	period.DevelopmentRequests = 1
 	period.CumulativeDevelopmentRequests = 49
 	period.Reservations[period.DevelopmentSchedule[0]] = true
-	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+	if err := storeRunnerJSON(buildRecoveryV2PeriodPath(directory), period); err != nil {
 		t.Fatal(err)
 	}
 	for index, item := range cfg.Cases {
@@ -1297,7 +1297,7 @@ func TestEngineeringInsightRecoveryV2RejectsIdentityCorpusAndScheduleDrift(t *te
 			mutate(&cfg)
 			client := &fakeEngineeringInsightClient{reply: runnerValidResponse()}
 			cfg.Client = client
-			if recoveryV2RunnerConfig(cfg) && validateRecoveryV2RunnerConfig(cfg) == nil && cfg.BaseRevision == base.BaseRevision {
+			if isRecoveryV2RunnerConfig(cfg) && validateRecoveryV2RunnerConfig(cfg) == nil && cfg.BaseRevision == base.BaseRevision {
 				t.Fatal("historical identity/corpus/schedule guard accepted drift")
 			}
 			if _, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg); err == nil || client.calls.Load() != 0 {
@@ -1346,19 +1346,19 @@ func TestEngineeringInsightRecoveryV2PeriodRejectsUnboundAndMalformedReservation
 	if err != nil {
 		t.Fatal(err)
 	}
-	period.DevelopmentSchedule = recoveryV2ScheduleIDs(cfg.Cases)
+	period.DevelopmentSchedule = buildRecoveryV2ScheduleIDs(cfg.Cases)
 	period.DevelopmentRequests = 1
 	period.CumulativeDevelopmentRequests = 49
 	period.Reservations["junk\x00development\x00junk\x001\x001"] = true
-	if validRecoveryV2Period(period, cfg.Root) {
+	if isValidRecoveryV2Period(period, cfg.Root) {
 		t.Fatal("unbound reservation ID was accepted")
 	}
 	period.Reservations = map[string]bool{period.DevelopmentSchedule[0]: true}
-	if !validRecoveryV2Period(period, cfg.Root) {
+	if !isValidRecoveryV2Period(period, cfg.Root) {
 		t.Fatal("bound reservation ID was rejected")
 	}
 	period.DevelopmentSchedule[0] = "junk\x00development\x00substantive\x001\x001"
-	if validRecoveryV2Period(period, cfg.Root) {
+	if isValidRecoveryV2Period(period, cfg.Root) {
 		t.Fatal("schedule with a reservation outside the verified corpus was accepted")
 	}
 }
@@ -1375,11 +1375,11 @@ func TestEngineeringInsightRecoveryV2ReservesFixedQualificationScheduleOnce(t *t
 	period.DevelopmentRequests = recoveryV2DevelopmentRequests
 	period.CumulativeDevelopmentRequests = recoveryV2DevelopmentLimit
 	for index, attempt := range development.Schedule {
-		id := expectedAttemptID(attempt)
+		id := buildExpectedAttemptID(attempt)
 		period.DevelopmentSchedule[index] = id
 		period.Reservations[id] = true
 	}
-	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+	if err := storeRunnerJSON(buildRecoveryV2PeriodPath(directory), period); err != nil {
 		t.Fatal(err)
 	}
 	manifest := engineeringInsightRunManifest{Finished: true, Receipt: v2Receipt(development, EngineeringInsightCollectionMode)}
@@ -1395,21 +1395,21 @@ func TestEngineeringInsightRecoveryV2ReservesFixedQualificationScheduleOnce(t *t
 	}
 	manifestPath := filepath.Join(directory, recoveryV2DevelopmentRunID+".json")
 	manifest.Receipt.Attempts[0].Score = nil
-	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+	if err := storeRunnerJSON(manifestPath, manifest); err != nil {
 		t.Fatal(err)
 	}
 	if dispatch, err := reserveRecoveryV2Attempt(directory, cfg, qualification.Schedule[0]); err == nil || dispatch {
 		t.Fatalf("qualification reserved against unscored development: dispatch=%v err=%v", dispatch, err)
 	}
 	manifest.Receipt.Attempts[0].Score = &EngineeringInsightAttemptScore{ResponseDigest: manifest.Receipt.Attempts[0].ResponseDigest, Correctness: 2, LocalRelevance: 2, TradeoffClarity: 2, UsefulVerification: 2, CriticalFalseClaim: true}
-	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+	if err := storeRunnerJSON(manifestPath, manifest); err != nil {
 		t.Fatal(err)
 	}
 	if dispatch, err := reserveRecoveryV2Attempt(directory, cfg, qualification.Schedule[0]); err == nil || dispatch {
 		t.Fatalf("qualification reserved against failed development: dispatch=%v err=%v", dispatch, err)
 	}
 	manifest.Receipt.Attempts[0].Score.CriticalFalseClaim = false
-	if err := writeRunnerJSON(manifestPath, manifest); err != nil {
+	if err := storeRunnerJSON(manifestPath, manifest); err != nil {
 		t.Fatal(err)
 	}
 	for index, attempt := range qualification.Schedule {
@@ -1431,7 +1431,7 @@ func TestEngineeringInsightRecoveryV2ReservesFixedQualificationScheduleOnce(t *t
 func TestEngineeringInsightRecoveryV2PeriodJSONIsStrict(t *testing.T) {
 	cfg := recoveryV2DevelopmentTestConfig(t, &fakeEngineeringInsightClient{reply: runnerValidResponse()})
 	directory := filepath.Join(cfg.Root, runnerRelativeDirectory)
-	path := recoveryV2PeriodPath(directory)
+	path := buildRecoveryV2PeriodPath(directory)
 	valid, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1552,12 +1552,12 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	period := engineeringInsightRecoveryV2Period{Version: "v2", PeriodID: recoveryV2PeriodID, CanonicalRoot: root, Provider: recoveryV2Provider, Endpoint: recoveryV2Endpoint, CandidateID: recoveryV2CandidateID, Model: recoveryV2Model, PromptVersion: recoveryV2PromptVersion, CorpusID: recoveryV2CorpusID, DevelopmentCorpusDigest: recoveryV2DevelopmentDigest, QualificationCorpusDigest: recoveryV2QualificationDigest, BaseRevision: base, SchemaIdentity: schema, MaxOutputTokens: qualificationOutputTokenCap, InputContextTokens: 16384, RuntimeContextTokens: recoveryV2RuntimeContextTokens, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, ReasoningEffort: mediumDevelopmentReasoningEffort, Temperature: 1, TopP: .95, TopK: 20, Lanes: 1, CumulativeDevelopmentRequests: 48, CumulativeQualificationRequests: 24, DevelopmentLimit: recoveryV2DevelopmentLimit, QualificationLimit: recoveryV2QualificationLimit, PredecessorFiles: cloneRecoveryV2PredecessorFiles(), DevelopmentSchedule: []string{}, QualificationSchedule: []string{}, Reservations: map[string]bool{}}
-	if !validRecoveryV2Period(period, root) {
-		canonical, _ := canonicalEvaluationRoot(root)
-		t.Fatalf("invalid test period: root=%q canonical=%q identity=%v canonicalIdentity=%v profile=%v accounting=%v predecessors=%+v", root, canonical, sameRecoveryV2PeriodIdentity(period, root), sameRecoveryV2PeriodIdentity(period, canonical), sameRecoveryV2PeriodProfile(period, schema), validRecoveryV2PeriodAccounting(period), period.PredecessorFiles)
+	period := engineeringInsightRecoveryV2Period{Version: "v2", PeriodID: recoveryV2PeriodID, CanonicalRoot: root, Provider: recoveryV2Provider, Endpoint: recoveryV2Endpoint, CandidateID: recoveryV2CandidateID, Model: recoveryV2Model, PromptVersion: recoveryV2PromptVersion, CorpusID: recoveryV2CorpusID, DevelopmentCorpusDigest: recoveryV2DevelopmentDigest, QualificationCorpusDigest: recoveryV2QualificationDigest, BaseRevision: base, SchemaIdentity: schema, MaxOutputTokens: qualificationOutputTokenCap, InputContextTokens: 16384, RuntimeContextTokens: recoveryV2RuntimeContextTokens, AttemptTimeoutSeconds: qualificationAttemptTimeoutSeconds, ReasoningEffort: mediumDevelopmentReasoningEffort, Temperature: 1, TopP: .95, TopK: 20, Lanes: 1, CumulativeDevelopmentRequests: 48, CumulativeQualificationRequests: 24, DevelopmentLimit: recoveryV2DevelopmentLimit, QualificationLimit: recoveryV2QualificationLimit, PredecessorFiles: buildRecoveryV2PredecessorFiles(), DevelopmentSchedule: []string{}, QualificationSchedule: []string{}, Reservations: map[string]bool{}}
+	if !isValidRecoveryV2Period(period, root) {
+		canonical, _ := loadCanonicalEvaluationRoot(root)
+		t.Fatalf("invalid test period: root=%q canonical=%q identity=%v canonicalIdentity=%v profile=%v accounting=%v predecessors=%+v", root, canonical, hasSameRecoveryV2PeriodIdentity(period, root), hasSameRecoveryV2PeriodIdentity(period, canonical), hasSameRecoveryV2PeriodProfile(period, schema), isValidRecoveryV2PeriodAccounting(period), period.PredecessorFiles)
 	}
-	if err := writeRunnerJSON(recoveryV2PeriodPath(directory), period); err != nil {
+	if err := storeRunnerJSON(buildRecoveryV2PeriodPath(directory), period); err != nil {
 		t.Fatal(err)
 	}
 	return root, base

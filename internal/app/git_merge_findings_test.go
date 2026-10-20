@@ -107,7 +107,7 @@ func recordedFindingFix(t *testing.T, service *Service, request GitMutationReque
 	session.State = "applied"
 	session.Commit = &ChangeCommit{State: "committed", OID: testGit(t, path, "rev-parse", "HEAD")}
 	session.FindingTargets = []project.FindingTarget{{ProjectID: request.ProjectID, Kind: "semantic", ID: "target", Path: "main.go"}}
-	if err := writeChangeSession(path, session); err != nil {
+	if err := storeChangeSession(path, session); err != nil {
 		t.Fatal(err)
 	}
 	return path, session
@@ -131,7 +131,7 @@ func TestGitMergeDoesNotCompleteUncommittedUndoneUnmergedOrForeignTargets(t *tes
 			case "legacy":
 				session.FindingTargets = nil
 			}
-			if err := writeChangeSession(path, session); err != nil {
+			if err := storeChangeSession(path, session); err != nil {
 				t.Fatal(err)
 			}
 			request = trustedGitRequest(t, service)
@@ -159,7 +159,7 @@ func TestGitMergeFindingCompletionFailureRetainsHistoryForRetry(t *testing.T) {
 	if err != nil || result.State != "merged" || result.RemovedWorktree != "" || len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "could not be marked Done") {
 		t.Fatalf("completion failure: %+v, %v", result, err)
 	}
-	if _, err := readChangeSession(path, session.ID); err != nil {
+	if _, err := loadChangeSession(path, session.ID); err != nil {
 		t.Fatalf("lost finding link after storage failure: %v", err)
 	}
 	if err := os.Remove(file); err != nil {

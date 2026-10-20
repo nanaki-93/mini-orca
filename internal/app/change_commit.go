@@ -32,7 +32,7 @@ func preflightChangeCommit(ctx context.Context, root string, session *ChangeSess
 	if err != nil {
 		return nil, err
 	}
-	if err := requireGitIdentity(repository, request.GitIdentity); err != nil {
+	if err := requireMatchingGitIdentity(repository, request.GitIdentity); err != nil {
 		return nil, err
 	}
 	for _, edit := range session.Changes {
@@ -87,7 +87,7 @@ func commitChangeFiles(ctx context.Context, root string, journal *changeJournal)
 	if err != nil {
 		return err
 	}
-	if err := requireGitIdentity(repository, commit.GitIdentity); err != nil {
+	if err := requireMatchingGitIdentity(repository, commit.GitIdentity); err != nil {
 		return err
 	}
 	tree, err := writeReviewedGitTree(ctx, root, session, commit.Head)
@@ -98,7 +98,7 @@ func commitChangeFiles(ctx context.Context, root string, journal *changeJournal)
 	if err != nil {
 		return err
 	}
-	if err := requireGitIdentity(current, commit.GitIdentity); err != nil {
+	if err := requireMatchingGitIdentity(current, commit.GitIdentity); err != nil {
 		return err
 	}
 
@@ -230,7 +230,7 @@ func verifyCommittedChange(ctx context.Context, root string, journal *changeJour
 	if err != nil {
 		return err
 	}
-	return requireGitIdentity(repository, expected)
+	return requireMatchingGitIdentity(repository, expected)
 }
 
 func writeReviewedGitTree(ctx context.Context, root string, session *ChangeSession, head string) (string, error) {

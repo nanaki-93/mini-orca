@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/features"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -18,10 +18,10 @@ var changeIDPattern = regexp.MustCompile(`^change-[a-f0-9]{32}$`)
 // changeMetadataPath disallows metadata-directory aliases before either reads
 // or writes. Source-write path policy deliberately does not admit metadata.
 func changeMetadataPath(root, name string) (string, error) {
-	return features.MetadataPath(root, name)
+	return changes.MetadataPath(root, name)
 }
 
-func readChangeSession(root, id string) (*ChangeSession, error) {
+func loadChangeSession(root, id string) (*ChangeSession, error) {
 	if !changeIDPattern.MatchString(id) {
 		return nil, fmt.Errorf("invalid change session id")
 	}
@@ -108,7 +108,7 @@ func boundedChangeFile(file *os.File) error {
 	return nil
 }
 
-func writeChangeSession(root string, session *ChangeSession) error {
+func storeChangeSession(root string, session *ChangeSession) error {
 	if err := validateStoredChange(*session); err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 		if !changeIDPattern.MatchString(id) {
 			continue
 		}
-		session, err := readChangeSession(root, id)
+		session, err := loadChangeSession(root, id)
 		if err != nil {
 			return nil, err
 		}
