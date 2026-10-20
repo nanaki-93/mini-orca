@@ -413,12 +413,12 @@ func (s *State) handleIssueListKey(key string) bool {
 	switch key {
 	case "i":
 		s.Navigate(PageIssueDetail)
-		s.CmdOutput = "Opened Issue Detail view ([Enter/a] Fix with Agent · [Esc] Back)"
+		s.CmdOutput = "Opened Issue Detail view ([f/Enter/a] Fix with Agent · [Esc] Back)"
 		return true
-	case "t", "c", "f", ".", ">", "L":
+	case "t", "c", ".", ">", "L":
 		s.cycleIssueCategory(true)
 		return true
-	case "T", "C", "F", ",", "<", "H":
+	case "T", "C", ",", "<", "H":
 		s.cycleIssueCategory(false)
 		return true
 	case "s", "v":
@@ -498,6 +498,11 @@ func (s *State) handleAnalysisRunConfigKey(key string) bool {
 
 func (s *State) handleIssueShortcut(key string) bool {
 	switch key {
+	case "f":
+		if s.Page == PageBugs || s.Page == PageIssueDetail {
+			s.dispatchSingleSelectedIssue()
+			return true
+		}
 	case "a":
 		s.dispatchSelectedIssues()
 		return true

@@ -186,14 +186,14 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
-		primary:   []keyDesc{{"Enter/a", "Fix Selected Bug"}, {"i", "Inspect Issue"}, {"d", "Dismiss"}},
-		secondary: []keyDesc{{"s/v", "Status Filter"}, {"f/t", "Category Filter"}, {"x/Space", "Batch"}},
+		primary:   []keyDesc{{"Space/x", "Select Batch"}, {"Enter/a", "Run Batch"}, {"f", "Fix Selected Row"}, {"i", "Inspect"}, {"d", "Dismiss"}},
+		secondary: []keyDesc{{"s/v", "Status Filter"}, {"t/c", "Category Filter"}},
 		commands:  []keyDesc{{":fix", "Fix issue"}, {":dismiss", "Dismiss issue"}, {":status <s>", "Filter status"}},
 	},
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
-		primary:   []keyDesc{{"Enter/a", "Dispatch Fix"}, {"w", "Watch Agent Pipeline"}, {"d", "Dismiss"}},
-		secondary: []keyDesc{{"b/i/Esc", "Back to Issues"}, {"s/v", "Status Filter"}, {"f/t", "Category"}},
+		primary:   []keyDesc{{"f/Enter/a", "Dispatch Fix"}, {"w", "Watch Agent Pipeline"}, {"d", "Dismiss"}},
+		secondary: []keyDesc{{"b/i/Esc", "Back to Issues"}, {"s/v", "Status Filter"}, {"t/c", "Category"}},
 		commands:  []keyDesc{{":fix", "Fix issue"}, {":dismiss", "Dismiss issue"}, {":bugs", "Back to list"}},
 	},
 	PageFeatures: {

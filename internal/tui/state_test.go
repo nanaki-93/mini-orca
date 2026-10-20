@@ -1390,3 +1390,78 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 		t.Fatalf("expected retry workflow message to preserve both findings' full details, got:\n%v", workflowMessages)
 	}
 }
+
+func TestIssuesSpacebarBatchEnterAndSingleRowFixKey(t *testing.T) {
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo"}
+	s.Findings = []Finding{
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "bug-1",
+			Severity:        "high",
+			Title:           "First high bug",
+			Message:         "First cause",
+			Category:        "bugs",
+			Status:          "open",
+			Location:        SourceAnchor{Path: "internal/app/a.go", StartLine: 10},
+		},
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "bug-2",
+			Severity:        "high",
+			Title:           "Second high bug",
+			Message:         "Second cause",
+			Category:        "bugs",
+			Status:          "open",
+			Location:        SourceAnchor{Path: "internal/app/b.go", StartLine: 20},
+		},
+		{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "bug-3",
+			Severity:        "medium",
+			Title:           "Third medium bug",
+			Message:         "Third cause",
+			Category:        "bugs",
+			Status:          "open",
+			Location:        SourceAnchor{Path: "internal/app/c.go", StartLine: 30},
+		},
+	}
+
+	s.Navigate(PageBugs)
+	// Select bug-1 and bug-2 with Spacebar
+	s.HandleKey(KeyEvent{Key: " "})
+	s.HandleKey(KeyEvent{Key: "j"})
+	s.HandleKey(KeyEvent{Key: " "})
+	if len(s.SelectedIssueIDs) != 2 {
+		t.Fatalf("expected 2 issues selected with Spacebar, got %d", len(s.SelectedIssueIDs))
+	}
+
+	// Move to bug-3 and press 'f' to fix ONLY the currently highlighted row (bug-3)
+	s.HandleKey(KeyEvent{Key: "j"})
+	s.HandleKey(KeyEvent{Key: "f"})
+	if s.Page != PageAgents {
+		t.Fatalf("expected 'f' on PageBugs to navigate to PageAgents, got %s", s.Page)
+	}
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "start-agent" || s.PendingActions[0].Seed == nil || s.PendingActions[0].Seed.Title != "Third medium bug" {
+		t.Fatalf("expected 'f' to dispatch only selected row 'Third medium bug', got %+v", s.PendingActions)
+	}
+	// Spacebar selection for bug-1 and bug-2 remains intact until batch is run
+	if len(s.SelectedIssueIDs) != 2 {
+		t.Fatalf("expected remaining 2 Spacebar-selected issues to stay selected, got %d", len(s.SelectedIssueIDs))
+	}
+
+	// Return to PageBugs and press Enter -> runs the 2 Spacebar-selected issues in batch
+	s.PendingActions = nil
+	s.Navigate(PageBugs)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PageAgents {
+		t.Fatalf("expected Enter on PageBugs to navigate to PageAgents, got %s", s.Page)
+	}
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "start-agent" || s.PendingActions[0].Seed == nil || len(s.PendingActions[0].Seed.FindingTargets) != 2 {
+		t.Fatalf("expected Enter to dispatch batch fix for 2 issues, got %+v", s.PendingActions)
+	}
+	if len(s.SelectedIssueIDs) != 0 {
+		t.Fatalf("expected batch dispatch to clear SelectedIssueIDs, got %d", len(s.SelectedIssueIDs))
+	}
+}
+

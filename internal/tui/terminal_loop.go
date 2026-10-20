@@ -230,6 +230,9 @@ func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
 	case tea.KeyCtrlC:
 		return KeyEvent{Key: "c", Ctrl: true}
 	default:
+		if msg.String() == "space" {
+			return KeyEvent{Key: " "}
+		}
 		return KeyEvent{Key: msg.String()}
 	}
 }

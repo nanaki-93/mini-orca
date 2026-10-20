@@ -13,13 +13,13 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	batchBadge := ""
 	if len(s.SelectedIssueIDs) > 0 {
-		batchBadge = fmt.Sprintf("   %s BATCH SELECTED: %d %s", th.warnBg, len(s.SelectedIssueIDs), th.reset)
+		batchBadge = fmt.Sprintf("   %s BATCH SELECTED: %d ([Enter] Run Batch) %s", th.warnBg, len(s.SelectedIssueIDs), th.reset)
 	}
 	openCount, inProgCount, doneCount := s.IssueStatusCounts()
 	statusStrip := s.renderIssueStatusFilterStrip(th, openCount, inProgCount, doneCount)
 	lines := []string{
 		fmt.Sprintf(
-			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (f/t):%s %s[%s]%s   %sStatus (s/v):%s %s%s",
+			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (t/c):%s %s[%s]%s   %sStatus (s/v):%s %s%s",
 			th.bold+th.accent, th.reset,
 			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(s.IssueCategory), th.reset,
 			th.muted, th.reset, statusStrip, batchBadge,
@@ -30,7 +30,7 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
 		return append(lines, fmt.Sprintf(
-			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s/v] for status or [f/t] for category.%s",
+			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s/v] for status or [t/c] for category.%s",
 			th.muted, strings.ToUpper(s.IssueView), openCount, inProgCount, doneCount, th.reset,
 		))
 	}
@@ -64,6 +64,8 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			fmt.Sprintf("%sLocation:%s  %s%s:%d%s   %sSummary:%s %s",
 				th.muted, th.reset, th.cyan, cur.Path, cur.Line, th.reset,
 				th.muted, th.reset, cur.Cause),
+			fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Selected Row · %s[i]%s Inspect · %s[d]%s Dismiss",
+				th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
 		}
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
@@ -133,7 +135,7 @@ func (s *State) renderIssueDetailWorkflowLine(th ansiTheme, cur IssueRow) string
 		return fmt.Sprintf("%s✔ Resolution:%s      Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[Esc]%s Back",
 			th.bold+th.green, th.reset, oid, th.cyan, th.reset, th.cyan, th.reset)
 	default:
-		return fmt.Sprintf("%s▸ Next Action:%s     %s[Enter/a]%s Fix Bug with Agent · %s[d]%s Dismiss · %s[o]%s Open File · %s[Esc]%s Back",
+		return fmt.Sprintf("%s▸ Next Action:%s     %s[f/Enter/a]%s Fix Bug with Agent · %s[d]%s Dismiss · %s[o]%s Open File · %s[Esc]%s Back",
 			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	}
 }

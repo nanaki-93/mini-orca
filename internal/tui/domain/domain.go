@@ -451,9 +451,11 @@ func firstChangedPath(change *client.ChangeSession) string {
 // NormalizeFindingTargets validates and canonicalizes finding targets for OpenChangeSession.
 func NormalizeFindingTargets(targets []client.FindingTarget, projectID string, allowedPaths []string) []client.FindingTarget {
 	var out []client.FindingTarget
+	seen := make(map[client.FindingTarget]bool, len(targets))
 	for _, t := range targets {
 		norm, ok := normalizeSingleTarget(t, projectID, allowedPaths)
-		if ok {
+		if ok && !seen[norm] && len(out) < 16 {
+			seen[norm] = true
 			out = append(out, norm)
 		}
 	}

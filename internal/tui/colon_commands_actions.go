@@ -42,10 +42,16 @@ func (s *State) toggleSelectedIssue() {
 	for idx, id := range s.SelectedIssueIDs {
 		if id == issue.ID {
 			s.SelectedIssueIDs = append(s.SelectedIssueIDs[:idx], s.SelectedIssueIDs[idx+1:]...)
+			if len(s.SelectedIssueIDs) == 0 {
+				s.CmdOutput = fmt.Sprintf("Deselected %s — batch selection cleared", issue.Name)
+			} else {
+				s.CmdOutput = fmt.Sprintf("Selected %d issue(s) for batch fix — press [Enter] to run batch or [f] to fix current row", len(s.SelectedIssueIDs))
+			}
 			return
 		}
 	}
 	s.SelectedIssueIDs = append(s.SelectedIssueIDs, issue.ID)
+	s.CmdOutput = fmt.Sprintf("Selected %d issue(s) for batch fix — press [Enter] to run batch or [f] to fix current row", len(s.SelectedIssueIDs))
 }
 
 func (s *State) dismissSelectedIssue() {
@@ -63,9 +69,19 @@ func (s *State) dispatchSelectedIssues() {
 		s.dispatchBatchIssues()
 		return
 	}
+	s.dispatchSingleSelectedIssue()
+}
+
+func (s *State) dispatchSingleSelectedIssue() {
 	issue := s.SelectedIssue()
 	if issue == nil || issue.Status == "done" {
 		return
+	}
+	for idx, id := range s.SelectedIssueIDs {
+		if id == issue.ID {
+			s.SelectedIssueIDs = append(s.SelectedIssueIDs[:idx], s.SelectedIssueIDs[idx+1:]...)
+			break
+		}
 	}
 	s.dispatchSingleIssue(*issue)
 }
@@ -94,14 +110,14 @@ func buildSingleIssueSeed(issue IssueRow) *ChangeSeed {
 }
 
 func (s *State) dispatchBatchIssues() {
-	open := s.openIssues()
+	all := s.CollectAllIssues()
 	selectedSet := make(map[string]bool, len(s.SelectedIssueIDs))
 	for _, id := range s.SelectedIssueIDs {
 		selectedSet[id] = true
 	}
 	var batch []IssueRow
-	for _, row := range open {
-		if selectedSet[row.ID] {
+	for _, row := range all {
+		if row.Status != "done" && selectedSet[row.ID] {
 			batch = append(batch, row)
 		}
 	}
