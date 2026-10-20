@@ -115,7 +115,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		s.Palette = pal
 		frame := s.Render(100, 30)
 		if !strings.Contains(frame, string(pal)) {
-			t.Fatalf("expected palette %s in status bar", pal)
+			t.Fatalf("expected palette %s in footer", pal)
 		}
 	}
 }

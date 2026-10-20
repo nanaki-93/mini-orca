@@ -124,12 +124,12 @@ func (s *State) appendFullScreenWorkspaceDock(th ansiTheme, contentWidth, target
 	if rem < 5 {
 		return body
 	}
-	if rem >= 10 {
+	if rem >= 12 {
 		body = append(body, "")
 		body = append(body, s.renderWorkspaceContextSupplement(th, panelW)...)
 		rem = targetBodyRows - len(body)
 	}
-	if rem < 4 {
+	if rem < 5 {
 		return body
 	}
 	dockLines := s.buildFullScreenDockLines(th, panelW, rem >= 5)
@@ -174,10 +174,16 @@ func (s *State) buildFullScreenDockLines(th ansiTheme, panelW int, twoLines bool
 	if s.Project != nil && s.Project.Name != "" {
 		projName = truncatePlain(s.Project.Name, 20)
 	}
+	trust := th.statusBadge("TRUSTED")
+	if !s.WorkspaceTrust {
+		trust = th.statusBadge("UNTRUSTED")
+	}
 	analyzeMod := firstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze"))
 	bugMod := firstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug"))
 	fnMod := firstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function"))
-	line1 := fmt.Sprintf("%sProject:%s %s%s%s · %sPreset:%s %s%s%s · %sRouting:%s analyze=%s%s%s bug=%s%s%s fn=%s%s%s",
+	line1 := fmt.Sprintf("%strust:%s %s · %spalette:%s %s%s%s · %sProject:%s %s%s%s · %sPreset:%s %s%s%s · %sRouting:%s analyze=%s%s%s bug=%s%s%s fn=%s%s%s",
+		th.muted, th.reset, trust,
+		th.muted, th.reset, th.purple, s.Palette, th.reset,
 		th.muted, th.reset, th.bold+th.fg, projName, th.reset,
 		th.muted, th.reset, th.cyan, firstNonEmpty(s.ActivePresetID, "local-default"), th.reset,
 		th.muted, th.reset,
@@ -349,21 +355,15 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
 		dirty = " " + th.statusBadge("DIRTY")
 	}
-	trust := th.statusBadge("TRUSTED")
-	if !s.WorkspaceTrust {
-		trust = th.statusBadge("UNTRUSTED")
-	}
 	ver := ""
 	if s.Version != "" {
 		ver = "  " + th.muted + "v" + s.Version + th.reset
 	}
 	content := fmt.Sprintf(
-		"  %s%s   %s%s%s   %sgit:%s %s%s%s   %strust:%s %s   %spalette:%s %s%s%s",
+		"  %s%s   %s%s%s   %sgit:%s %s%s%s",
 		connBadge, ver,
 		th.bold+th.fg, projName, th.reset,
 		th.muted, th.reset, th.cyan, branch, dirty,
-		th.muted, th.reset, trust,
-		th.muted, th.reset, th.purple, s.Palette, th.reset,
 	)
 	return padVisibleRight(content, width-2)
 }
