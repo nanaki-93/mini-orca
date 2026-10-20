@@ -104,10 +104,6 @@ func assembleFrame(th ansiTheme, frameWidth, frameHeight int, header, body, foot
 }
 
 func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRows int) []string {
-	if s.ShowKeybindsModal && s.Error == "" && s.Confirmation == nil {
-		s.viewportBodyRows = targetBodyRows
-		return s.renderKeybindsModal(th, contentWidth)
-	}
 	var body []string
 	body = append(body, "")
 	if s.Error != "" {

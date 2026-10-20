@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
@@ -43,7 +44,11 @@ var allColonCommands = []keyDesc{
 
 func renderCommandCatalogRows(th ansiTheme, items []keyDesc, contentW int) []string {
 	if contentW >= 68 {
-		colW := (contentW - 2) / 2
+		gap := 4
+		if contentW < 76 {
+			gap = 2
+		}
+		colW := (contentW - gap) / 2
 		var rows []string
 		for i := 0; i < len(items); i += 2 {
 			left := formatCommandCatalogCell(th, items[i], colW)
@@ -52,7 +57,7 @@ func renderCommandCatalogRows(th ansiTheme, items []keyDesc, contentW int) []str
 				continue
 			}
 			right := formatCommandCatalogCell(th, items[i+1], colW)
-			rows = append(rows, left+"  "+right)
+			rows = append(rows, left+strings.Repeat(" ", gap)+right)
 		}
 		return rows
 	}
@@ -64,13 +69,14 @@ func renderCommandCatalogRows(th ansiTheme, items []keyDesc, contentW int) []str
 }
 
 func formatCommandCatalogCell(th ansiTheme, it keyDesc, colW int) string {
-	cell := fmt.Sprintf("%s%-15s%s %s%s%s", th.cyan, it.key, th.reset, th.fg, it.desc, th.reset)
+	keyW := max(15, min(20, colW-20))
+	cell := fmt.Sprintf("%s%-*s%s %s%s%s", th.cyan, keyW, it.key, th.reset, th.fg, it.desc, th.reset)
 	return theme.PadVisibleRight(cell, colW)
 }
 
 func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	spec := lookupPageHelpSpec(s.EffectivePage())
-	boxW := max(44, min(108, width-4))
+	boxW := max(44, width-4)
 	contentW := max(24, boxW-4)
 	globalItems := []keyDesc{
 		{"↑/↓", "Move selection"},
@@ -85,23 +91,42 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	pageItems = append(pageItems, spec.secondary...)
 	pageItems = append(pageItems, spec.commands...)
 
+	rule := fmt.Sprintf("%s%s%s", th.border, strings.Repeat("─", contentW), th.reset)
+	gapLines := []string{"", ""}
+	if s.viewportBodyRows > 0 && s.viewportBodyRows-3 < 26 {
+		gapLines = []string{""}
+	}
+
 	body := []string{
 		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.accent, spec.title, th.reset),
+		rule,
 	}
 	body = append(body, renderCommandCatalogRows(th, pageItems, contentW)...)
-	body = append(body, fmt.Sprintf("%sGLOBAL NAV · ARROWS & GLOBAL KEYS%s", th.bold+th.cyan, th.reset))
+	body = append(body, gapLines...)
+	body = append(body,
+		fmt.Sprintf("%sGLOBAL NAV · ARROWS & GLOBAL KEYS%s", th.bold+th.amber, th.reset),
+		rule,
+	)
 	body = append(body, renderCommandCatalogRows(th, globalItems, contentW)...)
-	body = append(body, fmt.Sprintf("%sGENERIC CMDS · ACTION COLON COMMANDS%s", th.bold+th.purple, th.reset))
+	body = append(body, gapLines...)
+	body = append(body,
+		fmt.Sprintf("%sGENERIC CMDS · ACTION COLON COMMANDS%s", th.bold+th.purple, th.reset),
+		rule,
+	)
 	body = append(body, renderCommandCatalogRows(th, allColonCommands, contentW)...)
 
 	rightMeta := "[?] / Esc"
 	if s.viewportBodyRows > 0 {
-		maxInner := max(6, s.viewportBodyRows-4)
+		maxInner := max(6, s.viewportBodyRows-3)
 		if len(body) > maxInner {
 			maxScroll := len(body) - maxInner
 			scroll := min(max(0, s.KeybindsScroll), maxScroll)
 			body = body[scroll : scroll+maxInner]
 			rightMeta = fmt.Sprintf("[j/k] %d-%d/%d · [?] / Esc", scroll+1, scroll+maxInner, len(body)+maxScroll)
+		} else {
+			for len(body) < maxInner {
+				body = append(body, "")
+			}
 		}
 	}
 	return th.renderPanelBox("KEYBINDINGS & COLON COMMANDS REFERENCE", rightMeta, boxW, body)
@@ -127,13 +152,13 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageRepo: {
 		title:     "[1] OVERVIEW · REPOSITORY & INDEX",
 		primary:   []keyDesc{{"Enter / r", "Reindex repo"}, {"t", "Run checks/tests"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":reindex", "Reindex repo"}, {":project <path>", "Switch repo"}},
 	},
 	PageProject: {
 		title:     "[1] OVERVIEW · PROJECT & VERIFICATION",
 		primary:   []keyDesc{{"Enter / t", "Run checks/tests"}, {"r", "Run/resume scan"}},
-		secondary: []keyDesc{{"n", "Fresh reanalyze"}},
+		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"R", "Retry failed run"}},
 		commands:  []keyDesc{{":test", "Run checks"}, {":analyze", "Run analysis"}},
 	},
 	PageAgents: {
@@ -151,7 +176,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
 		primary:   []keyDesc{{"Enter / f", "Dispatch fix"}, {"d", "Dismiss finding"}},
-		secondary: []keyDesc{{"o", "Open source file"}},
+		secondary: []keyDesc{{"o", "Open source file"}, {"r", "Run/resume scan"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":dismiss", "Dismiss finding"}},
 	},
 	PageFeatures: {
@@ -163,13 +188,13 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageAnalysisRun: {
 		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG",
 		primary:   []keyDesc{{"r", "Run/resume scan"}, {"P / R", "Pause / retry"}},
-		secondary: []keyDesc{{"x", "Reset config"}},
+		secondary: []keyDesc{{"x", "Reset config"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":batch <n>", "Set batch size"}, {":budget <s>", "Set time budget"}},
 	},
 	PageAnalysisFiles: {
 		title:     "[2] AGENT STUDIO · FILE SCOPE",
 		primary:   []keyDesc{{"Enter / Space", "Toggle scope"}, {"r", "Run scoped scan"}},
-		secondary: []keyDesc{{"n", "Fresh reanalyze"}},
+		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":open <file>", "Open file"}, {":analyze", "Run analysis"}},
 	},
 }
@@ -184,43 +209,43 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageGit: {
 		title:     "[3] CODE & DIFF · GIT & WORKTREES",
 		primary:   []keyDesc{{"m", "Merge worktree"}, {"a / c", "Apply & commit"}},
-		secondary: []keyDesc{{"u", "Guarded undo"}},
+		secondary: []keyDesc{{"u", "Guarded undo"}, {"d", "Inspect diff"}},
 		commands:  []keyDesc{{":merge", "Merge branch"}, {":undo", "Guarded undo"}},
 	},
 	PageHistory: {
 		title:     "[3] CODE & DIFF · SAVED PROPOSALS",
 		primary:   []keyDesc{{"Enter", "Load proposal"}, {"a / c", "Apply & commit"}},
-		secondary: []keyDesc{{"u", "Guarded undo"}},
+		secondary: []keyDesc{{"u", "Guarded undo"}, {"d", "Inspect diff"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
 	},
 	PageDocs: {
 		title:     "[4] HANDBOOK & ARCH · CONTEXT & DEPENDENCIES",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDocsComponents: {
 		title:     "[4] HANDBOOK & ARCH · ARCHITECTURAL COMPONENTS",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDocsDecisions: {
 		title:     "[4] HANDBOOK & ARCH · SCENARIOS & DECISIONS",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDiagrams: {
 		title:     "[4] HANDBOOK & ARCH · ARCHITECTURE DIAGRAM",
 		primary:   []keyDesc{{"r", "Refresh diagram"}, {"n", "Fresh reanalyze"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageInstructions: {
 		title:     "[5] GOVERNANCE & RULES · TRUST POLICY",
 		primary:   []keyDesc{{"Enter / t", "Toggle trust"}, {"b", "Bootstrap rules"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"g", "Graduate lesson"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":trust", "Toggle trust"}, {":bootstrap", "Bootstrap rules"}},
 	},
 	PageModels: {
@@ -232,7 +257,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageBootstrap: {
 		title:     "[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST",
 		primary:   []keyDesc{{"Enter / b", "Bootstrap pillar"}, {"t", "Toggle trust"}},
-		secondary: []keyDesc{},
+		secondary: []keyDesc{{"g", "Graduate lesson"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":bootstrap", "Bootstrap rules"}, {":trust", "Toggle trust"}},
 	},
 	PageLessons: {
