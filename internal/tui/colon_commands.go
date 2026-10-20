@@ -105,7 +105,7 @@ func (s *State) activateAgentRow() {
 	if idx >= len(items) {
 		return
 	}
-	if s.Change != nil && len(domain.EffectiveSessionChanges(s.Change)) > 0 {
+	if s.Change != nil && len(s.Change.Changes) > 0 && !s.hasWorkflowErrorOrRejection() {
 		s.openAgentDiffInspector()
 		return
 	}

@@ -555,6 +555,7 @@ type ChangeCommit struct {
 type ChangeWorkflowStage struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
 	Model  *Model `json:"model,omitempty"`
 }
 

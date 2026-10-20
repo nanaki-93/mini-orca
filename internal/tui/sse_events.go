@@ -138,19 +138,24 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 			}
 		}
 	}
+	s.syncActiveHistoryChanges(ctx, client, idQuery, projRev)
+	s.loadAuxResources(ctx, client, idQuery, revQuery)
+}
+
+func (s *State) syncActiveHistoryChanges(ctx context.Context, client *Client, idQuery, projRev string) {
 	for idx, entry := range s.ChangeHistory {
-		if (entry.WorkflowStatus == "running" || entry.WorkflowStatus == "canceling") && isUsableHistoryEntry(entry, projRev) {
-			if s.Change != nil && s.Change.ID == entry.ID {
-				continue
-			}
-			var chg ChangeSession
-			target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + idQuery
-			if err := client.DoJSON(ctx, fmt.Sprintf("sync-active-change-%d", idx), http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
-				s.upsertActiveChange(&chg)
-			}
+		if (entry.WorkflowStatus != "running" && entry.WorkflowStatus != "canceling") || !isUsableHistoryEntry(entry, projRev) {
+			continue
+		}
+		if s.Change != nil && s.Change.ID == entry.ID {
+			continue
+		}
+		var chg ChangeSession
+		target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + idQuery
+		if err := client.DoJSON(ctx, fmt.Sprintf("sync-active-change-%d", idx), http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
+			s.upsertActiveChange(&chg)
 		}
 	}
-	s.loadAuxResources(ctx, client, idQuery, revQuery)
 }
 
 func pickInitialChangeID(history []ChangeHistoryEntry, projectRev string) string {
@@ -252,6 +257,19 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 		return
 	}
 	revQuery, idQuery := s.resourceQueries()
+	s.pollRunningWorkflowSessions(ctx, client, idQuery)
+	if s.hasRunningAnalysis() {
+		s.pollRunningAnalysis(ctx, client, idQuery, revQuery)
+	}
+	if s.Scan != nil && s.Scan.Status == "running" {
+		var scan Scan
+		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
+			s.Scan = &scan
+		}
+	}
+}
+
+func (s *State) pollRunningWorkflowSessions(ctx context.Context, client *Client, idQuery string) {
 	for idx, running := range s.runningWorkflowSessions() {
 		var chg ChangeSession
 		target := "/api/projects/current/changes/" + url.PathEscape(running.ID) + idQuery
@@ -265,15 +283,6 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 				s.Change = &chg
 			}
 			s.announceWorkflowTransition(&chg)
-		}
-	}
-	if s.hasRunningAnalysis() {
-		s.pollRunningAnalysis(ctx, client, idQuery, revQuery)
-	}
-	if s.Scan != nil && s.Scan.Status == "running" {
-		var scan Scan
-		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
-			s.Scan = &scan
 		}
 	}
 }

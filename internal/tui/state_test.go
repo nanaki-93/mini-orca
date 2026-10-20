@@ -1554,4 +1554,70 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 	}
 }
 
+func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo"}
+	s.Change = &ChangeSession{
+		ID:        "chg-err",
+		Title:     "Fix nil pointer in parser",
+		State:     "draft",
+		Freshness: "current",
+		Targets:   []ChangeTarget{{Path: "internal/parser/parser.go", Exists: true}},
+		Checks: []Check{
+			{
+				Name:     "go test",
+				State:    "failed",
+				ExitCode: 1,
+				Command:  []string{"go", "test", "./..."},
+				Output:   "--- FAIL: TestParse (0.01s)\n    parser_test.go:42: expected nil error, got EOF",
+			},
+		},
+		Workflow: &ChangeWorkflow{
+			ID:           "wf-err",
+			Status:       "failed",
+			Reason:       "Tests or source checks failed. Inspect the check evidence before running again. (go test: --- FAIL: TestParse (0.01s))",
+			ProbeSummary: "Check failure in go test: TestParse failed at parser_test.go:42",
+			Stages: []ChangeWorkflowStage{
+				{Name: "create", Status: "completed", Model: &Model{Model: "qwen2.5-coder"}},
+				{Name: "test", Status: "failed", Reason: "go test failed with exit code 1", Model: &Model{Model: "qwen2.5-coder"}},
+				{Name: "review", Status: "skipped"},
+				{Name: "human_review", Status: "blocked"},
+			},
+		},
+	}
+
+	s.Navigate(PageAgents)
+	frame := s.Render(120, 44)
+	for _, want := range []string{
+		"ACTIVE AGENT MISSION CONTROL",
+		"2. Verify & Test",
+		"qwen2.5-coder",
+		"go test failed with exit code 1",
+		"--- FAIL: TestParse",
+		"Check failure in go test",
+	} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("expected PageAgents error diagnostics panel to contain %q:\n%s", want, frame)
+		}
+	}
+
+	// Pressing Enter on a failed workflow opens the full Workflow Debug & Check Inspector instead of PageEditor
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PageAgents || !s.AgentDetailOpen {
+		t.Fatalf("expected Enter on failed workflow to open AgentDetailOpen on PageAgents, got page=%s detail=%v", s.Page, s.AgentDetailOpen)
+	}
+	debugFrame := s.Render(120, 44)
+	for _, want := range []string{
+		"WORKFLOW DEBUG & CHECK INSPECTOR",
+		"└─ Error:",
+		"go test failed with exit code 1",
+		"parser_test.go:42: expected nil error, got EOF",
+	} {
+		if !strings.Contains(debugFrame, want) {
+			t.Fatalf("expected debug inspector frame to contain %q:\n%s", want, debugFrame)
+		}
+	}
+}
+
+
 

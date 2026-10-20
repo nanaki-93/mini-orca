@@ -61,12 +61,125 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 			th.muted, th.reset, th.purple, curItem.Branch, th.reset,
 			th.muted, th.reset, th.statusBadge(curItem.Status),
 			th.muted, th.reset, curItem.ChecksPassed, curItem.ChecksTotal),
-		s.renderAgentTelemetryLine(th, curItem, max(24, panelW-18)),
-		s.renderAgentNextStepLine(th, curItem),
 	}
+	if errLines := s.renderAgentErrorDiagnosticsLines(th); len(errLines) > 0 {
+		detail = append(detail, errLines...)
+	} else {
+		detail = append(detail, s.renderAgentTelemetryLine(th, curItem, max(24, panelW-18)))
+	}
+	detail = append(detail, s.renderAgentNextStepLine(th, curItem))
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("ACTIVE AGENT MISSION CONTROL", strings.ToUpper(curItem.Stage), panelW, detail)...)
 	return lines
+}
+
+func (s *State) hasWorkflowErrorOrRejection() bool {
+	if strings.TrimSpace(s.Error) != "" {
+		return true
+	}
+	chg := s.Change
+	if chg == nil {
+		return false
+	}
+	if chg.State == "failed" || chg.Freshness == "stale" {
+		return true
+	}
+	if chg.Workflow != nil {
+		st := chg.Workflow.Status
+		if st == "failed" || st == "changes_requested" || st == "interrupted" || st == "stale" || strings.TrimSpace(chg.Workflow.Reason) != "" {
+			return true
+		}
+	}
+	for _, chk := range chg.Checks {
+		if !strings.EqualFold(chk.State, "passed") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) renderAgentErrorDiagnosticsLines(th ansiTheme) []string {
+	if !s.hasWorkflowErrorOrRejection() {
+		return nil
+	}
+	var out []string
+	if strings.TrimSpace(s.Error) != "" {
+		out = append(out, fmt.Sprintf("%sError:%s     %s▲ %s%s", th.muted, th.reset, th.bold+th.red, strings.TrimSpace(s.Error), th.reset))
+	}
+	chg := s.Change
+	if chg == nil {
+		return out
+	}
+	out = append(out, s.collectWorkflowStageErrorLines(th, chg)...)
+	out = append(out, s.collectFailedCheckSummaryLines(th, chg, 2)...)
+	if chg.Workflow != nil && chg.Workflow.Review != nil && chg.Workflow.Review.Verdict == "changes_requested" {
+		out = append(out, fmt.Sprintf("%sCritic:%s    %s  %s%s%s",
+			th.muted, th.reset, th.statusBadge(chg.Workflow.Review.Verdict), th.fg, chg.Workflow.Review.Summary, th.reset))
+		for _, f := range chg.Workflow.Review.Findings {
+			out = append(out, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, f))
+		}
+	}
+	if chg.Workflow != nil && strings.TrimSpace(chg.Workflow.ProbeSummary) != "" {
+		out = append(out, fmt.Sprintf("%sProbe:%s     %s%s%s", th.muted, th.reset, th.cyan, strings.TrimSpace(chg.Workflow.ProbeSummary), th.reset))
+	}
+	return out
+}
+
+func (s *State) collectWorkflowStageErrorLines(th ansiTheme, chg *ChangeSession) []string {
+	if chg.Workflow == nil {
+		return nil
+	}
+	var out []string
+	hasStageReason := false
+	for idx, st := range chg.Workflow.Stages {
+		if st.Status != "failed" && st.Status != "interrupted" && st.Status != "stale" && strings.TrimSpace(st.Reason) == "" {
+			continue
+		}
+		modelName := "default"
+		if st.Model != nil && st.Model.Model != "" {
+			modelName = st.Model.Model
+		}
+		stageLine := fmt.Sprintf("%sStage:%s     %s%d. %s%s %s (%smodel:%s%s)",
+			th.muted, th.reset, th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
+			th.statusBadge(st.Status), th.cyan, modelName, th.reset)
+		out = append(out, stageLine)
+		if strings.TrimSpace(st.Reason) != "" {
+			hasStageReason = true
+			out = append(out, fmt.Sprintf("  %s└─ Error:%s %s%s%s", th.red, th.reset, th.amber, strings.TrimSpace(st.Reason), th.reset))
+		}
+	}
+	if !hasStageReason && strings.TrimSpace(chg.Workflow.Reason) != "" {
+		out = append(out, fmt.Sprintf("%sReason:%s    %s%s%s", th.muted, th.reset, th.amber, theme.TruncatePlain(strings.TrimSpace(chg.Workflow.Reason), 74), th.reset))
+	}
+	return out
+}
+
+func (s *State) collectFailedCheckSummaryLines(th ansiTheme, chg *ChangeSession, maxLines int) []string {
+	var out []string
+	for _, chk := range chg.Checks {
+		if strings.EqualFold(chk.State, "passed") {
+			continue
+		}
+		cmdStr := strings.Join(chk.Command, " ")
+		out = append(out, fmt.Sprintf("%sCheck:%s     %s  %s%s%s (exit %d)  %s%s%s",
+			th.muted, th.reset, th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, chk.ExitCode, th.muted, cmdStr, th.reset))
+		out = append(out, formatCheckOutputLines(th, chk.Output, maxLines)...)
+	}
+	return out
+}
+
+func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string {
+	if strings.TrimSpace(output) == "" {
+		return nil
+	}
+	rawLines := strings.Split(strings.TrimSpace(strings.ReplaceAll(output, "\r\n", "\n")), "\n")
+	limit := min(maxLines, len(rawLines))
+	out := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		clean := strings.TrimSpace(theme.SanitizeCodeText(rawLines[i]))
+		out = append(out, fmt.Sprintf("    %s│%s %s%s%s", th.red, th.reset, th.amber, clean, th.reset))
+	}
+	return out
 }
 
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
@@ -90,19 +203,15 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 			th.muted, th.reset, client.FirstNonEmpty(chg.Freshness, "current"),
 			th.muted, th.reset, repairs),
 	}
+	if strings.TrimSpace(s.Error) != "" {
+		stageBox = append(stageBox, fmt.Sprintf("%sError:%s   %s▲ %s%s", th.muted, th.reset, th.bold+th.red, strings.TrimSpace(s.Error), th.reset))
+	}
 	if strings.TrimSpace(wfReason) != "" {
 		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, wfReason, th.reset))
 	}
-	if chg.Workflow != nil && len(chg.Workflow.Stages) > 0 {
-		for idx, st := range chg.Workflow.Stages {
-			modelName := "default"
-			if st.Model != nil && st.Model.Model != "" {
-				modelName = st.Model.Model
-			}
-			stageBox = append(stageBox, fmt.Sprintf("  %s%d. %-18s%s  %-12s  %smodel:%s%s",
-				th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
-				th.statusBadge(st.Status), th.cyan, modelName, th.reset))
-		}
+	stageBox = append(stageBox, renderAgentDebugStageLines(th, chg, wfReason)...)
+	if chg.Workflow != nil && strings.TrimSpace(chg.Workflow.ProbeSummary) != "" {
+		stageBox = append(stageBox, fmt.Sprintf("%sProbe:%s   %s%s%s", th.muted, th.reset, th.cyan, strings.TrimSpace(chg.Workflow.ProbeSummary), th.reset))
 	}
 	lines = append(lines, th.renderPanelBox("4-STAGE WORKFLOW & ASSIGNED MODELS", strings.ToUpper(wfStatus), panelW, stageBox)...)
 	lines = append(lines, "")
@@ -121,25 +230,44 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	return lines
 }
 
+func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, wfReason string) []string {
+	if chg.Workflow == nil || len(chg.Workflow.Stages) == 0 {
+		return nil
+	}
+	var out []string
+	for idx, st := range chg.Workflow.Stages {
+		modelName := "default"
+		if st.Model != nil && st.Model.Model != "" {
+			modelName = st.Model.Model
+		}
+		out = append(out, fmt.Sprintf("  %s%d. %-18s%s  %-12s  %smodel:%s%s",
+			th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
+			th.statusBadge(st.Status), th.cyan, modelName, th.reset))
+		stErr := strings.TrimSpace(st.Reason)
+		if stErr == "" && (st.Status == "failed" || st.Status == "interrupted") && strings.TrimSpace(wfReason) != "" {
+			stErr = strings.TrimSpace(wfReason)
+		}
+		if stErr != "" {
+			out = append(out, fmt.Sprintf("      %s└─ Error:%s %s%s%s", th.red, th.reset, th.amber, stErr, th.reset))
+		}
+	}
+	return out
+}
+
 func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	if s.Change == nil || len(s.Change.Checks) == 0 {
 		if s.Change != nil && len(s.Change.Changes) == 0 && !s.hasRunningWorkflow() {
-			return []string{fmt.Sprintf("%sNo proposal changes generated yet — press [r] to retry the agent workflow.%s", th.muted, th.reset)}
+			return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
 		}
 		return []string{fmt.Sprintf("%sNo deterministic verification checks recorded yet — press [r] to run checks.%s", th.muted, th.reset)}
 	}
 	var out []string
 	for _, chk := range s.Change.Checks {
 		cmdStr := strings.Join(chk.Command, " ")
-		out = append(out, fmt.Sprintf("%s  %s%-18s%s  %s%s%s",
-			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, th.muted, cmdStr, th.reset))
-		if strings.TrimSpace(chk.Output) != "" && !strings.EqualFold(chk.State, "passed") {
-			rawLines := strings.Split(strings.TrimSpace(strings.ReplaceAll(chk.Output, "\r\n", "\n")), "\n")
-			limit := min(4, len(rawLines))
-			for i := 0; i < limit; i++ {
-				clean := strings.TrimSpace(theme.SanitizeCodeText(rawLines[i]))
-				out = append(out, fmt.Sprintf("    %s│%s %s%s%s", th.red, th.reset, th.amber, clean, th.reset))
-			}
+		out = append(out, fmt.Sprintf("%s  %s%-18s%s (exit %d)  %s%s%s",
+			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, chk.ExitCode, th.muted, cmdStr, th.reset))
+		if !strings.EqualFold(chk.State, "passed") {
+			out = append(out, formatCheckOutputLines(th, chk.Output, 10)...)
 		}
 	}
 	return out

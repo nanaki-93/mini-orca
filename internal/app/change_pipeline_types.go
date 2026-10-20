@@ -46,6 +46,7 @@ type ChangeWorkflowControl struct {
 type ChangeWorkflowStage struct {
 	Name   string          `json:"name"`
 	Status string          `json:"status"`
+	Reason string          `json:"reason,omitempty"`
 	Model  *EffectiveModel `json:"model,omitempty"`
 }
 
@@ -149,6 +150,9 @@ func stopChangeWorkflowStages(w *ChangeWorkflow) {
 		switch w.Stages[i].Status {
 		case "running":
 			w.Stages[i].Status = w.Status
+			if w.Stages[i].Reason == "" {
+				w.Stages[i].Reason = w.Reason
+			}
 		case "pending":
 			w.Stages[i].Status = "skipped"
 		}

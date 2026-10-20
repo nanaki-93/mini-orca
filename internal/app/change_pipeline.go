@@ -178,6 +178,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	session.Workflow.Review = nil
 	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
 		session.Workflow.Stages[i].Status = "pending"
+		session.Workflow.Stages[i].Reason = ""
 	}
 	session.Checks, session.ReviewedHash = []CheckResult{}, ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
@@ -236,8 +237,10 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 	}
 	if stage > 0 {
 		session.Workflow.Stages[stage-1].Status = "completed"
+		session.Workflow.Stages[stage-1].Reason = ""
 	}
 	session.Workflow.Stages[stage].Status = "running"
+	session.Workflow.Stages[stage].Reason = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	err = storeChangeSession(job.root, session)
 	s.notifyEvent("workflow")

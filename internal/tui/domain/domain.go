@@ -254,11 +254,6 @@ type AgentItem struct {
 	FindingTargets []client.FindingTarget
 }
 
-// CollectAgentItems derives Agent Studio items from the active change session and Git worktrees.
-func CollectAgentItems(change *client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
-	return CollectAllAgentItems(change, nil, receipt, gitWS)
-}
-
 // CollectAllAgentItems derives Agent Studio items from all tracked change sessions and Git worktrees.
 func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
 	var items []AgentItem
