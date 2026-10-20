@@ -679,6 +679,39 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	}
 }
 
+func TestArrowOptionOnlyModifiesSelectedRowOnAnalysisRun(t *testing.T) {
+	s := NewState()
+	s.Run = &AnalysisRun{
+		Status: "completed",
+		Sections: []Section{
+			{Category: "bugs", Status: "completed"},
+			{Category: "security", Status: "completed"},
+		},
+	}
+	s.Navigate(PageAnalysisRun)
+	// Row 0 is a section row ("bugs"), NOT the Batch Files Limit row.
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	s.HandleKey(KeyEvent{Key: " "})
+	if s.EffectiveAnalysisConfig().BatchFiles != 64 {
+		t.Fatalf("expected ArrowRight/ArrowLeft/Space on section row 0 to leave BatchFiles at 64, got %d", s.EffectiveAnalysisConfig().BatchFiles)
+	}
+
+	// Move down to row 2 (Batch Files Limit, after the 2 section rows) and press ArrowRight.
+	s.SelectedIdx = 2
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.EffectiveAnalysisConfig().BatchFiles != 128 {
+		t.Fatalf("expected ArrowRight on Batch Files Limit row (idx=2) to step BatchFiles to 128, got %d", s.EffectiveAnalysisConfig().BatchFiles)
+	}
+	// Move down to row 3 (Time Budget) and press ArrowRight: should step BudgetSeconds, not BatchFiles.
+	s.SelectedIdx = 3
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.EffectiveAnalysisConfig().BatchFiles != 128 || s.EffectiveAnalysisConfig().BudgetSeconds != 600 {
+		t.Fatalf("expected ArrowRight on Time Budget row (idx=3) to step BudgetSeconds to 600 and keep BatchFiles at 128, got batch=%d budget=%d",
+			s.EffectiveAnalysisConfig().BatchFiles, s.EffectiveAnalysisConfig().BudgetSeconds)
+	}
+}
+
 func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 	s := NewState()
 	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}

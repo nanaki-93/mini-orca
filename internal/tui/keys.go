@@ -204,8 +204,6 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	case PageAnalysisRun:
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
 			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), forward)
-		} else {
-			s.stepAnalysisBatch(forward)
 		}
 	case PageAnalysisFiles:
 		s.toggleCurrentFileExclusion()
@@ -217,7 +215,7 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 		if s.ClampedIdx() < len(domain.CanonicalModelScopes()) {
 			s.cycleSelectedScopeModel(forward)
 		} else {
-			s.stepModelPreset(forward)
+			s.activateInstructionsRow()
 		}
 	case PageBootstrap:
 		s.activateInstructionsRow()
@@ -461,8 +459,6 @@ func (s *State) handleAnalysisRunConfigKey(key string) bool {
 	case " ":
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
 			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), true)
-		} else {
-			s.stepAnalysisBatch(true)
 		}
 		return true
 	case "b":
