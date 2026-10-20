@@ -41,7 +41,13 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderPanelBox("ANALYSIS TELEMETRY", strings.ToUpper(s.Run.Status), panelW, telemetry)...)
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("   SECTION         STATUS        PROGRESS             SUCCEEDED    FAILED", width)...)
+	lines = append(lines, s.renderAnalysisSectionsTable(th, width, selected)...)
+	lines = append(lines, "")
+	return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
+}
+
+func (s *State) renderAnalysisSectionsTable(th ansiTheme, width, selected int) []string {
+	lines := th.renderTableHeader("   SECTION         STATUS        PROGRESS             SUCCEEDED    FAILED", width)
 	for idx, sec := range s.Run.Sections {
 		cursor := th.renderCursorPrefix(idx == selected)
 		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 10)
@@ -59,6 +65,9 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 		if strings.TrimSpace(sec.Reason) != "" {
 			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, sec.Reason, th.reset))
 		}
+		for _, diag := range collectSectionStageFailures(s.Run.Files, sec.Category) {
+			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.red, theme.TruncatePlain(diag, max(36, width-10)), th.reset))
+		}
 	}
 	if s.Run.Features != nil {
 		featIdx := len(s.Run.Sections)
@@ -70,9 +79,37 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 			th.statusBadge(s.Run.Features.Status),
 			th.muted, s.Run.Features.Attempts, th.reset,
 		))
+		if strings.TrimSpace(s.Run.Features.Reason) != "" {
+			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, theme.TruncatePlain(s.Run.Features.Reason, max(36, width-10)), th.reset))
+		}
 	}
-	lines = append(lines, "")
-	return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
+	return lines
+}
+
+func stageMatchesSection(stageName, category string) bool {
+	s := strings.ToLower(strings.TrimSpace(stageName))
+	c := strings.ToLower(strings.TrimSpace(category))
+	return s == c || strings.HasPrefix(s, c+"_")
+}
+
+func collectSectionStageFailures(files []RunFile, category string) []string {
+	var out []string
+	for _, rf := range files {
+		for _, st := range rf.Stages {
+			if !stageMatchesSection(st.Stage, category) {
+				continue
+			}
+			isComplete := st.Status == "completed" || st.Status == "completed_empty"
+			if st.Status == "failed" || (!isComplete && strings.TrimSpace(st.Reason) != "") {
+				reason := client.FirstNonEmpty(strings.TrimSpace(st.Reason), "stage execution failed")
+				out = append(out, fmt.Sprintf("%s [%s] — %s (attempts:%d)", rf.Path, st.Stage, reason, st.Attempts))
+				if len(out) >= 4 {
+					return out
+				}
+			}
+		}
+	}
+	return out
 }
 
 func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selected int) []string {
@@ -112,7 +149,7 @@ func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selecte
 }
 
 func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · FILE SCOPE", "Captured path inclusion & analysis scope")
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · FILE SCOPE", "Captured path inclusion & per-file analysis stage diagnostics")
 	if s.Index == nil || len(s.Index.Files) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo indexed files available.%s", th.muted, th.reset))
 	}
@@ -123,8 +160,12 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 		th.muted, th.reset, th.bold+th.green, incl, th.reset, th.amber, excl, th.reset, total), "")
 	lines = append(lines, th.renderTableHeader("   SCOPE     REPOSITORY PATH                             LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
-	pathCol := max(24, width-34)
-	start, end := windowBounds(total, selected, s.adaptiveWindowRows(10, 14))
+	pathCol := max(24, width-48)
+	winRows := s.adaptiveWindowRows(10, 14)
+	if s.Run != nil && len(s.Run.Files) > 0 {
+		winRows = s.adaptiveWindowRows(6, 10)
+	}
+	start, end := windowBounds(total, selected, winRows)
 	for idx := start; idx < end; idx++ {
 		f := s.Index.Files[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
@@ -132,14 +173,74 @@ func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
 		if domain.ContainsString(s.ExcludedPaths, f.Path) {
 			scopeTag = th.statusBadge("EXCL")
 		}
+		runTag := s.fileRunStatusBadge(th, f.Path)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s   %s%-*s%s  %s%s · %d lines%s",
+			"  %s%s   %s%-*s%s  %s%s · %d lines%s%s",
 			cursor, scopeTag, tStyle, pathCol, theme.TruncatePlain(f.Path, pathCol), th.reset,
-			th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset,
+			th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset, runTag,
 		))
 	}
-	return appendWindowFooter(th, lines, start, end, total)
+	lines = appendWindowFooter(th, lines, start, end, total)
+	if selected >= 0 && selected < len(s.Index.Files) {
+		lines = append(lines, s.renderSelectedFileStageInspector(th, adaptivePanelWidth(width), s.Index.Files[selected].Path)...)
+	}
+	return lines
+}
+
+func (s *State) findRunFile(path string) *RunFile {
+	if s.Run == nil {
+		return nil
+	}
+	for i := range s.Run.Files {
+		if s.Run.Files[i].Path == path {
+			return &s.Run.Files[i]
+		}
+	}
+	return nil
+}
+
+func (s *State) fileRunStatusBadge(th ansiTheme, path string) string {
+	rf := s.findRunFile(path)
+	if rf == nil || len(rf.Stages) == 0 {
+		return ""
+	}
+	status := "COMPLETED"
+	for _, st := range rf.Stages {
+		if st.Status == "failed" {
+			status = "FAILED"
+			break
+		}
+		if st.Status != "completed" && st.Status != "completed_empty" {
+			status = st.Status
+		}
+	}
+	return "  " + th.statusBadge(status)
+}
+
+func (s *State) renderSelectedFileStageInspector(th ansiTheme, panelW int, path string) []string {
+	rf := s.findRunFile(path)
+	if rf == nil || len(rf.Stages) == 0 {
+		return nil
+	}
+	var body []string
+	for _, st := range rf.Stages {
+		findingsText := "0 issues (clean)"
+		if st.Status == "failed" {
+			findingsText = "stage failed"
+		} else if st.FindingCount != nil && *st.FindingCount > 0 {
+			findingsText = fmt.Sprintf("%d findings", *st.FindingCount)
+		}
+		row := fmt.Sprintf("%-22s  %-16s  %s%-18s%s  %sattempts:%d%s",
+			strings.ToUpper(st.Stage), th.statusBadge(st.Status),
+			th.fg, findingsText, th.reset,
+			th.muted, st.Attempts, th.reset)
+		body = append(body, row)
+		if strings.TrimSpace(st.Reason) != "" {
+			body = append(body, fmt.Sprintf("  %s↳ Error: %s%s", th.red, strings.TrimSpace(st.Reason), th.reset))
+		}
+	}
+	return append([]string{""}, th.renderPanelBox("SELECTED FILE ANALYSIS STAGES", path, panelW, body)...)
 }
 
 func (s *State) renderGovernanceSubPage(th ansiTheme, width int) []string {

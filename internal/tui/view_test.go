@@ -860,3 +860,60 @@ func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
 		t.Fatalf("expected full check command and output to wrap without truncation in debug view:\n%s", debugFrame)
 	}
 }
+
+func TestAnalysisFileStageFailuresAndCompletedEmptyRendering(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	zero := 0
+	s.Index = &ProjectIndex{
+		Files: []IndexedFile{
+			{Path: "internal/app/clean.go", Language: "Go", LineCount: 80},
+			{Path: "internal/app/broken.go", Language: "Go", LineCount: 120},
+		},
+	}
+	s.Run = &AnalysisRun{
+		Identity: RunIdentity{ID: "run-99"},
+		Status:   "failed",
+		Sections: []Section{
+			{Category: "bugs", Status: "completed_empty", Coverage: Coverage{Total: 2, Succeeded: 2, Failed: 0}},
+			{Category: "security", Status: "failed", Coverage: Coverage{Total: 2, Succeeded: 1, Failed: 1}},
+		},
+		Files: []RunFile{
+			{
+				Path: "internal/app/clean.go",
+				Stages: []RunStage{
+					{Stage: "bugs", Status: "completed_empty", Attempts: 1, FindingCount: &zero},
+					{Stage: "security_semantic", Status: "completed_empty", Attempts: 1, FindingCount: &zero},
+				},
+			},
+			{
+				Path: "internal/app/broken.go",
+				Stages: []RunStage{
+					{Stage: "bugs", Status: "completed_empty", Attempts: 1, FindingCount: &zero},
+					{Stage: "security_semantic", Status: "failed", Attempts: 2, Reason: "security response must not use Markdown code fences"},
+				},
+			},
+		},
+	}
+
+	s.Navigate(PageAnalysisRun)
+	runView := s.Render(140, 42)
+	if !strings.Contains(runView, "[COMPLETED_EMPTY]") || !strings.Contains(runView, "internal/app/broken.go [security_semantic] — security response must not use Markdown code fences") {
+		t.Fatalf("expected Last Run page to show completed_empty section and per-file failure reason:\n%s", runView)
+	}
+
+	// Select clean.go (idx 0) on File Scope page: should show 0 issues (clean) and [COMPLETED], never [FAILED] for clean.go
+	s.Navigate(PageAnalysisFiles)
+	s.SelectedIdx = 0
+	cleanFilesView := s.Render(140, 42)
+	if !strings.Contains(cleanFilesView, "SELECTED FILE ANALYSIS STAGES") || !strings.Contains(cleanFilesView, "0 issues (clean)") {
+		t.Fatalf("expected File Scope page for clean.go to show SELECTED FILE ANALYSIS STAGES with '0 issues (clean)':\n%s", cleanFilesView)
+	}
+
+	// Select broken.go (idx 1) on File Scope page: should show the exact single-stage error reason
+	s.SelectedIdx = 1
+	brokenFilesView := s.Render(140, 42)
+	if !strings.Contains(brokenFilesView, "security response must not use Markdown code fences") {
+		t.Fatalf("expected File Scope page for broken.go to show exact stage failure reason:\n%s", brokenFilesView)
+	}
+}

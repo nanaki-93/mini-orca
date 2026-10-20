@@ -427,7 +427,7 @@ func runAggregateCoverage(run *AnalysisRun) (int, int) {
 		done += sec.Coverage.Succeeded + sec.Coverage.Partial
 		total += sec.Coverage.Total
 	}
-	if total == 0 && strings.EqualFold(run.Status, "completed") {
+	if total == 0 && (strings.EqualFold(run.Status, "completed") || strings.EqualFold(run.Status, "completed_empty")) {
 		return 1, 1
 	}
 	return done, total

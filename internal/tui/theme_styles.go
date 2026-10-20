@@ -148,7 +148,7 @@ func (th ansiTheme) statusBadge(state string) string {
 		upper = "IDLE"
 	}
 	switch upper {
-	case "PASSED", "READY", "DONE", "FIXED", "APPLIED", "CURRENT", "ONLINE", "TRUSTED", "INCL":
+	case "PASSED", "READY", "DONE", "FIXED", "APPLIED", "CURRENT", "ONLINE", "TRUSTED", "INCL", "COMPLETED", "COMPLETED_EMPTY", "CLEAN":
 		return th.green + "[" + upper + "]" + th.reset
 	case "FAILED", "ERROR", "CRITICAL", "EXCL", "MISSING", "DIRTY":
 		return th.critBg + "[" + upper + "]" + th.reset

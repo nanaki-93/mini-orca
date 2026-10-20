@@ -280,7 +280,7 @@ func (s *State) announceAnalysisTransition(run *AnalysisRun) {
 	switch run.Status {
 	case "paused", "interrupted":
 		s.CmdOutput = fmt.Sprintf("Analysis %s: %s — press [r] to resume", run.Status, client.FirstNonEmpty(run.Reason, "window completed"))
-	case "completed":
+	case "completed", "completed_empty":
 		s.CmdOutput = "Analysis completed — press [2] Agent Studio to inspect findings"
 	case "failed":
 		s.CmdOutput = fmt.Sprintf("Analysis failed: %s — press [r] to retry", client.FirstNonEmpty(run.Reason, "inspect Last Run for details"))
