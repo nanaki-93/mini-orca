@@ -810,8 +810,14 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		rows := strings.Split(frame, "\n")
 		// Check that the last body row right above the bottom border (rows[len(rows)-4]) has content in both sidebar and main pane
 		lastBodyRow := rows[len(rows)-4]
-		if !strings.Contains(lastBodyRow, "[?]  [:] Cmd") || !strings.Contains(lastBodyRow, "╰") {
+		if !strings.Contains(lastBodyRow, "64 files · 300s") || !strings.Contains(lastBodyRow, "╰") {
 			t.Fatalf("expected bottom-anchored sidebar footer and panel dock on last body row of page %s, got: %q", p, lastBodyRow)
+		}
+		if strings.Contains(frame, "[?]  [:] Cmd") {
+			t.Fatalf("expected duplicate [?]  [:] Cmd removed from left bottom corner on page %s:\n%s", p, frame)
+		}
+		if !strings.Contains(frame, "[?] Keys  [:] Cmd") {
+			t.Fatalf("expected [?] Keys  [:] Cmd to remain in right bottom corner on page %s:\n%s", p, frame)
 		}
 	}
 }

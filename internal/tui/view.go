@@ -207,7 +207,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 		lines = append(lines, "")
 		lines = append(lines, s.renderSidebarRouting(th, width)...)
 	}
-	if rem := targetBodyRows - len(lines); rem >= 5 {
+	if rem := targetBodyRows - len(lines); rem >= 4 {
 		footer := s.renderSidebarFooter(th, width)
 		padRows := max(0, targetBodyRows-len(lines)-len(footer))
 		for i := 0; i < padRows; i++ {
@@ -238,7 +238,6 @@ func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
 	return []string{
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
 		fmt.Sprintf("  %sBatch%s   %s%d files · %ds%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, cfg.BudgetSeconds, th.reset),
-		fmt.Sprintf("  %sHelp%s     %s[?]  [:] Cmd%s", th.muted, th.reset, th.purple, th.reset),
 	}
 }
 
