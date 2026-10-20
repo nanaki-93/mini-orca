@@ -572,7 +572,7 @@ func (s *State) stepAnalysisConfigByIndex(cfgIdx int, forward bool) {
 	case 3:
 		s.toggleAnalysisFeatures()
 	case 4:
-		s.cycleAnalysisCachePolicy()
+		s.stepAnalysisCachePolicy(forward)
 	}
 }
 
@@ -609,13 +609,24 @@ func (s *State) toggleAnalysisFeatures() {
 }
 
 func (s *State) cycleAnalysisCachePolicy() {
+	s.stepAnalysisCachePolicy(true)
+}
+
+func (s *State) stepAnalysisCachePolicy(forward bool) {
 	cfg := s.EffectiveAnalysisConfig()
-	switch {
-	case !cfg.Refresh && !cfg.ClearResults:
+	cur := "incremental"
+	if cfg.Refresh && cfg.ClearResults {
+		cur = "clean"
+	} else if cfg.Refresh {
+		cur = "refresh"
+	}
+	next := stepStringSlice([]string{"incremental", "refresh", "clean"}, cur, forward)
+	switch next {
+	case "refresh":
 		cfg.Refresh = true
 		cfg.ClearResults = false
 		s.CmdOutput = "Analysis cache policy: REFRESH (bypass cache, preserve prior findings)"
-	case cfg.Refresh && !cfg.ClearResults:
+	case "clean":
 		cfg.Refresh = true
 		cfg.ClearResults = true
 		s.CmdOutput = "Analysis cache policy: CLEAN REANALYZE (bypass cache & clear prior results)"
@@ -709,6 +720,10 @@ func (s *State) resetSelectedScopeModel() {
 }
 
 func (s *State) cycleModelPreset() {
+	s.stepModelPreset(true)
+}
+
+func (s *State) stepModelPreset(forward bool) {
 	presets := s.AllModelPresets()
 	if len(presets) == 0 {
 		return
@@ -716,9 +731,16 @@ func (s *State) cycleModelPreset() {
 	pos := 0
 	for i, p := range presets {
 		if p.ID == s.ActivePresetID {
-			pos = (i + 1) % len(presets)
+			if forward {
+				pos = (i + 1) % len(presets)
+			} else {
+				pos = (i - 1 + len(presets)) % len(presets)
+			}
 			break
 		}
+	}
+	if s.ClampedIdx() >= len(CanonicalModelScopes()) {
+		s.SelectedIdx = len(CanonicalModelScopes()) + pos
 	}
 	s.applyModelPreset(presets[pos])
 }

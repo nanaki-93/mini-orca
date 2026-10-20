@@ -630,22 +630,50 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 4 after second 'l': page=%s, want PageDiagrams", s.Page)
 	}
 
-	// Section 5: h/l and Tab update both Page and RulesSection
+	// Section 5: Tab updates both Page and RulesSection, while Left/Right arrows change options on the active page
 	s.HandleKey(KeyEvent{Key: "5"})
 	if s.Page != PageInstructions || s.RulesSection != "trust" {
 		t.Fatalf("Section 5 initial state: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Page != PageInstructions || s.WorkspaceTrust {
+		t.Fatalf("expected ArrowRight on PageInstructions to toggle WorkspaceTrust without navigating away, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.Page != PageInstructions || !s.WorkspaceTrust {
+		t.Fatalf("expected ArrowLeft on PageInstructions to toggle WorkspaceTrust back to true, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageModels || s.RulesSection != "models" {
-		t.Fatalf("Section 5 after ArrowRight: page=%s section=%s", s.Page, s.RulesSection)
+		t.Fatalf("Section 5 after Tab: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageBootstrap || s.RulesSection != "bootstrap" {
-		t.Fatalf("Section 5 after Tab: page=%s section=%s", s.Page, s.RulesSection)
+		t.Fatalf("Section 5 after second Tab: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "l"})
 	if s.Page != PageLessons || s.RulesSection != "lessons" {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
+	}
+
+	// Verify Left/Right arrows change options on PageBugs and PageAnalysisRun without navigating away
+	s.Navigate(PageBugs)
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Page != PageBugs || s.IssueView != "in_progress" {
+		t.Fatalf("expected ArrowRight on PageBugs to change status filter to in_progress, got page=%s view=%s", s.Page, s.IssueView)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.Page != PageBugs || s.IssueView != "open" {
+		t.Fatalf("expected ArrowLeft on PageBugs to change status filter back to open, got page=%s view=%s", s.Page, s.IssueView)
+	}
+	s.Navigate(PageAnalysisRun)
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Page != PageAnalysisRun || s.EffectiveAnalysisConfig().BatchFiles != 128 {
+		t.Fatalf("expected ArrowRight on PageAnalysisRun to step BatchFiles to 128, got page=%s batch=%d", s.Page, s.EffectiveAnalysisConfig().BatchFiles)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.Page != PageAnalysisRun || s.EffectiveAnalysisConfig().BatchFiles != 64 {
+		t.Fatalf("expected ArrowLeft on PageAnalysisRun to step BatchFiles back to 64, got page=%s batch=%d", s.Page, s.EffectiveAnalysisConfig().BatchFiles)
 	}
 }
 

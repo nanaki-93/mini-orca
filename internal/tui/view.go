@@ -523,7 +523,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	contentW := max(24, boxW-4)
 	availW := max(18, contentW-16)
 	ruleLen := max(16, boxW-6)
-	globalNav := []keyDesc{{"1-5", "Section"}, {"Tab", "Sub-page"}, {"h/l", "View"}, {"j/k", "Select Row"}}
+	globalNav := []keyDesc{{"1-5", "Section"}, {"Tab", "Sub-page"}, {"←/→", "Option"}, {"j/k", "Select Row"}}
 	globalKeys := []keyDesc{{"?", "Close Help"}, {":", "Command"}, {"p", "Cycle Palette"}, {"q", "Quit"}}
 	genericCmds := ":help  :keys  :analyze  :resume  :test  :fix  :agent  :debug  :open  :models  :apply  :undo  :q"
 

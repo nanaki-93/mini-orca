@@ -173,15 +173,60 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 }
 
 func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
-	if ev.Key != "h" && ev.Key != "ArrowLeft" && ev.Key != "l" && ev.Key != "ArrowRight" {
+	if ev.Key == "ArrowLeft" || ev.Key == "ArrowRight" {
+		return s.handleArrowOptionKey(ev.Key == "ArrowRight", ev.Shift)
+	}
+	if ev.Key != "h" && ev.Key != "l" {
 		return false
 	}
-	if ev.Shift && s.Page == PageBugs {
-		s.cycleIssueCategory(ev.Key == "ArrowRight")
-		return true
-	}
-	s.stepHorizontalSection(ev.Key == "l" || ev.Key == "ArrowRight")
+	s.stepHorizontalSection(ev.Key == "l")
 	return true
+}
+
+func (s *State) handleArrowOptionKey(forward, shift bool) bool {
+	switch s.EffectivePage() {
+	case PageBugs, PageIssueDetail:
+		if shift {
+			s.cycleIssueCategory(forward)
+		} else {
+			s.cycleIssueStatusView(forward)
+		}
+	case PageAnalysisRun:
+		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
+			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), forward)
+		} else {
+			s.stepAnalysisBatch(forward)
+		}
+	case PageAnalysisFiles:
+		s.toggleCurrentFileExclusion()
+	case PageEditor:
+		s.handleEditorArrowOption(forward)
+	case PageInstructions:
+		s.toggleWorkspaceTrust()
+	case PageModels:
+		if s.ClampedIdx() < len(CanonicalModelScopes()) {
+			s.cycleSelectedScopeModel(forward)
+		} else {
+			s.stepModelPreset(forward)
+		}
+	case PageBootstrap:
+		s.activateInstructionsRow()
+	case PageLessons:
+		s.graduateSelectedLesson()
+	}
+	return true
+}
+
+func (s *State) handleEditorArrowOption(forward bool) {
+	if s.isViewingDiff() {
+		s.cycleDiffViewMode(forward)
+		return
+	}
+	if !s.BrowseFiles && s.File != nil {
+		s.stepIndexedEditorFile(forward)
+		return
+	}
+	s.activateEditorFileRow()
 }
 
 func (s *State) switchHubByKey(key string) bool {
