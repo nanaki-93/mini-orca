@@ -237,7 +237,7 @@ func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
 	cfg := s.EffectiveAnalysisConfig()
 	return []string{
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %sBatch%s    %s%d · %ds%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, cfg.BudgetSeconds, th.reset),
+		fmt.Sprintf("  %sBatch%s   %s%d files · %ds%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, cfg.BudgetSeconds, th.reset),
 		fmt.Sprintf("  %sHelp%s     %s[?]  [:] Cmd%s", th.muted, th.reset, th.purple, th.reset),
 	}
 }

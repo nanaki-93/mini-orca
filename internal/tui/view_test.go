@@ -804,8 +804,8 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		if strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
 			t.Fatalf("expected footer dock on page %s to omit Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
 		}
-		if !strings.Contains(frame, "MODEL ROUTING") {
-			t.Fatalf("expected sidebar on page %s (160x46) to include expanded MODEL ROUTING section:\n%s", p, frame)
+		if !strings.Contains(frame, "MODEL ROUTING") || !strings.Contains(frame, "64 files · 300s") {
+			t.Fatalf("expected sidebar on page %s (160x46) to include MODEL ROUTING and '64 files · 300s':\n%s", p, frame)
 		}
 		rows := strings.Split(frame, "\n")
 		// Check that the last body row right above the bottom border (rows[len(rows)-4]) has content in both sidebar and main pane
