@@ -287,6 +287,8 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, request); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("unlisted CLI model admitted: %v", err)
 	}
+	s.runtimes.bug.effective.Timeout = "2m0s"
+	s.runtimes.function.effective.Timeout = "5m0s"
 	request.Models.Review = catalog.Defaults["function"]
 	started, err := s.StartChangeWorkflow(context.Background(), initial.ID, request)
 	if err != nil || started.Workflow.Status != "running" {
@@ -300,7 +302,7 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	expectedScopes := []string{"bug", "function", "analyze"}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
 		stage := session.Workflow.Stages[i]
-		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] {
+		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "5m0s" {
 			t.Fatalf("stage %d provenance: %+v", i, stage)
 		}
 	}

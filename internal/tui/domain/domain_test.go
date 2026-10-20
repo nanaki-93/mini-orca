@@ -162,4 +162,10 @@ func TestAgentItemsAndArchitectureDiagram(t *testing.T) {
 	if !strings.Contains(ascii, "cmd/tui") || !strings.Contains(ascii, "internal/app") {
 		t.Fatalf("unexpected ASCII diagram:\n%s", ascii)
 	}
+
+	multiPaths := EnsureChangeTestPaths([]string{"cmd/add.go", "internal/utils/utils.go"}, nil)
+	wantPaths := "cmd/add.go,internal/utils/utils.go,cmd/add_test.go,internal/utils/utils_test.go"
+	if got := strings.Join(multiPaths, ","); got != wantPaths {
+		t.Fatalf("expected companion test paths per directory %q, got %q", wantPaths, got)
+	}
 }

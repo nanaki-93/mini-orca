@@ -492,21 +492,26 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		if comp != nil {
 			commitOID = comp.CommitOID
 		}
+		var criteria []string
+		if plan := strings.TrimSpace(f.VerificationPlan); plan != "" {
+			criteria = []string{plan}
+		}
 		rows = append(rows, IssueRow{
-			ID:        id,
-			Title:     f.Title,
-			Name:      name,
-			Path:      rep.Path,
-			Symbol:    f.Symbol,
-			Line:      f.StartLine,
-			Severity:  f.PotentialImpact,
-			Category:  "performance",
-			Status:    issueStatus(done, agentPath),
-			CommitOID: commitOID,
-			AgentPath: agentPath,
-			Cause:     client.FirstNonEmpty(f.ObservedPattern, "No cause recorded."),
-			Solution:  client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
-			Target:    target,
+			ID:                 id,
+			Title:              f.Title,
+			Name:               name,
+			Path:               rep.Path,
+			Symbol:             f.Symbol,
+			Line:               f.StartLine,
+			Severity:           f.PotentialImpact,
+			Category:           "performance",
+			Status:             issueStatus(done, agentPath),
+			CommitOID:          commitOID,
+			AgentPath:          agentPath,
+			Cause:              client.FirstNonEmpty(f.ObservedPattern, "No cause recorded."),
+			Solution:           client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
+			Target:             target,
+			AcceptanceCriteria: criteria,
 		})
 	}
 	return rows
@@ -535,21 +540,26 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 		if comp != nil {
 			commitOID = comp.CommitOID
 		}
+		var criteria []string
+		if idea := strings.TrimSpace(f.VerificationIdea); idea != "" {
+			criteria = []string{idea}
+		}
 		rows = append(rows, IssueRow{
-			ID:        id,
-			Title:     f.Title,
-			Name:      name,
-			Path:      path,
-			Symbol:    f.SourceAnchor.Symbol,
-			Line:      f.SourceAnchor.StartLine,
-			Severity:  f.Severity,
-			Category:  "security",
-			Status:    issueStatus(done, agentPath),
-			CommitOID: commitOID,
-			AgentPath: agentPath,
-			Cause:     client.FirstNonEmpty(f.ObservedCondition, "No cause recorded."),
-			Solution:  client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
-			Target:    target,
+			ID:                 id,
+			Title:              f.Title,
+			Name:               name,
+			Path:               path,
+			Symbol:             f.SourceAnchor.Symbol,
+			Line:               f.SourceAnchor.StartLine,
+			Severity:           f.Severity,
+			Category:           "security",
+			Status:             issueStatus(done, agentPath),
+			CommitOID:          commitOID,
+			AgentPath:          agentPath,
+			Cause:              client.FirstNonEmpty(f.ObservedCondition, "No cause recorded."),
+			Solution:           client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
+			Target:             target,
+			AcceptanceCriteria: criteria,
 		})
 	}
 	return rows

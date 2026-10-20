@@ -275,7 +275,7 @@ func parseWorkflowReview(output string) (*ChangeWorkflowReview, error) {
 	if len(output) > 32*1024 {
 		return nil, fmt.Errorf("workflow review exceeds its limit")
 	}
-	output = unwrapMarkdownJSON(output)
+	output = llm.UnwrapMarkdownJSON(output)
 	// The provider may not choose the proposal identity attached by the daemon.
 	var wire struct {
 		Verdict  string   `json:"verdict"`

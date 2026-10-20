@@ -48,12 +48,26 @@ func (c *Client) chatCLI(ctx context.Context, messages []ChatMessage, format *Re
 		return nil, err
 	}
 	if schema != nil && !(c.optionalFinalContent && strings.TrimSpace(response.Choices[0].Message.Content) == "") {
-		instance, decodeErr := jsonschema.UnmarshalJSON(strings.NewReader(response.Choices[0].Message.Content))
+		content := UnwrapMarkdownJSON(response.Choices[0].Message.Content)
+		instance, decodeErr := jsonschema.UnmarshalJSON(strings.NewReader(content))
 		if decodeErr != nil || schema.Validate(instance) != nil {
 			return nil, fmt.Errorf("llm client: %w: CLI output does not match the required JSON schema", ErrUnusableResponse)
 		}
+		response.Choices[0].Message.Content = content
 	}
 	return response, nil
+}
+
+// UnwrapMarkdownJSON strips a surrounding markdown code fence from a JSON payload when present.
+func UnwrapMarkdownJSON(output string) string {
+	trimmed := strings.TrimSpace(output)
+	if strings.HasPrefix(trimmed, "```") && strings.HasSuffix(trimmed, "```") {
+		if newline := strings.IndexByte(trimmed, '\n'); newline >= 0 {
+			inner := strings.TrimSuffix(trimmed[newline+1:], "```")
+			return strings.TrimSpace(inner)
+		}
+	}
+	return output
 }
 
 func prepareCLIInvocation(profile config.ModelProfile, messages []ChatMessage, format *ResponseFormat, directory string) (cliInvocation, error) {

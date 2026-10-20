@@ -1268,3 +1268,125 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 		t.Fatalf("expected 'd' to delete selected custom preset, remaining=%+v", s.CustomPresets)
 	}
 }
+
+func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "pwd-manager"}
+	s.Index = &ProjectIndex{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		Files: []IndexedFile{
+			{Path: "internal/utils/utils.go", Language: "Go"},
+			{Path: "internal/utils/utils_test.go", Language: "Go"},
+		},
+	}
+	s.Results = map[string]SectionResults{
+		"security": {
+			Security: []SecurityReport{
+				{
+					Path:   "internal/utils/utils.go",
+					Source: "ai",
+					Findings: []SecurityFinding{
+						{
+							ID:                "security:0953f1",
+							Title:             "Unvalidated derived key length",
+							Severity:          "high",
+							ObservedCondition: "verifyPBKDF2 uses the stored hash byte length directly.",
+							Remediation:       "Validate fixed salt and derived key lengths before comparison.",
+							VerificationIdea:  "Reject single-byte hex derived key in unit test.",
+							Triage:            "open",
+							SourceAnchor:      SourceAnchor{Path: "internal/utils/utils.go", StartLine: 84, Symbol: "verifyPBKDF2"},
+						},
+					},
+				},
+			},
+		},
+		"performance": {
+			Performance: []PerformanceReport{
+				{
+					Path: "internal/utils/utils.go",
+					Findings: []PerformanceFinding{
+						{
+							ID:               "performance:5bf047",
+							Title:            "Per-iteration HMAC allocation in PBKDF2",
+							PotentialImpact:  "high",
+							ObservedPattern:  "pbkdf2SHA256 allocates hmac.New on every iteration.",
+							Recommendation:   "Instantiate HMAC once outside the loop and reuse via Reset.",
+							VerificationPlan: "Verify PBKDF2 output vectors and reduced allocations.",
+							StartLine:        101,
+							Symbol:           "pbkdf2SHA256",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.Navigate(PageBugs)
+	s.HandleKey(KeyEvent{Key: " "})
+	s.HandleKey(KeyEvent{Key: "j"})
+	s.HandleKey(KeyEvent{Key: " "})
+	s.HandleKey(KeyEvent{Key: "Enter"})
+
+	var workflowMessages []string
+	var openCriteria [][]string
+	checksCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/projects/current/changes" && r.Method == http.MethodPost:
+			var body struct {
+				AcceptanceCriteria []string `json:"acceptance_criteria"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			openCriteria = append(openCriteria, body.AcceptanceCriteria)
+			_, _ = w.Write([]byte(`{"id":"chg-batch","project_id":"p1","project_revision":"r1","title":"Batch fix (2 issues)","state":"draft","revision":1,"hash":"h1","targets":[{"path":"internal/utils/utils.go","exists":true,"content":"package utils\n"},{"path":"internal/utils/utils_test.go","exists":true,"content":"package utils\n"}],"finding_targets":[{"project_id":"p1","kind":"security","id":"security:0953f1","path":"internal/utils/utils.go","source":"ai"},{"project_id":"p1","kind":"performance","id":"performance:5bf047","path":"internal/utils/utils.go"}]}`))
+		case r.URL.Path == "/api/projects/current/changes/chg-batch/workflow" && r.Method == http.MethodPost:
+			var body struct {
+				Message string `json:"message"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			workflowMessages = append(workflowMessages, body.Message)
+			_, _ = w.Write([]byte(`{"id":"chg-batch","project_id":"p1","project_revision":"r1","title":"Batch fix (2 issues)","state":"draft","revision":2,"hash":"h1","targets":[{"path":"internal/utils/utils.go","exists":true,"content":"package utils\n"},{"path":"internal/utils/utils_test.go","exists":true,"content":"package utils\n"}],"finding_targets":[{"project_id":"p1","kind":"security","id":"security:0953f1","path":"internal/utils/utils.go","source":"ai"},{"project_id":"p1","kind":"performance","id":"performance:5bf047","path":"internal/utils/utils.go"}],"workflow":{"id":"wf-1","status":"failed","reason":"Workflow timed out. Reduce scope or check the selected provider.","stages":[{"name":"create","status":"failed"}]}}`))
+		case r.URL.Path == "/api/projects/current/changes/chg-batch/checks":
+			checksCalled = true
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"type":"bad_request","message":"AI workflow request failed","detail":"prepare a proposal before checking"}`))
+		default:
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	// 1. First dispatch includes both findings' details and acceptance criteria
+	s.FlushActions(context.Background(), cli)
+	if len(workflowMessages) != 1 || len(openCriteria) != 1 || len(openCriteria[0]) != 2 {
+		t.Fatalf("expected 1 workflow dispatch with 2 acceptance criteria, got msgs=%d criteria=%+v", len(workflowMessages), openCriteria)
+	}
+	for _, want := range []string{
+		"Unvalidated derived key length",
+		"internal/utils/utils.go:84 · verifyPBKDF2",
+		"Validate fixed salt and derived key lengths",
+		"Per-iteration HMAC allocation in PBKDF2",
+		"internal/utils/utils.go:101 · pbkdf2SHA256",
+		"Instantiate HMAC once outside the loop",
+	} {
+		if !strings.Contains(workflowMessages[0], want) {
+			t.Fatalf("expected batch workflow message to contain %q, got:\n%s", want, workflowMessages[0])
+		}
+	}
+
+	// 2. When Stage 1 times out with empty Changes (but non-empty Targets), pressing 'r' retries the workflow instead of calling /checks
+	s.HandleKey(KeyEvent{Key: "r"})
+	s.FlushActions(context.Background(), cli)
+	if checksCalled || s.Error != "" {
+		t.Fatalf("expected 'r' after Stage 1 timeout to retry workflow without calling /checks, checksCalled=%v err=%q", checksCalled, s.Error)
+	}
+	if len(workflowMessages) != 2 || !strings.Contains(workflowMessages[1], "Unvalidated derived key length") || !strings.Contains(workflowMessages[1], "Per-iteration HMAC allocation in PBKDF2") {
+		t.Fatalf("expected retry workflow message to preserve both findings' full details, got:\n%v", workflowMessages)
+	}
+}

@@ -412,6 +412,8 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 		content = ""
 	}
 	switch mode {
+	case "fenced-json":
+		content = "```json\n" + cliFixtureContent + "\n```"
 	case "invalid-json", "native-only":
 		content = "Task completed."
 	case "invalid-schema":

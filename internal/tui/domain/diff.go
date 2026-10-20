@@ -424,7 +424,7 @@ func companionTestBase(stem, ext string) string {
 	}
 }
 
-// EnsureChangeTestPaths deduplicates captured paths, caps scope at 8 files, and guarantees at least one test path.
+// EnsureChangeTestPaths deduplicates captured paths, caps scope at 8 files, and guarantees companion test paths.
 func EnsureChangeTestPaths(paths []string, index *client.ProjectIndex) []string {
 	var clean []string
 	for _, raw := range paths {
@@ -436,18 +436,37 @@ func EnsureChangeTestPaths(paths []string, index *client.ProjectIndex) []string 
 	if len(clean) == 0 && index != nil && len(index.Files) > 0 {
 		clean = append(clean, index.Files[0].Path)
 	}
-	if len(clean) == 0 || hasAnyTestPath(clean) {
+	if len(clean) == 0 {
 		return clean
 	}
-	testPath := DeriveCompanionTestPath(clean[0])
-	if testPath == "" {
-		return clean
+	return appendCompanionTestPaths(clean)
+}
+
+func appendCompanionTestPaths(clean []string) []string {
+	for _, src := range append([]string(nil), clean...) {
+		if IsTestFilePath(src) || hasTestPathInDir(clean, filepath.ToSlash(filepath.Dir(src))) {
+			continue
+		}
+		testPath := DeriveCompanionTestPath(src)
+		if testPath == "" || ContainsString(clean, testPath) {
+			continue
+		}
+		if len(clean) < 8 {
+			clean = append(clean, testPath)
+		} else if !hasAnyTestPath(clean) {
+			clean[7] = testPath
+		}
 	}
-	if len(clean) >= 8 {
-		clean[7] = testPath
-		return clean
+	return clean
+}
+
+func hasTestPathInDir(paths []string, dir string) bool {
+	for _, p := range paths {
+		if IsTestFilePath(p) && filepath.ToSlash(filepath.Dir(p)) == dir {
+			return true
+		}
 	}
-	return append(clean, testPath)
+	return false
 }
 
 func hasAnyTestPath(paths []string) bool {

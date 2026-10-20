@@ -123,6 +123,9 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 
 func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	if s.Change == nil || len(s.Change.Checks) == 0 {
+		if s.Change != nil && len(s.Change.Changes) == 0 && !s.hasRunningWorkflow() {
+			return []string{fmt.Sprintf("%sNo proposal changes generated yet — press [r] to retry the agent workflow.%s", th.muted, th.reset)}
+		}
 		return []string{fmt.Sprintf("%sNo deterministic verification checks recorded yet — press [r] to run checks.%s", th.muted, th.reset)}
 	}
 	var out []string

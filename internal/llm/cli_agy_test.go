@@ -11,16 +11,20 @@ import (
 )
 
 func TestCLIAgyStructuredRequestDoesNotDependOnFinishTool(t *testing.T) {
-	profile, capture := cliFixture(t, config.AgyProvider, "success")
-	schema := JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)}
-	response, err := NewClient(profile).ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "Explain the supplied source."}}, schema)
-	if err != nil || response.Choices[0].Message.Content != cliFixtureContent {
-		t.Fatalf("schema-constrained final response = %+v, %v", response, err)
-	}
-	var request cliCapture
-	readTestJSON(t, capture, &request)
-	if strings.Contains(strings.Join(request.Args, " "), "--json-schema") || !strings.Contains(request.System, "tools: []") || !strings.Contains(request.System, string(schema.Schema)) {
-		t.Fatal("schema must be supplied as context and validated locally with all tools disabled")
+	for _, mode := range []string{"success", "fenced-json"} {
+		t.Run(mode, func(t *testing.T) {
+			profile, capture := cliFixture(t, config.AgyProvider, mode)
+			schema := JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)}
+			response, err := NewClient(profile).ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "Explain the supplied source."}}, schema)
+			if err != nil || response.Choices[0].Message.Content != cliFixtureContent {
+				t.Fatalf("schema-constrained final response = %+v, %v", response, err)
+			}
+			var request cliCapture
+			readTestJSON(t, capture, &request)
+			if strings.Contains(strings.Join(request.Args, " "), "--json-schema") || !strings.Contains(request.System, "tools: []") || !strings.Contains(request.System, string(schema.Schema)) {
+				t.Fatal("schema must be supplied as context and validated locally with all tools disabled")
+			}
+		})
 	}
 }
 

@@ -292,22 +292,11 @@ func sanitizeEditSummary(raw string) string {
 	return trimmed
 }
 
-func unwrapMarkdownJSON(output string) string {
-	trimmed := strings.TrimSpace(output)
-	if strings.HasPrefix(trimmed, "```") && strings.HasSuffix(trimmed, "```") {
-		if newline := strings.IndexByte(trimmed, '\n'); newline >= 0 {
-			inner := strings.TrimSuffix(trimmed[newline+1:], "```")
-			return strings.TrimSpace(inner)
-		}
-	}
-	return output
-}
-
 func parseChangeResponse(output string, session *ChangeSession) (string, []ChangeEdit, error) {
 	if len(output) > maxChangeBytes {
 		return "", nil, fmt.Errorf("proposal response exceeds 256 KiB")
 	}
-	output = unwrapMarkdownJSON(output)
+	output = llm.UnwrapMarkdownJSON(output)
 	var response struct {
 		Explanation string            `json:"explanation"`
 		Changes     []ChangeEditInput `json:"changes"`

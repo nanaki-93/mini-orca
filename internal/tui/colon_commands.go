@@ -35,6 +35,10 @@ func (s *State) ActivateCurrentRow() {
 }
 
 func (s *State) activateIssueRow() {
+	if len(s.SelectedIssueIDs) > 0 {
+		s.dispatchBatchIssues()
+		return
+	}
 	issue := s.SelectedIssue()
 	if issue == nil {
 		if s.Page == PageSummary {

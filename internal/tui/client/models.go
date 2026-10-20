@@ -391,16 +391,17 @@ type Selection struct {
 
 // PerformanceFinding describes a single performance issue in a file report.
 type PerformanceFinding struct {
-	ID              string `json:"id"`
-	Category        string `json:"category"`
-	PotentialImpact string `json:"potential_impact"`
-	Confidence      string `json:"confidence"`
-	Title           string `json:"title"`
-	ObservedPattern string `json:"observed_pattern"`
-	Recommendation  string `json:"recommendation"`
-	StartLine       int    `json:"start_line"`
-	EndLine         int    `json:"end_line"`
-	Symbol          string `json:"symbol"`
+	ID               string `json:"id"`
+	Category         string `json:"category"`
+	PotentialImpact  string `json:"potential_impact"`
+	Confidence       string `json:"confidence"`
+	Title            string `json:"title"`
+	ObservedPattern  string `json:"observed_pattern"`
+	Recommendation   string `json:"recommendation"`
+	VerificationPlan string `json:"verification_plan,omitempty"`
+	StartLine        int    `json:"start_line"`
+	EndLine          int    `json:"end_line"`
+	Symbol           string `json:"symbol"`
 }
 
 // PerformanceReport holds performance findings for a single repository file.
@@ -422,6 +423,7 @@ type SecurityFinding struct {
 	Confidence        string       `json:"confidence"`
 	ObservedCondition string       `json:"observed_condition"`
 	Remediation       string       `json:"remediation"`
+	VerificationIdea  string       `json:"verification_idea,omitempty"`
 	Triage            string       `json:"triage"`
 }
 

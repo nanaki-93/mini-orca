@@ -71,11 +71,19 @@ func (s *State) dispatchSelectedIssues() {
 }
 
 func (s *State) dispatchSingleIssue(issue IssueRow) {
+	seed := buildSingleIssueSeed(issue)
+	s.startLocalAgentPreview(seed)
+	s.Navigate(PageAgents)
+	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s) — Agent Pipeline active", issue.Name, issue.Path)
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, Seed: seed})
+}
+
+func buildSingleIssueSeed(issue IssueRow) *ChangeSeed {
 	kind := "fix"
 	if issue.Category == "security" || issue.Category == "performance" {
 		kind = issue.Category
 	}
-	seed := &ChangeSeed{
+	return &ChangeSeed{
 		FindingTargets:     []FindingTarget{issue.Target},
 		Title:              issue.Name,
 		Paths:              []string{issue.Path},
@@ -83,10 +91,6 @@ func (s *State) dispatchSingleIssue(issue IssueRow) {
 		Message:            fmt.Sprintf("Address this finding: %s\nLocation: %s:%d\nCause: %s\nProposed solution: %s", issue.Title, issue.Path, issue.Line, issue.Cause, issue.Solution),
 		AcceptanceCriteria: issue.AcceptanceCriteria,
 	}
-	s.startLocalAgentPreview(seed)
-	s.Navigate(PageAgents)
-	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s) — Agent Pipeline active", issue.Name, issue.Path)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, Seed: seed})
 }
 
 func (s *State) dispatchBatchIssues() {
@@ -109,27 +113,94 @@ func (s *State) dispatchBatchIssues() {
 		s.dispatchSingleIssue(batch[0])
 		return
 	}
+	seed := buildBatchIssuesSeed(batch)
+	s.startLocalAgentPreview(seed)
+	s.Navigate(PageAgents)
+	s.CmdOutput = fmt.Sprintf("Dispatched grouped agent fix for %d issues", len(batch))
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+}
+
+func buildBatchIssuesSeed(batch []IssueRow) *ChangeSeed {
+	if len(batch) == 1 {
+		return buildSingleIssueSeed(batch[0])
+	}
+	paths, included, targets := selectBatchIssueScope(batch)
+	itemLines, criteria := formatBatchIssueItems(included)
+	msg := fmt.Sprintf(
+		"Address these %d findings across %s:\n\n%s\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.",
+		len(included), strings.Join(paths, ", "), strings.Join(itemLines, "\n\n"),
+	)
+	if len(msg) > 8000 {
+		msg = msg[:8000]
+	}
+	return &ChangeSeed{
+		FindingTargets:     targets,
+		Title:              fmt.Sprintf("Batch fix (%d issues)", len(included)),
+		Paths:              paths,
+		Kind:               batchIssueKind(included),
+		Message:            msg,
+		AcceptanceCriteria: criteria,
+	}
+}
+
+func selectBatchIssueScope(batch []IssueRow) ([]string, []IssueRow, []FindingTarget) {
 	var paths []string
+	var included []IssueRow
 	var targets []FindingTarget
 	for _, row := range batch {
 		if row.Path != "" && !domain.ContainsString(paths, row.Path) && len(paths) < 7 {
 			paths = append(paths, row.Path)
 		}
 		if row.Path != "" && domain.ContainsString(paths, row.Path) {
+			included = append(included, row)
 			targets = append(targets, row.Target)
 		}
 	}
-	seed := &ChangeSeed{
-		FindingTargets: targets,
-		Title:          fmt.Sprintf("Batch fix (%d issues)", len(batch)),
-		Paths:          paths,
-		Kind:           "fix",
-		Message:        fmt.Sprintf("Address %d selected findings across %s", len(batch), strings.Join(paths, ", ")),
+	if len(included) == 0 {
+		included = batch
 	}
-	s.startLocalAgentPreview(seed)
-	s.Navigate(PageAgents)
-	s.CmdOutput = fmt.Sprintf("Dispatched grouped agent fix for %d issues", len(batch))
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+	return paths, included, targets
+}
+
+func formatBatchIssueItems(rows []IssueRow) ([]string, []string) {
+	var itemLines []string
+	var criteria []string
+	for idx, row := range rows {
+		loc := row.Path
+		if row.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", row.Path, row.Line)
+		}
+		if row.Symbol != "" {
+			loc += " · " + row.Symbol
+		}
+		itemLines = append(itemLines, fmt.Sprintf(
+			"%d. %s (%s)\n   Cause: %s\n   Proposed solution: %s",
+			idx+1, row.Title, loc, row.Cause, row.Solution,
+		))
+		for _, ac := range row.AcceptanceCriteria {
+			trimmed := strings.TrimSpace(ac)
+			if trimmed != "" && !domain.ContainsString(criteria, trimmed) && len(criteria) < 8 {
+				criteria = append(criteria, trimmed)
+			}
+		}
+	}
+	return itemLines, criteria
+}
+
+func batchIssueKind(rows []IssueRow) string {
+	if len(rows) == 0 {
+		return "fix"
+	}
+	first := rows[0].Category
+	if first != "security" && first != "performance" {
+		return "fix"
+	}
+	for _, r := range rows[1:] {
+		if r.Category != first {
+			return "fix"
+		}
+	}
+	return first
 }
 
 func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
@@ -255,7 +326,7 @@ func (s *State) triggerAgentRecheckOrRepair() {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 		return
 	}
-	if s.isChangeStale() || (s.Change.Workflow != nil && s.Change.Workflow.Status == "failed" && len(domain.EffectiveSessionChanges(s.Change)) == 0) {
+	if s.isChangeStale() || len(s.Change.Changes) == 0 {
 		s.restartAgentFromCurrentChange()
 		return
 	}
@@ -263,6 +334,10 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	if total > 0 && passed < total {
 		s.CmdOutput = "Triggering agent self-repair..."
 		s.enqueueAction(ActionRequest{Kind: "repair-change", Target: s.Change.ID})
+		return
+	}
+	if s.Change.Workflow != nil && s.Change.Workflow.Status == "changes_requested" {
+		s.restartAgentFromCurrentChange()
 		return
 	}
 	s.CmdOutput = "Re-running deterministic verification checks..."
@@ -286,12 +361,17 @@ func (s *State) isChangeStale() bool {
 }
 
 func (s *State) restartAgentFromCurrentChange() {
+	stale := s.isChangeStale()
 	seed := s.buildSeedFromCurrentChange()
 	if seed == nil {
 		return
 	}
 	s.startLocalAgentPreview(seed)
-	s.CmdOutput = fmt.Sprintf("Refreshing stale proposal %q on current project revision...", seed.Title)
+	if stale {
+		s.CmdOutput = fmt.Sprintf("Refreshing stale proposal %q on current project revision...", seed.Title)
+	} else {
+		s.CmdOutput = fmt.Sprintf("Retrying agent workflow for %q...", seed.Title)
+	}
 	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
 }
 
@@ -299,31 +379,72 @@ func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
 	if s.Change == nil {
 		return nil
 	}
-	var paths []string
-	for _, t := range s.Change.Targets {
-		if t.Path != "" && !domain.ContainsString(paths, t.Path) {
-			paths = append(paths, t.Path)
-		}
-	}
-	for _, c := range s.Change.Changes {
-		if c.Path != "" && !domain.ContainsString(paths, c.Path) {
-			paths = append(paths, c.Path)
-		}
-	}
-	for _, ft := range s.Change.FindingTargets {
-		if ft.Path != "" && !domain.ContainsString(paths, ft.Path) {
-			paths = append(paths, ft.Path)
-		}
-	}
+	paths := collectChangeSessionPaths(s.Change)
 	title := client.FirstNonEmpty(s.Change.Title, "Agent Mission")
+	if matched := s.matchIssuesForTargets(s.Change.FindingTargets); len(matched) > 0 {
+		seed := buildBatchIssuesSeed(matched)
+		seed.Title = title
+		seed.Paths = paths
+		seed.FindingTargets = s.Change.FindingTargets
+		if len(s.Change.AcceptanceCriteria) > 0 {
+			seed.AcceptanceCriteria = s.Change.AcceptanceCriteria
+		}
+		return seed
+	}
 	return &ChangeSeed{
 		FindingTargets:     s.Change.FindingTargets,
 		Title:              title,
 		Paths:              paths,
 		Kind:               client.FirstNonEmpty(s.Change.Kind, "fix"),
-		Message:            fmt.Sprintf("Refresh and complete proposal: %s", title),
+		Message:            firstUserChangeMessage(s.Change, title),
 		AcceptanceCriteria: s.Change.AcceptanceCriteria,
 	}
+}
+
+func collectChangeSessionPaths(chg *ChangeSession) []string {
+	var paths []string
+	for _, t := range chg.Targets {
+		if t.Path != "" && !domain.ContainsString(paths, t.Path) {
+			paths = append(paths, t.Path)
+		}
+	}
+	for _, c := range chg.Changes {
+		if c.Path != "" && !domain.ContainsString(paths, c.Path) {
+			paths = append(paths, c.Path)
+		}
+	}
+	for _, ft := range chg.FindingTargets {
+		if ft.Path != "" && !domain.ContainsString(paths, ft.Path) {
+			paths = append(paths, ft.Path)
+		}
+	}
+	return paths
+}
+
+func firstUserChangeMessage(chg *ChangeSession, title string) string {
+	for _, m := range chg.Messages {
+		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
+			return m.Content
+		}
+	}
+	return fmt.Sprintf("Refresh and complete proposal: %s", title)
+}
+
+func (s *State) matchIssuesForTargets(targets []FindingTarget) []IssueRow {
+	if len(targets) == 0 {
+		return nil
+	}
+	all := s.CollectAllIssues()
+	var matched []IssueRow
+	for _, ft := range targets {
+		for _, row := range all {
+			if sameFindingTarget(row.Target, ft) {
+				matched = append(matched, row)
+				break
+			}
+		}
+	}
+	return matched
 }
 
 func (s *State) rejectCurrentDiffHunk() {

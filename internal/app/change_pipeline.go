@@ -27,6 +27,9 @@ func workflowStageScope(stage int) config.ModelScope {
 
 func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
 	runtime, _ := s.selectedRuntime(workflowStageScope(stage), profile)
+	if genTimeout := duration(s.runtimes.function.effective.Timeout); genTimeout > duration(runtime.effective.Timeout) {
+		runtime.effective.Timeout = genTimeout.String()
+	}
 	return runtime
 }
 
