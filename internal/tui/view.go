@@ -164,17 +164,16 @@ func (s *State) renderWorkspaceFooter(th ansiTheme, panelW int, twoLines bool) [
 		trust = th.statusBadge("UNTRUSTED")
 	}
 	if !twoLines {
-		line := fmt.Sprintf("%sAnalysis:%s %s · %sScope:%s %d/%d · %strust:%s %s · %spalette:%s %s%s%s",
-			th.muted, th.reset, th.statusBadge(runStatus),
-			th.muted, th.reset, inclFiles, totalFiles,
+		line := fmt.Sprintf("%sAnalysis:%s %s %d/%d Files · %sAgents:%s %s · %strust:%s %s · %spalette:%s %s%s%s",
+			th.muted, th.reset, th.statusBadge(runStatus), inclFiles, totalFiles,
+			th.muted, th.reset, th.statusBadge(chgStatus),
 			th.muted, th.reset, trust,
 			th.muted, th.reset, th.purple, s.Palette, th.reset)
 		return th.renderPanelBox("", "", panelW, []string{line})
 	}
 	lines := []string{
-		fmt.Sprintf("%sAnalysis:%s %s · %sScope:%s %d/%d · %sChange:%s %s",
-			th.muted, th.reset, th.statusBadge(runStatus),
-			th.muted, th.reset, inclFiles, totalFiles,
+		fmt.Sprintf("%sAnalysis:%s %s %d/%d Files · %sAgents:%s %s",
+			th.muted, th.reset, th.statusBadge(runStatus), inclFiles, totalFiles,
 			th.muted, th.reset, th.statusBadge(chgStatus)),
 		fmt.Sprintf("%sProposals:%s %d · %sLessons:%s %d · %strust:%s %s · %spalette:%s %s%s%s",
 			th.muted, th.reset, len(s.ChangeHistory),

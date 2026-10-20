@@ -811,11 +811,11 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 			strings.Contains(frame, "VERIFICATION GATE PIPELINE") {
 			t.Fatalf("expected 1-Overview subsection titles to be omitted on page %s:\n%s", p, frame)
 		}
-		if !strings.Contains(frame, "Analysis:") || !strings.Contains(frame, "Scope:") || !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
-			t.Fatalf("expected combined footer on page %s to display session context, trust, and palette:\n%s", p, frame)
+		if !strings.Contains(frame, "Analysis:") || !strings.Contains(frame, "Files") || !strings.Contains(frame, "Agents:") || !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
+			t.Fatalf("expected combined footer on page %s to display Analysis: [STATUS] X/Y Files, Agents:, trust, and palette:\n%s", p, frame)
 		}
-		if strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
-			t.Fatalf("expected footer dock on page %s to omit Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
+		if strings.Contains(frame, "Scope:") || strings.Contains(frame, "Change:") || strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
+			t.Fatalf("expected footer dock on page %s to omit Scope:/Change:/Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
 		}
 		if !strings.Contains(frame, "MODEL ROUTING") || !strings.Contains(frame, "64 files · 5m") || !strings.Contains(frame, "Attempts") || !strings.Contains(frame, "2 / stage") {
 			t.Fatalf("expected sidebar on page %s (160x46) to include MODEL ROUTING, '64 files · 5m', and 'Attempts 2 / stage':\n%s", p, frame)
