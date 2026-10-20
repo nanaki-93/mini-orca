@@ -85,11 +85,47 @@ type changeWorkflowJob struct {
 	failure             string
 }
 
-// The controller owns the single bounded worker. Session/proposal writes use
-// changesMu; this mutex is never held while acquiring changesMu or doing I/O.
+// The controller tracks active workflow workers per change session. Session/proposal
+// writes use changesMu; this mutex is never held while acquiring changesMu or doing I/O.
 type changeWorkflowController struct {
-	mu  sync.Mutex
-	job *changeWorkflowJob
+	mu   sync.Mutex
+	job  *changeWorkflowJob
+	jobs map[string]*changeWorkflowJob
+}
+
+func (c *changeWorkflowController) getJob(sessionID string) *changeWorkflowJob {
+	if c.jobs != nil {
+		if j := c.jobs[sessionID]; j != nil {
+			return j
+		}
+	}
+	if c.job != nil && c.job.sessionID == sessionID {
+		return c.job
+	}
+	return nil
+}
+
+func (c *changeWorkflowController) setJob(job *changeWorkflowJob) {
+	if c.jobs == nil {
+		c.jobs = make(map[string]*changeWorkflowJob)
+	}
+	c.job = job
+	c.jobs[job.sessionID] = job
+}
+
+func (c *changeWorkflowController) allJobs() []*changeWorkflowJob {
+	seen := make(map[*changeWorkflowJob]bool)
+	var out []*changeWorkflowJob
+	for _, j := range c.jobs {
+		if j != nil && !seen[j] {
+			seen[j] = true
+			out = append(out, j)
+		}
+	}
+	if c.job != nil && !seen[c.job] {
+		out = append(out, c.job)
+	}
+	return out
 }
 
 func isChangePipelineActive(workflow *ChangeWorkflow) bool {

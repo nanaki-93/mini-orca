@@ -134,6 +134,19 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 			target := "/api/projects/current/changes/" + url.PathEscape(chgID) + idQuery
 			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
 				s.Change = &chg
+				s.upsertActiveChange(&chg)
+			}
+		}
+	}
+	for idx, entry := range s.ChangeHistory {
+		if (entry.WorkflowStatus == "running" || entry.WorkflowStatus == "canceling") && isUsableHistoryEntry(entry, projRev) {
+			if s.Change != nil && s.Change.ID == entry.ID {
+				continue
+			}
+			var chg ChangeSession
+			target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + idQuery
+			if err := client.DoJSON(ctx, fmt.Sprintf("sync-active-change-%d", idx), http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
+				s.upsertActiveChange(&chg)
 			}
 		}
 	}
@@ -239,11 +252,18 @@ func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
 		return
 	}
 	revQuery, idQuery := s.resourceQueries()
-	if s.hasRunningWorkflow() {
+	for idx, running := range s.runningWorkflowSessions() {
 		var chg ChangeSession
-		target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + idQuery
-		if err := client.DoJSON(ctx, "poll-change", http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
-			s.Change = &chg
+		target := "/api/projects/current/changes/" + url.PathEscape(running.ID) + idQuery
+		reqID := "poll-change"
+		if idx > 0 {
+			reqID = fmt.Sprintf("poll-change-%d", idx)
+		}
+		if err := client.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
+			s.upsertActiveChange(&chg)
+			if s.Change != nil && s.Change.ID == chg.ID {
+				s.Change = &chg
+			}
 			s.announceWorkflowTransition(&chg)
 		}
 	}
@@ -305,15 +325,35 @@ func (s *State) announceWorkflowTransition(chg *ChangeSession) {
 }
 
 func (s *State) hasActiveBackgroundJob() bool {
-	return s.hasRunningWorkflow() || s.hasRunningAnalysis() || (s.Scan != nil && s.Scan.Status == "running")
+	return len(s.runningWorkflowSessions()) > 0 || s.hasRunningAnalysis() || (s.Scan != nil && s.Scan.Status == "running")
+}
+
+func isChangeSessionWorkflowRunning(chg *ChangeSession) bool {
+	if chg == nil || chg.ID == "" || isLocalPreviewChangeID(chg.ID) || chg.Workflow == nil {
+		return false
+	}
+	st := chg.Workflow.Status
+	return st == "running" || st == "queued" || st == "canceling"
 }
 
 func (s *State) hasRunningWorkflow() bool {
-	if s.Change == nil || s.Change.ID == "" || s.Change.ID == "agent-session" || s.Change.Workflow == nil {
-		return false
+	return isChangeSessionWorkflowRunning(s.Change)
+}
+
+func (s *State) runningWorkflowSessions() []*ChangeSession {
+	seen := make(map[string]bool)
+	var out []*ChangeSession
+	if isChangeSessionWorkflowRunning(s.Change) {
+		seen[s.Change.ID] = true
+		out = append(out, s.Change)
 	}
-	st := s.Change.Workflow.Status
-	return st == "running" || st == "queued" || st == "canceling"
+	for _, chg := range s.ActiveChanges {
+		if isChangeSessionWorkflowRunning(chg) && !seen[chg.ID] {
+			seen[chg.ID] = true
+			out = append(out, chg)
+		}
+	}
+	return out
 }
 
 func (s *State) hasRunningAnalysis() bool {
@@ -363,10 +403,20 @@ func (s *State) fetchFileInfo(ctx context.Context, cl *Client, reqID, path strin
 }
 
 func (s *State) syncProjectRevision(ctx context.Context, cl *Client, reqID string) {
-	_ = s.dispatchReindex(ctx, cl, reqID+"-reidx")
+	oldRev := s.projectRevision()
 	var proj Project
 	if err := cl.DoJSON(ctx, reqID+"-proj", http.MethodGet, "/api/projects/current", nil, &proj); err == nil && proj.ProjectID != "" {
 		s.Project = &proj
+	}
+	var idx ProjectIndex
+	if err := cl.DoJSON(ctx, reqID+"-idx", http.MethodGet, "/api/projects/current/index", nil, &idx); err == nil && s.AcceptProjectResponse(idx.ProjectIdentity) {
+		s.Index = &idx
+		if s.Project != nil && idx.ProjectRevision != "" {
+			s.Project.ProjectRevision = idx.ProjectRevision
+		}
+	}
+	if s.projectRevision() == oldRev && len(s.runningWorkflowSessions()) == 0 {
+		_ = s.dispatchReindex(ctx, cl, reqID+"-reidx")
 	}
 }
 

@@ -130,6 +130,7 @@ type State struct {
 	File              *FileInfo
 	Symbols           []SymbolInfo
 	Change            *ChangeSession
+	ActiveChanges     []*ChangeSession
 	ChangeReceipt     *ChangeMutation
 	ChangeHistory     []ChangeHistoryEntry
 	Repository        *GitRepository
@@ -347,6 +348,9 @@ func (s *State) Navigate(page Page) {
 		s.AgentDetailOpen = false
 	}
 	s.Page = page
+	if page == PageAgents {
+		s.syncSelectedIdxToCurrentChange()
+	}
 	switch page {
 	case PageDocs:
 		s.DocsSection = "context"
@@ -418,7 +422,7 @@ func (s *State) AcceptFileResponse(path, contentHash string) bool {
 
 // CollectAllIssues returns all deduplicated, severity-sorted issues across semantic, performance, and security results.
 func (s *State) CollectAllIssues() []IssueRow {
-	agentItems := domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
+	agentItems := s.AgentItems()
 	var rows []IssueRow
 	rows = s.appendSemanticFindings(rows, agentItems)
 	rows = s.appendSectionResults(rows, agentItems)
@@ -753,7 +757,7 @@ func (s *State) ActiveListLength() int {
 		}
 		return 1
 	case PageAgents:
-		return len(domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace))
+		return len(s.AgentItems())
 	case PageBugs:
 		return len(s.FilteredIssues())
 	case PageFeatures:

@@ -14,7 +14,7 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 		return s.renderAgentDebugPage(th, width)
 	}
 	panelW := adaptivePanelWidth(width)
-	items := domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
+	items := s.AgentItems()
 	activeStage := 1
 	if len(items) > 0 {
 		activeStage = items[s.ClampedIdx()].StageNumber

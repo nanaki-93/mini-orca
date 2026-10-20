@@ -256,8 +256,27 @@ type AgentItem struct {
 
 // CollectAgentItems derives Agent Studio items from the active change session and Git worktrees.
 func CollectAgentItems(change *client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
+	return CollectAllAgentItems(change, nil, receipt, gitWS)
+}
+
+// CollectAllAgentItems derives Agent Studio items from all tracked change sessions and Git worktrees.
+func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
 	var items []AgentItem
-	if change != nil {
+	seenIDs := make(map[string]bool)
+	for _, chg := range activeChanges {
+		if chg == nil {
+			continue
+		}
+		cur := chg
+		if change != nil && change.ID != "" && chg.ID == change.ID {
+			cur = change
+		}
+		items = append(items, buildAgentItemFromSession(cur, receipt, gitWS))
+		if cur.ID != "" {
+			seenIDs[cur.ID] = true
+		}
+	}
+	if change != nil && (len(items) == 0 || (change.ID != "" && !seenIDs[change.ID])) {
 		items = append(items, buildAgentItemFromSession(change, receipt, gitWS))
 	}
 	if gitWS != nil {

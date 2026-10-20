@@ -75,6 +75,7 @@ func (s *State) activateEditorFileRow() {
 }
 
 func (s *State) openAgentDiffInspector() {
+	s.syncSelectedAgentSession()
 	s.File = nil
 	s.BrowseFiles = false
 	if s.Change != nil && len(domain.EffectiveSessionChanges(s.Change)) > 0 {
@@ -83,7 +84,7 @@ func (s *State) openAgentDiffInspector() {
 		s.CmdOutput = fmt.Sprintf("Inspecting diff for %s", s.Change.Title)
 		return
 	}
-	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 		s.Navigate(PageEditor)
 		s.CmdOutput = fmt.Sprintf("Loading diff for %s...", s.Change.Title)
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
@@ -98,7 +99,8 @@ func (s *State) openAgentDiffInspector() {
 }
 
 func (s *State) activateAgentRow() {
-	items := domain.CollectAgentItems(s.Change, s.ChangeReceipt, s.GitWorkspace)
+	s.syncSelectedAgentSession()
+	items := s.AgentItems()
 	idx := s.ClampedIdx()
 	if idx >= len(items) {
 		return
@@ -108,7 +110,7 @@ func (s *State) activateAgentRow() {
 		return
 	}
 	s.AgentDetailOpen = true
-	if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 	}
 	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s)", items[idx].Title, items[idx].Branch)

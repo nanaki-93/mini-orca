@@ -52,7 +52,11 @@ func workflowRequest(session *ChangeSession) ChangeWorkflowRequest {
 func finishedWorkflow(t *testing.T, s *Service, id string) *ChangeSession {
 	t.Helper()
 	s.changeWorkflow.mu.Lock()
-	done := s.changeWorkflow.job.done
+	job := s.changeWorkflow.getJob(id)
+	if job == nil {
+		job = s.changeWorkflow.job
+	}
+	done := job.done
 	s.changeWorkflow.mu.Unlock()
 	select {
 	case <-done:
@@ -587,3 +591,39 @@ func TestChangeWorkflowAutonomousSelfHealingLoop(t *testing.T) {
 		t.Fatalf("expected auto-repair Stage 0 prompt to include Harness² Probe and failed test output, got %+v", healed.Messages)
 	}
 }
+
+func TestConcurrentChangeWorkflowsDoNotConflict(t *testing.T) {
+	firstEntered := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var createCalls atomic.Int32
+	s, _, first := workflowService(t, [3]func() string{
+		func() string {
+			if createCalls.Add(1) == 1 {
+				close(firstEntered)
+				<-releaseFirst
+			}
+			return workflowImplementation
+		},
+		func() string { return workflowTests },
+		func() string { return workflowApproval },
+	})
+	second := openChangeFixture(t, s, "new.go", "new_test.go")
+
+	if _, err := s.StartChangeWorkflow(context.Background(), first.ID, workflowRequest(first)); err != nil {
+		t.Fatalf("start first workflow: %v", err)
+	}
+	<-firstEntered
+
+	if _, err := s.StartChangeWorkflow(context.Background(), second.ID, workflowRequest(second)); err != nil {
+		close(releaseFirst)
+		t.Fatalf("expected second session workflow to start concurrently without conflict, got %v", err)
+	}
+	close(releaseFirst)
+
+	res1 := finishedWorkflow(t, s, first.ID)
+	res2 := finishedWorkflow(t, s, second.ID)
+	if res1.Workflow.Status != "awaiting_human_review" || res2.Workflow.Status != "awaiting_human_review" {
+		t.Fatalf("expected both concurrent workflows to succeed, got first=%+v second=%+v", res1.Workflow, res2.Workflow)
+	}
+}
+

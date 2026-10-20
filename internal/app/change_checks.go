@@ -17,7 +17,9 @@ import (
 )
 
 func (s *Service) CheckChange(ctx context.Context, id string, request ChangeCheckRequest) (*ChangeSession, error) {
+	s.changesMu.Lock()
 	session, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
+	s.changesMu.Unlock()
 	if err != nil {
 		return nil, err
 	}

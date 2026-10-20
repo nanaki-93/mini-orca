@@ -329,6 +329,9 @@ func (s *State) moveSelection(delta int) {
 		next = maxIdx
 	}
 	s.SelectedIdx = next
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
 }
 
 func (s *State) cycleIssueCategory(forward bool) {
@@ -615,10 +618,11 @@ func (s *State) handleAgentsKey(key string) bool {
 }
 
 func (s *State) toggleAgentDebugInspector() {
+	s.syncSelectedAgentSession()
 	s.AgentDetailOpen = !s.AgentDetailOpen
 	if s.AgentDetailOpen {
 		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([Esc/g] to return)"
-		if s.Change != nil && s.Change.ID != "" && s.Change.ID != "agent-session" {
+		if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 			s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 		}
 		return

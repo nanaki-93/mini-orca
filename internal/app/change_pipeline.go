@@ -77,7 +77,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
-	s.changeWorkflow.job = job
+	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
 	go s.runChangeWorkflow(workCtx, job, retryMessage)
 	return session, nil
@@ -85,7 +85,8 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 
 func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWorkflowRequest, messageCount int) error {
 	s.changeWorkflow.mu.Lock()
-	busy := s.changeWorkflow.job != nil && !s.changeWorkflow.job.finished
+	existing := s.changeWorkflow.getJob(session.ID)
+	busy := existing != nil && !existing.finished
 	s.changeWorkflow.mu.Unlock()
 	if busy {
 		return fmt.Errorf("%w: a change workflow is already active", project.ErrRevisionConflict)

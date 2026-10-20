@@ -380,6 +380,7 @@ func (s *State) dispatchCancelWorkflow(ctx context.Context, cl *Client, reqID, s
 	}
 	if updated.ID != "" {
 		s.Change = &updated
+		s.upsertActiveChange(&updated)
 	}
 	return nil
 }
@@ -428,12 +429,10 @@ func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string
 	}
 	session, err := s.openChangeSessionWithRetry(ctx, cl, reqID, act.Seed, paths)
 	if err != nil {
-		if s.Change != nil && s.Change.ID == "agent-session" {
-			s.Change = nil
-		}
+		s.dropPreviewChangeOnError()
 		return err
 	}
-	s.Change = &session
+	s.replacePreviewWithSession(&session)
 	modelsMap, confirmedProfiles := s.workflowModelsPayload()
 	wfReq := map[string]any{
 		"project_id":         s.Project.ProjectID,
@@ -449,10 +448,16 @@ func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string
 	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow"
 	var wfSession ChangeSession
 	if err := cl.DoJSON(ctx, reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
-		s.Change.State = "failed"
+		session.State = "failed"
+		s.Change = &session
+		s.upsertActiveChange(&session)
 		return err
 	}
 	s.Change = &wfSession
+	s.upsertActiveChange(&wfSession)
+	if s.Page == PageAgents {
+		s.syncSelectedIdxToCurrentChange()
+	}
 	return nil
 }
 
@@ -505,6 +510,7 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 	if receipt.Commit != nil {
 		s.Change.Commit = receipt.Commit
 	}
+	s.upsertActiveChange(s.Change)
 	s.recordAppliedFindingCompletions(s.Change.FindingTargets, receipt.Commit)
 	if receipt.ProjectRevision != "" {
 		s.Project.ProjectRevision = receipt.ProjectRevision
@@ -544,6 +550,7 @@ func (s *State) dispatchUpdateProposal(ctx context.Context, cl *Client, reqID st
 	}
 	if updated.ID != "" {
 		s.Change = &updated
+		s.upsertActiveChange(&updated)
 	}
 	return nil
 }
@@ -716,6 +723,7 @@ func (s *State) postChangeSessionAction(ctx context.Context, cl *Client, reqID, 
 		return err
 	}
 	s.Change = &updated
+	s.upsertActiveChange(&updated)
 	return nil
 }
 
@@ -779,6 +787,7 @@ func (s *State) dispatchLoadChange(ctx context.Context, cl *Client, reqID, sessi
 	}
 	if chg.ID != "" {
 		s.Change = &chg
+		s.upsertActiveChange(&chg)
 	}
 	return nil
 }

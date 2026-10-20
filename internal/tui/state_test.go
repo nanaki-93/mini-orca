@@ -1472,3 +1472,86 @@ func TestIssuesSpacebarBatchEnterAndSingleRowFixKey(t *testing.T) {
 	}
 }
 
+func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
+	var openedCount int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"trusted":true}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, _ *http.Request) {
+		openedCount++
+		if openedCount == 1 {
+			_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 1","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1/workflow", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","revision":2,"hash":"h1","state":"draft","title":"Mission 1","targets":[{"path":"a.go"},{"path":"a_test.go"}],"workflow":{"id":"chg-1-2","status":"running","stages":[{"name":"create","status":"running"},{"name":"test","status":"pending"},{"name":"review","status":"pending"},{"name":"human_review","status":"blocked"}]}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-2/workflow", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":2,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}],"workflow":{"id":"chg-2-2","status":"running","stages":[{"name":"create","status":"running"},{"name":"test","status":"pending"},{"name":"review","status":"pending"},{"name":"human_review","status":"blocked"}]}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-1", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","revision":3,"hash":"h2","state":"draft","title":"Mission 1","workflow":{"id":"chg-1-2","status":"awaiting_human_review","stages":[{"name":"create","status":"completed"},{"name":"test","status":"completed"},{"name":"review","status":"completed"},{"name":"human_review","status":"waiting"}]}}`))
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-2", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":3,"hash":"h2","state":"draft","title":"Mission 2","workflow":{"id":"chg-2-2","status":"awaiting_human_review","stages":[{"name":"create","status":"completed"},{"name":"test","status":"completed"},{"name":"review","status":"completed"},{"name":"human_review","status":"waiting"}]}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cl, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo"}
+	s.Index = &ProjectIndex{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		Files:           []IndexedFile{{Path: "a.go", Language: "Go"}, {Path: "a_test.go", Language: "Go"}},
+	}
+	s.Findings = []Finding{
+		{ID: "f1", Category: "bugs", Severity: "high", Title: "Mission 1", Location: SourceAnchor{Path: "a.go", StartLine: 10}, Status: "open"},
+		{ID: "f2", Category: "bugs", Severity: "high", Title: "Mission 2", Location: SourceAnchor{Path: "a.go", StartLine: 20}, Status: "open"},
+	}
+
+	// Start first agent with 'f'
+	s.Navigate(PageBugs)
+	s.SelectedIdx = 0
+	s.HandleKey(KeyEvent{Key: "f"})
+	s.FlushActions(context.Background(), cl)
+
+	// Start second agent while first is still running
+	s.Navigate(PageBugs)
+	s.SelectedIdx = 0
+	s.HandleKey(KeyEvent{Key: "f"})
+	s.FlushActions(context.Background(), cl)
+
+	items := s.AgentItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 concurrent agents tracked in AgentItems, got %d (%+v)", len(items), items)
+	}
+	// PollActiveJobs refreshes both running agents
+	s.PollActiveJobs(context.Background(), cl)
+	for _, chg := range s.ActiveChanges {
+		if chg.Workflow == nil || chg.Workflow.Status != "awaiting_human_review" {
+			t.Fatalf("expected PollActiveJobs to update both running workflows, got %+v", chg)
+		}
+	}
+	// Navigating with k/j in PageAgents switches s.Change between the two sessions
+	s.Navigate(PageAgents)
+	s.HandleKey(KeyEvent{Key: "k"})
+	if s.Change == nil || s.Change.ID != "chg-1" {
+		t.Fatalf("expected 'k' on PageAgents to select chg-1, got %+v", s.Change)
+	}
+	s.HandleKey(KeyEvent{Key: "j"})
+	if s.Change == nil || s.Change.ID != "chg-2" {
+		t.Fatalf("expected 'j' on PageAgents to select chg-2, got %+v", s.Change)
+	}
+}
+
+

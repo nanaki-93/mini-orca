@@ -175,7 +175,7 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	defer s.changesMu.Unlock()
 	root := s.manager.Root()
 	s.changeWorkflow.mu.Lock()
-	job := s.changeWorkflow.job
+	job := s.changeWorkflow.getJob(id)
 	running := job != nil && !job.finished && job.root == root && job.sessionID == id
 	s.changeWorkflow.mu.Unlock()
 	if running {
@@ -220,7 +220,7 @@ func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, erro
 	for i := range history {
 		entry := &history[i]
 		if entry.WorkflowStatus == "running" || entry.WorkflowStatus == "canceling" {
-			job := s.changeWorkflow.job
+			job := s.changeWorkflow.getJob(entry.ID)
 			if job == nil || job.finished || job.sessionID != entry.ID || job.root != s.manager.Root() {
 				entry.WorkflowStatus = "interrupted"
 				entry.WorkflowReason = "The workflow stopped before completion. Restore the conversation to run again."

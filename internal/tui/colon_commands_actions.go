@@ -223,6 +223,9 @@ func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
 	if seed == nil {
 		return
 	}
+	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
+		s.upsertActiveChange(s.Change)
+	}
 	var targets []ChangeTarget
 	for _, p := range seed.Paths {
 		if strings.TrimSpace(p) != "" {
@@ -381,6 +384,10 @@ func (s *State) restartAgentFromCurrentChange() {
 	seed := s.buildSeedFromCurrentChange()
 	if seed == nil {
 		return
+	}
+	if s.Change != nil && s.Change.ID != "" {
+		s.removeActiveChangeByID(s.Change.ID)
+		s.Change = nil
 	}
 	s.startLocalAgentPreview(seed)
 	if stale {

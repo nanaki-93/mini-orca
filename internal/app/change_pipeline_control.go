@@ -33,7 +33,7 @@ func (s *Service) CancelChangeWorkflow(ctx context.Context, id string, request C
 		return session, nil
 	}
 	s.changeWorkflow.mu.Lock()
-	job := s.changeWorkflow.job
+	job := s.changeWorkflow.getJob(id)
 	active := job != nil && !job.finished && job.root == root && job.id == request.WorkflowID
 	if active {
 		job.cancel()
@@ -53,8 +53,10 @@ func (s *Service) CancelChangeWorkflow(ctx context.Context, id string, request C
 func (s *Service) CancelChangeWorkflows() {
 	s.changeWorkflow.mu.Lock()
 	defer s.changeWorkflow.mu.Unlock()
-	if job := s.changeWorkflow.job; job != nil && !job.finished {
-		job.cancel()
+	for _, job := range s.changeWorkflow.allJobs() {
+		if !job.finished {
+			job.cancel()
+		}
 	}
 }
 
@@ -83,20 +85,19 @@ func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 
 func (s *Service) waitChangeWorkflowDone(ctx context.Context) error {
 	s.changeWorkflow.mu.Lock()
-	job := s.changeWorkflow.job
-	if job != nil {
+	jobs := s.changeWorkflow.allJobs()
+	for _, job := range jobs {
 		job.cancel()
 	}
 	s.changeWorkflow.mu.Unlock()
-	if job == nil {
-		return nil
+	for _, job := range jobs {
+		select {
+		case <-job.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	select {
-	case <-job.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return nil
 }
 
 func (s *Service) waitAnalysisRunDone(ctx context.Context) error {
@@ -147,7 +148,7 @@ func (s *Service) restoreChangeWorkflow(session *ChangeSession) {
 		return
 	}
 	s.changeWorkflow.mu.Lock()
-	job := s.changeWorkflow.job
+	job := s.changeWorkflow.getJob(session.ID)
 	active := job != nil && job.id == w.ID && job.root == s.manager.Root() && !job.finished
 	failure := ""
 	if job != nil && job.id == w.ID {
