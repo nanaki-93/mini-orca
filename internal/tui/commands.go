@@ -1290,7 +1290,7 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 	case "agent", "agents":
 		s.Navigate(PageAgents)
 		if arg != "" {
-			seed := &ChangeSeed{Title: truncatePlain(arg, 48), Kind: "fix", Message: arg}
+			seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}
 			s.startLocalAgentPreview(seed)
 			s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, Seed: seed})
 			s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)

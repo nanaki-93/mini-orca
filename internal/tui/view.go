@@ -387,7 +387,7 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 		bar := th.renderProgressBar(done, total, 12)
 		runText := fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds)
 		if s.isAnalysisPausedOrInterrupted() {
-			reason := truncatePlain(firstNonEmpty(s.Run.Reason, "window paused"), 36)
+			reason := firstNonEmpty(s.Run.Reason, "window paused")
 			runText += fmt.Sprintf(" %s%s · [r] Resume%s", th.amber, reason, th.reset)
 		}
 		parts = append(parts, runText)
@@ -395,7 +395,7 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 	if s.Change != nil {
 		added, removed, badge := ClassifyDiffScope(s.Change.Changes)
 		parts = append(parts, fmt.Sprintf("Active Proposal: %s%s%s %s (%s+%d%s/%s-%d%s)",
-			th.bold, truncatePlain(s.Change.Title, 28), th.reset,
+			th.bold, s.Change.Title, th.reset,
 			th.statusBadge(badge), th.green, added, th.reset, th.red, removed, th.reset,
 		))
 	}
@@ -684,13 +684,13 @@ func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	}
 	if s.Error != "" {
 		return fmt.Sprintf(" %s ▲ ERROR %s  %s%s%s",
-			th.critBg, th.reset, th.bold+th.red, truncatePlain(s.Error, max(20, width-16)), th.reset)
+			th.critBg, th.reset, th.bold+th.red, s.Error, th.reset)
 	}
 	badge := th.okBg + " ● READY " + th.reset
 	if s.Busy != "" {
 		badge = th.warnBg + " ⟳ BUSY " + th.reset
 	}
-	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, truncatePlain(s.CmdOutput, max(20, width-28)), th.reset)
+	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, s.CmdOutput, th.reset)
 	right := fmt.Sprintf("%s[?] Keys  [:] Cmd%s ", th.muted, th.reset)
 	gap := max(2, width-2-visibleRuneCount(left)-visibleRuneCount(right))
 	return left + strings.Repeat(" ", gap) + right

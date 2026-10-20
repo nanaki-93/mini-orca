@@ -172,13 +172,13 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, added, removed int) []string {
 	fileScope := fmt.Sprintf("%sFile %d/%d:%s %s%s%s",
 		th.muted, active.FileIndex+1, max(1, active.FileTotal), th.reset,
-		th.cyan, truncatePlain(active.Path, 28), th.reset)
+		th.cyan, active.Path, th.reset)
 	meta := []string{
 		fmt.Sprintf(
 			"%sHunk #%d/%d%s · %s · %sProposal:%s %s%s%s",
 			th.bold+th.accent, active.GlobalIndex+1, totalHunks, th.reset,
 			fileScope,
-			th.muted, th.reset, th.bold+th.fg, truncatePlain(s.Change.Title, 32), th.reset,
+			th.muted, th.reset, th.bold+th.fg, s.Change.Title, th.reset,
 		),
 	}
 	if s.ShowInlineWhy && active.Summary != "" {

@@ -826,3 +826,29 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		}
 	}
 }
+
+func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	longMission := "Refactor authentication middleware to propagate context deadlines across all downstream gRPC handlers"
+	s.ExecuteCommand("agent " + longMission)
+	if s.Change == nil || s.Change.Title != longMission {
+		t.Fatalf("expected full agent mission title to be preserved without truncation, got %q", s.Change.Title)
+	}
+
+	longCmd := "go test -race -count=1 ./internal/tui/... ./cmd/tui/... -run TestFullScreenVerticalSpaceUtilization"
+	s.Change.Checks = []Check{
+		{
+			Name:    "unit-and-race-suite",
+			State:   "failed",
+			Command: strings.Fields(longCmd),
+			Output:  "assertion failed in TestFullScreenVerticalSpaceUtilization: expected full command visibility",
+		},
+	}
+	s.Navigate(PageAgents)
+	s.AgentDetailOpen = true
+	debugFrame := s.Render(120, 44)
+	if !strings.Contains(debugFrame, "TestFullScreenVerticalSpaceUtilization") || !strings.Contains(debugFrame, "command visibility") {
+		t.Fatalf("expected full check command and output to wrap without truncation in debug view:\n%s", debugFrame)
+	}
+}

@@ -290,7 +290,7 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 			th.muted, th.reset, repairs),
 	}
 	if strings.TrimSpace(wfReason) != "" {
-		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, truncatePlain(wfReason, max(24, panelW-14)), th.reset))
+		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, wfReason, th.reset))
 	}
 	if chg.Workflow != nil && len(chg.Workflow.Stages) > 0 {
 		for idx, st := range chg.Workflow.Stages {
@@ -309,10 +309,10 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	if chg.Workflow != nil && chg.Workflow.Review != nil {
 		rev := chg.Workflow.Review
 		revLines := []string{
-			fmt.Sprintf("%sVerdict:%s %s  %s%s%s", th.muted, th.reset, th.statusBadge(rev.Verdict), th.fg, truncatePlain(rev.Summary, max(24, panelW-22)), th.reset),
+			fmt.Sprintf("%sVerdict:%s %s  %s%s%s", th.muted, th.reset, th.statusBadge(rev.Verdict), th.fg, rev.Summary, th.reset),
 		}
 		for _, f := range rev.Findings {
-			revLines = append(revLines, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, truncatePlain(f, max(24, panelW-10))))
+			revLines = append(revLines, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, f))
 		}
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("STAGE 3 · CRITIC REVIEW VERDICT", strings.ToUpper(rev.Verdict), panelW, revLines)...)
@@ -320,22 +320,21 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	return lines
 }
 
-func (s *State) renderAgentCheckDebugLines(th ansiTheme, panelW int) []string {
+func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	if s.Change == nil || len(s.Change.Checks) == 0 {
 		return []string{fmt.Sprintf("%sNo deterministic verification checks recorded yet — press [r] to run checks.%s", th.muted, th.reset)}
 	}
 	var out []string
-	maxLineW := max(24, panelW-12)
 	for _, chk := range s.Change.Checks {
 		cmdStr := strings.Join(chk.Command, " ")
 		out = append(out, fmt.Sprintf("%s  %s%-18s%s  %s%s%s",
-			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, th.muted, truncatePlain(cmdStr, max(18, maxLineW-30)), th.reset))
+			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, th.muted, cmdStr, th.reset))
 		if strings.TrimSpace(chk.Output) != "" && !strings.EqualFold(chk.State, "passed") {
 			rawLines := strings.Split(strings.TrimSpace(strings.ReplaceAll(chk.Output, "\r\n", "\n")), "\n")
 			limit := min(4, len(rawLines))
 			for i := 0; i < limit; i++ {
 				clean := strings.TrimSpace(sanitizeCodeText(rawLines[i]))
-				out = append(out, fmt.Sprintf("    %s│%s %s%s%s", th.red, th.reset, th.amber, truncatePlain(clean, maxLineW), th.reset))
+				out = append(out, fmt.Sprintf("    %s│%s %s%s%s", th.red, th.reset, th.amber, clean, th.reset))
 			}
 		}
 	}
@@ -354,7 +353,7 @@ func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
 		}
 		label := shortNames[idx]
 		if st.Model != nil && st.Model.Model != "" {
-			label += "(" + truncatePlain(st.Model.Model, 10) + ")"
+			label += "(" + st.Model.Model + ")"
 		}
 		parts = append(parts, fmt.Sprintf("%s%s%s %s", th.muted, label, th.reset, th.statusBadge(st.Status)))
 	}
@@ -364,24 +363,24 @@ func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
 	return strings.Join(parts, "  ")
 }
 
-func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, maxText int) string {
+func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, _ int) string {
 	if s.Change != nil {
 		if s.Change.Workflow != nil && s.Change.Workflow.Review != nil {
 			rev := s.Change.Workflow.Review
 			return fmt.Sprintf("%sCritic:%s    %s  %s%s%s",
 				th.muted, th.reset, th.statusBadge(rev.Verdict),
-				th.fg, truncatePlain(rev.Summary, max(16, maxText-14)), th.reset)
+				th.fg, rev.Summary, th.reset)
 		}
 		for _, chk := range s.Change.Checks {
 			if strings.EqualFold(chk.State, "failed") && strings.TrimSpace(chk.Output) != "" {
 				return fmt.Sprintf("%sFailure:%s   %s▲ %s:%s %s",
 					th.muted, th.reset, th.bold+th.red, chk.Name, th.reset,
-					truncatePlain(strings.TrimSpace(chk.Output), max(16, maxText-14)))
+					strings.TrimSpace(chk.Output))
 			}
 		}
 		if s.Change.Workflow != nil && strings.TrimSpace(s.Change.Workflow.Reason) != "" {
 			return fmt.Sprintf("%sReason:%s    %s%s%s",
-				th.muted, th.reset, th.amber, truncatePlain(s.Change.Workflow.Reason, maxText), th.reset)
+				th.muted, th.reset, th.amber, s.Change.Workflow.Reason, th.reset)
 		}
 	}
 	return fmt.Sprintf("%sProgress:%s  Stage %d/4 (%s) · Delta: %s+%d%s/%s-%d%s (%s)",
@@ -488,10 +487,10 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	if cur := s.SelectedIssue(); cur != nil {
 		footer := []string{
 			fmt.Sprintf("%sFinding:%s   %s  %s%s%s",
-				th.muted, th.reset, th.severityBadge(cur.Severity), th.bold+th.fg, truncatePlain(cur.Title, max(20, panelW-22)), th.reset),
+				th.muted, th.reset, th.severityBadge(cur.Severity), th.bold+th.fg, cur.Title, th.reset),
 			fmt.Sprintf("%sLocation:%s  %s%s:%d%s   %sSummary:%s %s",
 				th.muted, th.reset, th.cyan, cur.Path, cur.Line, th.reset,
-				th.muted, th.reset, truncatePlain(cur.Cause, max(16, panelW-38))),
+				th.muted, th.reset, cur.Cause),
 		}
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
@@ -530,7 +529,6 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	if cur == nil {
 		return append(lines, fmt.Sprintf("  %sNo finding selected.%s", th.muted, th.reset))
 	}
-	textW := max(28, panelW-22)
 	meta := []string{
 		fmt.Sprintf("%sFinding:%s  %s%s%s", th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset),
 		fmt.Sprintf("%sSeverity:%s %s   %sCategory:%s %s%s%s   %sStatus:%s %s",
@@ -541,8 +539,8 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, th.renderPanelBox("ISSUE METADATA & LOCATION", cur.ID, panelW, meta)...)
 	diag := []string{
-		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, truncatePlain(cur.Cause, textW), th.reset),
-		fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.bold+th.fg, truncatePlain(cur.Solution, textW), th.reset),
+		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, cur.Cause, th.reset),
+		fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.bold+th.fg, cur.Solution, th.reset),
 		s.renderIssueDetailWorkflowLine(th, *cur),
 	}
 	lines = append(lines, "")
@@ -584,8 +582,8 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
 			"  %s%s  %s%-32s%s  %s%s%s",
-			cursor, th.severityBadge(effort), tStyle, truncatePlain(f.Title, 32), th.reset,
-			th.muted, truncatePlain(f.Benefit, max(18, width-52)), th.reset,
+			cursor, th.severityBadge(effort), tStyle, f.Title, th.reset,
+			th.muted, f.Benefit, th.reset,
 		))
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(features))
@@ -594,7 +592,7 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 		fmt.Sprintf("%sProposal:%s %s%s%s   %sEffort:%s %s",
 			th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset,
 			th.muted, th.reset, th.severityBadge(firstNonEmpty(cur.Effort, "med"))),
-		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, truncatePlain(cur.Benefit, max(28, panelW-14)), th.reset),
+		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, cur.Benefit, th.reset),
 	}
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("FEATURE IMPLEMENTATION WORKBENCH", "CAPABILITY SPEC", panelW, featBox)...)
@@ -622,7 +620,7 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	}
 	if strings.TrimSpace(s.Run.Reason) != "" {
 		telemetry = append(telemetry, fmt.Sprintf("%sReason:%s %s%s%s",
-			th.muted, th.reset, th.amber, truncatePlain(s.Run.Reason, max(24, panelW-14)), th.reset))
+			th.muted, th.reset, th.amber, s.Run.Reason, th.reset))
 	}
 	if s.isAnalysisPausedOrInterrupted() {
 		telemetry = append(telemetry, fmt.Sprintf("%sAction:%s %sPress [r] or [Enter] to Resume remaining work%s · %s[n]%s Full Reanalyze",
@@ -649,7 +647,7 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 			th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset, failStr,
 		))
 		if strings.TrimSpace(sec.Reason) != "" {
-			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, truncatePlain(sec.Reason, max(24, width-12)), th.reset))
+			lines = append(lines, fmt.Sprintf("      %s↳ %s%s", th.amber, sec.Reason, th.reset))
 		}
 	}
 	if s.Run.Features != nil {
@@ -680,8 +678,8 @@ func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selecte
 			"  %s%s%-7s%s %s%-24s%s  %s%-32s%s  %s%s%s",
 			cursor, th.cyan, row.Key, th.reset,
 			tStyle, row.Label, th.reset,
-			th.bold+th.green, truncatePlain(row.Value, 32), th.reset,
-			th.muted, truncatePlain(row.Description, max(18, width-74)), th.reset,
+			th.bold+th.green, row.Value, th.reset,
+			th.muted, row.Description, th.reset,
 		))
 	}
 	codeMod := s.EffectiveScopeModel("bug")
@@ -780,7 +778,7 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 		cursor := th.renderCursorPrefix(idx == selected)
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf("  %s%s%-40s%s %s(%s)  %d lines%s",
-			cursor, tStyle, truncatePlain(f.Path, 40), th.reset, th.muted, firstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
+			cursor, tStyle, f.Path, th.reset, th.muted, firstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
 	}
 	return appendWindowFooter(th, lines, start, end, total)
 }
@@ -823,7 +821,7 @@ func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
 			"  %s%-12s %s%-32s%s %srev:%d (%s)%s",
-			cursor, th.statusBadge(entry.State), tStyle, truncatePlain(entry.Title, 32), th.reset,
+			cursor, th.statusBadge(entry.State), tStyle, entry.Title, th.reset,
 			th.muted, entry.Revision, firstNonEmpty(entry.Freshness, "current"), th.reset,
 		))
 	}
@@ -1058,7 +1056,7 @@ func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
 			badge = th.statusBadge("GRADUATED")
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%-12s %s%s%s", cursor, badge, tStyle, truncatePlain(rule, max(24, width-20)), th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%-12s %s%s%s", cursor, badge, tStyle, rule, th.reset))
 	}
 	if selected < len(lessons) {
 		selRule := lessons[selected]
@@ -1074,7 +1072,7 @@ func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
 				th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 		}
 		box := []string{
-			fmt.Sprintf("%sRule:%s     %s%s%s", th.muted, th.reset, th.bold+th.fg, truncatePlain(selRule, max(24, panelW-14)), th.reset),
+			fmt.Sprintf("%sRule:%s     %s%s%s", th.muted, th.reset, th.bold+th.fg, selRule, th.reset),
 			propLine,
 		}
 		lines = append(lines, "")
