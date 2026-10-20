@@ -213,11 +213,22 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 		}
 	}
 
-	// Verify split-screen sidebar menu division and hidden keymappings on standard screen
+	// Verify split-screen sidebar menu division, spacing before WORKSPACE PULSE, and hidden keymappings on standard screen
 	s.Navigate(PageSummary)
 	splitOut := s.Render(120, 36)
 	if !strings.Contains(splitOut, "NAVIGATION") || !strings.Contains(splitOut, "WORKSPACE PULSE") || !strings.Contains(splitOut, "┳") {
 		t.Fatalf("expected split-screen sidebar menu and divider on 120x36 viewport:\n%s", splitOut)
+	}
+	sidebarRows := s.renderSidebarMenu(themeForPalette(s.Palette), sidebarMenuWidth, 30)
+	pulseIdx := -1
+	for i, row := range sidebarRows {
+		if strings.Contains(row, "WORKSPACE PULSE") {
+			pulseIdx = i
+			break
+		}
+	}
+	if pulseIdx < 2 || sidebarRows[pulseIdx-1] != "" || sidebarRows[pulseIdx-2] != "" {
+		t.Fatalf("expected at least 2 blank rows between navigation menu and WORKSPACE PULSE, got rows around %d: %q", pulseIdx, sidebarRows)
 	}
 	if strings.Contains(splitOut, "ACTIONS:") || strings.Contains(splitOut, "[b/Enter]") || strings.Contains(splitOut, "Press [1-5]") {
 		t.Fatalf("expected keymappings to be hidden from main screen:\n%s", splitOut)

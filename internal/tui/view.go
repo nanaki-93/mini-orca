@@ -198,6 +198,10 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 				th.muted, tab.Key, th.reset, th.fg, truncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
+	if active.Key != "5" {
+		lines = append(lines, "")
+	}
+	lines = append(lines, "")
 	lines = append(lines, s.renderSidebarPulse(th, width)...)
 	if targetBodyRows-len(lines) >= 7 {
 		lines = append(lines, "")
