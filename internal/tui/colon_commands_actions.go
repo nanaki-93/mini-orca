@@ -673,6 +673,7 @@ func (s *State) setScopeModel(scope, modelID string) {
 		s.ScopeModels = make(map[string]string)
 	}
 	s.ScopeModels[scope] = modelID
+	s.saveCustomPresetsToDisk()
 	eff := s.EffectiveScopeModel(scope)
 	s.CmdOutput = fmt.Sprintf("Assigned scope [%s] -> %s (%s · %s)",
 		strings.ToUpper(scope), client.FirstNonEmpty(eff.Model, modelID), eff.ProviderOrigin, domain.FormatModelParams(eff))
@@ -684,6 +685,7 @@ func (s *State) resetSelectedScopeModel() {
 		s.ScopeModels = make(map[string]string)
 	}
 	s.ScopeModels[scope] = scope
+	s.saveCustomPresetsToDisk()
 	s.CmdOutput = fmt.Sprintf("Reset scope [%s] routing to default profile (%s)", strings.ToUpper(scope), scope)
 }
 
@@ -721,6 +723,7 @@ func (s *State) applyModelPreset(p ModelPreset) {
 	s.ScopeModels["analyze"] = p.Analyze
 	s.ScopeModels["bug"] = p.Bug
 	s.ScopeModels["function"] = p.Function
+	s.saveCustomPresetsToDisk()
 	s.CmdOutput = fmt.Sprintf("Applied model preset: %s (analyze:%s · bug:%s · function:%s)",
 		p.Name, p.Analyze, p.Bug, p.Function)
 }

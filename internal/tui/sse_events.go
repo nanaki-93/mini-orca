@@ -33,6 +33,9 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 		}
 	}
 	if s.Project != nil {
+		if s.Project.Path == "" && projectPath != "" {
+			s.Project.Path = projectPath
+		}
 		s.loadProjectResources(ctx, client)
 	}
 	return nil

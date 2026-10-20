@@ -1247,12 +1247,19 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 		t.Fatalf("expected rust-audit preset to restore pi:qwen and agy:claude, got %+v", s.ScopeModels)
 	}
 
-	// 4. Verify custom presets are persisted in .mini-orca/tui-presets.json and reloaded
+	// 4. Verify custom presets, active preset ID, and selected scope models are persisted and reloaded
+	s.ExecuteCommand(":model function agy:claude")
 	s2 := NewState()
 	s2.Project = s.Project
 	s2.loadCustomPresetsFromDisk()
 	if len(s2.CustomPresets) != 2 || s2.CustomPresets[0].ID != "rust-audit" {
 		t.Fatalf("expected custom presets to reload from .mini-orca/tui-presets.json, got %+v", s2.CustomPresets)
+	}
+	if s2.ActivePresetID != "rust-audit" ||
+		s2.AssignedScopeModelID("analyze") != "pi:qwen" ||
+		s2.AssignedScopeModelID("bug") != "agy:claude" ||
+		s2.AssignedScopeModelID("function") != "agy:claude" {
+		t.Fatalf("expected active preset and selected scope models to persist across restarts, got preset=%q scopes=%+v", s2.ActivePresetID, s2.ScopeModels)
 	}
 
 	// 5. Render PageModels and verify custom preset row is displayed

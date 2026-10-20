@@ -244,24 +244,51 @@ func (s *State) AllModelPresets() []ModelPreset {
 	return domain.MergeModelPresets(s.CustomPresets)
 }
 
+type persistedModelSettings struct {
+	ActivePresetID string            `json:"active_preset_id,omitempty"`
+	ScopeModels    map[string]string `json:"scope_models,omitempty"`
+	CustomPresets  []ModelPreset     `json:"custom_presets,omitempty"`
+}
+
 func (s *State) customPresetsFilePath() string {
 	if s.Project == nil || strings.TrimSpace(s.Project.Path) == "" {
 		return ""
 	}
-	dir := filepath.Join(s.Project.Path, ".mini-orca")
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+	info, err := os.Stat(s.Project.Path)
+	if err != nil || !info.IsDir() {
 		return ""
 	}
-	return filepath.Join(dir, "tui-presets.json")
+	return filepath.Join(s.Project.Path, ".mini-orca", "tui-presets.json")
 }
 
 func (s *State) loadCustomPresetsFromDisk() {
 	p := s.customPresetsFilePath()
-	if p == "" || len(s.CustomPresets) > 0 {
+	if p == "" {
 		return
 	}
 	data, err := os.ReadFile(p)
 	if err != nil {
+		return
+	}
+	var settings persistedModelSettings
+	if err := json.Unmarshal(data, &settings); err == nil &&
+		(settings.ActivePresetID != "" || len(settings.ScopeModels) > 0 || len(settings.CustomPresets) > 0) {
+		if len(settings.CustomPresets) > 0 {
+			s.CustomPresets = settings.CustomPresets
+		}
+		if strings.TrimSpace(settings.ActivePresetID) != "" {
+			s.ActivePresetID = strings.TrimSpace(settings.ActivePresetID)
+		}
+		if len(settings.ScopeModels) > 0 {
+			if s.ScopeModels == nil {
+				s.ScopeModels = make(map[string]string)
+			}
+			for _, scope := range domain.CanonicalModelScopes() {
+				if val := strings.TrimSpace(settings.ScopeModels[scope]); val != "" {
+					s.ScopeModels[scope] = val
+				}
+			}
+		}
 		return
 	}
 	var loaded []ModelPreset
@@ -275,7 +302,19 @@ func (s *State) saveCustomPresetsToDisk() {
 	if p == "" {
 		return
 	}
-	if data, err := json.MarshalIndent(s.CustomPresets, "", "  "); err == nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return
+	}
+	scopeModels := make(map[string]string, len(s.ScopeModels))
+	for _, scope := range domain.CanonicalModelScopes() {
+		scopeModels[scope] = s.AssignedScopeModelID(scope)
+	}
+	payload := persistedModelSettings{
+		ActivePresetID: s.ActivePresetID,
+		ScopeModels:    scopeModels,
+		CustomPresets:  s.CustomPresets,
+	}
+	if data, err := json.MarshalIndent(payload, "", "  "); err == nil {
 		_ = os.WriteFile(p, data, 0o600)
 	}
 }
