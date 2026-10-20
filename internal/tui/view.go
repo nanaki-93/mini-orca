@@ -132,7 +132,7 @@ func (s *State) appendFullScreenWorkspaceDock(th ansiTheme, contentWidth, target
 	if rem < 5 {
 		return body
 	}
-	dockLines := s.buildFullScreenDockLines(th, panelW, rem >= 5)
+	dockLines := s.buildFullScreenDockLines(th)
 	dockBox := th.renderPanelBox("WORKSPACE TELEMETRY & ROUTING DOCK", strings.ToUpper(string(s.EffectivePage())), panelW, dockLines)
 	padRows := max(0, targetBodyRows-len(body)-len(dockBox))
 	for i := 0; i < padRows; i++ {
@@ -168,40 +168,15 @@ func (s *State) renderWorkspaceContextSupplement(th ansiTheme, panelW int) []str
 	return th.renderPanelBox("SESSION & PIPELINE CONTEXT", "LIVE STATE", panelW, lines)
 }
 
-func (s *State) buildFullScreenDockLines(th ansiTheme, panelW int, twoLines bool) []string {
-	cfg := s.EffectiveAnalysisConfig()
-	projName := "no-project"
-	if s.Project != nil && s.Project.Name != "" {
-		projName = truncatePlain(s.Project.Name, 20)
-	}
+func (s *State) buildFullScreenDockLines(th ansiTheme) []string {
 	trust := th.statusBadge("TRUSTED")
 	if !s.WorkspaceTrust {
 		trust = th.statusBadge("UNTRUSTED")
 	}
-	analyzeMod := firstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze"))
-	bugMod := firstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug"))
-	fnMod := firstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function"))
-	line1 := fmt.Sprintf("%strust:%s %s · %spalette:%s %s%s%s · %sProject:%s %s%s%s · %sPreset:%s %s%s%s · %sRouting:%s analyze=%s%s%s bug=%s%s%s fn=%s%s%s",
+	line := fmt.Sprintf("%strust:%s %s   %spalette:%s %s%s%s",
 		th.muted, th.reset, trust,
-		th.muted, th.reset, th.purple, s.Palette, th.reset,
-		th.muted, th.reset, th.bold+th.fg, projName, th.reset,
-		th.muted, th.reset, th.cyan, firstNonEmpty(s.ActivePresetID, "local-default"), th.reset,
-		th.muted, th.reset,
-		th.bold+th.fg, truncatePlain(analyzeMod, 14), th.reset,
-		th.bold+th.fg, truncatePlain(bugMod, 14), th.reset,
-		th.bold+th.fg, truncatePlain(fnMod, 14), th.reset)
-	if !twoLines {
-		return []string{line1}
-	}
-	branch := "main"
-	if s.Repository != nil && s.Repository.Branch != "" {
-		branch = truncatePlain(s.Repository.Branch, 16)
-	}
-	line2 := fmt.Sprintf("%sGit:%s %s%s%s · %sAnalysis Config:%s batch=%d budget=%ds attempts=%d features=%v · %sNav:%s [Tab/h/l] Sub-view [?] Help [:] Cmd",
-		th.muted, th.reset, th.purple, branch, th.reset,
-		th.muted, th.reset, cfg.BatchFiles, cfg.BudgetSeconds, cfg.MaxAttemptsPerStage, cfg.IncludeFeatures,
-		th.muted, th.reset)
-	return []string{line1, truncatePlain(line2, max(36, panelW-4))}
+		th.muted, th.reset, th.purple, s.Palette, th.reset)
+	return []string{line}
 }
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {

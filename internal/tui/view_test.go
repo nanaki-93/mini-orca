@@ -787,6 +787,12 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		if !strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") {
 			t.Fatalf("expected page %s on 160x46 full-screen viewport to render bottom-anchored WORKSPACE TELEMETRY & ROUTING DOCK:\n%s", p, frame)
 		}
+		if !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
+			t.Fatalf("expected footer dock on page %s to display trust and palette:\n%s", p, frame)
+		}
+		if strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
+			t.Fatalf("expected footer dock on page %s to omit Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
+		}
 		if !strings.Contains(frame, "MODEL ROUTING") {
 			t.Fatalf("expected sidebar on page %s (160x46) to include expanded MODEL ROUTING section:\n%s", p, frame)
 		}
