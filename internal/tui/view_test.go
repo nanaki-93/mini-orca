@@ -744,23 +744,23 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		t.Fatal("expected Escape to close Agent Debug & Check Inspector")
 	}
 
-	// 3. Handbook direct shortcuts c / m / s / d
+	// 3. Handbook arrow navigation cycles through sub-pages
 	s.Navigate(PageDocs)
-	s.HandleKey(KeyEvent{Key: "m"})
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageDocsComponents {
-		t.Fatalf("expected 'm' in Handbook to open PageDocsComponents, got %s", s.Page)
+		t.Fatalf("expected ArrowRight in Handbook to open PageDocsComponents, got %s", s.Page)
 	}
-	s.HandleKey(KeyEvent{Key: "s"})
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageDocsDecisions {
-		t.Fatalf("expected 's' in Handbook to open PageDocsDecisions, got %s", s.Page)
+		t.Fatalf("expected second ArrowRight in Handbook to open PageDocsDecisions, got %s", s.Page)
 	}
-	s.HandleKey(KeyEvent{Key: "d"})
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageDiagrams {
-		t.Fatalf("expected 'd' in Handbook to open PageDiagrams, got %s", s.Page)
+		t.Fatalf("expected third ArrowRight in Handbook to open PageDiagrams, got %s", s.Page)
 	}
-	s.HandleKey(KeyEvent{Key: "c"})
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageDocs {
-		t.Fatalf("expected 'c' in Handbook to open PageDocs, got %s", s.Page)
+		t.Fatalf("expected fourth ArrowRight in Handbook to wrap back to PageDocs, got %s", s.Page)
 	}
 }
 

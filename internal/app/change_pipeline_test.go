@@ -626,4 +626,3 @@ func TestConcurrentChangeWorkflowsDoNotConflict(t *testing.T) {
 		t.Fatalf("expected both concurrent workflows to succeed, got first=%+v second=%+v", res1.Workflow, res2.Workflow)
 	}
 }
-

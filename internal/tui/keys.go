@@ -221,6 +221,8 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 		s.activateInstructionsRow()
 	case PageLessons:
 		s.graduateSelectedLesson()
+	default:
+		s.stepHorizontalSection(forward)
 	}
 	return true
 }
@@ -491,10 +493,6 @@ func (s *State) handleAnalysisRunConfigKey(key string) bool {
 	case "x":
 		s.resetAnalysisConfig()
 		return true
-	case "m":
-		s.Navigate(PageModels)
-		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing"
-		return true
 	}
 	return false
 }
@@ -508,10 +506,6 @@ func (s *State) handleIssueShortcut(key string) bool {
 		}
 	case "a":
 		s.dispatchSelectedIssues()
-		return true
-	case "w":
-		s.Navigate(PageAgents)
-		s.CmdOutput = "Switched to [2] Agent Studio · Pipeline to watch active agent."
 		return true
 	case "o":
 		if s.Page != PageSummary {
@@ -594,10 +588,6 @@ func (s *State) handleAgentsKey(key string) bool {
 	case "d", "i":
 		s.openAgentDiffInspector()
 		return true
-	case "b":
-		s.Navigate(PageBugs)
-		s.CmdOutput = "Returned to [2] Agent Studio · Issues"
-		return true
 	case "a", "c":
 		s.applyAndCommitProposal("")
 		return true
@@ -657,14 +647,6 @@ func (s *State) handleEditorKey(key string) bool {
 		return true
 	case "d":
 		s.openAgentDiffInspector()
-		return true
-	case "w":
-		s.Navigate(PageAgents)
-		s.CmdOutput = "Returned to [2] Agent Studio · Pipeline"
-		return true
-	case "b":
-		s.Navigate(PageBugs)
-		s.CmdOutput = "Returned to [2] Agent Studio · Issues"
 		return true
 	}
 	return false
@@ -846,32 +828,7 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 	if isGovernancePage(s.Page) {
 		return s.handleGovernanceKey(ev.Key)
 	}
-	if isHandbookPage(s.Page) {
-		return s.handleHandbookKey(ev.Key)
-	}
 	return s.handleOverviewShortcuts(ev.Key)
-}
-
-func (s *State) handleHandbookKey(key string) bool {
-	switch key {
-	case "c":
-		s.Navigate(PageDocs)
-		s.CmdOutput = "Handbook: Context & Dependencies"
-		return true
-	case "m":
-		s.Navigate(PageDocsComponents)
-		s.CmdOutput = "Handbook: Architectural Components"
-		return true
-	case "s":
-		s.Navigate(PageDocsDecisions)
-		s.CmdOutput = "Handbook: Scenarios & Decisions"
-		return true
-	case "d":
-		s.Navigate(PageDiagrams)
-		s.CmdOutput = "Handbook: Architecture Diagram"
-		return true
-	}
-	return false
 }
 
 func (s *State) handleGovernanceKey(key string) bool {
@@ -942,16 +899,6 @@ func (s *State) handleModelsPageKey(key string) bool {
 }
 
 func (s *State) handleOverviewShortcuts(key string) bool {
-	if s.Page == PageSummary && key == "b" {
-		s.Navigate(PageBugs)
-		s.CmdOutput = "Switched to [2] Agent Studio · Issues"
-		return true
-	}
-	if s.Page == PageSummary && key == "f" {
-		s.Navigate(PageFeatures)
-		s.CmdOutput = "Switched to [2] Agent Studio · Features"
-		return true
-	}
 	if s.Page == PageRepo && key == "r" {
 		s.CmdOutput = "Reindexing repository..."
 		s.enqueueAction(ActionRequest{Kind: "reindex"})
