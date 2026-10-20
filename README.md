@@ -74,6 +74,6 @@ The checks use fakes and temporary directories, do not start the daemon, and do 
 
 - `make check`: Formatting, Go unit/race/vet checks, Python tooling, and Go TUI tests.
 - `make quality`: Pinned Go static, reachability, complexity, and clone checks.
-- [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md)
+- [Interactive technical docs](docs/technical-docs.html) · [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
 - [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [LICENSE](LICENSE)

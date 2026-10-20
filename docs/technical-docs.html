@@ -1,0 +1,2238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini-Orca v4.4.0 — Interactive Technical Documentation</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .tab-btn-active {
+      background-color: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .code-scroll::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .code-scroll::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased selection:bg-[var(--primary)] selection:text-[var(--primary-foreground)]">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Top Header Banner -->
+    <header class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]">v4.4.0 CANONICAL</span>
+            <span class="px-2.5 py-1 rounded-md text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">Go 1.22 Daemon + Pure Go TUI</span>
+            <span class="px-2.5 py-1 rounded-md text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">Loopback 127.0.0.1:9090</span>
+            <span class="px-2.5 py-1 rounded-md text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">63 Guarded API Routes</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--foreground)]">Mini-Orca Technical Documentation &amp; Interactive System Explorer</h1>
+          <p class="text-sm text-[var(--muted-foreground)] max-w-4xl">
+            Local-first coding assistant pairing a pure Go 5-Hub Terminal UI (<code class="font-mono">cmd/tui</code>) with a strict loopback HTTP daemon (<code class="font-mono">cmd/daemon</code>). Coordinates deterministic indexing, multi-stage static &amp; AI analysis, C4/Arc42/ADR handbook synthesis, goal-aligned feature discovery, and a 4-stage verified change &amp; autonomous worktree agent pipeline.
+          </p>
+        </div>
+
+        <!-- Global Quick Search & Stats -->
+        <div class="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end gap-2 shrink-0">
+          <div class="relative w-full sm:w-72">
+            <input
+              id="global-search"
+              type="text"
+              placeholder="Jump to route, package, :cmd, file..."
+              class="w-full px-3.5 py-2 text-xs font-mono rounded-lg bg-[var(--background)] text-[var(--foreground)] placeholder-[var(--muted-foreground)] border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+            />
+            <div id="global-search-results" class="hidden absolute right-0 left-0 mt-1 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto divide-y divide-[var(--border)]"></div>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-[var(--muted-foreground)] font-mono">
+            <span>3 Binaries</span>
+            <span>·</span>
+            <span>19 Packages</span>
+            <span>·</span>
+            <span>5 TUI Hubs</span>
+            <span>·</span>
+            <span>4 Palettes</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary Navigation Tabs -->
+      <nav id="main-nav" class="mt-6 pt-4 border-t border-[var(--border)] flex flex-wrap gap-1.5" role="tablist">
+        <button data-tab="overview" class="nav-tab tab-btn-active px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors">1. System Overview</button>
+        <button data-tab="architecture" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">2. Architecture &amp; Boundaries</button>
+        <button data-tab="tui" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">3. 5-Hub TUI &amp; :Commands</button>
+        <button data-tab="workflows" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">4. Analysis &amp; 4-Stage Pipeline</button>
+        <button data-tab="api" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">5. HTTP API (63 Routes) &amp; Guards</button>
+        <button data-tab="models" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">6. LLM Scopes, Config &amp; Security</button>
+        <button data-tab="storage" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">7. Storage (.mini-orca/) &amp; Git</button>
+        <button data-tab="quality" class="nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors">8. Quality Gates, Eval &amp; Docker</button>
+      </nav>
+    </header>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 1: SYSTEM OVERVIEW                                            -->
+    <!-- ===================================================================== -->
+    <section id="tab-overview" class="tab-panel space-y-6">
+      <!-- Core Pillars Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)]">PILLAR 01</span>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">internal/project + app</span>
+          </div>
+          <h3 class="text-base font-bold">Scoped Multi-Stage Issue Analysis</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Coordinates deterministic AST rules (<code class="font-mono">go-rules-v1</code>) and isolated <code class="font-mono">go vet</code>/<code class="font-mono">go test</code> scans alongside resumable per-file AI stages (<code class="font-mono">semantic</code>, <code class="font-mono">performance</code>, <code class="font-mono">security_rules</code>, <code class="font-mono">security_ai</code>). Keeps verified tool findings strictly distinct from model suspicions.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)]">PILLAR 02</span>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">internal/project/handbook</span>
+          </div>
+          <h3 class="text-base font-bold">C4 / Arc42 / ADR Handbook Synthesis</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Synthesizes a deterministic + AI <code class="font-mono">ProjectDocsReport</code> (<code class="font-mono">.mini-orca/project-docs.json</code>) covering C4 Level 1–3 context &amp; components, goal pursuit, stack dependencies, behavioral runtime scenarios, ADRs with tradeoffs, operational runbooks, and domain glossary.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)]">PILLAR 03</span>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">internal/app/features</span>
+          </div>
+          <h3 class="text-base font-bold">Goal-Aligned Feature Discovery</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Generates additive feature proposals (<code class="font-mono">schema_version: 2</code>, max 5 ideas/run, 64 KiB cap) grounded in user-defined project goals, <code class="font-mono">AGENTS.md</code> rules, and indexed architecture. Tracks per-generation freshness and Unicode-normalized duplicate suppression.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)]">PILLAR 04</span>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">internal/app + gitops</span>
+          </div>
+          <h3 class="text-base font-bold">4-Stage Verified Change &amp; Agents</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Captures 1–8 explicit Go/Markdown paths (or isolated Git worktrees) through <strong>Architect &amp; Code → Verify &amp; Test → Critic Review → Human Review</strong> with bounded 3-attempt repair, pinned regression tests, explicit diff Apply, atomic <code class="font-mono">git commit-tree</code>, and guarded Undo.
+          </p>
+        </div>
+      </div>
+
+      <!-- Interactive End-to-End Architecture Topology -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-bold">Interactive System Topology &amp; Data Flow</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">Click any subsystem node below to inspect its runtime invariants, entry points, security guards, and owned files.</p>
+          </div>
+          <span class="text-xs font-mono px-2.5 py-1 rounded bg-[var(--background)] border border-[var(--border)]">Click a node to inspect</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <!-- Left: Interactive Topology Diagram -->
+          <div class="lg:col-span-7 space-y-3 bg-[var(--background)] border border-[var(--border)] rounded-xl p-4">
+            <div class="text-xs font-mono font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Client &amp; Loopback Boundary</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button data-topo="tui" class="topo-node text-left p-3 rounded-lg border-2 border-[var(--primary)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold">cmd/tui + internal/tui</span>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)]">5 Hubs</span>
+                </div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Pure Go Terminal UI, modal vim keys, :commands, SSE listener</p>
+              </button>
+              <button data-topo="api" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold">cmd/daemon + internal/api</span>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)]">63 Routes</span>
+                </div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Loopback HTTP mux, LocalOnly guard, Worktree router, SSE stream</p>
+              </button>
+            </div>
+
+            <div class="flex justify-center text-xs font-mono text-[var(--muted-foreground)]">↓ Strict JSON Decoding + Revision/Hash Guards ↓</div>
+
+            <div class="text-xs font-mono font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Core Orchestration &amp; Domain Intelligence</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button data-topo="app" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold">internal/app</span>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)]">Orchestrator</span>
+                </div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Unified analysis runs, 4-stage change workflows, Apply/Undo journals</p>
+              </button>
+              <button data-topo="project" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold">internal/project</span>
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-[var(--secondary)]">Facts &amp; Policy</span>
+                </div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Context policy v2, AST symbols, C4 handbook, deterministic security rules</p>
+              </button>
+            </div>
+
+            <div class="flex justify-center text-xs font-mono text-[var(--muted-foreground)]">↓ Bounded Execution, Transport &amp; Atomic Persistence ↓</div>
+
+            <div class="text-xs font-mono font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Execution, Transports &amp; Durable Storage</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button data-topo="checkexec" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="font-mono text-xs font-bold">checkexec + gitops</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Copied temp workspace, Unix pgrp, .worktrees/ &amp; CAS commits</p>
+              </button>
+              <button data-topo="llm" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="font-mono text-xs font-bold">internal/llm + config</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">3 Scopes (analyze/bug/function) via HTTP, agy CLI, or pi CLI</p>
+              </button>
+              <button data-topo="storage" class="topo-node text-left p-3 rounded-lg border border-[var(--border)] bg-[var(--card)] hover:opacity-95 transition">
+                <div class="font-mono text-xs font-bold">internal/storage</div>
+                <p class="text-xs text-[var(--muted-foreground)] mt-1">Atomic 0700 .mini-orca/ temp-sync-rename &amp; corrupt recovery</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- Right: Node Detail Panel -->
+          <div id="topo-detail" class="lg:col-span-5 bg-[var(--background)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Fundamental Safety & Product Invariants -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+        <h2 class="text-lg font-bold">Non-Negotiable Safety, Consent &amp; Mutation Invariants</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold text-[var(--foreground)]">1. Zero Passive Side Effects</div>
+            <p class="text-[var(--muted-foreground)]">
+              Opening, restoring, navigating, previewing, or reading history never contacts a model provider, never executes project code, and never modifies source files or Git refs.
+            </p>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold text-[var(--foreground)]">2. Scope-Bound Consent &amp; Trust</div>
+            <p class="text-[var(--muted-foreground)]">
+              Every non-loopback HTTP or CLI (<code class="font-mono">agy</code>/<code class="font-mono">pi</code>) prompt request requires per-request <code class="font-mono">confirm_remote_provider: true</code>. Running <code class="font-mono">go test</code> or Git checkout/merge requires separate in-memory <code class="font-mono">execution-trust</code> for the exact <code class="font-mono">project_revision</code>.
+            </p>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold text-[var(--foreground)]">3. Identity-Guarded Mutation &amp; Undo</div>
+            <p class="text-[var(--muted-foreground)]">
+              Source mutation requires a checked proposal (<code class="font-mono">revision</code> + <code class="font-mono">hash</code>), explicit diff Review (<code class="font-mono">reviewed_hash</code>), and explicit Apply. Grouped recovery journals verify pre-Apply and post-Apply SHA-256 hashes before Apply or Undo.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 2: ARCHITECTURE & BOUNDARIES                                  -->
+    <!-- ===================================================================== -->
+    <section id="tab-architecture" class="tab-panel hidden space-y-6">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-bold">Acyclic Package Ownership &amp; Import Boundary Matrix (<code class="font-mono">internal/app/archcheck</code>)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Mini-Orca enforces strict acyclic import rules and complexity budgets (<code class="font-mono">maxFunctionComplexity = 15</code>) both in CI (<code class="font-mono">scripts/quality.sh</code>) and on every AI proposal check (<code class="font-mono">archcheck.ChangeArchitectureAndComplexityChecks</code>). Select any package to inspect its boundary contract.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <!-- Package List -->
+          <div id="pkg-list" class="lg:col-span-5 space-y-1.5 max-h-[540px] overflow-y-auto pr-1 code-scroll">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Package Inspector Detail -->
+          <div id="pkg-detail" class="lg:col-span-7 bg-[var(--background)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Import Rule Checker -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <h3 class="text-base font-bold">Interactive <code class="font-mono">archcheck</code> Import Boundary Simulator</h3>
+        <p class="text-xs text-[var(--muted-foreground)]">
+          Test whether a hypothetical Go import between two repository packages is permitted or rejected by <code class="font-mono">defaultArchitectureImportRules</code> in <code class="font-mono">internal/app/archcheck/archcheck.go</code>.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div>
+            <label class="block text-xs font-mono text-[var(--muted-foreground)] mb-1">Source Package (Importer)</label>
+            <select id="arch-from" class="w-full px-3 py-2 rounded-lg text-xs font-mono bg-[var(--background)] border border-[var(--border)]"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-mono text-[var(--muted-foreground)] mb-1">Target Package (Imported)</label>
+            <select id="arch-to" class="w-full px-3 py-2 rounded-lg text-xs font-mono bg-[var(--background)] border border-[var(--border)]"></select>
+          </div>
+          <div id="arch-result" class="p-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-xs font-mono"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 3: 5-HUB TUI & :COMMANDS                                      -->
+    <!-- ===================================================================== -->
+    <section id="tab-tui" class="tab-panel hidden space-y-6">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold">Interactive 5-Hub Terminal UI Simulator (<code class="font-mono">internal/tui</code>)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Explore all 5 canonical hubs, 20 sub-views, 4 terminal palettes (<code class="font-mono">Tokyo</code>, <code class="font-mono">CRT Green</code>, <code class="font-mono">Amber</code>, <code class="font-mono">Paper</code>), keyboard shortcuts, and the live <code class="font-mono">:command</code> bar.
+            </p>
+          </div>
+          <!-- Palette Switcher -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-mono text-[var(--muted-foreground)] mr-1">Palette [p]:</span>
+            <button data-palette="tokyo" class="palette-btn px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]">Tokyo</button>
+            <button data-palette="crt" class="palette-btn px-2.5 py-1 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)]">CRT Green</button>
+            <button data-palette="amber" class="palette-btn px-2.5 py-1 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)]">Amber</button>
+            <button data-palette="paper" class="palette-btn px-2.5 py-1 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)]">Paper</button>
+          </div>
+        </div>
+
+        <!-- Simulated Terminal Window -->
+        <div id="tui-screen" class="rounded-xl border-2 border-[var(--border)] overflow-hidden font-mono text-xs transition-colors" style="background-color:#1a1b26; color:#c0caf5; border-color:#414868;">
+          <!-- Terminal Top Bar: 5 Hubs -->
+          <div id="tui-hub-bar" class="px-4 py-2.5 border-b flex flex-wrap items-center justify-between gap-2" style="background-color:#16161e; border-color:#414868;">
+            <div class="flex flex-wrap items-center gap-1.5" id="tui-hub-buttons"></div>
+            <div class="flex items-center gap-2">
+              <span id="tui-palette-badge" class="px-2 py-0.5 rounded text-xs" style="background-color:#24283b; color:#7aa2f7;">PALETTE: TOKYO</span>
+              <span class="px-2 py-0.5 rounded text-xs" style="background-color:#24283b; color:#9ece6a;">● 127.0.0.1:9090 (v4.4.0)</span>
+            </div>
+          </div>
+
+          <!-- Sub-Pages Bar -->
+          <div id="tui-subpage-bar" class="px-4 py-2 border-b flex flex-wrap items-center gap-2" style="background-color:#1f2335; border-color:#414868;"></div>
+
+          <!-- Active Sub-Page Viewport -->
+          <div id="tui-viewport" class="p-4 space-y-3 min-h-[260px]"></div>
+
+          <!-- Interactive :command Bar -->
+          <div class="px-4 py-2.5 border-t flex flex-col sm:flex-row sm:items-center gap-2" style="background-color:#16161e; border-color:#414868;">
+            <div class="flex items-center gap-2 flex-1">
+              <span class="font-bold" style="color:#7aa2f7;">:</span>
+              <input
+                id="tui-cmd-input"
+                type="text"
+                placeholder="Type a TUI command (e.g. :analyze, :bugs, :fix, :diff split, :preset hybrid-precision, :scope) and press Enter"
+                class="w-full bg-transparent focus:outline-none text-xs font-mono"
+                style="color:#c0caf5;"
+              />
+              <button id="tui-cmd-run" class="px-2.5 py-1 rounded text-xs font-semibold shrink-0" style="background-color:#7aa2f7; color:#1a1b26;">Run</button>
+            </div>
+            <div id="tui-cmd-output" class="text-xs truncate max-w-md" style="color:#e0af68;">Ready — press 1-5 or click hubs above</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Complete Keybindings & Colon Command Reference -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <h3 class="text-base font-bold">Global &amp; Modal Keyboard Shortcuts (<code class="font-mono">internal/tui/keys.go</code>)</h3>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">1 / 2 / 3 / 4 / 5</code><span class="text-[var(--muted-foreground)]">Switch directly to Hub 1–5</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">[ / ]</code><span class="text-[var(--muted-foreground)]">Cycle previous / next top-level Hub</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">Tab / Shift+Tab</code><span class="text-[var(--muted-foreground)]">Cycle sub-views within the active Hub</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">j / k or ↓ / ↑</code><span class="text-[var(--muted-foreground)]">Move row selection cursor (▸) down / up</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">h / l or ← / →</code><span class="text-[var(--muted-foreground)]">Step horizontal section, status filter, diff mode, or scope model</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">Shift+← / Shift+→</code><span class="text-[var(--muted-foreground)]">Cycle issue category (All / Bugs / Security / Performance) on Issues</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">Enter / Space</code><span class="text-[var(--muted-foreground)]">Activate current row / toggle multi-issue batch selection</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">: or /</code><span class="text-[var(--muted-foreground)]">Open interactive colon command bar</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">p</code><span class="text-[var(--muted-foreground)]">Cycle TUI color palette (Tokyo → CRT Green → Amber → Paper)</span></div>
+            <div class="flex justify-between py-1.5 border-b border-[var(--border)]"><code class="font-mono font-semibold">?</code><span class="text-[var(--muted-foreground)]">Toggle Keybindings Modal</span></div>
+            <div class="flex justify-between py-1.5"><code class="font-mono font-semibold">Esc / Backspace</code><span class="text-[var(--muted-foreground)]">Dismiss alert, cancel modal, or return from detail/diff view</span></div>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold">Colon Command Directory (<code class="font-mono">internal/tui/commands.go</code>)</h3>
+            <span class="text-xs text-[var(--muted-foreground)]">Click any command to run in simulator</span>
+          </div>
+          <div id="colon-cmd-list" class="space-y-1.5 max-h-80 overflow-y-auto pr-1 code-scroll">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 4: UNIFIED ANALYSIS & 4-STAGE PIPELINE                        -->
+    <!-- ===================================================================== -->
+    <section id="tab-workflows" class="tab-panel hidden space-y-6">
+      <!-- 4-Stage Change & Autonomous Agent Pipeline InteractiveStepper -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div>
+          <h2 class="text-lg font-bold">4-Stage Verified Change &amp; Autonomous Agent Pipeline (<code class="font-mono">internal/app/change_workflow.go</code>)</h2>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Every change session captures 1–8 explicit Go/Markdown paths and up to 16 <code class="font-mono">finding_targets</code>. Only one autonomous change workflow runs per checkout at a time (30-minute total deadline). Click each stage to inspect its model profile, guards, and failure transitions.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5" id="pipeline-stage-btns">
+          <button data-stage="0" class="stage-btn text-left p-3.5 rounded-xl border-2 border-[var(--primary)] bg-[var(--background)]">
+            <div class="text-xs font-mono font-bold text-[var(--primary)]">STAGE 01</div>
+            <div class="text-sm font-bold mt-0.5">Architect &amp; Code</div>
+            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Default: function scope</div>
+          </button>
+          <button data-stage="1" class="stage-btn text-left p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)]">
+            <div class="text-xs font-mono font-bold text-[var(--muted-foreground)]">STAGE 02</div>
+            <div class="text-sm font-bold mt-0.5">Verify &amp; Test</div>
+            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Default: bug + checkexec</div>
+          </button>
+          <button data-stage="2" class="stage-btn text-left p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)]">
+            <div class="text-xs font-mono font-bold text-[var(--muted-foreground)]">STAGE 03</div>
+            <div class="text-sm font-bold mt-0.5">Critic Review</div>
+            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Default: analyze scope</div>
+          </button>
+          <button data-stage="3" class="stage-btn text-left p-3.5 rounded-xl border border-[var(--border)] bg-[var(--background)]">
+            <div class="text-xs font-mono font-bold text-[var(--muted-foreground)]">STAGE 04</div>
+            <div class="text-sm font-bold mt-0.5">Human Review Gate</div>
+            <div class="text-xs font-mono text-[var(--muted-foreground)] mt-1">Explicit Review → Apply/Undo</div>
+          </button>
+        </div>
+
+        <div id="pipeline-stage-detail" class="bg-[var(--background)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Unified Project Analysis Engine -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-bold">Unified Project Analysis Engine (<code class="font-mono">internal/app/analysis_run*.go</code>)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Single execution scope (<code class="font-mono">project</code>) with deterministic preflight (<code class="font-mono">queue_id</code> + <code class="font-mono">preview_id</code>), resumable dispatch windows, 4 per-file stages, and an optional parallel <code class="font-mono">feature_suggestions</code> worker.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-1.5 text-xs font-mono">
+            <span class="px-2 py-1 rounded bg-[var(--background)] border border-[var(--border)]">Batch: 100 default / 500 max</span>
+            <span class="px-2 py-1 rounded bg-[var(--background)] border border-[var(--border)]">Window: 900s default / 3600s max</span>
+            <span class="px-2 py-1 rounded bg-[var(--background)] border border-[var(--border)]">Attempts: 2 default / 4 max</span>
+          </div>
+        </div>
+
+        <!-- 4 Per-File Stages + Feature Step -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold">1. semantic</div>
+            <div class="text-[var(--muted-foreground)] font-mono">Prompt: file-analysis-v16</div>
+            <p class="text-[var(--muted-foreground)]">Uses <code class="font-mono">models.code</code> (default <code class="font-mono">bug</code>). Extracts structured risks with explicit <code class="font-mono">category</code> (<code class="font-mono">bugs</code>, <code class="font-mono">performance</code>, <code class="font-mono">security</code>) and 2–6 word <code class="font-mono">title</code>. Feeds all 3 result sections; counted once in request budgets.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold">2. performance</div>
+            <div class="text-[var(--muted-foreground)] font-mono">Prompt: performance-file-v7</div>
+            <p class="text-[var(--muted-foreground)]">Uses <code class="font-mono">models.performance</code> (default <code class="font-mono">analyze</code>). Strict <code class="font-mono">json_schema</code> with file-bounded line numbers; innermost enclosing symbol is derived deterministically from the AST index.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold">3. security_rules</div>
+            <div class="text-[var(--muted-foreground)] font-mono">Ruleset: go-rules-v1</div>
+            <p class="text-[var(--muted-foreground)]">Deterministic Go AST visitor (<code class="font-mono">internal/project/securityrules</code>). Zero model calls, zero subprocesses. Detects <code class="font-mono">go.tls.insecure-skip-verify</code> (CWE-295) &amp; <code class="font-mono">go.shell.dynamic-command</code> (CWE-78). Max 5 matches/file.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold">4. security_ai</div>
+            <div class="text-[var(--muted-foreground)] font-mono">Prompt: security-file-v4</div>
+            <p class="text-[var(--muted-foreground)]">Uses <code class="font-mono">models.security</code> (default <code class="font-mono">analyze</code>). Requires explicit <code class="font-mono">security_review: true</code> even for local models. Sends ≤64 KiB source + ≤32 KiB <code class="font-mono">AGENTS.md</code>; redacts source token sequences from output.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold">+ feature_suggestions</div>
+            <div class="text-[var(--muted-foreground)] font-mono">Prompt: feature-suggestions-v4</div>
+            <p class="text-[var(--muted-foreground)]">Optional parallel worker when <code class="font-mono">include_features: true</code>. Uses <code class="font-mono">models.features</code> (default <code class="font-mono">analyze</code>), ≥10m independent deadline, appends 0–5 deduplicated ideas to <code class="font-mono">features.json</code>.</p>
+          </div>
+        </div>
+
+        <!-- Analysis Admission Modes Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)] font-mono">
+                <th class="py-2 pr-3">Admission Mode</th>
+                <th class="py-2 px-3">Selected Files &amp; Cache Behavior</th>
+                <th class="py-2 px-3">Mutually Exclusive With</th>
+                <th class="py-2 pl-3">Identity Binding</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--border)]">
+              <tr>
+                <td class="py-2 pr-3 font-mono font-semibold">Standard (default)</td>
+                <td class="py-2 px-3 text-[var(--muted-foreground)]">All selected eligible files; fresh cached stages make 0 model calls.</td>
+                <td class="py-2 px-3 font-mono text-[var(--muted-foreground)]">—</td>
+                <td class="py-2 pl-3 font-mono text-[var(--muted-foreground)]">queue_id + preview_id</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-3 font-mono font-semibold">refresh: true (+ clear_results)</td>
+                <td class="py-2 px-3 text-[var(--muted-foreground)]">Bypasses existing stage caches. With <code class="font-mono">clear_results: true</code>, clears findings, stage reports &amp; feature ideas (keeping goals) and starts from 0.</td>
+                <td class="py-2 px-3 font-mono text-[var(--muted-foreground)]">retry_stale_failed, stale_only, recover_incomplete</td>
+                <td class="py-2 pl-3 font-mono text-[var(--muted-foreground)]">queue_id + preview_id</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-3 font-mono font-semibold">retry_stale_failed: true</td>
+                <td class="py-2 px-3 text-[var(--muted-foreground)]">Only eligible files with stale/failed producer evidence or durable failed stages. Unanalyzed files excluded.</td>
+                <td class="py-2 px-3 font-mono text-[var(--muted-foreground)]">refresh, stale_only, recover_incomplete</td>
+                <td class="py-2 pl-3 font-mono text-[var(--muted-foreground)]">Retains admitted set on resume</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-3 font-mono font-semibold">stale_only: true (+ stale_path)</td>
+                <td class="py-2 px-3 text-[var(--muted-foreground)]">Selects only files with stale evidence (optionally narrowed to one exact <code class="font-mono">stale_path</code>).</td>
+                <td class="py-2 px-3 font-mono text-[var(--muted-foreground)]">refresh, retry_stale_failed, recover_incomplete, include_features</td>
+                <td class="py-2 pl-3 font-mono text-[var(--muted-foreground)]">Preserves stale_path on resume</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-3 font-mono font-semibold">recover_incomplete: true</td>
+                <td class="py-2 px-3 text-[var(--muted-foreground)]">Selects files with ≥1 recoverable stage (stale, failed, partial, missing, canceled, interrupted, unavailable with configured model).</td>
+                <td class="py-2 px-3 font-mono text-[var(--muted-foreground)]">refresh, retry_stale_failed, stale_only, include_features</td>
+                <td class="py-2 pl-3 font-mono text-[var(--muted-foreground)]">Exposed via selection.recovery</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 5: HTTP API (ALL 63 ROUTES) & GUARD SIMULATOR                 -->
+    <!-- ===================================================================== -->
+    <section id="tab-api" class="tab-panel hidden space-y-6">
+      <!-- Interactive Local Request Policy & Guard Simulator -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div>
+          <h2 class="text-lg font-bold">Interactive Daemon Request Boundary &amp; Guard Simulator</h2>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Simulate how <code class="font-mono">api.LocalOnly</code> (<code class="font-mono">internal/api/local_policy.go</code>) and route identity guards evaluate incoming HTTP requests before touching workflow state.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div>
+            <label class="block font-mono text-[var(--muted-foreground)] mb-1">Bind Mode (MINI_ORCA_BIND_ADDRESS)</label>
+            <select id="sim-bind" class="w-full px-3 py-2 rounded-lg font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="loopback">Default (127.0.0.1:9090)</option>
+              <option value="external">Explicit External (0.0.0.0:9090)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-mono text-[var(--muted-foreground)] mb-1">Request Host Header</label>
+            <select id="sim-host" class="w-full px-3 py-2 rounded-lg font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="localhost:9090">localhost:9090 / 127.0.0.1:9090</option>
+              <option value="desktop.example:9090">desktop.example:9090 (Non-loopback)</option>
+              <option value="attacker.example">attacker.example (DNS Rebinding)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-mono text-[var(--muted-foreground)] mb-1">Origin / CORS Header</label>
+            <select id="sim-origin" class="w-full px-3 py-2 rounded-lg font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="none">None (Native Go TUI Client)</option>
+              <option value="browser">Origin: https://evil.example (Browser)</option>
+              <option value="preflight">OPTIONS + Access-Control-Request-Method</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-mono text-[var(--muted-foreground)] mb-1">Method &amp; Content-Type</label>
+            <select id="sim-ct" class="w-full px-3 py-2 rounded-lg font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="valid-json">POST + application/json</option>
+              <option value="valid-charset">POST + application/json; charset=utf-8</option>
+              <option value="missing-ct">POST + (missing Content-Type)</option>
+              <option value="text-plain">POST + text/plain</option>
+              <option value="unknown-field">POST JSON + unknown/trailing field</option>
+              <option value="stale-rev">POST JSON + mismatched project_revision</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="sim-verdict" class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] font-mono text-xs space-y-1"></div>
+      </div>
+
+      <!-- Complete 63 Live Routes Explorer -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold">Complete Loopback API Contract — All 63 Live Routes (<code class="font-mono">docs/api-contract.md</code> &amp; <code class="font-mono">docs/openapi.yaml</code>)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Verified by <code class="font-mono">TestDocumentedRoutesAreHandledByDaemon</code> in <code class="font-mono">cmd/daemon/main_test.go</code>. Filter by category, HTTP method, or keyword.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="api-cat-filter" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="all">All Categories (63)</option>
+              <option value="System & Models">System &amp; Models (4)</option>
+              <option value="Project & Context">Project &amp; Context (11)</option>
+              <option value="Unified Analysis">Unified Analysis (7)</option>
+              <option value="Findings & Security">Findings, Files &amp; Security (7)</option>
+              <option value="Scan & Execution Trust">Scan &amp; Execution Trust (5)</option>
+              <option value="Changes & 4-Stage Workflow">Changes &amp; 4-Stage Workflow (14)</option>
+              <option value="Git & Worktrees">Git &amp; Worktrees (9)</option>
+              <option value="Instructions & Features">Instructions &amp; Features (6)</option>
+            </select>
+            <select id="api-method-filter" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-[var(--background)] border border-[var(--border)]">
+              <option value="all">All Methods</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PATCH">PATCH</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+            <input
+              id="api-search"
+              type="text"
+              placeholder="Filter path or guard..."
+              class="px-3 py-1.5 rounded-lg text-xs font-mono bg-[var(--background)] border border-[var(--border)] focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div id="api-count-label" class="text-xs font-mono text-[var(--muted-foreground)]">Showing 63 of 63 routes</div>
+
+        <div id="api-routes-container" class="space-y-2 max-h-[600px] overflow-y-auto pr-1 code-scroll">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 6: LLM SCOPES, CONFIG & SECURITY                              -->
+    <!-- ===================================================================== -->
+    <section id="tab-models" class="tab-panel hidden space-y-6">
+      <!-- 3 Model Scopes & Context Budgets -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <h2 class="text-lg font-bold">3-Scope Model Configuration &amp; Transport Adapters (<code class="font-mono">CONFIG.md</code>, <code class="font-mono">internal/llm</code>)</h2>
+        <p class="text-xs text-[var(--muted-foreground)]">
+          Configuration is loaded and strictly validated once at startup from <code class="font-mono">config.yaml</code> (or <code class="font-mono">MINI_ORCA_CONFIG</code>). Unknown or retired keys fail startup with the full field path. All three scopes (<code class="font-mono">analyze</code>, <code class="font-mono">bug</code>, <code class="font-mono">function</code>) are required.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-sm font-bold">analyze</span>
+              <span class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)]">120,000 ctx tokens</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Used for project import (<code class="font-mono">project-analysis-v5</code>), source-based Performance review (<code class="font-mono">performance-file-v7</code>), passive AI Security review (<code class="font-mono">security-file-v4</code>), feature generation (<code class="font-mono">feature-suggestions-v4</code>), and Stage 3 Critic Review.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-sm font-bold">bug</span>
+              <span class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)]">32,000 ctx tokens</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Used for selected-file and unified semantic analysis (<code class="font-mono">file-analysis-v16</code>) and Stage 2 Agent Test Writing (<code class="font-mono">_test.go</code> only).
+            </p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-sm font-bold">function</span>
+              <span class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)]">4,000 ctx tokens</span>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Used for transient atomic Go declaration explanations (<code class="font-mono">POST /api/projects/current/files/explanation</code>), chat proposal generation, bounded check-driven repairs, and Stage 1 Agent Creation.
+            </p>
+          </div>
+        </div>
+
+        <!-- Transport Comparison Table -->
+        <div class="overflow-x-auto pt-2">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)] font-mono">
+                <th class="py-2 pr-3">Transport Provider</th>
+                <th class="py-2 px-3">Origin / Execution</th>
+                <th class="py-2 px-3">Discovery &amp; Catalog ID</th>
+                <th class="py-2 px-3">Isolation &amp; Limits</th>
+                <th class="py-2 pl-3">Remote Consent</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--border)]">
+              <tr>
+                <td class="py-2.5 pr-3 font-mono font-bold">openai (HTTP default)</td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]">Non-streaming <code class="font-mono">POST /v1/chat/completions</code></td>
+                <td class="py-2.5 px-3 font-mono text-[var(--muted-foreground)]">configured:&lt;hash&gt;</td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]">Rejects all 3xx redirects; reduces provider errors to status code so bodies never leak keys; temp 0–2, max_tokens 1–65536.</td>
+                <td class="py-2.5 pl-3 text-[var(--muted-foreground)]">Required when <code class="font-mono">api_base_url</code> is non-loopback.</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 pr-3 font-mono font-bold">agy (Antigravity CLI)</td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]"><code class="font-mono">cli://agy</code> direct exec (no shell)</td>
+                <td class="py-2.5 px-3 font-mono text-[var(--muted-foreground)]">agy:&lt;slug&gt; via <code class="font-mono">agy --log-file /dev/null models</code></td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]">Temp <code class="font-mono">mini-orca</code> agent in private temp dir; file, cmd, subagent, MCP, slash &amp; <code class="font-mono">finish</code> disabled; 4 MiB stdout / 64 KiB stderr cap; local JSON Schema check.</td>
+                <td class="py-2.5 pl-3 text-[var(--muted-foreground)]">Always required (<code class="font-mono">remote_provider: true</code>).</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 pr-3 font-mono font-bold">pi (Pi Coding Agent CLI)</td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]"><code class="font-mono">cli://pi</code> direct exec (no shell)</td>
+                <td class="py-2.5 px-3 font-mono text-[var(--muted-foreground)]">pi:&lt;provider&gt;/&lt;model&gt; via RPC <code class="font-mono">get_available_models</code></td>
+                <td class="py-2.5 px-3 text-[var(--muted-foreground)]">JSON print mode in private temp dir; tools, extensions, MCP, skills, context discovery, sessions, retries &amp; compaction disabled; local JSON Schema check.</td>
+                <td class="py-2.5 pl-3 text-[var(--muted-foreground)]">Always required (CLI controls downstream endpoint).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Deterministic Security Rules & Context Policy -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <h3 class="text-base font-bold">Deterministic Go AST Security Rules (<code class="font-mono">go-rules-v1</code>)</h3>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Implemented in <code class="font-mono">internal/project/securityrules/security_rules.go</code>. Evaluates Go ASTs with lexical scope tracking (tracking imports, dot imports, shadowed identifiers, and <code class="font-mono">tls.Config</code> variables/collections). Returns at most 5 source-order matches per file (<code class="font-mono">evidence_kind: "rule_match"</code>).
+          </p>
+          <div class="space-y-2.5 text-xs">
+            <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+              <div class="flex items-center justify-between font-mono">
+                <span class="font-bold">go.tls.insecure-skip-verify</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--secondary)]">CWE-295 · HIGH</span>
+              </div>
+              <p class="text-[var(--muted-foreground)]">
+                Detects <code class="font-mono">crypto/tls.Config</code> composite literals or field assignments (including pointers, slices, arrays, and maps of <code class="font-mono">tls.Config</code>) that set <code class="font-mono">InsecureSkipVerify</code> to the predeclared boolean <code class="font-mono">true</code>.
+              </p>
+            </div>
+            <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+              <div class="flex items-center justify-between font-mono">
+                <span class="font-bold">go.shell.dynamic-command</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--secondary)]">CWE-78 · HIGH</span>
+              </div>
+              <p class="text-[var(--muted-foreground)]">
+                Detects <code class="font-mono">os/exec.Command</code> or <code class="font-mono">CommandContext</code> invocations of <code class="font-mono">sh/bash/zsh/dash/ksh -c</code>, <code class="font-mono">cmd /c</code>, or <code class="font-mono">powershell/pwsh -Command|-c</code> where the command argument is not a static string literal or concatenation of static literals.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <h3 class="text-base font-bold">Context Policy v2 &amp; Instruction Hierarchy (<code class="font-mono">internal/project</code>)</h3>
+          <div class="space-y-2 text-xs text-[var(--muted-foreground)]">
+            <p>
+              <strong class="text-[var(--foreground)]">Directory-Relative Ignore Semantics:</strong> Traverses <code class="font-mono">.gitignore</code> and <code class="font-mono">.mini-orcaignore</code> in every directory using ordered negation, <code class="font-mono">**</code>, and anchored paths. Hard exclusions always block <code class="font-mono">.git/</code>, <code class="font-mono">.mini-orca/</code>, <code class="font-mono">.worktrees/</code>, <code class="font-mono">build/</code>, <code class="font-mono">node_modules/</code>, symlinks, binary files, <code class="font-mono">config.yaml</code>, and secret-bearing files (<code class="font-mono">.env*</code>, keys/certs).
+            </p>
+            <p>
+              <strong class="text-[var(--foreground)]">1 MiB Source Extraction Bound:</strong> Index Schema v3 streams SHA-256 hashes and line counts for all files, while AST/regex symbol extraction (<code class="font-mono">internal/project/symbols</code> across 35+ languages) is bounded to text files ≤ 1 MiB.
+            </p>
+            <p>
+              <strong class="text-[var(--foreground)]">Root-to-Directory <code class="font-mono">AGENTS.md</code> Hierarchy:</strong> Applicable <code class="font-mono">AGENTS.md</code> guides are fingerprinted (<code class="font-mono">instructions_fingerprint</code>) and supplied to analysis, security reviews, explanations, feature generation, and 4-stage workflows. Editing an applicable <code class="font-mono">AGENTS.md</code> marks dependent cached AI reports <code class="font-mono">stale</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 7: STORAGE (.mini-orca/) & GIT WORKTREES                      -->
+    <!-- ===================================================================== -->
+    <section id="tab-storage" class="tab-panel hidden space-y-6">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div>
+          <h2 class="text-lg font-bold">Interactive <code class="font-mono">.mini-orca/</code> Durable Storage &amp; Schema Explorer (<code class="font-mono">internal/storage</code>)</h2>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            All metadata writes use <code class="font-mono">storage.WriteFile</code> / <code class="font-mono">storage.WriteFileAuthorized</code>: creates <code class="font-mono">0700</code> directories, writes to a same-directory <code class="font-mono">.metadata-*.tmp</code> file, <code class="font-mono">fsync</code>s, runs optional pre-commit authorization, and atomically renames over the target. Click any persisted artifact below to inspect its schema and invariants.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div id="storage-list" class="lg:col-span-5 space-y-1.5 max-h-[480px] overflow-y-auto pr-1 code-scroll">
+            <!-- Populated by JS -->
+          </div>
+          <div id="storage-detail" class="lg:col-span-7 bg-[var(--background)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Git Operations, Atomic Commits & Worktree Isolation -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+        <h2 class="text-lg font-bold">Git Operations, Private-Index Commits &amp; Worktree Isolation (<code class="font-mono">internal/app/gitops</code>)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold text-sm">1. Private-Index CAS Commit</div>
+            <p class="text-[var(--muted-foreground)]">
+              <code class="font-mono">Apply &amp; Commit</code> writes reviewed blobs into a temporary <code class="font-mono">GIT_INDEX_FILE</code>, runs <code class="font-mono">git write-tree</code> + <code class="font-mono">git commit-tree</code>, and updates the branch ref with compare-and-swap against the captured <code class="font-mono">HEAD</code>. Unrelated staged/untracked files are never swept into the commit; hooks and signing are bypassed.
+            </p>
+          </div>
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold text-sm">2. Isolated <code class="font-mono">.worktrees/</code> Routing</div>
+            <p class="text-[var(--muted-foreground)]">
+              <code class="font-mono">POST /api/projects/current/git/worktrees</code> creates a branch &amp; worktree inside <code class="font-mono">.worktrees/</code> (added to <code class="font-mono">.git/info/exclude</code>). Any <code class="font-mono">/api/projects/current/*</code> route accepts <code class="font-mono">?worktree_path=/abs/path</code> (<code class="font-mono">cmd/daemon/worktree_router.go</code>), routing to an isolated <code class="font-mono">app.Service</code> and <code class="font-mono">project.Manager</code> per checkout.
+            </p>
+          </div>
+          <div class="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+            <div class="font-mono font-bold text-sm">3. Merge &amp; Finding Completion</div>
+            <p class="text-[var(--muted-foreground)]">
+              <code class="font-mono">POST /api/projects/current/git/merge</code> verifies both checkouts are clean, merges the worktree <code class="font-mono">source_head</code>, marks all linked <code class="font-mono">finding_targets</code> whose fix commit is in the merged history as <strong>Done</strong> (<code class="font-mono">finding-completions.json</code>), and removes the clean worktree while keeping its branch.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SECTION 8: QUALITY GATES, EVAL CLI & DOCKER                           -->
+    <!-- ===================================================================== -->
+    <section id="tab-quality" class="tab-panel hidden space-y-6">
+      <!-- Validation & Quality Pipeline -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-bold">Deterministic Validation &amp; Quality Pipeline (<code class="font-mono">scripts/validate.sh</code> &amp; <code class="font-mono">scripts/quality.sh</code>)</h2>
+            <p class="text-xs text-[var(--muted-foreground)]">
+              Runs offline using temporary directories and fake HTTP providers—never starts the daemon or contacts live LLM endpoints. Supports <code class="font-mono">MINI_ORCA_VALIDATE_FAIL_STAGE</code> and <code class="font-mono">MINI_ORCA_QUALITY_FAIL_STAGE</code> for aggregate failure testing.
+            </p>
+          </div>
+          <code class="text-xs font-mono px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)]">./scripts/validate.sh (or just check)</code>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold">Stage 1–4: Core Go Gates</div>
+            <p class="text-[var(--muted-foreground)]"><code class="font-mono">make fmt-check</code> (<code class="font-mono">gofmt -l</code>), <code class="font-mono">make test</code> (with coverage), <code class="font-mono">make test-race</code> (<code class="font-mono">go test -race ./...</code>), and <code class="font-mono">make vet</code> (<code class="font-mono">go vet ./...</code>).</p>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold">Stage 5: Daemon Contracts</div>
+            <p class="text-[var(--muted-foreground)]">Runs <code class="font-mono">TestReleaseDocumentationUsesCanonicalVersion</code> (verifies <code class="font-mono">4.4.0</code> across docs) &amp; <code class="font-mono">TestDocumentedRoutesAreHandledByDaemon</code> (verifies all 63 routes match OpenAPI &amp; mux).</p>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold">Stage 6 &amp; 8: Python &amp; TUI</div>
+            <p class="text-[var(--muted-foreground)]"><code class="font-mono">python3 -m unittest discover -s scripts/tests -p 'test_*.py'</code> (tests <code class="font-mono">autopilot.py</code>, <code class="font-mono">insight_runtime.py</code>, <code class="font-mono">quality.sh</code>) + <code class="font-mono">go test -race ./internal/tui/... ./cmd/tui/...</code>.</p>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-1">
+            <div class="font-mono font-bold">Stage 7: Pinned Go Quality</div>
+            <p class="text-[var(--muted-foreground)]"><code class="font-mono">staticcheck@v0.8.1</code>, <code class="font-mono">deadcode@v0.40.0</code> across all 3 <code class="font-mono">cmd/*</code> roots, <code class="font-mono">gocyclo@v0.6.0 -over 15</code>, and <code class="font-mono">jscpd@4.0.5</code> (--min-tokens 70 --min-lines 8 --threshold 1).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evaluation CLI, Operational Scripts & Docker -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2.5">
+          <h3 class="text-base font-bold">Evaluation CLI (<code class="font-mono">cmd/engineering-insight-eval</code>)</h3>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Backed by <code class="font-mono">internal/insighteval</code>. Default invocation validates source-free collection and qualification receipts offline without contacting a provider. Explicit <code class="font-mono">-mode</code> flags support <code class="font-mono">collect</code>, <code class="font-mono">development</code>, <code class="font-mono">qualification</code>, <code class="font-mono">grant-development</code>, <code class="font-mono">handoff</code>, <code class="font-mono">score</code>, <code class="font-mono">export</code>, and <code class="font-mono">discard</code> with OS file locking and strict request-budget accounting.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2.5">
+          <h3 class="text-base font-bold">Operational Tooling (<code class="font-mono">scripts/</code>)</h3>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            <code class="font-mono">scripts/autopilot.py</code> manages isolated task dispatch worktrees, protected-file boundaries, writer ownership, bounded repair attempts, and recovery receipts. <code class="font-mono">scripts/insight_runtime.py</code> manages local LLM runtime lifecycle locking, loopback health/audit checks, and read-only preflight verification.
+          </p>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-2.5">
+          <h3 class="text-base font-bold">Docker Deployment (<code class="font-mono">DOCKER.md</code>)</h3>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Multi-stage Alpine image (<code class="font-mono">mini-orca:4.4.0</code>) containing only the static daemon binary, CA certificates, and tzdata (zero source or config). Binds <code class="font-mono">127.0.0.1:9090:9090</code> on the host with <code class="font-mono">/app/config.yaml:ro</code> and <code class="font-mono">/app/projects:rw</code> mounts. Optional <code class="font-mono">--profile with-llm</code> starts a loopback LM Studio container.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. TOPOLOGY DATA (Section 1)
+    // =========================================================================
+    const TOPO_DATA = {
+      tui: {
+        title: "cmd/tui & internal/tui — Pure Go 5-Hub Terminal UI",
+        badge: "Client Layer",
+        files: [
+          "cmd/tui/main.go",
+          "internal/tui/state.go",
+          "internal/tui/keys.go",
+          "internal/tui/commands.go",
+          "internal/tui/render_hubs.go",
+          "internal/tui/diff_view.go",
+          "internal/tui/tuiclient/client.go",
+          "internal/tui/tuidomain/domain.go",
+          "internal/tui/tuitheme/graphics.go"
+        ],
+        summary: "Deterministic terminal state machine rendered with ANSI / Lip Gloss primitives across 5 canonical hubs and 20 sub-views. Connects to http://127.0.0.1:9090 (or MINI_ORCA_URL / -url) without sending a browser Origin header.",
+        invariants: [
+          "Never imports internal/app, internal/api, internal/project, internal/storage, internal/llm, or internal/config.",
+          "Navigation, disclosures, diff mode switches, and palette cycling never trigger provider calls or source writes.",
+          "Consumes Server-Sent Events (GET /api/projects/current/events) to refresh state when background runs, scans, or agent workflows transition."
+        ]
+      },
+      api: {
+        title: "cmd/daemon & internal/api — Loopback HTTP Boundary",
+        badge: "HTTP Boundary",
+        files: [
+          "cmd/daemon/main.go",
+          "cmd/daemon/worktree_router.go",
+          "internal/api/local_policy.go",
+          "internal/api/request.go",
+          "internal/api/error.go",
+          "internal/api/handlers/*.go"
+        ],
+        summary: "Registers all 63 live routes behind api.LocalOnly and the worktree router. Enforces strict JSON decoding (unknown fields & trailing tokens rejected, bounded body sizes) and structured error envelopes ({type, message, user_message}).",
+        invariants: [
+          "Rejects any request carrying an Origin header or CORS preflight (403 Forbidden) even when MINI_ORCA_BIND_ADDRESS is external.",
+          "Requires Host to be localhost, 127.0.0.1, or ::1 in default loopback mode.",
+          "Requires Content-Type: application/json on all body-bearing POST/PATCH requests (415 Unsupported Media Type otherwise).",
+          "Handlers never import internal/storage or internal/llm directly; they delegate to internal/app."
+        ]
+      },
+      app: {
+        title: "internal/app — Workflow Orchestration & Guarded Mutation",
+        badge: "Application Layer",
+        files: [
+          "internal/app/service.go",
+          "internal/app/analysis_run.go",
+          "internal/app/change_session.go",
+          "internal/app/change_workflow.go",
+          "internal/app/change_apply.go",
+          "internal/app/change_commit.go",
+          "internal/app/execution_trust.go",
+          "internal/app/worktree_service.go"
+        ],
+        summary: "Coordinates project lifecycle, unified analysis runs, 4-stage change workflows, isolated Go scans, declaration explanations, feature discovery, and guarded Apply/Undo/Commit operations.",
+        invariants: [
+          "Rechecks project_id, project_revision, base_file_hash, policy fingerprint, and proposal hash before and after every asynchronous operation.",
+          "Consumes provider consent and security_review intent per admission; never persists reusable consent into run.json.",
+          "Maintains a durable grouped recovery journal (.mini-orca/changes/recovery.json) before touching any project source file."
+        ]
+      },
+      project: {
+        title: "internal/project — Deterministic Facts, Context Policy & Handbook",
+        badge: "Domain Layer",
+        files: [
+          "internal/project/manager.go",
+          "internal/project/index.go",
+          "internal/project/context_policy.go",
+          "internal/project/instructions.go",
+          "internal/project/diff/diff.go",
+          "internal/project/symbols/*.go",
+          "internal/project/handbook/handbook.go",
+          "internal/project/securityrules/security_rules.go",
+          "internal/project/insight/*.go"
+        ],
+        summary: "Builds deterministic repository facts, enforces .gitignore + .mini-orcaignore context policy v2, extracts multi-language symbols/imports, synthesizes C4/Arc42/ADR ProjectDocsReport specifications, and runs deterministic AST security rules.",
+        invariants: [
+          "Never imports internal/app, internal/api, or internal/tui.",
+          "Context manifests and index files (.mini-orca/index.json) are strictly source-free.",
+          "Symlinks and paths escaping the project root are rejected before any read or write."
+        ]
+      },
+      checkexec: {
+        title: "internal/app/checkexec & gitops — Isolated Execution & Git",
+        badge: "Execution & Git",
+        files: [
+          "internal/app/checkexec/workspace.go",
+          "internal/app/checkexec/check_command_unix.go",
+          "internal/app/gitops/repository.go",
+          "internal/app/gitops/worktrees.go",
+          "internal/app/gitops/merge.go",
+          "internal/app/gitops/mutation.go"
+        ],
+        summary: "Copies eligible project files into a bounded temporary workspace for parser/vet/test execution with fixed argv and Unix process-group ownership, and manages Git worktrees (.worktrees/), branch switches, merges, and private-index commits.",
+        invariants: [
+          "Never executes model-authored text as a shell command; uses fixed argv and an allowlisted environment.",
+          "Requires explicit in-memory execution trust for the current project_revision before running go test or Git checkout/merge.",
+          "Kills the entire Unix process group on context cancellation or timeout."
+        ]
+      },
+      llm: {
+        title: "internal/llm & internal/config — 3-Scope Transports & Catalog",
+        badge: "LLM Transport",
+        files: [
+          "internal/config/config.go",
+          "internal/config/model_profiles.go",
+          "internal/llm/client.go",
+          "internal/llm/cli_request.go",
+          "internal/llm/cli_response.go",
+          "internal/llm/agy_models.go",
+          "internal/llm/pi_models.go"
+        ],
+        summary: "Manages the 3 required model scopes (analyze, bug, function) and discovered catalog models across OpenAI-compatible HTTP endpoints, Antigravity CLI (agy), and Pi CLI (pi).",
+        invariants: [
+          "HTTP client never follows 3xx redirects and strips provider error bodies to status codes so API keys cannot leak.",
+          "CLI adapters run in private temporary directories with tools/extensions/MCP/sessions disabled and validate final JSON against the required JSON Schema locally.",
+          "Bounds CLI stdout to 4 MiB and stderr to 64 KiB; never logs API keys or raw CLI stderr."
+        ]
+      },
+      storage: {
+        title: "internal/storage — Atomic Durable Metadata Primitives",
+        badge: "Storage Layer",
+        files: [
+          "internal/storage/atomic.go"
+        ],
+        summary: "Provides WriteFile, WriteFileAuthorized, and RecoverCorrupt for all domain stores under .mini-orca/.",
+        invariants: [
+          "Creates metadata directories with 0700 permissions.",
+          "Writes to a same-directory .metadata-*.tmp file, chmods, fsyncs, closes, runs optional authorize() callback, and atomically renames.",
+          "Preserves unreadable metadata files with a .corrupt-<UTC timestamp> suffix when a store opts into recovery."
+        ]
+      }
+    };
+
+    function renderTopoDetail(key) {
+      const d = TOPO_DATA[key];
+      if (!d) return;
+      document.querySelectorAll(".topo-node").forEach(btn => {
+        if (btn.dataset.topo === key) {
+          btn.classList.add("border-2", "border-[var(--primary)]");
+          btn.classList.remove("border-[var(--border)]");
+        } else {
+          btn.classList.remove("border-2", "border-[var(--primary)]");
+          btn.classList.add("border", "border-[var(--border)]");
+        }
+      });
+      const container = document.getElementById("topo-detail");
+      container.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <span class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]">${d.badge}</span>
+          <span class="text-xs font-mono text-[var(--muted-foreground)]">${d.files.length} key paths</span>
+        </div>
+        <h3 class="text-base font-bold">${d.title}</h3>
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">${d.summary}</p>
+        <div class="space-y-1.5 pt-1">
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Architectural Invariants</div>
+          <ul class="space-y-1 text-xs text-[var(--muted-foreground)] list-disc pl-4">
+            ${d.invariants.map(i => `<li>${i}</li>`).join("")}
+          </ul>
+        </div>
+        <div class="space-y-1.5 pt-1">
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Owned Source Paths</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${d.files.map(f => `<code class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--card)] border border-[var(--border)]">${f}</code>`).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 2. PACKAGE BOUNDARIES & ARCHCHECK DATA (Section 2)
+    // =========================================================================
+    const PACKAGES = [
+      {
+        path: "cmd/daemon",
+        layer: "Entrypoint",
+        summary: "Daemon HTTP server startup, configuration loading, graceful shutdown, and ?worktree_path request routing.",
+        files: ["main.go", "worktree_router.go"],
+        forbidden: []
+      },
+      {
+        path: "cmd/tui",
+        layer: "Entrypoint",
+        summary: "Pure Go Terminal UI executable entry point, raw terminal lifecycle, and daemon connection flag wiring.",
+        files: ["main.go"],
+        forbidden: []
+      },
+      {
+        path: "cmd/engineering-insight-eval",
+        layer: "Entrypoint",
+        summary: "Offline evaluation receipt validator and explicitly authorized development/qualification campaign CLI.",
+        files: ["main.go"],
+        forbidden: []
+      },
+      {
+        path: "internal/api",
+        layer: "HTTP Boundary",
+        summary: "Loopback/origin protection (LocalOnly), strict JSON decoding, size limits, and structured error responses ({type, message, user_message}).",
+        files: ["local_policy.go", "request.go", "error.go", "util.go", "handlers/*.go"],
+        forbidden: ["internal/storage", "internal/llm", "internal/tui"]
+      },
+      {
+        path: "internal/app",
+        layer: "Application Orchestration",
+        summary: "Workflow orchestration, unified analysis controller, 4-stage change/agent sessions, guarded Apply/Undo/Commit, model catalog, and SSE events.",
+        files: ["service.go", "analysis_run*.go", "analysis_selection*.go", "change_*.go", "security_review*.go", "performance_review*.go", "execution_trust.go"],
+        forbidden: ["internal/api", "internal/tui"]
+      },
+      {
+        path: "internal/app/archcheck",
+        layer: "App Subpackage",
+        summary: "Enforces acyclic import rules, cyclomatic complexity (<= 15), function/file line budgets, and codebase hygiene checks on proposed edits.",
+        files: ["archcheck.go", "hygiene.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/checkexec", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
+      },
+      {
+        path: "internal/app/checkexec",
+        layer: "App Subpackage",
+        summary: "Creates bounded temporary copied workspaces and executes fixed-argv Go parser/vet/test checks with Unix process-group ownership.",
+        files: ["checkexec.go", "workspace.go", "bootstrap.go", "check_command_unix.go", "check_command_unsupported.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"]
+      },
+      {
+        path: "internal/app/gitops",
+        layer: "App Subpackage",
+        summary: "Guarded Git repository inspection, .worktrees/ management, clean branch switching, merge preview/merge/abort, and private-index git commit-tree.",
+        files: ["command.go", "repository.go", "worktrees.go", "merge.go", "mutation.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/archcheck", "internal/app/features", "internal/llm", "internal/storage"]
+      },
+      {
+        path: "internal/app/features",
+        layer: "App Subpackage",
+        summary: "Parses structured feature suggestions, normalizes titles for duplicate detection, and manages additive schema_version 2 history (64 KiB cap).",
+        files: ["suggestions.go", "history.go"],
+        forbidden: ["internal/api", "internal/tui", "internal/app/archcheck", "internal/app/gitops"]
+      },
+      {
+        path: "internal/project",
+        layer: "Domain Intelligence",
+        summary: "Project indexing, .gitignore/.mini-orcaignore context policy v2, bounded context composition, AGENTS.md hierarchy/presets, and finding triage/completion.",
+        files: ["manager.go", "index.go", "context.go", "context_policy.go", "ignore.go", "instructions.go", "findings.go", "finding_completion.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui"]
+      },
+      {
+        path: "internal/project/diff",
+        layer: "Project Subpackage",
+        summary: "Computes unified diffs, aligns unchanged lines between hunks, preserves literal/Markdown whitespace diffs, and evaluates symbol impact.",
+        files: ["diff.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+      },
+      {
+        path: "internal/project/symbols",
+        layer: "Project Subpackage",
+        summary: "Detects 35+ languages and extracts exact Go AST symbols/imports plus conservative multi-language symbol spans within the 1 MiB limit.",
+        files: ["language.go", "go_symbols.go", "generic_symbols.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+      },
+      {
+        path: "internal/project/insight",
+        layer: "Project Subpackage",
+        summary: "Validates structured EngineeringInsight records and bug task specifications.",
+        files: ["engineering_insight.go", "bug_task_spec.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"]
+      },
+      {
+        path: "internal/project/handbook",
+        layer: "Project Subpackage",
+        summary: "Synthesizes language-agnostic C4/Arc42/ADR ProjectDocsReport (.mini-orca/project-docs.json) and persists ProjectAnalysisReport.",
+        files: ["handbook.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/securityrules", "internal/llm"]
+      },
+      {
+        path: "internal/project/securityrules",
+        layer: "Project Subpackage",
+        summary: "Deterministic Go AST security rule scanner (go-rules-v1: go.tls.insecure-skip-verify & go.shell.dynamic-command).",
+        files: ["security_rules.go"],
+        forbidden: ["internal/app", "internal/api", "internal/tui", "internal/project/diff", "internal/project/handbook", "internal/storage", "internal/llm"]
+      },
+      {
+        path: "internal/tui",
+        layer: "Terminal UI",
+        summary: "5-hub TUI state machine, modal vim key handler, :command interpreter, diff viewer, and Lip Gloss hub renderers.",
+        files: ["state.go", "keys.go", "commands.go", "render_hubs.go", "diff_view.go", "view.go", "terminal.go"],
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"]
+      },
+      {
+        path: "internal/tui/tuiclient",
+        layer: "TUI Subpackage",
+        summary: "Guarded loopback HTTP client, SSE event stream reader, and TUI wire DTOs.",
+        files: ["client.go", "models.go"],
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuitheme", "internal/tui/tuidomain"]
+      },
+      {
+        path: "internal/tui/tuidomain",
+        layer: "TUI Subpackage",
+        summary: "Pure TUI domain models, issue filtering, diff hunk formatting, and model preset helpers.",
+        files: ["domain.go"],
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuitheme"]
+      },
+      {
+        path: "internal/tui/tuitheme",
+        layer: "TUI Subpackage",
+        summary: "4 terminal color palettes (Tokyo, CRT Green, Amber, Paper) and ANSI / Lip Gloss layout primitives.",
+        files: ["graphics.go"],
+        forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config", "internal/tui/tuiclient", "internal/tui/tuidomain"]
+      },
+      {
+        path: "internal/llm",
+        layer: "LLM Transport",
+        summary: "OpenAI-compatible non-streaming HTTP transport and isolated agy / pi CLI subprocess adapters and catalog discovery.",
+        files: ["client.go", "cli_request.go", "cli_response.go", "cli_process*.go", "model_catalog.go", "agy_models.go", "pi_models.go"],
+        forbidden: []
+      },
+      {
+        path: "internal/storage",
+        layer: "Persistence Primitives",
+        summary: "Atomic 0700 directory and temporary file write-sync-authorize-rename primitives plus .corrupt-<UTC> recovery.",
+        files: ["atomic.go"],
+        forbidden: []
+      },
+      {
+        path: "internal/config",
+        layer: "Configuration",
+        summary: "Strict YAML configuration parser, 3-scope model profile validator, timeouts, and retry backoff settings.",
+        files: ["config.go", "model_profiles.go", "cli_profiles.go", "default.go"],
+        forbidden: []
+      },
+      {
+        path: "internal/insighteval",
+        layer: "Evaluation Runner",
+        summary: "Offline evaluation receipt validation, lock management, and authorized development/qualification campaign state.",
+        files: ["evaluation.go", "runner.go", "runner_lock_unix.go", "runner_lock_windows.go"],
+        forbidden: []
+      }
+    ];
+
+    function renderPackages(selectedIndex = 0) {
+      const listEl = document.getElementById("pkg-list");
+      listEl.innerHTML = PACKAGES.map((p, idx) => `
+        <button data-pkg="${idx}" class="pkg-item w-full text-left px-3.5 py-2.5 rounded-lg border transition flex items-center justify-between gap-2 ${idx === selectedIndex ? 'border-[var(--primary)] bg-[var(--background)] font-semibold' : 'border-[var(--border)] bg-[var(--card)] hover:opacity-90'}">
+          <span class="font-mono text-xs truncate">${p.path}</span>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)] shrink-0">${p.layer}</span>
+        </button>
+      `).join("");
+
+      listEl.querySelectorAll(".pkg-item").forEach(btn => {
+        btn.addEventListener("click", () => renderPackages(Number(btn.dataset.pkg)));
+      });
+
+      const pkg = PACKAGES[selectedIndex];
+      const detailEl = document.getElementById("pkg-detail");
+      detailEl.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-base font-bold font-mono">${pkg.path}</h3>
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono bg-[var(--primary)] text-[var(--primary-foreground)]">${pkg.layer}</span>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">${pkg.summary}</p>
+        <div class="space-y-1.5">
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Key Source Files</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${pkg.files.map(f => `<code class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--card)] border border-[var(--border)]">${pkg.path}/${f}</code>`).join("")}
+          </div>
+        </div>
+        <div class="space-y-1.5">
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Forbidden Imports (Enforced by internal/app/archcheck)</div>
+          ${pkg.forbidden.length === 0
+            ? `<div class="text-xs font-mono text-[var(--muted-foreground)] p-2.5 rounded bg-[var(--card)] border border-[var(--border)]">Leaf / Entrypoint package — follows standard Go acyclic graph rules.</div>`
+            : `<div class="flex flex-wrap gap-1.5">${pkg.forbidden.map(f => `<code class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">✗ ${f}</code>`).join("")}</div>`
+          }
+        </div>
+      `;
+    }
+
+    function initArchSimulator() {
+      const fromSel = document.getElementById("arch-from");
+      const toSel = document.getElementById("arch-to");
+      const opts = PACKAGES.map(p => `<option value="${p.path}">${p.path}</option>`).join("");
+      fromSel.innerHTML = opts;
+      toSel.innerHTML = opts;
+      fromSel.value = "internal/api";
+      toSel.value = "internal/storage";
+
+      function evaluateArch() {
+        const from = fromSel.value;
+        const to = toSel.value;
+        const resEl = document.getElementById("arch-result");
+        if (from === to) {
+          resEl.innerHTML = `<span class="font-bold">SELF IMPORT:</span> Same package (<code class="font-mono">${from}</code>).`;
+          return;
+        }
+        const rules = [
+          { prefix: "internal/api", forbidden: ["internal/storage", "internal/llm", "internal/tui"] },
+          { prefix: "internal/project", forbidden: ["internal/app", "internal/api", "internal/tui"] },
+          { prefix: "internal/project/diff", forbidden: ["internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/symbols", forbidden: ["internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/insight", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"] },
+          { prefix: "internal/project/handbook", forbidden: ["internal/project/diff", "internal/project/securityrules", "internal/llm"] },
+          { prefix: "internal/project/securityrules", forbidden: ["internal/project/diff", "internal/project/handbook", "internal/storage", "internal/llm"] },
+          { prefix: "internal/app", forbidden: ["internal/api", "internal/tui"] },
+          { prefix: "internal/app/archcheck", forbidden: ["internal/app/checkexec", "internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/checkexec", forbidden: ["internal/app/gitops", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/gitops", forbidden: ["internal/app/archcheck", "internal/app/features", "internal/llm", "internal/storage"] },
+          { prefix: "internal/app/features", forbidden: ["internal/app/archcheck", "internal/app/gitops"] },
+          { prefix: "internal/tui", forbidden: ["internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"] },
+          { prefix: "internal/tui/tuiclient", forbidden: ["internal/tui/tuitheme", "internal/tui/tuidomain"] },
+          { prefix: "internal/tui/tuitheme", forbidden: ["internal/tui/tuiclient", "internal/tui/tuidomain"] },
+          { prefix: "internal/tui/tuidomain", forbidden: ["internal/tui/tuitheme"] }
+        ];
+        for (const r of rules) {
+          if (from === r.prefix || from.startsWith(r.prefix + "/")) {
+            for (const bad of r.forbidden) {
+              if (to === bad || to.startsWith(bad + "/")) {
+                resEl.innerHTML = `<span class="font-bold">[REJECTED by archcheck]</span> <code class="font-mono">${from}</code> cannot import <code class="font-mono">${to}</code> (rule on <code class="font-mono">${r.prefix}</code>).`;
+                return;
+              }
+            }
+          }
+        }
+        resEl.innerHTML = `<span class="font-bold">[ALLOWED]</span> <code class="font-mono">${from}</code> → <code class="font-mono">${to}</code> respects all <code class="font-mono">defaultArchitectureImportRules</code>.`;
+      }
+      fromSel.addEventListener("change", evaluateArch);
+      toSel.addEventListener("change", evaluateArch);
+      evaluateArch();
+    }
+
+    // =========================================================================
+    // 3. 5-HUB TUI SIMULATOR & COLON COMMANDS (Section 3)
+    // =========================================================================
+    const TUI_PALETTES = {
+      tokyo: { name: "TOKYO", bg: "#1a1b26", bar: "#16161e", sub: "#1f2335", border: "#414868", fg: "#c0caf5", muted: "#787c99", accent: "#7aa2f7", ok: "#9ece6a", warn: "#e0af68" },
+      crt:   { name: "CRT GREEN", bg: "#071108", bar: "#040a05", sub: "#0c1c0e", border: "#1f5226", fg: "#63f578", muted: "#369644", accent: "#63f578", ok: "#8aff9b", warn: "#d6ff63" },
+      amber: { name: "AMBER", bg: "#140e05", bar: "#0d0802", sub: "#1f1507", border: "#5c3f14", fg: "#ffb84d", muted: "#a67326", accent: "#ffb84d", ok: "#ffd280", warn: "#ff9900" },
+      paper: { name: "PAPER", bg: "#f7f4eb", bar: "#ebe6d8", sub: "#efeae0", border: "#c7bfae", fg: "#23211c", muted: "#6b6559", accent: "#1d4ed8", ok: "#15803d", warn: "#b45309" }
+    };
+
+    const TUI_HUBS = [
+      {
+        key: "1",
+        label: "Overview",
+        page: "summary",
+        subPages: [
+          {
+            page: "summary",
+            label: "Dashboard",
+            desc: "Project health, coverage metrics, active run/agent banners, and top 8 open findings.",
+            rows: [
+              "▸ [HIGH] [RULE_MATCH] go.tls.insecure-skip-verify · internal/net/client.go:42 · TLS cert verification disabled",
+              "  [HIGH] [RULE_MATCH] go.shell.dynamic-command   · internal/exec/run.go:88   · Dynamic sh -c command string",
+              "  [MED]  [AI_SEMANTIC] Unbounded retry loop      · internal/app/retry.go:64  · Missing context cancellation check"
+            ],
+            keys: "[Enter] Inspect Issue · [Space] Select Batch · [f] Dispatch Agent Fix · [a] Run/Resume Analysis · [t] Run Scan"
+          },
+          {
+            page: "repo",
+            label: "Repository",
+            desc: "Deterministic language inventory, file counts, line totals, and build manifest facts.",
+            rows: [
+              "▸ Language: Go (119 source files, 34,210 lines) · Build: go.mod (Go 1.22)",
+              "  Language: Python (6 files, 3,120 lines)       · Tooling: scripts/autopilot.py, insight_runtime.py",
+              "  Language: Markdown / YAML (10 files)          · API Contract: docs/openapi.yaml (v4.4.0)"
+            ],
+            keys: "[r] Reindex Project Facts (no LLM request) · [Tab] Next Sub-View"
+          },
+          {
+            page: "project",
+            label: "Tests & Checks",
+            desc: "Explicit Go scan phases (workspace → parser → vet → test) in an isolated temporary copied workspace.",
+            rows: [
+              "▸ Phase 1: workspace · [PASSED] Copied eligible project files into isolated temporary directory",
+              "  Phase 2: parser    · [PASSED] gofmt & AST syntax verification across all Go packages",
+              "  Phase 3: vet       · [PASSED] go vet ./... static analyzer passed with 0 diagnostics",
+              "  Phase 4: test      · [TRUSTED] go test ./... passed (requires revision execution-trust)"
+            ],
+            keys: "[t] Start Explicit Go Scan · [x] Cancel Active Scan · [u] Toggle Workspace Execution Trust"
+          }
+        ]
+      },
+      {
+        key: "2",
+        label: "Agent Studio",
+        page: "agents",
+        subPages: [
+          {
+            page: "agents",
+            label: "Pipeline",
+            desc: "4-Stage Autonomous Change Workflow monitor (Architect & Code → Verify & Test → Critic Review → Human Review).",
+            rows: [
+              "▸ Stage 1 · Architect & Code  [COMPLETED] (model: function · 2 captured paths edited)",
+              "  Stage 2 · Verify & Test     [COMPLETED] (model: bug · go test ./... & archcheck passed, 1 repair used)",
+              "  Stage 3 · Critic Review     [APPROVED]  (model: analyze · 0 regressions, boundary rules respected)",
+              "  Stage 4 · Human Review Gate [AWAITING]  Press [d] to inspect read-only diff, [a] to Accept & Commit"
+            ],
+            keys: "[d] Open Diff Inspector · [g] Debug & Check Logs · [a] Accept & Commit · [u] Guarded Undo · [x] Cancel Workflow"
+          },
+          {
+            page: "bugs",
+            label: "Issues",
+            desc: "Unified & verified findings list with Status filters (OPEN / IN_PROGRESS / DONE / ALL) and Category filters (ALL / BUGS / SECURITY / PERF).",
+            rows: [
+              "▸ [OPEN] [SECURITY] go.tls.insecure-skip-verify · internal/net/client.go:42 (Deterministic AST Rule CWE-295)",
+              "  [OPEN] [PERF]     Repeated slice allocation   · internal/project/diff/diff.go:118 (performance-file-v7)",
+              "  [DONE] [BUGS]     Nil pointer on empty index  · internal/project/index.go:79 (Committed: a8f3c21)"
+            ],
+            keys: "[←/→] Cycle Status Filter · [Shift+←/→] Cycle Category · [Space] Multi-Select · [f] Dispatch Fix · [x] Dismiss"
+          },
+          {
+            page: "issue-detail",
+            label: "Issue Detail",
+            desc: "Deep inspection of a single finding: source anchor, observed condition, preconditions, remediation, and verification idea.",
+            rows: [
+              "▸ Finding ID: security:8f91c4... · Rule: go.tls.insecure-skip-verify (CWE-295)",
+              "  Observed: A crypto/tls Config composite literal sets InsecureSkipVerify to literal true.",
+              "  Remediation: Keep certificate verification enabled or isolate a narrowly controlled exception.",
+              "  Verification Idea: Exercise connection against an invalid certificate in unit tests."
+            ],
+            keys: "[f] Dispatch Agent Fix for this Finding · [o] Open File in Inspector · [Esc] Back to Issues"
+          },
+          {
+            page: "features",
+            label: "Features",
+            desc: "Goal-aligned additive feature suggestions (schema_version: 2, 0–5 per generation, 64 KiB history bound).",
+            rows: [
+              "▸ [OPEN] [MEDIUM] Export SARIF findings report · Paths: internal/api/handlers/project_handler.go",
+              "  [SAVED] [SMALL] Add per-stage latency histogram to Last Run sub-view · Paths: internal/tui/render_hubs.go",
+              "  Project Goals: Maintain strict loopback safety, deterministic checks, and fast keyboard workflows."
+            ],
+            keys: "[g] Generate New Feature Ideas · [Enter] Dispatch Selected Feature to Agent · [s] Save · [x] Dismiss"
+          },
+          {
+            page: "analysis-run",
+            label: "Last Run",
+            desc: "Unified analysis run progress across Bugs, Performance, Security, and Features plus interactive dispatch window config.",
+            rows: [
+              "▸ Section: Bugs (semantic)        · Status: COMPLETED · Coverage: 119/119 files (0 pending)",
+              "  Section: Performance            · Status: COMPLETED · Coverage: 119/119 files (2 findings)",
+              "  Section: Security (rules + AI)  · Status: COMPLETED · Coverage: 119/119 files (1 finding)",
+              "  Run Config: batch_files=100 · budget_seconds=900s · max_attempts=2 · include_features=true"
+            ],
+            keys: "[a] Start/Resume Run · [p] Pause Run · [r] Retry Stale/Failed · [←/→] Adjust Batch/Budget/Attempts"
+          },
+          {
+            page: "analysis-files",
+            label: "File Scope",
+            desc: "Per-file analysis checklist (.mini-orca/analysis/selection.json) and stage freshness inspector.",
+            rows: [
+              "▸ [INCLUDED] cmd/daemon/main.go             · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:fresh",
+              "  [INCLUDED] internal/app/change_apply.go   · semantic:fresh · perf:fresh · sec_rules:fresh · sec_ai:stale",
+              "  [EXCLUDED] internal/app/testdata/fx.go    · Reason: Excluded by user checklist selection"
+            ],
+            keys: "[Space / Enter / ← / →] Toggle File Exclusion · [i] Recover Incomplete Work"
+          }
+        ]
+      },
+      {
+        key: "3",
+        label: "Code & Diff",
+        page: "editor",
+        subPages: [
+          {
+            page: "editor",
+            label: "Inspector",
+            desc: "Read-only source browser, atomic symbol inspector, and 3-mode proposal diff reviewer (Hunk / Split / Unified).",
+            rows: [
+              "▸ Diff Mode: [FOCUSED HUNK 1/2] · Target: internal/app/change_apply.go (Checked Hash: 9b2e41...)",
+              "  - if session.ReviewedHash == \"\" {",
+              "  + if session.ReviewedHash != session.Proposal.Hash {",
+              "        return ErrProposalReviewRequired",
+              "    }"
+            ],
+            keys: "[←/→] Switch Diff Mode (Hunk/Split/Unified) · [n/N] Next/Prev Hunk · [r] Record Diff Review · [a] Apply & Commit"
+          },
+          {
+            page: "git",
+            label: "Worktrees",
+            desc: "Local Git branches, isolated .worktrees/ checkouts, incoming commit previews, and guarded worktree merge.",
+            rows: [
+              "▸ [ACTIVE] main (HEAD 4f8a91c · clean) · Primary repository checkout",
+              "  [MERGEABLE] .worktrees/fix-tls-verify (branch: fix/tls-verify · +1 commit · 1 linked finding)",
+              "  [HISTORY] Committed 2m ago: Fix TLS verification in internal/net/client.go (oid: 7d2c19a)"
+            ],
+            keys: "[m] Merge Selected Worktree & Mark Linked Findings Done · [w] New Worktree · [x] Discard Clean Worktree"
+          },
+          {
+            page: "history",
+            label: "Proposals",
+            desc: "Local change conversation history (.mini-orca/changes/index.json, up to 200 sessions) and recovery journal status.",
+            rows: [
+              "▸ [APPLIED & COMMITTED] Fix TLS verification · 2 paths · rev 4 · hash 9b2e41 · Fresh",
+              "  [AWAITING_REVIEW]     Add SARIF export     · 3 paths · rev 2 · hash 3c1108 · Current",
+              "  [RECOVERY JOURNAL]    State: applied       · Undo Available: true (Post-Apply hashes match)"
+            ],
+            keys: "[Enter] Resume Session (clears prior check/review authority) · [v] Verify Applied Change · [u] Guarded Undo"
+          }
+        ]
+      },
+      {
+        key: "4",
+        label: "Handbook & Arch",
+        page: "docs",
+        subPages: [
+          {
+            page: "docs",
+            label: "Context & Deps",
+            desc: "Synthesized C4 Level 1–2 System Context, Goal Pursuit, Topology, Stack, and Runtime/Build Dependencies.",
+            rows: [
+              "▸ Purpose: Local-first Go coding assistant with 5-hub TUI and guarded loopback daemon.",
+              "  Topology: Pure Go CLI/TUI client <-> Loopback HTTP/SSE daemon <-> Scoped LLM & isolated checkexec.",
+              "  Dependency: gopkg.in/yaml.v3 (Configuration & OpenAPI parsing) · Go 1.22 standard library"
+            ],
+            keys: "[h/l] Step Handbook Sections · [Tab] Components & ADRs"
+          },
+          {
+            page: "docs-components",
+            label: "Components",
+            desc: "C4 Level 3 Bounded Contexts, Layer Ownership, Responsibilities, Contracts, and Internal Dependencies.",
+            rows: [
+              "▸ Component: internal/api     · Layer: HTTP Boundary · Contracts: LocalOnly, 63 REST/SSE Handlers",
+              "  Component: internal/app     · Layer: Orchestration · Contracts: Service, AnalysisRun, ChangeWorkflow",
+              "  Component: internal/project · Layer: Domain Facts  · Contracts: Manager, BuildProjectDocs, ScanGoFile"
+            ],
+            keys: "[j/k] Browse Components · [Enter] View Component Contracts"
+          },
+          {
+            page: "docs-decisions",
+            label: "Scenarios & ADRs",
+            desc: "End-to-end behavioral runtime scenarios, Architectural Decision Records (ADRs) with tradeoffs, Runbook, and Glossary.",
+            rows: [
+              "▸ ADR-01: Loopback-only HTTP API with Origin rejection vs. browser CORS sessions",
+              "  ADR-02: Atomic .mini-orca/ temp-sync-rename persistence & pre-Apply recovery journals",
+              "  Scenario: Guarded Apply & Private-Index Git Commit (verifies base hashes -> writes -> git commit-tree)"
+            ],
+            keys: "[j/k] Inspect Scenario Steps, Invariants, ADRs & Operational Runbook"
+          },
+          {
+            page: "diagrams",
+            label: "Architecture",
+            desc: "Mermaid architecture flowcharts and sequence diagrams rendered from ProjectAnalysisReport.",
+            rows: [
+              "▸ Diagram 1: Layered Package Ownership (cmd -> internal/api -> internal/app -> internal/project -> storage)",
+              "  Diagram 2: 4-Stage Verified Change & Worktree Merge Sequence",
+              "  Diagram 3: Unified Analysis Preflight, Admission & Per-File Stage Dispatch"
+            ],
+            keys: "[j/k] Switch Diagram · [r] Refresh Project Analysis"
+          }
+        ]
+      },
+      {
+        key: "5",
+        label: "Governance & Rules",
+        page: "instructions",
+        subPages: [
+          {
+            page: "instructions",
+            label: "Trust Policy",
+            desc: "Current-session Execution Trust status, exact allowed argv preview, and remote provider confirmation policy.",
+            rows: [
+              "▸ Execution Trust (Current Revision): [TRUSTED] · Cleared automatically on project switch/restore/reindex",
+              "  Allowed Test Argv: go test ./... (isolated temporary copied workspace with allowlisted env)",
+              "  Remote Provider Consent: Per-request confirmation required for non-loopback HTTP, cli://agy, and cli://pi"
+            ],
+            keys: "[Enter / ← / →] Toggle Revision Execution Trust"
+          },
+          {
+            page: "models",
+            label: "Model Routing",
+            desc: "Per-scope model assignment (analyze, bug, function) and built-in/custom presets across Configured, Agy, and Pi catalogs.",
+            rows: [
+              "▸ Scope [analyze]  → agy:gemini-3.8-flash-high (120k context · Architecture, Perf, Security AI, Critic)",
+              "  Scope [bug]      → pi:anthropic/claude-sonnet (32k context · Semantic Code Analysis & Test Agent)",
+              "  Scope [function] → configured:local-qwen-coder (4k context · Fast Proposals, Repairs & Explanations)",
+              "  Active Preset: hybrid-precision (Presets: local-default · hybrid-precision · deep-audit)"
+            ],
+            keys: "[←/→] Cycle Scope Model or Preset · [:preset-save <name>] Save Custom Preset · [:preset-delete] Delete"
+          },
+          {
+            page: "bootstrap",
+            label: "Bootstrap",
+            desc: "Root-to-directory AGENTS.md instruction hierarchy preview and evidence-matched instruction presets.",
+            rows: [
+              "▸ Active Guide: AGENTS.md + internal/AGENTS.md + docs/AGENTS.md (Fingerprint: e4a912...)",
+              "  Matched Preset [Go Architecture]: Enforce acyclic subpackages via internal/app/archcheck (Evidence: go.mod)",
+              "  Matched Preset [Testing]: Use temporary projects and fake HTTP providers with -race"
+            ],
+            keys: "[Enter] Prepare Guided AGENTS.md Proposal (no model call, opens in Code & Diff for Review/Apply)"
+          },
+          {
+            page: "lessons",
+            label: "Lessons",
+            desc: "Graduated engineering lessons that can be promoted into durable AGENTS.md repository rules.",
+            rows: [
+              "▸ [GRADUATED] Always recheck project_id, project_revision, and base_file_hash after async LLM calls.",
+              "  [CANDIDATE] Never execute model output through a shell; use fixed argv in checkexec.",
+              "  [CANDIDATE] Keep deterministic rule_match findings distinct from model_suspicion advisories."
+            ],
+            keys: "[Enter / ← / →] Graduate Selected Lesson into AGENTS.md Draft"
+          }
+        ]
+      }
+    ];
+
+    const COLON_COMMANDS = [
+      { cmd: ":analyze", aliases: ":run", desc: "Start or resume unified project analysis run" },
+      { cmd: ":new-analysis", aliases: ":reanalyze", desc: "Start fresh project analysis (preserving in-progress issues)" },
+      { cmd: ":resume", aliases: "", desc: "Resume paused or interrupted unified analysis run" },
+      { cmd: ":repair", aliases: ":retry [path]", desc: "Retry failed or stale analysis files" },
+      { cmd: ":pause", aliases: "", desc: "Pause active unified analysis run at stage boundary" },
+      { cmd: ":test", aliases: ":scan", desc: "Run explicit Go parser/vet/test scan in isolated temp workspace" },
+      { cmd: ":analysis-config", aliases: ":run-config [batch=N budget=Ns attempts=N]", desc: "Inspect or update unified analysis dispatch limits" },
+      { cmd: ":issues", aliases: ":bugs, :security, :perf, :all", desc: "Jump to [2] Agent Studio · Issues with category filter" },
+      { cmd: ":status open", aliases: ":wip, :done, :status <open|in_progress|done|all>", desc: "Filter issues by triage/completion workflow status" },
+      { cmd: ":fix", aliases: "", desc: "Dispatch 4-stage autonomous agent fix for selected finding(s)" },
+      { cmd: ":dismiss", aliases: "", desc: "Record dismissed triage status for selected finding" },
+      { cmd: ":agent Fix retry loop", aliases: ":agents [mission]", desc: "Open Agent Studio or dispatch custom agent mission" },
+      { cmd: ":diff split", aliases: ":diff [hunk|split|unified|next|prev]", desc: "Open Code & Diff Inspector in specified diff mode" },
+      { cmd: ":hunk next", aliases: ":next-hunk, :prev-hunk", desc: "Step to next or previous diff hunk in Inspector" },
+      { cmd: ":accept", aliases: ":apply, :commit [msg]", desc: "Apply reviewed proposal and create atomic Git commit" },
+      { cmd: ":undo", aliases: "", desc: "Restore pre-Apply file contents using guarded recovery journal" },
+      { cmd: ":merge", aliases: "", desc: "Merge selected clean worktree and mark linked findings Done" },
+      { cmd: ":cancel", aliases: "", desc: "Cancel active change workflow without applying source" },
+      { cmd: ":models", aliases: ":model [scope] [id]", desc: "Open [5] Governance · Model Routing or assign scope model" },
+      { cmd: ":preset hybrid-precision", aliases: ":preset [local-default|hybrid-precision|deep-audit]", desc: "Apply model routing preset across scopes" },
+      { cmd: ":preset-save my-preset", aliases: ":preset-delete <name>", desc: "Save or delete a custom model preset" },
+      { cmd: ":scope", aliases: ":files", desc: "Open [2] Agent Studio · File Scope checklist" },
+      { cmd: ":proposals", aliases: ":history", desc: "Open [3] Code & Diff · Saved Proposals history" },
+      { cmd: ":features", aliases: "", desc: "Open [2] Agent Studio · Goal-aligned Feature Suggestions" },
+      { cmd: ":docs", aliases: ":handbook, :arch, :diagrams", desc: "Open [4] Handbook & Arch C4/Arc42/ADR specification" },
+      { cmd: ":git", aliases: "", desc: "Open [3] Code & Diff · Git & Worktrees manager" },
+      { cmd: ":debug", aliases: ":logs", desc: "Open Agent Workflow Debug & Check Inspector" }
+    ];
+
+    let currentHubIdx = 0;
+    let currentSubIdx = 0;
+    let currentPaletteKey = "tokyo";
+
+    function renderTuiSimulator() {
+      const pal = TUI_PALETTES[currentPaletteKey];
+      const screen = document.getElementById("tui-screen");
+      const hubBar = document.getElementById("tui-hub-bar");
+      const subBar = document.getElementById("tui-subpage-bar");
+      const viewport = document.getElementById("tui-viewport");
+      const badge = document.getElementById("tui-palette-badge");
+
+      screen.style.backgroundColor = pal.bg;
+      screen.style.color = pal.fg;
+      screen.style.borderColor = pal.border;
+      hubBar.style.backgroundColor = pal.bar;
+      hubBar.style.borderColor = pal.border;
+      subBar.style.backgroundColor = pal.sub;
+      subBar.style.borderColor = pal.border;
+      badge.textContent = `PALETTE: ${pal.name}`;
+      badge.style.backgroundColor = pal.sub;
+      badge.style.color = pal.accent;
+
+      // Hub buttons
+      const hubBtns = document.getElementById("tui-hub-buttons");
+      hubBtns.innerHTML = TUI_HUBS.map((h, idx) => {
+        const active = idx === currentHubIdx;
+        return `<button data-hidx="${idx}" class="tui-hub-btn px-2.5 py-1 rounded text-xs font-mono font-semibold transition" style="background-color:${active ? pal.accent : 'transparent'}; color:${active ? pal.bg : pal.fg}; border:1px solid ${active ? pal.accent : pal.border};">[${h.key}] ${h.label}</button>`;
+      }).join("");
+
+      hubBtns.querySelectorAll(".tui-hub-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentHubIdx = Number(btn.dataset.hidx);
+          currentSubIdx = 0;
+          document.getElementById("tui-cmd-output").textContent = `Switched to [${TUI_HUBS[currentHubIdx].key}] ${TUI_HUBS[currentHubIdx].label}`;
+          renderTuiSimulator();
+        });
+      });
+
+      // Sub-page buttons
+      const hub = TUI_HUBS[currentHubIdx];
+      subBar.innerHTML = `<span class="text-xs font-mono" style="color:${pal.muted};">Sub-Views (Tab):</span>` +
+        hub.subPages.map((sp, sidx) => {
+          const active = sidx === currentSubIdx;
+          return `<button data-sidx="${sidx}" class="tui-sub-btn px-2 py-0.5 rounded text-xs font-mono transition" style="background-color:${active ? pal.fg : 'transparent'}; color:${active ? pal.bg : pal.muted};">${sp.label} (${sp.page})</button>`;
+        }).join("");
+
+      subBar.querySelectorAll(".tui-sub-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentSubIdx = Number(btn.dataset.sidx);
+          renderTuiSimulator();
+        });
+      });
+
+      const sub = hub.subPages[currentSubIdx];
+      viewport.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b" style="border-color:${pal.border};">
+          <div>
+            <span class="font-bold" style="color:${pal.accent};">[${hub.key}] ${hub.label} → ${sub.label}</span>
+            <span class="ml-2 text-xs" style="color:${pal.muted};">(Page = "${sub.page}")</span>
+          </div>
+          <span class="text-xs" style="color:${pal.ok};">Read-Only Navigation (0 provider calls)</span>
+        </div>
+        <p class="text-xs" style="color:${pal.muted};">${sub.desc}</p>
+        <div class="space-y-1.5 pt-1">
+          ${sub.rows.map((r, i) => `
+            <div class="px-3 py-2 rounded font-mono text-xs" style="background-color:${i === 0 ? pal.sub : pal.bar}; border:1px solid ${i === 0 ? pal.accent : pal.border}; color:${pal.fg};">
+              ${r}
+            </div>
+          `).join("")}
+        </div>
+        <div class="pt-3 text-xs flex flex-wrap items-center justify-between gap-2" style="color:${pal.muted};">
+          <span>Active Keys: <strong style="color:${pal.fg};">${sub.keys}</strong></span>
+        </div>
+      `;
+    }
+
+    function executeSimulatedColonCommand(rawInput) {
+      const clean = rawInput.trim().replace(/^[:/]/, "");
+      if (!clean) return;
+      const [cmdRaw, ...rest] = clean.split(/\s+/);
+      const cmd = cmdRaw.toLowerCase();
+      const arg = rest.join(" ");
+      const outEl = document.getElementById("tui-cmd-output");
+
+      if (cmd === "1" || cmd === "summary" || cmd === "overview") {
+        currentHubIdx = 0; currentSubIdx = 0;
+        outEl.textContent = "Switched to [1] Overview · Dashboard.";
+      } else if (cmd === "2" || cmd === "agent" || cmd === "agents") {
+        currentHubIdx = 1; currentSubIdx = 0;
+        outEl.textContent = arg ? `Dispatched custom agent mission: ${arg}` : "Switched to [2] Agent Studio · Pipeline.";
+      } else if (cmd === "issues" || cmd === "bugs" || cmd === "security" || cmd === "perf" || cmd === "performance" || cmd === "wip" || cmd === "done" || cmd === "status") {
+        currentHubIdx = 1; currentSubIdx = 1;
+        outEl.textContent = `Switched to [2] Agent Studio · Issues (filter: ${cmd.toUpperCase()} ${arg}).`;
+      } else if (cmd === "features") {
+        currentHubIdx = 1; currentSubIdx = 3;
+        outEl.textContent = "Switched to [2] Agent Studio · Features.";
+      } else if (cmd === "analyze" || cmd === "run" || cmd === "new-analysis" || cmd === "reanalyze" || cmd === "resume" || cmd === "pause" || cmd === "repair" || cmd === "retry" || cmd === "analysis-config" || cmd === "run-config" || cmd === "batch" || cmd === "budget" || cmd === "attempts") {
+        currentHubIdx = 1; currentSubIdx = 4;
+        outEl.textContent = `Executed :${cmd} ${arg} — viewing [2] Agent Studio · Last Run.`;
+      } else if (cmd === "scope" || cmd === "files") {
+        currentHubIdx = 1; currentSubIdx = 5;
+        outEl.textContent = "Switched to [2] Agent Studio · File Scope.";
+      } else if (cmd === "3" || cmd === "diff" || cmd === "inspect" || cmd === "hunk" || cmd === "next-hunk" || cmd === "prev-hunk" || cmd === "open") {
+        currentHubIdx = 2; currentSubIdx = 0;
+        outEl.textContent = `Opened [3] Code & Diff · Inspector (${cmd} ${arg || "focused hunk"}).`;
+      } else if (cmd === "git" || cmd === "merge") {
+        currentHubIdx = 2; currentSubIdx = 1;
+        outEl.textContent = cmd === "merge" ? "Verified clean checkouts & merged worktree (linked findings marked Done)." : "Switched to [3] Code & Diff · Worktrees.";
+      } else if (cmd === "proposals" || cmd === "history" || cmd === "accept" || cmd === "apply" || cmd === "commit" || cmd === "undo") {
+        currentHubIdx = 2; currentSubIdx = 2;
+        outEl.textContent = `Executed :${cmd} ${arg} — viewing [3] Code & Diff · Proposals.`;
+      } else if (cmd === "4" || cmd === "docs" || cmd === "handbook") {
+        currentHubIdx = 3; currentSubIdx = 0;
+        outEl.textContent = "Switched to [4] Handbook & Arch · Context & Deps.";
+      } else if (cmd === "arch" || cmd === "diagrams") {
+        currentHubIdx = 3; currentSubIdx = 3;
+        outEl.textContent = "Switched to [4] Handbook & Arch · Architecture Diagrams.";
+      } else if (cmd === "5" || cmd === "trust") {
+        currentHubIdx = 4; currentSubIdx = 0;
+        outEl.textContent = "Switched to [5] Governance & Rules · Trust Policy.";
+      } else if (cmd === "models" || cmd === "model" || cmd === "preset" || cmd === "presets" || cmd === "profile" || cmd === "preset-save" || cmd === "preset-delete") {
+        currentHubIdx = 4; currentSubIdx = 1;
+        outEl.textContent = `Executed :${cmd} ${arg} — viewing [5] Governance & Rules · Model Routing.`;
+      } else if (cmd === "test" || cmd === "scan") {
+        currentHubIdx = 0; currentSubIdx = 2;
+        outEl.textContent = "Started explicit Go scan in temporary copied workspace.";
+      } else if (cmd === "fix") {
+        currentHubIdx = 1; currentSubIdx = 0;
+        outEl.textContent = "Dispatched 4-stage Agent Fix for selected finding(s) — Pipeline active.";
+      } else {
+        outEl.textContent = `Executed :${clean}`;
+      }
+      renderTuiSimulator();
+    }
+
+    function initTuiSection() {
+      renderTuiSimulator();
+
+      document.querySelectorAll(".palette-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentPaletteKey = btn.dataset.palette;
+          document.querySelectorAll(".palette-btn").forEach(b => {
+            if (b.dataset.palette === currentPaletteKey) {
+              b.className = "palette-btn px-2.5 py-1 rounded text-xs font-mono font-semibold bg-[var(--primary)] text-[var(--primary-foreground)]";
+            } else {
+              b.className = "palette-btn px-2.5 py-1 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)]";
+            }
+          });
+          renderTuiSimulator();
+        });
+      });
+
+      const cmdInput = document.getElementById("tui-cmd-input");
+      document.getElementById("tui-cmd-run").addEventListener("click", () => {
+        executeSimulatedColonCommand(cmdInput.value);
+      });
+      cmdInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+          executeSimulatedColonCommand(cmdInput.value);
+        }
+      });
+
+      const cmdList = document.getElementById("colon-cmd-list");
+      cmdList.innerHTML = COLON_COMMANDS.map(c => `
+        <button data-cmd="${c.cmd}" class="colon-item w-full text-left p-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-[var(--primary)] transition flex flex-col gap-0.5">
+          <div class="flex items-center justify-between gap-2">
+            <code class="font-mono text-xs font-bold text-[var(--foreground)]">${c.cmd}</code>
+            ${c.aliases ? `<span class="font-mono text-xs text-[var(--muted-foreground)]">${c.aliases}</span>` : ""}
+          </div>
+          <span class="text-xs text-[var(--muted-foreground)]">${c.desc}</span>
+        </button>
+      `).join("");
+
+      cmdList.querySelectorAll(".colon-item").forEach(btn => {
+        btn.addEventListener("click", () => {
+          cmdInput.value = btn.dataset.cmd;
+          executeSimulatedColonCommand(btn.dataset.cmd);
+        });
+      });
+    }
+
+    // =========================================================================
+    // 4. 4-STAGE PIPELINE DATA (Section 4)
+    // =========================================================================
+    const PIPELINE_STAGES = [
+      {
+        title: "Stage 1 · Architect & Code (Creation Worker)",
+        model: "models.create (default profile: function · 4,000 context tokens)",
+        route: "POST /api/projects/current/changes/{sessionID}/workflow",
+        summary: "Generates a multi-file unified proposal across the 1–8 captured Go/Markdown paths using bounded project context, applicable AGENTS.md rules, and any linked finding_targets or feature acceptance criteria.",
+        guards: [
+          "Targets are immutable once the change session is opened; file creation is supported for Go/Markdown, while file deletion and other languages are rejected.",
+          "Go edits are formatted with go/format before proposal publication; unchanged targets and formatting-only Go rewrites are omitted.",
+          "Every new proposal revision increments revision, computes a new SHA-256 proposal hash, and clears any previous check or diff-review authority."
+        ]
+      },
+      {
+        title: "Stage 2 · Verify & Test (Testing Worker + Isolated Checkexec)",
+        model: "models.test (default profile: bug · 32,000 context tokens) + internal/app/checkexec",
+        route: "POST /api/projects/current/changes/{sessionID}/checks",
+        summary: "The testing agent writes or updates regression tests (strictly restricted to captured _test.go paths) and merges them with the Stage 1 implementation. The daemon then evaluates AST parse/format, archcheck import/complexity budgets, go vet ./..., and go test ./... inside a temporary copied workspace.",
+        guards: [
+          "Requires current-revision Execution Trust (GET/POST /api/projects/current/execution-trust) and at least one captured _test.go path before workflow dispatch.",
+          "New tests are verified against both the base and candidate snapshots; a reviewed regression proof stays pinned across up to 3 bounded repair attempts.",
+          "If checks fail after bounded repairs, the workflow stops with status 'failed' before reaching Critic Review; source is never applied."
+        ]
+      },
+      {
+        title: "Stage 3 · Critic Review (Independent Model Reviewer)",
+        model: "models.review (default profile: analyze · 120,000 context tokens)",
+        route: "GET /api/projects/current/changes/{sessionID} (workflow.review)",
+        summary: "Evaluates the checked proposal diff and test evidence for regressions, architectural boundary violations, security risks, and adherence to acceptance criteria.",
+        guards: [
+          "Returns a structured review bound to proposal_hash with verdict ('approved' or 'changes_requested'), summary, and findings.",
+          "A verdict of 'changes_requested' sets workflow status to 'changes_requested' and blocks human approval until a new run produces a passing proposal and approving review.",
+          "Even when Critic Review returns 'approved', it sets workflow status to 'awaiting_human_review' — model approval NEVER sets reviewed_hash."
+        ]
+      },
+      {
+        title: "Stage 4 · Human Precision Gate (Explicit Review → Apply, Commit, Merge or Undo)",
+        model: "Human Operator (Zero LLM calls)",
+        route: "POST .../review → POST .../apply (or POST .../undo & POST .../verify)",
+        summary: "Presents read-only Hunk, Split, or Unified diffs in the TUI Inspector. The developer explicitly records diff review, applies the change with a grouped recovery journal, optionally creates an atomic private-index Git commit, or merges the isolated worktree.",
+        guards: [
+          "POST /api/projects/current/changes/{sessionID}/review binds the exact checked proposal hash as reviewed_hash.",
+          "POST .../apply writes a durable 'prepared' journal (.mini-orca/changes/recovery.json), verifies all target base hashes, Policy fingerprint, and AGENTS.md fingerprint, replaces targets atomically, and records 'applied'.",
+          "Optional commit_message + head + branch uses a private GIT_INDEX_FILE and git commit-tree + CAS branch update without touching unrelated staged/untracked files.",
+          "POST .../undo verifies every post-Apply file hash matches before restoring pre-Apply contents and removing newly created files."
+        ]
+      }
+    ];
+
+    function renderPipelineStage(idx = 0) {
+      document.querySelectorAll(".stage-btn").forEach((btn, i) => {
+        if (i === idx) {
+          btn.classList.add("border-2", "border-[var(--primary)]");
+          btn.classList.remove("border-[var(--border)]");
+        } else {
+          btn.classList.remove("border-2", "border-[var(--primary)]");
+          btn.classList.add("border", "border-[var(--border)]");
+        }
+      });
+      const st = PIPELINE_STAGES[idx];
+      document.getElementById("pipeline-stage-detail").innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-base font-bold">${st.title}</h3>
+          <code class="px-2.5 py-0.5 rounded text-xs font-mono bg-[var(--card)] border border-[var(--border)]">${st.route}</code>
+        </div>
+        <div class="text-xs font-mono text-[var(--muted-foreground)]">Owner / Model Scope: <strong class="text-[var(--foreground)]">${st.model}</strong></div>
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">${st.summary}</p>
+        <div class="space-y-1">
+          <div class="text-xs font-mono font-semibold uppercase text-[var(--muted-foreground)]">Enforced Guards &amp; State Transitions</div>
+          <ul class="list-disc pl-4 space-y-1 text-xs text-[var(--muted-foreground)]">
+            ${st.guards.map(g => `<li>${g}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 5. ALL 63 LIVE HTTP API ROUTES & GUARD SIMULATOR (Section 5)
+    // =========================================================================
+    const API_ROUTES = [
+      // System & Models (4)
+      { method: "GET", path: "/health", cat: "System & Models", guards: "Loopback Host (no Origin)", effect: "Read-Only", desc: "Liveness probe and canonical daemon version (4.4.0)." },
+      { method: "GET", path: "/status", cat: "System & Models", guards: "Loopback Host (no Origin)", effect: "Read-Only", desc: "Daemon status, version, and shared_proposals workflow identifier." },
+      { method: "GET", path: "/api/models/current", cat: "System & Models", guards: "Loopback Host", effect: "Read-Only", desc: "Returns non-secret configured analyze, bug, and function model catalog metadata." },
+      { method: "GET", path: "/api/models/available", cat: "System & Models", guards: "Loopback Host (no query params)", effect: "Discovery (20s cap)", desc: "Returns deduplicated configured choices plus discovered Pi (get_available_models) and Agy (agy models) catalogs with independent status." },
+
+      // Project & Context (11)
+      { method: "POST", path: "/api/projects/import", cat: "Project & Context", guards: "project_path, optional confirm_remote_provider", effect: "Index + Optional Analyze LLM", desc: "Imports user-selected project, builds deterministic index.json, synthesizes project-docs.json, and optionally generates project-analysis-v5." },
+      { method: "POST", path: "/api/projects/restore", cat: "Project & Context", guards: "project_path", effect: "Read-Only Local Restore", desc: "Restores a previously imported local project from .mini-orca/ without contacting any model provider." },
+      { method: "GET", path: "/api/projects/current", cat: "Project & Context", guards: "optional ?worktree_path", effect: "Read-Only", desc: "Reads selected project summary without changing the active project." },
+      { method: "GET", path: "/api/projects/current/overview", cat: "Project & Context", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads source-free metrics, structured ProjectAnalysisReport, ProjectDocsReport (docs), analysis_coverage, and finding counts." },
+      { method: "POST", path: "/api/projects/current/reindex", cat: "Project & Context", guards: "project_id, project_revision", effect: "Local Index Refresh (No LLM)", desc: "Refreshes deterministic file/symbol facts in .mini-orca/index.json and clears revision execution trust." },
+      { method: "GET", path: "/api/projects/current/index", cat: "Project & Context", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads deterministic eligible-file and symbol facts (Index Schema v3)." },
+      { method: "GET", path: "/api/projects/current/context", cat: "Project & Context", guards: "project_id, project_revision, path", effect: "Read-Only", desc: "Returns bounded source-free ContextManifest for a project-relative path." },
+      { method: "GET", path: "/api/projects/current/files/info", cat: "Project & Context", guards: "project_id, project_revision, path", effect: "Read-Only", desc: "Reads safe selected-file metadata and content for a canonical project-relative path." },
+      { method: "GET", path: "/api/projects/current/files/symbols", cat: "Project & Context", guards: "project_id, project_revision, path", effect: "Read-Only", desc: "Lists atomic symbol targets and line spans in one selected eligible file." },
+      { method: "GET", path: "/api/projects/current/impact", cat: "Project & Context", guards: "project_id, project_revision, path, optional symbol", effect: "Read-Only", desc: "Reads advisory source-free impact references across the indexed project for a file or symbol." },
+      { method: "GET", path: "/api/projects/current/events", cat: "Project & Context", guards: "Loopback Host", effect: "SSE Stream", desc: "Streams Server-Sent Events (SSE) when analysis runs, Go scans, or change workflows transition state." },
+
+      // Unified Analysis (7)
+      { method: "GET", path: "/api/projects/current/analysis/selection", cat: "Unified Analysis", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads file checklist, saved excluded_paths, per-file stage freshness statuses, and selection.recovery state." },
+      { method: "POST", path: "/api/projects/current/analysis/selection", cat: "Unified Analysis", guards: "project_id, project_revision, selection_id, excluded_paths", effect: "Metadata Write (.mini-orca/)", desc: "Atomically saves excluded_paths (up to 20,000 canonical entries) in .mini-orca/analysis/selection.json; rejected with 409 if a run is active/paused." },
+      { method: "POST", path: "/api/projects/current/analysis/preview", cat: "Unified Analysis", guards: "project_id, project_revision, options/models", effect: "Read-Only Preflight", desc: "Computes whole-project AnalysisRunPreview, queue_id, preview_id, and request bounds without dispatching providers." },
+      { method: "POST", path: "/api/projects/current/analysis/run", cat: "Unified Analysis", guards: "project_id, project_revision, queue_id, preview_id, confirm_providers, security_review", effect: "Starts Background Run (202)", desc: "Durably admits the previewed unified analysis run with fresh provider and Security review consent." },
+      { method: "GET", path: "/api/projects/current/analysis/run", cat: "Unified Analysis", guards: "project_id, project_revision", effect: "Read-Only (200 or 204)", desc: "Reads current unified analysis progress across Bugs, Performance, Security, and Features." },
+      { method: "POST", path: "/api/projects/current/analysis/run/control", cat: "Unified Analysis", guards: "project_id, project_revision, run_id, generation, action, preview_id (on resume)", effect: "Run Control", desc: "Pauses, resumes (with fresh preview_id & consent), or cancels the exact unified analysis run generation." },
+      { method: "GET", path: "/api/projects/current/analysis/results", cat: "Unified Analysis", guards: "project_id, project_revision, run_id, generation, queue_id, category, optional path", effect: "Read-Only", desc: "Reads classified Bugs, Performance, or Security section evidence and saved_finding_count for the exact run identity." },
+
+      // Findings, Files & Security (7)
+      { method: "GET", path: "/api/projects/current/findings", cat: "Findings & Security", guards: "project_id, project_revision, optional filters", effect: "Read-Only", desc: "Lists source-free verified findings, AI suggestions, and completed finding references (with commit_oid)." },
+      { method: "PATCH", path: "/api/projects/current/findings/{findingID}", cat: "Findings & Security", guards: "project_id, project_revision, status", effect: "Metadata Write (.mini-orca/)", desc: "Records explicit user triage status (open, dismissed, fixed) for one finding." },
+      { method: "GET", path: "/api/projects/current/files/analysis", cat: "Findings & Security", guards: "project_id, project_revision, path", effect: "Read-Only Cache Read", desc: "Reads cached semantic analysis report for one selected file and revision." },
+      { method: "POST", path: "/api/projects/current/files/analysis", cat: "Findings & Security", guards: "project_id, project_revision, base_file_hash, path, confirm_remote_provider", effect: "Bug-Scope LLM Call", desc: "Explicitly analyzes one selected eligible file using the configured Bug scope (file-analysis-v16)." },
+      { method: "POST", path: "/api/projects/current/files/security-scan", cat: "Findings & Security", guards: "project_id, project_revision, base_file_hash, path", effect: "Deterministic AST Scan (No LLM)", desc: "Scans one Go file with deterministic AST rules (go-rules-v1); returns up to 5 source-order matches." },
+      { method: "POST", path: "/api/projects/current/files/explanation", cat: "Findings & Security", guards: "project_id, project_revision, base_file_hash, target_path, target_symbol, confirm_remote_provider", effect: "Transient Function-Scope LLM", desc: "Explains one exact indexed Go declaration transiently without persisting chat/draft state." },
+      { method: "POST", path: "/api/projects/current/security-review", cat: "Findings & Security", guards: "project_id, project_revision, base_file_hash, path, confirm_remote_provider", effect: "Analyze-Scope Security LLM", desc: "Performs passive, source-free AI Security review (security-file-v4, max 5 model_suspicion findings) with source-token redaction." },
+
+      // Scan & Execution Trust (5)
+      { method: "GET", path: "/api/projects/current/execution-trust", cat: "Scan & Execution Trust", guards: "project_id, project_revision, optional task_test_name", effect: "Read-Only", desc: "Reads current-session execution trust status and exact fixed argv scope (including -run for generated task tests)." },
+      { method: "POST", path: "/api/projects/current/execution-trust", cat: "Scan & Execution Trust", guards: "project_id, project_revision, confirm: true", effect: "In-Memory Trust Grant", desc: "Explicitly grants local execution trust for the active project_revision (cleared on switch/restore/reindex)." },
+      { method: "GET", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads status and phase diagnostics (workspace, parser, vet, test) of an explicitly started Go scan." },
+      { method: "POST", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", guards: "project_id, project_revision, execution trust (for test phase)", effect: "Isolated Temp Workspace Subprocess", desc: "Starts an explicit Go parser/vet/test scan inside a bounded temporary copied workspace." },
+      { method: "DELETE", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", guards: "project_id, project_revision", effect: "Process-Group Cancel", desc: "Cancels the active explicit Go scan and stops its owned Unix process group." },
+
+      // Changes & 4-Stage Workflow (14)
+      { method: "GET", path: "/api/projects/current/changes", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Read-Only", desc: "Lists local change conversation summaries (up to 200 sessions) without triggering generation." },
+      { method: "POST", path: "/api/projects/current/changes", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, kind, title, paths (1-8), optional finding_targets (<=16)", effect: "Metadata Write (.mini-orca/changes/)", desc: "Captures a new change session across 1–8 explicit Go/Markdown paths (or manual AGENTS.md content)." },
+      { method: "GET", path: "/api/projects/current/changes/recovery", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads the latest grouped mutation receipt or interrupted recovery journal (.mini-orca/changes/recovery.json)." },
+      { method: "GET", path: "/api/projects/current/changes/{sessionID}", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads full proposal, diff hunks, check results, 4-stage workflow state, and live source freshness." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/resume", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision", effect: "Clears Authority (No LLM)", desc: "Restores historical session into view while clearing prior check/review authority and marking workflow evidence outdated." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/messages", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, message, profile, confirm_remote_provider, optional repair", effect: "Scoped LLM Proposal / Repair", desc: "Generates a new proposal revision or performs one of 3 bounded check-driven repair attempts." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/checks", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, run_tests, run_lint", effect: "Isolated Temp Workspace Checks", desc: "Runs required Go parse/format/archcheck plus optional go vet and go test (with execution trust) in a copied workspace." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/workflow", cat: "Changes & 4-Stage Workflow", guards: "ChangeIdentity, message, models:{create,test,review}, confirmed_profiles, confirm_security, execution trust, _test.go path", effect: "Starts 4-Stage Agent (202)", desc: "Starts the bounded 4-stage autonomous workflow (Architect & Code → Verify & Test → Critic Review → Awaiting Human Review)." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/workflow/cancel", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, workflow_id", effect: "Cancels Agent Worker", desc: "Cancels the exact running change workflow without applying source edits." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/review", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash", effect: "Records Human Review", desc: "Records explicit human diff review for the current checked proposal hash (sets reviewed_hash)." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/apply", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, confirm: true, optional commit_message/head/branch", effect: "Guarded Source Mutation (+ Optional Git Commit)", desc: "Journals pre-Apply state, verifies all target/policy/instruction/workspace hashes, applies edits atomically, and optionally commits via private Git index." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/commit", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, hash, confirm: true, commit_message", effect: "Private-Index Git Commit Retry", desc: "Retries a failed or interrupted proposal commit after reconciling candidate OIDs without reapplying source." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/undo", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, confirm: true", effect: "Guarded Source Restore", desc: "Verifies post-Apply target hashes match the recovery journal, restores original files, and removes newly created files." },
+      { method: "POST", path: "/api/projects/current/changes/{sessionID}/verify", cat: "Changes & 4-Stage Workflow", guards: "project_id, project_revision, revision, hash, fresh execution trust", effect: "Post-Apply Isolated Verification", desc: "Runs parse/format, go test ./..., and go vet ./... in an isolated copy against the latest applied change." },
+
+      // Git & Worktrees (9)
+      { method: "GET", path: "/api/projects/current/git", cat: "Git & Worktrees", guards: "project_id, project_revision, optional path", effect: "Read-Only", desc: "Reads target-file Git availability, current branch, and working-tree status." },
+      { method: "GET", path: "/api/projects/current/git/repository", cat: "Git & Worktrees", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads guarded repository identity, HEAD OID, branch, dirty state, and any active merge_head/conflicts." },
+      { method: "GET", path: "/api/projects/current/git/workspace", cat: "Git & Worktrees", guards: "project_id, project_revision", effect: "Read-Only", desc: "Lists local branches, registered worktrees (up to 100, with passive mergeable flag), and committed fix history." },
+      { method: "POST", path: "/api/projects/current/git/worktrees", cat: "Git & Worktrees", guards: "project_id, project_revision, head, branch, target_branch, path (.worktrees/...), confirm, confirm_execution, execution trust", effect: "Creates Git Worktree", desc: "Creates a new branch and isolated checkout inside .worktrees/ (added to .git/info/exclude) from the displayed HEAD." },
+      { method: "POST", path: "/api/projects/current/git/switch", cat: "Git & Worktrees", guards: "project_id, project_revision, head, branch, target_branch, confirm, confirm_execution, execution trust", effect: "Switches Clean Branch", desc: "Switches a clean checkout to an existing local branch not checked out elsewhere; cancels prepared jobs and reindexes." },
+      { method: "POST", path: "/api/projects/current/git/merge-preview", cat: "Git & Worktrees", guards: "project_id, project_revision, path, source_head", effect: "Read-Only Diff Preview", desc: "Previews incoming commits and bounded read-only diff for a selected worktree without requiring execution trust." },
+      { method: "POST", path: "/api/projects/current/git/merge", cat: "Git & Worktrees", guards: "project_id, project_revision, head, branch, path, source_head, confirm, confirm_execution, execution trust", effect: "Merges Worktree & Completes Findings", desc: "Merges captured worktree HEAD into current clean branch, marks linked finding_targets Done, and removes the merged worktree." },
+      { method: "POST", path: "/api/projects/current/git/discard-worktree", cat: "Git & Worktrees", guards: "project_id, project_revision, head, branch, path, source_head, confirm, confirm_execution, execution trust", effect: "Removes Clean Worktree", desc: "Stops worker, verifies clean state, and removes an unmerged worktree without force while retaining its branch." },
+      { method: "POST", path: "/api/projects/current/git/abort-merge", cat: "Git & Worktrees", guards: "project_id, project_revision, head, branch, merge_head, confirm, confirm_execution, execution trust", effect: "Aborts Merge Conflict", desc: "Aborts the identified in-progress merge and discards conflict-resolution working-tree edits." },
+
+      // Instructions & Features (6)
+      { method: "GET", path: "/api/projects/current/instructions", cat: "Instructions & Features", guards: "project_id, project_revision, path (ending in AGENTS.md)", effect: "Read-Only", desc: "Previews applicable root-to-directory AGENTS.md guides, origins, and evidence-matched instruction presets." },
+      { method: "POST", path: "/api/projects/current/instructions/proposal", cat: "Instructions & Features", guards: "project_id, project_revision, path, content/presets", effect: "Metadata Write (No LLM / No Source Write)", desc: "Prepares a checked AGENTS.md proposal session without calling a model or writing AGENTS.md directly." },
+      { method: "GET", path: "/api/projects/current/features", cat: "Instructions & Features", guards: "project_id, project_revision", effect: "Read-Only", desc: "Reads saved project goals, additive feature suggestions (schema_version: 2), and generation provenance." },
+      { method: "POST", path: "/api/projects/current/features/goals", cat: "Instructions & Features", guards: "project_id, project_revision, expected_hash, goals (<=4096B)", effect: "Metadata Write (.mini-orca/)", desc: "Saves project goals; existing ideas generated under earlier goals become stale on read." },
+      { method: "POST", path: "/api/projects/current/features/generate", cat: "Instructions & Features", guards: "project_id, project_revision, expected_hash, confirm_remote_provider, optional profile, optional analysis_selection_id", effect: "Synchronous Analyze LLM (≥10m cap)", desc: "Generates up to 5 new deduplicated feature suggestions and appends them to .mini-orca/changes/features.json." },
+      { method: "PATCH", path: "/api/projects/current/features/{featureID}", cat: "Instructions & Features", guards: "project_id, project_revision, expected_hash, status (open|saved|dismissed)", effect: "Metadata Write (.mini-orca/)", desc: "Updates triage status of a saved feature suggestion." }
+    ];
+
+    function renderApiRoutes() {
+      const cat = document.getElementById("api-cat-filter").value;
+      const method = document.getElementById("api-method-filter").value;
+      const q = document.getElementById("api-search").value.trim().toLowerCase();
+
+      const filtered = API_ROUTES.filter(r => {
+        if (cat !== "all" && r.cat !== cat) return false;
+        if (method !== "all" && r.method !== method) return false;
+        if (q && !(`${r.method} ${r.path} ${r.guards} ${r.desc} ${r.cat} ${r.effect}`).toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      document.getElementById("api-count-label").textContent = `Showing ${filtered.length} of ${API_ROUTES.length} live routes`;
+      const container = document.getElementById("api-routes-container");
+      container.innerHTML = filtered.map(r => `
+        <div class="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-1.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-[var(--primary)] text-[var(--primary-foreground)]">${r.method}</span>
+              <code class="text-xs sm:text-sm font-mono font-bold">${r.path}</code>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--secondary)] text-[var(--secondary-foreground)]">${r.cat}</span>
+              <span class="px-2 py-0.5 rounded text-xs font-mono bg-[var(--card)] border border-[var(--border)]">${r.effect}</span>
+            </div>
+          </div>
+          <p class="text-xs text-[var(--muted-foreground)]">${r.desc}</p>
+          <div class="text-xs font-mono text-[var(--muted-foreground)]">Required Guards: <span class="text-[var(--foreground)]">${r.guards}</span></div>
+        </div>
+      `).join("");
+    }
+
+    function initGuardSimulator() {
+      const bindEl = document.getElementById("sim-bind");
+      const hostEl = document.getElementById("sim-host");
+      const origEl = document.getElementById("sim-origin");
+      const ctEl = document.getElementById("sim-ct");
+      const outEl = document.getElementById("sim-verdict");
+
+      function updateSim() {
+        const bind = bindEl.value;
+        const host = hostEl.value;
+        const orig = origEl.value;
+        const ct = ctEl.value;
+
+        if (orig === "browser" || orig === "preflight") {
+          outEl.innerHTML = `<div class="font-bold">HTTP 403 Forbidden — Rejected by api.LocalOnly</div><div class="text-[var(--muted-foreground)]">Reason: Requests carrying an Origin header or CORS preflight are unconditionally rejected with no CORS headers, preventing browser pages from calling the daemon.</div>`;
+          return;
+        }
+        if (bind === "loopback" && host !== "localhost:9090") {
+          outEl.innerHTML = `<div class="font-bold">HTTP 403 Forbidden — Rejected by api.LocalOnly</div><div class="text-[var(--muted-foreground)]">Reason: With default loopback bind, Host must be localhost, 127.0.0.1, or ::1 (got "${host}"). Prevents DNS rebinding attacks.</div>`;
+          return;
+        }
+        if (ct === "missing-ct" || ct === "text-plain") {
+          outEl.innerHTML = `<div class="font-bold">HTTP 415 Unsupported Media Type — Rejected Before Route Handler</div><div class="text-[var(--muted-foreground)]">Reason: POST/PATCH requests with a body must send Content-Type: application/json (optional charset permitted).</div>`;
+          return;
+        }
+        if (ct === "unknown-field") {
+          outEl.innerHTML = `<div class="font-bold">HTTP 400 Bad Request — Structured Error ({type: "invalid_request"})</div><div class="text-[var(--muted-foreground)]">Reason: Strict JSON decoder (DisallowUnknownFields + trailing token check) rejects unknown or retired keys and multiple JSON objects.</div>`;
+          return;
+        }
+        if (ct === "stale-rev") {
+          outEl.innerHTML = `<div class="font-bold">HTTP 409 Conflict — Structured Error ({type: "conflict"})</div><div class="text-[var(--muted-foreground)]">Reason: Captured project_revision or base_file_hash no longer matches live repository state. No side effects or writes occurred.</div>`;
+          return;
+        }
+        outEl.innerHTML = `<div class="font-bold">HTTP 200 OK / 202 Accepted — Passed Boundary &amp; Identity Guards</div><div class="text-[var(--muted-foreground)]">Request accepted by api.LocalOnly (Host="${host}", Origin=none, Content-Type=application/json) and verified against active project_id &amp; project_revision.</div>`;
+      }
+
+      [bindEl, hostEl, origEl, ctEl].forEach(el => el.addEventListener("change", updateSim));
+      updateSim();
+    }
+
+    // =========================================================================
+    // 6. STORAGE (.mini-orca/) DATA (Section 7)
+    // =========================================================================
+    const STORAGE_ITEMS = [
+      {
+        path: ".mini-orca/index.json",
+        schema: "schema_version: 3",
+        classification: "Source-Free Deterministic Metadata",
+        owner: "internal/project (index.go, symbols/)",
+        desc: "Stores ProjectID, ProjectRevision, and sorted IndexFile records (path, SHA-256 content_hash, language, size_bytes, line_count, imports, symbols, diagnostics). Never stores file source text."
+      },
+      {
+        path: ".mini-orca/project-analysis.json",
+        schema: "prompt_version: project-analysis-v5",
+        classification: "Source-Free Project Summary",
+        owner: "internal/project/handbook",
+        desc: "Stores Analysis & ProjectAnalysisReport (purpose, Mermaid architecture flowchart, components, entry_points, sequence/flow diagrams, risks, next_steps, and model provenance)."
+      },
+      {
+        path: ".mini-orca/project-docs.json",
+        schema: "schema_version: 1",
+        classification: "Source-Free C4/Arc42/ADR Specification",
+        owner: "internal/project/handbook (BuildProjectDocs)",
+        desc: "Language-agnostic engineering handbook containing Context (purpose, goal_pursuit, topology, stack), Dependencies, C4 Level 3 Components, runtime Scenarios, ADRs (decisions + tradeoffs), Runbook commands, and Glossary."
+      },
+      {
+        path: ".mini-orca/analysis/selection.json",
+        schema: "schema_version: 1",
+        classification: "Source-Free User Scope Checklist",
+        owner: "internal/app/analysis_selection_store.go",
+        desc: "Persists user-selected excluded_paths (up to 20,000 canonical project-relative paths) across daemon restarts. Corrupt selection metadata fails explicitly instead of silently selecting everything."
+      },
+      {
+        path: ".mini-orca/analysis/run.json",
+        schema: "Unified Analysis Journal",
+        classification: "Source-Free Run Progress & Plan",
+        owner: "internal/app/analysis_run_store.go",
+        desc: "Persists the admitted AnalysisRun plan, queue_id, generation, model choices, cumulative attempt counters, per-file stage statuses, and section progress (Bugs, Performance, Security, Features). Never stores reusable provider consent."
+      },
+      {
+        path: ".mini-orca/file-analysis/<hash>.json",
+        schema: "prompt_version: file-analysis-v16",
+        classification: "Source-Free Semantic File Cache",
+        owner: "internal/project/file_analysis.go",
+        desc: "Per-file semantic analysis cache bound to content hash, instructions_fingerprint, policy version, and model profile. Stores summary, classified risks (bugs/performance/security with 2-6 word titles), and engineering insights."
+      },
+      {
+        path: ".mini-orca/performance/files/<hash>.json",
+        schema: "prompt_version: performance-file-v7",
+        classification: "Source-Free Performance Review Cache",
+        owner: "internal/project/performance.go",
+        desc: "Per-file Performance review report storing line-anchored bottlenecks, hypotheses, complexity impact, configured_model vs resolved model, and failure diagnostics."
+      },
+      {
+        path: ".mini-orca/security/files/<hash>.json",
+        schema: "rules: go-rules-v1 / prompt: security-file-v4",
+        classification: "Source-Free Security Evidence",
+        owner: "internal/project/security.go",
+        desc: "Stores deterministic AST rule_match findings and redacted AI model_suspicion findings with CWE, observed_condition, preconditions, remediation, verification_idea, and triage state."
+      },
+      {
+        path: ".mini-orca/findings.json & finding-completions.json",
+        schema: "Envelope v1",
+        classification: "Source-Free Triage & Merge Completion",
+        owner: "internal/project/findings.go, finding_completion.go",
+        desc: "Persists user triage statuses (open, dismissed, fixed) and worktree-merged FindingCompletion records linking finding IDs to their fixing Git commit_oid."
+      },
+      {
+        path: ".mini-orca/changes/index.json & <sessionID>.json",
+        schema: "Change Session Store (<=200 sessions, <=2 MiB each)",
+        classification: "Private Source-Bearing Change History",
+        owner: "internal/app/change_store.go",
+        desc: "Intentionally stores captured base file snapshots, proposed edits, unified diffs, up to 40 messages, check results, 4-stage workflow review, and commit receipts in 0700 private files excluded from prompt context and Git indexing."
+      },
+      {
+        path: ".mini-orca/changes/recovery.json",
+        schema: "Grouped Mutation Recovery Journal",
+        classification: "Private Source-Bearing Recovery Receipt",
+        owner: "internal/app/change_apply.go",
+        desc: "Written before any source replacement ('prepared' -> 'applied' / 'undoing' / 'recovery_required'). Holds pre-Apply snapshots, post-Apply hashes, commit status, and post-Apply verification evidence to power guarded Undo and crash recovery."
+      },
+      {
+        path: ".mini-orca/changes/features.json",
+        schema: "schema_version: 2 (<=64 KiB)",
+        classification: "Source-Free Goal & Feature Library",
+        owner: "internal/app/features/history.go",
+        desc: "Stores user project goals, generations[] provenance (revision, workspace_hash, goals_hash, model), last_generation counts, and deduplicated feature suggestions with per-idea freshness."
+      }
+    ];
+
+    function renderStorage(selectedIndex = 0) {
+      const listEl = document.getElementById("storage-list");
+      listEl.innerHTML = STORAGE_ITEMS.map((item, idx) => `
+        <button data-sidx="${idx}" class="storage-item w-full text-left px-3.5 py-2.5 rounded-lg border transition flex items-center justify-between gap-2 ${idx === selectedIndex ? 'border-[var(--primary)] bg-[var(--background)] font-semibold' : 'border-[var(--border)] bg-[var(--card)] hover:opacity-90'}">
+          <code class="font-mono text-xs truncate">${item.path}</code>
+        </button>
+      `).join("");
+
+      listEl.querySelectorAll(".storage-item").forEach(btn => {
+        btn.addEventListener("click", () => renderStorage(Number(btn.dataset.sidx)));
+      });
+
+      const it = STORAGE_ITEMS[selectedIndex];
+      document.getElementById("storage-detail").innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <code class="text-sm font-mono font-bold">${it.path}</code>
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono bg-[var(--primary)] text-[var(--primary-foreground)]">${it.schema}</span>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs font-mono">
+          <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">Owner: ${it.owner}</span>
+          <span class="px-2 py-0.5 rounded bg-[var(--secondary)] text-[var(--secondary-foreground)]">${it.classification}</span>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">${it.desc}</p>
+        <div class="p-3 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs font-mono text-[var(--muted-foreground)]">
+          Atomic Write Protocol: MkdirAll(0700) → CreateTemp(".metadata-*.tmp") → Write → Chmod → Sync → Close → Authorize() → Rename()
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 7. TAB NAVIGATION & GLOBAL SEARCH
+    // =========================================================================
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-panel").forEach(p => {
+        p.classList.toggle("hidden", p.id !== `tab-${tabId}`);
+      });
+      document.querySelectorAll(".nav-tab").forEach(btn => {
+        if (btn.dataset.tab === tabId) {
+          btn.className = "nav-tab tab-btn-active px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors";
+        } else {
+          btn.className = "nav-tab px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90 transition-colors";
+        }
+      });
+    }
+
+    function initGlobalSearch() {
+      const input = document.getElementById("global-search");
+      const resultsBox = document.getElementById("global-search-results");
+
+      const searchIndex = [
+        ...PACKAGES.map((p, idx) => ({ label: p.path, sub: `Package (${p.layer}) — ${p.summary}`, tab: "architecture", action: () => renderPackages(idx) })),
+        ...API_ROUTES.map(r => ({ label: `${r.method} ${r.path}`, sub: `API Route (${r.cat}) — ${r.desc}`, tab: "api", action: () => {
+          document.getElementById("api-cat-filter").value = "all";
+          document.getElementById("api-method-filter").value = "all";
+          document.getElementById("api-search").value = r.path;
+          renderApiRoutes();
+        }})),
+        ...COLON_COMMANDS.map(c => ({ label: c.cmd, sub: `TUI Command — ${c.desc}`, tab: "tui", action: () => {
+          document.getElementById("tui-cmd-input").value = c.cmd;
+          executeSimulatedColonCommand(c.cmd);
+        }})),
+        ...STORAGE_ITEMS.map((s, idx) => ({ label: s.path, sub: `Storage (${s.schema}) — ${s.desc}`, tab: "storage", action: () => renderStorage(idx) }))
+      ];
+
+      input.addEventListener("input", () => {
+        const q = input.value.trim().toLowerCase();
+        if (!q) {
+          resultsBox.classList.add("hidden");
+          return;
+        }
+        const matches = searchIndex.filter(it => (`${it.label} ${it.sub}`).toLowerCase().includes(q)).slice(0, 12);
+        if (matches.length === 0) {
+          resultsBox.innerHTML = `<div class="p-3 text-xs text-[var(--muted-foreground)] font-mono">No matching technical item found.</div>`;
+        } else {
+          resultsBox.innerHTML = matches.map((m, i) => `
+            <button data-midx="${i}" class="search-hit w-full text-left p-2.5 hover:bg-[var(--secondary)] transition block">
+              <div class="font-mono text-xs font-bold text-[var(--foreground)]">${m.label}</div>
+              <div class="text-xs text-[var(--muted-foreground)] truncate">${m.sub}</div>
+            </button>
+          `).join("");
+          resultsBox.querySelectorAll(".search-hit").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const hit = matches[Number(btn.dataset.midx)];
+              switchTab(hit.tab);
+              if (hit.action) hit.action();
+              resultsBox.classList.add("hidden");
+              input.value = "";
+            });
+          });
+        }
+        resultsBox.classList.remove("hidden");
+      });
+
+      document.addEventListener("click", e => {
+        if (!input.contains(e.target) && !resultsBox.contains(e.target)) {
+          resultsBox.classList.add("hidden");
+        }
+      });
+    }
+
+    // Initialize everything on DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", () => {
+      // Standalone browser theme initialization if host iframe tokens are absent
+      const rootStyle = getComputedStyle(document.documentElement);
+      if (!rootStyle.getPropertyValue("--background").trim()) {
+        const s = document.documentElement.style;
+        s.setProperty("--background", "#0f111a");
+        s.setProperty("--card", "#161926");
+        s.setProperty("--sidebar", "#131622");
+        s.setProperty("--content", "#0f111a");
+        s.setProperty("--border", "#2a2f45");
+        s.setProperty("--foreground", "#e2e8f0");
+        s.setProperty("--muted-foreground", "#94a3b8");
+        s.setProperty("--placeholder", "#64748b");
+        s.setProperty("--primary", "#60a5fa");
+        s.setProperty("--primary-foreground", "#0f111a");
+        s.setProperty("--secondary", "#1e2436");
+        s.setProperty("--secondary-foreground", "#cbd5e1");
+        s.setProperty("--accent", "#3b82f6");
+      }
+
+      // Main tabs
+      document.querySelectorAll(".nav-tab").forEach(btn => {
+        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      });
+
+      // Section 1: Topology
+      renderTopoDetail("tui");
+      document.querySelectorAll(".topo-node").forEach(btn => {
+        btn.addEventListener("click", () => renderTopoDetail(btn.dataset.topo));
+      });
+
+      // Section 2: Packages & Arch Simulator
+      renderPackages(3); // default to internal/api
+      initArchSimulator();
+
+      // Section 3: TUI Simulator & Colon Commands
+      initTuiSection();
+
+      // Section 4: 4-Stage Pipeline
+      renderPipelineStage(0);
+      document.querySelectorAll(".stage-btn").forEach(btn => {
+        btn.addEventListener("click", () => renderPipelineStage(Number(btn.dataset.stage)));
+      });
+
+      // Section 5: API Explorer & Guard Simulator
+      initGuardSimulator();
+      renderApiRoutes();
+      document.getElementById("api-cat-filter").addEventListener("change", renderApiRoutes);
+      document.getElementById("api-method-filter").addEventListener("change", renderApiRoutes);
+      document.getElementById("api-search").addEventListener("input", renderApiRoutes);
+
+      // Section 7: Storage Explorer
+      renderStorage(0);
+
+      // Global Search
+      initGlobalSearch();
+    });
+  </script>
+</body>
+</html>
