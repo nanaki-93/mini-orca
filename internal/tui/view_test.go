@@ -792,11 +792,16 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 	}
 
 	// Verify pages always render the combined untitled footer at the bottom of the screen
-	for _, p := range []Page{PageSummary, PageProject, PageGit, PageHistory, PageInstructions, PageLessons} {
+	for _, p := range []Page{PageSummary, PageRepo, PageProject, PageGit, PageHistory, PageInstructions, PageLessons} {
 		s.Navigate(p)
 		frame := s.Render(160, 46)
 		if strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") || strings.Contains(frame, "SESSION & PIPELINE CONTEXT") {
 			t.Fatalf("expected footer on page %s to omit section titles:\n%s", p, frame)
+		}
+		if strings.Contains(frame, "CATEGORY BREAKDOWN") || strings.Contains(frame, "PRIORITY FOCUS") ||
+			strings.Contains(frame, "WORKSPACE IDENTITY") || strings.Contains(frame, "INDEXED FILES SAMPLE") ||
+			strings.Contains(frame, "VERIFICATION GATE PIPELINE") {
+			t.Fatalf("expected 1-Overview subsection titles to be omitted on page %s:\n%s", p, frame)
 		}
 		if !strings.Contains(frame, "Analysis:") || !strings.Contains(frame, "Scope:") || !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
 			t.Fatalf("expected combined footer on page %s to display session context, trust, and palette:\n%s", p, frame)
