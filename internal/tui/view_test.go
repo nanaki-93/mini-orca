@@ -791,15 +791,15 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		t.Fatalf("expected full-screen 180x50 viewport to display more finding rows (%d) than 120x26 (%d)", tallFindingRows, compactFindingRows)
 	}
 
-	// Verify sparse pages fill the bottom of full-screen viewports with the telemetry & routing dock
+	// Verify pages always render the combined untitled footer at the bottom of the screen
 	for _, p := range []Page{PageSummary, PageProject, PageGit, PageHistory, PageInstructions, PageLessons} {
 		s.Navigate(p)
 		frame := s.Render(160, 46)
-		if !strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") {
-			t.Fatalf("expected page %s on 160x46 full-screen viewport to render bottom-anchored WORKSPACE TELEMETRY & ROUTING DOCK:\n%s", p, frame)
+		if strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") || strings.Contains(frame, "SESSION & PIPELINE CONTEXT") {
+			t.Fatalf("expected footer on page %s to omit section titles:\n%s", p, frame)
 		}
-		if !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
-			t.Fatalf("expected footer dock on page %s to display trust and palette:\n%s", p, frame)
+		if !strings.Contains(frame, "Analysis:") || !strings.Contains(frame, "Scope:") || !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
+			t.Fatalf("expected combined footer on page %s to display session context, trust, and palette:\n%s", p, frame)
 		}
 		if strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
 			t.Fatalf("expected footer dock on page %s to omit Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)

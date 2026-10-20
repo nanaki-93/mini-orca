@@ -112,28 +112,26 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRow
 	case s.ShowKeybindsModal:
 		body = append(body, s.renderKeybindsModal(th, contentWidth)...)
 	default:
+		s.viewportBodyRows = max(1, targetBodyRows-4)
 		body = append(body, s.renderActivePage(th, contentWidth)...)
-		body = s.appendFullScreenWorkspaceDock(th, contentWidth, targetBodyRows, body)
+		body = s.appendBottomFooterDock(th, contentWidth, targetBodyRows, body)
 	}
 	return body
 }
 
-func (s *State) appendFullScreenWorkspaceDock(th ansiTheme, contentWidth, targetBodyRows int, body []string) []string {
-	panelW := adaptivePanelWidth(contentWidth)
+func (s *State) appendBottomFooterDock(th ansiTheme, contentWidth, targetBodyRows int, body []string) []string {
 	rem := targetBodyRows - len(body)
-	if rem < 5 {
+	if rem < 3 {
 		return body
 	}
-	if rem >= 12 {
-		body = append(body, "")
-		body = append(body, s.renderWorkspaceContextSupplement(th, panelW)...)
-		rem = targetBodyRows - len(body)
+	panelW := adaptivePanelWidth(contentWidth)
+	dockBox := s.renderWorkspaceFooter(th, panelW, rem >= 4)
+	if len(dockBox) > rem {
+		dockBox = s.renderWorkspaceFooter(th, panelW, false)
 	}
-	if rem < 5 {
+	if len(dockBox) > rem {
 		return body
 	}
-	dockLines := s.buildFullScreenDockLines(th)
-	dockBox := th.renderPanelBox("WORKSPACE TELEMETRY & ROUTING DOCK", strings.ToUpper(string(s.EffectivePage())), panelW, dockLines)
 	padRows := max(0, targetBodyRows-len(body)-len(dockBox))
 	for i := 0; i < padRows; i++ {
 		body = append(body, "")
@@ -141,8 +139,7 @@ func (s *State) appendFullScreenWorkspaceDock(th ansiTheme, contentWidth, target
 	return append(body, dockBox...)
 }
 
-func (s *State) renderWorkspaceContextSupplement(th ansiTheme, panelW int) []string {
-	cfg := s.EffectiveAnalysisConfig()
+func (s *State) renderWorkspaceFooter(th ansiTheme, panelW int, twoLines bool) []string {
 	totalFiles := s.indexedFileCount()
 	inclFiles := max(0, totalFiles-len(s.ExcludedPaths))
 	runStatus := "IDLE"
@@ -153,30 +150,30 @@ func (s *State) renderWorkspaceContextSupplement(th ansiTheme, panelW int) []str
 	if s.Change != nil && s.Change.State != "" {
 		chgStatus = s.Change.State
 	}
-	lines := []string{
-		fmt.Sprintf("%sAnalysis Policy:%s %s · %sBatch:%s %d · %sBudget:%s %ds · %sTries:%s %d · %sScope:%s %d/%d indexed",
-			th.muted, th.reset, th.statusBadge(runStatus),
-			th.muted, th.reset, cfg.BatchFiles,
-			th.muted, th.reset, cfg.BudgetSeconds,
-			th.muted, th.reset, cfg.MaxAttemptsPerStage,
-			th.muted, th.reset, inclFiles, totalFiles),
-		fmt.Sprintf("%sChange Session:%s  %s · %sSaved Proposals:%s %d · %sGraduated Lessons:%s %d",
-			th.muted, th.reset, th.statusBadge(chgStatus),
-			th.muted, th.reset, len(s.ChangeHistory),
-			th.muted, th.reset, len(s.GraduatedLessons)),
-	}
-	return th.renderPanelBox("SESSION & PIPELINE CONTEXT", "LIVE STATE", panelW, lines)
-}
-
-func (s *State) buildFullScreenDockLines(th ansiTheme) []string {
 	trust := th.statusBadge("TRUSTED")
 	if !s.WorkspaceTrust {
 		trust = th.statusBadge("UNTRUSTED")
 	}
-	line := fmt.Sprintf("%strust:%s %s   %spalette:%s %s%s%s",
-		th.muted, th.reset, trust,
-		th.muted, th.reset, th.purple, s.Palette, th.reset)
-	return []string{line}
+	if !twoLines {
+		line := fmt.Sprintf("%sAnalysis:%s %s · %sScope:%s %d/%d · %strust:%s %s · %spalette:%s %s%s%s",
+			th.muted, th.reset, th.statusBadge(runStatus),
+			th.muted, th.reset, inclFiles, totalFiles,
+			th.muted, th.reset, trust,
+			th.muted, th.reset, th.purple, s.Palette, th.reset)
+		return th.renderPanelBox("", "", panelW, []string{line})
+	}
+	lines := []string{
+		fmt.Sprintf("%sAnalysis:%s %s · %sScope:%s %d/%d · %sChange:%s %s",
+			th.muted, th.reset, th.statusBadge(runStatus),
+			th.muted, th.reset, inclFiles, totalFiles,
+			th.muted, th.reset, th.statusBadge(chgStatus)),
+		fmt.Sprintf("%sProposals:%s %d · %sLessons:%s %d · %strust:%s %s · %spalette:%s %s%s%s",
+			th.muted, th.reset, len(s.ChangeHistory),
+			th.muted, th.reset, len(s.GraduatedLessons),
+			th.muted, th.reset, trust,
+			th.muted, th.reset, th.purple, s.Palette, th.reset),
+	}
+	return th.renderPanelBox("", "", panelW, lines)
 }
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {

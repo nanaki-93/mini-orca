@@ -295,29 +295,86 @@ func RenderProgressBar(progStartHex, progEndHex string, done, total, barWidth in
 	return fmt.Sprintf("%s %3d%%", prog.ViewAs(ratio), pct)
 }
 
+// WrapVisibleLine wraps an ANSI-styled line into one or more lines of exact maxCols visible width without truncating text.
+func WrapVisibleLine(s string, maxCols int) []string {
+	s = SanitizeSingleLine(s)
+	if maxCols <= 0 {
+		return nil
+	}
+	if lipgloss.Width(s) <= maxCols {
+		return []string{PadVisibleRight(s, maxCols)}
+	}
+	var lines []string
+	rem := s
+	activeSGR := ""
+	for rem != "" {
+		chunk, rest, nextSGR := splitVisibleChunk(rem, maxCols, activeSGR)
+		lines = append(lines, PadVisibleRight(activeSGR+chunk+"\x1b[0m", maxCols))
+		rem = strings.TrimLeft(rest, " ")
+		activeSGR = nextSGR
+	}
+	return lines
+}
+
+func splitVisibleChunk(s string, maxCols int, startSGR string) (string, string, string) {
+	cols := 0
+	curSGR := startSGR
+	lastSpaceIdx := -1
+	lastSpaceSGR := curSGR
+	for i := 0; i < len(s); {
+		if seqLen := ansiEscapeLen(s[i:]); seqLen > 0 {
+			seq := s[i : i+seqLen]
+			if seq == "\x1b[0m" {
+				curSGR = ""
+			} else {
+				curSGR += seq
+			}
+			i += seqLen
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		rw := max(1, lipgloss.Width(string(r)))
+		if cols+rw > maxCols {
+			if lastSpaceIdx > 0 {
+				return s[:lastSpaceIdx], s[lastSpaceIdx+1:], lastSpaceSGR
+			}
+			return s[:i], s[i:], curSGR
+		}
+		if r == ' ' && cols >= maxCols/3 {
+			lastSpaceIdx = i
+			lastSpaceSGR = curSGR
+		}
+		cols += rw
+		i += size
+	}
+	return s, "", curSGR
+}
+
 // RenderPanelBox wraps content lines in a Lip Gloss rounded enterprise panel frame without line-wrap overflow.
 func RenderPanelBox(titleStyle, mutedStyle, cardStyle lipgloss.Style, border, reset, title, rightMeta string, innerWidth int, body []string) []string {
 	if innerWidth < 40 {
 		innerWidth = 40
 	}
 	contentW := max(24, innerWidth-4)
-	header := titleStyle.Render(strings.TrimSpace(title))
-	if strings.TrimSpace(rightMeta) != "" {
-		meta := mutedStyle.Render(strings.TrimSpace(rightMeta))
-		maxTitleW := max(10, contentW-lipgloss.Width(meta)-2)
-		if lipgloss.Width(header) > maxTitleW {
-			header = TruncateVisible(header, maxTitleW)
-		}
-		gap := max(2, contentW-lipgloss.Width(header)-lipgloss.Width(meta))
-		header = header + strings.Repeat(" ", gap) + meta
-	}
 	allLines := make([]string, 0, len(body)+2)
-	allLines = append(allLines, PadVisibleRight(header, contentW))
-	if len(body) > 0 {
-		allLines = append(allLines, border+strings.Repeat("─", contentW)+reset)
+	if strings.TrimSpace(title) != "" || strings.TrimSpace(rightMeta) != "" {
+		header := titleStyle.Render(strings.TrimSpace(title))
+		if strings.TrimSpace(rightMeta) != "" {
+			meta := mutedStyle.Render(strings.TrimSpace(rightMeta))
+			maxTitleW := max(10, contentW-lipgloss.Width(meta)-2)
+			if lipgloss.Width(header) > maxTitleW {
+				header = TruncateVisible(header, maxTitleW)
+			}
+			gap := max(2, contentW-lipgloss.Width(header)-lipgloss.Width(meta))
+			header = header + strings.Repeat(" ", gap) + meta
+		}
+		allLines = append(allLines, PadVisibleRight(header, contentW))
+		if len(body) > 0 {
+			allLines = append(allLines, border+strings.Repeat("─", contentW)+reset)
+		}
 	}
 	for _, line := range body {
-		allLines = append(allLines, PadVisibleRight(line, contentW))
+		allLines = append(allLines, WrapVisibleLine(line, contentW)...)
 	}
 	rendered := cardStyle.Render(strings.Join(allLines, "\n"))
 	rawLines := strings.Split(rendered, "\n")
@@ -334,9 +391,9 @@ func RenderErrorBanner(errorBoxStyle lipgloss.Style, critBg, boldRed, reset, err
 		innerWidth = 40
 	}
 	contentW := max(24, innerWidth-4)
-	head := PadVisibleRight(fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s", critBg, reset), contentW)
-	msg := PadVisibleRight(fmt.Sprintf("%s%s%s", boldRed, strings.TrimSpace(errText), reset), contentW)
-	box := errorBoxStyle.Render(head + "\n" + msg)
+	allLines := []string{PadVisibleRight(fmt.Sprintf("%s ▲ ERROR / DIAGNOSTIC ALERT %s", critBg, reset), contentW)}
+	allLines = append(allLines, WrapVisibleLine(fmt.Sprintf("%s%s%s", boldRed, strings.TrimSpace(errText), reset), contentW)...)
+	box := errorBoxStyle.Render(strings.Join(allLines, "\n"))
 	var out []string
 	for _, line := range strings.Split(box, "\n") {
 		out = append(out, "  "+line)
