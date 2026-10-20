@@ -64,13 +64,31 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			fmt.Sprintf("%sLocation:%s  %s%s:%d%s   %sSummary:%s %s",
 				th.muted, th.reset, th.cyan, cur.Path, cur.Line, th.reset,
 				th.muted, th.reset, cur.Cause),
-			fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Selected Row · %s[i]%s Inspect · %s[d]%s Dismiss",
-				th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
 		}
+		if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
+			footer = append(footer, fmt.Sprintf("%sCommit:%s    %s%s%s",
+				th.muted, th.reset, th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), th.reset))
+		}
+		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Selected Row · %s[i]%s Inspect · %s[d]%s Dismiss",
+			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset))
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
 	}
 	return lines
+}
+
+func formatIssueCommitLink(code, oid string) string {
+	shortOID := theme.TruncatePlain(strings.TrimSpace(oid), 8)
+	switch {
+	case code != "" && shortOID != "":
+		return fmt.Sprintf("%s (%s)", code, shortOID)
+	case code != "":
+		return code
+	case shortOID != "":
+		return shortOID
+	default:
+		return "verified"
+	}
 }
 
 func (s *State) renderIssueStatusFilterStrip(th ansiTheme, openCount, inProgCount, doneCount int) string {
@@ -128,12 +146,12 @@ func (s *State) renderIssueDetailWorkflowLine(th ansiTheme, cur IssueRow) string
 		return fmt.Sprintf("%s⟳ Agent Status:%s    In Progress (%s) · %s[Enter/w]%s Watch Agent Pipeline · %s[Esc]%s Back",
 			th.bold+th.amber, th.reset, client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset)
 	case "done":
-		oid := ""
-		if cur.CommitOID != "" {
-			oid = " (" + theme.TruncatePlain(cur.CommitOID, 8) + ")"
+		commitRef := ""
+		if cur.CommitCode != "" || cur.CommitOID != "" {
+			commitRef = " [" + formatIssueCommitLink(cur.CommitCode, cur.CommitOID) + "]"
 		}
 		return fmt.Sprintf("%s✔ Resolution:%s      Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[Esc]%s Back",
-			th.bold+th.green, th.reset, oid, th.cyan, th.reset, th.cyan, th.reset)
+			th.bold+th.green, th.reset, commitRef, th.cyan, th.reset, th.cyan, th.reset)
 	default:
 		return fmt.Sprintf("%s▸ Next Action:%s     %s[f/Enter/a]%s Fix Bug with Agent · %s[d]%s Dismiss · %s[o]%s Open File · %s[Esc]%s Back",
 			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)

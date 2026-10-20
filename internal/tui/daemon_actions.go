@@ -489,13 +489,15 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 	}
 	sessionID := url.PathEscape(s.Change.ID)
 	s.ensureChangeReviewed(ctx, cl, reqID, sessionID)
+	commitCode := domain.GenerateCommitCode(s.Change.ID, s.Change.Hash, s.Change.FindingTargets)
+	commitMsg := domain.FormatCommitMessageWithCode(client.FirstNonEmpty(act.Message, s.Change.Title), commitCode)
 	applyReq := map[string]any{
 		"project_id":       s.Project.ProjectID,
 		"project_revision": s.Project.ProjectRevision,
 		"revision":         s.Change.Revision,
 		"hash":             s.Change.Hash,
 		"confirm":          true,
-		"commit_message":   client.FirstNonEmpty(act.Message, s.Change.Title),
+		"commit_message":   commitMsg,
 	}
 	if head, branch := s.activeGitIdentity(); head != "" && branch != "" {
 		applyReq["head"] = head
@@ -505,11 +507,20 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/changes/"+sessionID+"/apply", applyReq, &receipt); err != nil {
 		return err
 	}
+	if receipt.SessionID == "" {
+		receipt.SessionID = s.Change.ID
+	}
+	if receipt.Hash == "" {
+		receipt.Hash = s.Change.Hash
+	}
+	if receipt.Commit == nil {
+		receipt.Commit = &ChangeCommit{State: "committed", Message: commitMsg}
+	} else if receipt.Commit.Message == "" {
+		receipt.Commit.Message = commitMsg
+	}
 	s.ChangeReceipt = &receipt
 	s.Change.State = client.FirstNonEmpty(receipt.State, "applied")
-	if receipt.Commit != nil {
-		s.Change.Commit = receipt.Commit
-	}
+	s.Change.Commit = receipt.Commit
 	s.upsertActiveChange(s.Change)
 	s.recordAppliedFindingCompletions(s.Change.FindingTargets, receipt.Commit)
 	if receipt.ProjectRevision != "" {
@@ -519,7 +530,7 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 		s.Instructions.Exists = true
 		s.Instructions.ExistingContent = s.Change.Changes[0].Content
 	}
-	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q", s.Change.Title)
+	s.CmdOutput = fmt.Sprintf("Applied and committed proposal %q [%s]", s.Change.Title, commitCode)
 	return nil
 }
 
@@ -671,10 +682,24 @@ func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act 
 		return err
 	}
 	s.ChangeReceipt = &receipt
+	newState := client.FirstNonEmpty(receipt.State, "reverted")
+	var targets []FindingTarget
 	if s.Change != nil && s.Change.ID == act.Target {
-		s.Change.State = client.FirstNonEmpty(receipt.State, "reverted")
-		s.removeFindingCompletions(s.Change.FindingTargets)
+		s.Change.State = newState
+		targets = append(targets, s.Change.FindingTargets...)
 	}
+	for i := range s.ChangeHistory {
+		if s.ChangeHistory[i].ID == act.Target {
+			s.ChangeHistory[i].State = newState
+			targets = append(targets, s.ChangeHistory[i].FindingTargets...)
+		}
+	}
+	for _, comp := range s.CompletedFindings {
+		if comp.SessionID == act.Target {
+			targets = append(targets, comp.FindingTarget)
+		}
+	}
+	s.removeFindingCompletions(targets)
 	if receipt.ProjectRevision != "" && s.Project != nil {
 		s.Project.ProjectRevision = receipt.ProjectRevision
 	}

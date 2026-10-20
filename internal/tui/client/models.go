@@ -273,7 +273,10 @@ type FindingTarget struct {
 // FindingCompletion records a finding closed by a committed change or merged worktree.
 type FindingCompletion struct {
 	FindingTarget
-	CommitOID string `json:"commit_oid"`
+	CommitOID  string `json:"commit_oid"`
+	CommitCode string `json:"commit_code,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	Title      string `json:"title,omitempty"`
 }
 
 // FindingsResponse wraps the daemon's /api/projects/current/findings payload.

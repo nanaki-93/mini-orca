@@ -169,3 +169,27 @@ func TestAgentItemsAndArchitectureDiagram(t *testing.T) {
 		t.Fatalf("expected companion test paths per directory %q, got %q", wantPaths, got)
 	}
 }
+
+func TestCommitCodeGenerationAndFormatting(t *testing.T) {
+	targets := []client.FindingTarget{{Kind: "semantic", ID: "f1", Path: "main.go"}}
+	code := GenerateCommitCode("chg-1", "hash-1", targets)
+	if !strings.HasPrefix(code, "ORC-") || len(code) != 12 {
+		t.Fatalf("expected ORC-XXXXXXXX commit code, got %q", code)
+	}
+	if again := GenerateCommitCode("chg-1", "hash-1", targets); again != code {
+		t.Fatalf("expected deterministic commit code %q, got %q", code, again)
+	}
+	formatted := FormatCommitMessageWithCode("Fix nil pointer dereference", code)
+	if !strings.HasPrefix(formatted, "["+code+"] ") {
+		t.Fatalf("expected prefixed commit message, got %q", formatted)
+	}
+	if FormatCommitMessageWithCode(formatted, code) != formatted {
+		t.Fatalf("expected FormatCommitMessageWithCode to be idempotent")
+	}
+	if got := ExtractCommitCode(formatted); got != code {
+		t.Fatalf("ExtractCommitCode = %q, want %q", got, code)
+	}
+	if got := ResolveCommitCode("chg-1", "hash-1", targets, &client.ChangeCommit{Message: formatted}); got != code {
+		t.Fatalf("ResolveCommitCode = %q, want %q", got, code)
+	}
+}

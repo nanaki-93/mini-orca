@@ -301,8 +301,41 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 	if err := storeChangeSession(root, &journal.Session); err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; history could not be updated: "+err.Error())
 	}
+	syncDirectChangeFindingCompletions(root, journal)
 	delete(s.changeAuthority, journal.Session.ProjectID+"/"+journal.Session.ID)
 	return result
+}
+
+func syncDirectChangeFindingCompletions(root string, journal *changeJournal) {
+	if journal == nil || len(journal.Session.FindingTargets) == 0 {
+		return
+	}
+	store, err := project.NewFindingStore(root)
+	if err != nil {
+		return
+	}
+	if journal.State == "applied" && journal.Commit != nil && journal.Commit.State == "committed" && journal.Commit.OID != "" {
+		var completions []project.FindingCompletion
+		for _, target := range journal.Session.FindingTargets {
+			if target.ProjectID == journal.Session.ProjectID {
+				completions = append(completions, project.FindingCompletion{
+					FindingTarget: target,
+					CommitOID:     journal.Commit.OID,
+				})
+			}
+		}
+		if len(completions) > 0 {
+			_ = store.Complete(completions)
+		}
+		return
+	}
+	if journal.State == "undone" {
+		for _, target := range journal.Session.FindingTargets {
+			if target.ProjectID == journal.Session.ProjectID {
+				_ = store.SetTargetStatus(target, project.FindingStatusOpen, "")
+			}
+		}
+	}
 }
 
 func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {

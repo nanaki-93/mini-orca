@@ -320,6 +320,66 @@ func (s *State) saveCustomPresetsToDisk() {
 	}
 }
 
+func (s *State) issueHistoryFilePath() string {
+	if s.Project == nil || strings.TrimSpace(s.Project.Path) == "" {
+		return ""
+	}
+	info, err := os.Stat(s.Project.Path)
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+	return filepath.Join(s.Project.Path, ".mini-orca", "tui-issue-history.json")
+}
+
+func (s *State) loadIssueHistoryFromDisk() {
+	p := s.issueHistoryFilePath()
+	if p == "" {
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var saved []FindingCompletion
+	if err := json.Unmarshal(data, &saved); err != nil || len(saved) == 0 {
+		return
+	}
+	projID := s.projectID()
+	for _, item := range saved {
+		if projID != "" && item.ProjectID != "" && item.ProjectID != projID {
+			continue
+		}
+		s.mergeFindingCompletion(item)
+	}
+}
+
+func (s *State) saveIssueHistoryToDisk() {
+	p := s.issueHistoryFilePath()
+	if p == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return
+	}
+	if data, err := json.MarshalIndent(s.CompletedFindings, "", "  "); err == nil {
+		_ = os.WriteFile(p, data, 0o600)
+	}
+}
+
+func (s *State) mergeFindingCompletion(item FindingCompletion) {
+	for i := range s.CompletedFindings {
+		cur := &s.CompletedFindings[i]
+		if sameFindingTarget(cur.FindingTarget, item.FindingTarget) {
+			cur.CommitOID = client.FirstNonEmpty(item.CommitOID, cur.CommitOID)
+			cur.CommitCode = client.FirstNonEmpty(item.CommitCode, cur.CommitCode)
+			cur.SessionID = client.FirstNonEmpty(item.SessionID, cur.SessionID)
+			cur.Title = client.FirstNonEmpty(item.Title, cur.Title)
+			return
+		}
+	}
+	s.CompletedFindings = append(s.CompletedFindings, item)
+}
+
 // ActiveHub returns the HubTab owning the current Page.
 func (s *State) ActiveHub() HubTab {
 	tabs := HubTabs()
@@ -493,9 +553,10 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 		criteria = f.TaskSpec.AcceptanceCriteria
 		sol = strings.Join(criteria, "\n")
 	}
-	commitOID := ""
+	commitOID, commitCode := "", ""
 	if comp != nil {
 		commitOID = comp.CommitOID
+		commitCode = comp.CommitCode
 	}
 	rows = append(rows, IssueRow{
 		ID:                 id,
@@ -508,6 +569,7 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 		Category:           cat,
 		Status:             issueStatus(done, agentPath),
 		CommitOID:          commitOID,
+		CommitCode:         commitCode,
 		AgentPath:          agentPath,
 		Cause:              cause,
 		Solution:           sol,
@@ -531,9 +593,10 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		if !done {
 			agentPath = matchAgentPath(agents, target, name, f.Title)
 		}
-		commitOID := ""
+		commitOID, commitCode := "", ""
 		if comp != nil {
 			commitOID = comp.CommitOID
+			commitCode = comp.CommitCode
 		}
 		var criteria []string
 		if plan := strings.TrimSpace(f.VerificationPlan); plan != "" {
@@ -550,6 +613,7 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			Category:           "performance",
 			Status:             issueStatus(done, agentPath),
 			CommitOID:          commitOID,
+			CommitCode:         commitCode,
 			AgentPath:          agentPath,
 			Cause:              client.FirstNonEmpty(f.ObservedPattern, "No cause recorded."),
 			Solution:           client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
@@ -579,9 +643,10 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 		if !done {
 			agentPath = matchAgentPath(agents, target, name, f.Title)
 		}
-		commitOID := ""
+		commitOID, commitCode := "", ""
 		if comp != nil {
 			commitOID = comp.CommitOID
+			commitCode = comp.CommitCode
 		}
 		var criteria []string
 		if idea := strings.TrimSpace(f.VerificationIdea); idea != "" {
@@ -598,6 +663,7 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			Category:           "security",
 			Status:             issueStatus(done, agentPath),
 			CommitOID:          commitOID,
+			CommitCode:         commitCode,
 			AgentPath:          agentPath,
 			Cause:              client.FirstNonEmpty(f.ObservedCondition, "No cause recorded."),
 			Solution:           client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
@@ -626,9 +692,12 @@ func sameFindingTarget(a, b FindingTarget) bool {
 
 func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 	for i := range s.CompletedFindings {
-		c := &s.CompletedFindings[i]
+		c := s.CompletedFindings[i]
 		if sameFindingTarget(c.FindingTarget, target) {
-			return c
+			if c.CommitCode == "" {
+				c.CommitCode = s.lookupHistoryCommitCode(target, c.CommitOID)
+			}
+			return &c
 		}
 	}
 	if s.Change != nil && s.Change.State == "applied" {
@@ -638,7 +707,8 @@ func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 				if s.Change.Commit != nil {
 					oid = s.Change.Commit.OID
 				}
-				return &FindingCompletion{FindingTarget: target, CommitOID: oid}
+				code := domain.ResolveCommitCode(s.Change.ID, s.Change.Hash, s.Change.FindingTargets, s.Change.Commit)
+				return &FindingCompletion{FindingTarget: target, CommitOID: oid, CommitCode: code, SessionID: s.Change.ID, Title: s.Change.Title}
 			}
 		}
 	}
@@ -652,11 +722,29 @@ func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 				if entry.Commit != nil {
 					oid = entry.Commit.OID
 				}
-				return &FindingCompletion{FindingTarget: target, CommitOID: oid}
+				code := domain.ResolveCommitCode(entry.ID, entry.Hash, entry.FindingTargets, entry.Commit)
+				return &FindingCompletion{FindingTarget: target, CommitOID: oid, CommitCode: code, SessionID: entry.ID, Title: entry.Title}
 			}
 		}
 	}
 	return nil
+}
+
+func (s *State) lookupHistoryCommitCode(target FindingTarget, commitOID string) string {
+	for _, entry := range s.ChangeHistory {
+		if commitOID != "" && entry.Commit != nil && entry.Commit.OID == commitOID {
+			return domain.ResolveCommitCode(entry.ID, entry.Hash, entry.FindingTargets, entry.Commit)
+		}
+		for _, t := range entry.FindingTargets {
+			if sameFindingTarget(t, target) {
+				return domain.ResolveCommitCode(entry.ID, entry.Hash, entry.FindingTargets, entry.Commit)
+			}
+		}
+	}
+	if commitOID != "" {
+		return domain.GenerateCommitCode(commitOID, "", []FindingTarget{target})
+	}
+	return ""
 }
 
 func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string) string {

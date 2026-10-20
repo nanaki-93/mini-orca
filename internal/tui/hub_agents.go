@@ -444,22 +444,56 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
+	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "[3] CODE & DIFF · SAVED PROPOSALS", "Guarded change history & audit trail")
 	if len(s.ChangeHistory) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo saved proposals in history.%s", th.muted, th.reset))
 	}
-	lines = append(lines, th.renderTableHeader("   STATE        PROPOSAL TITLE                        REVISION    FRESHNESS", width)...)
+	lines = append(lines, th.renderTableHeader("   STATE        COMMIT CODE    PROPOSAL TITLE                        REVISION", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.ChangeHistory), selected, s.adaptiveWindowRows(12, 12))
+	start, end := windowBounds(len(s.ChangeHistory), selected, s.adaptiveWindowRows(12, 10))
 	for idx := start; idx < end; idx++ {
 		entry := s.ChangeHistory[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		tStyle := rowTitleStyle(th, idx == selected)
+		code := domain.ResolveCommitCode(entry.ID, entry.Hash, entry.FindingTargets, entry.Commit)
+		if code == "" {
+			code = "—"
+		}
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-12s %s%-32s%s %srev:%d (%s)%s",
-			cursor, th.statusBadge(entry.State), tStyle, entry.Title, th.reset,
+			"  %s%-12s %s%-13s%s %s%-32s%s %srev:%d (%s)%s",
+			cursor, th.statusBadge(entry.State),
+			th.purple, code, th.reset,
+			tStyle, theme.TruncatePlain(entry.Title, 32), th.reset,
 			th.muted, entry.Revision, client.FirstNonEmpty(entry.Freshness, "current"), th.reset,
 		))
 	}
-	return appendWindowFooter(th, lines, start, end, len(s.ChangeHistory))
+	lines = appendWindowFooter(th, lines, start, end, len(s.ChangeHistory))
+	if selected >= 0 && selected < len(s.ChangeHistory) {
+		entry := s.ChangeHistory[selected]
+		code := client.FirstNonEmpty(domain.ResolveCommitCode(entry.ID, entry.Hash, entry.FindingTargets, entry.Commit), "—")
+		oid := "uncommitted"
+		if entry.Commit != nil && entry.Commit.OID != "" {
+			oid = theme.TruncatePlain(entry.Commit.OID, 12)
+		}
+		var targetLabels []string
+		for _, ft := range entry.FindingTargets {
+			targetLabels = append(targetLabels, fmt.Sprintf("%s:%s (%s)", ft.Kind, ft.ID, ft.Path))
+		}
+		linked := "None"
+		if len(targetLabels) > 0 {
+			linked = strings.Join(targetLabels, ", ")
+		}
+		detail := []string{
+			fmt.Sprintf("%sProposal:%s      %s%s%s · %sCode:%s %s%s%s · %sCommit:%s %s%s%s",
+				th.muted, th.reset, th.bold+th.fg, entry.Title, th.reset,
+				th.muted, th.reset, th.bold+th.purple, code, th.reset,
+				th.muted, th.reset, th.cyan, oid, th.reset),
+			fmt.Sprintf("%sLinked Issues:%s %s%s%s",
+				th.muted, th.reset, th.green, linked, th.reset),
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderPanelBox("SELECTED PROPOSAL & ISSUE AUDIT TRAIL", strings.ToUpper(entry.State), panelW, detail)...)
+	}
+	return lines
 }

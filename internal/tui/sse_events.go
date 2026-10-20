@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
 // SyncFromDaemon loads the initial workspace snapshot from the local daemon via Client.
@@ -73,6 +74,7 @@ func (s *State) loadProjectResources(ctx context.Context, client *Client) {
 		s.Findings = fResp.Findings
 		s.CompletedFindings = fResp.Completed
 	}
+	s.loadIssueHistoryFromDisk()
 	var gitWS GitWorkspace
 	if err := client.DoJSON(ctx, "sync-git", http.MethodGet, "/api/projects/current/git/workspace"+idQuery, nil, &gitWS); err == nil {
 		s.GitWorkspace = &gitWS
@@ -301,7 +303,10 @@ func (s *State) pollRunningAnalysis(ctx context.Context, client *Client, idQuery
 	var fResp FindingsResponse
 	if err := client.DoJSON(ctx, "poll-findings", http.MethodGet, "/api/projects/current/findings"+revQuery, nil, &fResp); err == nil && s.AcceptProjectResponse(fResp.ProjectIdentity) {
 		s.Findings = fResp.Findings
-		s.CompletedFindings = fResp.Completed
+		for _, comp := range fResp.Completed {
+			s.mergeFindingCompletion(comp)
+		}
+		s.loadIssueHistoryFromDisk()
 	}
 }
 
@@ -430,18 +435,33 @@ func (s *State) syncProjectRevision(ctx context.Context, cl *Client, reqID strin
 }
 
 func (s *State) recordAppliedFindingCompletions(targets []FindingTarget, commit *ChangeCommit) {
+	if len(targets) == 0 {
+		return
+	}
 	oid := ""
 	if commit != nil {
 		oid = commit.OID
 	}
-	for _, ft := range targets {
-		if s.findCompletion(ft) == nil {
-			s.CompletedFindings = append(s.CompletedFindings, FindingCompletion{
-				FindingTarget: ft,
-				CommitOID:     oid,
-			})
-		}
+	sessionID, hash, title := "", "", ""
+	if s.Change != nil {
+		sessionID = s.Change.ID
+		hash = s.Change.Hash
+		title = s.Change.Title
 	}
+	commitCode := domain.ResolveCommitCode(sessionID, hash, targets, commit)
+	for _, ft := range targets {
+		if ft.ProjectID == "" {
+			ft.ProjectID = s.projectID()
+		}
+		s.mergeFindingCompletion(FindingCompletion{
+			FindingTarget: ft,
+			CommitOID:     oid,
+			CommitCode:    commitCode,
+			SessionID:     sessionID,
+			Title:         title,
+		})
+	}
+	s.saveIssueHistoryToDisk()
 }
 
 func (s *State) removeFindingCompletions(targets []FindingTarget) {
@@ -462,6 +482,7 @@ func (s *State) removeFindingCompletions(targets []FindingTarget) {
 		}
 	}
 	s.CompletedFindings = kept
+	s.saveIssueHistoryToDisk()
 }
 
 func (s *State) activeGitIdentity() (string, string) {

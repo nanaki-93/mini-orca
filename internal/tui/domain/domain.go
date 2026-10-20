@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -15,8 +17,67 @@ var (
 	whitespacePattern   = regexp.MustCompile(`\s+`)
 	genericTitlePattern = regexp.MustCompile(`(?i)^(file|project) analysis suggestion$`)
 	nonAlphaNumPattern  = regexp.MustCompile(`[^a-z0-9]+`)
+	commitCodePattern   = regexp.MustCompile(`(?i)\b(ORC-[0-9A-F]{8})\b`)
 	trailingPunct       = " \t\n\r.,;:!?…"
 )
+
+// GenerateCommitCode produces a deterministic 8-hex-character commit code (ORC-XXXXXXXX)
+// linking a guarded change commit to its resolved issue targets.
+func GenerateCommitCode(sessionID, hash string, targets []client.FindingTarget) string {
+	var parts []string
+	if id := strings.TrimSpace(sessionID); id != "" {
+		parts = append(parts, id)
+	}
+	if h := strings.TrimSpace(hash); h != "" {
+		parts = append(parts, h)
+	}
+	for _, t := range targets {
+		parts = append(parts, t.Kind+":"+t.ID+":"+t.Path)
+	}
+	seed := strings.Join(parts, "|")
+	if seed == "" {
+		seed = "mini-orca-commit"
+	}
+	sum := sha256.Sum256([]byte(seed))
+	return "ORC-" + strings.ToUpper(hex.EncodeToString(sum[:4]))
+}
+
+// ExtractCommitCode extracts an ORC-XXXXXXXX commit code from a commit message if present.
+func ExtractCommitCode(message string) string {
+	if m := commitCodePattern.FindStringSubmatch(message); len(m) == 2 {
+		return strings.ToUpper(m[1])
+	}
+	return ""
+}
+
+// FormatCommitMessageWithCode prefixes a commit message with [ORC-XXXXXXXX] unless already tagged.
+func FormatCommitMessageWithCode(message, code string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		trimmed = "Apply verified Mini-Orca proposal"
+	}
+	normCode := strings.ToUpper(strings.TrimSpace(code))
+	if normCode == "" || ExtractCommitCode(trimmed) != "" {
+		return trimmed
+	}
+	return fmt.Sprintf("[%s] %s", normCode, trimmed)
+}
+
+// ResolveCommitCode extracts or deterministically derives the ORC-XXXXXXXX code for a commit.
+func ResolveCommitCode(sessionID, hash string, targets []client.FindingTarget, commit *client.ChangeCommit) string {
+	if commit != nil {
+		if code := ExtractCommitCode(commit.Message); code != "" {
+			return code
+		}
+		if commit.OID != "" && sessionID == "" && hash == "" && len(targets) == 0 {
+			return GenerateCommitCode(commit.OID, "", nil)
+		}
+	}
+	if sessionID == "" && hash == "" && len(targets) == 0 {
+		return ""
+	}
+	return GenerateCommitCode(sessionID, hash, targets)
+}
 
 // FindingTitle normalizes a finding title, falling back to its summary when generic or empty.
 func FindingTitle(title, summary string) string {
@@ -68,6 +129,7 @@ type IssueRow struct {
 	Category           string
 	Status             string
 	CommitOID          string
+	CommitCode         string
 	AgentPath          string
 	Cause              string
 	Solution           string
