@@ -809,13 +809,13 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		if strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
 			t.Fatalf("expected footer dock on page %s to omit Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
 		}
-		if !strings.Contains(frame, "MODEL ROUTING") || !strings.Contains(frame, "64 files · 300s") {
-			t.Fatalf("expected sidebar on page %s (160x46) to include MODEL ROUTING and '64 files · 300s':\n%s", p, frame)
+		if !strings.Contains(frame, "MODEL ROUTING") || !strings.Contains(frame, "64 files · 5m") || !strings.Contains(frame, "Attempts") || !strings.Contains(frame, "2 / stage") {
+			t.Fatalf("expected sidebar on page %s (160x46) to include MODEL ROUTING, '64 files · 5m', and 'Attempts 2 / stage':\n%s", p, frame)
 		}
 		rows := strings.Split(frame, "\n")
 		// Check that the last body row right above the bottom border (rows[len(rows)-4]) has content in both sidebar and main pane
 		lastBodyRow := rows[len(rows)-4]
-		if !strings.Contains(lastBodyRow, "64 files · 300s") || !strings.Contains(lastBodyRow, "╰") {
+		if !strings.Contains(lastBodyRow, "2 / stage") || !strings.Contains(lastBodyRow, "╰") {
 			t.Fatalf("expected bottom-anchored sidebar footer and panel dock on last body row of page %s, got: %q", p, lastBodyRow)
 		}
 		if strings.Contains(frame, "[?]  [:] Cmd") {

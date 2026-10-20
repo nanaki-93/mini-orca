@@ -200,12 +200,12 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 	}
 	lines = append(lines, "")
 	lines = append(lines, s.renderSidebarPulse(th, width)...)
-	if targetBodyRows-len(lines) >= 7 {
+	footer := s.renderSidebarFooter(th, width)
+	if targetBodyRows-len(lines)-len(footer) >= 8 {
 		lines = append(lines, "")
 		lines = append(lines, s.renderSidebarRouting(th, width)...)
 	}
-	if rem := targetBodyRows - len(lines); rem >= 4 {
-		footer := s.renderSidebarFooter(th, width)
+	if rem := targetBodyRows - len(lines); rem >= len(footer) {
 		padRows := max(0, targetBodyRows-len(lines)-len(footer))
 		for i := 0; i < padRows; i++ {
 			lines = append(lines, "")
@@ -232,9 +232,11 @@ func (s *State) renderSidebarRouting(th ansiTheme, width int) []string {
 
 func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
 	cfg := s.EffectiveAnalysisConfig()
+	mins := max(1, (cfg.BudgetSeconds+59)/60)
 	return []string{
 		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %sBatch%s   %s%d files · %ds%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, cfg.BudgetSeconds, th.reset),
+		fmt.Sprintf("  %sBatch%s    %s%d files · %dm%s", th.muted, th.reset, th.cyan, cfg.BatchFiles, mins, th.reset),
+		fmt.Sprintf("  %sAttempts%s %s%d / stage%s", th.muted, th.reset, th.cyan, cfg.MaxAttemptsPerStage, th.reset),
 	}
 }
 
