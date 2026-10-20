@@ -101,6 +101,7 @@ type State struct {
 	BrowseFiles       bool
 	AgentDetailOpen   bool
 	ShowKeybindsModal bool
+	KeybindsScroll    int
 	Confirmation      *Confirmation
 	CmdActive         bool
 	CmdInput          string

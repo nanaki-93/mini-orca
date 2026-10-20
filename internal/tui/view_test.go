@@ -348,11 +348,18 @@ func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 			"KEYBINDINGS & COLON COMMANDS REFERENCE",
 			"PAGE SHORTCUTS · " + spec.title,
 			spec.primary[0].desc,
+			spec.commands[0].key,
+			spec.commands[0].desc,
 			"GLOBAL NAV",
 			"GENERIC CMDS",
 		} {
 			if !strings.Contains(frame, token) {
 				t.Fatalf("page %s help overlay missing %q:\n%s", p, token, frame)
+			}
+		}
+		for _, cmd := range allColonCommands {
+			if !strings.Contains(frame, cmd.key) || !strings.Contains(frame, cmd.desc) {
+				t.Fatalf("page %s help overlay missing command %q or explanation %q:\n%s", p, cmd.key, cmd.desc, frame)
 			}
 		}
 	}

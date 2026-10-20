@@ -102,6 +102,13 @@ func (s *State) handleKeybindsModalKey(ev KeyEvent) {
 	switch ev.Key {
 	case "Escape", "?", "Enter", "q":
 		s.ShowKeybindsModal = false
+		s.KeybindsScroll = 0
+	case "j", "ArrowDown":
+		s.KeybindsScroll++
+	case "k", "ArrowUp":
+		if s.KeybindsScroll > 0 {
+			s.KeybindsScroll--
+		}
 	}
 }
 
@@ -109,6 +116,7 @@ func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 	switch ev.Key {
 	case "?":
 		s.ShowKeybindsModal = !s.ShowKeybindsModal
+		s.KeybindsScroll = 0
 		return true
 	case ":", "/":
 		s.CmdActive = true
