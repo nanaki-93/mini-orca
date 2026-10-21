@@ -735,13 +735,18 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		},
 	}
 	s.Navigate(PageAgents)
+	mainAgentsFrame := s.Render(120, 40)
+	if strings.Contains(mainAgentsFrame, "GUARDED EXECUTION PIPELINE") {
+		t.Fatalf("expected main Agent Studio table view to omit GUARDED EXECUTION PIPELINE:\n%s", mainAgentsFrame)
+	}
 	s.HandleKey(KeyEvent{Key: "g"})
 	if !s.AgentDetailOpen {
 		t.Fatal("expected 'g' on PageAgents to open Agent Debug & Check Inspector")
 	}
-	dbgFrame := s.Render(120, 40)
+	dbgFrame := s.Render(120, 44)
 	for _, token := range []string{
 		"WORKFLOW DEBUG & CHECK INSPECTOR",
+		"GUARDED EXECUTION PIPELINE",
 		"4-STAGE WORKFLOW & ASSIGNED MODELS",
 		"qwen2.5-coder:14b",
 		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
@@ -980,4 +985,3 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		}
 	}
 }
-

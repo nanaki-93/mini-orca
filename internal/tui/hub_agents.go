@@ -15,18 +15,7 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	}
 	panelW := adaptivePanelWidth(width)
 	items := s.AgentItems()
-	activeStage := 0
-	if len(items) > 0 {
-		activeStage = items[s.ClampedIdx()].StageNumber
-	}
-	pipelineLines := []string{renderPipelineStepper(th, activeStage, s.Change)}
-	if len(items) > 0 {
-		if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
-			pipelineLines = append(pipelineLines, stageSummary)
-		}
-	}
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · 4-STAGE AUTONOMOUS PIPELINE", "Guarded code generation & verification")
-	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, pipelineLines)...)
 	if len(items) == 0 {
 		guide := []string{
 			fmt.Sprintf("%sStatus:%s No active autonomous missions running.", th.bold+th.cyan, th.reset),
@@ -187,6 +176,17 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[Esc/g] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
+	items := s.AgentItems()
+	activeStage := 1
+	if len(items) > 0 {
+		activeStage = items[s.ClampedIdx()].StageNumber
+	}
+	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg)}
+	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
+		pipelineLines = append(pipelineLines, stageSummary)
+	}
+	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, pipelineLines)...)
+	lines = append(lines, "")
 	wfStatus := chg.State
 	wfReason := ""
 	repairs := chg.RepairAttempts
