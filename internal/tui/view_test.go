@@ -798,23 +798,27 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		t.Fatal("expected Escape to close Agent Debug & Check Inspector")
 	}
 
-	// 3. Handbook arrow navigation cycles through sub-pages
+	// 3. Handbook arrow keys stay on current page while Tab cycles through sub-pages
 	s.Navigate(PageDocs)
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageDocsComponents {
-		t.Fatalf("expected ArrowRight in Handbook to open PageDocsComponents, got %s", s.Page)
-	}
-	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageDocsDecisions {
-		t.Fatalf("expected second ArrowRight in Handbook to open PageDocsDecisions, got %s", s.Page)
-	}
-	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageDiagrams {
-		t.Fatalf("expected third ArrowRight in Handbook to open PageDiagrams, got %s", s.Page)
-	}
-	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageDocs {
-		t.Fatalf("expected fourth ArrowRight in Handbook to wrap back to PageDocs, got %s", s.Page)
+		t.Fatalf("expected ArrowRight in Handbook to stay on PageDocs, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageDocsComponents {
+		t.Fatalf("expected Tab in Handbook to open PageDocsComponents, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageDocsDecisions {
+		t.Fatalf("expected second Tab in Handbook to open PageDocsDecisions, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageDiagrams {
+		t.Fatalf("expected third Tab in Handbook to open PageDiagrams, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageDocs {
+		t.Fatalf("expected fourth Tab in Handbook to wrap back to PageDocs, got %s", s.Page)
 	}
 }
 

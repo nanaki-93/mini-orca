@@ -614,14 +614,20 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		}
 	}
 
-	// Section 4: h/l and j/k update both Page and DocsSection
+	// Section 4: Tab and h/l update both Page and DocsSection; arrow keys and j/k do not switch submenus
 	s.HandleKey(KeyEvent{Key: "4"})
 	if s.Page != PageDocs || s.DocsSection != "context" {
 		t.Fatalf("Section 4 initial state: page=%s section=%s", s.Page, s.DocsSection)
 	}
-	s.HandleKey(KeyEvent{Key: "j"})
+	for _, key := range []string{"ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "j", "k"} {
+		s.HandleKey(KeyEvent{Key: key})
+		if s.Page != PageDocs || s.DocsSection != "context" {
+			t.Fatalf("Section 4 after %q: expected to stay on PageDocs/context, got page=%s section=%s", key, s.Page, s.DocsSection)
+		}
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageDocsComponents || s.DocsSection != "components" {
-		t.Fatalf("Section 4 after 'j': page=%s section=%s", s.Page, s.DocsSection)
+		t.Fatalf("Section 4 after Tab: page=%s section=%s", s.Page, s.DocsSection)
 	}
 	s.HandleKey(KeyEvent{Key: "l"})
 	if s.Page != PageDocsDecisions || s.DocsSection != "decisions" {
@@ -658,15 +664,22 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
 	}
 
-	// Verify Left/Right arrows on PageAgents (Pipeline view) stay on PageAgents and do not move to Issues
-	s.Navigate(PageAgents)
-	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageAgents {
-		t.Fatalf("expected ArrowRight on PageAgents to stay on PageAgents, got %s", s.Page)
+	// Verify Left/Right/Up/Down arrows never navigate submenus on any page
+	nonSubmenuArrowPages := []Page{
+		PageSummary, PageRepo, PageProject,
+		PageAgents, PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
+		PageEditor, PageGit, PageHistory,
+		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
+		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
-	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
-	if s.Page != PageAgents {
-		t.Fatalf("expected ArrowLeft on PageAgents to stay on PageAgents, got %s", s.Page)
+	for _, p := range nonSubmenuArrowPages {
+		s.Navigate(p)
+		for _, key := range []string{"ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"} {
+			s.HandleKey(KeyEvent{Key: key})
+			if s.Page != p {
+				t.Fatalf("expected %s on %s to stay on %s, got %s", key, p, p, s.Page)
+			}
+		}
 	}
 
 	// Verify Left/Right arrows do NOT change status filter on PageBugs, while 's'/'S' does
@@ -688,6 +701,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("expected 'S' on PageBugs to change status filter back to open, got page=%s view=%s", s.Page, s.IssueView)
 	}
 	s.Navigate(PageAnalysisRun)
+	s.SelectedIdx = s.analysisRunSectionCount()
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if s.Page != PageAnalysisRun || s.EffectiveAnalysisConfig().BatchFiles != 128 {
 		t.Fatalf("expected ArrowRight on PageAnalysisRun to step BatchFiles to 128, got page=%s batch=%d", s.Page, s.EffectiveAnalysisConfig().BatchFiles)

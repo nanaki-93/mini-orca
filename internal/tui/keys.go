@@ -253,8 +253,6 @@ func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
 
 func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	switch s.EffectivePage() {
-	case PageAgents, PageBugs:
-		return true
 	case PageAnalysisRun:
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
 			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), forward)
@@ -275,8 +273,6 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 		s.activateInstructionsRow()
 	case PageLessons:
 		s.graduateSelectedLesson()
-	default:
-		s.stepHorizontalSection(forward)
 	}
 	return true
 }
@@ -372,9 +368,6 @@ func (s *State) moveSelection(delta int) {
 			s.moveAgentDetailStageSelection(delta)
 			return
 		}
-	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
-		s.cycleSubView(delta > 0)
-		return
 	case PageEditor:
 		if s.isViewingDiff() {
 			s.moveEditorDiffSelection(delta)

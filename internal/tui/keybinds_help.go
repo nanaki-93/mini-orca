@@ -80,7 +80,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	contentW := max(24, boxW-4)
 	globalItems := []keyDesc{
 		{"↑/↓", "Move selection"},
-		{"←/→", "Step option / view"},
+		{"←/→", "Step option"},
 		{"1-5 / Tab", "Switch hub / tab"},
 		{"Enter / Esc", "Activate / back"},
 		{"? / :", "Help / command"},
