@@ -145,11 +145,11 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 	rule := client.FirstNonEmpty(cur.Rule, cur.Category+"-check")
 	fresh := client.FirstNonEmpty(cur.Freshness, "current")
 	symbol, signature, fileMeta := s.resolveIssueSymbolAndFileMeta(cur)
-	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s   %sSymbol:%s %s%s%s",
+	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s  %sSymbol:%s %s%s%s",
 		th.muted, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset,
 		th.muted, th.reset, th.bold+th.fg, symbol, th.reset)
 	if fileMeta != "" {
-		locLine += fmt.Sprintf("   %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
+		locLine += fmt.Sprintf("  %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
 	}
 	scopePaths := domain.EnsureChangeTestPaths([]string{cur.Path}, s.Index)
 	scopeStr := client.FirstNonEmpty(strings.Join(scopePaths, ", "), cur.Path, "workspace")

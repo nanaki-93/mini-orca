@@ -9,7 +9,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
-const sidebarMenuWidth = 26
+const sidebarMenuWidth = 30
 
 // Render generates a complete, full-screen adaptive ANSI terminal frame for the current TUI state.
 func (s *State) Render(width, height int) string {
@@ -190,7 +190,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 	for _, tab := range HubTabs() {
 		isActiveHub := tab.Key == active.Key
 		if isActiveHub {
-			badge := fmt.Sprintf(" ▸ %s. %-18s", tab.Key, strings.ToUpper(tab.Label))
+			badge := fmt.Sprintf(" ▸ %s. %-*s", tab.Key, max(18, width-8), strings.ToUpper(tab.Label))
 			lines = append(lines, " "+th.accentBg+theme.TruncatePlain(badge, width-2)+th.reset)
 			lines = append(lines, s.renderSidebarSubPages(th, tab, width)...)
 			lines = append(lines, "")
