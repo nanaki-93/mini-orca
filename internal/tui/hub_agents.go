@@ -38,19 +38,20 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, "")
 	selected := s.ClampedIdx()
-	titleCol := max(16, width-60)
-	headerCols := fmt.Sprintf("    %-16s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
+	titleCol := min(32, max(16, width-64))
+	headerCols := fmt.Sprintf("  %-16s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
 	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	start, end := windowBounds(len(items), selected, 5)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
-		stageLabel := theme.TruncatePlain(fmt.Sprintf("%d. %s", item.StageNumber, item.Stage), 16)
+		stageCol := theme.PadVisibleRight(theme.TruncatePlain(fmt.Sprintf("%d. %s", item.StageNumber, item.Stage), 16), 16)
+		titleCell := theme.PadVisibleRight(theme.TruncatePlain(item.Title, titleCol), titleCol)
 		tStyle := rowTitleStyle(th, idx == selected)
 		deltaCol := theme.PadVisibleRight(fmt.Sprintf("%s+%d%s/%s-%d%s", th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset), 10)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%-16s  %s%-*s%s  %s  %s  %schecks:%d/%d%s",
-			cursor, stageLabel, tStyle, titleCol, theme.TruncatePlain(item.Title, titleCol), th.reset,
+			"  %s%s  %s%s%s  %s  %s  %schecks:%d/%d%s",
+			cursor, stageCol, tStyle, titleCell, th.reset,
 			th.padBadge(item.ScopeBadge, 12),
 			deltaCol,
 			th.muted, item.ChecksPassed, item.ChecksTotal, th.reset,

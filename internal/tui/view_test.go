@@ -932,3 +932,52 @@ func TestAnalysisFileStageFailuresAndCompletedEmptyRendering(t *testing.T) {
 		t.Fatalf("expected File Scope page for broken.go to show exact stage failure reason:\n%s", brokenFilesView)
 	}
 }
+
+func TestAgentStudioTableColumnAlignment(t *testing.T) {
+	s := NewState()
+	s.Change = &ChangeSession{
+		ID:    "chg-align",
+		Title: "Fix discarded clipboard copy",
+		State: "checked",
+		Changes: []FileChange{
+			{
+				Path: "internal/tui/view.go",
+				Diff: FileDiff{Lines: []DiffLine{{Kind: "add", NewLine: 1, Text: "line"}}},
+			},
+		},
+		Checks: []Check{{Name: "go test", State: "passed"}},
+	}
+	s.Navigate(PageAgents)
+	th := themeForPalette(s.Palette)
+	for _, width := range []int{96, 128} {
+		lines := s.renderAgentsPage(th, width)
+		var hdrLine, rowLine string
+		for _, l := range lines {
+			if strings.Contains(l, "STAGE") && strings.Contains(l, "MISSION TITLE") {
+				hdrLine = l
+			}
+			if strings.Contains(l, "Fix discarded clipboard copy") && strings.Contains(l, "checks:1/1") {
+				rowLine = l
+			}
+		}
+		if hdrLine == "" || rowLine == "" {
+			t.Fatalf("expected table header and row in renderAgentsPage at width %d, got hdr=%q row=%q", width, hdrLine, rowLine)
+		}
+		pairs := [][2]string{
+			{"STAGE", "3. Critic Review"},
+			{"MISSION TITLE", "Fix discarded clipboard copy"},
+			{"SCOPE", "[SURGICAL]"},
+			{"DELTA", "+1"},
+			{"CHECKS", "checks:1/1"},
+		}
+		for _, pair := range pairs {
+			hPos := theme.VisibleRuneCount(hdrLine[:strings.Index(hdrLine, pair[0])])
+			rPos := theme.VisibleRuneCount(rowLine[:strings.Index(rowLine, pair[1])])
+			if hPos != rPos {
+				t.Fatalf("width %d column %q misaligned: header at visible col %d, row %q at visible col %d\nhdr: %q\nrow: %q",
+					width, pair[0], hPos, pair[1], rPos, hdrLine, rowLine)
+			}
+		}
+	}
+}
+
