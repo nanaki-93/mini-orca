@@ -143,11 +143,14 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 		Checks: []Check{{Name: "go test", State: "passed"}},
 	}
 
-	// Verify Diff Inspector panel & inline Why
+	// Verify Diff Inspector panel & inline Why, and that Active Proposal is omitted from header
 	s.Navigate(PageEditor)
 	diffFrame := s.Render(110, 34)
 	if !strings.Contains(diffFrame, "GUARDED DIFF REVIEW") || !strings.Contains(diffFrame, "Enforce explicit read header timeout") {
 		t.Fatalf("expected enterprise diff review panel and inline why:\n%s", diffFrame)
+	}
+	if strings.Contains(diffFrame, "Active Proposal:") {
+		t.Fatalf("expected Active Proposal to be omitted from header:\n%s", diffFrame)
 	}
 
 	// Verify Governance sections (trust, models, bootstrap, lessons)

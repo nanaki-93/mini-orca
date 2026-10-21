@@ -393,13 +393,6 @@ func (s *State) renderProgressParts(th ansiTheme) []string {
 		}
 		parts = append(parts, runText)
 	}
-	if s.HasActiveProposal() {
-		added, removed, badge := domain.ClassifyDiffScope(s.Change.Changes)
-		parts = append(parts, fmt.Sprintf("Active Proposal: %s%s%s %s (%s+%d%s/%s-%d%s)",
-			th.bold, theme.TruncatePlain(s.Change.Title, 24), th.reset,
-			th.statusBadge(badge), th.green, added, th.reset, th.red, removed, th.reset,
-		))
-	}
 	if s.Busy != "" {
 		parts = append(parts, th.warnBg+" ⟳ BUSY: "+theme.TruncatePlain(s.Busy, 22)+" "+th.reset)
 	}
