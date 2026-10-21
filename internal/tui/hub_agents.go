@@ -206,15 +206,33 @@ func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string 
 	return out
 }
 
+func (s *State) activeAgentStageNumber() int {
+	items := s.AgentItems()
+	if len(items) > 0 {
+		idx := s.ClampedIdx()
+		if idx >= 0 && idx < len(items) && items[idx].StageNumber >= 1 && items[idx].StageNumber <= 4 {
+			if items[idx].StageNumber == 1 && s.Change != nil && len(s.Change.Checks) > 0 {
+				return 2
+			}
+			return items[idx].StageNumber
+		}
+	}
+	return 1
+}
+
+func (s *State) effectiveAgentDetailStage() int {
+	if s.AgentStage >= 1 && s.AgentStage <= 4 {
+		return s.AgentStage
+	}
+	return s.activeAgentStageNumber()
+}
+
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
-	items := s.AgentItems()
-	activeStage := 1
-	if len(items) > 0 {
-		activeStage = items[s.ClampedIdx()].StageNumber
-	}
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[↑/↓] Select Stage · [i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
+	activeStage := s.activeAgentStageNumber()
+	selectedStage := s.effectiveAgentDetailStage()
 	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg)}
 	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
 		pipelineLines = append(pipelineLines, stageSummary)
@@ -244,42 +262,42 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	if strings.TrimSpace(wfReason) != "" {
 		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, wfReason, th.reset))
 	}
-	stageBox = append(stageBox, renderAgentDebugStageLines(th, chg, wfReason)...)
+	stageBox = append(stageBox, renderAgentDebugStageLines(th, chg, activeStage, selectedStage, wfReason)...)
 	if chg.Workflow != nil && strings.TrimSpace(chg.Workflow.ProbeSummary) != "" {
 		stageBox = append(stageBox, fmt.Sprintf("%sProbe:%s   %s%s%s", th.muted, th.reset, th.cyan, strings.TrimSpace(chg.Workflow.ProbeSummary), th.reset))
 	}
 	lines = append(lines, th.renderPanelBox("4-STAGE WORKFLOW & ASSIGNED MODELS", strings.ToUpper(wfStatus), panelW, stageBox)...)
 	lines = append(lines, "")
-	lines = append(lines, th.renderPanelBox("VERIFICATION CHECKS & DIAGNOSTIC OUTPUT", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))...)
-	if chg.Workflow != nil && chg.Workflow.Review != nil {
-		rev := chg.Workflow.Review
-		revLines := []string{
-			fmt.Sprintf("%sVerdict:%s %s  %s%s%s", th.muted, th.reset, th.statusBadge(rev.Verdict), th.fg, rev.Summary, th.reset),
-		}
-		for _, f := range rev.Findings {
-			revLines = append(revLines, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, f))
-		}
-		lines = append(lines, "")
-		lines = append(lines, th.renderPanelBox("STAGE 3 · CRITIC REVIEW VERDICT", strings.ToUpper(rev.Verdict), panelW, revLines)...)
-	}
+	lines = append(lines, s.renderSelectedAgentStageDetailPanel(th, panelW, chg, activeStage, selectedStage)...)
 	return lines
 }
 
-func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, wfReason string) []string {
-	if chg.Workflow == nil || len(chg.Workflow.Stages) == 0 {
-		return nil
-	}
+func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, activeStage, selectedStage int, wfReason string) []string {
 	var out []string
-	for idx, st := range chg.Workflow.Stages {
+	for idx := 0; idx < 4; idx++ {
+		stageNum := idx + 1
+		isSelected := stageNum == selectedStage
+		cursor := th.renderCursorPrefix(isSelected)
+		tStyle := rowTitleStyle(th, isSelected)
+		stageName := domain.CanonicalStageLabel(idx, "")
+		stStatus := resolvePipelineStageStatus(activeStage, chg, stageNum)
 		modelName := "default"
-		if st.Model != nil && st.Model.Model != "" {
-			modelName = st.Model.Model
+		stErr := ""
+		if chg != nil && chg.Workflow != nil && idx < len(chg.Workflow.Stages) {
+			st := chg.Workflow.Stages[idx]
+			stageName = domain.CanonicalStageLabel(idx, st.Name)
+			if strings.TrimSpace(st.Status) != "" {
+				stStatus = st.Status
+			}
+			if st.Model != nil && st.Model.Model != "" {
+				modelName = st.Model.Model
+			}
+			stErr = strings.TrimSpace(st.Reason)
 		}
-		out = append(out, fmt.Sprintf("  %s%d. %-18s%s  %s  %smodel:%s%s",
-			th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
-			th.padBadge(st.Status, 14), th.cyan, modelName, th.reset))
-		stErr := strings.TrimSpace(st.Reason)
-		if stErr == "" && (st.Status == "failed" || st.Status == "interrupted") && strings.TrimSpace(wfReason) != "" {
+		out = append(out, fmt.Sprintf("  %s%s%d. %-18s%s  %s  %smodel:%s%s",
+			cursor, tStyle, stageNum, stageName, th.reset,
+			th.padBadge(stStatus, 14), th.cyan, modelName, th.reset))
+		if stErr == "" && (stStatus == "failed" || stStatus == "interrupted") && strings.TrimSpace(wfReason) != "" {
 			stErr = strings.TrimSpace(wfReason)
 		}
 		if stErr != "" {
@@ -287,6 +305,78 @@ func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, wfReason strin
 		}
 	}
 	return out
+}
+
+func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, chg *ChangeSession, activeStage, selectedStage int) []string {
+	switch selectedStage {
+	case 1:
+		return th.renderPanelBox("STAGE 1 · ARCHITECT & CODE", fmt.Sprintf("%d FILES", len(chg.Changes)), panelW, s.renderStage1CodeDetailLines(th, chg))
+	case 2:
+		return th.renderPanelBox("VERIFICATION CHECKS & DIAGNOSTIC OUTPUT", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))
+	case 3:
+		meta := strings.ToUpper(resolvePipelineStageStatus(activeStage, chg, 3))
+		if chg.Workflow != nil && chg.Workflow.Review != nil && chg.Workflow.Review.Verdict != "" {
+			meta = strings.ToUpper(chg.Workflow.Review.Verdict)
+		}
+		return th.renderPanelBox("STAGE 3 · CRITIC REVIEW VERDICT", meta, panelW, s.renderStage3CriticDetailLines(th, chg, activeStage))
+	default:
+		meta := normalizePipelineStageBadge(4, resolvePipelineStageStatus(activeStage, chg, 4), chg)
+		return th.renderPanelBox("STAGE 4 · HUMAN REVIEW & APPLY GATE", meta, panelW, s.renderStage4HumanReviewDetailLines(th, chg, activeStage))
+	}
+}
+
+func (s *State) renderStage1CodeDetailLines(th ansiTheme, chg *ChangeSession) []string {
+	if chg == nil || len(chg.Changes) == 0 {
+		if s.hasRunningWorkflow() {
+			return []string{fmt.Sprintf("%sGenerating code proposal for target files...%s", th.amber, th.reset)}
+		}
+		return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
+	}
+	added, removed, badge := domain.ClassifyDiffScope(chg.Changes)
+	out := []string{
+		fmt.Sprintf("%sScope:%s %s   %sDelta:%s %s+%d%s/%s-%d%s across %d file(s)",
+			th.muted, th.reset, th.statusBadge(badge),
+			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(chg.Changes)),
+	}
+	for _, fc := range chg.Changes {
+		if strings.TrimSpace(fc.Summary) != "" {
+			out = append(out, fmt.Sprintf("  %s•%s %s%s%s — %s", th.cyan, th.reset, th.bold+th.fg, fc.Path, th.reset, strings.TrimSpace(fc.Summary)))
+		} else {
+			out = append(out, fmt.Sprintf("  %s•%s %s%s%s", th.cyan, th.reset, th.bold+th.fg, fc.Path, th.reset))
+		}
+	}
+	return out
+}
+
+func (s *State) renderStage3CriticDetailLines(th ansiTheme, chg *ChangeSession, activeStage int) []string {
+	if chg != nil && chg.Workflow != nil && chg.Workflow.Review != nil {
+		rev := chg.Workflow.Review
+		revLines := []string{
+			fmt.Sprintf("%sVerdict:%s %s  %s%s%s", th.muted, th.reset, th.statusBadge(rev.Verdict), th.fg, rev.Summary, th.reset),
+		}
+		for _, f := range rev.Findings {
+			revLines = append(revLines, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, f))
+		}
+		return revLines
+	}
+	stStatus := resolvePipelineStageStatus(activeStage, chg, 3)
+	return []string{
+		fmt.Sprintf("%sStatus:%s %s  %sCritic review verdict not recorded yet.%s",
+			th.muted, th.reset, th.statusBadge(stStatus), th.muted, th.reset),
+	}
+}
+
+func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSession, activeStage int) []string {
+	stStatus := normalizePipelineStageBadge(4, resolvePipelineStageStatus(activeStage, chg, 4), chg)
+	added, removed, badge := domain.ClassifyDiffScope(chg.Changes)
+	return []string{
+		fmt.Sprintf("%sGate:%s    %s   %sScope:%s %s   %sDelta:%s %s+%d%s/%s-%d%s (%d files)",
+			th.muted, th.reset, th.statusBadge(stStatus),
+			th.muted, th.reset, th.statusBadge(badge),
+			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(chg.Changes)),
+		fmt.Sprintf("%sActions:%s %s[d]%s Inspect Diff · %s[a/c]%s Apply & Commit · %s[u]%s Guarded Undo",
+			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
+	}
 }
 
 func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {

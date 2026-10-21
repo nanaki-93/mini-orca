@@ -739,9 +739,9 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 	if strings.Contains(mainAgentsFrame, "GUARDED EXECUTION PIPELINE") {
 		t.Fatalf("expected main Agent Studio table view to omit GUARDED EXECUTION PIPELINE:\n%s", mainAgentsFrame)
 	}
-	s.HandleKey(KeyEvent{Key: "g"})
+	s.HandleKey(KeyEvent{Key: "i"})
 	if !s.AgentDetailOpen {
-		t.Fatal("expected 'g' on PageAgents to open Agent Debug & Check Inspector")
+		t.Fatal("expected 'i' on PageAgents to open Agent Debug & Check Inspector")
 	}
 	dbgFrame := s.Render(120, 44)
 	for _, token := range []string{
@@ -752,13 +752,47 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
 		"nonce_uniqueness",
 		"assertion `left != right` failed",
+	} {
+		if !strings.Contains(dbgFrame, token) {
+			t.Fatalf("expected Agent Debug Inspector (Stage 2 selected) to contain %q:\n%s", token, dbgFrame)
+		}
+	}
+	if strings.Contains(dbgFrame, "STAGE 3 · CRITIC REVIEW VERDICT") {
+		t.Fatalf("expected Stage 3 detail to be hidden while Stage 2 is selected:\n%s", dbgFrame)
+	}
+
+	// Moving down selects Stage 3 in 4-Stage Workflow and updates the section below to Stage 3 detail only
+	s.HandleKey(KeyEvent{Key: "ArrowDown"})
+	stage3Frame := s.Render(120, 44)
+	for _, token := range []string{
 		"STAGE 3 · CRITIC REVIEW VERDICT",
 		"src/crypto.rs:42 reuses static slice",
 	} {
-		if !strings.Contains(dbgFrame, token) {
-			t.Fatalf("expected Agent Debug Inspector to contain %q:\n%s", token, dbgFrame)
+		if !strings.Contains(stage3Frame, token) {
+			t.Fatalf("expected Agent Debug Inspector (Stage 3 selected) to contain %q:\n%s", token, stage3Frame)
 		}
 	}
+	if strings.Contains(stage3Frame, "VERIFICATION CHECKS & DIAGNOSTIC OUTPUT") {
+		t.Fatalf("expected Stage 2 detail to be hidden while Stage 3 is selected:\n%s", stage3Frame)
+	}
+
+	// Moving up twice selects Stage 1 and updates the section below to Stage 1 detail only
+	s.HandleKey(KeyEvent{Key: "ArrowUp"})
+	s.HandleKey(KeyEvent{Key: "ArrowUp"})
+	stage1Frame := s.Render(120, 44)
+	if !strings.Contains(stage1Frame, "STAGE 1 · ARCHITECT & CODE") || strings.Contains(stage1Frame, "STAGE 3 · CRITIC REVIEW VERDICT") {
+		t.Fatalf("expected Stage 1 detail only when Stage 1 is selected:\n%s", stage1Frame)
+	}
+
+	// Moving down to Stage 4 updates the section below to Stage 4 detail only
+	s.HandleKey(KeyEvent{Key: "j"})
+	s.HandleKey(KeyEvent{Key: "j"})
+	s.HandleKey(KeyEvent{Key: "j"})
+	stage4Frame := s.Render(120, 44)
+	if !strings.Contains(stage4Frame, "STAGE 4 · HUMAN REVIEW & APPLY GATE") || strings.Contains(stage4Frame, "STAGE 1 · ARCHITECT & CODE") {
+		t.Fatalf("expected Stage 4 detail only when Stage 4 is selected:\n%s", stage4Frame)
+	}
+
 	s.HandleKey(KeyEvent{Key: "Escape"})
 	if s.AgentDetailOpen {
 		t.Fatal("expected Escape to close Agent Debug & Check Inspector")

@@ -100,6 +100,7 @@ type State struct {
 	HunkIdx           int
 	BrowseFiles       bool
 	AgentDetailOpen   bool
+	AgentStage        int
 	ShowKeybindsModal bool
 	KeybindsScroll    int
 	Confirmation      *Confirmation
@@ -408,6 +409,7 @@ func (s *State) Navigate(page Page) {
 	}
 	if page != PageAgents {
 		s.AgentDetailOpen = false
+		s.AgentStage = 0
 	}
 	s.Page = page
 	if page == PageAgents {

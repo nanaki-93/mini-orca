@@ -226,6 +226,7 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 	}
 	if s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
+		s.AgentStage = 0
 		s.CmdOutput = "Returned to Agents in Progress Dashboard"
 		return true
 	}
@@ -366,6 +367,11 @@ func (s *State) stepHorizontalSection(forward bool) {
 
 func (s *State) moveSelection(delta int) {
 	switch s.EffectivePage() {
+	case PageAgents:
+		if s.AgentDetailOpen {
+			s.moveAgentDetailStageSelection(delta)
+			return
+		}
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		s.cycleSubView(delta > 0)
 		return
@@ -664,13 +670,22 @@ func (s *State) toggleAgentDebugInspector() {
 	s.syncSelectedAgentSession()
 	s.AgentDetailOpen = !s.AgentDetailOpen
 	if s.AgentDetailOpen {
-		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([Esc/g] to return)"
+		s.AgentStage = s.activeAgentStageNumber()
+		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([i/Esc] to return)"
 		if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 			s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 		}
 		return
 	}
+	s.AgentStage = 0
 	s.CmdOutput = "Returned to Agents in Progress Dashboard"
+}
+
+func (s *State) moveAgentDetailStageSelection(delta int) {
+	cur := s.effectiveAgentDetailStage()
+	next := min(4, max(1, cur+delta))
+	s.AgentStage = next
+	s.CmdOutput = fmt.Sprintf("Selected Stage %d/4: %s", next, domain.CanonicalStageLabel(next-1, ""))
 }
 
 func (s *State) handleEditorKey(key string) bool {
