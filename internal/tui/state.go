@@ -541,44 +541,84 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	name := domain.FindingName(f.Title, f.Message)
 	comp := s.findCompletion(target)
 	done := f.Status == "fixed" || f.Status == "done" || comp != nil
-	agentPath := ""
-	if !done {
-		agentPath = matchAgentPath(agents, target, name, title)
-		if agentPath == "" && f.Status == "in_progress" {
-			agentPath = client.FirstNonEmpty(f.Location.Path, f.ID)
-		}
-	}
+	agentPath := s.resolveSemanticAgentPath(done, f, agents, target, name, title)
 	cause := client.FirstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
-	sol := "Synthesize a minimal, verified fix and unit test."
-	var criteria []string
-	if f.TaskSpec != nil && len(f.TaskSpec.AcceptanceCriteria) > 0 {
-		criteria = f.TaskSpec.AcceptanceCriteria
-		sol = strings.Join(criteria, "\n")
-	}
-	commitOID, commitCode := "", ""
-	if comp != nil {
-		commitOID = comp.CommitOID
-		commitCode = comp.CommitCode
-	}
+	evidence := distinctEvidenceText(f.Evidence, cause)
+	symbol, signature, sol, criteria, nonGoals := extractTaskSpecDetails(f)
+	commitOID, commitCode := completionCommitMeta(comp)
 	rows = append(rows, IssueRow{
 		ID:                 id,
 		Title:              title,
 		Name:               name,
 		Path:               f.Location.Path,
-		Symbol:             f.Location.Symbol,
+		Symbol:             symbol,
+		Signature:          signature,
 		Line:               f.Location.StartLine,
+		EndLine:            f.Location.EndLine,
 		Severity:           f.Severity,
+		Confidence:         client.FirstNonEmpty(f.Confidence, "medium"),
 		Category:           cat,
+		Rule:               f.Rule,
+		Source:             client.FirstNonEmpty(f.Source, "ai"),
+		Freshness:          client.FirstNonEmpty(f.Freshness, "current"),
 		Status:             issueStatus(done, agentPath),
 		CommitOID:          commitOID,
 		CommitCode:         commitCode,
 		AgentPath:          agentPath,
 		Cause:              cause,
+		Evidence:           evidence,
 		Solution:           sol,
 		Target:             target,
 		AcceptanceCriteria: criteria,
+		NonGoals:           nonGoals,
 	})
 	return rows
+}
+
+func (s *State) resolveSemanticAgentPath(done bool, f Finding, agents []AgentItem, target FindingTarget, name, title string) string {
+	if done {
+		return ""
+	}
+	if p := matchAgentPath(agents, target, name, title); p != "" {
+		return p
+	}
+	if f.Status == "in_progress" {
+		return client.FirstNonEmpty(f.Location.Path, f.ID)
+	}
+	return ""
+}
+
+func extractTaskSpecDetails(f Finding) (symbol, signature, solution string, criteria, nonGoals []string) {
+	symbol = f.Location.Symbol
+	solution = "Synthesize a minimal, verified fix and unit test."
+	if f.TaskSpec == nil {
+		return symbol, "", solution, nil, nil
+	}
+	if symbol == "" {
+		symbol = f.TaskSpec.TargetSymbol
+	}
+	signature = f.TaskSpec.TargetSignature
+	nonGoals = f.TaskSpec.NonGoals
+	if len(f.TaskSpec.AcceptanceCriteria) > 0 {
+		criteria = f.TaskSpec.AcceptanceCriteria
+		solution = strings.Join(criteria, "\n")
+	}
+	return symbol, signature, solution, criteria, nonGoals
+}
+
+func distinctEvidenceText(evidence, cause string) string {
+	trimmed := strings.TrimSpace(evidence)
+	if trimmed == "" || trimmed == strings.TrimSpace(cause) {
+		return ""
+	}
+	return trimmed
+}
+
+func completionCommitMeta(comp *FindingCompletion) (string, string) {
+	if comp == nil {
+		return "", ""
+	}
+	return comp.CommitOID, comp.CommitCode
 }
 
 func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, agents []AgentItem) []IssueRow {
@@ -595,15 +635,12 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		if !done {
 			agentPath = matchAgentPath(agents, target, name, f.Title)
 		}
-		commitOID, commitCode := "", ""
-		if comp != nil {
-			commitOID = comp.CommitOID
-			commitCode = comp.CommitCode
-		}
+		commitOID, commitCode := completionCommitMeta(comp)
 		var criteria []string
 		if plan := strings.TrimSpace(f.VerificationPlan); plan != "" {
 			criteria = []string{plan}
 		}
+		cause := client.FirstNonEmpty(f.ObservedPattern, "No cause recorded.")
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
@@ -611,13 +648,19 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			Path:               rep.Path,
 			Symbol:             f.Symbol,
 			Line:               f.StartLine,
+			EndLine:            f.EndLine,
 			Severity:           f.PotentialImpact,
+			Confidence:         client.FirstNonEmpty(f.Confidence, "medium"),
 			Category:           "performance",
+			Rule:               f.Category,
+			Source:             "ai",
+			Freshness:          client.FirstNonEmpty(rep.Status, "current"),
 			Status:             issueStatus(done, agentPath),
 			CommitOID:          commitOID,
 			CommitCode:         commitCode,
 			AgentPath:          agentPath,
-			Cause:              client.FirstNonEmpty(f.ObservedPattern, "No cause recorded."),
+			Cause:              cause,
+			Evidence:           distinctEvidenceText(f.VerificationPlan, cause),
 			Solution:           client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
 			Target:             target,
 			AcceptanceCriteria: criteria,
@@ -645,15 +688,12 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 		if !done {
 			agentPath = matchAgentPath(agents, target, name, f.Title)
 		}
-		commitOID, commitCode := "", ""
-		if comp != nil {
-			commitOID = comp.CommitOID
-			commitCode = comp.CommitCode
-		}
+		commitOID, commitCode := completionCommitMeta(comp)
 		var criteria []string
 		if idea := strings.TrimSpace(f.VerificationIdea); idea != "" {
 			criteria = []string{idea}
 		}
+		cause := client.FirstNonEmpty(f.ObservedCondition, "No cause recorded.")
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
@@ -661,13 +701,19 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			Path:               path,
 			Symbol:             f.SourceAnchor.Symbol,
 			Line:               f.SourceAnchor.StartLine,
+			EndLine:            f.SourceAnchor.EndLine,
 			Severity:           f.Severity,
+			Confidence:         client.FirstNonEmpty(f.Confidence, "high"),
 			Category:           "security",
+			Rule:               f.Rule,
+			Source:             src,
+			Freshness:          client.FirstNonEmpty(rep.Status, "current"),
 			Status:             issueStatus(done, agentPath),
 			CommitOID:          commitOID,
 			CommitCode:         commitCode,
 			AgentPath:          agentPath,
-			Cause:              client.FirstNonEmpty(f.ObservedCondition, "No cause recorded."),
+			Cause:              cause,
+			Evidence:           distinctEvidenceText(f.VerificationIdea, cause),
 			Solution:           client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
 			Target:             target,
 			AcceptanceCriteria: criteria,

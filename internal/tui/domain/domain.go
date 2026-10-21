@@ -124,17 +124,25 @@ type IssueRow struct {
 	Name               string
 	Path               string
 	Symbol             string
+	Signature          string
 	Line               int
+	EndLine            int
 	Severity           string
+	Confidence         string
 	Category           string
+	Rule               string
+	Source             string
+	Freshness          string
 	Status             string
 	CommitOID          string
 	CommitCode         string
 	AgentPath          string
 	Cause              string
+	Evidence           string
 	Solution           string
 	Target             client.FindingTarget
 	AcceptanceCriteria []string
+	NonGoals           []string
 }
 
 // IssueSummary aggregates open, in-progress, and resolved issue counts by category.

@@ -1813,6 +1813,28 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 
 func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 	s := NewState()
+	s.Index = &ProjectIndex{
+		Files: []IndexedFile{
+			{
+				Path:      "internal/app/second.go",
+				Language:  "Go",
+				LineCount: 120,
+				Symbols: []SymbolInfo{
+					{
+						Name:      "ValidateToken",
+						Kind:      "func",
+						Signature: "func ValidateToken(tok string) error",
+						StartLine: 20,
+						EndLine:   45,
+					},
+				},
+			},
+			{
+				Path:     "internal/app/second_test.go",
+				Language: "Go",
+			},
+		},
+	}
 	s.Findings = []Finding{
 		{
 			ID:       "f-first",
@@ -1824,13 +1846,23 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 			Location: SourceAnchor{Path: "internal/app/first.go", StartLine: 10},
 		},
 		{
-			ID:       "f-second",
-			Severity: "high",
-			Title:    "Second targeted finding",
-			Message:  "Second root cause",
-			Category: "security",
-			Status:   "open",
-			Location: SourceAnchor{Path: "internal/app/second.go", StartLine: 25},
+			ID:         "f-second",
+			Severity:   "high",
+			Confidence: "high",
+			Category:   "security",
+			Rule:       "SEC-JWT-01",
+			Title:      "Second targeted finding",
+			Message:    "Second root cause",
+			Evidence:   "if token == \"\" { return nil }",
+			Status:     "open",
+			Freshness:  "current",
+			Location:   SourceAnchor{Path: "internal/app/second.go", StartLine: 25, EndLine: 32, Symbol: "ValidateToken"},
+			TaskSpec: &TaskSpec{
+				TargetSymbol:       "ValidateToken",
+				TargetSignature:    "func ValidateToken(tok string) error",
+				AcceptanceCriteria: []string{"Reject empty token in ValidateToken", "Cover empty token in unit test"},
+				NonGoals:           []string{"Do not alter token signing format"},
+			},
 		},
 		{
 			ID:       "f-third",
@@ -1857,9 +1889,28 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 	if cur == nil || cur.ID != "semantic:f-second" {
 		t.Fatalf("expected Issue Detail to target cursor issue f-second, got %+v", cur)
 	}
-	detailFrame := s.Render(120, 40)
+	detailFrame := s.Render(120, 44)
 	if !strings.Contains(detailFrame, "Second targeted finding") || strings.Contains(detailFrame, "First critical finding") {
 		t.Fatalf("expected Issue Detail frame to render targeted 2nd issue, got:\n%s", detailFrame)
+	}
+	for _, want := range []string{
+		"Issue 2 of 3",
+		"Confidence:",
+		"HIGH",
+		"SEC-JWT-01",
+		"internal/app/second.go:25-32",
+		"ValidateToken",
+		"func ValidateToken(tok string) error",
+		"Go ·",
+		"120 lines",
+		"if token == \"\" { return nil }",
+		"Reject empty token in ValidateToken",
+		"Do not alter token signing format",
+		"internal/app/second_test.go",
+	} {
+		if !strings.Contains(detailFrame, want) {
+			t.Fatalf("expected Issue Detail frame to contain enriched field %q:\n%s", want, detailFrame)
+		}
 	}
 
 	// Background Issues shortcuts ('s', 't', 'Space', 'x') must NOT fire while in PageIssueDetail
@@ -1890,4 +1941,3 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		t.Fatalf("expected 'i' on PageIssueDetail to return to PageBugs at index 2, got page=%s idx=%d", s.Page, s.SelectedIdx)
 	}
 }
-
