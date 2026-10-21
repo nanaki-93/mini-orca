@@ -13,7 +13,7 @@ import (
 )
 
 func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T) {
-	entered := make(chan struct{}, 2)
+	entered := make(chan struct{}, 3)
 	release := make(chan struct{})
 	service, root, _ := workflowService(t, [3]func() string{
 		func() string { entered <- struct{}{}; <-release; return workflowImplementation },
@@ -25,8 +25,8 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 	initializeChangeGit(t, service, root)
 	root = service.manager.Root()
 	request := trustedGitRequest(t, service)
-	children := make([]*Service, 2)
-	sessions := make([]*ChangeSession, 2)
+	children := make([]*Service, 3)
+	sessions := make([]*ChangeSession, 3)
 	for i := range children {
 		request.TargetBranch = fmt.Sprintf("codex/fix-%d", i)
 		request.Path = filepath.Join(root, ".worktrees", fmt.Sprintf("fix-%d", i))
@@ -66,6 +66,12 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 			t.Fatal("implementations did not dispatch concurrently")
 		}
 	}
+	for i, child := range children {
+		polled, err := child.ChangeSession(context.Background(), sessions[i].ID)
+		if err != nil || polled.Freshness != "current" || polled.Workflow == nil || polled.Workflow.Status != "running" {
+			t.Fatalf("poll active session %d: %+v, %v", i, polled, err)
+		}
+	}
 	// Reindexing the original project must neither capture child sources nor
 	// cancel jobs in separate worktrees.
 	index, err := service.Reindex()
@@ -91,7 +97,7 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 	if err != nil || receipt.Commit == nil || receipt.Commit.State != "committed" {
 		t.Fatalf("apply: %+v, %v", receipt, err)
 	}
-	for _, untouched := range []string{root, children[1].manager.Root()} {
+	for _, untouched := range []string{root, children[1].manager.Root(), children[2].manager.Root()} {
 		if _, err := os.Stat(filepath.Join(untouched, "new.go")); !os.IsNotExist(err) {
 			t.Fatalf("Apply changed another checkout: %s", untouched)
 		}

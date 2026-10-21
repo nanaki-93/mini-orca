@@ -13,6 +13,13 @@ func (s *Service) refreshAnalysisRunAfterReindex() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.run != nil && c.root == s.manager.Root() {
+		if err := s.validateAnalysisQueue(context.Background(), c.root, &c.run.Plan, true); err != nil {
+			if c.run.Status != AnalysisRunStale {
+				s.staleAnalysisRunLocked()
+				_ = s.saveAnalysisRunLocked(false)
+			}
+			return
+		}
 		_ = s.refreshAnalysisRunFreshnessLocked(context.Background())
 	}
 }
@@ -60,6 +67,9 @@ func (s *Service) validateAnalysisRunFreshness(ctx context.Context, root string,
 		}
 		return project.VerifyProjectSources(ctx, root, index)
 	default:
+		if s.analysisRun.done != nil {
+			return s.validateAnalysisQueue(ctx, root, &run.Plan, false)
+		}
 		return s.validateAnalysisQueue(ctx, root, &run.Plan, true)
 	}
 }

@@ -34,6 +34,17 @@ func (s *Service) gitMutationPreflight(ctx context.Context, request GitMutationR
 }
 
 func (s *Service) CreateGitWorktree(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
+	result, err := s.createGitWorktreeCheckout(ctx, request)
+	if err != nil || result.State != "created" {
+		return result, err
+	}
+	if err := s.initializeWorktreeInventory(ctx, result.Path); err != nil {
+		result.Error = "Worktree created, but local initialization failed: " + err.Error()
+	}
+	return result, nil
+}
+
+func (s *Service) createGitWorktreeCheckout(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
 	repository, err := s.gitMutationPreflight(ctx, request, false)
@@ -54,8 +65,6 @@ func (s *Service) CreateGitWorktree(ctx context.Context, request GitMutationRequ
 	result := &GitMutationResult{State: "created", Path: path, Repository: repository, Warnings: []string{}}
 	if err != nil {
 		result.State, result.Error = "failed", err.Error()
-	} else if err := s.initializeWorktreeInventory(ctx, path); err != nil {
-		result.Error = "Worktree created, but local initialization failed: " + err.Error()
 	}
 	return result, nil
 }

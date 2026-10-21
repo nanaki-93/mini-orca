@@ -30,6 +30,20 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 	if !category.Valid() || path != "" && !analysisMetadataPath(path) {
 		return nil, fmt.Errorf("invalid analysis results filter")
 	}
+	reader, err := s.prepareAnalysisSectionReader(ctx, identity, category, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := reader.read(ctx, path); err != nil {
+		return nil, err
+	}
+	if err := s.verifyAnalysisSectionRead(identity, reader.root); err != nil {
+		return nil, err
+	}
+	return reader.result, nil
+}
+
+func (s *Service) prepareAnalysisSectionReader(ctx context.Context, identity AnalysisRunIdentity, category project.FindingCategory, path string) (*analysisSectionReader, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
 	_, err := s.currentAnalysisRunLocked(ctx)
@@ -43,17 +57,29 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 	if run == nil || run.Identity != identity {
 		return nil, project.ErrRevisionConflict
 	}
-	reader, err := s.analysisSectionReader(run, category, path, c.root)
-	if err != nil {
-		return nil, err
-	}
-	if err := reader.read(ctx, path); err != nil {
-		return nil, err
-	}
-	return reader.result, nil
+	return s.analysisSectionReader(run, category, path, c.root)
 }
 
-// This projection owns only a captured read snapshot; all callers hold the run locks.
+func (s *Service) verifyAnalysisSectionRead(identity AnalysisRunIdentity, root string) error {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return err
+	}
+	if s.manager.Root() != root || analysis.ProjectID != identity.ProjectID {
+		return project.ErrRevisionConflict
+	}
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.run == nil || c.run.Identity != identity || c.root != root {
+		return project.ErrRevisionConflict
+	}
+	return nil
+}
+
+// This projection owns only a captured read snapshot.
 type analysisSectionReader struct {
 	service     *Service
 	root        string
@@ -61,6 +87,7 @@ type analysisSectionReader struct {
 	analysis    *project.Analysis
 	index       *project.ProjectIndex
 	policy      *project.ContextPolicy
+	fileCache   *project.FileAnalysisCache
 	captured    map[string]AnalysisRunFile
 	statuses    map[string]string
 	result      *AnalysisSectionResults
@@ -76,12 +103,29 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	if analysis.ProjectID != identity.ProjectID {
 		return nil, project.ErrRevisionConflict
 	}
+	fileCache, err := project.NewFileAnalysisCache(root)
+	if err != nil {
+		return nil, err
+	}
+	fileCache = fileCache.WithPolicy(policy)
 	result := &AnalysisSectionResults{Identity: identity, Path: path, Semantic: []project.UnifiedFinding{}, Performance: []project.PerformanceFileReport{}, Security: []project.SecurityFileReport{}, Unclassified: []project.UnifiedFinding{}}
 	for _, section := range run.Sections {
 		if section.Category == category {
 			result.Progress = section
 		}
 	}
+	captured, hashes, err := captureAnalysisSectionFiles(run, index, path, result)
+	if err != nil {
+		return nil, err
+	}
+	statuses, err := loadAnalysisTriage(root, identity, hashes)
+	if err != nil {
+		return nil, err
+	}
+	return &analysisSectionReader{service: s, root: root, run: run, analysis: analysis, index: index, policy: policy, fileCache: fileCache, captured: captured, statuses: statuses, result: result}, nil
+}
+
+func captureAnalysisSectionFiles(run *AnalysisRun, index *project.ProjectIndex, path string, result *AnalysisSectionResults) (map[string]AnalysisRunFile, map[string]string, error) {
 	captured := map[string]AnalysisRunFile{}
 	hashes := map[string]string{}
 	for _, file := range run.Files {
@@ -90,7 +134,7 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	}
 	if path != "" {
 		if _, ok := captured[path]; !ok {
-			return nil, project.ErrRevisionConflict
+			return nil, nil, project.ErrRevisionConflict
 		}
 	}
 	// A scoped retry or recovery changes dispatch scope, not the saved findings
@@ -110,11 +154,7 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 			result.RetainedFiles = append(result.RetainedFiles, identity)
 		}
 	}
-	statuses, err := loadAnalysisTriage(root, identity, hashes)
-	if err != nil {
-		return nil, err
-	}
-	return &analysisSectionReader{service: s, root: root, run: run, analysis: analysis, index: index, policy: policy, captured: captured, statuses: statuses, result: result}, nil
+	return captured, hashes, nil
 }
 
 func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[string]string) (map[string]string, error) {
@@ -183,26 +223,38 @@ func (reader *analysisSectionReader) appendInProgressSemantic(ctx context.Contex
 	if err != nil || len(stored) == 0 {
 		return
 	}
+	seen := make(map[string]bool, len(reader.result.Semantic))
+	for _, existing := range reader.result.Semantic {
+		seen[existing.ID] = true
+	}
+	candidates := reader.filterStoredSectionFindings(stored, seen, path)
+	if len(candidates) == 0 {
+		return
+	}
 	targets := reader.service.inProgressFindingTargets(ctx, reader.root, reader.run.Identity.ProjectID)
 	inProgress := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		inProgress[target.ID] = true
 	}
-	seen := make(map[string]bool, len(reader.result.Semantic))
-	for _, existing := range reader.result.Semantic {
-		seen[existing.ID] = true
-	}
-	for _, finding := range stored {
-		if seen[finding.ID] || (finding.Status != project.FindingStatusInProgress && !inProgress[finding.ID]) {
-			continue
-		}
-		if finding.Category != reader.result.Progress.Category || (path != "" && finding.Location.Path != path) {
+	for _, finding := range candidates {
+		if finding.Status != project.FindingStatusInProgress && !inProgress[finding.ID] {
 			continue
 		}
 		reader.result.Semantic = append(reader.result.Semantic, finding)
 		reader.hasEvidence = true
-		seen[finding.ID] = true
 	}
+}
+
+func (reader *analysisSectionReader) filterStoredSectionFindings(stored []project.UnifiedFinding, seen map[string]bool, path string) []project.UnifiedFinding {
+	var out []project.UnifiedFinding
+	for _, finding := range stored {
+		if seen[finding.ID] || finding.Category != reader.result.Progress.Category || (path != "" && finding.Location.Path != path) {
+			continue
+		}
+		seen[finding.ID] = true
+		out = append(out, finding)
+	}
+	return out
 }
 
 func (reader *analysisSectionReader) readFile(indexed project.IndexFile, file AnalysisRunFile) error {
@@ -226,11 +278,7 @@ func (reader *analysisSectionReader) readFile(indexed project.IndexFile, file An
 }
 
 func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, file AnalysisRunFile) error {
-	cache, err := project.NewFileAnalysisCache(reader.root)
-	if err != nil {
-		return err
-	}
-	semantic, err := cache.WithPolicy(reader.policy).Load(semanticCacheInputForRuntime(reader.analysis, &indexed, file.ContentHash, reader.policy.Version(), reader.service.analysisModelRuntime(AnalysisStageSemantic, reader.run.Plan.Models)))
+	semantic, err := reader.fileCache.Load(semanticCacheInputForRuntime(reader.analysis, &indexed, file.ContentHash, reader.policy.Version(), reader.service.analysisModelRuntime(AnalysisStageSemantic, reader.run.Plan.Models)))
 	if err != nil {
 		return err
 	}

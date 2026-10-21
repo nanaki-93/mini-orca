@@ -109,16 +109,13 @@ func validateChangeCriteria(criteria []string) error {
 	return features.ValidateCriteria(criteria)
 }
 
-func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session *ChangeSession) error {
+func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession) error {
 	index, err := s.manager.Index()
 	if err != nil {
 		return err
 	}
 	if s.manager.Root() != root || index.ProjectID != session.ProjectID || index.ProjectRevision != session.ProjectRevision {
 		return project.ErrRevisionConflict
-	}
-	if err := verifySessionGitIdentity(ctx, root, session.Git); err != nil {
-		return err
 	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
@@ -140,7 +137,27 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 			return project.ErrRevisionConflict
 		}
 	}
+	return nil
+}
+
+func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session *ChangeSession) error {
+	if err := s.verifyChangeTargetsCurrent(root, session); err != nil {
+		return err
+	}
+	if err := verifySessionGitIdentity(ctx, root, session.Git); err != nil {
+		return err
+	}
 	return (workspaceIdentity{fingerprint: session.WorkspaceHash}).verifyCurrent(ctx, root)
+}
+
+func (s *Service) hasActiveWorkflowJob(root string, session *ChangeSession) bool {
+	if session == nil || session.Workflow == nil || !isChangePipelineActive(session.Workflow) {
+		return false
+	}
+	s.changeWorkflow.mu.Lock()
+	defer s.changeWorkflow.mu.Unlock()
+	job := s.changeWorkflow.getJob(session.ID)
+	return job != nil && !job.finished && job.root == root && job.id == session.Workflow.ID
 }
 
 func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession, error) {
@@ -157,9 +174,15 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 		return nil, project.ErrRevisionConflict
 	}
 	if session.State == "draft" {
-		if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
-			if !errors.Is(err, project.ErrRevisionConflict) && !errors.Is(err, project.ErrExcludedFile) {
-				return nil, err
+		var verifyErr error
+		if s.hasActiveWorkflowJob(root, session) {
+			verifyErr = s.verifyChangeTargetsCurrent(root, session)
+		} else {
+			verifyErr = s.verifyChangeCurrent(ctx, root, session)
+		}
+		if verifyErr != nil {
+			if !errors.Is(verifyErr, project.ErrRevisionConflict) && !errors.Is(verifyErr, project.ErrExcludedFile) {
+				return nil, verifyErr
 			}
 			session.Freshness = "stale"
 		}

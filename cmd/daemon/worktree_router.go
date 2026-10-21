@@ -10,7 +10,7 @@ import (
 
 // Cache recent checkouts with a bounded cap. Registration and scope are still
 // checked by WorktreeService on every request, and old services cannot accumulate.
-const maxCachedWorktreeRouters = 8
+const maxCachedWorktreeRouters = 32
 
 type worktreeRouteEntry struct {
 	service *app.Service
