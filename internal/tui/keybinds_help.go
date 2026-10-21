@@ -98,7 +98,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	}
 
 	body := []string{
-		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.accent, spec.title, th.reset),
+		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.green, spec.title, th.reset),
 		rule,
 	}
 	body = append(body, renderCommandCatalogRows(th, pageItems, contentW)...)

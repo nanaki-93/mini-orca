@@ -357,6 +357,11 @@ func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 				t.Fatalf("page %s help overlay missing %q:\n%s", p, token, frame)
 			}
 		}
+		th := themeForPalette(s.Palette)
+		wantFirstSectionTitle := th.bold + th.green + "PAGE SHORTCUTS · " + spec.title
+		if !strings.Contains(frame, wantFirstSectionTitle) {
+			t.Fatalf("page %s help overlay expected distinct green first section title %q", p, wantFirstSectionTitle)
+		}
 		for _, cmd := range allColonCommands {
 			if !strings.Contains(frame, cmd.key) || !strings.Contains(frame, cmd.desc) {
 				t.Fatalf("page %s help overlay missing command %q or explanation %q:\n%s", p, cmd.key, cmd.desc, frame)
