@@ -237,6 +237,7 @@ func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
 		Kind:               client.FirstNonEmpty(seed.Kind, "fix"),
 		Title:              client.FirstNonEmpty(seed.Title, "Agent Mission"),
 		State:              "running",
+		WorktreePath:       seed.WorktreePath,
 		FindingTargets:     seed.FindingTargets,
 		Targets:            targets,
 		AcceptanceCriteria: seed.AcceptanceCriteria,
@@ -290,6 +291,9 @@ func (s *State) toggleCurrentFileExclusion() {
 }
 
 func (s *State) applyAndCommitProposal(commitMsg string) {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
 	if s.Change == nil {
 		s.CmdOutput = "No active proposal diff to apply."
 		return
@@ -337,6 +341,9 @@ func (s *State) mergeSelectedWorktree() {
 }
 
 func (s *State) triggerAgentRecheckOrRepair() {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
 	if s.Change == nil {
 		return
 	}
@@ -373,7 +380,7 @@ func (s *State) isChangeStale() bool {
 	if s.Change.Workflow != nil && s.Change.Workflow.Status == "stale" {
 		return true
 	}
-	if s.Project != nil && s.Change.ProjectRevision != "" && s.Project.ProjectRevision != "" && s.Change.ProjectRevision != s.Project.ProjectRevision {
+	if s.Change.WorktreePath == "" && s.Project != nil && s.Change.ProjectRevision != "" && s.Project.ProjectRevision != "" && s.Change.ProjectRevision != s.Project.ProjectRevision {
 		return true
 	}
 	return false
@@ -408,6 +415,7 @@ func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
 		seed := buildBatchIssuesSeed(matched)
 		seed.Title = title
 		seed.Paths = paths
+		seed.WorktreePath = s.Change.WorktreePath
 		seed.FindingTargets = s.Change.FindingTargets
 		if len(s.Change.AcceptanceCriteria) > 0 {
 			seed.AcceptanceCriteria = s.Change.AcceptanceCriteria
@@ -418,6 +426,7 @@ func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
 		FindingTargets:     s.Change.FindingTargets,
 		Title:              title,
 		Paths:              paths,
+		WorktreePath:       s.Change.WorktreePath,
 		Kind:               client.FirstNonEmpty(s.Change.Kind, "fix"),
 		Message:            firstUserChangeMessage(s.Change, title),
 		AcceptanceCriteria: s.Change.AcceptanceCriteria,

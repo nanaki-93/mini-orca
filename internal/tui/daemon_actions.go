@@ -502,6 +502,10 @@ func (s *State) prepareStandardAgentWorktree(ctx context.Context, cl *Client, re
 	if s.Project == nil {
 		return "", "", ""
 	}
+	if seed != nil && seed.WorktreePath != "" {
+		projID, projRev := s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-wt", seed.WorktreePath)
+		return seed.WorktreePath, projID, projRev
+	}
 	root := s.Project.Path
 	if root == "" && s.Repository != nil {
 		root = s.Repository.Root
@@ -532,17 +536,25 @@ func (s *State) prepareStandardAgentWorktree(ctx context.Context, cl *Client, re
 	}
 	createdPath := client.FirstNonEmpty(wtRes.Path, absPath)
 	s.registerCreatedWorktree(createdPath, head, targetBranch)
-	scope := "?worktree_path=" + url.QueryEscape(createdPath)
+	projID, projRev := s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-wt", createdPath)
+	return createdPath, projID, projRev
+}
+
+func (s *State) resolveWorktreeProjectIdentity(ctx context.Context, cl *Client, reqID, wtPath string) (string, string) {
+	scope := "?worktree_path=" + url.QueryEscape(wtPath)
 	var wtProj Project
-	if err := cl.DoJSON(ctx, reqID+"-wt-proj", http.MethodGet, "/api/projects/current"+scope, nil, &wtProj); err == nil && wtProj.ProjectID != "" && wtProj.ProjectRevision != "" {
+	if err := cl.DoJSON(ctx, reqID+"-proj", http.MethodGet, "/api/projects/current"+scope, nil, &wtProj); err == nil && wtProj.ProjectID != "" && wtProj.ProjectRevision != "" {
 		if s.WorkspaceTrust {
 			trustBody := map[string]any{"project_revision": wtProj.ProjectRevision, "confirm": true}
 			var trust ExecutionTrust
-			_ = cl.DoJSON(ctx, reqID+"-wt-trust", http.MethodPost, "/api/projects/current/execution-trust"+scope, trustBody, &trust)
+			_ = cl.DoJSON(ctx, reqID+"-trust", http.MethodPost, "/api/projects/current/execution-trust"+scope, trustBody, &trust)
 		}
-		return createdPath, wtProj.ProjectID, wtProj.ProjectRevision
+		return wtProj.ProjectID, wtProj.ProjectRevision
 	}
-	return createdPath, s.Project.ProjectID, s.Project.ProjectRevision
+	if s.Project != nil {
+		return s.Project.ProjectID, s.Project.ProjectRevision
+	}
+	return "", ""
 }
 
 func (s *State) existingWorktrees() []GitWorktree {
@@ -580,23 +592,28 @@ func (s *State) openChangeSessionWithRetry(ctx context.Context, cl *Client, reqI
 		scope = "?worktree_path=" + url.QueryEscape(wtPath)
 	}
 	buildReq := func() map[string]any {
+		effProjID := client.FirstNonEmpty(projID, s.Project.ProjectID)
 		return map[string]any{
-			"project_id":          client.FirstNonEmpty(projID, s.Project.ProjectID),
+			"project_id":          effProjID,
 			"project_revision":    client.FirstNonEmpty(projRev, s.Project.ProjectRevision),
 			"kind":                client.FirstNonEmpty(seed.Kind, "fix"),
 			"title":               client.FirstNonEmpty(seed.Title, "Agent Mission"),
 			"paths":               paths,
 			"acceptance_criteria": seed.AcceptanceCriteria,
-			"finding_targets":     domain.NormalizeFindingTargets(seed.FindingTargets, s.Project.ProjectID, paths),
+			"finding_targets":     domain.NormalizeFindingTargets(seed.FindingTargets, effProjID, paths),
 		}
 	}
 	var session ChangeSession
 	err := cl.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(), &session)
-	if err != nil && isRevisionConflictError(err) && wtPath == "" {
-		s.syncProjectRevision(ctx, cl, reqID+"-sync")
-		projRev = s.Project.ProjectRevision
-		_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust2")
-		err = cl.DoJSON(ctx, reqID+"-open2", http.MethodPost, "/api/projects/current/changes", buildReq(), &session)
+	if err != nil && isRevisionConflictError(err) {
+		if wtPath != "" {
+			projID, projRev = s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-sync", wtPath)
+		} else {
+			s.syncProjectRevision(ctx, cl, reqID+"-sync")
+			projRev = s.Project.ProjectRevision
+			_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust2")
+		}
+		err = cl.DoJSON(ctx, reqID+"-open2", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(), &session)
 	}
 	if session.ProjectID == "" {
 		session.ProjectID = client.FirstNonEmpty(projID, s.Project.ProjectID)
@@ -916,6 +933,9 @@ func (s *State) postChangeSessionAction(ctx context.Context, cl *Client, reqID, 
 	if err := cl.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
 		if isRevisionConflictError(err) {
 			if seed := s.buildSeedFromCurrentChange(); seed != nil {
+				if s.Change != nil && s.Change.ID != "" {
+					s.removeActiveChangeByID(s.Change.ID)
+				}
 				s.syncProjectRevision(ctx, cl, reqID+"-sync")
 				s.CmdOutput = fmt.Sprintf("Proposal was stale — started fresh agent mission for %q", seed.Title)
 				return s.dispatchStartAgent(ctx, cl, reqID+"-refresh", ActionRequest{Kind: "start-agent", Seed: seed})
@@ -991,15 +1011,32 @@ func (s *State) dispatchLoadChange(ctx context.Context, cl *Client, reqID, sessi
 	if sessionID == "" || s.Project == nil {
 		return nil
 	}
-	_, idQuery := s.resourceQueries()
+	prev := s.findTrackedChangeSession(sessionID)
+	var wtPath string
+	if prev != nil {
+		wtPath = prev.WorktreePath
+	}
 	var chg ChangeSession
-	target := "/api/projects/current/changes/" + url.PathEscape(sessionID) + idQuery
+	target := "/api/projects/current/changes/" + url.PathEscape(sessionID) + s.changeResourceQuery(prev)
 	if err := cl.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err != nil {
 		return err
 	}
 	if chg.ID != "" {
+		chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, wtPath)
 		s.Change = &chg
 		s.upsertActiveChange(&chg)
+	}
+	return nil
+}
+
+func (s *State) findTrackedChangeSession(sessionID string) *ChangeSession {
+	if s.Change != nil && s.Change.ID == sessionID {
+		return s.Change
+	}
+	for _, chg := range s.ActiveChanges {
+		if chg != nil && chg.ID == sessionID {
+			return chg
+		}
 	}
 	return nil
 }

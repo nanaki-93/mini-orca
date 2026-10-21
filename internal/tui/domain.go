@@ -157,7 +157,7 @@ func (s *State) syncSelectedAgentSession() {
 		return
 	}
 	targetID := items[idx].ID
-	if targetID == "" {
+	if targetID == "" || (s.Change != nil && s.Change.ID == targetID) {
 		return
 	}
 	for _, chg := range s.ActiveChanges {

@@ -1959,3 +1959,78 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		t.Fatalf("expected 'i' on PageIssueDetail to return to PageBugs at index 2, got page=%s idx=%d", s.Page, s.SelectedIdx)
 	}
 }
+
+func TestAgentRepairInWorktreeDoesNotDuplicateWorktreeRow(t *testing.T) {
+	wtPath := "/repo/.mini-orca/autopilot/fix-discarded-clipboard-copy-d7901b"
+	s := NewState()
+	s.Project = &Project{
+		Name:            "mini-orca",
+		Path:            "/repo",
+		ProjectIdentity: ProjectIdentity{ProjectID: "proj-main", ProjectRevision: "rev-main-1"},
+	}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: GitRepository{
+			Available:   true,
+			Root:        "/repo",
+			GitIdentity: GitIdentity{Head: "aaaa1111", Branch: "main"},
+		},
+		Worktrees: []GitWorktree{
+			{
+				Path:        wtPath,
+				GitIdentity: GitIdentity{Head: "bbbb2222", Branch: "orca/fix-discarded-clipboard-copy-d7901b"},
+				Mergeable:   true,
+			},
+		},
+	}
+	chg := &ChangeSession{
+		ID:              "chg-wt-1",
+		ProjectIdentity: ProjectIdentity{ProjectID: "proj-wt", ProjectRevision: "rev-wt-1"},
+		WorktreePath:    wtPath,
+		Kind:            "fix",
+		Title:           "Discarded clipboard copy",
+		State:           "proposed",
+		Revision:        2,
+		Hash:            "h-wt-1",
+		Changes:         []FileChange{{Path: "internal/tui/clipboard.go", Content: "package tui\n"}},
+		Checks: []Check{
+			{Name: "go test", State: "failed", Required: true},
+		},
+		Workflow: &ChangeWorkflow{
+			ID:     "wf-wt-1",
+			Status: "failed",
+			Stages: []ChangeWorkflowStage{
+				{Name: "Architect & Code", Status: "completed"},
+				{Name: "Verify & Test", Status: "failed"},
+			},
+		},
+	}
+	s.Change = chg
+	s.ActiveChanges = []*ChangeSession{chg}
+	s.Navigate(PageAgents)
+
+	// 1. Pressing 'r' when checks failed on a worktree session must trigger repair-change (not treat as stale due to worktree ProjectRevision != main ProjectRevision)
+	s.HandleKey(KeyEvent{Key: "r"})
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "repair-change" || s.PendingActions[0].Target != "chg-wt-1" {
+		t.Fatalf("expected 'r' on failed worktree session to enqueue repair-change, got %+v", s.PendingActions)
+	}
+	items := s.AgentItems()
+	if len(items) != 1 || items[0].ScopeBadge == "WORKTREE" || strings.HasPrefix(items[0].Title, "Worktree ") {
+		t.Fatalf("expected a single agent row without duplicate WORKTREE row after 'r', got %+v", items)
+	}
+
+	// 2. Even when 'r' restarts a rejected/empty worktree session, WorktreePath is preserved and no WORKTREE row appears
+	s.PendingActions = nil
+	s.Change.Changes = nil
+	s.HandleKey(KeyEvent{Key: "r"})
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "start-agent" || s.PendingActions[0].Seed == nil || s.PendingActions[0].Seed.WorktreePath != wtPath {
+		t.Fatalf("expected restart seed to preserve WorktreePath %q, got %+v", wtPath, s.PendingActions)
+	}
+	itemsAfterRestart := s.AgentItems()
+	if len(itemsAfterRestart) != 1 || itemsAfterRestart[0].ScopeBadge == "WORKTREE" || strings.HasPrefix(itemsAfterRestart[0].Title, "Worktree ") {
+		t.Fatalf("expected a single agent row without duplicate WORKTREE row after restart, got %+v", itemsAfterRestart)
+	}
+	frame := s.Render(120, 36)
+	if strings.Contains(frame, "Worktree orca/") || strings.Contains(frame, "WORKTREE") {
+		t.Fatalf("expected Agent Studio frame not to contain duplicate Worktree row:\n%s", frame)
+	}
+}

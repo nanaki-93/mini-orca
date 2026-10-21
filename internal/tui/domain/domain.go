@@ -385,22 +385,18 @@ func worktreeSpecCollides(existing []client.GitWorktree, branch, relPath string)
 	return false
 }
 
-// CollectAllAgentItems derives Agent Studio items from all tracked change sessions and Git worktrees.
+// CollectAllAgentItems derives Agent Studio items from all tracked change sessions.
 func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
-	items, seenIDs, seenWorktrees := collectSessionAgentItems(change, activeChanges, receipt, gitWS)
+	items, seenIDs := collectSessionAgentItems(change, activeChanges, receipt, gitWS)
 	if shouldAppendPrimaryChange(change, len(items), seenIDs) {
-		if change.WorktreePath != "" {
-			seenWorktrees[change.WorktreePath] = true
-		}
 		items = append(items, buildAgentItemFromSession(change, receipt, gitWS))
 	}
-	return appendWorktreeAgentItems(items, gitWS, seenWorktrees)
+	return items
 }
 
-func collectSessionAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) ([]AgentItem, map[string]bool, map[string]bool) {
+func collectSessionAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) ([]AgentItem, map[string]bool) {
 	var items []AgentItem
 	seenIDs := make(map[string]bool)
-	seenWorktrees := make(map[string]bool)
 	for _, chg := range activeChanges {
 		if chg == nil {
 			continue
@@ -409,14 +405,11 @@ func collectSessionAgentItems(change *client.ChangeSession, activeChanges []*cli
 		if cur.ID != "" {
 			seenIDs[cur.ID] = true
 		}
-		if cur.WorktreePath != "" {
-			seenWorktrees[cur.WorktreePath] = true
-		}
 		if !IsCompletedOrInactiveSession(cur) {
 			items = append(items, buildAgentItemFromSession(cur, receipt, gitWS))
 		}
 	}
-	return items, seenIDs, seenWorktrees
+	return items, seenIDs
 }
 
 func resolveCurrentSession(candidate, primary *client.ChangeSession) *client.ChangeSession {
@@ -433,38 +426,11 @@ func shouldAppendPrimaryChange(change *client.ChangeSession, count int, seenIDs 
 	return count == 0 || (change.ID != "" && !seenIDs[change.ID])
 }
 
-func appendWorktreeAgentItems(items []AgentItem, gitWS *client.GitWorkspace, seenWorktrees map[string]bool) []AgentItem {
-	if gitWS == nil {
-		return items
-	}
-	for _, wt := range gitWS.Worktrees {
-		if wt.Current || seenWorktrees[wt.Path] || hasAgentPath(items, wt.Path) {
-			continue
-		}
-		items = append(items, buildAgentItemFromWorktree(wt))
-	}
-	return items
-}
-
-func hasAgentPath(items []AgentItem, path string) bool {
-	for _, item := range items {
-		if item.Path == path && path != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func buildAgentItemFromSession(change *client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) AgentItem {
 	added, removed, badge := ClassifyDiffScope(change.Changes)
 	passed, total := CountPassedChecks(change.Checks)
 	stageNum, stageName := classifyAgentStage(change, passed, total)
-	branch := "main"
-	if change.Git != nil && change.Git.Branch != "" {
-		branch = change.Git.Branch
-	} else if gitWS != nil && gitWS.Branch != "" {
-		branch = gitWS.Branch
-	}
+	branch := resolveSessionBranch(change, gitWS)
 	undo := receipt != nil && receipt.UndoAvailable
 	title := strings.TrimSpace(change.Title)
 	if title == "" {
@@ -489,6 +455,23 @@ func buildAgentItemFromSession(change *client.ChangeSession, receipt *client.Cha
 	}
 }
 
+func resolveSessionBranch(change *client.ChangeSession, gitWS *client.GitWorkspace) string {
+	if change != nil && change.Git != nil && change.Git.Branch != "" {
+		return change.Git.Branch
+	}
+	if change != nil && change.WorktreePath != "" && gitWS != nil {
+		for _, wt := range gitWS.Worktrees {
+			if wt.Path == change.WorktreePath && wt.Branch != "" {
+				return wt.Branch
+			}
+		}
+	}
+	if gitWS != nil && gitWS.Branch != "" {
+		return gitWS.Branch
+	}
+	return "main"
+}
+
 func effectiveAgentSessionStatus(change *client.ChangeSession) string {
 	if change == nil {
 		return "idle"
@@ -511,36 +494,6 @@ func effectiveAgentSessionStatus(change *client.ChangeSession) string {
 		return change.State
 	}
 	return "working"
-}
-
-func buildAgentItemFromWorktree(wt client.GitWorktree) AgentItem {
-	title := fmt.Sprintf("Worktree %s", wt.Branch)
-	var targets []client.FindingTarget
-	if len(wt.Sessions) > 0 && wt.Sessions[0].Title != "" {
-		title = wt.Sessions[0].Title
-		targets = wt.Sessions[0].FindingTargets
-	} else if len(wt.Completed) > 0 && wt.Completed[0].Title != "" {
-		title = wt.Completed[0].Title
-		targets = wt.Completed[0].FindingTargets
-	}
-	stageName := "Human Review"
-	status := "ready"
-	if !wt.Mergeable {
-		stageName = "Architect & Code"
-		status = "working"
-	}
-	return AgentItem{
-		ID:             wt.Path,
-		Title:          title,
-		Branch:         wt.Branch,
-		Path:           wt.Path,
-		Stage:          stageName,
-		StageNumber:    4,
-		Status:         status,
-		ScopeBadge:     "WORKTREE",
-		Mergeable:      wt.Mergeable,
-		FindingTargets: targets,
-	}
 }
 
 // CountPassedChecks returns the number of passed (or non-required skipped) checks and total checks.
