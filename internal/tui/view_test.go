@@ -970,6 +970,7 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		}
 		pairs := [][2]string{
 			{"STAGE", "AI Review"},
+			{"STATUS", "Waiting"},
 			{"MISSION TITLE", "Fix discarded clipboard copy"},
 			{"SCOPE", "[SURGICAL]"},
 			{"DELTA", "+1"},
@@ -990,5 +991,11 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		if got := pipelineStageShortLabel(num); got != want {
 			t.Fatalf("pipelineStageShortLabel(%d) = %q, want %q", num, got, want)
 		}
+	}
+	if got := pipelineAgentStatusLabel("running"); got != "RUNNING" {
+		t.Fatalf("pipelineAgentStatusLabel(running) = %q, want RUNNING", got)
+	}
+	if got := pipelineAgentStatusLabel("ready"); got != "Waiting" {
+		t.Fatalf("pipelineAgentStatusLabel(ready) = %q, want Waiting", got)
 	}
 }

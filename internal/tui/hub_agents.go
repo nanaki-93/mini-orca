@@ -27,20 +27,21 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	}
 	lines = append(lines, "")
 	selected := s.ClampedIdx()
-	titleCol := min(32, max(16, width-64))
-	headerCols := fmt.Sprintf("  %-10s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
+	titleCol := min(32, max(16, width-66))
+	headerCols := fmt.Sprintf("  %-10s  %-9s  %-*s  %-12s  %-10s  %s", "STAGE", "STATUS", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
 	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	start, end := windowBounds(len(items), selected, 5)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
 		stageCol := theme.PadVisibleRight(pipelineStageShortLabel(item.StageNumber), 10)
+		statusCol := formatPipelineAgentStatus(th, item.Status, 9)
 		titleCell := theme.PadVisibleRight(theme.TruncatePlain(item.Title, titleCol), titleCol)
 		tStyle := rowTitleStyle(th, idx == selected)
 		deltaCol := theme.PadVisibleRight(fmt.Sprintf("%s+%d%s/%s-%d%s", th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset), 10)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s  %s%s%s  %s  %s  %schecks:%d/%d%s",
-			cursor, stageCol, tStyle, titleCell, th.reset,
+			"  %s%s  %s  %s%s%s  %s  %s  %schecks:%d/%d%s",
+			cursor, stageCol, statusCol, tStyle, titleCell, th.reset,
 			th.padBadge(item.ScopeBadge, 12),
 			deltaCol,
 			th.muted, item.ChecksPassed, item.ChecksTotal, th.reset,
@@ -80,6 +81,24 @@ func pipelineStageShortLabel(stageNum int) string {
 	default:
 		return "Code"
 	}
+}
+
+func pipelineAgentStatusLabel(rawStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(rawStatus)) {
+	case "running", "queued", "working", "in_progress", "canceling":
+		return "RUNNING"
+	default:
+		return "Waiting"
+	}
+}
+
+func formatPipelineAgentStatus(th ansiTheme, rawStatus string, width int) string {
+	label := pipelineAgentStatusLabel(rawStatus)
+	color := th.cyan
+	if label == "RUNNING" {
+		color = th.amber
+	}
+	return theme.PadVisibleRight(color+label+th.reset, width)
 }
 
 func (s *State) hasWorkflowErrorOrRejection() bool {
