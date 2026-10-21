@@ -175,8 +175,8 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
-		primary:   []keyDesc{{"Enter / f", "Dispatch fix"}, {"d", "Dismiss finding"}},
-		secondary: []keyDesc{{"o", "Open source file"}, {"r", "Run/resume scan"}},
+		primary:   []keyDesc{{"Enter / f", "Dispatch fix"}, {"i / Esc", "Back to issues"}},
+		secondary: []keyDesc{{"j/k / ←/→", "Prev/next issue"}, {"o / d", "Open / dismiss"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":dismiss", "Dismiss finding"}},
 	},
 	PageFeatures: {

@@ -1810,3 +1810,84 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 		t.Fatalf("expected persisted completed finding with commit code, got %+v", s.CompletedFindings)
 	}
 }
+
+func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
+	s := NewState()
+	s.Findings = []Finding{
+		{
+			ID:       "f-first",
+			Severity: "critical",
+			Title:    "First critical finding",
+			Message:  "First root cause",
+			Category: "bugs",
+			Status:   "open",
+			Location: SourceAnchor{Path: "internal/app/first.go", StartLine: 10},
+		},
+		{
+			ID:       "f-second",
+			Severity: "high",
+			Title:    "Second targeted finding",
+			Message:  "Second root cause",
+			Category: "security",
+			Status:   "open",
+			Location: SourceAnchor{Path: "internal/app/second.go", StartLine: 25},
+		},
+		{
+			ID:       "f-third",
+			Severity: "medium",
+			Title:    "Third medium finding",
+			Message:  "Third root cause",
+			Category: "performance",
+			Status:   "open",
+			Location: SourceAnchor{Path: "internal/app/third.go", StartLine: 40},
+		},
+	}
+
+	s.Navigate(PageBugs)
+	// Move cursor down to 2nd issue (index 1) and press 'i' to inspect
+	s.HandleKey(KeyEvent{Key: "j"})
+	if s.SelectedIdx != 1 {
+		t.Fatalf("expected SelectedIdx=1 on PageBugs, got %d", s.SelectedIdx)
+	}
+	s.HandleKey(KeyEvent{Key: "i"})
+	if s.Page != PageIssueDetail {
+		t.Fatalf("expected PageIssueDetail after 'i', got %s", s.Page)
+	}
+	cur := s.SelectedIssue()
+	if cur == nil || cur.ID != "semantic:f-second" {
+		t.Fatalf("expected Issue Detail to target cursor issue f-second, got %+v", cur)
+	}
+	detailFrame := s.Render(120, 40)
+	if !strings.Contains(detailFrame, "Second targeted finding") || strings.Contains(detailFrame, "First critical finding") {
+		t.Fatalf("expected Issue Detail frame to render targeted 2nd issue, got:\n%s", detailFrame)
+	}
+
+	// Background Issues shortcuts ('s', 't', 'Space', 'x') must NOT fire while in PageIssueDetail
+	s.HandleKey(KeyEvent{Key: "s"})
+	s.HandleKey(KeyEvent{Key: "t"})
+	s.HandleKey(KeyEvent{Key: " "})
+	s.HandleKey(KeyEvent{Key: "x"})
+	if s.IssueView != "open" || s.IssueCategory != "all" || len(s.SelectedIssueIDs) != 0 {
+		t.Fatalf("expected background Issues shortcuts to be blocked on PageIssueDetail, got view=%s cat=%s sel=%v",
+			s.IssueView, s.IssueCategory, s.SelectedIssueIDs)
+	}
+
+	// Left/Right arrows and j/k step between issues inside PageIssueDetail without changing IssueView status
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.IssueView != "open" || s.SelectedIssue() == nil || s.SelectedIssue().ID != "semantic:f-first" {
+		t.Fatalf("expected ArrowLeft in PageIssueDetail to step to 1st issue without changing status, got view=%s issue=%+v",
+			s.IssueView, s.SelectedIssue())
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	s.HandleKey(KeyEvent{Key: "j"})
+	if s.SelectedIssue() == nil || s.SelectedIssue().ID != "semantic:f-third" {
+		t.Fatalf("expected ArrowRight + j in PageIssueDetail to step to 3rd issue, got %+v", s.SelectedIssue())
+	}
+
+	// Pressing 'i' (or Esc) returns to PageBugs keeping cursor on the inspected 3rd issue (index 2)
+	s.HandleKey(KeyEvent{Key: "i"})
+	if s.Page != PageBugs || s.SelectedIdx != 2 {
+		t.Fatalf("expected 'i' on PageIssueDetail to return to PageBugs at index 2, got page=%s idx=%d", s.Page, s.SelectedIdx)
+	}
+}
+

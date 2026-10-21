@@ -56,6 +56,10 @@ func (s *State) HandleKey(ev KeyEvent) {
 		s.handleKeybindsModalKey(ev)
 		return
 	}
+	if s.Page == PageIssueDetail {
+		s.handleIssueDetailKey(ev)
+		return
+	}
 	if s.handleGlobalNavigationKey(ev) {
 		return
 	}
@@ -112,6 +116,64 @@ func (s *State) handleKeybindsModalKey(ev KeyEvent) {
 	}
 }
 
+func (s *State) handleIssueDetailKey(ev KeyEvent) {
+	if ev.Key == "Escape" && s.Error != "" {
+		s.Error = ""
+		s.CmdOutput = "Dismissed error alert."
+		return
+	}
+	switch ev.Key {
+	case "Escape", "Backspace", "i", "b", "q":
+		s.Navigate(PageBugs)
+		s.CmdOutput = "Returned to Issues list"
+	case "j", "ArrowDown", "n", "ArrowRight":
+		s.stepInspectedIssue(1)
+	case "k", "ArrowUp", "N", "ArrowLeft":
+		s.stepInspectedIssue(-1)
+	case "1", "2", "3", "4", "5":
+		s.switchHubByKey(ev.Key)
+	case "[", "]":
+		s.cycleHub(ev.Key == "]")
+	case "Tab":
+		s.cycleSubView(!ev.Shift)
+	case "?":
+		s.ShowKeybindsModal = !s.ShowKeybindsModal
+		s.KeybindsScroll = 0
+	case ":", "/":
+		s.CmdActive = true
+		s.CmdInput = ""
+	case "p":
+		s.CyclePalette()
+	default:
+		s.handleIssueDetailActionKey(ev.Key)
+	}
+}
+
+func (s *State) handleIssueDetailActionKey(key string) {
+	switch key {
+	case "Enter", "w":
+		s.activateIssueRow()
+	case "f", "a":
+		s.dispatchSingleSelectedIssue()
+	case "d":
+		s.dismissSelectedIssue()
+	case "o":
+		if issue := s.SelectedIssue(); issue != nil && issue.Path != "" {
+			s.openFileInEditor(issue.Path)
+		}
+	}
+}
+
+func (s *State) stepInspectedIssue(delta int) {
+	issues := s.FilteredIssues()
+	if len(issues) == 0 {
+		return
+	}
+	next := min(max(0, s.ClampedIdx()+delta), len(issues)-1)
+	s.SelectedIdx = next
+	s.CmdOutput = fmt.Sprintf("Inspecting issue %d/%d: %s", next+1, len(issues), issues[next].Name)
+}
+
 func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 	switch ev.Key {
 	case "?":
@@ -162,11 +224,6 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 	if key != "Escape" && key != "Backspace" {
 		return false
 	}
-	if s.Page == PageIssueDetail {
-		s.Page = PageBugs
-		s.CmdOutput = "Returned to Issues list"
-		return true
-	}
 	if s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
 		s.CmdOutput = "Returned to Agents in Progress Dashboard"
@@ -195,7 +252,7 @@ func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
 
 func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	switch s.EffectivePage() {
-	case PageBugs, PageIssueDetail:
+	case PageBugs:
 		return true
 	case PageAnalysisRun:
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
@@ -413,8 +470,7 @@ func (s *State) handleBugsPageKey(ev KeyEvent) bool {
 func (s *State) handleIssueListKey(key string) bool {
 	switch key {
 	case "i":
-		s.Navigate(PageIssueDetail)
-		s.CmdOutput = "Opened Issue Detail view ([f/Enter/a] Fix with Agent · [Esc] Back)"
+		s.openSelectedIssueDetail()
 		return true
 	case "t", "c", ".", ">", "L":
 		s.cycleIssueCategory(true)
@@ -438,9 +494,21 @@ func (s *State) handleIssueListKey(key string) bool {
 	return false
 }
 
+func (s *State) openSelectedIssueDetail() {
+	issues := s.FilteredIssues()
+	if len(issues) == 0 {
+		s.CmdOutput = "No finding selected to inspect."
+		return
+	}
+	idx := s.ClampedIdx()
+	s.Navigate(PageIssueDetail)
+	s.SelectedIdx = idx
+	s.CmdOutput = fmt.Sprintf("Inspecting issue %d/%d: %s ([f/Enter] Fix · [j/k] Prev/Next · [i/Esc] Back)", idx+1, len(issues), issues[idx].Name)
+}
+
 func (s *State) handleIssueActionKey(key string) bool {
 	switch s.Page {
-	case PageBugs, PageIssueDetail, PageSummary:
+	case PageBugs, PageSummary:
 		return s.handleIssueShortcut(key)
 	case PageFeatures:
 		return s.handleFeaturesKey(key)
@@ -496,7 +564,7 @@ func (s *State) handleAnalysisRunConfigKey(key string) bool {
 func (s *State) handleIssueShortcut(key string) bool {
 	switch key {
 	case "f":
-		if s.Page == PageBugs || s.Page == PageIssueDetail {
+		if s.Page == PageBugs {
 			s.dispatchSingleSelectedIssue()
 			return true
 		}
@@ -509,17 +577,6 @@ func (s *State) handleIssueShortcut(key string) bool {
 				s.openFileInEditor(issue.Path)
 				return true
 			}
-		}
-	case "d":
-		if s.Page == PageIssueDetail {
-			s.dismissSelectedIssue()
-			return true
-		}
-	case "b", "i":
-		if s.Page == PageIssueDetail {
-			s.Navigate(PageBugs)
-			s.CmdOutput = "Returned to Issues list"
-			return true
 		}
 	}
 	return false

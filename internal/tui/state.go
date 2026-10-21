@@ -400,7 +400,9 @@ func (s *State) ActiveHub() HubTab {
 func (s *State) Navigate(page Page) {
 	if s.Page != page {
 		s.Error = ""
-		if page != PageIssueDetail {
+		preserveIssueIdx := (s.Page == PageBugs && page == PageIssueDetail) ||
+			(s.Page == PageIssueDetail && page == PageBugs)
+		if !preserveIssueIdx {
 			s.SelectedIdx = 0
 		}
 	}
@@ -846,7 +848,7 @@ func (s *State) ActiveListLength() int {
 		return 1
 	case PageAgents:
 		return len(s.AgentItems())
-	case PageBugs:
+	case PageBugs, PageIssueDetail:
 		return len(s.FilteredIssues())
 	case PageFeatures:
 		return len(s.activeFeatures())
