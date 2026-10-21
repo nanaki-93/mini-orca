@@ -658,6 +658,17 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
 	}
 
+	// Verify Left/Right arrows on PageAgents (Pipeline view) stay on PageAgents and do not move to Issues
+	s.Navigate(PageAgents)
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Page != PageAgents {
+		t.Fatalf("expected ArrowRight on PageAgents to stay on PageAgents, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.Page != PageAgents {
+		t.Fatalf("expected ArrowLeft on PageAgents to stay on PageAgents, got %s", s.Page)
+	}
+
 	// Verify Left/Right arrows do NOT change status filter on PageBugs, while 's'/'S' does
 	s.Navigate(PageBugs)
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})

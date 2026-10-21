@@ -252,7 +252,7 @@ func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
 
 func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	switch s.EffectivePage() {
-	case PageBugs:
+	case PageAgents, PageBugs:
 		return true
 	case PageAnalysisRun:
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
