@@ -28,13 +28,13 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	lines = append(lines, "")
 	selected := s.ClampedIdx()
 	titleCol := min(32, max(16, width-64))
-	headerCols := fmt.Sprintf("  %-16s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
+	headerCols := fmt.Sprintf("  %-10s  %-*s  %-12s  %-10s  %s", "STAGE", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
 	lines = append(lines, th.renderTableHeader(headerCols, width)...)
 	start, end := windowBounds(len(items), selected, 5)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
-		stageCol := theme.PadVisibleRight(theme.TruncatePlain(fmt.Sprintf("%d. %s", item.StageNumber, item.Stage), 16), 16)
+		stageCol := theme.PadVisibleRight(pipelineStageShortLabel(item.StageNumber), 10)
 		titleCell := theme.PadVisibleRight(theme.TruncatePlain(item.Title, titleCol), titleCol)
 		tStyle := rowTitleStyle(th, idx == selected)
 		deltaCol := theme.PadVisibleRight(fmt.Sprintf("%s+%d%s/%s-%d%s", th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset), 10)
@@ -65,6 +65,21 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	lines = append(lines, "")
 	lines = append(lines, th.renderPanelBox("ACTIVE AGENT MISSION CONTROL", strings.ToUpper(curItem.Stage), panelW, detail)...)
 	return lines
+}
+
+func pipelineStageShortLabel(stageNum int) string {
+	switch stageNum {
+	case 1:
+		return "Code"
+	case 2:
+		return "Test"
+	case 3:
+		return "AI Review"
+	case 4:
+		return "Hu review"
+	default:
+		return "Code"
+	}
 }
 
 func (s *State) hasWorkflowErrorOrRejection() bool {

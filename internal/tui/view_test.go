@@ -969,7 +969,7 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 			t.Fatalf("expected table header and row in renderAgentsPage at width %d, got hdr=%q row=%q", width, hdrLine, rowLine)
 		}
 		pairs := [][2]string{
-			{"STAGE", "3. Critic Review"},
+			{"STAGE", "AI Review"},
 			{"MISSION TITLE", "Fix discarded clipboard copy"},
 			{"SCOPE", "[SURGICAL]"},
 			{"DELTA", "+1"},
@@ -982,6 +982,13 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 				t.Fatalf("width %d column %q misaligned: header at visible col %d, row %q at visible col %d\nhdr: %q\nrow: %q",
 					width, pair[0], hPos, pair[1], rPos, hdrLine, rowLine)
 			}
+		}
+	}
+
+	wantLabels := map[int]string{1: "Code", 2: "Test", 3: "AI Review", 4: "Hu review"}
+	for num, want := range wantLabels {
+		if got := pipelineStageShortLabel(num); got != want {
+			t.Fatalf("pipelineStageShortLabel(%d) = %q, want %q", num, got, want)
 		}
 	}
 }
