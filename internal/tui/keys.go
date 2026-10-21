@@ -635,10 +635,10 @@ func (s *State) handleAgentsKey(key string) bool {
 	case "n":
 		s.CmdOutput = "Use :agent <objective> to dispatch a new precision agent mission"
 		return true
-	case "g":
+	case "i", "g":
 		s.toggleAgentDebugInspector()
 		return true
-	case "d", "i":
+	case "d":
 		s.openAgentDiffInspector()
 		return true
 	case "a", "c":

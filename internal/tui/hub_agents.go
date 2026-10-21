@@ -209,7 +209,7 @@ func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string 
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[Esc/g] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
 	items := s.AgentItems()
 	activeStage := 1
 	if len(items) > 0 {
@@ -370,22 +370,22 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	st := strings.ToLower(strings.TrimSpace(item.Status))
 	switch {
 	case st == "stale":
-		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[Enter/g]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
+		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
 			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "applied":
-		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[Enter/g]%s Agent Detail · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
+		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[i/Enter]%s Agent Detail · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "running" || st == "queued" || st == "canceling":
-		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[Enter/g]%s Agent Detail · %s[r]%s Refresh · %s[x]%s Cancel",
+		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh · %s[x]%s Cancel",
 			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[Enter/g]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff",
+		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[i/Enter]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff",
 			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[Enter/g]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit",
+		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	default:
-		return fmt.Sprintf("%sNext Step:%s %s[Enter/g]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply",
+		return fmt.Sprintf("%sNext Step:%s %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply",
 			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	}
 }

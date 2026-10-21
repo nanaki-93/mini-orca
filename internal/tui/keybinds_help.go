@@ -163,7 +163,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageAgents: {
 		title:     "[2] AGENT STUDIO · PIPELINE & WORKTREES",
-		primary:   []keyDesc{{"Enter / g", "Agent detail"}, {"d", "Inspect diff"}},
+		primary:   []keyDesc{{"i / Enter", "Agent detail"}, {"d", "Inspect diff"}},
 		secondary: []keyDesc{{"a / c", "Apply & commit"}, {"r / x", "Repair / cancel"}},
 		commands:  []keyDesc{{":agent <msg>", "New mission"}, {":apply", "Apply & commit"}},
 	},
