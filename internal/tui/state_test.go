@@ -786,10 +786,14 @@ func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 		t.Fatalf("expected PageAgents to display critic summary and Ready to Review & Apply:\n%s", agentFrame)
 	}
 
-	// 4. Press Enter (or 'd') on PageAgents -> opens Diff Inspector (PageEditor)
+	// 4. Press Enter on PageAgents -> opens Agent Detail view (AgentDetailOpen=true) on every row; 'd' opens Diff Inspector (PageEditor)
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PageAgents || !s.AgentDetailOpen {
+		t.Fatalf("expected AgentDetailOpen=true on PageAgents after Enter on ready agent, got page=%s detail=%v", s.Page, s.AgentDetailOpen)
+	}
+	s.HandleKey(KeyEvent{Key: "d"})
 	if s.Page != PageEditor {
-		t.Fatalf("expected PageEditor after Enter on ready agent, got %s", s.Page)
+		t.Fatalf("expected PageEditor after pressing 'd' on ready agent, got %s", s.Page)
 	}
 
 	// 5. Apply & commit -> bug moves to 'done'

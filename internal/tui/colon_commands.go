@@ -105,10 +105,6 @@ func (s *State) activateAgentRow() {
 	if idx >= len(items) {
 		return
 	}
-	if s.Change != nil && len(s.Change.Changes) > 0 && !s.hasWorkflowErrorOrRejection() {
-		s.openAgentDiffInspector()
-		return
-	}
 	s.AgentDetailOpen = true
 	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})

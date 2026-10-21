@@ -336,22 +336,22 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	st := strings.ToLower(strings.TrimSpace(item.Status))
 	switch {
 	case st == "stale":
-		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
-			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[Enter/g]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "applied":
-		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
-			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[Enter/g]%s Agent Detail · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
+			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "running" || st == "queued" || st == "canceling":
-		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[g]%s Debug & Logs · %s[r]%s Refresh · %s[x]%s Cancel",
+		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[Enter/g]%s Agent Detail · %s[r]%s Refresh · %s[x]%s Cancel",
 			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[r]%s Self-Repair · %s[g]%s Debug & Logs · %s[d]%s Diff",
+		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[Enter/g]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff",
 			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[d/Enter]%s Inspect Diff · %s[c]%s Apply & Commit · %s[g]%s Debug",
+		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[Enter/g]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	default:
-		return fmt.Sprintf("%sNext Step:%s %s[d/Enter]%s Inspect Diff · %s[g]%s Debug & Logs · %s[r]%s Run Checks · %s[c]%s Apply",
+		return fmt.Sprintf("%sNext Step:%s %s[Enter/g]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply",
 			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	}
 }
