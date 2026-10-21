@@ -217,6 +217,10 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	// Verify split-screen sidebar menu division, spacing before WORKSPACE PULSE, and hidden keymappings on standard screen
 	s.Navigate(PageSummary)
 	splitOut := s.Render(120, 36)
+	splitRows := strings.Split(splitOut, "\n")
+	if len(splitRows) < 3 || !strings.Contains(splitRows[2], "┳") {
+		t.Fatalf("expected single-line header (split rule on row index 2), got row[2]=%q:\n%s", splitRows[2], splitOut)
+	}
 	if sidebarMenuWidth != 30 || !strings.Contains(splitOut, strings.Repeat("━", sidebarMenuWidth)+"┳") {
 		t.Fatalf("expected wider 30-column sidebar menu divider on 120x36 viewport:\n%s", splitOut)
 	}

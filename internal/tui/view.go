@@ -29,11 +29,8 @@ func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) stri
 	header := []string{
 		s.renderTopBorder(th, frameWidth, frameHeight),
 		th.wrapFrameLine(s.renderStatusBar(th, frameWidth), frameWidth),
+		s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┳", "┫", "━"),
 	}
-	if prog := s.renderProgressStrip(th, frameWidth); prog != "" {
-		header = append(header, th.wrapFrameLine(prog, frameWidth))
-	}
-	header = append(header, s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┳", "┫", "━"))
 
 	footer := []string{
 		s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┻", "┫", "━"),
@@ -71,9 +68,6 @@ func (s *State) renderCompactFrame(th ansiTheme, frameWidth, frameHeight int) st
 	}
 	if sub := s.renderSubViewBar(th, frameWidth); sub != "" {
 		header = append(header, th.wrapFrameLine(sub, frameWidth))
-	}
-	if prog := s.renderProgressStrip(th, frameWidth); prog != "" {
-		header = append(header, th.wrapFrameLine(prog, frameWidth))
 	}
 	header = append(header, s.renderHorizontalRule(th, frameWidth, "┠", "┨", "─"))
 
@@ -346,6 +340,9 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 		th.bold+th.fg, projName, th.reset,
 		th.muted, th.reset, th.cyan, branch, dirty,
 	)
+	if parts := s.renderProgressParts(th); len(parts) > 0 {
+		content += th.border + "  │  " + th.reset + strings.Join(parts, th.border+"  │  "+th.reset)
+	}
 	return theme.PadVisibleRight(content, width-2)
 }
 
@@ -384,14 +381,14 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 	return theme.PadVisibleRight(row, width-2)
 }
 
-func (s *State) renderProgressStrip(th ansiTheme, width int) string {
+func (s *State) renderProgressParts(th ansiTheme) []string {
 	var parts []string
 	if s.Run != nil && s.Run.Status != "" {
 		done, total := runAggregateCoverage(s.Run)
-		bar := th.renderProgressBar(done, total, 12)
+		bar := th.renderProgressBar(done, total, 8)
 		runText := fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds)
 		if s.isAnalysisPausedOrInterrupted() {
-			reason := client.FirstNonEmpty(s.Run.Reason, "window paused")
+			reason := theme.TruncatePlain(client.FirstNonEmpty(s.Run.Reason, "window paused"), 28)
 			runText += fmt.Sprintf(" %s%s · [r] Resume%s", th.amber, reason, th.reset)
 		}
 		parts = append(parts, runText)
@@ -399,18 +396,14 @@ func (s *State) renderProgressStrip(th ansiTheme, width int) string {
 	if s.HasActiveProposal() {
 		added, removed, badge := domain.ClassifyDiffScope(s.Change.Changes)
 		parts = append(parts, fmt.Sprintf("Active Proposal: %s%s%s %s (%s+%d%s/%s-%d%s)",
-			th.bold, s.Change.Title, th.reset,
+			th.bold, theme.TruncatePlain(s.Change.Title, 24), th.reset,
 			th.statusBadge(badge), th.green, added, th.reset, th.red, removed, th.reset,
 		))
 	}
 	if s.Busy != "" {
-		parts = append(parts, th.warnBg+" ⟳ BUSY: "+s.Busy+" "+th.reset)
+		parts = append(parts, th.warnBg+" ⟳ BUSY: "+theme.TruncatePlain(s.Busy, 22)+" "+th.reset)
 	}
-	if len(parts) == 0 {
-		return ""
-	}
-	row := "  " + strings.Join(parts, th.border+"  │  "+th.reset)
-	return theme.PadVisibleRight(row, width-2)
+	return parts
 }
 
 func runAggregateCoverage(run *AnalysisRun) (int, int) {
