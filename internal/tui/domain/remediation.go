@@ -225,7 +225,11 @@ func conciseSubject(title, cause string) string {
 
 func conciseCauseDetail(subject, cause string) string {
 	c := strings.TrimSpace(strings.TrimRight(cause, ". "))
+	s := strings.TrimSpace(strings.TrimRight(subject, ".… "))
 	if c == "" || strings.EqualFold(c, subject) || c == "No cause recorded" {
+		return ""
+	}
+	if len(s) >= 12 && strings.HasPrefix(strings.ToLower(c), strings.ToLower(s)) {
 		return ""
 	}
 	if len(c) > 80 {

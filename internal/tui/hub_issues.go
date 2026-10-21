@@ -134,7 +134,7 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	}
 	meta := s.buildIssueDetailMetadataLines(th, *cur)
 	lines = append(lines, th.renderPanelBox("ISSUE METADATA & LOCATION", rightMeta, panelW, meta)...)
-	diag := s.buildIssueDetailDiagnosticLines(th, *cur)
+	diag := s.buildIssueDetailDiagnosticLines(th, *cur, panelW)
 	lines = append(lines, "")
 	return append(lines, th.renderPanelBox("ROOT CAUSE DIAGNOSTIC & REMEDIATION", strings.ToUpper(cur.Category), panelW, diag)...)
 }
@@ -145,16 +145,19 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 	rule := client.FirstNonEmpty(cur.Rule, cur.Category+"-check")
 	fresh := client.FirstNonEmpty(cur.Freshness, "current")
 	symbol, signature, fileMeta := s.resolveIssueSymbolAndFileMeta(cur)
-	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s  %sSymbol:%s %s%s%s",
-		th.muted, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset,
-		th.muted, th.reset, th.bold+th.fg, symbol, th.reset)
+	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s",
+		th.muted, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset)
 	if fileMeta != "" {
-		locLine += fmt.Sprintf("  %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
+		locLine += fmt.Sprintf("   %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
+	}
+	symLine := fmt.Sprintf("%sSymbol:%s     %s%s%s", th.muted, th.reset, th.bold+th.fg, symbol, th.reset)
+	if signature != "" {
+		symLine += fmt.Sprintf("   %sSignature:%s %s%s%s", th.muted, th.reset, th.purple, signature, th.reset)
 	}
 	scopePaths := domain.EnsureChangeTestPaths([]string{cur.Path}, s.Index)
 	scopeStr := client.FirstNonEmpty(strings.Join(scopePaths, ", "), cur.Path, "workspace")
-	rows := []string{
-		fmt.Sprintf("%sSeverity:%s   %s   %sCategory:%s %s%s%s   %sStatus:%s %s   %sConfidence:%s %s%s%s",
+	return []string{
+		fmt.Sprintf("%sSeverity:%s   %s  %sCategory:%s %s%s%s  %sStatus:%s %s  %sConfidence:%s %s%s%s",
 			th.muted, th.reset, th.severityBadge(cur.Severity),
 			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(cur.Category), th.reset,
 			th.muted, th.reset, th.statusBadge(cur.Status),
@@ -164,12 +167,9 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 			th.muted, th.reset, th.purple, rule, th.reset,
 			th.muted, th.reset, th.green, fresh, th.reset),
 		locLine,
+		symLine,
+		fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset),
 	}
-	if signature != "" {
-		rows = append(rows, fmt.Sprintf("%sSignature:%s  %s%s%s", th.muted, th.reset, th.purple, signature, th.reset))
-	}
-	rows = append(rows, fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset))
-	return rows
 }
 
 func formatIssueRootCauseText(cur IssueRow) string {
@@ -185,49 +185,102 @@ func formatIssueRootCauseText(cur IssueRow) string {
 	return fmt.Sprintf("%s — %s", strings.TrimRight(title, ". "), cause)
 }
 
-func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow) []string {
-	diag := []string{
-		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, formatIssueRootCauseText(cur), th.reset),
+const diagnosticLabelCols = 19
+
+func issuePanelContentWidth(panelW int) int {
+	if panelW < 40 {
+		panelW = 40
 	}
+	return max(24, panelW-4)
+}
+
+func renderDiagnosticDivider(th ansiTheme, contentW int) string {
+	return th.border + strings.Repeat("─", contentW) + th.reset
+}
+
+func renderDiagnosticRow(th ansiTheme, labelStyle, label, valueStyle, value string, contentW int) []string {
+	prefix := theme.PadVisibleRight(labelStyle+label+th.reset, diagnosticLabelCols)
+	rightW := max(16, contentW-diagnosticLabelCols)
+	wrapped := theme.WrapVisibleLine(valueStyle+strings.TrimSpace(value)+th.reset, rightW)
+	if len(wrapped) == 0 {
+		return []string{prefix}
+	}
+	indent := strings.Repeat(" ", diagnosticLabelCols)
+	out := make([]string, 0, len(wrapped))
+	for i, w := range wrapped {
+		if i == 0 {
+			out = append(out, prefix+w)
+		} else {
+			out = append(out, indent+w)
+		}
+	}
+	return out
+}
+
+func renderDiagnosticBulletRows(th ansiTheme, labelStyle, label, bulletStyle, textStyle string, items []string, contentW int) []string {
+	prefix := theme.PadVisibleRight(labelStyle+label+th.reset, diagnosticLabelCols)
+	indent := strings.Repeat(" ", diagnosticLabelCols)
+	bulletPrefix := bulletStyle + "• " + th.reset
+	bulletIndent := "  "
+	itemW := max(14, contentW-diagnosticLabelCols-2)
+	var out []string
+	for idx, item := range items {
+		wrapped := theme.WrapVisibleLine(textStyle+strings.TrimSpace(item)+th.reset, itemW)
+		for lineIdx, w := range wrapped {
+			left := indent
+			if idx == 0 && lineIdx == 0 {
+				left = prefix
+			}
+			lead := bulletIndent
+			if lineIdx == 0 {
+				lead = bulletPrefix
+			}
+			out = append(out, left+lead+w)
+		}
+	}
+	return out
+}
+
+func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow, panelW int) []string {
+	contentW := issuePanelContentWidth(panelW)
+	diag := renderDiagnosticRow(th, th.bold+th.red, "▲ Root Cause:", th.amber, formatIssueRootCauseText(cur), contentW)
 	if cur.Evidence != "" {
-		diag = append(diag, fmt.Sprintf("%s◆ Evidence:%s        %s%s%s", th.bold+th.cyan, th.reset, th.fg, cur.Evidence, th.reset))
+		diag = append(diag, renderDiagnosticRow(th, th.bold+th.cyan, "◆ Evidence:", th.fg, cur.Evidence, contentW)...)
 	}
-	diag = append(diag, fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.bold+th.fg, cur.Solution, th.reset))
-	diag = append(diag, s.formatIssueVerificationLines(th, cur)...)
+	diag = append(diag, renderDiagnosticDivider(th, contentW))
+	diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "✔ Recommended Fix:", th.bold+th.fg, cur.Solution, contentW)...)
+	diag = append(diag, s.formatIssueVerificationLines(th, cur, contentW)...)
 	if len(cur.NonGoals) > 0 {
-		diag = append(diag, fmt.Sprintf("%s▸ Guardrails:%s      %s%s%s", th.bold+th.purple, th.reset, th.muted, strings.Join(cur.NonGoals, " · "), th.reset))
+		diag = append(diag, formatIssueGuardrailLines(th, cur.NonGoals, contentW)...)
 	}
+	diag = append(diag, renderDiagnosticDivider(th, contentW))
 	if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
-		diag = append(diag, fmt.Sprintf("%s▸ Commit Receipt:%s  %s%s%s", th.bold+th.green, th.reset, th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), th.reset))
+		diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "▸ Commit Receipt:", th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), contentW)...)
 	} else if cur.Status == "in_progress" && cur.AgentPath != "" {
-		diag = append(diag, fmt.Sprintf("%s▸ Active Worktree:%s %s%s%s", th.bold+th.amber, th.reset, th.cyan, cur.AgentPath, th.reset))
+		diag = append(diag, renderDiagnosticRow(th, th.bold+th.amber, "▸ Active Worktree:", th.cyan, cur.AgentPath, contentW)...)
 	}
-	diag = append(diag, s.renderIssueDetailWorkflowLine(th, cur))
+	diag = append(diag, s.renderIssueDetailWorkflowLines(th, cur, contentW)...)
 	return diag
 }
 
-func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow) []string {
+func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow, contentW int) []string {
 	if len(cur.AcceptanceCriteria) == 0 {
 		plan := domain.SynthesizeIssueVerification(cur, s.Index)
-		return []string{
-			fmt.Sprintf("%s▸ Verification:%s    %s%s%s",
-				th.bold+th.purple, th.reset, th.cyan, plan, th.reset),
-		}
+		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Verification:", th.cyan, plan, contentW)
 	}
 	if len(cur.AcceptanceCriteria) == 1 {
-		return []string{
-			fmt.Sprintf("%s▸ Verification:%s    %s%s%s",
-				th.bold+th.purple, th.reset, th.cyan, cur.AcceptanceCriteria[0], th.reset),
-		}
+		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Verification:", th.cyan, cur.AcceptanceCriteria[0], contentW)
 	}
 	limit := min(3, len(cur.AcceptanceCriteria))
-	out := []string{
-		fmt.Sprintf("%s▸ Acceptance Criteria (%d):%s", th.bold+th.purple, len(cur.AcceptanceCriteria), th.reset),
+	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Verification:", th.cyan, th.cyan, cur.AcceptanceCriteria[:limit], contentW)
+}
+
+func formatIssueGuardrailLines(th ansiTheme, nonGoals []string, contentW int) []string {
+	if len(nonGoals) == 1 {
+		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Guardrails:", th.muted, nonGoals[0], contentW)
 	}
-	for i := 0; i < limit; i++ {
-		out = append(out, fmt.Sprintf("  %s•%s %s", th.cyan, th.reset, cur.AcceptanceCriteria[i]))
-	}
-	return out
+	limit := min(3, len(nonGoals))
+	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Guardrails:", th.purple, th.muted, nonGoals[:limit], contentW)
 }
 
 func formatIssueOrigin(cur IssueRow) string {
@@ -281,21 +334,24 @@ func formatIndexedFileSummary(f IndexedFile) string {
 	return lang
 }
 
-func (s *State) renderIssueDetailWorkflowLine(th ansiTheme, cur IssueRow) string {
+func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, contentW int) []string {
 	switch cur.Status {
 	case "in_progress":
-		return fmt.Sprintf("%s⟳ Agent Status:%s    In Progress (%s) · %s[Enter/w]%s Watch Agent Pipeline · %s[i/Esc]%s Back",
-			th.bold+th.amber, th.reset, client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset)
+		val := fmt.Sprintf("In Progress (%s) · %s[Enter/w]%s Watch Pipeline · %s[i/Esc]%s Back",
+			client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset)
+		return renderDiagnosticRow(th, th.bold+th.amber, "⟳ Agent Status:", th.fg, val, contentW)
 	case "done":
 		commitRef := ""
 		if cur.CommitCode != "" || cur.CommitOID != "" {
 			commitRef = " [" + formatIssueCommitLink(cur.CommitCode, cur.CommitOID) + "]"
 		}
-		return fmt.Sprintf("%s✔ Resolution:%s      Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[i/Esc]%s Back",
-			th.bold+th.green, th.reset, commitRef, th.cyan, th.reset, th.cyan, th.reset)
+		val := fmt.Sprintf("Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[i/Esc]%s Back",
+			commitRef, th.cyan, th.reset, th.cyan, th.reset)
+		return renderDiagnosticRow(th, th.bold+th.green, "✔ Resolution:", th.fg, val, contentW)
 	default:
-		return fmt.Sprintf("%s▸ Next Action:%s     %s[f/Enter/a]%s Fix Bug with Agent · %s[d]%s Dismiss · %s[o]%s Open File · %s[i/Esc]%s Back",
-			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		val := fmt.Sprintf("%s[Enter/f]%s Fix · %s[d]%s Dismiss · %s[o]%s Open File · %s[i/Esc]%s Back",
+			th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return renderDiagnosticRow(th, th.bold+th.cyan, "▸ Next Action:", th.fg, val, contentW)
 	}
 }
 

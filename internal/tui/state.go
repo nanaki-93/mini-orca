@@ -598,7 +598,6 @@ func (s *State) extractSemanticIssueDetails(f Finding, cat, title, cause string)
 		nonGoals = f.TaskSpec.NonGoals
 		if len(f.TaskSpec.AcceptanceCriteria) > 0 {
 			criteria = f.TaskSpec.AcceptanceCriteria
-			solution = strings.Join(criteria, "\n")
 		}
 	}
 	if (symbol == "" || signature == "") && s.Index != nil && f.Location.Path != "" {
@@ -610,10 +609,8 @@ func (s *State) extractSemanticIssueDetails(f Finding, cat, title, cause string)
 			signature = sig
 		}
 	}
-	if solution == "" {
-		src := client.FirstNonEmpty(f.Source, "ai")
-		solution = domain.SynthesizeIssueRemediation(title, cause, cat, f.Rule, src, f.Location.Path, symbol, f.Location.StartLine, f.EngineeringInsight)
-	}
+	src := client.FirstNonEmpty(f.Source, "ai")
+	solution = domain.SynthesizeIssueRemediation(title, cause, cat, f.Rule, src, f.Location.Path, symbol, f.Location.StartLine, f.EngineeringInsight)
 	return symbol, signature, solution, criteria, nonGoals
 }
 
@@ -627,14 +624,6 @@ func (s *State) lookupIndexedSymbolForIssue(path, targetSymbol string, line int,
 		}
 	}
 	return "", ""
-}
-
-func distinctEvidenceText(evidence, cause string) string {
-	trimmed := strings.TrimSpace(evidence)
-	if trimmed == "" || trimmed == strings.TrimSpace(cause) {
-		return ""
-	}
-	return trimmed
 }
 
 func completionCommitMeta(comp *FindingCompletion) (string, string) {
@@ -687,7 +676,6 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			CommitCode:         commitCode,
 			AgentPath:          agentPath,
 			Cause:              cause,
-			Evidence:           distinctEvidenceText(f.VerificationPlan, cause),
 			Solution:           sol,
 			Target:             target,
 			AcceptanceCriteria: criteria,
@@ -744,7 +732,6 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			CommitCode:         commitCode,
 			AgentPath:          agentPath,
 			Cause:              cause,
-			Evidence:           distinctEvidenceText(f.VerificationIdea, cause),
 			Solution:           sol,
 			Target:             target,
 			AcceptanceCriteria: criteria,

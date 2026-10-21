@@ -1907,8 +1907,14 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		"Go ·",
 		"120 lines",
 		"if token == \"\" { return nil }",
+		"✔ Recommended Fix:",
+		"Enforce strict authentication/cryptographic validation",
+		"▸ Verification:",
 		"Reject empty token in ValidateToken",
+		"Cover empty token in unit test",
+		"▸ Guardrails:",
 		"Do not alter token signing format",
+		"▸ Next Action:",
 		"internal/app/second_test.go",
 	} {
 		if !strings.Contains(detailFrame, want) {
