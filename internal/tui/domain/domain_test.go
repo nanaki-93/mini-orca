@@ -193,3 +193,42 @@ func TestCommitCodeGenerationAndFormatting(t *testing.T) {
 		t.Fatalf("ResolveCommitCode = %q, want %q", got, code)
 	}
 }
+
+func TestSynthesizeIssueRemediationAndSymbolMatching(t *testing.T) {
+	syms := []client.SymbolInfo{
+		{Name: "Server.Start", Signature: "func (s *Server) Start(ctx context.Context) error", StartLine: 10, EndLine: 30},
+		{Name: "parsePayload", Signature: "func parsePayload(raw []byte) error", StartLine: 35, EndLine: 60},
+	}
+	sym, sig := MatchIndexedSymbolForFinding(syms, "", 0, "Unchecked error in parsePayload", "parsePayload ignores Close error.")
+	if sym != "parsePayload" || sig != "func parsePayload(raw []byte) error" {
+		t.Fatalf("expected text-matched symbol parsePayload, got sym=%q sig=%q", sym, sig)
+	}
+
+	remErr := SynthesizeIssueRemediation(
+		"Unchecked error return",
+		"Close error is ignored after writing payload.",
+		"bugs",
+		"",
+		"ai",
+		"internal/api/server.go",
+		"parsePayload",
+		42,
+		nil,
+	)
+	if strings.Contains(remErr, "Synthesize a minimal, verified fix") || !strings.Contains(remErr, "parsePayload") || !strings.Contains(remErr, "internal/api/server_test.go") {
+		t.Fatalf("expected specific error-handling remediation, got %q", remErr)
+	}
+
+	insight := &client.EngineeringInsight{
+		Mechanism:          "Token is compared with == instead of subtle.ConstantTimeCompare.",
+		WhyItMattersHere:   "Timing side-channel leaks HMAC byte prefix.",
+		TransferableLesson: "Use hmac.Equal for constant-time MAC comparison and test rejected tokens.",
+	}
+	remInsight := SynthesizeIssueRemediation("Timing side-channel", "Non-constant-time comparison", "security", "SEC-01", "ai", "auth.go", "Verify", 12, insight)
+	if remInsight != insight.TransferableLesson {
+		t.Fatalf("expected insight TransferableLesson %q, got %q", insight.TransferableLesson, remInsight)
+	}
+	if ev := DistinctInsightEvidence("", "Non-constant-time comparison", insight); ev != insight.WhyItMattersHere {
+		t.Fatalf("expected DistinctInsightEvidence to surface WhyItMattersHere, got %q", ev)
+	}
+}

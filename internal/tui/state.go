@@ -543,8 +543,8 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	done := f.Status == "fixed" || f.Status == "done" || comp != nil
 	agentPath := s.resolveSemanticAgentPath(done, f, agents, target, name, title)
 	cause := client.FirstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
-	evidence := distinctEvidenceText(f.Evidence, cause)
-	symbol, signature, sol, criteria, nonGoals := extractTaskSpecDetails(f)
+	evidence := domain.DistinctInsightEvidence(f.Evidence, cause, f.EngineeringInsight)
+	symbol, signature, sol, criteria, nonGoals := s.extractSemanticIssueDetails(f, cat, title, cause)
 	commitOID, commitCode := completionCommitMeta(comp)
 	rows = append(rows, IssueRow{
 		ID:                 id,
@@ -588,22 +588,45 @@ func (s *State) resolveSemanticAgentPath(done bool, f Finding, agents []AgentIte
 	return ""
 }
 
-func extractTaskSpecDetails(f Finding) (symbol, signature, solution string, criteria, nonGoals []string) {
+func (s *State) extractSemanticIssueDetails(f Finding, cat, title, cause string) (symbol, signature, solution string, criteria, nonGoals []string) {
 	symbol = f.Location.Symbol
-	solution = "Synthesize a minimal, verified fix and unit test."
-	if f.TaskSpec == nil {
-		return symbol, "", solution, nil, nil
+	if f.TaskSpec != nil {
+		if symbol == "" {
+			symbol = f.TaskSpec.TargetSymbol
+		}
+		signature = f.TaskSpec.TargetSignature
+		nonGoals = f.TaskSpec.NonGoals
+		if len(f.TaskSpec.AcceptanceCriteria) > 0 {
+			criteria = f.TaskSpec.AcceptanceCriteria
+			solution = strings.Join(criteria, "\n")
+		}
 	}
-	if symbol == "" {
-		symbol = f.TaskSpec.TargetSymbol
+	if (symbol == "" || signature == "") && s.Index != nil && f.Location.Path != "" {
+		sym, sig := s.lookupIndexedSymbolForIssue(f.Location.Path, symbol, f.Location.StartLine, title, cause)
+		if symbol == "" {
+			symbol = sym
+		}
+		if signature == "" {
+			signature = sig
+		}
 	}
-	signature = f.TaskSpec.TargetSignature
-	nonGoals = f.TaskSpec.NonGoals
-	if len(f.TaskSpec.AcceptanceCriteria) > 0 {
-		criteria = f.TaskSpec.AcceptanceCriteria
-		solution = strings.Join(criteria, "\n")
+	if solution == "" {
+		src := client.FirstNonEmpty(f.Source, "ai")
+		solution = domain.SynthesizeIssueRemediation(title, cause, cat, f.Rule, src, f.Location.Path, symbol, f.Location.StartLine, f.EngineeringInsight)
 	}
 	return symbol, signature, solution, criteria, nonGoals
+}
+
+func (s *State) lookupIndexedSymbolForIssue(path, targetSymbol string, line int, title, cause string) (string, string) {
+	if s.Index == nil {
+		return "", ""
+	}
+	for _, f := range s.Index.Files {
+		if f.Path == path {
+			return domain.MatchIndexedSymbolForFinding(f.Symbols, targetSymbol, line, title, cause)
+		}
+	}
+	return "", ""
 }
 
 func distinctEvidenceText(evidence, cause string) string {
@@ -641,6 +664,10 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			criteria = []string{plan}
 		}
 		cause := client.FirstNonEmpty(f.ObservedPattern, "No cause recorded.")
+		sol := strings.TrimSpace(f.Recommendation)
+		if sol == "" {
+			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "performance", f.Category, "ai", rep.Path, f.Symbol, f.StartLine, nil)
+		}
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
@@ -661,7 +688,7 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			AgentPath:          agentPath,
 			Cause:              cause,
 			Evidence:           distinctEvidenceText(f.VerificationPlan, cause),
-			Solution:           client.FirstNonEmpty(f.Recommendation, "Synthesize a minimal, verified fix and unit test."),
+			Solution:           sol,
 			Target:             target,
 			AcceptanceCriteria: criteria,
 		})
@@ -694,6 +721,10 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			criteria = []string{idea}
 		}
 		cause := client.FirstNonEmpty(f.ObservedCondition, "No cause recorded.")
+		sol := strings.TrimSpace(f.Remediation)
+		if sol == "" {
+			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "security", f.Rule, src, path, f.SourceAnchor.Symbol, f.SourceAnchor.StartLine, nil)
+		}
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
@@ -714,7 +745,7 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			AgentPath:          agentPath,
 			Cause:              cause,
 			Evidence:           distinctEvidenceText(f.VerificationIdea, cause),
-			Solution:           client.FirstNonEmpty(f.Remediation, "Synthesize a minimal, verified fix and unit test."),
+			Solution:           sol,
 			Target:             target,
 			AcceptanceCriteria: criteria,
 		})

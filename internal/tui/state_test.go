@@ -1929,6 +1929,15 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		t.Fatalf("expected ArrowLeft in PageIssueDetail to step to 1st issue without changing status, got view=%s issue=%+v",
 			s.IssueView, s.SelectedIssue())
 	}
+	firstDetailFrame := s.Render(120, 44)
+	if strings.Contains(firstDetailFrame, "Synthesize a minimal, verified fix") {
+		t.Fatalf("expected specific Recommended Fix instead of generic placeholder on 1st issue:\n%s", firstDetailFrame)
+	}
+	for _, wantFirst := range []string{"Update internal/app/first.go:10 to resolve", "First critical finding", "internal/app/first_test.go"} {
+		if !strings.Contains(firstDetailFrame, wantFirst) {
+			t.Fatalf("expected 1st issue detail frame to include specific remediation context %q:\n%s", wantFirst, firstDetailFrame)
+		}
+	}
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	s.HandleKey(KeyEvent{Key: "j"})
 	if s.SelectedIssue() == nil || s.SelectedIssue().ID != "semantic:f-third" {

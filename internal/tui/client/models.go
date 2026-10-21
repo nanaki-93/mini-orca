@@ -224,6 +224,14 @@ type ModelPreset struct {
 	Function string `json:"function"`
 }
 
+// EngineeringInsight holds optional model-derived mechanism, impact, tradeoff, and verification guidance.
+type EngineeringInsight struct {
+	Mechanism             string `json:"mechanism"`
+	WhyItMattersHere      string `json:"why_it_matters_here"`
+	TradeoffOrFailureMode string `json:"tradeoff_or_failure_mode,omitempty"`
+	TransferableLesson    string `json:"transferable_lesson,omitempty"`
+}
+
 // TaskSpec describes the target and acceptance criteria for fixing a finding.
 type TaskSpec struct {
 	SchemaVersion      string   `json:"schema_version"`
@@ -245,20 +253,21 @@ type SourceAnchor struct {
 // Finding represents a semantic or static analysis finding.
 type Finding struct {
 	ProjectIdentity
-	ID         string       `json:"id"`
-	Source     string       `json:"source"`
-	Confidence string       `json:"confidence"`
-	Severity   string       `json:"severity"`
-	Title      string       `json:"title"`
-	Message    string       `json:"message"`
-	Rule       string       `json:"rule"`
-	FileHash   string       `json:"file_hash"`
-	Location   SourceAnchor `json:"location"`
-	Evidence   string       `json:"evidence"`
-	Status     string       `json:"status"`
-	Freshness  string       `json:"freshness"`
-	Category   string       `json:"category"`
-	TaskSpec   *TaskSpec    `json:"task_spec,omitempty"`
+	ID                 string              `json:"id"`
+	Source             string              `json:"source"`
+	Confidence         string              `json:"confidence"`
+	Severity           string              `json:"severity"`
+	Title              string              `json:"title"`
+	Message            string              `json:"message"`
+	Rule               string              `json:"rule"`
+	FileHash           string              `json:"file_hash"`
+	Location           SourceAnchor        `json:"location"`
+	Evidence           string              `json:"evidence"`
+	Status             string              `json:"status"`
+	Freshness          string              `json:"freshness"`
+	Category           string              `json:"category"`
+	TaskSpec           *TaskSpec           `json:"task_spec,omitempty"`
+	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // FindingTarget identifies a finding across semantic, performance, or security reports.

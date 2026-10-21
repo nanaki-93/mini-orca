@@ -26,6 +26,7 @@ type (
 	ModelDiscovery          = client.ModelDiscovery
 	AvailableModels         = client.AvailableModels
 	ModelPreset             = client.ModelPreset
+	EngineeringInsight      = client.EngineeringInsight
 	TaskSpec                = client.TaskSpec
 	SourceAnchor            = client.SourceAnchor
 	Finding                 = client.Finding

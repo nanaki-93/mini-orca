@@ -419,7 +419,11 @@ func SuggestedFindingsForProject(report ProjectAnalysisReport) []UnifiedFinding 
 	}
 	findings := make([]UnifiedFinding, 0, len(report.Risks))
 	for _, risk := range report.Risks {
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: risk.Summary, Message: risk.Summary, OriginatingAnalysis: "project", EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		eng := risk.EngineeringInsight
+		if eng == nil {
+			eng = report.EngineeringInsight
+		}
+		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: risk.Summary, Message: risk.Summary, OriginatingAnalysis: "project", EngineeringInsight: CloneEngineeringInsight(eng)})
 	}
 	return findings
 }
@@ -431,7 +435,7 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 		return []UnifiedFinding{}
 	}
 	findings := make([]UnifiedFinding, 0, len(analysis.Risks))
-	for _, risk := range analysis.Risks {
+	for idx, risk := range analysis.Risks {
 		title := strings.TrimSpace(risk.Title)
 		if title == "" {
 			// Historical reports and providers without structured output may omit titles.
@@ -448,7 +452,60 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 				}
 			}
 		}
-		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: insight.CloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		eng := resolveFileRiskInsight(analysis, risk, idx)
+		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: insight.CloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: eng})
 	}
 	return findings
+}
+
+func resolveFileRiskInsight(analysis FileAnalysis, risk Finding, riskIdx int) *EngineeringInsight {
+	if risk.EngineeringInsight != nil {
+		return CloneEngineeringInsight(risk.EngineeringInsight)
+	}
+	if sug := matchSuggestionForRisk(analysis.Suggestions, risk, riskIdx, len(analysis.Risks)); sug != nil {
+		if sug.EngineeringInsight != nil {
+			return CloneEngineeringInsight(sug.EngineeringInsight)
+		}
+		lesson := strings.TrimSpace(sug.Action)
+		if lesson == "" {
+			lesson = strings.TrimSpace(sug.Summary)
+		}
+		why := strings.TrimSpace(sug.Summary)
+		if why == "" {
+			why = strings.TrimSpace(sug.Title)
+		}
+		if lesson != "" && why != "" && strings.TrimSpace(risk.Summary) != "" {
+			return &EngineeringInsight{
+				Mechanism:          strings.TrimSpace(risk.Summary),
+				WhyItMattersHere:   why,
+				TransferableLesson: lesson,
+			}
+		}
+	}
+	return CloneEngineeringInsight(analysis.EngineeringInsight)
+}
+
+func matchSuggestionForRisk(suggestions []Suggestion, risk Finding, riskIdx, riskCount int) *Suggestion {
+	if len(suggestions) == 0 {
+		return nil
+	}
+	if risk.TaskSpec != nil && risk.TaskSpec.TargetSymbol != "" {
+		for i := range suggestions {
+			if suggestions[i].TargetSymbol == risk.TaskSpec.TargetSymbol {
+				return &suggestions[i]
+			}
+		}
+	}
+	for i := range suggestions {
+		if suggestions[i].TargetSymbol != "" && (strings.Contains(risk.Summary, suggestions[i].TargetSymbol) || strings.Contains(risk.Title, suggestions[i].TargetSymbol)) {
+			return &suggestions[i]
+		}
+	}
+	if riskCount == 1 && len(suggestions) == 1 {
+		return &suggestions[0]
+	}
+	if riskIdx >= 0 && riskIdx < len(suggestions) && len(suggestions) == riskCount {
+		return &suggestions[riskIdx]
+	}
+	return nil
 }

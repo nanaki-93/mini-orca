@@ -150,8 +150,18 @@ func TestFindingStoreRecoversCorruptStorageAndAdaptsFreshAIRisks(t *testing.T) {
 	}
 	projectFindings := SuggestedFindingsForProject(ProjectAnalysisReport{Status: ProjectAnalysisStatusFresh, Risks: []ProjectAnalysisRisk{{Severity: "low", Summary: "Add tests"}}})
 	task := &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func Run()", AcceptanceCriteria: []string{"Return errors."}}
-	fileFindings := SuggestedFindingsForFile(FileAnalysis{Status: AnalysisStatusFresh, Path: "main.go", ContentHash: "hash", Symbols: []SymbolInfo{{Name: "Run", StartLine: 4, EndLine: 6}}, Risks: []Finding{{Severity: "high", Summary: "Check errors", TaskSpec: task}}})
+	fileFindings := SuggestedFindingsForFile(FileAnalysis{
+		Status:      AnalysisStatusFresh,
+		Path:        "main.go",
+		ContentHash: "hash",
+		Symbols:     []SymbolInfo{{Name: "Run", StartLine: 4, EndLine: 6}},
+		Risks:       []Finding{{Severity: "high", Summary: "Check errors in Run", TaskSpec: task}},
+		Suggestions: []Suggestion{{Title: "Propagate Run error", Summary: "Return error to caller", TargetSymbol: "Run", Action: "Wrap and return the error from Run instead of ignoring it."}},
+	})
 	if projectFindings[0].Confidence != FindingConfidenceSuggested || projectFindings[0].Source != FindingSourceAI || fileFindings[0].Location.Path != "main.go" || fileFindings[0].FileHash != "hash" || fileFindings[0].TaskSpec == nil || fileFindings[0].Location.Symbol != "Run" {
 		t.Fatalf("adapted findings = %+v %+v", projectFindings, fileFindings)
+	}
+	if fileFindings[0].EngineeringInsight == nil || !strings.Contains(fileFindings[0].EngineeringInsight.TransferableLesson, "Wrap and return the error") {
+		t.Fatalf("expected SuggestedFindingsForFile to attach matched suggestion action to EngineeringInsight, got %+v", fileFindings[0].EngineeringInsight)
 	}
 }

@@ -184,7 +184,7 @@ func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow) []st
 		diag = append(diag, fmt.Sprintf("%s◆ Evidence:%s        %s%s%s", th.bold+th.cyan, th.reset, th.fg, cur.Evidence, th.reset))
 	}
 	diag = append(diag, fmt.Sprintf("%s✔ Recommended Fix:%s %s%s%s", th.bold+th.green, th.reset, th.bold+th.fg, cur.Solution, th.reset))
-	diag = append(diag, formatIssueVerificationLines(th, cur)...)
+	diag = append(diag, s.formatIssueVerificationLines(th, cur)...)
 	if len(cur.NonGoals) > 0 {
 		diag = append(diag, fmt.Sprintf("%s▸ Guardrails:%s      %s%s%s", th.bold+th.purple, th.reset, th.muted, strings.Join(cur.NonGoals, " · "), th.reset))
 	}
@@ -197,11 +197,12 @@ func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow) []st
 	return diag
 }
 
-func formatIssueVerificationLines(th ansiTheme, cur IssueRow) []string {
+func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow) []string {
 	if len(cur.AcceptanceCriteria) == 0 {
+		plan := domain.SynthesizeIssueVerification(cur, s.Index)
 		return []string{
-			fmt.Sprintf("%s▸ Verification:%s    %sSynthesize regression test & pass project verification checks%s",
-				th.bold+th.purple, th.reset, th.muted, th.reset),
+			fmt.Sprintf("%s▸ Verification:%s    %s%s%s",
+				th.bold+th.purple, th.reset, th.cyan, plan, th.reset),
 		}
 	}
 	if len(cur.AcceptanceCriteria) == 1 {
@@ -251,7 +252,7 @@ func (s *State) resolveIssueSymbolAndFileMeta(cur IssueRow) (symbol, signature, 
 			continue
 		}
 		fileMeta = formatIndexedFileSummary(f)
-		sym, sig := matchIndexedSymbol(f.Symbols, symbol, cur.Line)
+		sym, sig := domain.MatchIndexedSymbolForFinding(f.Symbols, symbol, cur.Line, cur.Title, cur.Cause)
 		if symbol == "" {
 			symbol = sym
 		}
@@ -269,22 +270,6 @@ func formatIndexedFileSummary(f IndexedFile) string {
 		return fmt.Sprintf("%s · %d lines", lang, f.LineCount)
 	}
 	return lang
-}
-
-func matchIndexedSymbol(symbols []SymbolInfo, targetName string, line int) (string, string) {
-	for _, sym := range symbols {
-		if targetName != "" && sym.Name == targetName {
-			return sym.Name, sym.Signature
-		}
-	}
-	if line > 0 {
-		for _, sym := range symbols {
-			if sym.StartLine <= line && (sym.EndLine >= line || sym.StartLine == line) {
-				return sym.Name, sym.Signature
-			}
-		}
-	}
-	return "", ""
 }
 
 func (s *State) renderIssueDetailWorkflowLine(th ansiTheme, cur IssueRow) string {
