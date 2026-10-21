@@ -5,10 +5,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
+	"sync/atomic"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
+
+var tuiReqSeq atomic.Uint64
+
+func nextTUIReqID(prefix string) string {
+	return fmt.Sprintf("%s-%d", prefix, tuiReqSeq.Add(1))
+}
 
 // SyncFromDaemon loads the initial workspace snapshot from the local daemon via Client.
 func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath string) error {
@@ -231,84 +239,259 @@ func (s *State) RefreshModels(ctx context.Context, client *Client) error {
 	return errCur
 }
 
-func (s *State) loadAnalysisSectionResults(ctx context.Context, client *Client) {
+func (s *State) loadAnalysisSectionResults(ctx context.Context, cl *Client) {
 	if s.Run == nil || s.Run.Identity.ID == "" || s.Run.Identity.QueueID == "" {
 		return
 	}
-	id := s.Run.Identity
+	fetched := fetchAnalysisSectionResults(ctx, cl, s.Run.Identity)
+	if len(fetched) == 0 {
+		return
+	}
+	if s.Results == nil {
+		s.Results = make(map[string]SectionResults)
+	}
+	for cat, sec := range fetched {
+		s.Results[cat] = sec
+	}
+}
+
+func fetchAnalysisSectionResults(ctx context.Context, cl *Client, id RunIdentity) map[string]SectionResults {
+	if cl == nil || id.ID == "" || id.QueueID == "" {
+		return nil
+	}
 	base := fmt.Sprintf(
 		"/api/projects/current/analysis/results?project_id=%s&project_revision=%s&policy_fingerprint=%s&provider_fingerprint=%s&queue_id=%s&id=%s&generation=%s",
 		url.QueryEscape(id.ProjectID), url.QueryEscape(id.ProjectRevision),
 		url.QueryEscape(id.PolicyFingerprint), url.QueryEscape(id.ProviderFingerprint),
 		url.QueryEscape(id.QueueID), url.QueryEscape(id.ID), url.QueryEscape(id.Generation),
 	)
-	for _, cat := range []string{"bugs", "security", "performance"} {
-		var sec SectionResults
-		if err := client.DoJSON(ctx, "sync-res-"+cat, http.MethodGet, base+"&category="+cat, nil, &sec); err == nil {
+	cats := []string{"bugs", "security", "performance"}
+	type catResult struct {
+		cat string
+		sec SectionResults
+		ok  bool
+	}
+	fetched := make([]catResult, len(cats))
+	var wg sync.WaitGroup
+	for i, cat := range cats {
+		wg.Add(1)
+		go func(idx int, category string) {
+			defer wg.Done()
+			var sec SectionResults
+			reqID := nextTUIReqID("sync-res-" + category)
+			if err := cl.DoJSON(ctx, reqID, http.MethodGet, base+"&category="+category, nil, &sec); err == nil {
+				fetched[idx] = catResult{cat: category, sec: sec, ok: true}
+			}
+		}(i, cat)
+	}
+	wg.Wait()
+	out := make(map[string]SectionResults, len(cats))
+	for _, item := range fetched {
+		if item.ok {
+			out[item.cat] = item.sec
+		}
+	}
+	return out
+}
+
+type workflowPollTarget struct {
+	id             string
+	worktreePath   string
+	query          string
+	findingTargets []FindingTarget
+}
+
+type pollSnapshot struct {
+	idQuery      string
+	revQuery     string
+	workflows    []workflowPollTarget
+	pollAnalysis bool
+	prevRun      *AnalysisRun
+	emptyResults bool
+	pollScan     bool
+}
+
+type pollResult struct {
+	changes        []ChangeSession
+	changeOK       []bool
+	hasRun         bool
+	run            AnalysisRun
+	sectionResults map[string]SectionResults
+	hasFindings    bool
+	findingsResp   FindingsResponse
+	hasScan        bool
+	scan           Scan
+}
+
+// PollActiveJobs refreshes in-progress workflow, analysis, or scan states from the daemon concurrently.
+func (s *State) PollActiveJobs(ctx context.Context, cl *Client) {
+	snap, ok := s.capturePollSnapshot()
+	if !ok || cl == nil {
+		return
+	}
+	res := executePollSnapshot(ctx, cl, snap)
+	s.applyPollResult(res)
+}
+
+func (s *State) capturePollSnapshot() (pollSnapshot, bool) {
+	if s.Project == nil || s.Project.ProjectID == "" || s.Project.ProjectRevision == "" {
+		return pollSnapshot{}, false
+	}
+	revQuery, idQuery := s.resourceQueries()
+	running := s.runningWorkflowSessions()
+	workflows := make([]workflowPollTarget, 0, len(running))
+	for _, chg := range running {
+		workflows = append(workflows, workflowPollTarget{
+			id:             chg.ID,
+			worktreePath:   chg.WorktreePath,
+			query:          client.FirstNonEmpty(s.changeResourceQuery(chg), idQuery),
+			findingTargets: chg.FindingTargets,
+		})
+	}
+	pollAnalysis := s.hasRunningAnalysis()
+	var prevRun *AnalysisRun
+	if s.Run != nil {
+		cp := *s.Run
+		if len(s.Run.Sections) > 0 {
+			cp.Sections = append([]Section(nil), s.Run.Sections...)
+		}
+		prevRun = &cp
+	}
+	pollScan := s.Scan != nil && s.Scan.Status == "running"
+	if len(workflows) == 0 && !pollAnalysis && !pollScan {
+		return pollSnapshot{}, false
+	}
+	return pollSnapshot{
+		idQuery:      idQuery,
+		revQuery:     revQuery,
+		workflows:    workflows,
+		pollAnalysis: pollAnalysis,
+		prevRun:      prevRun,
+		emptyResults: len(s.Results) == 0,
+		pollScan:     pollScan,
+	}, true
+}
+
+func executePollSnapshot(ctx context.Context, cl *Client, snap pollSnapshot) pollResult {
+	res := pollResult{
+		changes:  make([]ChangeSession, len(snap.workflows)),
+		changeOK: make([]bool, len(snap.workflows)),
+	}
+	var wg sync.WaitGroup
+	for idx, wf := range snap.workflows {
+		wg.Add(1)
+		go func(i int, target workflowPollTarget) {
+			defer wg.Done()
+			var chg ChangeSession
+			endpoint := "/api/projects/current/changes/" + url.PathEscape(target.id) + target.query
+			reqID := nextTUIReqID(fmt.Sprintf("poll-change-%d", i))
+			if err := cl.DoJSON(ctx, reqID, http.MethodGet, endpoint, nil, &chg); err == nil && chg.ID != "" {
+				chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, target.worktreePath)
+				if len(chg.FindingTargets) == 0 && len(target.findingTargets) > 0 {
+					chg.FindingTargets = target.findingTargets
+				}
+				res.changes[i] = chg
+				res.changeOK[i] = true
+			}
+		}(idx, wf)
+	}
+	if snap.pollAnalysis {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pollAnalysisTask(ctx, cl, snap, &res)
+		}()
+	}
+	if snap.pollScan {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var scan Scan
+			reqID := nextTUIReqID("poll-scan")
+			if err := cl.DoJSON(ctx, reqID, http.MethodGet, "/api/projects/current/scan"+snap.revQuery, nil, &scan); err == nil && scan.Status != "" {
+				res.hasScan = true
+				res.scan = scan
+			}
+		}()
+	}
+	wg.Wait()
+	return res
+}
+
+func pollAnalysisTask(ctx context.Context, cl *Client, snap pollSnapshot, res *pollResult) {
+	var run AnalysisRun
+	reqID := nextTUIReqID("poll-analysis")
+	if err := cl.DoJSON(ctx, reqID, http.MethodGet, "/api/projects/current/analysis/run"+snap.idQuery, nil, &run); err != nil || run.Identity.ID == "" {
+		return
+	}
+	res.hasRun = true
+	res.run = run
+	if analysisSectionsChanged(snap.prevRun, &run, snap.emptyResults) {
+		res.sectionResults = fetchAnalysisSectionResults(ctx, cl, run.Identity)
+	}
+	if !isAnalysisStatusRunning(run.Status) {
+		var fResp FindingsResponse
+		fReqID := nextTUIReqID("poll-findings")
+		if err := cl.DoJSON(ctx, fReqID, http.MethodGet, "/api/projects/current/findings"+snap.revQuery, nil, &fResp); err == nil {
+			res.hasFindings = true
+			res.findingsResp = fResp
+		}
+	}
+}
+
+func analysisSectionsChanged(prev, next *AnalysisRun, emptyResults bool) bool {
+	if next == nil {
+		return false
+	}
+	if emptyResults || prev == nil || prev.Identity.ID != next.Identity.ID || prev.Status != next.Status || len(prev.Sections) != len(next.Sections) {
+		return true
+	}
+	for i := range next.Sections {
+		a, b := prev.Sections[i], next.Sections[i]
+		if a.Status != b.Status || a.Coverage != b.Coverage || a.Reason != b.Reason {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) applyPollResult(res pollResult) {
+	for i, chg := range res.changes {
+		if !res.changeOK[i] {
+			continue
+		}
+		cp := chg
+		s.upsertActiveChange(&cp)
+		if s.Change != nil && s.Change.ID == cp.ID {
+			s.Change = &cp
+		}
+		s.announceWorkflowTransition(&cp)
+	}
+	if res.hasRun {
+		run := res.run
+		s.Run = &run
+		if len(res.sectionResults) > 0 {
 			if s.Results == nil {
 				s.Results = make(map[string]SectionResults)
 			}
-			s.Results[cat] = sec
-		}
-	}
-}
-
-// PollActiveJobs refreshes in-progress workflow, analysis, or scan states from the daemon.
-func (s *State) PollActiveJobs(ctx context.Context, client *Client) {
-	if client == nil || s.Project == nil || s.Project.ProjectID == "" || s.Project.ProjectRevision == "" {
-		return
-	}
-	revQuery, idQuery := s.resourceQueries()
-	s.pollRunningWorkflowSessions(ctx, client, idQuery)
-	if s.hasRunningAnalysis() {
-		s.pollRunningAnalysis(ctx, client, idQuery, revQuery)
-	}
-	if s.Scan != nil && s.Scan.Status == "running" {
-		var scan Scan
-		if err := client.DoJSON(ctx, "poll-scan", http.MethodGet, "/api/projects/current/scan"+revQuery, nil, &scan); err == nil && scan.Status != "" {
-			s.Scan = &scan
-		}
-	}
-}
-
-func (s *State) pollRunningWorkflowSessions(ctx context.Context, cl *Client, idQuery string) {
-	for idx, running := range s.runningWorkflowSessions() {
-		var chg ChangeSession
-		query := client.FirstNonEmpty(s.changeResourceQuery(running), idQuery)
-		target := "/api/projects/current/changes/" + url.PathEscape(running.ID) + query
-		reqID := "poll-change"
-		if idx > 0 {
-			reqID = fmt.Sprintf("poll-change-%d", idx)
-		}
-		if err := cl.DoJSON(ctx, reqID, http.MethodGet, target, nil, &chg); err == nil && chg.ID != "" {
-			chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, running.WorktreePath)
-			s.upsertActiveChange(&chg)
-			if s.Change != nil && s.Change.ID == chg.ID {
-				s.Change = &chg
+			for cat, sec := range res.sectionResults {
+				s.Results[cat] = sec
 			}
-			s.announceWorkflowTransition(&chg)
+		}
+		if !s.hasRunningAnalysis() {
+			s.announceAnalysisTransition(&run)
+			if res.hasFindings && s.AcceptProjectResponse(res.findingsResp.ProjectIdentity) {
+				s.Findings = res.findingsResp.Findings
+				for _, comp := range res.findingsResp.Completed {
+					s.mergeFindingCompletion(comp)
+				}
+				s.loadIssueHistoryFromDisk()
+			}
 		}
 	}
-}
-
-func (s *State) pollRunningAnalysis(ctx context.Context, client *Client, idQuery, revQuery string) {
-	var run AnalysisRun
-	if err := client.DoJSON(ctx, "poll-analysis", http.MethodGet, "/api/projects/current/analysis/run"+idQuery, nil, &run); err != nil || run.Identity.ID == "" {
-		return
-	}
-	s.Run = &run
-	s.loadAnalysisSectionResults(ctx, client)
-	if s.hasRunningAnalysis() {
-		return
-	}
-	s.announceAnalysisTransition(&run)
-	var fResp FindingsResponse
-	if err := client.DoJSON(ctx, "poll-findings", http.MethodGet, "/api/projects/current/findings"+revQuery, nil, &fResp); err == nil && s.AcceptProjectResponse(fResp.ProjectIdentity) {
-		s.Findings = fResp.Findings
-		for _, comp := range fResp.Completed {
-			s.mergeFindingCompletion(comp)
-		}
-		s.loadIssueHistoryFromDisk()
+	if res.hasScan {
+		scan := res.scan
+		s.Scan = &scan
 	}
 }
 
@@ -372,16 +555,20 @@ func (s *State) runningWorkflowSessions() []*ChangeSession {
 	return out
 }
 
-func (s *State) hasRunningAnalysis() bool {
-	if s.Run == nil {
-		return false
-	}
-	switch s.Run.Status {
+func isAnalysisStatusRunning(status string) bool {
+	switch status {
 	case "running", "queued", "pausing", "canceling":
 		return true
 	default:
 		return false
 	}
+}
+
+func (s *State) hasRunningAnalysis() bool {
+	if s.Run == nil {
+		return false
+	}
+	return isAnalysisStatusRunning(s.Run.Status)
 }
 
 func (s *State) ensureExecutionTrust(ctx context.Context, cl *Client, reqID string) error {

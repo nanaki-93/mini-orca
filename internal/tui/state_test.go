@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
@@ -2069,5 +2071,167 @@ func TestAgentRepairInWorktreeDoesNotDuplicateWorktreeRow(t *testing.T) {
 	frame := s.Render(120, 36)
 	if strings.Contains(frame, "Worktree orca/") || strings.Contains(frame, "WORKTREE") {
 		t.Fatalf("expected Agent Studio frame not to contain duplicate Worktree row:\n%s", frame)
+	}
+}
+
+type concurrentTestTracker struct {
+	mu       sync.Mutex
+	branches []string
+	wtPaths  []string
+	polled   map[string]int
+}
+
+func newConcurrentAgentsTestServer(t *testing.T, tmpRoot string, tracker *concurrentTestTracker) *httptest.Server {
+	t.Helper()
+	var seq int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(ExecutionTrust{Trusted: true})
+	})
+	mux.HandleFunc("/api/projects/current/git/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		wtPath, _ := body["path"].(string)
+		branch, _ := body["target_branch"].(string)
+		tracker.mu.Lock()
+		tracker.branches = append(tracker.branches, branch)
+		tracker.wtPaths = append(tracker.wtPaths, wtPath)
+		tracker.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"state": "created", "path": wtPath})
+	})
+	mux.HandleFunc("/api/projects/current", func(w http.ResponseWriter, r *http.Request) {
+		wt := r.URL.Query().Get("worktree_path")
+		if wt != "" {
+			_ = json.NewEncoder(w).Encode(Project{
+				ProjectIdentity: ProjectIdentity{ProjectID: "p-wt-" + filepath.Base(wt), ProjectRevision: "r-wt-1"},
+				Name:            "demo-wt",
+				Path:            wt,
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(Project{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			Name:            "demo",
+			Path:            tmpRoot,
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Title          string          `json:"title"`
+			FindingTargets []FindingTarget `json:"finding_targets"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		tracker.mu.Lock()
+		seq++
+		id := fmt.Sprintf("chg-%d", seq)
+		tracker.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              id,
+			Title:           body.Title,
+			Kind:            "fix",
+			Revision:        1,
+			Hash:            "h-" + id,
+			State:           "draft",
+			FindingTargets:  body.FindingTargets,
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes/", func(w http.ResponseWriter, r *http.Request) {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/projects/current/changes/")
+		id := strings.TrimSuffix(trimmed, "/workflow")
+		tracker.mu.Lock()
+		if r.Method == http.MethodGet {
+			tracker.polled[id]++
+		}
+		tracker.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              id,
+			Title:           "Context leak in worker",
+			Kind:            "fix",
+			Revision:        2,
+			Hash:            "h-" + id,
+			State:           "proposed",
+			Workflow:        &ChangeWorkflow{ID: "wf-" + id, Status: "running"},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/analysis/run", func(w http.ResponseWriter, r *http.Request) {
+		tracker.mu.Lock()
+		tracker.polled["analysis"]++
+		tracker.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(AnalysisRun{
+			Identity: RunIdentity{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "run-1", QueueID: "q-1"},
+			Status:   "running",
+		})
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestThreeConcurrentAgentsAndAnalysisRunInParallelWithoutSticking(t *testing.T) {
+	tmpRoot := t.TempDir()
+	tracker := &concurrentTestTracker{polled: make(map[string]int)}
+	srv := newConcurrentAgentsTestServer(t, tmpRoot, tracker)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo", Path: tmpRoot}
+	s.Repository = &GitRepository{GitIdentity: GitIdentity{Head: "base123", Branch: "main"}, Available: true, Root: tmpRoot}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: *s.Repository,
+		Worktrees:     []GitWorktree{{GitIdentity: GitIdentity{Head: "base123", Branch: "main"}, Path: tmpRoot, Current: true}},
+	}
+	s.Run = &AnalysisRun{
+		Identity: RunIdentity{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "run-1", QueueID: "q-1"},
+		Status:   "running",
+	}
+	// Three findings with identical titles on different files: starting agents 1 and 2 must NOT mark finding 3 as in_progress.
+	s.Findings = []Finding{
+		{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "bug-1", Severity: "high", Title: "Context leak in worker", Category: "bugs", Status: "open", Location: SourceAnchor{Path: "internal/app/a.go", StartLine: 10}},
+		{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "bug-2", Severity: "high", Title: "Context leak in worker", Category: "bugs", Status: "open", Location: SourceAnchor{Path: "internal/app/b.go", StartLine: 20}},
+		{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "bug-3", Severity: "high", Title: "Context leak in worker", Category: "bugs", Status: "open", Location: SourceAnchor{Path: "internal/app/c.go", StartLine: 30}},
+	}
+
+	// Start agent 1, press 'b' on PageAgents to return to PageBugs, start agent 2, press 'b' to return to PageBugs, start agent 3.
+	s.Navigate(PageBugs)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	s.HandleKey(KeyEvent{Key: "b"})
+	if s.Page != PageBugs {
+		t.Fatalf("expected 'b' on PageAgents to navigate back to PageBugs, got %s", s.Page)
+	}
+	if len(s.FilteredIssues()) != 2 {
+		t.Fatalf("expected 2 remaining open findings after starting agent 1, got %d", len(s.FilteredIssues()))
+	}
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	s.HandleKey(KeyEvent{Key: "b"})
+	if len(s.FilteredIssues()) != 1 || s.FilteredIssues()[0].Target.ID != "bug-3" {
+		t.Fatalf("expected bug-3 to remain open when 2 agents are running, got %+v", s.FilteredIssues())
+	}
+	s.HandleKey(KeyEvent{Key: "Enter"})
+
+	// Before daemon flush, all 3 local previews must exist concurrently in AgentItems().
+	if len(s.AgentItems()) != 3 {
+		t.Fatalf("expected 3 concurrent local agent previews before flush, got %d", len(s.AgentItems()))
+	}
+
+	// Flush all 3 start-agent tasks concurrently and poll all 3 agents + analysis concurrently.
+	s.FlushActions(context.Background(), cli)
+	if len(s.AgentItems()) != 3 {
+		t.Fatalf("expected 3 running agent sessions after concurrent flush, got %+v", s.AgentItems())
+	}
+	s.PollActiveJobs(context.Background(), cli)
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	if len(tracker.branches) != 3 || tracker.branches[0] == tracker.branches[1] || tracker.branches[1] == tracker.branches[2] {
+		t.Fatalf("expected 3 distinct branches for 3 concurrent agents, got %v", tracker.branches)
+	}
+	for _, id := range []string{"chg-1", "chg-2", "chg-3", "analysis"} {
+		if tracker.polled[id] == 0 {
+			t.Fatalf("expected %s to be polled concurrently, got %v", id, tracker.polled)
+		}
 	}
 }

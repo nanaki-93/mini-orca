@@ -136,6 +136,14 @@ func decodeSingleKey(buf []byte) (KeyEvent, int) {
 
 type pollTickMsg time.Time
 
+type pollResultMsg struct {
+	res pollResult
+}
+
+type startAgentResultMsg struct {
+	res startAgentResult
+}
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -144,11 +152,14 @@ func pollTickCmd() tea.Cmd {
 
 // BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
 type BubbleModel struct {
-	ctx    context.Context
-	state  *State
-	client *Client
-	width  int
-	height int
+	ctx               context.Context
+	state             *State
+	client            *Client
+	width             int
+	height            int
+	pollScheduled     bool
+	pollInFlight      bool
+	activeAgentStarts int
 }
 
 // NewBubbleModel constructs a Bubble Tea model wrapping State and Client.
@@ -166,6 +177,7 @@ func NewBubbleModel(ctx context.Context, state *State, client *Client, width, he
 // Init implements tea.Model.
 func (m *BubbleModel) Init() tea.Cmd {
 	if m.client != nil && m.state.hasActiveBackgroundJob() {
+		m.pollScheduled = true
 		return pollTickCmd()
 	}
 	return nil
@@ -173,6 +185,7 @@ func (m *BubbleModel) Init() tea.Cmd {
 
 // Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, KeyEvent, and poll ticks.
 func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 	switch ev := msg.(type) {
 	case tea.WindowSizeMsg:
 		if ev.Width > 0 && ev.Height > 0 {
@@ -180,24 +193,93 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.height = ev.Height
 		}
 	case tea.KeyMsg:
-		m.applyKeyEvent(keyEventFromTea(ev))
+		cmds = append(cmds, m.applyKeyEventAsync(keyEventFromTea(ev))...)
 	case KeyEvent:
 		m.applyKeyEvent(ev)
+	case startAgentResultMsg:
+		if m.activeAgentStarts > 0 {
+			m.activeAgentStarts--
+		}
+		_ = m.state.applyStartAgentResult(ev.res)
 	case pollTickMsg:
-		m.state.PollActiveJobs(m.ctx, m.client)
+		m.pollScheduled = false
+		if cmd := m.startAsyncPollCmd(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case pollResultMsg:
+		m.pollInFlight = false
+		m.state.applyPollResult(ev.res)
 	}
 	if m.state.Quitting {
 		return m, tea.Quit
 	}
-	if m.client != nil && m.state.hasActiveBackgroundJob() {
-		return m, pollTickCmd()
+	m.maybeSchedulePollTick(&cmds)
+	return m, batchTeaCmds(cmds)
+}
+
+func (m *BubbleModel) maybeSchedulePollTick(cmds *[]tea.Cmd) {
+	if m.client != nil && (m.state.hasActiveBackgroundJob() || m.activeAgentStarts > 0) && !m.pollScheduled {
+		m.pollScheduled = true
+		*cmds = append(*cmds, pollTickCmd())
 	}
-	return m, nil
+}
+
+func batchTeaCmds(cmds []tea.Cmd) tea.Cmd {
+	switch len(cmds) {
+	case 0:
+		return nil
+	case 1:
+		return cmds[0]
+	default:
+		return tea.Batch(cmds...)
+	}
 }
 
 func (m *BubbleModel) applyKeyEvent(ev KeyEvent) {
 	m.state.HandleKey(ev)
 	m.state.FlushActions(m.ctx, m.client)
+}
+
+func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
+	m.state.HandleKey(ev)
+	if m.client == nil || len(m.state.PendingActions) == 0 {
+		m.state.PendingActions = nil
+		return nil
+	}
+	actions := m.state.PendingActions
+	m.state.PendingActions = nil
+	var cmds []tea.Cmd
+	for _, act := range actions {
+		reqID := nextTUIReqID("act-" + act.Kind)
+		if act.Kind == "start-agent" {
+			if task, ok := m.state.prepareStartAgentTask(reqID, act); ok {
+				m.activeAgentStarts++
+				t := task
+				cmds = append(cmds, func() tea.Msg {
+					return startAgentResultMsg{res: executeStartAgentTask(m.ctx, m.client, t)}
+				})
+			}
+			continue
+		}
+		if err := m.state.dispatchAction(m.ctx, m.client, reqID, act); err != nil {
+			m.state.Error = err.Error()
+		}
+	}
+	return cmds
+}
+
+func (m *BubbleModel) startAsyncPollCmd() tea.Cmd {
+	if m.pollInFlight || m.client == nil {
+		return nil
+	}
+	snap, ok := m.state.capturePollSnapshot()
+	if !ok {
+		return nil
+	}
+	m.pollInFlight = true
+	return func() tea.Msg {
+		return pollResultMsg{res: executePollSnapshot(m.ctx, m.client, snap)}
+	}
 }
 
 // View implements tea.Model, rendering the full-screen Lip Gloss / Bubbles frame.
@@ -240,7 +322,6 @@ func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
 // RunSession runs an interactive terminal session using Bubble Tea on TTYs or deterministic model updates on streams.
 func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
 	model := NewBubbleModel(ctx, s, client, width, height)
-	_ = model.Init()
 	if _, isTTY := isCharDevice(in); isTTY {
 		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
 		_, err := prog.Run()

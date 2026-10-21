@@ -631,6 +631,10 @@ func (s *State) handleGitOrHistoryKey(key string) bool {
 
 func (s *State) handleAgentsKey(key string) bool {
 	switch key {
+	case "b":
+		s.Navigate(PageBugs)
+		s.CmdOutput = "Switched to [2] Agent Studio · Issues"
+		return true
 	case "n":
 		s.CmdOutput = "Use :agent <objective> to dispatch a new precision agent mission"
 		return true

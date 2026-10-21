@@ -44,7 +44,7 @@ func (s *State) HasActiveProposal() bool {
 }
 
 func (s *State) upsertActiveChange(chg *ChangeSession) {
-	if chg == nil || chg.ID == "" || isLocalPreviewChangeID(chg.ID) {
+	if chg == nil || chg.ID == "" {
 		return
 	}
 	if domain.IsCompletedOrInactiveSession(chg) {
@@ -56,6 +56,9 @@ func (s *State) upsertActiveChange(chg *ChangeSession) {
 		if existing != nil && existing.ID == chg.ID {
 			if cp.WorktreePath == "" {
 				cp.WorktreePath = existing.WorktreePath
+			}
+			if len(cp.FindingTargets) == 0 && len(existing.FindingTargets) > 0 {
+				cp.FindingTargets = existing.FindingTargets
 			}
 			s.ActiveChanges[i] = &cp
 			return
@@ -129,17 +132,49 @@ func (s *State) archiveAndCompleteChange(chg *ChangeSession) {
 	}
 }
 
-func (s *State) replacePreviewWithSession(chg *ChangeSession) {
+func matchesPreviewID(id, previewID string) bool {
+	if previewID != "" {
+		return id == previewID
+	}
+	return isLocalPreviewChangeID(id)
+}
+
+func (s *State) replacePreviewWithSession(previewID string, chg *ChangeSession) {
 	if chg == nil {
 		return
 	}
 	cp := *chg
-	s.upsertActiveChange(&cp)
-	s.Change = &cp
+	replaced := false
+	for i, existing := range s.ActiveChanges {
+		if existing != nil && matchesPreviewID(existing.ID, previewID) {
+			if len(cp.FindingTargets) == 0 && len(existing.FindingTargets) > 0 {
+				cp.FindingTargets = existing.FindingTargets
+			}
+			s.ActiveChanges[i] = &cp
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		s.upsertActiveChange(&cp)
+	}
+	if s.Change == nil || s.Change.ID == chg.ID || matchesPreviewID(s.Change.ID, previewID) {
+		s.Change = &cp
+	}
 }
 
-func (s *State) dropPreviewChangeOnError() {
-	if s.Change != nil && isLocalPreviewChangeID(s.Change.ID) {
+func (s *State) dropPreviewChangeOnError(previewID string) {
+	if previewID != "" {
+		s.removeActiveChangeByID(previewID)
+	} else {
+		for i := len(s.ActiveChanges) - 1; i >= 0; i-- {
+			if s.ActiveChanges[i] != nil && isLocalPreviewChangeID(s.ActiveChanges[i].ID) {
+				s.removeActiveChangeByID(s.ActiveChanges[i].ID)
+				break
+			}
+		}
+	}
+	if s.Change != nil && matchesPreviewID(s.Change.ID, previewID) {
 		if len(s.ActiveChanges) > 0 {
 			last := s.ActiveChanges[len(s.ActiveChanges)-1]
 			cp := *last

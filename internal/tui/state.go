@@ -73,11 +73,12 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
-	Kind    string
-	Target  string
-	Message string
-	Seed    *ChangeSeed
-	Issue   *FindingTarget
+	Kind      string
+	Target    string
+	Message   string
+	PreviewID string
+	Seed      *ChangeSeed
+	Issue     *FindingTarget
 }
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
@@ -118,6 +119,7 @@ type State struct {
 	PendingActions    []ActionRequest
 	Quitting          bool
 	viewportBodyRows  int
+	nextPreviewSeq    int
 
 	Project           *Project
 	Index             *ProjectIndex
@@ -822,10 +824,13 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 		if isInactiveAgentStatus(item.Status) {
 			continue
 		}
-		for _, t := range item.FindingTargets {
-			if sameFindingTarget(t, target) {
-				return client.FirstNonEmpty(item.Path, item.ID)
+		if len(item.FindingTargets) > 0 {
+			for _, t := range item.FindingTargets {
+				if sameFindingTarget(t, target) {
+					return client.FirstNonEmpty(item.Path, item.ID)
+				}
 			}
+			continue
 		}
 		lowItem := strings.ToLower(strings.TrimSpace(item.Title))
 		if lowItem != "" && (lowItem == lowName || lowItem == lowTitle) {

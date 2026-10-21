@@ -52,6 +52,11 @@ func NewClient(base string) (*Client, error) {
 		base: strings.TrimSuffix(base, "/"),
 		http: &http.Client{
 			Timeout: 6 * time.Minute,
+			Transport: &http.Transport{
+				MaxIdleConns:        64,
+				MaxIdleConnsPerHost: 32,
+				IdleConnTimeout:     90 * time.Second,
+			},
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return fmt.Errorf("daemon redirects are not allowed")
 			},

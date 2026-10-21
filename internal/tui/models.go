@@ -53,6 +53,7 @@ type (
 	Scan                    = client.Scan
 	GitIdentity             = client.GitIdentity
 	GitRepository           = client.GitRepository
+	GitBranch               = client.GitBranch
 	GitWorktree             = client.GitWorktree
 	GitWorkspace            = client.GitWorkspace
 	DiffLine                = client.DiffLine

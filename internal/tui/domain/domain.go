@@ -412,11 +412,35 @@ func collectSessionAgentItems(change *client.ChangeSession, activeChanges []*cli
 	return items, seenIDs
 }
 
+func isLocalPreviewID(id string) bool {
+	return id == "agent-session" || strings.HasPrefix(id, "agent-session-")
+}
+
 func resolveCurrentSession(candidate, primary *client.ChangeSession) *client.ChangeSession {
-	if primary != nil && primary.ID != "" && candidate.ID == primary.ID {
+	if primary == nil || primary.ID == "" {
+		return candidate
+	}
+	if candidate.ID == primary.ID {
+		return primary
+	}
+	if isLocalPreviewID(candidate.ID) && !isLocalPreviewID(primary.ID) && sessionsShareTargetOrTitle(candidate, primary) {
 		return primary
 	}
 	return candidate
+}
+
+func sessionsShareTargetOrTitle(a, b *client.ChangeSession) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	for _, ta := range a.FindingTargets {
+		for _, tb := range b.FindingTargets {
+			if ta.Kind == tb.Kind && ta.ID == tb.ID && ta.Path == tb.Path {
+				return true
+			}
+		}
+	}
+	return len(a.FindingTargets) == 0 && len(b.FindingTargets) == 0 && strings.EqualFold(strings.TrimSpace(a.Title), strings.TrimSpace(b.Title))
 }
 
 func shouldAppendPrimaryChange(change *client.ChangeSession, count int, seenIDs map[string]bool) bool {

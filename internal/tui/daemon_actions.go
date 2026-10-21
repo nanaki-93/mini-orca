@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
@@ -20,10 +21,41 @@ func (s *State) FlushActions(ctx context.Context, cl *Client) {
 	}
 	actions := s.PendingActions
 	s.PendingActions = nil
-	for idx, act := range actions {
-		reqID := fmt.Sprintf("act-%d-%s", idx, act.Kind)
+	s.flushActionBatch(ctx, cl, actions)
+}
+
+func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []ActionRequest) {
+	var agentTasks []startAgentTask
+	for _, act := range actions {
+		reqID := nextTUIReqID("act-" + act.Kind)
+		if act.Kind == "start-agent" {
+			if task, ok := s.prepareStartAgentTask(reqID, act); ok {
+				agentTasks = append(agentTasks, task)
+			}
+			continue
+		}
 		if err := s.dispatchAction(ctx, cl, reqID, act); err != nil {
 			s.Error = err.Error()
+		}
+	}
+	if len(agentTasks) == 1 {
+		res := executeStartAgentTask(ctx, cl, agentTasks[0])
+		_ = s.applyStartAgentResult(res)
+		return
+	}
+	if len(agentTasks) > 1 {
+		results := make([]startAgentResult, len(agentTasks))
+		var wg sync.WaitGroup
+		for i, task := range agentTasks {
+			wg.Add(1)
+			go func(idx int, t startAgentTask) {
+				defer wg.Done()
+				results[idx] = executeStartAgentTask(ctx, cl, t)
+			}(i, task)
+		}
+		wg.Wait()
+		for _, res := range results {
+			_ = s.applyStartAgentResult(res)
 		}
 	}
 }
@@ -451,74 +483,129 @@ func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) str
 	return fallbackScope
 }
 
-func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
-	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
-		return nil
-	}
-	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
-	paths := domain.EnsureChangeTestPaths(act.Seed.Paths, s.Index)
-	if len(paths) == 0 {
-		return nil
-	}
-	wtPath, wtProjID, wtProjRev := s.prepareStandardAgentWorktree(ctx, cl, reqID, act.Seed)
-	session, err := s.openChangeSessionWithRetry(ctx, cl, reqID, act.Seed, paths, wtPath, wtProjID, wtProjRev)
-	if err != nil {
-		s.dropPreviewChangeOnError()
-		return err
-	}
-	session.WorktreePath = wtPath
-	s.replacePreviewWithSession(&session)
-	modelsMap, confirmedProfiles := s.workflowModelsPayload()
-	sessProjID, sessProjRev := s.changeProjectIdentity(&session)
-	wfReq := map[string]any{
-		"project_id":         sessProjID,
-		"project_revision":   sessProjRev,
-		"revision":           session.Revision,
-		"hash":               session.Hash,
-		"message":            client.FirstNonEmpty(act.Seed.Message, act.Message, session.Title),
-		"models":             modelsMap,
-		"confirmed_profiles": confirmedProfiles,
-		"confirm_security":   true,
-		"auto_repair":        true,
-	}
-	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow" + changeWorktreeScopeQuery(&session)
-	var wfSession ChangeSession
-	if err := cl.DoJSON(ctx, reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
-		session.State = "failed"
-		s.Change = &session
-		s.upsertActiveChange(&session)
-		return err
-	}
-	wfSession.WorktreePath = wtPath
-	s.Change = &wfSession
-	s.upsertActiveChange(&wfSession)
-	if s.Page == PageAgents {
-		s.syncSelectedIdxToCurrentChange()
-	}
-	return nil
+type startAgentTask struct {
+	reqID             string
+	act               ActionRequest
+	projectID         string
+	projectRevision   string
+	root              string
+	head              string
+	branch            string
+	workspaceTrust    bool
+	paths             []string
+	modelsMap         map[string]string
+	confirmedProfiles []string
+	targetBranch      string
+	reservedPath      string
+	existingWorktrees []GitWorktree
 }
 
-func (s *State) prepareStandardAgentWorktree(ctx context.Context, cl *Client, reqID string, seed *ChangeSeed) (string, string, string) {
-	if s.Project == nil {
-		return "", "", ""
+type startAgentResult struct {
+	task      startAgentTask
+	wtPath    string
+	wtHead    string
+	wtBranch  string
+	session   ChangeSession
+	wfSession ChangeSession
+	syncProj  *Project
+	syncIdx   *ProjectIndex
+	err       error
+}
+
+func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	task, ok := s.prepareStartAgentTask(reqID, act)
+	if !ok {
+		return nil
 	}
-	if seed != nil && seed.WorktreePath != "" {
-		projID, projRev := s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-wt", seed.WorktreePath)
-		return seed.WorktreePath, projID, projRev
+	res := executeStartAgentTask(ctx, cl, task)
+	return s.applyStartAgentResult(res)
+}
+
+func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAgentTask, bool) {
+	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+		return startAgentTask{}, false
 	}
+	paths := domain.EnsureChangeTestPaths(act.Seed.Paths, s.Index)
+	if len(paths) == 0 {
+		return startAgentTask{}, false
+	}
+	modelsMap, confirmedProfiles := s.workflowModelsPayload()
 	root := s.Project.Path
 	if root == "" && s.Repository != nil {
 		root = s.Repository.Root
 	}
 	head, branch := s.mainGitIdentity()
-	if root == "" || !filepath.IsAbs(root) || head == "" || branch == "" {
-		return "", s.Project.ProjectID, s.Project.ProjectRevision
+	existing := s.worktreeCollisionEntries()
+	var targetBranch, reservedPath string
+	if act.Seed.WorktreePath == "" && root != "" && filepath.IsAbs(root) && head != "" && branch != "" {
+		var relPath string
+		targetBranch, relPath = domain.BuildWorktreeSpec(act.Seed, existing)
+		reservedPath = filepath.Join(root, relPath)
+		s.registerCreatedWorktree(reservedPath, head, targetBranch)
 	}
-	targetBranch, relPath := domain.BuildWorktreeSpec(seed, s.existingWorktrees())
-	absPath := filepath.Join(root, relPath)
+	return startAgentTask{
+		reqID:             reqID,
+		act:               act,
+		projectID:         s.Project.ProjectID,
+		projectRevision:   s.Project.ProjectRevision,
+		root:              root,
+		head:              head,
+		branch:            branch,
+		workspaceTrust:    s.WorkspaceTrust,
+		paths:             paths,
+		modelsMap:         modelsMap,
+		confirmedProfiles: confirmedProfiles,
+		targetBranch:      targetBranch,
+		reservedPath:      reservedPath,
+		existingWorktrees: existing,
+	}, true
+}
+
+func executeStartAgentTask(ctx context.Context, cl *Client, task startAgentTask) startAgentResult {
+	res := startAgentResult{task: task}
+	if task.workspaceTrust && task.projectRevision != "" {
+		body := map[string]any{"project_revision": task.projectRevision, "confirm": true}
+		var trust ExecutionTrust
+		_ = cl.DoJSON(ctx, task.reqID+"-trust", http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+	}
+	wtPath, wtProjID, wtProjRev, wtHead, wtBranch := prepareAgentWorktreeTask(ctx, cl, &task)
+	res.wtPath, res.wtHead, res.wtBranch = wtPath, wtHead, wtBranch
+	session, syncProj, syncIdx, err := openChangeSessionTask(ctx, cl, &task, wtPath, wtProjID, wtProjRev)
+	res.syncProj, res.syncIdx = syncProj, syncIdx
+	if err != nil {
+		res.err = err
+		return res
+	}
+	res.session = session
+	wfSession, err := startAgentWorkflowTask(ctx, cl, &task, &session)
+	if err != nil {
+		res.err = err
+		return res
+	}
+	res.wfSession = wfSession
+	return res
+}
+
+func prepareAgentWorktreeTask(ctx context.Context, cl *Client, task *startAgentTask) (string, string, string, string, string) {
+	if task.act.Seed != nil && task.act.Seed.WorktreePath != "" {
+		wtPath := task.act.Seed.WorktreePath
+		projID, projRev := resolveWorktreeIdentityTask(ctx, cl, task.reqID+"-wt", wtPath, task.projectID, task.projectRevision, task.workspaceTrust)
+		return wtPath, projID, projRev, task.head, task.branch
+	}
+	if task.reservedPath == "" || task.root == "" || !filepath.IsAbs(task.root) || task.head == "" || task.branch == "" {
+		return "", task.projectID, task.projectRevision, task.head, ""
+	}
+	if created, ok := tryCreateAgentWorktree(ctx, cl, task.reqID+"-wt", task.projectID, task.projectRevision, task.head, task.branch, task.targetBranch, task.reservedPath); ok {
+		projID, projRev := resolveWorktreeIdentityTask(ctx, cl, task.reqID+"-wt", created, task.projectID, task.projectRevision, task.workspaceTrust)
+		return created, projID, projRev, task.head, task.targetBranch
+	}
+	return retryCreateAgentWorktree(ctx, cl, task)
+}
+
+func tryCreateAgentWorktree(ctx context.Context, cl *Client, reqID, projID, projRev, head, branch, targetBranch, absPath string) (string, bool) {
 	wtReq := map[string]any{
-		"project_id":        s.Project.ProjectID,
-		"project_revision":  s.Project.ProjectRevision,
+		"project_id":        projID,
+		"project_revision":  projRev,
 		"head":              head,
 		"branch":            branch,
 		"target_branch":     targetBranch,
@@ -531,37 +618,87 @@ func (s *State) prepareStandardAgentWorktree(ctx context.Context, cl *Client, re
 		Path  string `json:"path"`
 		Error string `json:"error"`
 	}
-	if err := cl.DoJSON(ctx, reqID+"-wt", http.MethodPost, "/api/projects/current/git/worktrees", wtReq, &wtRes); err != nil || wtRes.State != "created" || wtRes.Error != "" {
-		return "", s.Project.ProjectID, s.Project.ProjectRevision
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/git/worktrees", wtReq, &wtRes); err != nil || wtRes.State != "created" || wtRes.Error != "" {
+		return "", false
 	}
-	createdPath := client.FirstNonEmpty(wtRes.Path, absPath)
-	s.registerCreatedWorktree(createdPath, head, targetBranch)
-	projID, projRev := s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-wt", createdPath)
-	return createdPath, projID, projRev
+	return client.FirstNonEmpty(wtRes.Path, absPath), true
 }
 
-func (s *State) resolveWorktreeProjectIdentity(ctx context.Context, cl *Client, reqID, wtPath string) (string, string) {
+func retryCreateAgentWorktree(ctx context.Context, cl *Client, task *startAgentTask) (string, string, string, string, string) {
+	existing := append([]GitWorktree(nil), task.existingWorktrees...)
+	existing = append(existing, GitWorktree{GitIdentity: GitIdentity{Branch: task.targetBranch}, Path: task.reservedPath})
+	projID, projRev, head, branch := refreshWorktreeGitState(ctx, cl, task, &existing)
+	for attempt := 1; attempt <= 2; attempt++ {
+		targetBranch, relPath := domain.BuildWorktreeSpec(task.act.Seed, existing)
+		candidatePath := filepath.Join(task.root, relPath)
+		reqID := fmt.Sprintf("%s-wt-retry-%d", task.reqID, attempt)
+		if created, ok := tryCreateAgentWorktree(ctx, cl, reqID, projID, projRev, head, branch, targetBranch, candidatePath); ok {
+			wtProjID, wtProjRev := resolveWorktreeIdentityTask(ctx, cl, reqID, created, projID, projRev, task.workspaceTrust)
+			return created, wtProjID, wtProjRev, head, targetBranch
+		}
+		existing = append(existing, GitWorktree{GitIdentity: GitIdentity{Branch: targetBranch}, Path: candidatePath})
+	}
+	return "", projID, projRev, head, ""
+}
+
+func refreshWorktreeGitState(ctx context.Context, cl *Client, task *startAgentTask, existing *[]GitWorktree) (string, string, string, string) {
+	projID, projRev, head, branch := task.projectID, task.projectRevision, task.head, task.branch
+	var proj Project
+	if err := cl.DoJSON(ctx, task.reqID+"-wt-proj", http.MethodGet, "/api/projects/current", nil, &proj); err == nil && proj.ProjectID != "" {
+		projID = proj.ProjectID
+		if proj.ProjectRevision != "" {
+			projRev = proj.ProjectRevision
+		}
+	}
+	idQuery := fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(projID), url.QueryEscape(projRev))
+	var gitWS GitWorkspace
+	if err := cl.DoJSON(ctx, task.reqID+"-wt-git", http.MethodGet, "/api/projects/current/git/workspace"+idQuery, nil, &gitWS); err == nil {
+		if gitWS.Head != "" && gitWS.Branch != "" {
+			head, branch = gitWS.Head, gitWS.Branch
+		}
+		*existing = append(*existing, gitWS.Worktrees...)
+		for _, b := range gitWS.Branches {
+			if strings.TrimSpace(b.Name) != "" {
+				*existing = append(*existing, GitWorktree{GitIdentity: GitIdentity{Branch: b.Name}})
+			}
+		}
+	}
+	return projID, projRev, head, branch
+}
+
+func resolveWorktreeIdentityTask(ctx context.Context, cl *Client, reqID, wtPath, fallbackID, fallbackRev string, trustEnabled bool) (string, string) {
 	scope := "?worktree_path=" + url.QueryEscape(wtPath)
 	var wtProj Project
 	if err := cl.DoJSON(ctx, reqID+"-proj", http.MethodGet, "/api/projects/current"+scope, nil, &wtProj); err == nil && wtProj.ProjectID != "" && wtProj.ProjectRevision != "" {
-		if s.WorkspaceTrust {
+		if trustEnabled {
 			trustBody := map[string]any{"project_revision": wtProj.ProjectRevision, "confirm": true}
 			var trust ExecutionTrust
 			_ = cl.DoJSON(ctx, reqID+"-trust", http.MethodPost, "/api/projects/current/execution-trust"+scope, trustBody, &trust)
 		}
 		return wtProj.ProjectID, wtProj.ProjectRevision
 	}
-	if s.Project != nil {
-		return s.Project.ProjectID, s.Project.ProjectRevision
-	}
-	return "", ""
+	return fallbackID, fallbackRev
 }
 
-func (s *State) existingWorktrees() []GitWorktree {
-	if s.GitWorkspace == nil {
-		return nil
+func (s *State) worktreeCollisionEntries() []GitWorktree {
+	var out []GitWorktree
+	if s.GitWorkspace != nil {
+		out = append(out, s.GitWorkspace.Worktrees...)
+		for _, b := range s.GitWorkspace.Branches {
+			if strings.TrimSpace(b.Name) != "" {
+				out = append(out, GitWorktree{GitIdentity: GitIdentity{Branch: b.Name}})
+			}
+		}
 	}
-	return s.GitWorkspace.Worktrees
+	if s.Change != nil && s.Change.WorktreePath != "" {
+		out = append(out, GitWorktree{Path: s.Change.WorktreePath})
+	}
+	for _, chg := range s.ActiveChanges {
+		if chg != nil && chg.WorktreePath != "" {
+			out = append(out, GitWorktree{Path: chg.WorktreePath})
+		}
+	}
+	return out
 }
 
 func (s *State) registerCreatedWorktree(wtPath, head, branch string) {
@@ -570,6 +707,18 @@ func (s *State) registerCreatedWorktree(wtPath, head, branch string) {
 	}
 	if s.GitWorkspace == nil {
 		s.GitWorkspace = &GitWorkspace{}
+	}
+	if branch != "" {
+		hasBranch := false
+		for _, b := range s.GitWorkspace.Branches {
+			if b.Name == branch {
+				hasBranch = true
+				break
+			}
+		}
+		if !hasBranch {
+			s.GitWorkspace.Branches = append(s.GitWorkspace.Branches, GitBranch{Name: branch})
+		}
 	}
 	for i := range s.GitWorkspace.Worktrees {
 		if s.GitWorkspace.Worktrees[i].Path == wtPath {
@@ -586,43 +735,132 @@ func (s *State) registerCreatedWorktree(wtPath, head, branch string) {
 	})
 }
 
-func (s *State) openChangeSessionWithRetry(ctx context.Context, cl *Client, reqID string, seed *ChangeSeed, paths []string, wtPath, projID, projRev string) (ChangeSession, error) {
+func syncProjectRevisionTask(ctx context.Context, cl *Client, reqID, fallbackRev string, trustEnabled bool) (*Project, *ProjectIndex, string) {
+	rev := fallbackRev
+	var proj Project
+	var projPtr *Project
+	if err := cl.DoJSON(ctx, reqID+"-proj", http.MethodGet, "/api/projects/current", nil, &proj); err == nil && proj.ProjectID != "" {
+		projPtr = &proj
+		if proj.ProjectRevision != "" {
+			rev = proj.ProjectRevision
+		}
+	}
+	var idx ProjectIndex
+	var idxPtr *ProjectIndex
+	if err := cl.DoJSON(ctx, reqID+"-idx", http.MethodGet, "/api/projects/current/index", nil, &idx); err == nil && idx.ProjectID != "" {
+		idxPtr = &idx
+		if idx.ProjectRevision != "" {
+			rev = idx.ProjectRevision
+		}
+	}
+	if trustEnabled && rev != "" {
+		body := map[string]any{"project_revision": rev, "confirm": true}
+		var trust ExecutionTrust
+		_ = cl.DoJSON(ctx, reqID+"-trust2", http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+	}
+	return projPtr, idxPtr, rev
+}
+
+func openChangeSessionTask(ctx context.Context, cl *Client, task *startAgentTask, wtPath, projID, projRev string) (ChangeSession, *Project, *ProjectIndex, error) {
 	scope := ""
 	if wtPath != "" {
 		scope = "?worktree_path=" + url.QueryEscape(wtPath)
 	}
-	buildReq := func() map[string]any {
-		effProjID := client.FirstNonEmpty(projID, s.Project.ProjectID)
+	seed := task.act.Seed
+	buildReq := func(pid, prev string) map[string]any {
+		effProjID := client.FirstNonEmpty(pid, task.projectID)
 		return map[string]any{
 			"project_id":          effProjID,
-			"project_revision":    client.FirstNonEmpty(projRev, s.Project.ProjectRevision),
+			"project_revision":    client.FirstNonEmpty(prev, task.projectRevision),
 			"kind":                client.FirstNonEmpty(seed.Kind, "fix"),
 			"title":               client.FirstNonEmpty(seed.Title, "Agent Mission"),
-			"paths":               paths,
+			"paths":               task.paths,
 			"acceptance_criteria": seed.AcceptanceCriteria,
-			"finding_targets":     domain.NormalizeFindingTargets(seed.FindingTargets, effProjID, paths),
+			"finding_targets":     domain.NormalizeFindingTargets(seed.FindingTargets, effProjID, task.paths),
 		}
 	}
 	var session ChangeSession
-	err := cl.DoJSON(ctx, reqID+"-open", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(), &session)
+	var syncProj *Project
+	var syncIdx *ProjectIndex
+	err := cl.DoJSON(ctx, task.reqID+"-open", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(projID, projRev), &session)
 	if err != nil && isRevisionConflictError(err) {
 		if wtPath != "" {
-			projID, projRev = s.resolveWorktreeProjectIdentity(ctx, cl, reqID+"-sync", wtPath)
+			projID, projRev = resolveWorktreeIdentityTask(ctx, cl, task.reqID+"-sync", wtPath, task.projectID, task.projectRevision, task.workspaceTrust)
 		} else {
-			s.syncProjectRevision(ctx, cl, reqID+"-sync")
-			projRev = s.Project.ProjectRevision
-			_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust2")
+			syncProj, syncIdx, projRev = syncProjectRevisionTask(ctx, cl, task.reqID+"-sync", task.projectRevision, task.workspaceTrust)
 		}
-		err = cl.DoJSON(ctx, reqID+"-open2", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(), &session)
+		err = cl.DoJSON(ctx, task.reqID+"-open2", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(projID, projRev), &session)
 	}
 	if session.ProjectID == "" {
-		session.ProjectID = client.FirstNonEmpty(projID, s.Project.ProjectID)
+		session.ProjectID = client.FirstNonEmpty(projID, task.projectID)
 	}
 	if session.ProjectRevision == "" {
-		session.ProjectRevision = client.FirstNonEmpty(projRev, s.Project.ProjectRevision)
+		session.ProjectRevision = client.FirstNonEmpty(projRev, task.projectRevision)
 	}
 	session.WorktreePath = wtPath
-	return session, err
+	if len(session.FindingTargets) == 0 && len(seed.FindingTargets) > 0 {
+		session.FindingTargets = seed.FindingTargets
+	}
+	return session, syncProj, syncIdx, err
+}
+
+func startAgentWorkflowTask(ctx context.Context, cl *Client, task *startAgentTask, session *ChangeSession) (ChangeSession, error) {
+	sessProjID := client.FirstNonEmpty(session.ProjectID, task.projectID)
+	sessProjRev := client.FirstNonEmpty(session.ProjectRevision, task.projectRevision)
+	wfReq := map[string]any{
+		"project_id":         sessProjID,
+		"project_revision":   sessProjRev,
+		"revision":           session.Revision,
+		"hash":               session.Hash,
+		"message":            client.FirstNonEmpty(task.act.Seed.Message, task.act.Message, session.Title),
+		"models":             task.modelsMap,
+		"confirmed_profiles": task.confirmedProfiles,
+		"confirm_security":   true,
+		"auto_repair":        true,
+	}
+	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow" + changeWorktreeScopeQuery(session)
+	var wfSession ChangeSession
+	if err := cl.DoJSON(ctx, task.reqID+"-wf", http.MethodPost, target, wfReq, &wfSession); err != nil {
+		return ChangeSession{}, err
+	}
+	wfSession.WorktreePath = session.WorktreePath
+	if len(wfSession.FindingTargets) == 0 && len(session.FindingTargets) > 0 {
+		wfSession.FindingTargets = session.FindingTargets
+	}
+	return wfSession, nil
+}
+
+func (s *State) applyStartAgentResult(res startAgentResult) error {
+	if res.task.reservedPath != "" && res.wtPath != res.task.reservedPath {
+		s.removeWorktreeByPath(res.task.reservedPath)
+	}
+	if res.wtPath != "" && res.wtBranch != "" {
+		s.registerCreatedWorktree(res.wtPath, res.wtHead, res.wtBranch)
+	}
+	if res.syncProj != nil && res.syncProj.ProjectID != "" {
+		s.Project = res.syncProj
+	}
+	if res.syncIdx != nil && s.AcceptProjectResponse(res.syncIdx.ProjectIdentity) {
+		s.Index = res.syncIdx
+		if s.Project != nil && res.syncIdx.ProjectRevision != "" {
+			s.Project.ProjectRevision = res.syncIdx.ProjectRevision
+		}
+	}
+	if res.err != nil {
+		if res.session.ID == "" {
+			s.dropPreviewChangeOnError(res.task.act.PreviewID)
+		} else {
+			res.session.State = "failed"
+			s.replacePreviewWithSession(res.task.act.PreviewID, &res.session)
+		}
+		s.Error = res.err.Error()
+		return res.err
+	}
+	s.replacePreviewWithSession(res.task.act.PreviewID, &res.wfSession)
+	if s.Page == PageAgents {
+		s.syncSelectedIdxToCurrentChange()
+	}
+	return nil
 }
 
 func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {

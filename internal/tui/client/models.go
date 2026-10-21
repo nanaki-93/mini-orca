@@ -516,9 +516,17 @@ type GitWorktree struct {
 	Error     string               `json:"error,omitempty"`
 }
 
+// GitBranch describes a local Git branch in the repository.
+type GitBranch struct {
+	Name    string `json:"name"`
+	Head    string `json:"head"`
+	Current bool   `json:"current"`
+}
+
 // GitWorkspace describes all branches and worktrees in the repository.
 type GitWorkspace struct {
 	GitRepository
+	Branches  []GitBranch   `json:"branches,omitempty"`
 	Worktrees []GitWorktree `json:"worktrees"`
 }
 

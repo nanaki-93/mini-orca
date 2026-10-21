@@ -88,10 +88,10 @@ func (s *State) dispatchSingleSelectedIssue() {
 
 func (s *State) dispatchSingleIssue(issue IssueRow) {
 	seed := buildSingleIssueSeed(issue)
-	s.startLocalAgentPreview(seed)
+	previewID := s.startLocalAgentPreview(seed)
 	s.Navigate(PageAgents)
 	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s) — Agent Pipeline active", issue.Name, issue.Path)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, Seed: seed})
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, PreviewID: previewID, Seed: seed})
 }
 
 func buildSingleIssueSeed(issue IssueRow) *ChangeSeed {
@@ -130,10 +130,10 @@ func (s *State) dispatchBatchIssues() {
 		return
 	}
 	seed := buildBatchIssuesSeed(batch)
-	s.startLocalAgentPreview(seed)
+	previewID := s.startLocalAgentPreview(seed)
 	s.Navigate(PageAgents)
 	s.CmdOutput = fmt.Sprintf("Dispatched grouped agent fix for %d issues", len(batch))
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+	s.enqueueAction(ActionRequest{Kind: "start-agent", PreviewID: previewID, Seed: seed})
 }
 
 func buildBatchIssuesSeed(batch []IssueRow) *ChangeSeed {
@@ -219,21 +219,23 @@ func batchIssueKind(rows []IssueRow) string {
 	return first
 }
 
-func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
+func (s *State) startLocalAgentPreview(seed *ChangeSeed) string {
 	if seed == nil {
-		return
+		return ""
 	}
-	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
+	if s.Change != nil && s.Change.ID != "" {
 		s.upsertActiveChange(s.Change)
 	}
+	s.nextPreviewSeq++
+	previewID := fmt.Sprintf("agent-session-%d", s.nextPreviewSeq)
 	var targets []ChangeTarget
 	for _, p := range seed.Paths {
 		if strings.TrimSpace(p) != "" {
 			targets = append(targets, ChangeTarget{Path: p, Exists: true})
 		}
 	}
-	s.Change = &ChangeSession{
-		ID:                 "agent-session",
+	preview := &ChangeSession{
+		ID:                 previewID,
 		Kind:               client.FirstNonEmpty(seed.Kind, "fix"),
 		Title:              client.FirstNonEmpty(seed.Title, "Agent Mission"),
 		State:              "running",
@@ -252,6 +254,9 @@ func (s *State) startLocalAgentPreview(seed *ChangeSeed) {
 			},
 		},
 	}
+	s.Change = preview
+	s.upsertActiveChange(preview)
+	return previewID
 }
 
 func (s *State) dispatchFeatureIdea(idea FeatureSuggestion) {
@@ -262,10 +267,10 @@ func (s *State) dispatchFeatureIdea(idea FeatureSuggestion) {
 		Message:            fmt.Sprintf("Implement feature: %s\nBenefit: %s", idea.Title, idea.Benefit),
 		AcceptanceCriteria: idea.AcceptanceCriteria,
 	}
-	s.startLocalAgentPreview(seed)
+	previewID := s.startLocalAgentPreview(seed)
 	s.Navigate(PageAgents)
 	s.CmdOutput = fmt.Sprintf("Dispatched feature idea %q to isolated Agent", idea.Title)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: idea.ID, Seed: seed})
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: idea.ID, PreviewID: previewID, Seed: seed})
 }
 
 func (s *State) toggleCurrentFileExclusion() {
@@ -396,13 +401,13 @@ func (s *State) restartAgentFromCurrentChange() {
 		s.removeActiveChangeByID(s.Change.ID)
 		s.Change = nil
 	}
-	s.startLocalAgentPreview(seed)
+	previewID := s.startLocalAgentPreview(seed)
 	if stale {
 		s.CmdOutput = fmt.Sprintf("Refreshing stale proposal %q on current project revision...", seed.Title)
 	} else {
 		s.CmdOutput = fmt.Sprintf("Retrying agent workflow for %q...", seed.Title)
 	}
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Seed: seed})
+	s.enqueueAction(ActionRequest{Kind: "start-agent", PreviewID: previewID, Seed: seed})
 }
 
 func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
@@ -1038,8 +1043,8 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 		s.Navigate(PageAgents)
 		if arg != "" {
 			seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}
-			s.startLocalAgentPreview(seed)
-			s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, Seed: seed})
+			previewID := s.startLocalAgentPreview(seed)
+			s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, PreviewID: previewID, Seed: seed})
 			s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)
 		} else {
 			s.CmdOutput = "Switched to [2] Agent Studio."
