@@ -658,15 +658,23 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
 	}
 
-	// Verify Left/Right arrows change options on PageBugs and PageAnalysisRun without navigating away
+	// Verify Left/Right arrows do NOT change status filter on PageBugs, while 's'/'S' does
 	s.Navigate(PageBugs)
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageBugs || s.IssueView != "in_progress" {
-		t.Fatalf("expected ArrowRight on PageBugs to change status filter to in_progress, got page=%s view=%s", s.Page, s.IssueView)
+	if s.Page != PageBugs || s.IssueView != "open" {
+		t.Fatalf("expected ArrowRight on PageBugs not to change status filter, got page=%s view=%s", s.Page, s.IssueView)
 	}
 	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
 	if s.Page != PageBugs || s.IssueView != "open" {
-		t.Fatalf("expected ArrowLeft on PageBugs to change status filter back to open, got page=%s view=%s", s.Page, s.IssueView)
+		t.Fatalf("expected ArrowLeft on PageBugs not to change status filter, got page=%s view=%s", s.Page, s.IssueView)
+	}
+	s.HandleKey(KeyEvent{Key: "s"})
+	if s.Page != PageBugs || s.IssueView != "in_progress" {
+		t.Fatalf("expected 's' on PageBugs to change status filter to in_progress, got page=%s view=%s", s.Page, s.IssueView)
+	}
+	s.HandleKey(KeyEvent{Key: "S"})
+	if s.Page != PageBugs || s.IssueView != "open" {
+		t.Fatalf("expected 'S' on PageBugs to change status filter back to open, got page=%s view=%s", s.Page, s.IssueView)
 	}
 	s.Navigate(PageAnalysisRun)
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})

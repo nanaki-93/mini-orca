@@ -196,11 +196,7 @@ func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
 func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	switch s.EffectivePage() {
 	case PageBugs, PageIssueDetail:
-		if shift {
-			s.cycleIssueCategory(forward)
-		} else {
-			s.cycleIssueStatusView(forward)
-		}
+		return true
 	case PageAnalysisRun:
 		if idx := s.ClampedIdx(); idx >= s.analysisRunSectionCount() {
 			s.stepAnalysisConfigByIndex(idx-s.analysisRunSectionCount(), forward)

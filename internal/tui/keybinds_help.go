@@ -170,7 +170,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
 		primary:   []keyDesc{{"Space / x", "Select batch"}, {"Enter / a", "Dispatch fix"}},
-		secondary: []keyDesc{{"i", "Inspect detail"}, {"d", "Dismiss finding"}},
+		secondary: []keyDesc{{"s / t", "Status / type"}, {"i / d", "Inspect / dismiss"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":dismiss", "Dismiss finding"}},
 	},
 	PageIssueDetail: {

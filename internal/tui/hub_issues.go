@@ -19,7 +19,7 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	statusStrip := s.renderIssueStatusFilterStrip(th, openCount, inProgCount, doneCount)
 	lines := []string{
 		fmt.Sprintf(
-			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (t/c):%s %s[%s]%s   %sStatus (s/v):%s %s%s",
+			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (t):%s %s[%s]%s   %sStatus (s):%s %s%s",
 			th.bold+th.accent, th.reset,
 			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(s.IssueCategory), th.reset,
 			th.muted, th.reset, statusStrip, batchBadge,
@@ -32,7 +32,7 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
 		return append(lines, fmt.Sprintf(
-			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s/v] for status or [t/c] for category.%s",
+			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s] for status or [t] for category.%s",
 			th.muted, strings.ToUpper(s.IssueView), openCount, inProgCount, doneCount, th.reset,
 		))
 	}
@@ -70,8 +70,8 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			footer = append(footer, fmt.Sprintf("%sCommit:%s    %s%s%s",
 				th.muted, th.reset, th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), th.reset))
 		}
-		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Selected Row · %s[i]%s Inspect · %s[d]%s Dismiss",
-			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset))
+		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Row · %s[i]%s Inspect · %s[s]%s Status · %s[d]%s Dismiss",
+			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset))
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
 	}
