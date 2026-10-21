@@ -1893,6 +1893,9 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 	if !strings.Contains(detailFrame, "Second targeted finding") || strings.Contains(detailFrame, "First critical finding") {
 		t.Fatalf("expected Issue Detail frame to render targeted 2nd issue, got:\n%s", detailFrame)
 	}
+	if strings.Contains(detailFrame, "Finding:") || strings.Contains(detailFrame, "semantic:f-second") {
+		t.Fatalf("expected Issue Detail metadata panel to omit Finding row and finding ID in title row:\n%s", detailFrame)
+	}
 	for _, want := range []string{
 		"Issue 2 of 3",
 		"Confidence:",

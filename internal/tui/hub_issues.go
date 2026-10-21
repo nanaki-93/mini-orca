@@ -128,9 +128,9 @@ func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
 	if cur == nil {
 		return append(lines, fmt.Sprintf("  %sNo finding selected.%s", th.muted, th.reset))
 	}
-	rightMeta := cur.ID
+	rightMeta := ""
 	if len(filtered) > 0 {
-		rightMeta = fmt.Sprintf("%d/%d · %s", s.ClampedIdx()+1, len(filtered), cur.ID)
+		rightMeta = fmt.Sprintf("%d/%d", s.ClampedIdx()+1, len(filtered))
 	}
 	meta := s.buildIssueDetailMetadataLines(th, *cur)
 	lines = append(lines, th.renderPanelBox("ISSUE METADATA & LOCATION", rightMeta, panelW, meta)...)
@@ -153,32 +153,41 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 	}
 	scopePaths := domain.EnsureChangeTestPaths([]string{cur.Path}, s.Index)
 	scopeStr := client.FirstNonEmpty(strings.Join(scopePaths, ", "), cur.Path, "workspace")
-	scopeLine := fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset)
-	if signature != "" {
-		scopeLine = fmt.Sprintf("%sSignature:%s  %s%s%s   %sScope:%s %s%s%s",
-			th.muted, th.reset, th.purple, signature, th.reset,
-			th.muted, th.reset, th.cyan, scopeStr, th.reset)
-	}
-	return []string{
-		fmt.Sprintf("%sFinding:%s    %s%s%s", th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset),
+	rows := []string{
 		fmt.Sprintf("%sSeverity:%s   %s   %sCategory:%s %s%s%s   %sStatus:%s %s   %sConfidence:%s %s%s%s",
 			th.muted, th.reset, th.severityBadge(cur.Severity),
 			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(cur.Category), th.reset,
 			th.muted, th.reset, th.statusBadge(cur.Status),
 			th.muted, th.reset, th.bold+th.cyan, conf, th.reset),
-		fmt.Sprintf("%sOrigin:%s     %s%s%s   %sRule:%s %s%s%s   %sFreshness:%s %s%s%s   %sTarget:%s %s%s%s",
+		fmt.Sprintf("%sOrigin:%s     %s%s%s   %sRule:%s %s%s%s   %sFreshness:%s %s%s%s",
 			th.muted, th.reset, th.cyan, origin, th.reset,
 			th.muted, th.reset, th.purple, rule, th.reset,
-			th.muted, th.reset, th.green, fresh, th.reset,
-			th.muted, th.reset, th.muted, client.FirstNonEmpty(cur.Target.ID, cur.ID), th.reset),
+			th.muted, th.reset, th.green, fresh, th.reset),
 		locLine,
-		scopeLine,
 	}
+	if signature != "" {
+		rows = append(rows, fmt.Sprintf("%sSignature:%s  %s%s%s", th.muted, th.reset, th.purple, signature, th.reset))
+	}
+	rows = append(rows, fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset))
+	return rows
+}
+
+func formatIssueRootCauseText(cur IssueRow) string {
+	title := strings.TrimSpace(cur.Title)
+	cause := strings.TrimSpace(cur.Cause)
+	if title == "" {
+		return cause
+	}
+	if cause == "" || strings.EqualFold(strings.TrimRight(title, ". "), strings.TrimRight(cause, ". ")) ||
+		strings.Contains(strings.ToLower(cause), strings.ToLower(title)) {
+		return client.FirstNonEmpty(cause, title)
+	}
+	return fmt.Sprintf("%s — %s", strings.TrimRight(title, ". "), cause)
 }
 
 func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow) []string {
 	diag := []string{
-		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, cur.Cause, th.reset),
+		fmt.Sprintf("%s▲ Root Cause:%s      %s%s%s", th.bold+th.red, th.reset, th.amber, formatIssueRootCauseText(cur), th.reset),
 	}
 	if cur.Evidence != "" {
 		diag = append(diag, fmt.Sprintf("%s◆ Evidence:%s        %s%s%s", th.bold+th.cyan, th.reset, th.fg, cur.Evidence, th.reset))
