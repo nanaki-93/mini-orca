@@ -47,29 +47,88 @@ func worktreeStatus(wt GitWorktree) string {
 
 func (s *State) cleanupSelectedWorktree() {
 	wt := s.selectedWorktree()
-	if wt == nil || wt.Current || wt.Integration != "merged" {
-		s.CmdOutput = "Cleanup requires the worktree commit to be included in the current branch. Refresh after completing the merge."
+	if wt == nil || wt.Current {
+		s.CmdOutput = "Select another worktree to clean up; the current checkout is retained."
+		return
+	}
+	if wt.Dirty || wt.Locked || wt.Prunable || wt.Error != "" {
+		s.CmdOutput = "Worktree retained. Resolve local changes, locks or unavailable status, then refresh before cleanup."
 		return
 	}
 	intent := &WorktreeIntent{ProjectIdentity: s.GitWorkspace.ProjectIdentity, GitIdentity: s.GitWorkspace.GitIdentity,
 		Path: wt.Path, SourceHead: wt.Head, SourceBranch: wt.Branch, Confirm: true, ConfirmExecution: true}
+	if wt.Integration != "merged" || worktreeHasUnfinishedTasks(wt) {
+		s.confirmWorktreeDiscard(wt, intent)
+		return
+	}
 	s.enqueueAction(ActionRequest{Kind: "cleanup-merged", Worktree: intent})
 	s.CmdOutput = "Verifying integration and cleaning up the worktree; its branch will be retained..."
 }
 
-func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
-	if act.Worktree == nil || !s.matchesPlanSource(act.Worktree.ProjectIdentity) {
-		return fmt.Errorf("project changed; refresh Worktrees before cleanup")
+func worktreeHasUnfinishedTasks(wt *GitWorktree) bool {
+	for _, entry := range wt.Sessions {
+		if entry.State != "applied" || entry.Commit == nil || entry.Commit.State != "committed" {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) confirmWorktreeDiscard(wt *GitWorktree, intent *WorktreeIntent) {
+	seed := &ChangeSeed{WorktreePath: wt.Path, Kind: wt.Branch, Message: wt.Head}
+	for _, entry := range wt.Sessions {
+		if entry.State != "applied" {
+			seed.FindingTargets = append(seed.FindingTargets, entry.FindingTargets...)
+		}
+	}
+	s.Confirmation = &Confirmation{
+		Title: "Discard worktree and saved tasks?", Destructive: true, AcceptLabel: "Discard worktree",
+		Message: fmt.Sprintf("Remove %s and its saved plans and proposals? Running tasks will be stopped. Commits remain on branch %s; uncommitted source changes block removal.", wt.Path, wt.Branch),
+		OnConfirm: func(state *State) {
+			state.enqueueAction(ActionRequest{Kind: "reject-change", Worktree: intent, Seed: seed})
+			state.CmdOutput = "Stopping tasks and discarding the worktree; waiting for removal confirmation..."
+		},
+	}
+}
+
+func (s *State) postCapturedWorktreeRemoval(ctx context.Context, cl *Client, reqID, endpoint string, intent *WorktreeIntent) (mergeWorktreeResponse, error) {
+	if intent == nil || !s.matchesPlanSource(intent.ProjectIdentity) {
+		return mergeWorktreeResponse{}, fmt.Errorf("project changed; refresh Worktrees before cleanup")
 	}
 	if err := s.ensureExecutionTrust(ctx, cl, reqID+"-trust"); err != nil {
-		return fmt.Errorf("verify cleanup trust: %w; after external changes, use [R] Update index and grant trust again", err)
+		return mergeWorktreeResponse{}, fmt.Errorf("verify cleanup trust: %w; after external changes, use [R] Update index and grant trust again", err)
 	}
 	var result mergeWorktreeResponse
-	err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/git/cleanup-merged", act.Worktree, &result)
-	s.applyMergeWorktreeResponse(act.Worktree.Path, result)
+	err := cl.DoJSON(ctx, reqID, http.MethodPost, endpoint, intent, &result)
+	if err == nil && result.Error != "" {
+		err = fmt.Errorf("%s", result.Error)
+	}
+	return result, err
+}
+
+func (s *State) forgetDiscardedWorktree(path string) {
+	s.removeActiveSession("", path)
+	kept := s.ChangeHistory[:0]
+	for _, entry := range s.ChangeHistory {
+		if entry.WorktreePath != path {
+			kept = append(kept, entry)
+		}
+	}
+	s.ChangeHistory = kept
+	if s.Change != nil && s.Change.WorktreePath == path {
+		s.Change = nil
+	}
+	if s.PlanDraft != nil && s.PlanDraft.Seed.WorktreePath == path {
+		s.PlanDraft = nil
+	}
+}
+
+func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	result, err := s.postCapturedWorktreeRemoval(ctx, cl, reqID, "/api/projects/current/git/cleanup-merged", act.Worktree)
 	if err != nil {
 		return err
 	}
+	s.applyMergeWorktreeResponse(act.Worktree.Path, result)
 	if result.Error != "" {
 		return fmt.Errorf("%s", result.Error)
 	}
@@ -118,7 +177,7 @@ func (s *State) worktreeRecoveryHint() string {
 	if wt != nil && wt.Integration == "behind" {
 		return fmt.Sprintf("Destination advanced · %d overlapping paths · [Enter] Inspect before merging", len(wt.OverlapPaths))
 	}
-	return "[Enter] Inspect · [m] Merge · [c] Clean up integrated · [r] Refresh"
+	return "[Enter] Inspect · [m] Merge · [c] Clean up / discard · [r] Refresh"
 }
 
 func (s *State) handleWorktreeKey(key string) bool {

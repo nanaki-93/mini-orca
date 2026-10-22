@@ -18,6 +18,90 @@ func recoveryState() *State {
 	return s
 }
 
+func TestCleanupOffersExplicitDiscardForUnfinishedWorktrees(t *testing.T) {
+	for _, status := range []string{"draft", "failed", "interrupted", "running"} {
+		t.Run(status, func(t *testing.T) {
+			s := recoveryState()
+			wt := &s.GitWorkspace.Worktrees[0]
+			wt.Sessions = []ChangeHistoryEntry{{ID: "old-plan", State: "draft", WorkflowStatus: status, WorktreePath: wt.Path}}
+			s.Change = &ChangeSession{ID: "old-plan", State: "draft", WorktreePath: wt.Path}
+			s.ActiveChanges = []*ChangeSession{s.Change}
+			s.ChangeHistory = append([]ChangeHistoryEntry(nil), wt.Sessions...)
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.URL.Path != "/api/projects/current/git/discard-worktree" || r.Method != http.MethodPost {
+					t.Errorf("wrong removal route: %s %s", r.Method, r.URL.Path)
+				}
+				var intent WorktreeIntent
+				if err := json.NewDecoder(r.Body).Decode(&intent); err != nil || intent.SourceHead != "source" || intent.SourceBranch != "fix" || intent.Head != "target" || !intent.Confirm {
+					t.Errorf("discard lost captured identity/consent: %+v %v", intent, err)
+				}
+				_ = json.NewEncoder(w).Encode(mergeWorktreeResponse{State: "discarded", RemovedWorktree: "/repo/task"})
+			}))
+			defer srv.Close()
+			cl, err := NewClient(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cl.Close()
+			s.HandleKey(KeyEvent{Key: "c"})
+			if s.Confirmation == nil || !s.Confirmation.Destructive || len(s.PendingActions) != 0 {
+				t.Fatal("unfinished task blocked cleanup or was discarded without consent")
+			}
+			s.HandleKey(KeyEvent{Key: "Escape"})
+			if len(s.PendingActions) != 0 || len(s.ActiveChanges) != 1 {
+				t.Fatal("canceling cleanup altered the task")
+			}
+			s.HandleKey(KeyEvent{Key: "c"})
+			wt.Head = "later-source"
+			s.HandleKey(KeyEvent{Key: "y"})
+			if len(s.ActiveChanges) != 1 || len(s.GitWorkspace.Worktrees) != 1 {
+				t.Fatal("discard hid task before its removal receipt")
+			}
+			s.FlushActions(context.Background(), cl)
+			if s.Error != "" || calls != 1 || len(s.GitWorkspace.Worktrees) != 0 || len(s.ActiveChanges) != 0 || len(s.ChangeHistory) != 0 || s.Change != nil {
+				t.Fatalf("confirmed discard failed: error=%s calls=%d tasks=%v", s.Error, calls, s.ActiveChanges)
+			}
+		})
+	}
+}
+
+func TestCleanupDiscardRetainsTasksOnFailureOrProjectChange(t *testing.T) {
+	for _, outcome := range []string{"error", "no receipt", "project changed"} {
+		t.Run(outcome, func(t *testing.T) {
+			s := recoveryState()
+			s.GitWorkspace.Worktrees[0].Integration = "behind"
+			s.Change = &ChangeSession{ID: "old-plan", WorktreePath: "/repo/task"}
+			s.ActiveChanges = []*ChangeSession{s.Change}
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if outcome == "error" {
+					http.Error(w, "worktree changed", http.StatusConflict)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(mergeWorktreeResponse{State: "discarded"})
+			}))
+			defer srv.Close()
+			cl, err := NewClient(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cl.Close()
+			s.HandleKey(KeyEvent{Key: "c"})
+			s.HandleKey(KeyEvent{Key: "y"})
+			if outcome == "project changed" {
+				s.Project.ProjectID = "other"
+			}
+			s.FlushActions(context.Background(), cl)
+			if s.Error == "" || len(s.GitWorkspace.Worktrees) != 1 || len(s.ActiveChanges) != 1 || (outcome == "project changed" && calls != 0) {
+				t.Fatalf("failed discard lost task or crossed project scope: %s, calls=%d", s.Error, calls)
+			}
+		})
+	}
+}
+
 func TestCleanupUsesCapturedIdentityAndWaitsForRemovalReceipt(t *testing.T) {
 	for _, outcome := range []string{"removed", "warning", "stale"} {
 		t.Run(outcome, func(t *testing.T) {

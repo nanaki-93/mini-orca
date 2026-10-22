@@ -98,6 +98,13 @@ func TestCleanupRetainsUnfinishedPlanEvenWhenBaseIsIntegrated(t *testing.T) {
 	if _, err := loadChangeSession(path, session.ID); err != nil {
 		t.Fatalf("pending task was lost: %v", err)
 	}
+	result, err := service.DiscardGitWorktree(context.Background(), request)
+	if err != nil || result.RemovedWorktree != path || result.State != "discarded" {
+		t.Fatalf("explicit discard of unfinished task was blocked: %+v %v", result, err)
+	}
+	if head := testGit(t, service.manager.Root(), "rev-parse", "codex/fix"); head != request.SourceHead {
+		t.Fatal("discard lost the task branch")
+	}
 }
 
 func TestCleanupMergedRejectsUnsafeOrUnintegratedWorktrees(t *testing.T) {

@@ -60,10 +60,12 @@ to update the project index, then `:trust` to grant execution trust for that
 revision. Select the **INTEGRATED** worktree and press `c` to complete linked
 findings and remove the clean checkout. Lowercase `r` only refreshes status;
 updating the index stops outdated checks and workflows in the destination checkout.
-The worktree's branch is retained. Cleanup refuses unfinished task drafts,
-unmerged commits, local changes, locked worktrees and changed identities. Squash
-merges and cherry-picks need manual Git review because ancestry cannot prove that
-the original task was integrated.
+The worktree's branch is retained. For unfinished drafts or unmerged commits,
+`c` offers explicit discard: it stops tasks and removes saved plans/proposals and
+the checkout, retaining committed work on its branch. Cancel keeps everything.
+Local changes, locked worktrees and changed identities still block removal. Squash
+merges and cherry-picks require review before discard because ancestry cannot
+prove that the original task was integrated.
 
 Worktrees stay visible until deletion succeeds. A failed merge shows the actual
 conflict state, and a cleanup warning can be retried through the same action.

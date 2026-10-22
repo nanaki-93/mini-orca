@@ -1598,10 +1598,19 @@ func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wt
 }
 
 func (s *State) dispatchRejectChange(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Worktree != nil && !s.matchesPlanSource(act.Worktree.ProjectIdentity) {
+		return fmt.Errorf("project changed; refresh Worktrees before discarding")
+	}
 	s.cancelRejectedChangeWorkflow(ctx, cl, reqID, act)
 	if act.Seed != nil && act.Seed.WorktreePath != "" && s.Project != nil {
 		wtPath := act.Seed.WorktreePath
-		result, err := s.postWorktreeMutation(ctx, cl, reqID+"-discard", "/api/projects/current/git/discard-worktree", wtPath, act.Seed.Message, act.Seed.Kind)
+		var result mergeWorktreeResponse
+		var err error
+		if act.Worktree != nil {
+			result, err = s.postCapturedWorktreeRemoval(ctx, cl, reqID+"-discard", "/api/projects/current/git/discard-worktree", act.Worktree)
+		} else {
+			result, err = s.postWorktreeMutation(ctx, cl, reqID+"-discard", "/api/projects/current/git/discard-worktree", wtPath, act.Seed.Message, act.Seed.Kind)
+		}
 		s.applyMergeWorktreeResponse(wtPath, result)
 		if err != nil {
 			return err
@@ -1609,6 +1618,7 @@ func (s *State) dispatchRejectChange(ctx context.Context, cl *Client, reqID stri
 		if result.State != "discarded" || result.RemovedWorktree != wtPath {
 			return fmt.Errorf("worktree removal was not confirmed; refresh Worktrees before retrying discard")
 		}
+		s.forgetDiscardedWorktree(wtPath)
 	}
 	if act.Seed != nil && len(act.Seed.FindingTargets) > 0 {
 		s.reopenRejectedTargets(ctx, cl, reqID, act.Seed.FindingTargets)
