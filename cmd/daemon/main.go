@@ -190,6 +190,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/git/switch", gitHandler.Switch)
 	mux.HandleFunc("POST /api/projects/current/git/merge-preview", gitHandler.PreviewMerge)
 	mux.HandleFunc("POST /api/projects/current/git/merge", gitHandler.Merge)
+	mux.HandleFunc("POST /api/projects/current/git/cleanup-merged", gitHandler.CleanupMergedWorktree)
 	mux.HandleFunc("POST /api/projects/current/git/abort-merge", gitHandler.AbortMerge)
 	mux.HandleFunc("POST /api/projects/current/git/discard-worktree", gitHandler.DiscardWorktree)
 	mux.HandleFunc("GET /api/projects/current/changes", changeHandler.List)

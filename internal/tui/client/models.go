@@ -507,15 +507,17 @@ type GitRepository struct {
 // GitWorktree describes an active Git worktree (main checkout or isolated agent worktree).
 type GitWorktree struct {
 	GitIdentity
-	Path      string               `json:"path"`
-	Current   bool                 `json:"current"`
-	Locked    bool                 `json:"locked"`
-	Prunable  bool                 `json:"prunable"`
-	Dirty     bool                 `json:"dirty,omitempty"`
-	Mergeable bool                 `json:"mergeable"`
-	Completed []ChangeHistoryEntry `json:"completed"`
-	Sessions  []ChangeHistoryEntry `json:"sessions,omitempty"`
-	Error     string               `json:"error,omitempty"`
+	Path         string               `json:"path"`
+	Current      bool                 `json:"current"`
+	Locked       bool                 `json:"locked"`
+	Prunable     bool                 `json:"prunable"`
+	Dirty        bool                 `json:"dirty,omitempty"`
+	Mergeable    bool                 `json:"mergeable"`
+	Integration  string               `json:"integration,omitempty"`
+	OverlapPaths []string             `json:"overlap_paths,omitempty"`
+	Completed    []ChangeHistoryEntry `json:"completed"`
+	Sessions     []ChangeHistoryEntry `json:"sessions,omitempty"`
+	Error        string               `json:"error,omitempty"`
 }
 
 // GitBranch describes a local Git branch in the repository.

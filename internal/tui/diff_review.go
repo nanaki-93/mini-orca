@@ -64,12 +64,19 @@ func (s *State) diffReviewOverview(th ansiTheme, active FileDiffHunk, width int)
 		labels = append(labels, mark+" "+file.Path)
 	}
 	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
-	rows := renderDiagnosticRow(th, th.cyan, "Files:", th.fg, strings.Join(labels, " · "), contentW)
+	reviewed := 0
+	if s.Change.FileReviewHash == s.Change.Hash {
+		reviewed = len(s.Change.ReviewedFiles)
+	}
+	rows := []string{fmt.Sprintf("%d/%d files reviewed · [w] Mark reviewed · [e] Details", reviewed, len(labels))}
+	if s.ShowInlineWhy {
+		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Files:", th.fg, strings.Join(labels, " · "), contentW)...)
+	}
 	mode := "Complete proposal"
 	if s.DiffSinceReview {
 		mode = "Changes since last complete review"
 	}
-	rows = append(rows, fmt.Sprintf("%s · column offset %d · [h/l] Scroll · [w] Reviewed · [z] Compare · [P] Plan", mode, s.DiffOffset))
+	rows = append(rows, fmt.Sprintf("%s · column %d · [h/l] Scroll · [z] Compare", mode, s.DiffOffset))
 	for _, file := range s.diffChanges() {
 		if file.Path != active.Path {
 			continue

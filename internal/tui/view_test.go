@@ -68,7 +68,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 
 	pages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -99,7 +99,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		t.Fatalf("expected 'i' on PageBugs to open PageIssueDetail, got %s", s.Page)
 	}
 	detailFrame := s.Render(120, 40)
-	if !strings.Contains(detailFrame, "ROOT CAUSE DIAGNOSTIC & REMEDIATION") || !strings.Contains(detailFrame, "Check error from Close") {
+	if !strings.Contains(detailFrame, "Cause hypothesis:") || !strings.Contains(detailFrame, "Check error from Close") {
 		t.Fatalf("expected dedicated Issue Detail view with root cause:\n%s", detailFrame)
 	}
 
@@ -115,8 +115,8 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	for _, pal := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
 		s.Palette = pal
 		frame := s.Render(100, 30)
-		if !strings.Contains(frame, string(pal)) {
-			t.Fatalf("expected palette %s in footer", pal)
+		if !strings.Contains(frame, themeForPalette(pal).name) {
+			t.Fatalf("expected palette %s in frame", pal)
 		}
 	}
 }
@@ -145,6 +145,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 
 	// Verify Diff Inspector panel & inline Why, and that Active Proposal is omitted from header
 	s.Navigate(PageEditor)
+	s.HandleKey(KeyEvent{Key: "e"})
 	diffFrame := s.Render(110, 34)
 	if !strings.Contains(diffFrame, "GUARDED DIFF REVIEW") || !strings.Contains(diffFrame, "Enforce explicit read header timeout") {
 		t.Fatalf("expected enterprise diff review panel and inline why:\n%s", diffFrame)
@@ -197,7 +198,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	}
 	allPages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -217,32 +218,16 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 		}
 	}
 
-	// Verify split-screen sidebar menu division, spacing before WORKSPACE PULSE, and hidden keymappings on standard screen
+	// Navigation uses a narrow sidebar without repeating settings or telemetry.
 	s.Navigate(PageSummary)
 	splitOut := s.Render(120, 36)
-	splitRows := strings.Split(splitOut, "\n")
-	if len(splitRows) < 3 || !strings.Contains(splitRows[2], "┳") {
-		t.Fatalf("expected single-line header (split rule on row index 2), got row[2]=%q:\n%s", splitRows[2], splitOut)
+	if !strings.Contains(splitOut, "NAVIGATION") || !strings.Contains(splitOut, "┳") {
+		t.Fatalf("missing split navigation: %s", splitOut)
 	}
-	if sidebarMenuWidth != 30 || !strings.Contains(splitOut, strings.Repeat("━", sidebarMenuWidth)+"┳") {
-		t.Fatalf("expected wider 30-column sidebar menu divider on 120x36 viewport:\n%s", splitOut)
-	}
-	if !strings.Contains(splitOut, "NAVIGATION") || !strings.Contains(splitOut, "WORKSPACE PULSE") || !strings.Contains(splitOut, "┳") {
-		t.Fatalf("expected split-screen sidebar menu and divider on 120x36 viewport:\n%s", splitOut)
-	}
-	sidebarRows := s.renderSidebarMenu(themeForPalette(s.Palette), sidebarMenuWidth, 30)
-	pulseIdx := -1
-	for i, row := range sidebarRows {
-		if strings.Contains(row, "WORKSPACE PULSE") {
-			pulseIdx = i
-			break
+	for _, redundant := range []string{"WORKSPACE PULSE", "MODEL ROUTING", "palette:"} {
+		if strings.Contains(splitOut, redundant) {
+			t.Fatalf("unexpected repeated panel %s", redundant)
 		}
-	}
-	if pulseIdx < 2 || sidebarRows[pulseIdx-1] != "" || sidebarRows[pulseIdx-2] != "" {
-		t.Fatalf("expected at least 2 blank rows between navigation menu and WORKSPACE PULSE, got rows around %d: %q", pulseIdx, sidebarRows)
-	}
-	if strings.Contains(splitOut, "ACTIONS:") || strings.Contains(splitOut, "[b/Enter]") || strings.Contains(splitOut, "Press [1-5]") {
-		t.Fatalf("expected keymappings to be hidden from main screen:\n%s", splitOut)
 	}
 
 	// Verify sidebar highlight moves in Sections 4 and 5 when stepping through submenus
@@ -336,8 +321,8 @@ func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
 func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 	allPages := []Page{
 		PageSummary, PageRepo, PageProject,
-		PageAgents, PageBugs, PageIssueDetail, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles,
-		PageEditor, PageGit, PageHistory,
+		PageAgents, PageBugs, PageIssueDetail, PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles,
+		PageEditor, PageGit, PageWorktreeDetail, PageHistory,
 		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -507,6 +492,7 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 	}
 
 	s.Navigate(PageEditor)
+	s.HandleKey(KeyEvent{Key: "e"})
 
 	// 1. Initially focused on Hunk #1/2 in file 1/2 (server.go)
 	frameHunk1 := s.Render(120, 36)
@@ -574,7 +560,7 @@ func TestKeybindsModalNoTruncationAcrossAllPages(t *testing.T) {
 	s := NewState()
 	pages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -753,10 +739,9 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 	}
 	dbgFrame := s.Render(120, 44)
 	for _, token := range []string{
-		"WORKFLOW DEBUG & CHECK INSPECTOR",
-		"GUARDED EXECUTION PIPELINE",
-		"4-STAGE WORKFLOW & ASSIGNED MODELS",
-		"qwen2.5-coder:14b",
+		"TASK · STAGES",
+		"Selected: 2/4",
+		"qwen2.5-coder:7b",
 		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
 		"nonce_uniqueness",
 		"assertion `left != right` failed",
@@ -865,40 +850,18 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		t.Fatalf("expected full-screen 180x50 viewport to display more finding rows (%d) than 120x26 (%d)", tallFindingRows, compactFindingRows)
 	}
 
-	// Verify pages always render the combined untitled footer at the bottom of the screen
+	// Spare space stays empty; global settings remain on their dedicated pages.
 	for _, p := range []Page{PageSummary, PageRepo, PageProject, PageGit, PageHistory, PageInstructions, PageLessons} {
 		s.Navigate(p)
 		frame := s.Render(160, 46)
-		if strings.Contains(frame, "WORKSPACE TELEMETRY & ROUTING DOCK") || strings.Contains(frame, "SESSION & PIPELINE CONTEXT") {
-			t.Fatalf("expected footer on page %s to omit section titles:\n%s", p, frame)
+		if strings.Contains(frame, "WORKSPACE PULSE") || strings.Contains(frame, "MODEL ROUTING") || strings.Contains(frame, "palette:") {
+			t.Fatalf("duplicated global settings on %s: %s", p, frame)
 		}
-		if strings.Contains(frame, "CATEGORY BREAKDOWN") || strings.Contains(frame, "PRIORITY FOCUS") ||
-			strings.Contains(frame, "WORKSPACE IDENTITY") || strings.Contains(frame, "INDEXED FILES SAMPLE") ||
-			strings.Contains(frame, "VERIFICATION GATE PIPELINE") {
-			t.Fatalf("expected 1-Overview subsection titles to be omitted on page %s:\n%s", p, frame)
-		}
-		if !strings.Contains(frame, "Analysis:") || !strings.Contains(frame, "Files") || !strings.Contains(frame, "Agents:") || !strings.Contains(frame, "trust:") || !strings.Contains(frame, "palette:") {
-			t.Fatalf("expected combined footer on page %s to display Analysis: [STATUS] X/Y Files, Agents:, trust, and palette:\n%s", p, frame)
-		}
-		if strings.Contains(frame, "Scope:") || strings.Contains(frame, "Change:") || strings.Contains(frame, "Project:") || strings.Contains(frame, "Preset:") || strings.Contains(frame, "Routing:") || strings.Contains(frame, "\\x1b") {
-			t.Fatalf("expected footer dock on page %s to omit Scope:/Change:/Project/Preset/Routing and corrupted ANSI text:\n%s", p, frame)
-		}
-		if !strings.Contains(frame, "MODEL ROUTING") || !strings.Contains(frame, "64 files · 5m") || !strings.Contains(frame, "Attempts") || !strings.Contains(frame, "2 / stage") {
-			t.Fatalf("expected sidebar on page %s (160x46) to include MODEL ROUTING, '64 files · 5m', and 'Attempts 2 / stage':\n%s", p, frame)
-		}
-		rows := strings.Split(frame, "\n")
-		// Check that the last body row right above the bottom border (rows[len(rows)-4]) has content in both sidebar and main pane
-		lastBodyRow := rows[len(rows)-4]
-		if !strings.Contains(lastBodyRow, "2 / stage") || !strings.Contains(lastBodyRow, "╰") {
-			t.Fatalf("expected bottom-anchored sidebar footer and panel dock on last body row of page %s, got: %q", p, lastBodyRow)
-		}
-		if strings.Contains(frame, "[?]  [:] Cmd") {
-			t.Fatalf("expected duplicate [?]  [:] Cmd removed from left bottom corner on page %s:\n%s", p, frame)
-		}
-		if !strings.Contains(frame, "[?] Keys  [:] Cmd") {
-			t.Fatalf("expected [?] Keys  [:] Cmd to remain in right bottom corner on page %s:\n%s", p, frame)
+		if !strings.Contains(frame, "[?] Keys  [:] Cmd") || len(strings.Split(frame, "\n")) != 46 {
+			t.Fatalf("lost command access or frame height on %s: %s", p, frame)
 		}
 	}
+
 }
 
 func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
@@ -1007,10 +970,10 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		lines := s.renderAgentsPage(th, width)
 		var hdrLine, rowLine string
 		for _, l := range lines {
-			if strings.Contains(l, "STAGE") && strings.Contains(l, "MISSION TITLE") {
+			if strings.Contains(l, "STAGE") && strings.Contains(l, "TASK") {
 				hdrLine = l
 			}
-			if strings.Contains(l, "Fix discarded clipboard copy") && strings.Contains(l, "checks:1/1") {
+			if strings.Contains(l, "Fix discarded clipboard copy") && strings.Contains(l, "AI Review") {
 				rowLine = l
 			}
 		}
@@ -1019,13 +982,13 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		}
 		pairs := [][2]string{
 			{"STAGE", "AI Review"},
-			{"STATUS", "Waiting"},
-			{"MISSION TITLE", "Fix discarded clipboard copy"},
-			{"SCOPE", "[SURGICAL]"},
-			{"DELTA", "+1"},
-			{"CHECKS", "checks:1/1"},
+			{"STATUS", "CHECKED"},
+			{"TASK", "Fix discarded clipboard copy"},
 		}
 		for _, pair := range pairs {
+			if !strings.Contains(hdrLine, pair[0]) || !strings.Contains(rowLine, pair[1]) {
+				t.Fatalf("missing column %v: %s / %s", pair, hdrLine, rowLine)
+			}
 			hPos := theme.VisibleRuneCount(hdrLine[:strings.Index(hdrLine, pair[0])])
 			rPos := theme.VisibleRuneCount(rowLine[:strings.Index(rowLine, pair[1])])
 			if hPos != rPos {
@@ -1044,7 +1007,7 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 	if got := pipelineAgentStatusLabel("running"); got != "RUNNING" {
 		t.Fatalf("pipelineAgentStatusLabel(running) = %q, want RUNNING", got)
 	}
-	if got := pipelineAgentStatusLabel("ready"); got != "Waiting" {
-		t.Fatalf("pipelineAgentStatusLabel(ready) = %q, want Waiting", got)
+	if got := pipelineAgentStatusLabel("ready"); got != "READY" {
+		t.Fatalf("pipelineAgentStatusLabel(ready) = %q, want READY", got)
 	}
 }

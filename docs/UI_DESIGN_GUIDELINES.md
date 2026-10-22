@@ -37,6 +37,22 @@ and show Apply's commit/merge destination. Model rationale and criterion referen
 are advisory; distinguish reproduced failures, tests already passing, and checks
 that could not execute. Progress timings are diagnostics, not measured speedups.
 
+Keep lists focused on selection and next actions. Task stages, feature evidence,
+and worktree recovery belong in detail views. Plans separate approach, evidence,
+scope and acceptance; issue details separate problem, evidence and solution.
+`Tab` / `Shift+Tab` switch these sections without requests or mutations. Preserve
+full content through scrolling. Avoid repeated workspace statistics, model routing
+and settings panels outside their own pages. Diff explanations are initially
+collapsed and remain reachable with `e`.
+
+Inspecting a failed task never retries it. Starting a second task in an occupied
+write scope requires finishing or discarding the existing task. Worktree refresh
+is passive; cleanup is explicit and must wait for the daemon's removal receipt.
+Keep integration, merge conflicts and cleanup warnings distinct. External merge
+resolution must remain recoverable through refresh and guarded cleanup.
+Updating the index after external changes is a separate explicit action; it stops
+outdated destination checks and workflows and clears execution trust.
+
 ## Verification
 
 Use deterministic Go tests (`go test -race ./internal/tui/... ./cmd/tui/...`)

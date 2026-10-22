@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
-const sidebarMenuWidth = 30
+const sidebarMenuWidth = 24
 
 // Render generates a complete, full-screen adaptive ANSI terminal frame for the current TUI state.
 func (s *State) Render(width, height int) string {
@@ -114,65 +113,8 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRow
 		s.viewportBodyRows = max(1, targetBodyRows-4)
 		page := s.renderActivePage(th, contentWidth)
 		body = append(body, s.scrollDetails(th, page, max(1, targetBodyRows-len(body)))...)
-		body = s.appendBottomFooterDock(th, contentWidth, targetBodyRows, body)
 	}
 	return body
-}
-
-func (s *State) appendBottomFooterDock(th ansiTheme, contentWidth, targetBodyRows int, body []string) []string {
-	rem := targetBodyRows - len(body)
-	if rem < 3 {
-		return body
-	}
-	panelW := adaptivePanelWidth(contentWidth)
-	dockBox := s.renderWorkspaceFooter(th, panelW, rem >= 4)
-	if len(dockBox) > rem {
-		dockBox = s.renderWorkspaceFooter(th, panelW, false)
-	}
-	if len(dockBox) > rem {
-		return body
-	}
-	padRows := max(0, targetBodyRows-len(body)-len(dockBox))
-	for i := 0; i < padRows; i++ {
-		body = append(body, "")
-	}
-	return append(body, dockBox...)
-}
-
-func (s *State) renderWorkspaceFooter(th ansiTheme, panelW int, twoLines bool) []string {
-	totalFiles := s.indexedFileCount()
-	inclFiles := max(0, totalFiles-len(s.ExcludedPaths))
-	runStatus := "IDLE"
-	if s.Run != nil && s.Run.Status != "" {
-		runStatus = s.Run.Status
-	}
-	chgStatus := "IDLE"
-	if s.HasActiveProposal() && s.Change.State != "" {
-		chgStatus = s.Change.State
-	}
-	trust := th.statusBadge("TRUSTED")
-	if !s.WorkspaceTrust {
-		trust = th.statusBadge("UNTRUSTED")
-	}
-	if !twoLines {
-		line := fmt.Sprintf("%sAnalysis:%s %s %d/%d Files · %sAgents:%s %s · %strust:%s %s · %spalette:%s %s%s%s",
-			th.muted, th.reset, th.statusBadge(runStatus), inclFiles, totalFiles,
-			th.muted, th.reset, th.statusBadge(chgStatus),
-			th.muted, th.reset, trust,
-			th.muted, th.reset, th.purple, s.Palette, th.reset)
-		return th.renderPanelBox("", "", panelW, []string{line})
-	}
-	lines := []string{
-		fmt.Sprintf("%sAnalysis:%s %s %d/%d Files · %sAgents:%s %s",
-			th.muted, th.reset, th.statusBadge(runStatus), inclFiles, totalFiles,
-			th.muted, th.reset, th.statusBadge(chgStatus)),
-		fmt.Sprintf("%sProposals:%s %d · %sLessons:%s %d · %strust:%s %s · %spalette:%s %s%s%s",
-			th.muted, th.reset, len(s.ChangeHistory),
-			th.muted, th.reset, len(s.GraduatedLessons),
-			th.muted, th.reset, trust,
-			th.muted, th.reset, th.purple, s.Palette, th.reset),
-	}
-	return th.renderPanelBox("", "", panelW, lines)
 }
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {
@@ -185,7 +127,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 	for _, tab := range HubTabs() {
 		isActiveHub := tab.Key == active.Key
 		if isActiveHub {
-			badge := fmt.Sprintf(" ▸ %s. %-*s", tab.Key, max(18, width-8), strings.ToUpper(tab.Label))
+			badge := fmt.Sprintf(" ▸ %s. %-*s", tab.Key, max(1, width-8), theme.TruncatePlain(strings.ToUpper(tab.Label), width-8))
 			lines = append(lines, " "+th.accentBg+theme.TruncatePlain(badge, width-2)+th.reset)
 			lines = append(lines, s.renderSidebarSubPages(th, tab, width)...)
 			lines = append(lines, "")
@@ -194,49 +136,13 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 				th.muted, tab.Key, th.reset, th.fg, theme.TruncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
-	if active.Key != "5" {
-		lines = append(lines, "")
-	}
-	lines = append(lines, "")
-	lines = append(lines, s.renderSidebarPulse(th, width)...)
-	footer := s.renderSidebarFooter(th, width)
-	if targetBodyRows-len(lines)-len(footer) >= 8 {
-		lines = append(lines, "")
-		lines = append(lines, s.renderSidebarRouting(th, width)...)
-	}
-	if rem := targetBodyRows - len(lines); rem >= len(footer) {
-		padRows := max(0, targetBodyRows-len(lines)-len(footer))
-		for i := 0; i < padRows; i++ {
+	if targetBodyRows > len(lines)+2 {
+		for len(lines) < targetBodyRows-2 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, footer...)
+		lines = append(lines, "  "+th.muted+"[?] Keys · [:] Commands"+th.reset)
 	}
 	return lines
-}
-
-func (s *State) renderSidebarRouting(th ansiTheme, width int) []string {
-	preset := theme.TruncatePlain(client.FirstNonEmpty(s.ActivePresetID, "local-default"), max(8, width-13))
-	aMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("analyze").Model, s.AssignedScopeModelID("analyze")), max(8, width-13))
-	bMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("bug").Model, s.AssignedScopeModelID("bug")), max(8, width-13))
-	fMod := theme.TruncatePlain(client.FirstNonEmpty(s.EffectiveScopeModel("function").Model, s.AssignedScopeModelID("function")), max(8, width-13))
-	return []string{
-		fmt.Sprintf("  %sMODEL ROUTING%s", th.bold+th.cyan, th.reset),
-		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Preset", th.reset, th.green, preset, th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Analyze", th.reset, th.fg, aMod, th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Bug", th.reset, th.fg, bMod, th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%s%s", th.muted, "Func", th.reset, th.fg, fMod, th.reset),
-	}
-}
-
-func (s *State) renderSidebarFooter(th ansiTheme, width int) []string {
-	cfg := s.EffectiveAnalysisConfig()
-	mins := max(1, (cfg.BudgetSeconds+59)/60)
-	return []string{
-		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%d files · %dm%s", th.muted, "Batch", th.reset, th.cyan, cfg.BatchFiles, mins, th.reset),
-		fmt.Sprintf("  %s%-10s%s %s%d / stage%s", th.muted, "Attempts", th.reset, th.cyan, cfg.MaxAttemptsPerStage, th.reset),
-	}
 }
 
 func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []string {
@@ -246,10 +152,7 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 			visible = append(visible, sp)
 		}
 	}
-	curPage := s.EffectivePage()
-	if curPage == PageIssueDetail {
-		curPage = PageBugs
-	}
+	curPage := parentPage(s.EffectivePage())
 	var out []string
 	for idx, sp := range visible {
 		branch := "├─"
@@ -264,26 +167,6 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 		}
 	}
 	return out
-}
-
-func (s *State) renderSidebarPulse(th ansiTheme, width int) []string {
-	summary := domain.ComputeIssueSummary(s.CollectAllIssues(), s.Features)
-	openVal := fmt.Sprintf("%s0%s", th.green, th.reset)
-	if summary.TotalOpen > 0 {
-		openVal = fmt.Sprintf("%s%d open%s", th.bold+th.amber, summary.TotalOpen, th.reset)
-	}
-	agentState := "IDLE"
-	if s.HasActiveProposal() && s.Change.State != "" {
-		agentState = s.Change.State
-	}
-	return []string{
-		fmt.Sprintf("  %sWORKSPACE PULSE%s", th.bold+th.cyan, th.reset),
-		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		fmt.Sprintf("  %s%-10s%s %s", th.muted, "Findings", th.reset, openVal),
-		fmt.Sprintf("  %s%-10s%s %s%d%s", th.muted, "Resolved", th.reset, th.green, summary.Done, th.reset),
-		fmt.Sprintf("  %s%-10s%s %s", th.muted, "Agent", th.reset, th.statusBadge(agentState)),
-		fmt.Sprintf("  %s%-10s%s %s%d%s", th.muted, "Files", th.reset, th.fg, s.indexedFileCount(), th.reset),
-	}
 }
 
 func (s *State) renderTopBorder(th ansiTheme, width, height int) string {
@@ -323,7 +206,7 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	if s.Project != nil && s.Project.Name != "" {
 		projName = theme.TruncatePlain(s.Project.Name, 26)
 	}
-	branch := "main"
+	branch := "no branch"
 	if s.Repository != nil && s.Repository.Branch != "" {
 		branch = theme.TruncatePlain(s.Repository.Branch, 20)
 	}
@@ -366,7 +249,7 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 	if len(hub.SubPages) == 0 {
 		return ""
 	}
-	curPage := s.EffectivePage()
+	curPage := parentPage(s.EffectivePage())
 	var parts []string
 	for _, sp := range hub.SubPages {
 		if sp.Page == PageIssueDetail && curPage != PageIssueDetail {

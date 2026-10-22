@@ -45,14 +45,16 @@ type GitBranch struct {
 type GitWorktree struct {
 	Path string `json:"path"`
 	GitIdentity
-	Current   bool                 `json:"current"`
-	Locked    bool                 `json:"locked"`
-	Prunable  bool                 `json:"prunable"`
-	Dirty     *bool                `json:"dirty,omitempty"`
-	Mergeable bool                 `json:"mergeable"`
-	Completed []ChangeHistoryEntry `json:"completed"`
-	Sessions  []ChangeHistoryEntry `json:"sessions,omitempty"`
-	Error     string               `json:"error,omitempty"`
+	Current      bool                 `json:"current"`
+	Locked       bool                 `json:"locked"`
+	Prunable     bool                 `json:"prunable"`
+	Dirty        *bool                `json:"dirty,omitempty"`
+	Mergeable    bool                 `json:"mergeable"`
+	Integration  string               `json:"integration,omitempty"`
+	OverlapPaths []string             `json:"overlap_paths,omitempty"`
+	Completed    []ChangeHistoryEntry `json:"completed"`
+	Sessions     []ChangeHistoryEntry `json:"sessions,omitempty"`
+	Error        string               `json:"error,omitempty"`
 }
 
 type GitWorkspace struct {
@@ -116,6 +118,11 @@ func PopulateWorktree(ctx context.Context, target *GitRepository, tree *GitWorkt
 		return
 	}
 	tree.Dirty = &repository.Dirty
+	if err := InspectIntegration(ctx, target, tree); err != nil {
+		tree.Integration, tree.OverlapPaths = "", nil
+		tree.Error = "Integration status unavailable: " + err.Error()
+		return
+	}
 	history, err := loadHistory(canonical)
 	if err != nil {
 		tree.Error = "Fix history unavailable: " + err.Error()

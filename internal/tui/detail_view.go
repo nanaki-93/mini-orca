@@ -11,7 +11,7 @@ import (
 )
 
 func (s *State) hasScrollableDetails() bool {
-	return s.Page == PagePlan || s.Page == PageIssueDetail || s.Page == PageFeatures || s.Page == PageAgents && s.AgentDetailOpen
+	return len(s.detailSections()) > 0 || s.Page == PageWorktreeDetail || s.Page == PageAgents && s.AgentDetailOpen
 }
 
 func (s *State) handleDetailScrollKey(ev KeyEvent) bool {

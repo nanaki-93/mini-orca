@@ -26,6 +26,8 @@ func (s *State) renderActivePage(th ansiTheme, width int) []string {
 		return s.renderIssueDetailPage(th, width)
 	case PageFeatures:
 		return s.renderFeaturesPage(th, width)
+	case PageFeatureDetail:
+		return s.renderFeatureDetailPage(th, width)
 	case PageAnalysisRun:
 		return s.renderAnalysisRunPage(th, width)
 	case PageAnalysisFiles:
@@ -41,6 +43,8 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderEditorPage(th, width)
 	case PageGit:
 		return s.renderGitPage(th, width)
+	case PageWorktreeDetail:
+		return s.renderWorktreeDetail(th, width)
 	case PageHistory:
 		return s.renderHistoryPage(th, width)
 	case PageDocs:
@@ -112,19 +116,10 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 		{"RISK BREAKDOWN", fmt.Sprintf("%sB:%d%s  %sS:%d%s  %sP:%d%s", th.bold+th.red, summary.Bugs, th.reset, th.bold+th.amber, summary.Security, th.reset, th.cyan, summary.Performance, th.reset)},
 		{"FEATURE IDEAS", fmt.Sprintf("%s%d%s ready", th.bold+th.purple, summary.Features, th.reset)},
 	}
-	lines := renderPageHeader(th, "[1] OVERVIEW · EXECUTIVE DASHBOARD", "Workspace health & risk telemetry")
+	lines := renderPageHeader(th, "OVERVIEW", "Plan → Generate → Verify → Review → Integrate")
 	lines = append(lines, th.renderKPICards(cards, width)...)
-	denom := max(1, summary.TotalOpen+summary.Done)
-	distBody := []string{
-		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.bold+th.fg, "Bugs", th.reset, th.renderProgressBar(summary.Bugs, denom, 16), th.red, summary.Bugs, th.reset),
-		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.bold+th.fg, "Security", th.reset, th.renderProgressBar(summary.Security, denom, 16), th.amber, summary.Security, th.reset),
-		fmt.Sprintf("%s%-15s%s %s  %s%d open%s", th.fg, "Performance", th.reset, th.renderProgressBar(summary.Performance, denom, 16), th.cyan, summary.Performance, th.reset),
-		fmt.Sprintf("%s%-15s%s %s  %s%d fixed%s", th.fg, "Resolved", th.reset, th.renderProgressBar(summary.Done, denom, 16), th.green, summary.Done, th.reset),
-	}
-	lines = append(lines, "")
-	lines = append(lines, th.renderPanelBox("", "", panelW, distBody)...)
 
-	focusStatus := fmt.Sprintf("%s  %sWorkspace clean%s", th.padBadge("CLEAN", 12), th.green, th.reset)
+	focusStatus := fmt.Sprintf("%s  %sNo open findings recorded%s", th.padBadge("CLEAN", 12), th.green, th.reset)
 	if summary.TotalOpen > 0 {
 		focusStatus = fmt.Sprintf("%s  %s%d open%s (%s%d bugs%s · %s%d security%s)",
 			th.padBadge("OPEN", 12), th.bold+th.amber, summary.TotalOpen, th.reset, th.red, summary.Bugs, th.reset, th.amber, summary.Security, th.reset)

@@ -79,6 +79,7 @@ untrusted networks.
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
 | POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree. |
+| POST | `/api/projects/current/git/cleanup-merged` | Reconcile an external merge and safely remove the integrated worktree, retaining its branch. |
 | POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
@@ -941,6 +942,24 @@ complete findings or remove the source. Successful removal returns `removed_work
 with its absolute path, allowing the client to close the implementation and stop polling it. If
 cleanup fails, the merge remains `state: merged` and `warnings` explains why the
 worktree remains; `removed_worktree` is omitted. No push happens automatically.
+
+`cleanup-merged` provides the same completion and removal path after an external
+merge commit or an earlier cleanup warning, without running `git merge` again.
+It requires the current project/revision, destination HEAD/branch, source path,
+source HEAD/branch, both confirmations and execution trust. The destination must
+be clean and have no active Git operation; the source must be an ancestor of its
+HEAD. Unfinished task histories, changed, dirty, locked or nested source worktrees
+remain protected. Successful reconciliation also refreshes project facts after
+the external merge. After external source changes, explicitly reindex and grant
+execution trust for the updated revision before requesting cleanup. Squash
+merges and cherry-picks without ancestry are not treated as proof of integration.
+
+Workspace reads add `integration` (`current`, `merged`, `up_to_date`, `behind`,
+`unrelated`) and `overlap_paths` for paths changed on both sides of a divergent
+branch. These are passive comparisons, without merging or running merge drivers.
+Overlap is advisory, not proof of conflict. `merged` includes equal HEADs; it does
+not claim a task was verified. Unknown integration is omitted with `error`.
+Refreshing never removes a worktree or completes findings.
 
 Discard takes the selected worktree `path`, `source_head` and `source_branch` plus
 the usual mutation identity, confirmation and execution trust. It rechecks the

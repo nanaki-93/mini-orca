@@ -170,8 +170,8 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PagePlan: {
 		title:     "[2] AGENT STUDIO · TASK PLAN",
 		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}},
-		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"PgUp/PgDn", "Scroll details"}},
-		commands:  []keyDesc{{":context paths", "Read-only context"}, {":repairs on|off", "Automatic repair"}},
+		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"Tab", "Change section"}},
+		commands:  []keyDesc{{":replan", "Use current base"}, {":repairs on|off", "Automatic repair"}},
 	},
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
@@ -182,14 +182,20 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
 		primary:   []keyDesc{{"Enter / f", "Review fix plan"}, {"i / Esc", "Back to issues"}},
-		secondary: []keyDesc{{"j/k / ←/→", "Prev/next issue"}, {"o / d", "Open / delete"}},
+		secondary: []keyDesc{{"Tab", "Change section"}, {"j/k", "Prev/next issue"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageFeatures: {
 		title:     "[2] AGENT STUDIO · FEATURE SUGGESTIONS",
-		primary:   []keyDesc{{"Enter / a", "Review feature plan"}, {"d", "Dismiss idea"}},
+		primary:   []keyDesc{{"Enter", "Inspect feature"}, {"f / a", "Review feature plan"}},
 		secondary: []keyDesc{{"r", "Run/resume scan"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":agent <msg>", "Custom feature"}, {":analyze", "Run analysis"}},
+	},
+	PageFeatureDetail: {
+		title:     "FEATURE",
+		primary:   []keyDesc{{"f / Enter", "Review feature plan"}, {"Esc", "Back"}},
+		secondary: []keyDesc{{"Tab", "Change section"}, {"PgUp/PgDn", "Scroll"}},
+		commands:  []keyDesc{{":agent <goal>", "Custom feature"}},
 	},
 	PageAnalysisRun: {
 		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG",
@@ -214,9 +220,15 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PageGit: {
 		title:     "[3] CODE & DIFF · GIT & WORKTREES",
-		primary:   []keyDesc{{"m", "Merge worktree"}, {"a / c", "Apply & commit"}},
-		secondary: []keyDesc{{"u", "Guarded undo"}, {"d", "Inspect diff"}},
-		commands:  []keyDesc{{":merge", "Merge branch"}, {":undo", "Guarded undo"}},
+		primary:   []keyDesc{{"Enter", "Inspect worktree"}, {"m", "Merge worktree"}},
+		secondary: []keyDesc{{"c", "Clean up integrated"}, {"r / R", "Refresh / reindex"}},
+		commands:  []keyDesc{{":merge", "Merge branch"}, {":reindex", "Update index"}},
+	},
+	PageWorktreeDetail: {
+		title:     "WORKTREE · INTEGRATION",
+		primary:   []keyDesc{{"m", "Merge"}, {"c", "Clean up integrated"}},
+		secondary: []keyDesc{{"r / R", "Refresh / reindex"}, {"Esc", "Back"}},
+		commands:  []keyDesc{{":merge", "Merge worktree"}},
 	},
 	PageHistory: {
 		title:     "[3] CODE & DIFF · SAVED PROPOSALS",

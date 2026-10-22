@@ -24,7 +24,8 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 
 ## Reviewing a task in the TUI
 
-Selecting a fix or feature opens **Task Plan**. Edit the approach with `e`, write
+Selecting a fix opens **Task Plan**. In Features, `Enter` opens its details and
+`f` prepares a plan. `Tab` / `Shift+Tab` switch focused detail sections. Edit the approach with `e`, write
 scope with `f`, and criteria with `t`. Use `:context path; path` for read-only
 context, `:boundaries item; item` for non-goals, and `:repairs on|off` for repair
 policy. `s` saves a captured draft; `g` approves it and generates code. A custom
@@ -44,6 +45,28 @@ destination and requires review of every changed file; changed proposals clear
 review progress. `:retry test` reuses implementation, while `:retry review`
 reuses current passing checks. Attempts, stage timings and failure reasons remain
 visible in workflow details.
+
+## Merges and worktree recovery
+
+Tasks start from the current branch. The TUI blocks generation when another
+active task already owns a write path; finish or discard that task first. A saved
+plan in an outdated worktree cannot start generation: refresh, use `:replan`, and
+review the new plan. The old worktree remains available in **Worktrees**.
+
+In **Worktrees**, `Enter` opens integration details. **BEHIND** means the destination
+advanced; overlapping paths are a review hint, not proof of conflict. If a merge
+conflicts, resolve it with your external Git tool and commit the merge. Press `R`
+to update the project index, then `:trust` to grant execution trust for that
+revision. Select the **INTEGRATED** worktree and press `c` to complete linked
+findings and remove the clean checkout. Lowercase `r` only refreshes status;
+updating the index stops outdated checks and workflows in the destination checkout.
+The worktree's branch is retained. Cleanup refuses unfinished task drafts,
+unmerged commits, local changes, locked worktrees and changed identities. Squash
+merges and cherry-picks need manual Git review because ancestry cannot prove that
+the original task was integrated.
+
+Worktrees stay visible until deletion succeeds. A failed merge shows the actual
+conflict state, and a cleanup warning can be retried through the same action.
 
 ## Architecture
 

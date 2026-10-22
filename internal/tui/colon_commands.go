@@ -21,6 +21,8 @@ func (s *State) ActivateCurrentRow() {
 	case PageEditor:
 		s.activateEditorFileRow()
 	case PageFeatures:
+		s.Navigate(PageFeatureDetail)
+	case PageFeatureDetail:
 		features := s.activeFeatures()
 		if idx := s.ClampedIdx(); idx < len(features) {
 			s.dispatchFeatureIdea(features[idx])
@@ -107,30 +109,12 @@ func (s *State) activateAgentRow() {
 	if idx >= len(items) {
 		return
 	}
-	if s.AgentDetailOpen && s.agentSessionNeedsRepairOrRerun() {
-		s.triggerAgentRecheckOrRepair()
-		return
-	}
 	s.AgentDetailOpen = true
 	s.AgentStage = s.activeAgentStageNumber()
 	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 	}
 	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s)", items[idx].Title, items[idx].Branch)
-}
-
-func (s *State) agentSessionNeedsRepairOrRerun() bool {
-	if s.Change == nil || s.hasRunningWorkflow() {
-		return false
-	}
-	if s.isChangeStale() || len(s.Change.Changes) == 0 || s.isWorkflowFailedOrInterrupted() {
-		return true
-	}
-	passed, total := domain.CountPassedChecks(s.Change.Checks)
-	if total > 0 && passed < total {
-		return true
-	}
-	return s.Change.Workflow != nil && s.Change.Workflow.Status == "changes_requested"
 }
 
 func (s *State) activateSecondaryRow() {

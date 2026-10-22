@@ -693,20 +693,7 @@ func (s *State) rejectSelectedAgentFix() {
 	if s.hasRunningWorkflow() && chg.Workflow != nil {
 		wfID = chg.Workflow.ID
 	}
-	s.removeActiveSession(chg.ID, wtPath)
-	s.removeUnappliedHistoryByID(chg.ID)
-	s.removeWorktreeByPath(wtPath)
-	s.reopenFindingTargets(targets)
-	s.selectNextActiveChange()
-	if s.Change == nil {
-		s.AgentDetailOpen = false
-		s.AgentStage = 0
-	}
-	s.SelectedIdx = s.ClampedIdx()
-	if s.Page == PageAgents {
-		s.syncSelectedIdxToCurrentChange()
-	}
-	s.CmdOutput = fmt.Sprintf("Rejected fix for %q — deleted worktree and restored issue to OPEN", chg.Title)
+	s.CmdOutput = fmt.Sprintf("Discarding task %q...", chg.Title)
 	s.enqueueAction(ActionRequest{
 		Kind:      "reject-change",
 		Target:    chg.ID,
@@ -739,9 +726,7 @@ func (s *State) discardSelectedWorktree() {
 		s.rejectSelectedAgentFix()
 		return
 	}
-	s.removeWorktreeByPath(wt.Path)
-	s.SelectedIdx = s.ClampedIdx()
-	s.CmdOutput = fmt.Sprintf("Discarded worktree %s", wt.Path)
+	s.CmdOutput = fmt.Sprintf("Discarding worktree %s...", wt.Path)
 	s.enqueueAction(ActionRequest{
 		Kind: "reject-change",
 		Seed: &ChangeSeed{WorktreePath: wt.Path, Kind: wt.Branch, Message: wt.Head},

@@ -205,8 +205,8 @@ func TestEditorDiffHunkAndGuardedApplyUndo(t *testing.T) {
 
 	// Toggle inline explanations with 'e'
 	s.HandleKey(KeyEvent{Key: "e"})
-	if s.ShowInlineWhy {
-		t.Fatal("expected ShowInlineWhy to toggle false")
+	if !s.ShowInlineWhy {
+		t.Fatal("expected ShowInlineWhy to toggle true")
 	}
 
 	// Reject current hunk with 'x' -> clears stale review/checks and enqueues update-proposal
@@ -817,7 +817,7 @@ func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 		},
 	}
 	agentFrame := s.Render(120, 36)
-	if !strings.Contains(agentFrame, "Ready to Review & Apply") || !strings.Contains(agentFrame, "Clean context cancellation fix") {
+	if !strings.Contains(agentFrame, "Review changed files") || strings.Contains(agentFrame, "Clean context cancellation fix") {
 		t.Fatalf("expected PageAgents to display critic summary and Ready to Review & Apply:\n%s", agentFrame)
 	}
 
@@ -1547,7 +1547,7 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 			_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-1","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 1","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-2","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
+		_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-2","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"b.go"},{"path":"b_test.go"}]}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1/workflow", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -1555,7 +1555,7 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-2/workflow", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":2,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}],"workflow":{"id":"chg-2-2","status":"running","stages":[{"name":"create","status":"running"},{"name":"test","status":"pending"},{"name":"review","status":"pending"},{"name":"human_review","status":"blocked"}]}}`))
+		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":2,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"b.go"},{"path":"b_test.go"}],"workflow":{"id":"chg-2-2","status":"running","stages":[{"name":"create","status":"running"},{"name":"test","status":"pending"},{"name":"review","status":"pending"},{"name":"human_review","status":"blocked"}]}}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","revision":3,"hash":"h2","state":"draft","title":"Mission 1","workflow":{"id":"chg-1-2","status":"awaiting_human_review","stages":[{"name":"create","status":"completed"},{"name":"test","status":"completed"},{"name":"review","status":"completed"},{"name":"human_review","status":"waiting"}]}}`))
@@ -1579,7 +1579,7 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 	}
 	s.Findings = []Finding{
 		{ID: "f1", Category: "bugs", Severity: "high", Title: "Mission 1", Location: SourceAnchor{Path: "a.go", StartLine: 10}, Status: "open"},
-		{ID: "f2", Category: "bugs", Severity: "high", Title: "Mission 2", Location: SourceAnchor{Path: "a.go", StartLine: 20}, Status: "open"},
+		{ID: "f2", Category: "bugs", Severity: "high", Title: "Mission 2", Location: SourceAnchor{Path: "b.go", StartLine: 20}, Status: "open"},
 	}
 
 	// Start first agent with 'f'
@@ -1653,17 +1653,10 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 
 	s.Navigate(PageAgents)
 	frame := s.Render(120, 44)
-	for _, want := range []string{
-		"ACTIVE AGENT MISSION CONTROL",
-		"2. Verify & Test",
-		"go test failed with exit code 1",
-		"--- FAIL: TestParse",
-		"Check failure in go test",
-	} {
-		if !strings.Contains(frame, want) {
-			t.Fatalf("expected PageAgents error diagnostics panel to contain %q:\n%s", want, frame)
-		}
+	if !strings.Contains(frame, "Inspect failure") || strings.Contains(frame, "--- FAIL: TestParse") {
+		t.Fatalf("task list should direct to diagnostics without expanding them: %s", frame)
 	}
+
 	if strings.Contains(frame, "qwen2.5-coder") {
 		t.Fatalf("expected Pipeline page to omit model names, got:\n%s", frame)
 	}
@@ -1675,9 +1668,9 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	}
 	debugFrame := s.Render(120, 44)
 	for _, want := range []string{
-		"WORKFLOW DEBUG & CHECK INSPECTOR",
+		"TASK · STAGES",
 		"qwen2.5-coder",
-		"└─ Error:",
+		"Stage reason:",
 		"go test failed with exit code 1",
 		"parser_test.go:42: expected nil error, got EOF",
 	} {
@@ -1954,6 +1947,10 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 	}
 	if strings.Contains(detailFrame, "Finding:") || strings.Contains(detailFrame, "semantic:f-second") {
 		t.Fatalf("expected Issue Detail metadata panel to omit Finding row and finding ID in title row:\n%s", detailFrame)
+	}
+	for section := 0; section < 2; section++ {
+		s.HandleKey(KeyEvent{Key: "Tab"})
+		detailFrame += s.Render(160, 60)
 	}
 	for _, want := range []string{
 		"Issue 2 of 3",
@@ -2350,9 +2347,9 @@ func TestRerunFailedAgentWorkflowDispatchesAsyncWorkflowWithoutFreezingTUI(t *te
 
 	m := NewBubbleModel(context.Background(), s, cli, 120, 40)
 
-	// Pressing Enter (or 'r') inside the Agent Debug Inspector on a Stage 1 timeout with existing Changes
+	// Pressing 'r' inside the Agent Debug Inspector on a Stage 1 timeout with existing Changes
 	// must NOT block Update() or call /checks or /messages; it must optimistically transition to running and return a tea.Cmd.
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
 	if cmd == nil {
 		t.Fatal("expected non-nil async tea.Cmd when rerunning failed workflow")
 	}
@@ -2737,6 +2734,10 @@ func TestRejectAgentFixInHumanStageDeletesWorktreeAndReopensIssue(t *testing.T) 
 	}
 
 	s.HandleKey(KeyEvent{Key: "x"})
+	if len(s.AgentItems()) != 1 || len(s.GitWorkspace.Worktrees) != 1 {
+		t.Fatal("discard hid the task before the daemon confirmed removal")
+	}
+	s.FlushActions(context.Background(), cli)
 	if len(s.AgentItems()) != 0 {
 		t.Fatalf("expected agent item to be removed after rejecting fix, got %+v", s.AgentItems())
 	}

@@ -117,26 +117,32 @@ func (s *State) renderIssueStatusFilterStrip(th ansiTheme, openCount, inProgCoun
 }
 
 func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	filtered := s.FilteredIssues()
-	subTitle := "Deep diagnostic & remediation plan"
-	if len(filtered) > 0 {
-		subTitle = fmt.Sprintf("Issue %d of %d · [j/k / ←/→] Prev/Next · [i/Esc] Back", s.ClampedIdx()+1, len(filtered))
-	}
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · ISSUE DETAIL & ROOT CAUSE", subTitle)
+	lines := renderPageHeader(th, "ISSUE", fmt.Sprintf("Issue %d of %d · [f] Plan fix · [j/k] Next/prev · [Esc] Back", s.ClampedIdx()+1, len(s.FilteredIssues())))
 	cur := s.SelectedIssue()
 	if cur == nil {
-		return append(lines, fmt.Sprintf("  %sNo finding selected.%s", th.muted, th.reset))
+		return append(lines, "  No finding selected.")
 	}
-	rightMeta := ""
-	if len(filtered) > 0 {
-		rightMeta = fmt.Sprintf("%d/%d", s.ClampedIdx()+1, len(filtered))
+	lines = append(lines, s.renderDetailSections(th)...)
+	panelW := adaptivePanelWidth(width)
+	contentW := issuePanelContentWidth(panelW)
+	var rows []string
+	switch s.DetailSection {
+	case 1:
+		rows = s.buildIssueDetailMetadataLines(th, *cur)
+		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, cur.Evidence, contentW)...)
+		rows = append(rows, s.issueSourceExcerpt(*cur, th, contentW)...)
+	case 2:
+		rows = renderDiagnosticRow(th, th.green, "Proposed approach:", th.fg, cur.Solution, contentW)
+		rows = append(rows, s.formatIssueVerificationLines(th, *cur, contentW)...)
+		rows = append(rows, formatIssueGuardrailLines(th, cur.NonGoals, contentW)...)
+		rows = append(rows, s.renderIssueDetailWorkflowLines(th, *cur, contentW)...)
+	default:
+		rows = renderDiagnosticRow(th, th.cyan, "Issue:", th.fg, cur.Name, contentW)
+		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Location:", th.fg, formatIssueLocationSpan(*cur), contentW)...)
+		rows = append(rows, fmt.Sprintf("%s · %s", th.severityBadge(cur.Severity), th.statusBadge(cur.Status)))
+		rows = append(rows, renderDiagnosticRow(th, th.amber, "Cause hypothesis:", th.fg, formatIssueRootCauseText(*cur), contentW)...)
 	}
-	meta := s.buildIssueDetailMetadataLines(th, *cur)
-	lines = append(lines, th.renderPanelBox("ISSUE METADATA & LOCATION", rightMeta, panelW, meta)...)
-	diag := s.buildIssueDetailDiagnosticLines(th, *cur, panelW)
-	lines = append(lines, "")
-	return append(lines, th.renderPanelBox("ROOT CAUSE DIAGNOSTIC & REMEDIATION", strings.ToUpper(cur.Category), panelW, diag)...)
+	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], "", panelW, rows)...)
 }
 
 func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []string {
@@ -194,10 +200,6 @@ func issuePanelContentWidth(panelW int) int {
 	return max(24, panelW-4)
 }
 
-func renderDiagnosticDivider(th ansiTheme, contentW int) string {
-	return th.border + strings.Repeat("─", contentW) + th.reset
-}
-
 func renderDiagnosticRow(th ansiTheme, labelStyle, label, valueStyle, value string, contentW int) []string {
 	prefix := theme.PadVisibleRight(labelStyle+label+th.reset, diagnosticLabelCols)
 	rightW := max(16, contentW-diagnosticLabelCols)
@@ -239,29 +241,6 @@ func renderDiagnosticBulletRows(th ansiTheme, labelStyle, label, bulletStyle, te
 		}
 	}
 	return out
-}
-
-func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow, panelW int) []string {
-	contentW := issuePanelContentWidth(panelW)
-	diag := renderDiagnosticRow(th, th.bold+th.red, "▲ Cause hypothesis:", th.amber, formatIssueRootCauseText(cur), contentW)
-	if cur.Evidence != "" {
-		diag = append(diag, renderDiagnosticRow(th, th.bold+th.cyan, "◆ Evidence:", th.fg, cur.Evidence, contentW)...)
-	}
-	diag = append(diag, s.issueSourceExcerpt(cur, th, contentW)...)
-	diag = append(diag, renderDiagnosticDivider(th, contentW))
-	diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "Proposed approach:", th.bold+th.fg, cur.Solution, contentW)...)
-	diag = append(diag, s.formatIssueVerificationLines(th, cur, contentW)...)
-	if len(cur.NonGoals) > 0 {
-		diag = append(diag, formatIssueGuardrailLines(th, cur.NonGoals, contentW)...)
-	}
-	diag = append(diag, renderDiagnosticDivider(th, contentW))
-	if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
-		diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "▸ Commit Receipt:", th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), contentW)...)
-	} else if cur.Status == "in_progress" && cur.AgentPath != "" {
-		diag = append(diag, renderDiagnosticRow(th, th.bold+th.amber, "▸ Active Worktree:", th.cyan, cur.AgentPath, contentW)...)
-	}
-	diag = append(diag, s.renderIssueDetailWorkflowLines(th, cur, contentW)...)
-	return diag
 }
 
 func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow, contentW int) []string {
@@ -355,7 +334,6 @@ func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, conte
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · FEATURES & ENHANCEMENTS", "Architecture-aligned capability proposals")
 	features := s.activeFeatures()
 	if len(features) == 0 {
@@ -376,19 +354,5 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 		))
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(features))
-	cur := features[selected]
-	featBox := []string{
-		fmt.Sprintf("%sProposal:%s %s%s%s   %sEffort:%s %s",
-			th.muted, th.reset, th.bold+th.fg, cur.Title, th.reset,
-			th.muted, th.reset, th.severityBadge(client.FirstNonEmpty(cur.Effort, "med"))),
-		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, cur.Benefit, th.reset),
-	}
-	lines = append(lines, "")
-	contentW := issuePanelContentWidth(panelW)
-	featBox = append(featBox, renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, cur.Evidence, contentW)...)
-	featBox = append(featBox, renderDiagnosticBulletRows(th, th.cyan, "Suggested files:", th.cyan, th.fg, cur.Paths, contentW)...)
-	featBox = append(featBox, renderDiagnosticBulletRows(th, th.purple, "Acceptance:", th.purple, th.fg, cur.AcceptanceCriteria, contentW)...)
-	featBox = append(featBox, "Model suggestion · review the plan with [f] before code generation.")
-	lines = append(lines, th.renderPanelBox("FEATURE IMPLEMENTATION WORKBENCH", "CAPABILITY SPEC", panelW, featBox)...)
-	return lines
+	return append(lines, "", "  [Enter] Inspect feature · [f] Plan implementation")
 }

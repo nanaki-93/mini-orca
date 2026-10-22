@@ -38,7 +38,7 @@ type Client struct {
 
 var allowedRoutes = map[string]*regexp.Regexp{
 	http.MethodGet:    regexp.MustCompile(`^/(health|status|api/models/(current|available)|api/projects/current|api/projects/current/(events|changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git(/(repository|workspace))?|analysis/(selection|run|results)))$`),
-	http.MethodPost:   regexp.MustCompile(`^/api/projects/(import|restore|current/(bootstrap/exec|git/(worktrees|switch|merge-preview|merge|abort-merge|discard-worktree)|changes(/[^/]+/(resume|messages|checks|review|review-file|plan|apply|commit|undo|verify|workflow(/cancel)?))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)))$`),
+	http.MethodPost:   regexp.MustCompile(`^/api/projects/(import|restore|current/(bootstrap/exec|git/(worktrees|switch|merge-preview|merge|abort-merge|discard-worktree|cleanup-merged)|changes(/[^/]+/(resume|messages|checks|review|review-file|plan|apply|commit|undo|verify|workflow(/cancel)?))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)))$`),
 	http.MethodPatch:  regexp.MustCompile(`^/api/projects/current/(findings|features)/[^/]+$`),
 	http.MethodDelete: regexp.MustCompile(`^/api/projects/current/scan$`),
 }

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -35,6 +38,46 @@ func TestGitRepositoryRequiresCurrentProject(t *testing.T) {
 	}
 }
 
+func TestCleanupMergedHTTPGuardsIdentityAndReturnsRemovalReceipt(t *testing.T) {
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	root := fixture.manager.Root()
+	git := func(args ...string) {
+		t.Helper()
+		flags := []string{"-C", root, "-c", "core.hooksPath=" + os.DevNull, "-c", "commit.gpgSign=false", "-c", "user.name=Test", "-c", "user.email=test@example.com"}
+		if out, err := exec.Command("git", append(flags, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git: %v %s", err, out)
+		}
+	}
+	git("init", "-b", "main")
+	git("add", "main.go")
+	git("commit", "-m", "Initial")
+	index, _ := fixture.manager.Index()
+	repo, err := fixture.service.GitRepository(context.Background(), index.ProjectID, index.ProjectRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	request := app.GitMutationRequest{GitIdentity: repo.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Confirm: true, ConfirmExecution: true, TargetBranch: "fix", Path: filepath.Join(root, ".worktrees", "fix")}
+	created, err := fixture.service.CreateGitWorktree(context.Background(), request)
+	if err != nil || created.State != "created" {
+		t.Fatalf("create: %+v %v", created, err)
+	}
+	request.SourceHead, request.SourceBranch = "stale", "fix"
+	h := NewGitHandler(fixture.service)
+	response := workflowResponse(t, h.CleanupMergedWorktree, "POST", "/git/cleanup-merged", "", request)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("stale cleanup: %d %s", response.Code, response.Body)
+	}
+	request.SourceHead = repo.Head
+	response = workflowResponse(t, h.CleanupMergedWorktree, "POST", "/git/cleanup-merged", "", request)
+	var result app.GitMutationResult
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.RemovedWorktree != created.Path {
+		t.Fatalf("cleanup: %d %s", response.Code, response.Body)
+	}
+}
+
 func TestProjectGitStatusEndpointHonorsCancellationAndPathPolicy(t *testing.T) {
 	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	handler := NewProjectHandler(fixture.manager, fixture.service)
@@ -57,7 +100,7 @@ func TestProjectGitStatusEndpointHonorsCancellationAndPathPolicy(t *testing.T) {
 func TestGitMutationsRejectUnconfirmedAndUnknownFields(t *testing.T) {
 	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	handler := NewGitHandler(fixture.service)
-	for _, action := range []http.HandlerFunc{handler.CreateWorktree, handler.Switch, handler.Merge, handler.AbortMerge, handler.DiscardWorktree} {
+	for _, action := range []http.HandlerFunc{handler.CreateWorktree, handler.Switch, handler.Merge, handler.AbortMerge, handler.DiscardWorktree, handler.CleanupMergedWorktree} {
 		for _, body := range []string{`{}`, `{"confirm":true,"shell":"rm"}`, `{} {}`} {
 			response := httptest.NewRecorder()
 			action(response, httptest.NewRequest("POST", "/git", strings.NewReader(body)))

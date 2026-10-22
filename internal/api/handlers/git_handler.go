@@ -80,6 +80,15 @@ func (h *GitHandler) AbortMerge(w http.ResponseWriter, r *http.Request) {
 	respondGit(w, value, err)
 }
 
+func (h *GitHandler) CleanupMergedWorktree(w http.ResponseWriter, r *http.Request) {
+	var request app.GitMutationRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.CleanupMergedWorktree(r.Context(), request)
+	respondGit(w, value, err)
+}
+
 func (h *GitHandler) DiscardWorktree(w http.ResponseWriter, r *http.Request) {
 	var request app.GitMutationRequest
 	if !decodeWorkflowBody(w, r, &request) {

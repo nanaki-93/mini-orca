@@ -23,11 +23,13 @@ const (
 	PageBugs           Page = "bugs"
 	PageIssueDetail    Page = "issue-detail"
 	PageFeatures       Page = "features"
+	PageFeatureDetail  Page = "feature-detail"
 	PagePlan           Page = "plan"
 	PageAnalysisRun    Page = "analysis-run"
 	PageAnalysisFiles  Page = "analysis-files"
 	PageEditor         Page = "editor"
 	PageGit            Page = "git"
+	PageWorktreeDetail Page = "worktree-detail"
 	PageHistory        Page = "history"
 	PageDocs           Page = "docs"
 	PageDocsComponents Page = "docs-components"
@@ -74,6 +76,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	Worktree       *WorktreeIntent
 	Source         ProjectIdentity
 	ExistingChange *ChangeSession
 	ResumeFrom     string
@@ -87,6 +90,7 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	DetailSection     int
 	PlanDraft         *PlanDraft
 	DetailScroll      int
 	DiffOffset        int
@@ -227,7 +231,7 @@ func NewState() *State {
 		IssueCategory:  "all",
 		DocsSection:    "context",
 		RulesSection:   "trust",
-		ShowInlineWhy:  true,
+		ShowInlineWhy:  false,
 		DiffMode:       "hunk",
 		ActivePresetID: "local-default",
 		ScopeModels: map[string]string{
@@ -440,11 +444,11 @@ func (s *State) mergeFindingCompletion(item FindingCompletion) {
 func (s *State) ActiveHub() HubTab {
 	tabs := HubTabs()
 	for _, tab := range tabs {
-		if tab.Page == s.Page {
+		if tab.Page == parentPage(s.Page) {
 			return tab
 		}
 		for _, sp := range tab.SubPages {
-			if sp.Page == s.Page {
+			if sp.Page == parentPage(s.Page) {
 				return tab
 			}
 		}
@@ -456,9 +460,9 @@ func (s *State) ActiveHub() HubTab {
 func (s *State) Navigate(page Page) {
 	if s.Page != page {
 		s.DetailScroll = 0
+		s.DetailSection = 0
 		s.Error = ""
-		preserveIssueIdx := (s.Page == PageBugs && page == PageIssueDetail) ||
-			(s.Page == PageIssueDetail && page == PageBugs)
+		preserveIssueIdx := parentPage(s.Page) == parentPage(page)
 		if !preserveIssueIdx {
 			s.SelectedIdx = 0
 		}
@@ -984,7 +988,7 @@ func (s *State) ActiveListLength() int {
 		return len(s.AgentItems())
 	case PageBugs, PageIssueDetail:
 		return len(s.FilteredIssues())
-	case PageFeatures:
+	case PageFeatures, PageFeatureDetail:
 		return len(s.activeFeatures())
 	case PageAnalysisRun:
 		return s.analysisRunListLen()
@@ -1013,7 +1017,7 @@ func (s *State) editorListLength() int {
 
 func (s *State) secondaryListLength() int {
 	switch s.Page {
-	case PageGit:
+	case PageGit, PageWorktreeDetail:
 		if s.GitWorkspace != nil {
 			return len(s.GitWorkspace.Worktrees)
 		}

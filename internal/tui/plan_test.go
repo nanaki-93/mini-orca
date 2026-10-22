@@ -133,9 +133,12 @@ func TestDetailsRemainReachableBeyondInitialViewport(t *testing.T) {
 	s := NewState()
 	s.openTaskPlan(&ChangeSeed{Title: "Detailed task", Paths: []string{"main.go"}, Message: "Inspect behavior", AcceptanceCriteria: []string{"First", "Second", "Third", "FOURTH_CRITERION"}, Plan: &ChangePlanInput{Problem: "A problem", Approach: strings.Repeat("Detailed approach. ", 30), NonGoals: []string{"One", "Two", "Three", "FOURTH_BOUNDARY"}}})
 	var frames string
-	for i := 0; i < 15; i++ {
-		frames += s.Render(90, 24)
-		s.HandleKey(KeyEvent{Key: "PageDown"})
+	for section := 0; section < 4; section++ {
+		for i := 0; i < 15; i++ {
+			frames += s.Render(90, 24)
+			s.HandleKey(KeyEvent{Key: "PageDown"})
+		}
+		s.HandleKey(KeyEvent{Key: "Tab"})
 	}
 	if !strings.Contains(frames, "FOURTH_CRITERION") || !strings.Contains(frames, "FOURTH_BOUNDARY") {
 		t.Fatal("plan detail was truncated instead of scrollable")
@@ -144,6 +147,7 @@ func TestDetailsRemainReachableBeyondInitialViewport(t *testing.T) {
 
 func TestLongDiffExplanationsDoNotHideCode(t *testing.T) {
 	s := NewState()
+	s.ShowInlineWhy = true
 	s.Navigate(PageEditor)
 	s.Change = &ChangeSession{ID: "c", Hash: "h", AcceptanceCriteria: []string{strings.Repeat("Acceptance detail ", 60) + "LAST_CRITERION"}, Changes: []FileChange{{Path: "main.go", Summary: strings.Repeat("Reason for the fix. ", 50), Criteria: []int{1}, Diff: FileDiff{Lines: []DiffLine{{Kind: "add", NewLine: 1, Text: "VISIBLE_CODE"}}}}}}
 	var details string

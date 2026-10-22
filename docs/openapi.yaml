@@ -256,6 +256,17 @@ paths:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/cleanup-merged:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    post:
+      tags: [Projects]
+      description: Reconcile a merge completed externally or retry cleanup. Requires current project and target identity, source_head, source_branch, both confirmations and execution trust. Reindex external source changes and grant trust for the updated revision first. Verifies source ancestry in the clean destination, completes linked findings, and removes the clean worktree without forcing deletion or deleting its branch. Retains unfinished task histories until explicit discard. Refreshes project facts after reconciliation. Does not attempt a merge. Squash or cherry-picked copies without ancestry are not eligible.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed integration and cleanup outcome; removed_worktree confirms deletion and warnings describe incomplete steps, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/discard-worktree:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2325,9 +2336,9 @@ components:
             confirm: {type: boolean, description: Required true for mutations}
             confirm_execution: {type: boolean, description: Required true for mutations in addition to current project execution trust}
             target_branch: {type: string, description: New branch for worktrees; existing local branch for switch}
-            path: {type: string, description: Absolute new path directly inside the project .worktrees directory or selected source path for merge or discard}
-            source_head: {type: string, description: Reviewed source worktree HEAD for merge or preview or discard}
-            source_branch: {type: string, description: Required source branch identity for discard}
+            path: {type: string, description: Absolute new path directly inside the project .worktrees directory or selected source path for merge or discard or cleanup-merged}
+            source_head: {type: string, description: Reviewed source worktree HEAD for merge or preview or discard or cleanup-merged}
+            source_branch: {type: string, description: Required source branch identity for discard or cleanup-merged}
             merge_head: {type: string, description: Identified MERGE_HEAD for abort}
     GitMutationResult:
       type: object
@@ -2335,7 +2346,7 @@ components:
       properties:
         state: {type: string, enum: [created, switched, merged, discarded, conflicts, aborted, failed]}
         path: {type: string}
-        removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard completed}
+        removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard or cleanup-merged completed}
         repository: {$ref: '#/components/schemas/GitRepository'}
         index: {$ref: '#/components/schemas/ProjectIndex'}
         error: {type: string}
@@ -2376,5 +2387,7 @@ components:
                       prunable: {type: boolean}
                       dirty: {type: boolean, description: Omitted when status cannot be read}
                       mergeable: {type: boolean, description: Clean local branches with shared history and incoming commits; excludes current or locked or prunable worktrees and in-progress Git operations. Does not predict conflicts.}
+                      integration: {type: string, enum: [current, merged, up_to_date, behind, unrelated], description: Passive ancestry comparison against the selected destination; merged includes equal HEADs and does not imply task verification or cleanup eligibility. Omitted if unavailable.}
+                      overlap_paths: {type: array, items: {type: string}, description: Committed paths changed on both branches since their merge base; advisory overlap rather than predicted conflicts.}
                       completed: {type: array, items: {$ref: '#/components/schemas/ChangeHistoryEntry'}}
                       error: {type: string}

@@ -56,6 +56,9 @@ func (s *State) HandleKey(ev KeyEvent) {
 		s.handleKeybindsModalKey(ev)
 		return
 	}
+	if s.handleFocusedPageKey(ev) {
+		return
+	}
 	if s.handleDetailScrollKey(ev) {
 		return
 	}
@@ -341,15 +344,7 @@ func (s *State) cycleSubView(forward bool) {
 	if len(subPages) == 0 {
 		return
 	}
-	curPage := s.EffectivePage()
-	if curPage == PageIssueDetail {
-		if !forward {
-			s.Navigate(PageBugs)
-			s.CmdOutput = "Sub-view: Issues"
-			return
-		}
-		curPage = PageBugs
-	}
+	curPage := parentPage(s.EffectivePage())
 	cur := 0
 	for idx, sp := range subPages {
 		if sp.Page == curPage {
@@ -605,7 +600,7 @@ func (s *State) handleFeaturesKey(key string) bool {
 		s.CmdOutput = fmt.Sprintf("Dismissed feature idea: %s", idea.Title)
 		s.enqueueAction(ActionRequest{Kind: "dismiss-feature", Target: idea.ID})
 		return true
-	case "a":
+	case "a", "f":
 		s.dispatchFeatureIdea(idea)
 		return true
 	}
@@ -618,7 +613,7 @@ func (s *State) handleAgentsAndEditorKey(ev KeyEvent) bool {
 		return s.handleAgentsKey(ev.Key)
 	case PageEditor:
 		return s.handleEditorKey(ev.Key)
-	case PageGit, PageHistory:
+	case PageGit, PageWorktreeDetail, PageHistory:
 		return s.handleGitOrHistoryKey(ev.Key)
 	}
 	return false
@@ -627,12 +622,12 @@ func (s *State) handleAgentsAndEditorKey(ev KeyEvent) bool {
 func (s *State) handleGitOrHistoryKey(key string) bool {
 	switch key {
 	case "m":
-		if s.Page == PageGit {
+		if parentPage(s.Page) == PageGit {
 			s.mergeSelectedWorktree()
 			return true
 		}
 	case "x", "X", "Delete":
-		if s.Page == PageGit {
+		if parentPage(s.Page) == PageGit {
 			s.discardSelectedWorktree()
 			return true
 		}

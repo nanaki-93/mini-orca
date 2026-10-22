@@ -64,6 +64,10 @@ func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, ac
 	switch act.Kind {
 	case "reconnect":
 		return s.SyncFromDaemon(ctx, cl, "")
+	case "refresh-worktrees":
+		return s.refreshWorktrees(ctx, cl, reqID, act)
+	case "reindex-worktrees":
+		return s.reindexWorktrees(ctx, cl, reqID, act)
 	case "open-project":
 		return s.SyncFromDaemon(ctx, cl, act.Target)
 	case "reindex":
@@ -382,6 +386,8 @@ func (s *State) dispatchSecondaryMutation(ctx context.Context, cl *Client, reqID
 		return s.dispatchRepairChange(ctx, cl, reqID, act)
 	case "merge-worktree":
 		return s.dispatchMergeWorktree(ctx, cl, reqID, act.Target)
+	case "cleanup-merged":
+		return s.dispatchCleanupMerged(ctx, cl, reqID, act)
 	case "load-change":
 		return s.dispatchLoadChange(ctx, cl, reqID, act.Target)
 	case "save-selection":
@@ -575,6 +581,10 @@ func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAge
 
 func executeStartAgentTask(ctx context.Context, cl *Client, task startAgentTask) startAgentResult {
 	res := startAgentResult{task: task}
+	if err := validateSavedWorktreeBase(ctx, cl, task); err != nil {
+		res.err = err
+		return res
+	}
 	if task.act.Kind == "save-plan" {
 		task.workspaceTrust = false
 	}
@@ -585,6 +595,10 @@ func executeStartAgentTask(ctx context.Context, cl *Client, task startAgentTask)
 	}
 	wtPath, wtProjID, wtProjRev, wtHead, wtBranch := prepareAgentWorktreeTask(ctx, cl, &task)
 	res.wtPath, res.wtHead, res.wtBranch = wtPath, wtHead, wtBranch
+	if task.reservedPath != "" && wtPath == "" {
+		res.err = fmt.Errorf("could not create the isolated task worktree; refresh Git status and review the plan again")
+		return res
+	}
 	session, syncProj, syncIdx, err := openChangeSessionTask(ctx, cl, &task, wtPath, wtProjID, wtProjRev)
 	res.syncProj, res.syncIdx = syncProj, syncIdx
 	if err != nil {
@@ -666,6 +680,9 @@ func retryCreateAgentWorktree(ctx context.Context, cl *Client, task *startAgentT
 	existing := append([]GitWorktree(nil), task.existingWorktrees...)
 	existing = append(existing, GitWorktree{GitIdentity: GitIdentity{Branch: task.targetBranch}, Path: task.reservedPath})
 	projID, projRev, head, branch := refreshWorktreeGitState(ctx, cl, task, &existing)
+	if projID != task.projectID || head != task.head || branch != task.branch || projRev != task.projectRevision {
+		return "", projID, projRev, head, branch
+	}
 	if task.workspaceTrust && projRev != "" {
 		body := map[string]any{"project_revision": projRev, "confirm": true}
 		var trust ExecutionTrust
@@ -1061,7 +1078,7 @@ func (s *State) autoMergeAppliedWorktree(ctx context.Context, cl *Client, reqID,
 		s.registerCreatedWorktree(wtPath, commit.OID, commit.Branch)
 	}
 	if err := s.dispatchMergeWorktree(ctx, cl, reqID+"-merge", wtPath); err != nil {
-		return fmt.Errorf("committed [%s] in worktree, but merge failed: %w", commitCode, err)
+		return fmt.Errorf("committed [%s] in worktree; integration needs attention: %w", commitCode, err)
 	}
 	return nil
 }
@@ -1567,13 +1584,16 @@ func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wt
 		return nil
 	}
 	result, err := s.postWorktreeMutation(ctx, cl, reqID, "/api/projects/current/git/merge", wtPath, "", "")
+	s.applyMergeWorktreeResponse(wtPath, result)
 	if err != nil {
 		return err
 	}
 	if result.State != "" && result.State != "merged" {
 		return fmt.Errorf("merge did not complete (state=%s)", result.State)
 	}
-	s.applyMergeWorktreeResponse(wtPath, result)
+	if len(result.Warnings) > 0 {
+		return fmt.Errorf("%s", strings.Join(result.Warnings, "; "))
+	}
 	return nil
 }
 
@@ -1586,13 +1606,18 @@ func (s *State) dispatchRejectChange(ctx context.Context, cl *Client, reqID stri
 		if err != nil {
 			return err
 		}
-		if result.State != "" && result.State != "discarded" {
-			return fmt.Errorf("discard did not complete (state=%s)", result.State)
+		if result.State != "discarded" || result.RemovedWorktree != wtPath {
+			return fmt.Errorf("worktree removal was not confirmed; refresh Worktrees before retrying discard")
 		}
 	}
 	if act.Seed != nil && len(act.Seed.FindingTargets) > 0 {
 		s.reopenRejectedTargets(ctx, cl, reqID, act.Seed.FindingTargets)
 	}
+	s.removeActiveSession(act.Target, "")
+	s.removeUnappliedHistoryByID(act.Target)
+	s.selectNextActiveChange()
+	s.SelectedIdx = s.ClampedIdx()
+	s.CmdOutput = "Task discarded. Its branch is retained in Git."
 	return nil
 }
 
@@ -1622,15 +1647,12 @@ func (s *State) reopenRejectedTargets(ctx context.Context, cl *Client, reqID str
 }
 
 func (s *State) postWorktreeMutation(ctx context.Context, cl *Client, reqID, endpoint, wtPath, fallbackHead, fallbackBranch string) (mergeWorktreeResponse, error) {
-	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
-	req := s.buildWorktreeMutationRequest(ctx, cl, reqID, wtPath, fallbackHead, fallbackBranch, false)
+	if err := s.ensureExecutionTrust(ctx, cl, reqID+"-trust"); err != nil {
+		return mergeWorktreeResponse{}, err
+	}
+	req := s.buildWorktreeMutationRequest(ctx, cl, reqID, wtPath, fallbackHead, fallbackBranch)
 	var result mergeWorktreeResponse
 	err := cl.DoJSON(ctx, reqID, http.MethodPost, endpoint, req, &result)
-	if err != nil && isRevisionConflictError(err) {
-		req = s.buildWorktreeMutationRequest(ctx, cl, reqID+"-retry", wtPath, fallbackHead, fallbackBranch, true)
-		_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust-retry")
-		err = cl.DoJSON(ctx, reqID+"-retry", http.MethodPost, endpoint, req, &result)
-	}
 	if err != nil {
 		return result, err
 	}
@@ -1640,10 +1662,10 @@ func (s *State) postWorktreeMutation(ctx context.Context, cl *Client, reqID, end
 	return result, nil
 }
 
-func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeResponse) {
+func (s *State) applyGitMutationSnapshot(result mergeWorktreeResponse) {
 	if result.Index != nil {
 		s.Index = result.Index
-		if result.Index.ProjectRevision != "" {
+		if result.Index.ProjectRevision != "" && s.Project != nil {
 			s.Project.ProjectRevision = result.Index.ProjectRevision
 		}
 	}
@@ -1656,21 +1678,31 @@ func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeRe
 			s.Project.ProjectRevision = result.Repository.ProjectRevision
 		}
 	}
-	s.removeWorktreeByPath(wtPath)
-	if chg := s.findActiveChangeByWorktree(wtPath); chg != nil && chg.Commit != nil && chg.Commit.State == "committed" {
+}
+
+func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeResponse) {
+	s.applyGitMutationSnapshot(result)
+	if result.RemovedWorktree == wtPath && wtPath != "" {
+		s.removeWorktreeByPath(wtPath)
+	}
+	if chg := s.findActiveChangeByWorktree(wtPath); result.State == "merged" && len(result.Warnings) == 0 && chg != nil && chg.Commit != nil && chg.Commit.State == "committed" {
 		commitCode := domain.ResolveCommitCode(chg.ID, chg.Hash, chg.FindingTargets, chg.Commit)
 		s.finalizeAppliedChange(chg, chg.Commit, commitCode)
 	}
 	if result.RemovedWorktree == "" && len(result.Warnings) > 0 {
 		s.CmdOutput = strings.Join(result.Warnings, "; ")
 	}
+	if result.State == "conflicts" {
+		s.Navigate(PageGit)
+		s.CmdOutput = "Resolve and commit with your Git tool, then [R] Update index, :trust, and [c] Clean up the integrated worktree."
+	}
 }
 
-func (s *State) buildWorktreeMutationRequest(ctx context.Context, cl *Client, reqID, wtPath, fallbackHead, fallbackBranch string, forceRefresh bool) map[string]any {
+func (s *State) buildWorktreeMutationRequest(ctx context.Context, cl *Client, reqID, wtPath, fallbackHead, fallbackBranch string) map[string]any {
 	head, branch, srcHead, srcBranch := s.resolveMergeWorktreeIdentities(wtPath)
 	srcHead = client.FirstNonEmpty(srcHead, fallbackHead)
 	srcBranch = client.FirstNonEmpty(srcBranch, fallbackBranch)
-	if forceRefresh || head == "" || branch == "" || srcHead == "" || srcBranch == "" {
+	if head == "" || branch == "" || srcHead == "" || srcBranch == "" {
 		s.refreshMergeWorkspaceState(ctx, cl, reqID)
 		h2, b2, sh2, sb2 := s.resolveMergeWorktreeIdentities(wtPath)
 		head = client.FirstNonEmpty(h2, head)

@@ -13,59 +13,23 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if s.AgentDetailOpen && s.Change != nil {
 		return s.renderAgentDebugPage(th, width)
 	}
-	panelW := adaptivePanelWidth(width)
+	lines := renderPageHeader(th, "TASKS", "[Enter] Stages · [d] Diff · [x] Cancel/Reject · [b] Issues")
 	items := s.AgentItems()
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · 4-STAGE AUTONOMOUS PIPELINE", "Guarded code generation & verification")
 	if len(items) == 0 {
-		guide := []string{
-			fmt.Sprintf("%sStatus:%s No active autonomous missions running.", th.bold+th.cyan, th.reset),
-			fmt.Sprintf("• %sIssue Remediation:%s Press %s[b]%s or open %sIssues%s and press %s[Enter/a]%s on a finding.", th.bold+th.fg, th.reset, th.cyan, th.reset, th.accent, th.reset, th.cyan, th.reset),
-			fmt.Sprintf("• %sFeature Delivery:%s  Select a proposal in %sFeatures%s or run %s:agent <goal>%s.", th.bold+th.fg, th.reset, th.accent, th.reset, th.purple, th.reset),
-		}
-		lines = append(lines, "")
-		return append(lines, th.renderPanelBox("AUTONOMOUS MISSION STANDBY", "IDLE", panelW, guide)...)
+		return append(lines, "  No active tasks.", "", "  Select an issue or feature to review a plan before generation.")
 	}
-	lines = append(lines, "")
 	selected := s.ClampedIdx()
-	titleCol := min(32, max(16, width-66))
-	headerCols := fmt.Sprintf("  %-10s  %-9s  %-*s  %-12s  %-10s  %s", "STAGE", "STATUS", titleCol, "MISSION TITLE", "SCOPE", "DELTA", "CHECKS")
-	lines = append(lines, th.renderTableHeader(headerCols, width)...)
-	start, end := windowBounds(len(items), selected, 5)
+	titleW := max(12, width-29)
+	lines = append(lines, th.renderTableHeader(fmt.Sprintf("  %-12s %-10s %s", "STATUS", "STAGE", "TASK"), width)...)
+	start, end := windowBounds(len(items), selected, s.adaptiveWindowRows(7, 12))
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
-		cursor := th.renderCursorPrefix(idx == selected)
-		stageCol := theme.PadVisibleRight(pipelineStageShortLabel(item.StageNumber), 10)
-		statusCol := formatPipelineAgentStatus(th, item.Status, 9)
-		titleCell := theme.PadVisibleRight(theme.TruncatePlain(item.Title, titleCol), titleCol)
-		tStyle := rowTitleStyle(th, idx == selected)
-		deltaCol := theme.PadVisibleRight(fmt.Sprintf("%s+%d%s/%s-%d%s", th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset), 10)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s  %s  %s%s%s  %s  %s  %schecks:%d/%d%s",
-			cursor, stageCol, statusCol, tStyle, titleCell, th.reset,
-			th.padBadge(item.ScopeBadge, 12),
-			deltaCol,
-			th.muted, item.ChecksPassed, item.ChecksTotal, th.reset,
-		))
+		lines = append(lines, fmt.Sprintf("  %s%-12s %-10s %s%s%s", th.renderCursorPrefix(idx == selected),
+			theme.TruncatePlain(pipelineAgentStatusLabel(item.Status), 12), pipelineStageShortLabel(item.StageNumber),
+			rowTitleStyle(th, idx == selected), theme.TruncatePlain(item.Title, titleW), th.reset))
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(items))
-	curItem := items[selected]
-	detail := []string{
-		fmt.Sprintf("%sMission:%s   %s%s%s", th.muted, th.reset, th.bold+th.fg, curItem.Title, th.reset),
-		fmt.Sprintf("%sScope:%s     %s%s%s   %sBranch:%s %s%s%s   %sStatus:%s %s   %sChecks:%s %d/%d",
-			th.muted, th.reset, th.cyan, client.FirstNonEmpty(curItem.Path, "workspace"), th.reset,
-			th.muted, th.reset, th.purple, curItem.Branch, th.reset,
-			th.muted, th.reset, th.statusBadge(curItem.Status),
-			th.muted, th.reset, curItem.ChecksPassed, curItem.ChecksTotal),
-	}
-	if errLines := s.renderAgentErrorDiagnosticsLines(th); len(errLines) > 0 {
-		detail = append(detail, errLines...)
-	} else {
-		detail = append(detail, s.renderAgentTelemetryLine(th, curItem, max(24, panelW-18)))
-	}
-	detail = append(detail, s.renderAgentNextStepLine(th, curItem))
-	lines = append(lines, "")
-	lines = append(lines, th.renderPanelBox("ACTIVE AGENT MISSION CONTROL", strings.ToUpper(curItem.Stage), panelW, detail)...)
-	return lines
+	return append(lines, "", s.renderAgentNextStepLine(th, items[selected]))
 }
 
 func pipelineStageShortLabel(stageNum int) string {
@@ -86,110 +50,14 @@ func pipelineStageShortLabel(stageNum int) string {
 func pipelineAgentStatusLabel(rawStatus string) string {
 	switch strings.ToLower(strings.TrimSpace(rawStatus)) {
 	case "running", "queued", "working", "in_progress", "canceling":
-		return "RUNNING"
+		return strings.ToUpper(rawStatus)
+	case "changes_requested":
+		return "NEEDS REVIEW"
+	case "":
+		return "UNKNOWN"
 	default:
-		return "Waiting"
+		return strings.ToUpper(rawStatus)
 	}
-}
-
-func formatPipelineAgentStatus(th ansiTheme, rawStatus string, width int) string {
-	label := pipelineAgentStatusLabel(rawStatus)
-	color := th.cyan
-	if label == "RUNNING" {
-		color = th.amber
-	}
-	return theme.PadVisibleRight(color+label+th.reset, width)
-}
-
-func (s *State) hasWorkflowErrorOrRejection() bool {
-	if strings.TrimSpace(s.Error) != "" {
-		return true
-	}
-	chg := s.Change
-	if chg == nil {
-		return false
-	}
-	if chg.State == "failed" || chg.Freshness == "stale" {
-		return true
-	}
-	if chg.Workflow != nil {
-		st := chg.Workflow.Status
-		if st == "failed" || st == "changes_requested" || st == "interrupted" || st == "stale" || strings.TrimSpace(chg.Workflow.Reason) != "" {
-			return true
-		}
-	}
-	for _, chk := range chg.Checks {
-		if !strings.EqualFold(chk.State, "passed") {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *State) renderAgentErrorDiagnosticsLines(th ansiTheme) []string {
-	if !s.hasWorkflowErrorOrRejection() {
-		return nil
-	}
-	var out []string
-	if strings.TrimSpace(s.Error) != "" {
-		out = append(out, fmt.Sprintf("%sError:%s     %s▲ %s%s", th.muted, th.reset, th.bold+th.red, strings.TrimSpace(s.Error), th.reset))
-	}
-	chg := s.Change
-	if chg == nil {
-		return out
-	}
-	out = append(out, s.collectWorkflowStageErrorLines(th, chg)...)
-	out = append(out, s.collectFailedCheckSummaryLines(th, chg, 2)...)
-	if chg.Workflow != nil && chg.Workflow.Review != nil && chg.Workflow.Review.Verdict == "changes_requested" {
-		out = append(out, fmt.Sprintf("%sCritic:%s    %s  %s%s%s",
-			th.muted, th.reset, th.statusBadge(chg.Workflow.Review.Verdict), th.fg, chg.Workflow.Review.Summary, th.reset))
-		for _, f := range chg.Workflow.Review.Findings {
-			out = append(out, fmt.Sprintf("  %s•%s %s", th.amber, th.reset, f))
-		}
-	}
-	if chg.Workflow != nil && strings.TrimSpace(chg.Workflow.ProbeSummary) != "" {
-		out = append(out, fmt.Sprintf("%sProbe:%s     %s%s%s", th.muted, th.reset, th.cyan, strings.TrimSpace(chg.Workflow.ProbeSummary), th.reset))
-	}
-	return out
-}
-
-func (s *State) collectWorkflowStageErrorLines(th ansiTheme, chg *ChangeSession) []string {
-	if chg.Workflow == nil {
-		return nil
-	}
-	var out []string
-	hasStageReason := false
-	for idx, st := range chg.Workflow.Stages {
-		if st.Status != "failed" && st.Status != "interrupted" && st.Status != "stale" && strings.TrimSpace(st.Reason) == "" {
-			continue
-		}
-		stageLine := fmt.Sprintf("%sStage:%s     %s%d. %s%s %s",
-			th.muted, th.reset, th.bold+th.fg, idx+1, domain.CanonicalStageLabel(idx, st.Name), th.reset,
-			th.statusBadge(st.Status))
-		out = append(out, stageLine)
-		if strings.TrimSpace(st.Reason) != "" {
-			hasStageReason = true
-			out = append(out, fmt.Sprintf("  %s└─ Error:%s %s%s%s", th.red, th.reset, th.amber, strings.TrimSpace(st.Reason), th.reset))
-		}
-	}
-	if !hasStageReason && strings.TrimSpace(chg.Workflow.Reason) != "" {
-		out = append(out, fmt.Sprintf("%sReason:%s    %s%s%s", th.muted, th.reset, th.amber, theme.TruncatePlain(strings.TrimSpace(chg.Workflow.Reason), 74), th.reset))
-	}
-	return out
-}
-
-func (s *State) collectFailedCheckSummaryLines(th ansiTheme, chg *ChangeSession, maxLines int) []string {
-	var out []string
-	for _, chk := range chg.Checks {
-		if strings.EqualFold(chk.State, "passed") {
-			continue
-		}
-		cmdStr := strings.Join(chk.Command, " ")
-		out = append(out, fmt.Sprintf("%sCheck:%s     %s  %s%s%s (exit %d)  %s%s%s",
-			th.muted, th.reset, th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, chk.ExitCode, th.muted, cmdStr, th.reset))
-		out = append(out, formatCheckOutputLines(th, chk.Output, maxLines)...)
-	}
-	return out
 }
 
 func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string {
@@ -238,82 +106,44 @@ func (s *State) effectiveAgentDetailStage() int {
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[↑/↓] Select Stage · [i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff · [x] Reject")
+	lines := renderPageHeader(th, "TASK · STAGES", "[↑/↓] Stage · [d] Diff · [r] Retry · [x] Cancel/reject · [Esc] Back")
 	activeStage := s.activeAgentStageNumber()
 	selectedStage := s.effectiveAgentDetailStage()
-	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg), workflowTimingSummary(chg), ":retry test or :retry review reuses earlier results when still current."}
-	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
-		pipelineLines = append(pipelineLines, stageSummary)
+	for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
+		lines = append(lines, "  "+row)
 	}
-	lines = append(lines, th.renderPanelBox("GUARDED EXECUTION PIPELINE", "4-STAGE WORKFLOW", panelW, pipelineLines)...)
-	lines = append(lines, "")
-	wfStatus := chg.State
-	wfReason := ""
-	repairs := chg.RepairAttempts
-	if chg.Workflow != nil {
-		wfStatus = client.FirstNonEmpty(chg.Workflow.Status, wfStatus)
-		wfReason = chg.Workflow.Reason
-		if chg.Workflow.AutoRepairAttempts > repairs {
-			repairs = chg.Workflow.AutoRepairAttempts
-		}
-	}
-	stageBox := []string{
-		fmt.Sprintf("%sSession:%s %s%s%s (%s) · %sStatus:%s %s · %sFreshness:%s %s · %sRepairs:%s %d",
-			th.muted, th.reset, th.bold+th.fg, chg.Title, th.reset, chg.ID,
-			th.muted, th.reset, th.statusBadge(wfStatus),
-			th.muted, th.reset, client.FirstNonEmpty(chg.Freshness, "current"),
-			th.muted, th.reset, repairs),
-	}
-	if strings.TrimSpace(s.Error) != "" {
-		stageBox = append(stageBox, fmt.Sprintf("%sError:%s   %s▲ %s%s", th.muted, th.reset, th.bold+th.red, strings.TrimSpace(s.Error), th.reset))
-	}
-	if strings.TrimSpace(wfReason) != "" {
-		stageBox = append(stageBox, fmt.Sprintf("%sReason:%s  %s%s%s", th.muted, th.reset, th.amber, wfReason, th.reset))
-	}
-	stageBox = append(stageBox, renderAgentDebugStageLines(th, chg, activeStage, selectedStage, wfReason)...)
-	if chg.Workflow != nil && strings.TrimSpace(chg.Workflow.ProbeSummary) != "" {
-		stageBox = append(stageBox, fmt.Sprintf("%sProbe:%s   %s%s%s", th.muted, th.reset, th.cyan, strings.TrimSpace(chg.Workflow.ProbeSummary), th.reset))
-	}
-	lines = append(lines, th.renderPanelBox("4-STAGE WORKFLOW & ASSIGNED MODELS", strings.ToUpper(wfStatus), panelW, stageBox)...)
-	lines = append(lines, "")
+	lines = append(lines, renderPipelineStepper(th, activeStage, chg))
+	lines = append(lines, "  "+workflowTimingSummary(chg), "")
+	lines = append(lines, fmt.Sprintf("  Selected: %d/4 · %s", selectedStage, resolvePipelineStageStatus(activeStage, chg, selectedStage)))
+	lines = append(lines, selectedStageMetadata(th, chg, selectedStage, width)...)
 	lines = append(lines, s.renderSelectedAgentStageDetailPanel(th, panelW, chg, activeStage, selectedStage)...)
 	return lines
 }
 
-func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, activeStage, selectedStage int, wfReason string) []string {
-	var out []string
-	for idx := 0; idx < 4; idx++ {
-		stageNum := idx + 1
-		isSelected := stageNum == selectedStage
-		cursor := th.renderCursorPrefix(isSelected)
-		tStyle := rowTitleStyle(th, isSelected)
-		stageName := domain.CanonicalStageLabel(idx, "")
-		stStatus := resolvePipelineStageStatus(activeStage, chg, stageNum)
-		modelName := "default"
-		stErr := ""
-		if chg != nil && chg.Workflow != nil && idx < len(chg.Workflow.Stages) {
-			st := chg.Workflow.Stages[idx]
-			stageName = domain.CanonicalStageLabel(idx, st.Name)
-			if strings.TrimSpace(st.Status) != "" {
-				stStatus = st.Status
-			}
-			if st.Model != nil && st.Model.Model != "" {
-				modelName = st.Model.Model
-			}
-			stErr = strings.TrimSpace(st.Reason)
-			modelName += " · " + workflowElapsed(st.StartedAt, st.FinishedAt)
+func selectedStageMetadata(th ansiTheme, chg *ChangeSession, stage int, width int) []string {
+	if chg.Workflow == nil {
+		return nil
+	}
+	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
+	var rows []string
+	if stage <= len(chg.Workflow.Stages) {
+		entry := chg.Workflow.Stages[stage-1]
+		model := "Not recorded"
+		if entry.Model != nil {
+			model = entry.Model.Model
 		}
-		out = append(out, fmt.Sprintf("  %s%s%d. %-18s%s  %s  %smodel:%s%s",
-			cursor, tStyle, stageNum, stageName, th.reset,
-			th.padBadge(stStatus, 14), th.cyan, modelName, th.reset))
-		if stErr == "" && (stStatus == "failed" || stStatus == "interrupted") && strings.TrimSpace(wfReason) != "" {
-			stErr = strings.TrimSpace(wfReason)
-		}
-		if stErr != "" {
-			out = append(out, fmt.Sprintf("      %s└─ Error:%s %s%s%s", th.red, th.reset, th.amber, stErr, th.reset))
+		rows = renderDiagnosticRow(th, th.cyan, "Model:", th.fg, model+" · "+workflowElapsed(entry.StartedAt, entry.FinishedAt), contentW)
+		if entry.Reason != "" {
+			rows = append(rows, renderDiagnosticRow(th, th.amber, "Stage reason:", th.fg, entry.Reason, contentW)...)
 		}
 	}
-	return out
+	if chg.Workflow.Reason != "" {
+		rows = append(rows, renderDiagnosticRow(th, th.amber, "Workflow:", th.fg, chg.Workflow.Reason, contentW)...)
+	}
+	if chg.Workflow.ProbeSummary != "" {
+		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Probe:", th.fg, chg.Workflow.ProbeSummary, contentW)...)
+	}
+	return rows
 }
 
 func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, chg *ChangeSession, activeStage, selectedStage int) []string {
@@ -416,26 +246,6 @@ func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	return out
 }
 
-func (s *State) renderWorkflowStagesLine(th ansiTheme) string {
-	if s.Change == nil || s.Change.Workflow == nil || len(s.Change.Workflow.Stages) == 0 {
-		return ""
-	}
-	shortNames := []string{"1.Code", "2.Test", "3.Critic", "4.Review"}
-	var parts []string
-	for idx, st := range s.Change.Workflow.Stages {
-		if idx >= len(shortNames) {
-			break
-		}
-		label := shortNames[idx]
-		stStatus := normalizePipelineStageBadge(idx+1, st.Status, s.Change)
-		parts = append(parts, fmt.Sprintf("%s%s%s %s", th.muted, label, th.reset, th.statusBadge(stStatus)))
-	}
-	if s.Change.Workflow.AutoRepairAttempts > 0 {
-		parts = append(parts, fmt.Sprintf("%srepair:#%d%s", th.amber, s.Change.Workflow.AutoRepairAttempts, th.reset))
-	}
-	return strings.Join(parts, "  ")
-}
-
 func normalizePipelineStageBadge(stageNum int, rawStatus string, chg *ChangeSession) string {
 	st := strings.ToLower(strings.TrimSpace(rawStatus))
 	if stageNum == 4 && (st == "waiting" || st == "awaiting_human_review") {
@@ -449,53 +259,19 @@ func normalizePipelineStageBadge(stageNum int, rawStatus string, chg *ChangeSess
 	return strings.ToUpper(st)
 }
 
-func (s *State) renderAgentTelemetryLine(th ansiTheme, item AgentItem, _ int) string {
-	if s.Change != nil {
-		if s.Change.Workflow != nil && s.Change.Workflow.Review != nil {
-			rev := s.Change.Workflow.Review
-			return fmt.Sprintf("%sCritic:%s    %s  %s%s%s",
-				th.muted, th.reset, th.statusBadge(rev.Verdict),
-				th.fg, rev.Summary, th.reset)
-		}
-		for _, chk := range s.Change.Checks {
-			if strings.EqualFold(chk.State, "failed") && strings.TrimSpace(chk.Output) != "" {
-				return fmt.Sprintf("%sFailure:%s   %s▲ %s:%s %s",
-					th.muted, th.reset, th.bold+th.red, chk.Name, th.reset,
-					strings.TrimSpace(chk.Output))
-			}
-		}
-		if s.Change.Workflow != nil && strings.TrimSpace(s.Change.Workflow.Reason) != "" {
-			return fmt.Sprintf("%sReason:%s    %s%s%s",
-				th.muted, th.reset, th.amber, s.Change.Workflow.Reason, th.reset)
-		}
-	}
-	return fmt.Sprintf("%sProgress:%s  Stage %d/4 (%s) · Delta: %s+%d%s/%s-%d%s (%s)",
-		th.muted, th.reset, item.StageNumber, item.Stage,
-		th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset, item.ScopeBadge)
-}
-
 func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
-	st := strings.ToLower(strings.TrimSpace(item.Status))
-	switch {
-	case st == "stale":
-		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[x]%s Reject · %s[b]%s Issues",
-			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-	case st == "applied":
-		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[i/Enter]%s Agent Detail · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
-			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-	case st == "running" || st == "queued" || st == "canceling":
-		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh · %s[x]%s Cancel",
-			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[i/Enter]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff · %s[x]%s Reject",
-			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit · %s[x]%s Reject",
-			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-	default:
-		return fmt.Sprintf("%sNext Step:%s %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply · %s[x]%s Reject",
-			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+	next := "[Enter] Inspect task · [d] Review diff"
+	switch strings.ToLower(item.Status) {
+	case "stale":
+		next = "Source changed · [r] Review a fresh plan"
+	case "running", "queued", "canceling":
+		next = "[Enter] Inspect progress · [x] Cancel"
+	case "failed", "changes_requested", "interrupted":
+		next = "[Enter] Inspect failure · :retry test or :retry review"
+	case "ready", "checked", "reviewed":
+		next = "[d] Review changed files before Apply"
 	}
+	return "  " + th.cyan + next + th.reset
 }
 
 func renderPipelineStepper(th ansiTheme, activeStage int, chg *ChangeSession) string {
@@ -646,25 +422,17 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 }
 
 func (s *State) renderGitPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[3] CODE & DIFF · GIT & WORKTREES", "Isolated worktrees & branch status")
+	lines := renderPageHeader(th, "WORKTREES", s.worktreeRecoveryHint())
 	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
-		return append(lines, fmt.Sprintf("  %sNo Git worktrees reported.%s", th.muted, th.reset))
+		return append(lines, "  No Git worktrees reported.")
 	}
-	lines = append(lines, th.renderTableHeader("    ROLE          BRANCH                     WORKTREE PATH", width)...)
+	lines = append(lines, th.renderTableHeader("    STATUS        BRANCH", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(12, 12))
+	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(5, 14))
 	for idx := start; idx < end; idx++ {
 		wt := s.GitWorkspace.Worktrees[idx]
-		cursor := th.renderCursorPrefix(idx == selected)
-		role := "WORKTREE"
-		if wt.Current {
-			role = "CURRENT"
-		} else if wt.Mergeable {
-			role = "MERGEABLE"
-		}
-		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%s  %sbranch:%-18s%s  %spath:%s%s",
-			cursor, th.padBadge(role, 12), tStyle, wt.Branch, th.reset, th.muted, wt.Path, th.reset))
+		lines = append(lines, fmt.Sprintf("  %s%-13s %s%s%s", th.renderCursorPrefix(idx == selected), worktreeStatus(wt),
+			rowTitleStyle(th, idx == selected), theme.TruncatePlain(wt.Branch, max(10, width-20)), th.reset))
 	}
 	return appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
 }

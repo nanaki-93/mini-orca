@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
@@ -73,6 +72,16 @@ func (s *State) submitTaskPlan(generate bool) {
 		s.Error = err.Error()
 		return
 	}
+	savedID := ""
+	if d.Saved != nil {
+		savedID = d.Saved.ID
+	}
+	if generate {
+		if reason := s.overlappingTask(d.Seed.Paths, savedID); reason != "" {
+			s.Error = reason
+			return
+		}
+	}
 	seed := d.Seed
 	seed.Message = seed.Plan.Problem + "\nApproved approach: " + seed.Plan.Approach
 	previewID := s.startLocalAgentPreview(&seed)
@@ -107,6 +116,14 @@ func validatePlanDraft(d *PlanDraft) error {
 
 func (s *State) execPlanCommand(cmd, arg string) bool {
 	switch cmd {
+	case "replan":
+		if s.PlanDraft != nil && !s.PlanDraft.Submitted {
+			seed := s.PlanDraft.Seed
+			seed.WorktreePath = ""
+			s.openTaskPlan(&seed)
+			s.CmdOutput = "New plan based on the current project. Review the evidence, scope and approach before approval. Previous worktree retained in Worktrees."
+		}
+		return true
 	case "plan":
 		if s.PlanDraft != nil {
 			s.Navigate(PagePlan)
@@ -186,10 +203,13 @@ func (s *State) handlePlanKey(ev KeyEvent) {
 	case "s":
 		s.submitTaskPlan(false)
 	case "e":
+		s.DetailSection, s.DetailScroll = 0, 0
 		s.beginPlanEdit("approach", s.PlanDraft.Seed.Plan.Approach)
 	case "f":
+		s.DetailSection, s.DetailScroll = 2, 0
 		s.beginPlanEdit("scope", strings.Join(s.PlanDraft.Seed.Paths, "; "))
 	case "t":
+		s.DetailSection, s.DetailScroll = 3, 0
 		s.beginPlanEdit("criteria", strings.Join(s.PlanDraft.Seed.AcceptanceCriteria, "; "))
 	case "j", "ArrowDown":
 		s.DetailScroll++
@@ -210,29 +230,12 @@ func (s *State) beginPlanEdit(field, value string) {
 }
 
 func (s *State) renderPlanPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "TASK PLAN · REVIEW BEFORE GENERATION", "[e] Approach · [f] Files · [t] Criteria · [s] Save · [g] Approve & generate")
+	lines := renderPageHeader(th, "TASK PLAN", "[s] Save draft · [g] Approve & generate · [Esc] Back")
 	if s.PlanDraft == nil {
 		return append(lines, "  Select an issue or feature, or use :agent <request> to prepare a plan.")
 	}
-	d := s.PlanDraft
-	p := d.Seed.Plan
-	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
-	rows := renderDiagnosticRow(th, th.bold+th.cyan, "Task:", th.fg, d.Seed.Title, contentW)
-	rows = append(rows, renderDiagnosticRow(th, th.bold+th.amber, "Problem / goal:", th.fg, p.Problem, contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.bold+th.cyan, "Evidence:", th.fg, client.FirstNonEmpty(p.Evidence, "No reproduction evidence recorded; inspect the source and verify the hypothesis."), contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.bold+th.green, "Approach:", th.fg, p.Approach, contentW)...)
-	rows = append(rows, renderDiagnosticBulletRows(th, th.cyan, "Write scope:", th.cyan, th.fg, d.Seed.Paths, contentW)...)
-	rows = append(rows, renderDiagnosticBulletRows(th, th.cyan, "Read context:", th.cyan, th.fg, p.ReadPaths, contentW)...)
-	rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Acceptance:", th.purple, th.fg, d.Seed.AcceptanceCriteria, contentW)...)
-	rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Non-goals:", th.purple, th.fg, p.NonGoals, contentW)...)
-	repairs := "Off — inspect failures before retrying"
-	if d.Seed.AutoRepair {
-		repairs = "On — up to 2 repairs within the approved scope"
-	}
-	rows = append(rows, renderDiagnosticRow(th, th.amber, "Auto repair:", th.fg, repairs, contentW)...)
-	if s.Change != nil && len(s.Change.ScopeSuggestions) > 0 {
-		rows = append(rows, renderDiagnosticBulletRows(th, th.amber, "Suggested scope (review and add explicitly):", th.amber, th.fg, s.Change.ScopeSuggestions, contentW)...)
-	}
-	rows = append(rows, "Related sibling/import declarations and applicable AGENTS.md guides may also be read under the project context policy.", "Edit: :problem · :approach · :scope · :context · :criteria · :boundaries · :repairs on|off", "Separate paths, criteria and boundaries with semicolons. [PgUp/PgDn] Scroll")
-	return append(lines, th.renderPanelBox("EDITABLE PLAN", "NO CODE GENERATED", adaptivePanelWidth(width), rows)...)
+	lines = append(lines, s.renderDetailSections(th)...)
+	rows := renderDiagnosticRow(th, th.cyan, "Task:", th.fg, s.PlanDraft.Seed.Title, issuePanelContentWidth(adaptivePanelWidth(width)))
+	rows = append(rows, s.renderPlanSection(th, width)...)
+	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], "REVIEW BEFORE GENERATION", adaptivePanelWidth(width), rows)...)
 }

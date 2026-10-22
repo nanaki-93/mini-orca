@@ -125,7 +125,6 @@ func (s *State) archiveAndCompleteChange(chg *ChangeSession) {
 			s.ChangeHistory = append([]ChangeHistoryEntry{entry}, s.ChangeHistory...)
 		}
 		s.removeActiveChangeByID(chg.ID)
-		s.removeWorktreeByPath(chg.WorktreePath)
 	}
 	s.selectNextActiveChange()
 }
