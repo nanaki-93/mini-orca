@@ -70,7 +70,7 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 			footer = append(footer, fmt.Sprintf("%sCommit:%s    %s%s%s",
 				th.muted, th.reset, th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), th.reset))
 		}
-		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Row · %s[i]%s Inspect · %s[s]%s Status · %s[d]%s Dismiss",
+		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Row · %s[i]%s Inspect · %s[s]%s Status · %s[d]%s Delete",
 			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset))
 		lines = append(lines, "")
 		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
@@ -337,19 +337,19 @@ func formatIndexedFileSummary(f IndexedFile) string {
 func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, contentW int) []string {
 	switch cur.Status {
 	case "in_progress":
-		val := fmt.Sprintf("In Progress (%s) · %s[Enter/w]%s Watch Pipeline · %s[i/Esc]%s Back",
-			client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset)
+		val := fmt.Sprintf("In Progress (%s) · %s[Enter/w]%s Watch Pipeline · %s[d]%s Delete · %s[i/Esc]%s Back",
+			client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 		return renderDiagnosticRow(th, th.bold+th.amber, "⟳ Agent Status:", th.fg, val, contentW)
 	case "done":
 		commitRef := ""
 		if cur.CommitCode != "" || cur.CommitOID != "" {
 			commitRef = " [" + formatIssueCommitLink(cur.CommitCode, cur.CommitOID) + "]"
 		}
-		val := fmt.Sprintf("Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[i/Esc]%s Back",
-			commitRef, th.cyan, th.reset, th.cyan, th.reset)
+		val := fmt.Sprintf("Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[d]%s Delete · %s[i/Esc]%s Back",
+			commitRef, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 		return renderDiagnosticRow(th, th.bold+th.green, "✔ Resolution:", th.fg, val, contentW)
 	default:
-		val := fmt.Sprintf("%s[Enter/f]%s Fix · %s[d]%s Dismiss · %s[o]%s Open File · %s[i/Esc]%s Back",
+		val := fmt.Sprintf("%s[Enter/f]%s Fix · %s[d]%s Delete · %s[o]%s Open File · %s[i/Esc]%s Back",
 			th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 		return renderDiagnosticRow(th, th.bold+th.cyan, "▸ Next Action:", th.fg, val, contentW)
 	}

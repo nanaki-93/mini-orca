@@ -90,6 +90,7 @@ type analysisSectionReader struct {
 	fileCache   *project.FileAnalysisCache
 	captured    map[string]AnalysisRunFile
 	statuses    map[string]string
+	dismissed   map[project.FindingTarget]bool
 	result      *AnalysisSectionResults
 	hasEvidence bool
 }
@@ -118,11 +119,11 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	if err != nil {
 		return nil, err
 	}
-	statuses, err := loadAnalysisTriage(root, identity, hashes)
+	statuses, dismissed, err := loadAnalysisTriage(root, identity, hashes)
 	if err != nil {
 		return nil, err
 	}
-	return &analysisSectionReader{service: s, root: root, run: run, analysis: analysis, index: index, policy: policy, fileCache: fileCache, captured: captured, statuses: statuses, result: result}, nil
+	return &analysisSectionReader{service: s, root: root, run: run, analysis: analysis, index: index, policy: policy, fileCache: fileCache, captured: captured, statuses: statuses, dismissed: dismissed, result: result}, nil
 }
 
 func captureAnalysisSectionFiles(run *AnalysisRun, index *project.ProjectIndex, path string, result *AnalysisSectionResults) (map[string]AnalysisRunFile, map[string]string, error) {
@@ -157,14 +158,14 @@ func captureAnalysisSectionFiles(run *AnalysisRun, index *project.ProjectIndex, 
 	return captured, hashes, nil
 }
 
-func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[string]string) (map[string]string, error) {
+func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[string]string) (map[string]string, map[project.FindingTarget]bool, error) {
 	store, err := project.NewFindingStore(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	triage, err := store.Load(project.FindingInput{ProjectID: identity.ProjectID, ProjectRevision: identity.ProjectRevision, FileHashes: hashes})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	statuses := map[string]string{}
 	for _, finding := range triage {
@@ -174,14 +175,25 @@ func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[st
 	}
 	completed, err := store.Completions(identity.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, completion := range completed {
 		if completion.Kind == "semantic" {
 			statuses[completion.ID] = project.FindingStatusFixed
 		}
 	}
-	return statuses, nil
+	dismissedList, err := store.Dismissed(identity.ProjectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	dismissed := make(map[project.FindingTarget]bool, len(dismissedList))
+	for _, target := range dismissedList {
+		dismissed[target] = true
+		if target.Kind == "semantic" {
+			statuses[target.ID] = project.FindingStatusDismissed
+		}
+	}
+	return statuses, dismissed, nil
 }
 
 func (reader *analysisSectionReader) read(ctx context.Context, path string) error {
@@ -336,6 +348,15 @@ func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error
 	}
 	if report.ProjectID == reader.run.Identity.ProjectID {
 		hasEvidence := report.Status == "completed" || report.Status == "completed_empty" || report.Status == "partial" || len(report.Findings) > 0
+		if len(reader.dismissed) > 0 && len(report.Findings) > 0 {
+			retained := report.Findings[:0]
+			for _, f := range report.Findings {
+				if !reader.dismissed[project.FindingTarget{ProjectID: report.ProjectID, Kind: "performance", ID: f.ID, Path: report.Path}] {
+					retained = append(retained, f)
+				}
+			}
+			report.Findings = retained
+		}
 		if hasEvidence && !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models)) {
 			report.Status = "stale"
 		}
@@ -362,10 +383,26 @@ func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, fil
 			continue
 		}
 		if report.ProjectID == reader.run.Identity.ProjectID {
+			if len(reader.dismissed) > 0 {
+				applyDismissedSecurityTriage(report, reader.dismissed)
+			}
 			hasEvidence := securityStageCacheUsable(report) || len(report.Findings) > 0
 			reader.result.Security = append(reader.result.Security, *report)
 			reader.hasEvidence = reader.hasEvidence || hasEvidence
 		}
 	}
 	return nil
+}
+
+func applyDismissedSecurityTriage(report *project.SecurityFileReport, dismissed map[project.FindingTarget]bool) {
+	for i := range report.Findings {
+		path := report.Findings[i].Anchor.Path
+		if path == "" {
+			path = report.Path
+		}
+		target := project.FindingTarget{ProjectID: report.ProjectID, Kind: "security", ID: report.Findings[i].ID, Path: path, Source: report.Source}
+		if dismissed[target] {
+			report.Findings[i].Triage = project.SecurityTriageDismissed
+		}
+	}
 }

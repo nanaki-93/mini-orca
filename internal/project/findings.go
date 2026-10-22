@@ -81,6 +81,7 @@ type findingDocument struct {
 	SchemaVersion string              `json:"schema_version"`
 	Findings      []UnifiedFinding    `json:"findings"`
 	Completed     []FindingCompletion `json:"completed,omitempty"`
+	Dismissed     []FindingTarget     `json:"dismissed,omitempty"`
 }
 
 // Store instances for the same checkout share read-modify-write ownership.
@@ -243,7 +244,7 @@ func (s *FindingStore) ClearExcept(keep []FindingTarget) error {
 			retained = append(retained, finding)
 		}
 	}
-	if len(retained) == 0 && len(document.Completed) == 0 {
+	if len(retained) == 0 && len(document.Completed) == 0 && len(document.Dismissed) == 0 {
 		return s.clearLocked()
 	}
 	document.Findings = retained

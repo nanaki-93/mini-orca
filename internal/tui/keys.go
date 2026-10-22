@@ -155,7 +155,7 @@ func (s *State) handleIssueDetailActionKey(key string) {
 		s.activateIssueRow()
 	case "f", "a":
 		s.dispatchSingleSelectedIssue()
-	case "d":
+	case "d", "D", "Delete":
 		s.dismissSelectedIssue()
 	case "o":
 		if issue := s.SelectedIssue(); issue != nil && issue.Path != "" {
@@ -486,7 +486,7 @@ func (s *State) handleIssueListKey(key string) bool {
 	case "x", " ":
 		s.toggleSelectedIssue()
 		return true
-	case "d":
+	case "d", "D", "Delete", "Backspace":
 		s.dismissSelectedIssue()
 		return true
 	}
@@ -619,6 +619,11 @@ func (s *State) handleGitOrHistoryKey(key string) bool {
 			s.mergeSelectedWorktree()
 			return true
 		}
+	case "x", "X", "Delete":
+		if s.Page == PageGit {
+			s.discardSelectedWorktree()
+			return true
+		}
 	case "a", "c":
 		s.applyAndCommitProposal("")
 		return true
@@ -657,7 +662,10 @@ func (s *State) handleAgentsKey(key string) bool {
 		s.triggerAgentRecheckOrRepair()
 		return true
 	case "x":
-		s.cancelActiveWorkflow()
+		s.cancelOrRejectActiveWorkflow()
+		return true
+	case "X", "Delete":
+		s.rejectSelectedAgentFix()
 		return true
 	}
 	return false

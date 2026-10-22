@@ -56,11 +56,23 @@ func (s *State) toggleSelectedIssue() {
 
 func (s *State) dismissSelectedIssue() {
 	issue := s.SelectedIssue()
-	if issue == nil || issue.Status == "done" {
+	if issue == nil {
+		s.CmdOutput = "No issue selected to delete."
 		return
 	}
-	s.CmdOutput = fmt.Sprintf("Dismissed finding: %s", issue.Name)
+	for idx, id := range s.SelectedIssueIDs {
+		if id == issue.ID {
+			s.SelectedIssueIDs = append(s.SelectedIssueIDs[:idx], s.SelectedIssueIDs[idx+1:]...)
+			break
+		}
+	}
 	target := issue.Target
+	s.markFindingDismissed(target)
+	s.SelectedIdx = s.ClampedIdx()
+	if s.Page == PageIssueDetail && len(s.FilteredIssues()) == 0 {
+		s.Navigate(PageBugs)
+	}
+	s.CmdOutput = fmt.Sprintf("Deleted issue: %s", issue.Name)
 	s.enqueueAction(ActionRequest{Kind: "dismiss-finding", Target: issue.ID, Issue: &target})
 }
 
@@ -613,12 +625,101 @@ func (s *State) triggerOrResumeAnalysis() {
 }
 
 func (s *State) cancelActiveWorkflow() {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
 	if s.Change == nil || !s.hasRunningWorkflow() {
 		s.CmdOutput = "No running agent workflow to cancel."
 		return
 	}
 	s.CmdOutput = fmt.Sprintf("Canceling active workflow for %s...", s.Change.Title)
 	s.enqueueAction(ActionRequest{Kind: "cancel-workflow", Target: s.Change.ID})
+}
+
+func (s *State) cancelOrRejectActiveWorkflow() {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
+	if s.hasRunningWorkflow() {
+		s.cancelActiveWorkflow()
+		return
+	}
+	s.rejectSelectedAgentFix()
+}
+
+func (s *State) rejectSelectedAgentFix() {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+	}
+	if s.Change == nil {
+		s.CmdOutput = "No active agent proposal to reject."
+		return
+	}
+	if s.Change.State == "applied" {
+		s.CmdOutput = fmt.Sprintf("Proposal %q is already applied and committed (press [u] for Undo).", s.Change.Title)
+		return
+	}
+	chg := *s.Change
+	wtPath := chg.WorktreePath
+	targets := s.collectRejectedFindingTargets(&chg)
+	_, _, srcHead, srcBranch := s.resolveMergeWorktreeIdentities(wtPath)
+	wfID := ""
+	if s.hasRunningWorkflow() && chg.Workflow != nil {
+		wfID = chg.Workflow.ID
+	}
+	s.removeActiveSession(chg.ID, wtPath)
+	s.removeUnappliedHistoryByID(chg.ID)
+	s.removeWorktreeByPath(wtPath)
+	s.reopenFindingTargets(targets)
+	s.selectNextActiveChange()
+	if s.Change == nil {
+		s.AgentDetailOpen = false
+		s.AgentStage = 0
+	}
+	s.SelectedIdx = s.ClampedIdx()
+	if s.Page == PageAgents {
+		s.syncSelectedIdxToCurrentChange()
+	}
+	s.CmdOutput = fmt.Sprintf("Rejected fix for %q — deleted worktree and restored issue to OPEN", chg.Title)
+	s.enqueueAction(ActionRequest{
+		Kind:      "reject-change",
+		Target:    chg.ID,
+		PreviewID: wfID,
+		Seed: &ChangeSeed{
+			Title:          chg.Title,
+			WorktreePath:   wtPath,
+			FindingTargets: targets,
+			Kind:           srcBranch,
+			Message:        srcHead,
+		},
+	})
+}
+
+func (s *State) discardSelectedWorktree() {
+	if s.GitWorkspace == nil {
+		return
+	}
+	idx := s.ClampedIdx()
+	if idx < 0 || idx >= len(s.GitWorkspace.Worktrees) {
+		return
+	}
+	wt := s.GitWorkspace.Worktrees[idx]
+	if wt.Current || wt.Path == "" {
+		return
+	}
+	if chg := s.findActiveChangeByWorktree(wt.Path); chg != nil {
+		cp := *chg
+		s.Change = &cp
+		s.rejectSelectedAgentFix()
+		return
+	}
+	s.removeWorktreeByPath(wt.Path)
+	s.SelectedIdx = s.ClampedIdx()
+	s.CmdOutput = fmt.Sprintf("Discarded worktree %s", wt.Path)
+	s.enqueueAction(ActionRequest{
+		Kind: "reject-change",
+		Seed: &ChangeSeed{WorktreePath: wt.Path, Kind: wt.Branch, Message: wt.Head},
+	})
 }
 
 func (s *State) stepAnalysisConfigByIndex(cfgIdx int, forward bool) {
@@ -1078,22 +1179,18 @@ func (s *State) deletePresetByArg(arg string) {
 
 func (s *State) execMutationCommand(cmd, arg string) bool {
 	switch cmd {
-	case "dismiss":
-		s.dismissSelectedIssue()
+	case "dismiss", "delete", "del", "rm":
+		if s.Page == PageAgents {
+			s.rejectSelectedAgentFix()
+		} else {
+			s.dismissSelectedIssue()
+		}
 		return true
 	case "fix":
 		s.dispatchSelectedIssues()
 		return true
 	case "agent", "agents":
-		s.Navigate(PageAgents)
-		if arg != "" {
-			seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}
-			previewID := s.startLocalAgentPreview(seed)
-			s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, PreviewID: previewID, Seed: seed})
-			s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)
-		} else {
-			s.CmdOutput = "Switched to [2] Agent Studio."
-		}
+		s.execAgentMissionCommand(arg)
 		return true
 	case "accept", "apply", "commit":
 		s.applyAndCommitProposal(arg)
@@ -1108,6 +1205,9 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 	case "cancel":
 		s.cancelActiveWorkflow()
 		return true
+	case "reject", "discard":
+		s.rejectSelectedAgentFix()
+		return true
 	case "merge":
 		s.mergeSelectedWorktree()
 		return true
@@ -1116,4 +1216,16 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *State) execAgentMissionCommand(arg string) {
+	s.Navigate(PageAgents)
+	if arg == "" {
+		s.CmdOutput = "Switched to [2] Agent Studio."
+		return
+	}
+	seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}
+	previewID := s.startLocalAgentPreview(seed)
+	s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, PreviewID: previewID, Seed: seed})
+	s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)
 }

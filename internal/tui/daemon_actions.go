@@ -388,6 +388,8 @@ func (s *State) dispatchSecondaryMutation(ctx context.Context, cl *Client, reqID
 		return s.dispatchBootstrap(ctx, cl, reqID, act.Target)
 	case "cancel-workflow":
 		return s.dispatchCancelWorkflow(ctx, cl, reqID, act.Target)
+	case "reject-change":
+		return s.dispatchRejectChange(ctx, cl, reqID, act)
 	case "refresh-models":
 		_ = s.RefreshModels(ctx, cl)
 		return nil
@@ -1125,22 +1127,26 @@ func (s *State) dispatchDismissFinding(ctx context.Context, cl *Client, reqID st
 	if act.Issue == nil || act.Issue.ID == "" {
 		return nil
 	}
-	kind := client.FirstNonEmpty(act.Issue.Kind, "semantic")
-	body := map[string]string{
-		"project_revision": s.projectRevision(),
-		"status":           "dismissed",
-		"kind":             kind,
-		"path":             act.Issue.Path,
-	}
-	if kind == "security" {
-		body["source"] = client.FirstNonEmpty(act.Issue.Source, "deterministic")
-	}
-	target := "/api/projects/current/findings/" + url.PathEscape(act.Issue.ID)
-	if err := cl.DoJSON(ctx, reqID, http.MethodPatch, target, body, nil); err != nil {
+	if err := s.patchFindingStatusOnDaemon(ctx, cl, reqID, *act.Issue, "dismissed"); err != nil {
 		return err
 	}
 	s.markFindingDismissed(*act.Issue)
 	return nil
+}
+
+func (s *State) patchFindingStatusOnDaemon(ctx context.Context, cl *Client, reqID string, issue FindingTarget, status string) error {
+	kind := client.FirstNonEmpty(issue.Kind, "semantic")
+	body := map[string]string{
+		"project_revision": s.projectRevision(),
+		"status":           status,
+		"kind":             kind,
+		"path":             issue.Path,
+	}
+	if kind == "security" {
+		body["source"] = client.FirstNonEmpty(issue.Source, "deterministic")
+	}
+	target := "/api/projects/current/findings/" + url.PathEscape(issue.ID)
+	return cl.DoJSON(ctx, reqID, http.MethodPatch, target, body, nil)
 }
 
 func (s *State) dispatchDismissFeature(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
@@ -1553,26 +1559,78 @@ func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wt
 	if s.Project == nil || wtPath == "" {
 		return nil
 	}
-	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
-	req := s.buildMergeWorktreeRequest(ctx, cl, reqID, wtPath, false)
-	var result mergeWorktreeResponse
-	err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/git/merge", req, &result)
-	if err != nil && isRevisionConflictError(err) {
-		req = s.buildMergeWorktreeRequest(ctx, cl, reqID+"-retry", wtPath, true)
-		_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust-retry")
-		err = cl.DoJSON(ctx, reqID+"-retry", http.MethodPost, "/api/projects/current/git/merge", req, &result)
-	}
+	result, err := s.postWorktreeMutation(ctx, cl, reqID, "/api/projects/current/git/merge", wtPath, "", "")
 	if err != nil {
 		return err
-	}
-	if result.Error != "" {
-		return fmt.Errorf("%s", result.Error)
 	}
 	if result.State != "" && result.State != "merged" {
 		return fmt.Errorf("merge did not complete (state=%s)", result.State)
 	}
 	s.applyMergeWorktreeResponse(wtPath, result)
 	return nil
+}
+
+func (s *State) dispatchRejectChange(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	s.cancelRejectedChangeWorkflow(ctx, cl, reqID, act)
+	if act.Seed != nil && act.Seed.WorktreePath != "" && s.Project != nil {
+		wtPath := act.Seed.WorktreePath
+		result, err := s.postWorktreeMutation(ctx, cl, reqID+"-discard", "/api/projects/current/git/discard-worktree", wtPath, act.Seed.Message, act.Seed.Kind)
+		s.applyMergeWorktreeResponse(wtPath, result)
+		if err != nil {
+			return err
+		}
+		if result.State != "" && result.State != "discarded" {
+			return fmt.Errorf("discard did not complete (state=%s)", result.State)
+		}
+	}
+	if act.Seed != nil && len(act.Seed.FindingTargets) > 0 {
+		s.reopenRejectedTargets(ctx, cl, reqID, act.Seed.FindingTargets)
+	}
+	return nil
+}
+
+func (s *State) cancelRejectedChangeWorkflow(ctx context.Context, cl *Client, reqID string, act ActionRequest) {
+	if act.PreviewID == "" || act.Target == "" || isLocalPreviewChangeID(act.Target) || s.Project == nil {
+		return
+	}
+	scope := ""
+	if act.Seed != nil && act.Seed.WorktreePath != "" {
+		scope = "?worktree_path=" + url.QueryEscape(act.Seed.WorktreePath)
+	}
+	cancelReq := map[string]any{
+		"project_id":       s.Project.ProjectID,
+		"project_revision": s.Project.ProjectRevision,
+		"workflow_id":      act.PreviewID,
+	}
+	_ = cl.DoJSON(ctx, reqID+"-cancel", http.MethodPost, "/api/projects/current/changes/"+url.PathEscape(act.Target)+"/workflow/cancel"+scope, cancelReq, nil)
+}
+
+func (s *State) reopenRejectedTargets(ctx context.Context, cl *Client, reqID string, targets []FindingTarget) {
+	for idx, ft := range targets {
+		if ft.ID != "" {
+			_ = s.patchFindingStatusOnDaemon(ctx, cl, fmt.Sprintf("%s-reopen-%d", reqID, idx), ft, "open")
+		}
+	}
+	s.reopenFindingTargets(targets)
+}
+
+func (s *State) postWorktreeMutation(ctx context.Context, cl *Client, reqID, endpoint, wtPath, fallbackHead, fallbackBranch string) (mergeWorktreeResponse, error) {
+	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
+	req := s.buildWorktreeMutationRequest(ctx, cl, reqID, wtPath, fallbackHead, fallbackBranch, false)
+	var result mergeWorktreeResponse
+	err := cl.DoJSON(ctx, reqID, http.MethodPost, endpoint, req, &result)
+	if err != nil && isRevisionConflictError(err) {
+		req = s.buildWorktreeMutationRequest(ctx, cl, reqID+"-retry", wtPath, fallbackHead, fallbackBranch, true)
+		_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust-retry")
+		err = cl.DoJSON(ctx, reqID+"-retry", http.MethodPost, endpoint, req, &result)
+	}
+	if err != nil {
+		return result, err
+	}
+	if result.Error != "" {
+		return result, fmt.Errorf("%s", result.Error)
+	}
+	return result, nil
 }
 
 func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeResponse) {
@@ -1601,11 +1659,17 @@ func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeRe
 	}
 }
 
-func (s *State) buildMergeWorktreeRequest(ctx context.Context, cl *Client, reqID, wtPath string, forceRefresh bool) map[string]any {
+func (s *State) buildWorktreeMutationRequest(ctx context.Context, cl *Client, reqID, wtPath, fallbackHead, fallbackBranch string, forceRefresh bool) map[string]any {
 	head, branch, srcHead, srcBranch := s.resolveMergeWorktreeIdentities(wtPath)
+	srcHead = client.FirstNonEmpty(srcHead, fallbackHead)
+	srcBranch = client.FirstNonEmpty(srcBranch, fallbackBranch)
 	if forceRefresh || head == "" || branch == "" || srcHead == "" || srcBranch == "" {
 		s.refreshMergeWorkspaceState(ctx, cl, reqID)
-		head, branch, srcHead, srcBranch = s.resolveMergeWorktreeIdentities(wtPath)
+		h2, b2, sh2, sb2 := s.resolveMergeWorktreeIdentities(wtPath)
+		head = client.FirstNonEmpty(h2, head)
+		branch = client.FirstNonEmpty(b2, branch)
+		srcHead = client.FirstNonEmpty(sh2, srcHead, fallbackHead)
+		srcBranch = client.FirstNonEmpty(sb2, srcBranch, fallbackBranch)
 	}
 	return map[string]any{
 		"project_id":        s.Project.ProjectID,

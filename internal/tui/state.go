@@ -126,6 +126,7 @@ type State struct {
 	Overview          *Overview
 	Findings          []Finding
 	CompletedFindings []FindingCompletion
+	DismissedTargets  []FindingTarget
 	Results           map[string]SectionResults
 	SecurityReport    *SecurityReport
 	Run               *AnalysisRun
@@ -334,6 +335,11 @@ func (s *State) issueHistoryFilePath() string {
 	return filepath.Join(s.Project.Path, ".mini-orca", "tui-issue-history.json")
 }
 
+type persistedIssueHistory struct {
+	Completed []FindingCompletion `json:"completed,omitempty"`
+	Dismissed []FindingTarget     `json:"dismissed,omitempty"`
+}
+
 func (s *State) loadIssueHistoryFromDisk() {
 	p := s.issueHistoryFilePath()
 	if p == "" {
@@ -343,16 +349,28 @@ func (s *State) loadIssueHistoryFromDisk() {
 	if err != nil {
 		return
 	}
-	var saved []FindingCompletion
-	if err := json.Unmarshal(data, &saved); err != nil || len(saved) == 0 {
+	var hist persistedIssueHistory
+	if err := json.Unmarshal(data, &hist); err == nil && (len(hist.Completed) > 0 || len(hist.Dismissed) > 0) {
+		s.applyPersistedIssueHistory(hist.Completed, hist.Dismissed)
 		return
 	}
+	var saved []FindingCompletion
+	if err := json.Unmarshal(data, &saved); err == nil && len(saved) > 0 {
+		s.applyPersistedIssueHistory(saved, nil)
+	}
+}
+
+func (s *State) applyPersistedIssueHistory(completed []FindingCompletion, dismissed []FindingTarget) {
 	projID := s.projectID()
-	for _, item := range saved {
-		if projID != "" && item.ProjectID != "" && item.ProjectID != projID {
-			continue
+	for _, item := range completed {
+		if projID == "" || item.ProjectID == "" || item.ProjectID == projID {
+			s.mergeFindingCompletion(item)
 		}
-		s.mergeFindingCompletion(item)
+	}
+	for _, target := range dismissed {
+		if projID == "" || target.ProjectID == "" || target.ProjectID == projID {
+			s.addDismissedTarget(target)
+		}
 	}
 }
 
@@ -364,9 +382,34 @@ func (s *State) saveIssueHistoryToDisk() {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
-	if data, err := json.MarshalIndent(s.CompletedFindings, "", "  "); err == nil {
+	payload := persistedIssueHistory{
+		Completed: s.CompletedFindings,
+		Dismissed: s.DismissedTargets,
+	}
+	if data, err := json.MarshalIndent(payload, "", "  "); err == nil {
 		_ = os.WriteFile(p, data, 0o600)
 	}
+}
+
+func (s *State) addDismissedTarget(target FindingTarget) {
+	if target.ID == "" {
+		return
+	}
+	for _, existing := range s.DismissedTargets {
+		if sameFindingTarget(existing, target) {
+			return
+		}
+	}
+	s.DismissedTargets = append(s.DismissedTargets, target)
+}
+
+func (s *State) isFindingDismissed(target FindingTarget) bool {
+	for _, existing := range s.DismissedTargets {
+		if sameFindingTarget(existing, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) mergeFindingCompletion(item FindingCompletion) {
@@ -541,6 +584,9 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 		return rows
 	}
 	target := FindingTarget{ProjectID: client.FirstNonEmpty(f.ProjectID, s.projectID()), Kind: "semantic", ID: f.ID, Path: f.Location.Path}
+	if s.isFindingDismissed(target) {
+		return rows
+	}
 	title := domain.FindingTitle(f.Title, f.Message)
 	name := domain.FindingName(f.Title, f.Message)
 	comp := s.findCompletion(target)
@@ -644,6 +690,9 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 			continue
 		}
 		target := FindingTarget{ProjectID: client.FirstNonEmpty(rep.ProjectID, s.projectID()), Kind: "performance", ID: f.ID, Path: rep.Path}
+		if s.isFindingDismissed(target) {
+			continue
+		}
 		name := domain.FindingName(f.Title, f.ObservedPattern)
 		comp := s.findCompletion(target)
 		done := comp != nil
@@ -700,6 +749,9 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 			continue
 		}
 		target := FindingTarget{ProjectID: client.FirstNonEmpty(rep.ProjectID, s.projectID()), Kind: "security", ID: f.ID, Path: path, Source: src}
+		if s.isFindingDismissed(target) {
+			continue
+		}
 		name := domain.FindingName(f.Title, f.ObservedCondition)
 		comp := s.findCompletion(target)
 		done := f.Triage == "fixed" || comp != nil

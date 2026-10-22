@@ -165,3 +165,32 @@ func TestFindingStoreRecoversCorruptStorageAndAdaptsFreshAIRisks(t *testing.T) {
 		t.Fatalf("expected SuggestedFindingsForFile to attach matched suggestion action to EngineeringInsight, got %+v", fileFindings[0].EngineeringInsight)
 	}
 }
+
+func TestFindingStoreDismissedTargetsPersistAcrossProducerTypesAndReopen(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewFindingStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	semTarget := FindingTarget{ProjectID: "p1", Kind: "semantic", ID: "finding:sem-1", Path: "main.go"}
+	perfTarget := FindingTarget{ProjectID: "p1", Kind: "performance", ID: "perf:1", Path: "perf.go"}
+	secTarget := FindingTarget{ProjectID: "p1", Kind: "security", ID: "sec:1", Path: "sec.go", Source: SecuritySourceDeterministic}
+
+	for _, target := range []FindingTarget{semTarget, perfTarget, secTarget} {
+		if err := store.SetTargetStatus(target, FindingStatusDismissed, ""); err != nil {
+			t.Fatalf("SetTargetStatus(%+v, dismissed): %v", target, err)
+		}
+	}
+	dismissed, err := store.Dismissed("p1")
+	if err != nil || len(dismissed) != 3 {
+		t.Fatalf("expected 3 dismissed targets, got %+v, err=%v", dismissed, err)
+	}
+
+	if err := store.SetTargetStatus(perfTarget, FindingStatusOpen, ""); err != nil {
+		t.Fatalf("SetTargetStatus(open): %v", err)
+	}
+	dismissed, err = store.Dismissed("p1")
+	if err != nil || len(dismissed) != 2 {
+		t.Fatalf("expected 2 dismissed targets after reopening perfTarget, got %+v, err=%v", dismissed, err)
+	}
+}

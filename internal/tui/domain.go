@@ -68,14 +68,19 @@ func (s *State) upsertActiveChange(chg *ChangeSession) {
 }
 
 func (s *State) removeActiveChangeByID(id string) {
-	if id == "" || len(s.ActiveChanges) == 0 {
+	s.removeActiveSession(id, "")
+}
+
+func (s *State) removeActiveSession(id, wtPath string) {
+	if (id == "" && wtPath == "") || len(s.ActiveChanges) == 0 {
 		return
 	}
 	var kept []*ChangeSession
 	for _, chg := range s.ActiveChanges {
-		if chg != nil && chg.ID != id {
-			kept = append(kept, chg)
+		if chg == nil || (id != "" && chg.ID == id) || (wtPath != "" && chg.WorktreePath == wtPath) {
+			continue
 		}
+		kept = append(kept, chg)
 	}
 	s.ActiveChanges = kept
 }
@@ -122,14 +127,47 @@ func (s *State) archiveAndCompleteChange(chg *ChangeSession) {
 		s.removeActiveChangeByID(chg.ID)
 		s.removeWorktreeByPath(chg.WorktreePath)
 	}
+	s.selectNextActiveChange()
+}
+
+func (s *State) selectNextActiveChange() {
 	s.Change = nil
 	for _, rem := range s.ActiveChanges {
 		if rem != nil && !domain.IsCompletedOrInactiveSession(rem) {
 			cp := *rem
 			s.Change = &cp
-			break
+			return
 		}
 	}
+}
+
+func (s *State) removeUnappliedHistoryByID(id string) {
+	if id == "" || len(s.ChangeHistory) == 0 {
+		return
+	}
+	var kept []ChangeHistoryEntry
+	for _, entry := range s.ChangeHistory {
+		if entry.ID != id || entry.State == "applied" {
+			kept = append(kept, entry)
+		}
+	}
+	s.ChangeHistory = kept
+}
+
+func (s *State) collectRejectedFindingTargets(chg *ChangeSession) []FindingTarget {
+	if chg == nil {
+		return nil
+	}
+	targets := append([]FindingTarget(nil), chg.FindingTargets...)
+	if len(targets) > 0 {
+		return targets
+	}
+	for _, row := range s.CollectAllIssues() {
+		if row.Name == chg.Title || row.Title == chg.Title {
+			targets = append(targets, row.Target)
+		}
+	}
+	return targets
 }
 
 func matchesPreviewID(id, previewID string) bool {

@@ -2618,3 +2618,224 @@ func TestDelayedPollDoesNotOverwriteNewerAnalysisRun(t *testing.T) {
 		t.Fatalf("expected delayed poll for run-1 to be rejected in favor of running run-2, got %+v", s.Run)
 	}
 }
+
+func TestRejectAgentFixInHumanStageDeletesWorktreeAndReopensIssue(t *testing.T) {
+	tmpRoot := t.TempDir()
+	var discardedWorktree string
+	var reopenedID, reopenedStatus string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/projects/current/execution-trust":
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","trusted":true,"status":"trusted"}`))
+		case r.URL.Path == "/api/projects/current/git/discard-worktree" && r.Method == http.MethodPost:
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			discardedWorktree, _ = body["path"].(string)
+			_, _ = w.Write([]byte(`{"state":"discarded","removed_worktree":"` + discardedWorktree + `"}`))
+		case strings.HasPrefix(r.URL.Path, "/api/projects/current/findings/") && r.Method == http.MethodPatch:
+			reopenedID = strings.TrimPrefix(r.URL.Path, "/api/projects/current/findings/")
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			reopenedStatus, _ = body["status"].(string)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	wtPath := tmpRoot + "/.worktrees/fix-1"
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo", Path: tmpRoot}
+	s.Repository = &GitRepository{GitIdentity: GitIdentity{Head: "main123", Branch: "main"}, Available: true, Root: tmpRoot}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: *s.Repository,
+		Worktrees: []GitWorktree{{
+			GitIdentity: GitIdentity{Head: "wt123", Branch: "orca/fix-1"},
+			Path:        wtPath,
+			Mergeable:   true,
+			Sessions:    []ChangeHistoryEntry{{ID: "chg-1", Title: "Fix auth bypass", State: "checked"}},
+		}},
+	}
+	s.Findings = []Finding{{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		ID:              "bug-1",
+		Severity:        "high",
+		Category:        "bugs",
+		Title:           "Fix auth bypass",
+		Status:          "in_progress",
+		Location:        SourceAnchor{Path: "auth.go", StartLine: 12},
+	}}
+	chg := &ChangeSession{
+		ProjectIdentity: ProjectIdentity{ProjectID: "wt-p1", ProjectRevision: "wt-r1"},
+		ID:              "chg-1",
+		Title:           "Fix auth bypass",
+		Kind:            "fix",
+		State:           "checked",
+		Revision:        2,
+		Hash:            "h-1",
+		WorktreePath:    wtPath,
+		FindingTargets:  []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "bug-1", Path: "auth.go"}},
+		Checks:          []Check{{Name: "test", State: "passed"}},
+		Workflow: &ChangeWorkflow{
+			ID:     "wf-1",
+			Status: "awaiting_human_review",
+			Stages: []ChangeWorkflowStage{
+				{Name: "create", Status: "completed"},
+				{Name: "test", Status: "completed"},
+				{Name: "review", Status: "completed"},
+				{Name: "human_review", Status: "ready"},
+			},
+		},
+	}
+	s.Change = chg
+	s.ActiveChanges = []*ChangeSession{chg}
+	s.Navigate(PageAgents)
+
+	view := s.Render(120, 40)
+	if !strings.Contains(view, "[x]") || !strings.Contains(view, "Reject") {
+		t.Fatalf("expected Agent Studio mission control to show '[x] Reject', got:\n%s", view)
+	}
+	s.AgentDetailOpen = true
+	s.AgentStage = 4
+	detailView := s.Render(120, 40)
+	if !strings.Contains(detailView, "[x]") || !strings.Contains(detailView, "Reject Fix") {
+		t.Fatalf("expected Agent Detail Stage 4 banner to show '[x] Reject Fix', got:\n%s", detailView)
+	}
+
+	s.HandleKey(KeyEvent{Key: "x"})
+	if len(s.AgentItems()) != 0 {
+		t.Fatalf("expected agent item to be removed after rejecting fix, got %+v", s.AgentItems())
+	}
+	if len(s.GitWorkspace.Worktrees) != 0 {
+		t.Fatalf("expected worktree to be removed from state after rejecting fix, got %+v", s.GitWorkspace.Worktrees)
+	}
+
+	s.Navigate(PageBugs)
+	s.IssueView = "open"
+	openIssues := s.FilteredIssues()
+	if len(openIssues) != 1 || openIssues[0].Target.ID != "bug-1" || openIssues[0].Status != "open" {
+		t.Fatalf("expected bug-1 to return to initial open state in Issues page, got %+v", openIssues)
+	}
+
+	s.FlushActions(context.Background(), cli)
+	if discardedWorktree != wtPath {
+		t.Fatalf("expected discard-worktree to be called with %q, got %q", wtPath, discardedWorktree)
+	}
+	if reopenedID != "bug-1" || reopenedStatus != "open" {
+		t.Fatalf("expected finding bug-1 to be patched to 'open' on daemon, got id=%q status=%q", reopenedID, reopenedStatus)
+	}
+}
+
+func TestDeleteIssueFromIssuesListAndDetailRemovesIssueAndPersistsDismissal(t *testing.T) {
+	tmpRoot := t.TempDir()
+	var dismissedIDs []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/projects/current/findings/") && r.Method == http.MethodPatch {
+			id := strings.TrimPrefix(r.URL.Path, "/api/projects/current/findings/")
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["status"] == "dismissed" {
+				dismissedIDs = append(dismissedIDs, id)
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "demo", Path: tmpRoot}
+	s.Findings = []Finding{
+		{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "sem-1", Severity: "high", Category: "bugs", Title: "Nil pointer deref", Status: "open", Location: SourceAnchor{Path: "a.go", StartLine: 10}},
+	}
+	s.Results["performance"] = SectionResults{
+		Performance: []PerformanceReport{{
+			Path: "perf.go",
+			Findings: []PerformanceFinding{{
+				ID:              "perf-1",
+				PotentialImpact: "medium",
+				Title:           "Quadratic loop",
+				StartLine:       20,
+			}},
+		}},
+	}
+	s.CompletedFindings = []FindingCompletion{{
+		FindingTarget: FindingTarget{ProjectID: "p1", Kind: "semantic", ID: "sem-done", Path: "done.go"},
+		CommitOID:     "abc1234",
+	}}
+	s.Findings = append(s.Findings, Finding{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		ID:              "sem-done",
+		Severity:        "low",
+		Category:        "architecture",
+		Title:           "Completed refactor",
+		Status:          "fixed",
+		Location:        SourceAnchor{Path: "done.go", StartLine: 5},
+	})
+
+	s.Navigate(PageBugs)
+	s.IssueView = "open"
+	if len(s.FilteredIssues()) != 2 {
+		t.Fatalf("expected 2 open issues initially, got %d", len(s.FilteredIssues()))
+	}
+
+	// 1. Press 'd' on PageBugs to delete the first open issue (sem-1).
+	s.HandleKey(KeyEvent{Key: "d"})
+	if len(s.FilteredIssues()) != 1 || s.FilteredIssues()[0].Target.ID != "perf-1" {
+		t.Fatalf("expected only perf-1 to remain after pressing 'd', got %+v", s.FilteredIssues())
+	}
+
+	// 2. Open PageIssueDetail for perf-1 and press 'Delete' to delete it; should navigate back to PageBugs when none left.
+	s.HandleKey(KeyEvent{Key: "i"})
+	if s.Page != PageIssueDetail {
+		t.Fatalf("expected PageIssueDetail, got %s", s.Page)
+	}
+	s.HandleKey(KeyEvent{Key: "Delete"})
+	if s.Page != PageBugs {
+		t.Fatalf("expected PageBugs after deleting last open issue from detail view, got %s", s.Page)
+	}
+	if len(s.FilteredIssues()) != 0 {
+		t.Fatalf("expected 0 open issues after deleting perf-1, got %+v", s.FilteredIssues())
+	}
+
+	// 3. Switch to Done tab (open -> in_progress -> done) and delete the completed issue via ':delete'.
+	s.HandleKey(KeyEvent{Key: "v"})
+	s.HandleKey(KeyEvent{Key: "v"})
+	if s.IssueView != "done" || len(s.FilteredIssues()) != 1 {
+		t.Fatalf("expected 1 done issue in done view, got view=%q issues=%+v", s.IssueView, s.FilteredIssues())
+	}
+	s.ExecuteCommand("delete")
+	if len(s.FilteredIssues()) != 0 || len(s.CollectAllIssues()) != 0 {
+		t.Fatalf("expected 0 total issues after deleting done issue, got %+v", s.CollectAllIssues())
+	}
+
+	s.FlushActions(context.Background(), cli)
+	if len(dismissedIDs) != 3 {
+		t.Fatalf("expected 3 findings to be patched as dismissed on daemon, got %v", dismissedIDs)
+	}
+
+	// Verify disk persistence keeps dismissed issues filtered out on reload.
+	reloaded := NewState()
+	reloaded.Project = s.Project
+	reloaded.Results = s.Results
+	reloaded.loadIssueHistoryFromDisk()
+	if len(reloaded.CollectAllIssues()) != 0 {
+		t.Fatalf("expected reloaded state to exclude dismissed issues, got %+v", reloaded.CollectAllIssues())
+	}
+}

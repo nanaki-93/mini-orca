@@ -238,7 +238,7 @@ func (s *State) effectiveAgentDetailStage() int {
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[↑/↓] Select Stage · [i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff")
+	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[↑/↓] Select Stage · [i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff · [x] Reject")
 	activeStage := s.activeAgentStageNumber()
 	selectedStage := s.effectiveAgentDetailStage()
 	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg)}
@@ -382,8 +382,8 @@ func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSess
 			th.muted, th.reset, th.statusBadge(stStatus),
 			th.muted, th.reset, th.statusBadge(badge),
 			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(chg.Changes)),
-		fmt.Sprintf("%sActions:%s %s[d]%s Inspect Diff · %s[a/c]%s Apply & Commit · %s[u]%s Guarded Undo",
-			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
+		fmt.Sprintf("%sActions:%s %s[d]%s Inspect Diff · %s[a/c]%s Apply & Commit · %s[x]%s Reject Fix · %s[u]%s Guarded Undo",
+			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
 	}
 }
 
@@ -468,8 +468,8 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	st := strings.ToLower(strings.TrimSpace(item.Status))
 	switch {
 	case st == "stale":
-		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[b]%s Issues",
-			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s▲ Proposal is stale (files changed)%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh & Rerun Agent · %s[x]%s Reject · %s[b]%s Issues",
+			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "applied":
 		return fmt.Sprintf("%sNext Step:%s %s✔ Fix applied & committed%s · %s[i/Enter]%s Agent Detail · %s[u]%s Guarded Undo · %s[b]%s Back to Issues",
 			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
@@ -477,14 +477,14 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 		return fmt.Sprintf("%sNext Step:%s %s⟳ Workflow running%s · %s[i/Enter]%s Agent Detail · %s[r]%s Refresh · %s[x]%s Cancel",
 			th.bold+th.cyan, th.reset, th.amber, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "failed" || st == "changes_requested" || (item.ChecksTotal > 0 && item.ChecksPassed < item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[i/Enter]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff",
-			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s▲ Verification needs repair%s · %s[i/Enter]%s Agent Detail · %s[r]%s Self-Repair · %s[d]%s Diff · %s[x]%s Reject",
+			th.bold+th.cyan, th.reset, th.red, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	case st == "ready" || st == "checked" || (item.ChecksTotal > 0 && item.ChecksPassed == item.ChecksTotal):
-		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit",
-			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s✔ Ready to Review & Apply%s · %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[c]%s Apply & Commit · %s[x]%s Reject",
+			th.bold+th.cyan, th.reset, th.green, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	default:
-		return fmt.Sprintf("%sNext Step:%s %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply",
-			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
+		return fmt.Sprintf("%sNext Step:%s %s[i/Enter]%s Agent Detail · %s[d]%s Inspect Diff · %s[r]%s Run Checks · %s[c]%s Apply · %s[x]%s Reject",
+			th.bold+th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
 	}
 }
 

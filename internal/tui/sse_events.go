@@ -720,20 +720,22 @@ func (s *State) recordAppliedFindingCompletions(targets []FindingTarget, commit 
 	s.saveIssueHistoryToDisk()
 }
 
+func matchesAnyFindingTarget(target FindingTarget, targets []FindingTarget) bool {
+	for _, t := range targets {
+		if sameFindingTarget(target, t) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *State) removeFindingCompletions(targets []FindingTarget) {
 	if len(targets) == 0 || len(s.CompletedFindings) == 0 {
 		return
 	}
 	var kept []FindingCompletion
 	for _, c := range s.CompletedFindings {
-		matched := false
-		for _, t := range targets {
-			if sameFindingTarget(c.FindingTarget, t) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
+		if !matchesAnyFindingTarget(c.FindingTarget, targets) {
 			kept = append(kept, c)
 		}
 	}
@@ -771,15 +773,109 @@ func (s *State) mainGitIdentity() (string, string) {
 }
 
 func (s *State) markFindingDismissed(target FindingTarget) {
+	s.addDismissedTarget(target)
 	for i := range s.Findings {
 		if s.Findings[i].ID == target.ID {
 			s.Findings[i].Status = "dismissed"
 		}
 	}
+	for cat, res := range s.Results {
+		markSectionFindingDismissed(&res, target)
+		s.Results[cat] = res
+	}
 	if s.SecurityReport != nil {
 		for i := range s.SecurityReport.Findings {
 			if s.SecurityReport.Findings[i].ID == target.ID {
 				s.SecurityReport.Findings[i].Triage = "dismissed"
+			}
+		}
+	}
+	s.removeFindingCompletions([]FindingTarget{target})
+	s.saveIssueHistoryToDisk()
+}
+
+func markSectionFindingDismissed(res *SectionResults, target FindingTarget) {
+	for i := range res.Semantic {
+		if res.Semantic[i].ID == target.ID {
+			res.Semantic[i].Status = "dismissed"
+		}
+	}
+	for i := range res.Performance {
+		rep := &res.Performance[i]
+		if target.Path != "" && rep.Path != "" && rep.Path != target.Path {
+			continue
+		}
+		var kept []PerformanceFinding
+		for _, f := range rep.Findings {
+			if f.ID != target.ID {
+				kept = append(kept, f)
+			}
+		}
+		rep.Findings = kept
+	}
+	for i := range res.Security {
+		for j := range res.Security[i].Findings {
+			if res.Security[i].Findings[j].ID == target.ID {
+				res.Security[i].Findings[j].Triage = "dismissed"
+			}
+		}
+	}
+}
+
+func (s *State) reopenFindingTargets(targets []FindingTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	s.removeDismissedTargets(targets)
+	s.removeFindingCompletions(targets)
+	ids := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		if t.ID != "" {
+			ids[t.ID] = true
+		}
+	}
+	for i := range s.Findings {
+		if ids[s.Findings[i].ID] && s.Findings[i].Status != "retired" {
+			s.Findings[i].Status = "open"
+		}
+	}
+	for cat, res := range s.Results {
+		reopenSectionFindings(&res, ids)
+		s.Results[cat] = res
+	}
+	if s.SecurityReport != nil {
+		for i := range s.SecurityReport.Findings {
+			if ids[s.SecurityReport.Findings[i].ID] {
+				s.SecurityReport.Findings[i].Triage = "open"
+			}
+		}
+	}
+	s.saveIssueHistoryToDisk()
+}
+
+func (s *State) removeDismissedTargets(targets []FindingTarget) {
+	if len(s.DismissedTargets) == 0 {
+		return
+	}
+	var kept []FindingTarget
+	for _, d := range s.DismissedTargets {
+		if !matchesAnyFindingTarget(d, targets) {
+			kept = append(kept, d)
+		}
+	}
+	s.DismissedTargets = kept
+}
+
+func reopenSectionFindings(res *SectionResults, ids map[string]bool) {
+	for i := range res.Semantic {
+		if ids[res.Semantic[i].ID] && res.Semantic[i].Status != "retired" {
+			res.Semantic[i].Status = "open"
+		}
+	}
+	for i := range res.Security {
+		for j := range res.Security[i].Findings {
+			if ids[res.Security[i].Findings[j].ID] {
+				res.Security[i].Findings[j].Triage = "open"
 			}
 		}
 	}

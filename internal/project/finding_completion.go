@@ -44,10 +44,14 @@ func (target FindingTarget) Validate() error {
 	return fmt.Errorf("finding target producer is invalid")
 }
 
-func (s *FindingStore) Completions(projectID string) ([]FindingCompletion, error) {
+func (s *FindingStore) readDocumentSnapshot() (*findingDocument, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	document, err := s.loadLocked(false)
+	return s.loadLocked(false)
+}
+
+func (s *FindingStore) Completions(projectID string) ([]FindingCompletion, error) {
+	document, err := s.readDocumentSnapshot()
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +59,20 @@ func (s *FindingStore) Completions(projectID string) ([]FindingCompletion, error
 	for _, completion := range document.Completed {
 		if completion.ProjectID == projectID {
 			result = append(result, completion)
+		}
+	}
+	return result, nil
+}
+
+func (s *FindingStore) Dismissed(projectID string) ([]FindingTarget, error) {
+	document, err := s.readDocumentSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	result := []FindingTarget{}
+	for _, target := range document.Dismissed {
+		if target.ProjectID == projectID {
+			result = append(result, target)
 		}
 	}
 	return result, nil
@@ -83,6 +101,7 @@ func (s *FindingStore) Complete(completions []FindingCompletion) error {
 		if completion.CommitOID == "" {
 			return fmt.Errorf("finding completion requires a commit")
 		}
+		removeDismissedTarget(document, completion.FindingTarget)
 		if !seen[completion.FindingTarget] {
 			document.Completed = append(document.Completed, completion)
 			seen[completion.FindingTarget] = true
@@ -118,6 +137,14 @@ func (s *FindingStore) SetTargetStatus(target FindingTarget, status, commitOID s
 }
 
 func setDocumentTargetCompletion(document *findingDocument, target FindingTarget, status, commitOID string) {
+	if status == FindingStatusDismissed {
+		removeCompletedTarget(document, target)
+		if !hasDismissedTarget(document.Dismissed, target) {
+			document.Dismissed = append(document.Dismissed, target)
+		}
+		return
+	}
+	removeDismissedTarget(document, target)
 	if status == FindingStatusFixed {
 		if strings.TrimSpace(commitOID) == "" {
 			commitOID = "manual"
@@ -127,6 +154,10 @@ func setDocumentTargetCompletion(document *findingDocument, target FindingTarget
 		}
 		return
 	}
+	removeCompletedTarget(document, target)
+}
+
+func removeCompletedTarget(document *findingDocument, target FindingTarget) {
 	retained := document.Completed[:0]
 	for _, completion := range document.Completed {
 		if completion.FindingTarget != target {
@@ -136,8 +167,18 @@ func setDocumentTargetCompletion(document *findingDocument, target FindingTarget
 	document.Completed = retained
 }
 
+func removeDismissedTarget(document *findingDocument, target FindingTarget) {
+	retained := document.Dismissed[:0]
+	for _, dismissed := range document.Dismissed {
+		if dismissed != target {
+			retained = append(retained, dismissed)
+		}
+	}
+	document.Dismissed = retained
+}
+
 func updateSemanticCompletion(document *findingDocument, finding UnifiedFinding, status string) {
-	if status == FindingStatusFixed && finding.Location.Path != "" {
+	if (status == FindingStatusFixed || status == FindingStatusDismissed) && finding.Location.Path != "" {
 		target := FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path}
 		if target.Validate() == nil {
 			setDocumentTargetCompletion(document, target, status, "manual")
@@ -151,6 +192,13 @@ func updateSemanticCompletion(document *findingDocument, finding UnifiedFinding,
 		}
 	}
 	document.Completed = retained
+	retainedDismissed := document.Dismissed[:0]
+	for _, target := range document.Dismissed {
+		if target.Kind != "semantic" || target.ID != finding.ID || target.ProjectID != finding.ProjectID {
+			retainedDismissed = append(retainedDismissed, target)
+		}
+	}
+	document.Dismissed = retainedDismissed
 }
 
 func hasFindingCompletion(completed []FindingCompletion, target FindingTarget) bool {
@@ -162,15 +210,31 @@ func hasFindingCompletion(completed []FindingCompletion, target FindingTarget) b
 	return false
 }
 
+func hasDismissedTarget(dismissed []FindingTarget, target FindingTarget) bool {
+	for _, item := range dismissed {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
 func applyFindingCompletions(document *findingDocument) {
 	completed := make(map[FindingTarget]bool, len(document.Completed))
 	for _, completion := range document.Completed {
 		completed[completion.FindingTarget] = true
 	}
+	dismissed := make(map[FindingTarget]bool, len(document.Dismissed))
+	for _, target := range document.Dismissed {
+		dismissed[target] = true
+	}
 	for i := range document.Findings {
 		finding := &document.Findings[i]
-		if completed[FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path}] {
+		target := FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path}
+		if completed[target] {
 			finding.Status = FindingStatusFixed
+		} else if dismissed[target] && finding.Status != FindingStatusRetired {
+			finding.Status = FindingStatusDismissed
 		}
 	}
 }

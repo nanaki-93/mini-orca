@@ -76,11 +76,46 @@ func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationReq
 	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
 		return nil, fmt.Errorf("worktree branch changed; refresh Git status before discarding: %w", project.ErrRevisionConflict)
 	}
+	targets := collectSessionFindingTargets(source.Path, false)
 	result := &GitMutationResult{State: "discarded", Path: source.Path, Repository: repository, Warnings: []string{}}
 	if err := s.removeGitWorktree(ctx, repository.Root, source, gitops.WorktreeDiscarded); err != nil {
 		result.State, result.Error = "failed", err.Error()
 	} else {
 		result.RemovedWorktree = source.Path
+		s.reopenDiscardedWorktreeFindings(ctx, repository.Root, repository.ProjectID, targets)
 	}
 	return result, nil
+}
+
+func (s *Service) reopenDiscardedWorktreeFindings(ctx context.Context, root, projectID string, targets []project.FindingTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	active := s.inProgressFindingTargets(ctx, root, projectID)
+	stillActive := make(map[string]bool, len(active))
+	for _, t := range active {
+		stillActive[t.ID] = true
+	}
+	discarded := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		if !stillActive[t.ID] {
+			discarded[t.ID] = true
+		}
+	}
+	if len(discarded) == 0 {
+		return
+	}
+	store, err := project.NewFindingStore(root)
+	if err != nil {
+		return
+	}
+	stored, err := store.Load(project.FindingInput{ProjectID: projectID})
+	if err != nil {
+		return
+	}
+	for _, f := range stored {
+		if f.Status == project.FindingStatusInProgress && discarded[f.ID] {
+			_ = store.SetStatus(f.ID, project.FindingStatusOpen)
+		}
+	}
 }
