@@ -348,3 +348,28 @@ func TestGoScanDrainedOnServiceShutdown(t *testing.T) {
 		t.Fatalf("expected active Go scan worker to be drained on shutdown, got cancel=%v done=%v", activeCancel != nil, activeDone != nil)
 	}
 }
+
+func TestScanGoProjectRejectsUnindexedWorkspaceChangesUnderStaleTrust(t *testing.T) {
+	service, root, revision := newGoScanService(t, map[string]string{
+		"go.mod":  "module fixture\n\ngo 1.22\n",
+		"main.go": "package fixture\nfunc Run() {}\n",
+	})
+	marker := filepath.Join(t.TempDir(), "stale-trust-executed")
+	unindexedTest := "package fixture\nimport (\"os\"; \"testing\")\nfunc TestAddedWithoutReindex(t *testing.T) { _ = os.WriteFile(" +
+		"`" + filepath.ToSlash(marker) + "`" + ", []byte(\"executed\"), 0600) }\n"
+	if err := os.WriteFile(filepath.Join(root, "added_test.go"), []byte(unindexedTest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ScanGoProject(context.Background(), revision); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("expected revision conflict when scanning unindexed test under stale trust, got %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("scan executed unindexed test under stale trust: %v", err)
+	}
+	if report, err := service.GoScanProgress(revision); err != nil || report != nil {
+		t.Fatalf("expected no verified scan report for modified workspace, got %+v, %v", report, err)
+	}
+	if _, err := service.TrustProjectExecution(revision, true); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("expected TrustProjectExecution to reject stale cached revision before reindex, got %v", err)
+	}
+}

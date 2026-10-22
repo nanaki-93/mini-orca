@@ -16,14 +16,16 @@ import (
 type ExecutionTrust struct {
 	ProjectID       string     `json:"project_id"`
 	ProjectRevision string     `json:"project_revision"`
+	WorkspaceHash   string     `json:"workspace_hash,omitempty"`
 	Trusted         bool       `json:"trusted"`
 	Commands        [][]string `json:"commands"`
 }
 
 type executionTrustStore struct {
-	mu       sync.Mutex
-	project  string
-	revision string
+	mu            sync.Mutex
+	project       string
+	revision      string
+	workspaceHash string
 }
 
 func newExecutionTrustStore() *executionTrustStore { return &executionTrustStore{} }
@@ -61,13 +63,17 @@ func (s *Service) ExecutionTrust(revision, taskName string) (*ExecutionTrust, er
 		return nil, project.ErrRevisionConflict
 	}
 	s.executionTrust.mu.Lock()
-	trusted := s.executionTrust.project == analysis.ProjectID && s.executionTrust.revision == analysis.ProjectRevision
+	trusted := s.executionTrust.project == analysis.ProjectID && s.executionTrust.revision == analysis.ProjectRevision && s.executionTrust.workspaceHash != ""
+	workspaceHash := ""
+	if trusted {
+		workspaceHash = s.executionTrust.workspaceHash
+	}
 	s.executionTrust.mu.Unlock()
 	commands, err := projectCodeCommands(s.manager.Root(), taskName)
 	if err != nil {
 		return nil, err
 	}
-	return &ExecutionTrust{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Trusted: trusted, Commands: commands}, nil
+	return &ExecutionTrust{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, WorkspaceHash: workspaceHash, Trusted: trusted, Commands: commands}, nil
 }
 
 // TrustProjectExecution records or revokes the user's current-session consent
@@ -83,13 +89,30 @@ func (s *Service) TrustProjectExecution(revision string, confirm bool) (*Executi
 		}
 		s.clearExecutionTrust()
 		trust.Trusted = false
+		trust.WorkspaceHash = ""
 		return trust, nil
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	if index.ProjectID != trust.ProjectID || index.ProjectRevision != trust.ProjectRevision {
+		return nil, project.ErrRevisionConflict
+	}
+	if err := project.VerifyProjectSources(context.Background(), s.manager.Root(), index); err != nil {
+		return nil, err
+	}
+	workspaceHash, err := workspaceFingerprint(context.Background(), s.manager.Root())
+	if err != nil {
+		return nil, err
 	}
 	s.executionTrust.mu.Lock()
 	s.executionTrust.project = trust.ProjectID
 	s.executionTrust.revision = trust.ProjectRevision
+	s.executionTrust.workspaceHash = workspaceHash
 	s.executionTrust.mu.Unlock()
 	trust.Trusted = true
+	trust.WorkspaceHash = workspaceHash
 	return trust, nil
 }
 
@@ -104,10 +127,25 @@ func (s *Service) requireProjectExecutionTrust(revision string) error {
 	return nil
 }
 
+func (s *Service) requireWorkspaceExecutionTrust(revision, workspaceHash string) error {
+	trust, err := s.ExecutionTrust(revision, "")
+	if err != nil {
+		return err
+	}
+	if !trust.Trusted {
+		return fmt.Errorf("trusted local execution is required before running project code")
+	}
+	if workspaceHash == "" || trust.WorkspaceHash != workspaceHash {
+		return project.ErrRevisionConflict
+	}
+	return nil
+}
+
 func (s *Service) clearExecutionTrust() {
 	s.executionTrust.mu.Lock()
 	s.executionTrust.project = ""
 	s.executionTrust.revision = ""
+	s.executionTrust.workspaceHash = ""
 	s.executionTrust.mu.Unlock()
 }
 

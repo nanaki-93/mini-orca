@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -30,6 +32,7 @@ type GoScanPhase struct {
 type GoScanReport struct {
 	ProjectID       string        `json:"project_id"`
 	ProjectRevision string        `json:"project_revision"`
+	WorkspaceHash   string        `json:"workspace_hash,omitempty"`
 	Status          string        `json:"status"`
 	StartedAt       time.Time     `json:"started_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
@@ -46,11 +49,13 @@ type goScanController struct {
 }
 
 type preparedGoScan struct {
-	root       string
-	workspace  string
-	report     *GoScanReport
-	fileHashes map[string]string
-	findings   []project.UnifiedFinding
+	root          string
+	workspace     string
+	workspaceHash string
+	index         *project.ProjectIndex
+	report        *GoScanReport
+	fileHashes    map[string]string
+	findings      []project.UnifiedFinding
 }
 
 func newGoScanController() *goScanController {
@@ -74,6 +79,12 @@ func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanRe
 		}
 		return nil, err
 	}
+	if err := s.validateGoScanWorkspace(ctx, &scan); err != nil {
+		if ctx.Err() != nil {
+			return s.completeGoScan(ctx, scan.root, scan.report, scan.findings, scan.fileHashes)
+		}
+		return nil, err
+	}
 	if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, project.FindingSourceParser); err != nil {
 		return nil, err
 	}
@@ -81,6 +92,25 @@ func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanRe
 		return nil, err
 	}
 	return s.completeGoScan(ctx, scan.root, scan.report, scan.findings, scan.fileHashes)
+}
+
+func (s *Service) validateGoScanWorkspace(ctx context.Context, scan *preparedGoScan) error {
+	workspaceHash, err := fingerprintCheckWorkspace(ctx, scan.workspace)
+	if err != nil {
+		return err
+	}
+	if err := s.requireWorkspaceExecutionTrust(scan.report.ProjectRevision, workspaceHash); err != nil {
+		return err
+	}
+	if err := project.VerifyProjectSources(ctx, scan.workspace, scan.index); err != nil {
+		return err
+	}
+	if err := (workspaceIdentity{fingerprint: workspaceHash}).verifyCurrent(ctx, scan.root); err != nil {
+		return err
+	}
+	scan.workspaceHash = workspaceHash
+	scan.report.WorkspaceHash = workspaceHash
+	return nil
 }
 
 func (s *Service) prepareGoScan(revision string) (preparedGoScan, error) {
@@ -105,7 +135,7 @@ func (s *Service) prepareGoScan(revision string) (preparedGoScan, error) {
 	report := newGoScanReport(analysis.ProjectID, analysis.ProjectRevision)
 	findings := parserScanFindings(index)
 	report.Phases = append(report.Phases, GoScanPhase{Name: "parse", State: scanPhaseState(findings)})
-	return preparedGoScan{root: analysis.Path, workspace: workspace, report: report, fileHashes: scanFileHashes(index), findings: findings}, nil
+	return preparedGoScan{root: analysis.Path, workspace: workspace, index: index, report: report, fileHashes: scanFileHashes(index), findings: findings}, nil
 }
 
 func newGoScanReport(projectID, revision string) *GoScanReport {
@@ -143,7 +173,7 @@ func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan)
 		command []string
 		source  string
 	}{{"vet", []string{"go", "vet", "./..."}, project.FindingSourceVet}, {"tests", []string{"go", "test", "./..."}, project.FindingSourceTest}} {
-		result := s.runGoScanPhase(ctx, scan.workspace, scan.root, scan.report.ProjectRevision, phase.name, phase.command)
+		result := s.runGoScanPhase(ctx, scan, phase.name, phase.command)
 		scan.report.Phases = append(scan.report.Phases, result)
 		scan.findings = append(scan.findings, toolScanFindings(result, phase.source, scan.fileHashes)...)
 		if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, phase.source); err != nil {
@@ -260,6 +290,14 @@ func (s *Service) GoScanProgress(revision string) (*GoScanReport, error) {
 	if report == nil || report.ProjectID != analysis.ProjectID || report.ProjectRevision != revision {
 		return nil, nil
 	}
+	if report.WorkspaceHash != "" {
+		if err := (workspaceIdentity{fingerprint: report.WorkspaceHash}).verifyCurrent(context.Background(), analysis.Path); err != nil {
+			if errors.Is(err, project.ErrRevisionConflict) {
+				return nil, nil
+			}
+			return nil, err
+		}
+	}
 	return report, nil
 }
 
@@ -325,12 +363,17 @@ func failedGoScanReport(projectID, revision, root string, failure error) *GoScan
 	}
 }
 
-func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, revision, name string, command []string) GoScanPhase {
+func (s *Service) runGoScanPhase(ctx context.Context, scan *preparedGoScan, name string, command []string) GoScanPhase {
 	phase := GoScanPhase{Name: name, Command: append([]string(nil), command...)}
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
-	result, err := s.runCheckCommand(timed, workspace, command, revision, name == "tests")
-	phase.Output = sanitizeCheckOutput(result.Output, result.Truncated, workspace, root)
+	result, err := sandbox.RunCommandWithStart(timed, scan.workspace, command, true, func() error {
+		if err := s.requireWorkspaceExecutionTrust(scan.report.ProjectRevision, scan.workspaceHash); err != nil {
+			return err
+		}
+		return (workspaceIdentity{fingerprint: scan.workspaceHash}).verifyCurrent(timed, scan.root)
+	})
+	phase.Output = sanitizeCheckOutput(result.Output, result.Truncated, scan.workspace, scan.root)
 	phase.ExitCode = result.ExitCode
 	if timed.Err() != nil {
 		phase.State = CheckCanceled
@@ -344,6 +387,11 @@ func (s *Service) runGoScanPhase(ctx context.Context, workspace, root, revision,
 }
 
 func (s *Service) finishGoScan(root string, report *GoScanReport, findings []project.UnifiedFinding, hashes map[string]string, sources ...string) error {
+	if report.Status != "canceled" && report.WorkspaceHash != "" {
+		if err := (workspaceIdentity{fingerprint: report.WorkspaceHash}).verifyCurrent(context.Background(), root); err != nil {
+			return err
+		}
+	}
 	store, err := project.NewFindingStore(root)
 	if err != nil {
 		return err
