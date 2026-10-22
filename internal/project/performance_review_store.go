@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -338,11 +337,6 @@ func performanceReportIsStale(report PerformanceFileReport, root, path, contentH
 	}
 	current, err := GetFileInfo(root, path)
 	return err != nil || current.SizeBytes > PerformanceMaxSourceBytes || current.ContentHash != contentHash
-}
-
-func performanceCachePath(root, path string) string {
-	key := sha256.Sum256([]byte(path))
-	return filepath.Join(root, ".mini-orca", "performance", "files", hex.EncodeToString(key[:])+".json")
 }
 
 func clonePerformanceFileReport(source *PerformanceFileReport) *PerformanceFileReport {

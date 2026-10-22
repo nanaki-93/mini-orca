@@ -261,3 +261,7 @@ func analysisCacheInput(path, hash string) FileAnalysisInput {
 func newFreshAnalysis(input FileAnalysisInput) FileAnalysis {
 	return FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusFresh, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }
+
+func (c *FileAnalysisCache) cachePath(relative string) string {
+	return filepath.Join(c.root, fileAnalysisRelativeDir, analysisPathKey(normalizedAnalysisPath(relative))+".json")
+}

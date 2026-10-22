@@ -230,3 +230,11 @@ func TestPerformanceCacheRemainsCurrentAtSourceLimitWithUnchangedPolicy(t *testi
 		t.Fatalf("current load = %+v, %v", loaded, err)
 	}
 }
+
+func performanceCachePath(root, path string) string {
+	resolved, err := resolvePerformanceCachePath(root, path)
+	if err != nil {
+		panic(err)
+	}
+	return resolved
+}

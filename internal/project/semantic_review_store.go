@@ -258,10 +258,6 @@ func (c *FileAnalysisCache) validateInputWithPolicy(input FileAnalysisInput, pol
 	return nil
 }
 
-func (c *FileAnalysisCache) cachePath(relative string) string {
-	return filepath.Join(c.root, fileAnalysisRelativeDir, analysisPathKey(normalizedAnalysisPath(relative))+".json")
-}
-
 func newMissingAnalysis(input FileAnalysisInput) *FileAnalysis {
 	return &FileAnalysis{SchemaVersion: fileAnalysisSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: normalizedAnalysisPath(input.Path), ContentHash: input.ContentHash, Language: input.Language, Status: AnalysisStatusMissing, Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion}
 }

@@ -441,3 +441,11 @@ func securityReport(input SecurityReportInput, status string) SecurityFileReport
 	}
 	return SecurityFileReport{SchemaVersion: securityReportSchemaVersion, ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Source: input.Source, RuleSetVersion: input.RuleSetVersion, Status: status, Findings: findings, Model: input.Model, ConfiguredModel: input.ConfiguredModel, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
 }
+
+func (c *SecurityReportCache) cachePath(path, source string) string {
+	resolved, err := c.resolveCachePath(path, source)
+	if err != nil {
+		panic(err)
+	}
+	return resolved
+}

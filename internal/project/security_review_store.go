@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -396,11 +395,6 @@ func (c *SecurityReportCache) reportCurrent(report SecurityFileReport, input Sec
 	}
 	current, err := GetFileInfo(c.root, report.Path)
 	return err == nil && current.SizeBytes <= SecurityMaxSourceBytes && current.ContentHash == report.ContentHash, nil
-}
-
-func (c *SecurityReportCache) cachePath(path, source string) string {
-	key := sha256.Sum256([]byte(source + "\x00" + path))
-	return filepath.Join(c.root, ".mini-orca", "security", "files", hex.EncodeToString(key[:])+".json")
 }
 
 func LoadSecurityFileReport(root string, input SecurityReportInput) (*SecurityFileReport, error) {
