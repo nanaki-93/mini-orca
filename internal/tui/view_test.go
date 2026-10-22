@@ -866,7 +866,7 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 
 func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
-		for _, height := range []int{24, 30, 46} {
+		for _, height := range []int{20, 21, 22, 23, 24, 30, 46} {
 			for _, hub := range HubTabs() {
 				s := NewState()
 				s.Palette = palette
@@ -875,9 +875,18 @@ func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 				}}
 				s.Navigate(hub.Page)
 				frame := s.Render(120, height)
+				var sidebar strings.Builder
+				for _, row := range strings.Split(frame, "\n")[3 : height-3] {
+					sidebar.WriteString(theme.TruncateVisible(row, sidebarMenuWidth+1))
+				}
 				for _, model := range []string{"inspector", "reviewer", "coder"} {
-					if !strings.Contains(frame, model) {
+					if !strings.Contains(sidebar.String(), model) {
 						t.Fatalf("model %s missing on %s at height %d", model, hub.Page, height)
+					}
+				}
+				for _, tab := range HubTabs() {
+					if !strings.Contains(sidebar.String(), tab.Key+".") {
+						t.Fatalf("models displaced navigation to %s at height %d", tab.Page, height)
 					}
 				}
 				if len(strings.Split(frame, "\n")) != height || len(s.PendingActions) != 0 {

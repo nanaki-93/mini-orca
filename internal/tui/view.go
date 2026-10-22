@@ -119,24 +119,33 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRow
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {
 	active := s.ActiveHub()
-	lines := []string{
-		"",
-		fmt.Sprintf("  %sNAVIGATION%s", th.bold+th.cyan, th.reset),
-		fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
+	tabs := HubTabs()
+	subPages := s.renderSidebarSubPages(th, active, width)
+	models := s.renderSidebarModels(th, width)
+	// Keep every navigation row and model visible before adding decoration.
+	roomy := targetBodyRows >= len(tabs)+len(subPages)+len(models)+4
+	var lines []string
+	if roomy {
+		lines = append(lines,
+			"",
+			fmt.Sprintf("  %sNAVIGATION%s", th.bold+th.cyan, th.reset),
+			fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
+		)
 	}
-	for _, tab := range HubTabs() {
+	for _, tab := range tabs {
 		isActiveHub := tab.Key == active.Key
 		if isActiveHub {
 			badge := fmt.Sprintf(" ▸ %s. %-*s", tab.Key, max(1, width-8), theme.TruncatePlain(strings.ToUpper(tab.Label), width-8))
 			lines = append(lines, " "+th.accentBg+theme.TruncatePlain(badge, width-2)+th.reset)
-			lines = append(lines, s.renderSidebarSubPages(th, tab, width)...)
-			lines = append(lines, "")
+			lines = append(lines, subPages...)
+			if roomy {
+				lines = append(lines, "")
+			}
 		} else {
 			lines = append(lines, fmt.Sprintf("   %s%s.%s %s%s%s",
 				th.muted, tab.Key, th.reset, th.fg, theme.TruncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
-	models := s.renderSidebarModels(th, width)
 	if targetBodyRows-len(lines) >= len(models)+2 {
 		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.bold + th.cyan + "MODELS" + th.reset}, models...)
 	}
