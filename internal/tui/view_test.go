@@ -864,6 +864,40 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 
 }
 
+func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
+	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+		for _, height := range []int{24, 30, 46} {
+			for _, hub := range HubTabs() {
+				s := NewState()
+				s.Palette = palette
+				s.Models = &ModelCatalog{Scopes: map[string]Model{
+					"analyze": {Model: "inspector"}, "bug": {Model: "reviewer"}, "function": {Model: "coder"},
+				}}
+				s.Navigate(hub.Page)
+				frame := s.Render(120, height)
+				for _, model := range []string{"inspector", "reviewer", "coder"} {
+					if !strings.Contains(frame, model) {
+						t.Fatalf("model %s missing on %s at height %d", model, hub.Page, height)
+					}
+				}
+				if len(strings.Split(frame, "\n")) != height || len(s.PendingActions) != 0 {
+					t.Fatal("model display changed frame height or dispatched work")
+				}
+				for _, row := range strings.Split(frame, "\n") {
+					if theme.VisibleRuneCount(row) != 120 {
+						t.Fatal("model summary broke frame width")
+					}
+				}
+			}
+		}
+	}
+	s := NewState()
+	s.ScopeModels["function"] = "chosen-model"
+	if frame := s.Render(120, 24); !strings.Contains(frame, "chosen-model") || !strings.Contains(frame, "unavailable") {
+		t.Fatal("sidebar lost assigned model or missing-model state")
+	}
+}
+
 func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
 	s := NewState()
 	s.Connected = true

@@ -136,11 +136,24 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []str
 				th.muted, tab.Key, th.reset, th.fg, theme.TruncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
-	if targetBodyRows > len(lines)+2 {
-		for len(lines) < targetBodyRows-2 {
-			lines = append(lines, "")
+	models := s.renderSidebarModels(th, width)
+	if targetBodyRows-len(lines) >= len(models)+2 {
+		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.bold + th.cyan + "MODELS" + th.reset}, models...)
+	}
+	for len(lines) < targetBodyRows-len(models) {
+		lines = append(lines, "")
+	}
+	return append(lines, models...)
+}
+
+func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
+	var lines []string
+	for _, role := range []struct{ scope, label string }{{"analyze", "Analyze"}, {"bug", "Bug"}, {"function", "Code"}} {
+		model := s.EffectiveScopeModel(role.scope).Model
+		if model == "" || model == role.scope {
+			model = "unavailable"
 		}
-		lines = append(lines, "  "+th.muted+"[?] Keys · [:] Commands"+th.reset)
+		lines = append(lines, fmt.Sprintf("  %s%-7s%s %s", th.muted, role.label, th.reset, theme.TruncatePlain(theme.SanitizeSingleLine(model), max(1, width-10))))
 	}
 	return lines
 }

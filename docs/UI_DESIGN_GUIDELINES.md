@@ -42,8 +42,9 @@ and worktree recovery belong in detail views. Plans separate approach, evidence,
 scope and acceptance; issue details separate problem, evidence and solution.
 `Tab` / `Shift+Tab` always switch sidebar views, including from task plans and
 detail pages. Left/Right (or `h`/`l`) switch detail sections without requests or
-mutations. Preserve full content through scrolling. Avoid repeated workspace statistics, model routing
-and settings panels outside their own pages. Diff explanations are initially
+mutations. Preserve full content through scrolling. Keep a compact model summary
+in the sidebar at every supported sidebar height. Detailed routing, settings and
+workspace statistics belong on their own pages. Diff explanations are initially
 collapsed and remain reachable with `e`.
 
 Inspecting a failed task never retries it. Starting a second task in an occupied
