@@ -273,7 +273,7 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
-	case "start-agent":
+	case "start-agent", "save-plan":
 		task, ok := m.state.prepareStartAgentTask(reqID, act)
 		if !ok {
 			return nil, true
@@ -317,6 +317,10 @@ func (m *BubbleModel) View() string {
 
 func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
 	switch msg.Type {
+	case tea.KeyPgUp:
+		return KeyEvent{Key: "PageUp"}
+	case tea.KeyPgDown:
+		return KeyEvent{Key: "PageDown"}
 	case tea.KeyUp:
 		return KeyEvent{Key: "ArrowUp"}
 	case tea.KeyDown:

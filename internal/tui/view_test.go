@@ -68,7 +68,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 
 	pages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -197,7 +197,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	}
 	allPages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -336,7 +336,7 @@ func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
 func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 	allPages := []Page{
 		PageSummary, PageRepo, PageProject,
-		PageAgents, PageBugs, PageIssueDetail, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
+		PageAgents, PageBugs, PageIssueDetail, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles,
 		PageEditor, PageGit, PageHistory,
 		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
@@ -574,7 +574,7 @@ func TestKeybindsModalNoTruncationAcrossAllPages(t *testing.T) {
 	s := NewState()
 	pages := []Page{
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
+		PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
 		PageInstructions, PageModels, PageBootstrap, PageLessons,
 	}
@@ -906,6 +906,9 @@ func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
 	s.Connected = true
 	longMission := "Refactor authentication middleware to propagate context deadlines across all downstream gRPC handlers"
 	s.ExecuteCommand("agent " + longMission)
+	s.ExecuteCommand(":scope auth.go; auth_test.go")
+	s.ExecuteCommand(":criteria Propagate context deadlines across downstream handlers")
+	approveTaskPlanForTest(t, s)
 	if s.Change == nil || s.Change.Title != longMission {
 		t.Fatalf("expected full agent mission title to be preserved without truncation, got %q", s.Change.Title)
 	}

@@ -57,30 +57,28 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := s.admitChangeWorkflow(session, request, len(cleanedMessages)); err != nil {
 		return nil, err
 	}
+	if err := approveWorkflowPlan(session, request.PlanHash); err != nil {
+		return nil, err
+	}
+	startStage, err := s.workflowResumeStage(session, request.ResumeFrom)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateResumedModels(session, request.Models, startStage); err != nil {
+		return nil, err
+	}
 	expandTargetsFromFailedChecks(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
-	now := time.Now().UTC()
-	session.Revision++ // Invalidates operations admitted before this run.
-	w := &ChangeWorkflow{ID: fmt.Sprintf("%s-%d", id, session.Revision), Status: "running", Models: request.Models, AutoRepair: request.AutoRepair, StartedAt: now, UpdatedAt: now}
-	for i, profile := range request.Models.selections() {
-		runtime := s.workflowStageRuntime(i, profile)
-		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
-	}
-	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
-	retainedChecks := []CheckResult{}
-	if len(session.Changes) > 0 && !requiredChecksPassed(session.Checks) {
-		retainedChecks = session.Checks
-	}
-	session.Workflow, session.Checks, session.ReviewedHash, session.PinnedTests = w, retainedChecks, "", nil
-	session.Messages = cleanedMessages
-	session.UpdatedAt = now
+	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
 	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
-	delete(s.changeAuthority, session.ProjectID+"/"+id)
+	if startStage != 2 {
+		delete(s.changeAuthority, session.ProjectID+"/"+id)
+	}
 	workCtx, cancel := context.WithTimeout(context.Background(), changeWorkflowBudget)
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
-	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, cancel: cancel, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
@@ -124,7 +122,10 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	defer job.cancel()
 	defer close(job.done)
 	var runErr error
-	currentMessage := s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)
+	currentMessage := message
+	if job.startStage == 0 {
+		currentMessage = s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)
+	}
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
 			nextMsg, ok := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
@@ -133,7 +134,11 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 			}
 			currentMessage = nextMsg
 		}
-		for stage := 0; stage < 3; stage++ {
+		startStage := 0
+		if attempt == 0 {
+			startStage = job.startStage
+		}
+		for stage := startStage; stage < 3; stage++ {
 			if runErr = s.executeChangeWorkflowStage(ctx, job, stage, currentMessage); runErr != nil {
 				break
 			}
@@ -171,10 +176,7 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	if ctx.Err() != nil {
 		return false
 	}
-	if errors.Is(runErr, errWorkflowChecksFailed) {
-		return true
-	}
-	if runErr != nil {
+	if runErr != nil && !errors.Is(runErr, errWorkflowChecksFailed) {
 		return false
 	}
 	s.changesMu.Lock()
@@ -183,7 +185,10 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	if err != nil || session.Workflow == nil || session.Workflow.ID != job.id {
 		return false
 	}
-	return session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
+	if session.Plan != nil && len(session.ScopeSuggestions) > 0 {
+		return false
+	}
+	return errors.Is(runErr, errWorkflowChecksFailed) || session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
 }
 
 func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, bool) {
@@ -207,6 +212,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
 		session.Workflow.Stages[i].Status = "pending"
 		session.Workflow.Stages[i].Reason = ""
+		session.Workflow.Stages[i].StartedAt, session.Workflow.Stages[i].FinishedAt = time.Time{}, time.Time{}
 	}
 	session.ReviewedHash = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
@@ -264,9 +270,9 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 		return nil, err
 	}
 	if stage > 0 {
-		session.Workflow.Stages[stage-1].Status = "completed"
-		session.Workflow.Stages[stage-1].Reason = ""
+		completeWorkflowStage(&session.Workflow.Stages[stage-1], time.Now().UTC())
 	}
+	session.Workflow.Stages[stage].StartedAt = time.Now().UTC()
 	session.Workflow.Stages[stage].Status = "running"
 	session.Workflow.Stages[stage].Reason = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
@@ -281,6 +287,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 	session, err := loadChangeSession(job.root, job.sessionID)
 	if err == nil && session.Workflow != nil && session.Workflow.ID == job.id {
 		w := session.Workflow
+		finishWorkflowStageTiming(w, time.Now().UTC())
 		if runErr == nil {
 			runErr = s.verifyChangeCurrent(ctx, job.root, session)
 		}
@@ -293,7 +300,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 		} else {
 			w.Status, w.Reason = workflowFailure(runErr, session.Checks)
 			stopChangeWorkflowStages(w)
-			if !errors.Is(runErr, errWorkflowChecksFailed) {
+			if !errors.Is(runErr, errWorkflowChecksFailed) && !s.hasLivePassingChecks(session) {
 				delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 			}
 		}

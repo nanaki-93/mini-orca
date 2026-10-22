@@ -20,35 +20,42 @@ type ChangeEdit = archgate.ChangeEdit
 // ChangeSession is private project-local history, unlike source-free findings
 // and audits. Restored check/review evidence is cleared before reuse.
 type ChangeSession struct {
-	SchemaVersion      int                     `json:"schema_version"`
-	ID                 string                  `json:"id"`
-	ProjectID          string                  `json:"project_id"`
-	ProjectRevision    string                  `json:"project_revision"`
-	Kind               string                  `json:"kind"`
-	Title              string                  `json:"title"`
-	AcceptanceCriteria []string                `json:"acceptance_criteria"`
-	FindingTargets     []project.FindingTarget `json:"finding_targets,omitempty"`
-	Targets            []ChangeTarget          `json:"targets"`
-	Instructions       map[string]string       `json:"instructions"`
-	PolicyFingerprint  string                  `json:"policy_fingerprint"`
-	WorkspaceHash      string                  `json:"workspace_hash"`
-	Git                *GitIdentity            `json:"git,omitempty"`
-	Commit             *ChangeCommit           `json:"commit,omitempty"`
-	Revision           int64                   `json:"revision"`
-	Hash               string                  `json:"hash"`
-	State              string                  `json:"state"`
-	Freshness          string                  `json:"freshness"`
-	Messages           []ChangeMessage         `json:"messages"`
-	Changes            []ChangeEdit            `json:"changes"`
-	PinnedTests        []ChangeEdit            `json:"pinned_tests,omitempty"`
-	ContextManifest    project.ContextManifest `json:"context_manifest"`
-	Checks             []CheckResult           `json:"checks"`
-	CheckOptions       CheckOptions            `json:"check_options"`
-	ReviewedHash       string                  `json:"reviewed_hash,omitempty"`
-	RepairAttempts     int                     `json:"repair_attempts"`
-	Workflow           *ChangeWorkflow         `json:"workflow,omitempty"`
-	CreatedAt          time.Time               `json:"created_at"`
-	UpdatedAt          time.Time               `json:"updated_at"`
+	Plan                *ChangePlan             `json:"plan,omitempty"`
+	ScopeSuggestions    []string                `json:"scope_suggestions,omitempty"`
+	ReviewedFiles       []string                `json:"reviewed_files,omitempty"`
+	FileReviewHash      string                  `json:"file_review_hash,omitempty"`
+	LastReviewedChanges []ChangeEdit            `json:"last_reviewed_changes,omitempty"`
+	LastReviewedHash    string                  `json:"last_reviewed_hash,omitempty"`
+	ReviewDiff          []ChangeEdit            `json:"review_diff,omitempty"`
+	SchemaVersion       int                     `json:"schema_version"`
+	ID                  string                  `json:"id"`
+	ProjectID           string                  `json:"project_id"`
+	ProjectRevision     string                  `json:"project_revision"`
+	Kind                string                  `json:"kind"`
+	Title               string                  `json:"title"`
+	AcceptanceCriteria  []string                `json:"acceptance_criteria"`
+	FindingTargets      []project.FindingTarget `json:"finding_targets,omitempty"`
+	Targets             []ChangeTarget          `json:"targets"`
+	Instructions        map[string]string       `json:"instructions"`
+	PolicyFingerprint   string                  `json:"policy_fingerprint"`
+	WorkspaceHash       string                  `json:"workspace_hash"`
+	Git                 *GitIdentity            `json:"git,omitempty"`
+	Commit              *ChangeCommit           `json:"commit,omitempty"`
+	Revision            int64                   `json:"revision"`
+	Hash                string                  `json:"hash"`
+	State               string                  `json:"state"`
+	Freshness           string                  `json:"freshness"`
+	Messages            []ChangeMessage         `json:"messages"`
+	Changes             []ChangeEdit            `json:"changes"`
+	PinnedTests         []ChangeEdit            `json:"pinned_tests,omitempty"`
+	ContextManifest     project.ContextManifest `json:"context_manifest"`
+	Checks              []CheckResult           `json:"checks"`
+	CheckOptions        CheckOptions            `json:"check_options"`
+	ReviewedHash        string                  `json:"reviewed_hash,omitempty"`
+	RepairAttempts      int                     `json:"repair_attempts"`
+	Workflow            *ChangeWorkflow         `json:"workflow,omitempty"`
+	CreatedAt           time.Time               `json:"created_at"`
+	UpdatedAt           time.Time               `json:"updated_at"`
 }
 
 // Listing summaries keeps a full history within the native response bound;
@@ -56,6 +63,7 @@ type ChangeSession struct {
 type ChangeHistoryEntry = gitops.ChangeHistoryEntry
 
 type ChangeCreateRequest struct {
+	Plan               *ChangePlanInput        `json:"plan,omitempty"`
 	ProjectID          string                  `json:"project_id"`
 	ProjectRevision    string                  `json:"project_revision"`
 	Kind               string                  `json:"kind"`
@@ -73,9 +81,10 @@ type ChangeIdentity struct {
 }
 
 type ChangeEditInput struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-	Summary string `json:"summary,omitempty"`
+	Criteria []int  `json:"criteria,omitempty"`
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	Summary  string `json:"summary,omitempty"`
 }
 
 type ChangeMessageRequest struct {

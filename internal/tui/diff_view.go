@@ -33,7 +33,7 @@ func diffModeDisplayName(mode string) string {
 }
 
 func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
-	changes := domain.EffectiveSessionChanges(s.Change)
+	changes := s.diffChanges()
 	if len(changes) == 0 {
 		return FileDiffHunk{}, nil, false
 	}
@@ -46,7 +46,7 @@ func (s *State) activeDiffHunk() (FileDiffHunk, []FileDiffHunk, bool) {
 }
 
 func (s *State) unifiedDiffRows() []UnifiedDiffRow {
-	changes := domain.EffectiveSessionChanges(s.Change)
+	changes := s.diffChanges()
 	if len(changes) == 0 {
 		return nil
 	}
@@ -99,6 +99,7 @@ func (s *State) syncDiffSelectionToHunk(hunkIdx int) {
 	}
 	hunkIdx = min(max(0, hunkIdx), len(all)-1)
 	s.HunkIdx = hunkIdx
+	s.DetailScroll = 0
 	active = all[hunkIdx]
 	mode := s.EffectiveDiffMode()
 	if mode == "unified" {
@@ -129,20 +130,21 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	if !ok {
 		return []string{fmt.Sprintf("  %sNo diff lines available.%s", th.muted, th.reset)}
 	}
-	added, removed, _ := domain.ClassifyDiffScope(domain.EffectiveSessionChanges(s.Change))
+	added, removed, _ := domain.ClassifyDiffScope(s.diffChanges())
 	mode := s.EffectiveDiffMode()
 	meta := s.buildDiffReviewMeta(th, active, len(allHunks), added, removed)
+	meta = append(meta, s.diffReviewOverview(th, active, width)...)
 	stateTag := strings.ToUpper(client.FirstNonEmpty(s.Change.State, "draft"))
 	rightTag := fmt.Sprintf("%s · +%d / -%d", stateTag, added, removed)
-	lines := th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, meta)
+	lines := th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, s.diffMetadataWindow(meta, panelW))
 
 	switch mode {
 	case "split":
-		return append(lines, s.renderSplitHunkDiff(th, width, active, len(allHunks))...)
+		return append(lines, s.renderSplitHunkDiff(th, width, active, len(allHunks), s.diffWindowRows(len(lines)))...)
 	case "unified":
-		return append(lines, s.renderUnifiedStreamDiff(th, width, active, len(allHunks))...)
+		return append(lines, s.renderUnifiedStreamDiff(th, width, active, len(allHunks), s.diffWindowRows(len(lines)))...)
 	default:
-		return append(lines, s.renderFocusedHunkDiff(th, width, active, len(allHunks))...)
+		return append(lines, s.renderFocusedHunkDiff(th, width, active, len(allHunks), s.diffWindowRows(len(lines)))...)
 	}
 }
 
@@ -165,16 +167,16 @@ func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunk
 	return meta
 }
 
-func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
+func (s *State) renderFocusedHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks, rowBudget int) []string {
 	hdr := fmt.Sprintf("   OLD  NEW │ SIGN  FOCUSED HUNK #%d/%d · %s",
 		active.GlobalIndex+1, totalHunks, theme.SanitizeCodeText(active.Path))
 	lines := th.renderTableHeader(hdr, width)
 	hunkLines := active.Hunk.Lines
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(hunkLines), selected, s.adaptiveWindowRows(10, 14))
+	start, end := windowBounds(len(hunkLines), selected, rowBudget)
 	for idx := start; idx < end; idx++ {
-		lines = append(lines, formatDualNumberDiffLine(th, hunkLines[idx], idx == selected, codeCol))
+		lines = append(lines, formatDualNumberDiffLine(th, shiftedDiffLine(hunkLines[idx], s.DiffOffset), idx == selected, codeCol))
 	}
 	return appendWindowFooter(th, lines, start, end, len(hunkLines))
 }
@@ -199,7 +201,7 @@ func formatDualNumberDiffLine(th ansiTheme, dl DiffLine, selected bool, codeCol 
 	}
 }
 
-func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
+func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks, rowBudget int) []string {
 	halfW := max(26, (width-7)/2)
 	leftHdr := theme.PadVisibleRight(" OLD │ BEFORE (ORIGINAL)", halfW)
 	rightHdr := theme.PadVisibleRight(fmt.Sprintf(" NEW │ AFTER (HUNK #%d/%d)", active.GlobalIndex+1, totalHunks), halfW)
@@ -207,12 +209,12 @@ func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk
 
 	splitRows := domain.BuildSplitDiffRows(active.Hunk.Lines)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(splitRows), selected, s.adaptiveWindowRows(10, 14))
+	start, end := windowBounds(len(splitRows), selected, rowBudget)
 	for idx := start; idx < end; idx++ {
 		r := splitRows[idx]
 		cursor := th.renderCursorPrefix(idx == selected)
-		leftCell := formatSplitHalfCell(th, r.OldLine, r.OldKind, r.OldText, halfW, idx == selected)
-		rightCell := formatSplitHalfCell(th, r.NewLine, r.NewKind, r.NewText, halfW, idx == selected)
+		leftCell := formatSplitHalfCell(th, r.OldLine, r.OldKind, shiftedCode(r.OldText, s.DiffOffset), halfW, idx == selected)
+		rightCell := formatSplitHalfCell(th, r.NewLine, r.NewKind, shiftedCode(r.NewText, s.DiffOffset), halfW, idx == selected)
 		lines = append(lines, fmt.Sprintf("  %s%s %s│%s %s", cursor, leftCell, th.border, th.reset, rightCell))
 	}
 	return appendWindowFooter(th, lines, start, end, len(splitRows))
@@ -239,13 +241,13 @@ func formatSplitHalfCell(th ansiTheme, lineNum int, kind, rawText string, colWid
 	return theme.PadVisibleRight(cell, colWidth)
 }
 
-func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks int) []string {
+func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks, rowBudget int) []string {
 	hdr := fmt.Sprintf("   OLD  NEW │ SIGN  UNIFIED DIFF STREAM (%d HUNKS ACROSS %d FILES)", totalHunks, active.FileTotal)
 	lines := th.renderTableHeader(hdr, width)
 	uRows := s.unifiedDiffRows()
 	selected := s.ClampedIdx()
 	codeCol := max(16, width-20)
-	start, end := windowBounds(len(uRows), selected, s.adaptiveWindowRows(10, 14))
+	start, end := windowBounds(len(uRows), selected, rowBudget)
 	for idx := start; idx < end; idx++ {
 		r := uRows[idx]
 		if r.IsHeader {
@@ -260,7 +262,14 @@ func (s *State) renderUnifiedStreamDiff(th ansiTheme, width int, active FileDiff
 			lines = append(lines, fmt.Sprintf("  %s%s── %s ──%s", cursor, style, banner, th.reset))
 			continue
 		}
-		lines = append(lines, formatDualNumberDiffLine(th, r.Line, idx == selected, codeCol))
+		lines = append(lines, formatDualNumberDiffLine(th, shiftedDiffLine(r.Line, s.DiffOffset), idx == selected, codeCol))
 	}
 	return appendWindowFooter(th, lines, start, end, len(uRows))
+}
+
+func (s *State) diffWindowRows(metaRows int) int {
+	if s.viewportBodyRows <= 0 {
+		return 14
+	}
+	return max(1, s.viewportBodyRows-metaRows-4)
 }

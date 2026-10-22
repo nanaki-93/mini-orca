@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
@@ -56,11 +57,13 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 		check.Output = err.Error()
 		return check, err
 	}
+	started := time.Now()
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
 	result, err := s.runCheckCommand(timed, workspace, check.Command, revision, executesProjectCode)
 	check.Output = sanitizeCheckOutput(result.Output, result.Truncated, workspace, s.manager.Root())
 	check.ExitCode = result.ExitCode
+	check.DurationMS = time.Since(started).Milliseconds()
 	if timed.Err() != nil {
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()

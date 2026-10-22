@@ -30,12 +30,14 @@ const (
 // CheckResult is one parser, formatter, lint, or test result. Command is a
 // display-only argv preview; it is never executed through a shell.
 type CheckResult struct {
-	Name     string   `json:"name"`
-	Required bool     `json:"required"`
-	State    string   `json:"state"`
-	Command  []string `json:"command,omitempty"`
-	Output   string   `json:"output,omitempty"`
-	ExitCode int      `json:"exit_code,omitempty"`
+	Outcome    string   `json:"outcome,omitempty"`
+	DurationMS int64    `json:"duration_ms,omitempty"`
+	Name       string   `json:"name"`
+	Required   bool     `json:"required"`
+	State      string   `json:"state"`
+	Command    []string `json:"command,omitempty"`
+	Output     string   `json:"output,omitempty"`
+	ExitCode   int      `json:"exit_code,omitempty"`
 }
 
 // CheckOptions keeps expensive checks explicit. Parsing and formatting
@@ -56,11 +58,12 @@ type ChangeTarget struct {
 
 // ChangeEdit holds one proposed file edit and its computed unified diff.
 type ChangeEdit struct {
-	Path    string           `json:"path"`
-	Content string           `json:"content"`
-	Hash    string           `json:"hash"`
-	Summary string           `json:"summary,omitempty"`
-	Diff    diff.UnifiedDiff `json:"diff"`
+	Criteria []int            `json:"criteria,omitempty"`
+	Path     string           `json:"path"`
+	Content  string           `json:"content"`
+	Hash     string           `json:"hash"`
+	Summary  string           `json:"summary,omitempty"`
+	Diff     diff.UnifiedDiff `json:"diff"`
 }
 
 type architectureImportRule struct {

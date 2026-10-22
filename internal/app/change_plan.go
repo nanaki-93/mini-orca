@@ -1,0 +1,208 @@
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+type ChangePlanRequest struct {
+	ChangeIdentity
+	Plan               ChangePlanInput `json:"plan"`
+	Paths              []string        `json:"paths"`
+	AcceptanceCriteria []string        `json:"acceptance_criteria"`
+}
+
+func (s *Service) UpdateChangePlan(ctx context.Context, id string, request ChangePlanRequest) (*ChangeSession, error) {
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	session, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
+	if err != nil {
+		return nil, err
+	}
+	if len(session.Changes) > 0 {
+		return nil, fmt.Errorf("start a new plan to change the intent of an existing proposal")
+	}
+	create := ChangeCreateRequest{Title: session.Title, Kind: session.Kind, Paths: request.Paths, AcceptanceCriteria: request.AcceptanceCriteria}
+	if err := validateChangeCreateRequest(create); err != nil {
+		return nil, err
+	}
+	session.Targets, session.Instructions = nil, map[string]string{}
+	session.AcceptanceCriteria = request.AcceptanceCriteria
+	if err := captureChangeScope(root, session, request.Paths); err != nil {
+		return nil, err
+	}
+	if err := captureChangePlan(root, session, &request.Plan); err != nil {
+		return nil, err
+	}
+	_, manifest, err := composeChangePromptContext(root, session)
+	if err != nil {
+		return nil, err
+	}
+	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
+	session.ScopeSuggestions = nil
+	session.LastReviewedHash, session.FileReviewHash = "", ""
+	session.LastReviewedChanges, session.ReviewedFiles = nil, nil
+	session.Revision++
+	session.UpdatedAt = time.Now().UTC()
+	session.Workflow, session.Checks, session.ReviewedHash = nil, nil, ""
+	delete(s.changeAuthority, session.ProjectID+"/"+id)
+	return session, storeChangeSession(root, session)
+}
+
+// ChangePlanInput is user-editable task intent, separate from proposed source.
+type ChangePlanInput struct {
+	Problem   string   `json:"problem"`
+	Evidence  string   `json:"evidence,omitempty"`
+	Approach  string   `json:"approach"`
+	NonGoals  []string `json:"non_goals,omitempty"`
+	ReadPaths []string `json:"read_paths,omitempty"`
+}
+
+type ChangePlan struct {
+	ChangePlanInput
+	ReadTargets  []ChangeTarget `json:"read_targets,omitempty"`
+	Hash         string         `json:"hash"`
+	ApprovedHash string         `json:"approved_hash,omitempty"`
+}
+
+func captureChangePlan(root string, session *ChangeSession, input *ChangePlanInput) error {
+	if input == nil {
+		return nil // The existing direct proposal API and historical conversations remain supported.
+	}
+	if err := validateChangePlanInput(*input); err != nil {
+		return err
+	}
+	session.Plan = &ChangePlan{ChangePlanInput: *input}
+	seen := map[string]bool{}
+	for _, path := range input.ReadPaths {
+		if seen[path] || changeTarget(session, path) != nil {
+			return fmt.Errorf("read context paths must be distinct from each other and write targets")
+		}
+		seen[path] = true
+		target, err := captureChangeTarget(root, path)
+		if err != nil {
+			return err
+		}
+		if !target.Exists {
+			return fmt.Errorf("read context path %q does not exist", path)
+		}
+		instructions, err := project.ResolveInstructions(root, path)
+		if err != nil {
+			return err
+		}
+		session.Instructions[path] = instructions.Fingerprint
+		session.Plan.ReadTargets = append(session.Plan.ReadTargets, target)
+	}
+	session.Plan.Hash = changePlanHash(session)
+	return nil
+}
+
+func validateChangePlanInput(input ChangePlanInput) error {
+	if strings.TrimSpace(input.Problem) == "" || strings.TrimSpace(input.Approach) == "" {
+		return fmt.Errorf("provide the problem and proposed approach before approving the plan")
+	}
+	if len(input.NonGoals) > 16 || len(input.ReadPaths) > 8 {
+		return fmt.Errorf("plan allows at most 16 boundaries and 8 read context paths")
+	}
+	for _, value := range append([]string{input.Problem, input.Evidence, input.Approach}, input.NonGoals...) {
+		if len(value) > 8192 || !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
+			return fmt.Errorf("plan text must be UTF-8 without NUL and at most 8192 bytes per field")
+		}
+	}
+	return nil
+}
+
+func changePlanHash(session *ChangeSession) string {
+	input := struct {
+		Kind, Title  string
+		Plan         ChangePlanInput
+		ReadTargets  []ChangeTarget
+		Targets      []ChangeTarget
+		Criteria     []string
+		Instructions map[string]string
+		Project      string
+		Revision     string
+		Workspace    string
+		Policy       string
+	}{session.Kind, session.Title, session.Plan.ChangePlanInput, session.Plan.ReadTargets, session.Targets, session.AcceptanceCriteria,
+		session.Instructions, session.ProjectID, session.ProjectRevision, session.WorkspaceHash, session.PolicyFingerprint}
+	data, _ := json.Marshal(input) // Only strings, slices and maps; no unsupported JSON values.
+	return contentHash(data)
+}
+
+func validateStoredPlan(session *ChangeSession) error {
+	if session.Plan == nil {
+		return nil
+	}
+	p := session.Plan
+	if len(session.AcceptanceCriteria) == 0 {
+		return fmt.Errorf("provide acceptance criteria for the plan")
+	}
+	if err := validateChangePlanInput(p.ChangePlanInput); err != nil {
+		return err
+	}
+	if p.Hash != changePlanHash(session) || p.ApprovedHash != "" && p.ApprovedHash != p.Hash {
+		return fmt.Errorf("plan or captured source identity changed; review the approach again")
+	}
+	if len(p.ReadPaths) != len(p.ReadTargets) {
+		return fmt.Errorf("corrupt plan context")
+	}
+	seen := map[string]bool{}
+	for i, target := range p.ReadTargets {
+		if seen[target.Path] || changeTarget(session, target.Path) != nil {
+			return fmt.Errorf("corrupt plan context scope")
+		}
+		seen[target.Path] = true
+		if target.Path != p.ReadPaths[i] || !target.Exists || target.Hash != contentHash([]byte(target.Content)) {
+			return fmt.Errorf("corrupt plan context identity")
+		}
+	}
+	return nil
+}
+
+func requireApprovedChangePlan(session *ChangeSession) error {
+	if err := validateStoredPlan(session); err != nil {
+		return err
+	}
+	if session.Plan != nil && session.Plan.ApprovedHash != session.Plan.Hash {
+		return fmt.Errorf("approve the current plan before generating code")
+	}
+	return nil
+}
+
+func approveWorkflowPlan(session *ChangeSession, hash string) error {
+	if session.Plan == nil {
+		if hash != "" {
+			return fmt.Errorf("this conversation has no captured plan")
+		}
+		return nil
+	}
+	if hash == "" || hash != session.Plan.Hash {
+		return fmt.Errorf("approve the displayed plan and captured source before generation")
+	}
+	session.Plan.ApprovedHash = hash
+	return nil
+}
+
+func (s *Service) captureChangePromptSnapshot(ctx context.Context, root string, session *ChangeSession, plan *ChangePlanInput) error {
+	var err error
+	session.WorkspaceHash, err = workspaceFingerprint(ctx, root)
+	if err != nil {
+		return err
+	}
+	if err := captureChangePlan(root, session, plan); err != nil {
+		return err
+	}
+	_, manifest, err := composeChangePromptContext(root, session)
+	if err != nil {
+		return err
+	}
+	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
+	return nil
+}

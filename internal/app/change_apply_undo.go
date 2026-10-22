@@ -117,7 +117,7 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 }
 
 func (s *Service) changeApproved(session *ChangeSession) bool {
-	return canHumanReviewProposal(session) && s.changeAuthority[session.ProjectID+"/"+session.ID] == "review:"+session.Hash && session.ReviewedHash == session.Hash && len(session.Checks) > 0 && requiredChecksPassed(session.Checks)
+	return (session.Plan == nil || allChangeFilesReviewed(session)) && canHumanReviewProposal(session) && s.changeAuthority[session.ProjectID+"/"+session.ID] == "review:"+session.Hash && session.ReviewedHash == session.Hash && len(session.Checks) > 0 && requiredChecksPassed(session.Checks)
 }
 
 func (s *Service) failedChangeMutation(root string, journal, previous *changeJournal, cause error) (*ChangeMutationResult, error) {

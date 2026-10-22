@@ -28,7 +28,7 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 	var agentTasks []startAgentTask
 	for _, act := range actions {
 		reqID := nextTUIReqID("act-" + act.Kind)
-		if act.Kind == "start-agent" {
+		if act.Kind == "start-agent" || act.Kind == "save-plan" {
 			if task, ok := s.prepareStartAgentTask(reqID, act); ok {
 				agentTasks = append(agentTasks, task)
 			}
@@ -70,6 +70,8 @@ func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, ac
 		return s.dispatchReindex(ctx, cl, reqID)
 	case "scan":
 		return s.dispatchScan(ctx, cl, reqID)
+	case "issue-source":
+		return s.fetchIssueSource(ctx, cl, reqID, act)
 	case "open-file":
 		return s.fetchFileInfo(ctx, cl, reqID, act.Target)
 	case "run-analysis", "reanalyze", "repair-analysis", "pause-analysis", "resume-analysis":
@@ -351,7 +353,7 @@ func (s *State) dispatchResumeAnalysis(ctx context.Context, cl *Client, reqID st
 
 func (s *State) dispatchMutationAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
 	switch act.Kind {
-	case "start-agent":
+	case "start-agent", "save-plan":
 		return s.dispatchStartAgent(ctx, cl, reqID, act)
 	case "apply-commit":
 		return s.dispatchApplyCommit(ctx, cl, reqID, act)
@@ -370,6 +372,8 @@ func (s *State) dispatchMutationAction(ctx context.Context, cl *Client, reqID st
 
 func (s *State) dispatchSecondaryMutation(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
 	switch act.Kind {
+	case "review-file":
+		return s.dispatchReviewFile(ctx, cl, reqID, act)
 	case "update-proposal":
 		return s.dispatchUpdateProposal(ctx, cl, reqID, act)
 	case "check-change":
@@ -525,10 +529,16 @@ func (s *State) dispatchStartAgent(ctx context.Context, cl *Client, reqID string
 
 func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAgentTask, bool) {
 	if act.Seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+		s.rejectPlanSubmission(act, "Open a project and review a task plan before generation.")
 		return startAgentTask{}, false
 	}
-	paths := domain.EnsureChangeTestPaths(act.Seed.Paths, s.Index)
-	if len(paths) == 0 {
+	if !s.matchesPlanSource(act.Source) {
+		s.rejectPlanSubmission(act, "Project changed; review the task plan again.")
+		return startAgentTask{}, false
+	}
+	paths := domain.EnsureChangeTestPaths(act.Seed.Paths, nil)
+	if len(paths) == 0 || len(paths) > 8 {
+		s.rejectPlanSubmission(act, "Review a scope of 1–8 files including tests before generation.")
 		return startAgentTask{}, false
 	}
 	modelsMap, confirmedProfiles := s.workflowModelsPayload()
@@ -565,6 +575,9 @@ func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAge
 
 func executeStartAgentTask(ctx context.Context, cl *Client, task startAgentTask) startAgentResult {
 	res := startAgentResult{task: task}
+	if task.act.Kind == "save-plan" {
+		task.workspaceTrust = false
+	}
 	if task.workspaceTrust && task.projectRevision != "" {
 		body := map[string]any{"project_revision": task.projectRevision, "confirm": true}
 		var trust ExecutionTrust
@@ -583,6 +596,10 @@ func executeStartAgentTask(ctx context.Context, cl *Client, task startAgentTask)
 		return res
 	}
 	res.session = session
+	if task.act.Kind == "save-plan" {
+		res.wfSession = session
+		return res
+	}
 	wfSession, err := startAgentWorkflowTask(ctx, cl, &task, &session)
 	if err != nil {
 		res.err = err
@@ -803,6 +820,7 @@ func openChangeSessionTask(ctx context.Context, cl *Client, task *startAgentTask
 		return map[string]any{
 			"project_id":          effProjID,
 			"project_revision":    client.FirstNonEmpty(prev, task.projectRevision),
+			"plan":                seed.Plan,
 			"kind":                client.FirstNonEmpty(seed.Kind, "fix"),
 			"title":               client.FirstNonEmpty(seed.Title, "Agent Mission"),
 			"paths":               task.paths,
@@ -813,8 +831,12 @@ func openChangeSessionTask(ctx context.Context, cl *Client, task *startAgentTask
 	var session ChangeSession
 	var syncProj *Project
 	var syncIdx *ProjectIndex
+	if task.act.ExistingChange != nil {
+		session, err := updateSavedPlanTask(ctx, cl, task, scope)
+		return session, nil, nil, err
+	}
 	err := cl.DoJSON(ctx, task.reqID+"-open", http.MethodPost, "/api/projects/current/changes"+scope, buildReq(projID, projRev), &session)
-	if err != nil && isRevisionConflictError(err) {
+	if err != nil && isRevisionConflictError(err) && seed.Plan == nil {
 		if wtPath != "" {
 			projID, projRev = resolveWorktreeIdentityTask(ctx, cl, task.reqID+"-sync", wtPath, task.projectID, task.projectRevision, task.workspaceTrust)
 		} else {
@@ -836,6 +858,9 @@ func openChangeSessionTask(ctx context.Context, cl *Client, task *startAgentTask
 }
 
 func startAgentWorkflowTask(ctx context.Context, cl *Client, task *startAgentTask, session *ChangeSession) (ChangeSession, error) {
+	if task.act.Seed.Plan != nil && session.Plan == nil {
+		return ChangeSession{}, fmt.Errorf("daemon did not return the captured plan; generation was not started")
+	}
 	sessProjID := client.FirstNonEmpty(session.ProjectID, task.projectID)
 	sessProjRev := client.FirstNonEmpty(session.ProjectRevision, task.projectRevision)
 	wfReq := map[string]any{
@@ -847,7 +872,8 @@ func startAgentWorkflowTask(ctx context.Context, cl *Client, task *startAgentTas
 		"models":             task.modelsMap,
 		"confirmed_profiles": task.confirmedProfiles,
 		"confirm_security":   true,
-		"auto_repair":        true,
+		"auto_repair":        task.act.Seed.AutoRepair,
+		"plan_hash":          planHash(session),
 	}
 	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow" + changeWorktreeScopeQuery(session)
 	var wfSession ChangeSession
@@ -862,6 +888,11 @@ func startAgentWorkflowTask(ctx context.Context, cl *Client, task *startAgentTas
 }
 
 func (s *State) applyStartAgentResult(res startAgentResult) error {
+	s.finishPlanSubmission(res)
+	if !s.acceptPlanResult(res) {
+		s.Error = "Project changed while preparing the plan. Review it again."
+		return fmt.Errorf("%s", s.Error)
+	}
 	if res.task.reservedPath != "" && res.wtPath != res.task.reservedPath {
 		s.removeWorktreeByPath(res.task.reservedPath)
 	}
@@ -902,7 +933,9 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 		return s.mergeAlreadyCommittedChange(ctx, cl, reqID, s.Change)
 	}
 	sessionID := url.PathEscape(s.Change.ID)
-	s.ensureChangeReviewed(ctx, cl, reqID, sessionID)
+	if err := s.ensureChangeReviewed(ctx, cl, reqID, sessionID); err != nil {
+		return err
+	}
 	appliedChange := s.Change
 	wtPath := appliedChange.WorktreePath
 	commitCode := domain.GenerateCommitCode(appliedChange.ID, appliedChange.Hash, appliedChange.FindingTargets)
@@ -1046,12 +1079,13 @@ func (s *State) dispatchUpdateProposal(ctx context.Context, cl *Client, reqID st
 	}
 	wtPath := s.Change.WorktreePath
 	projID, projRev := s.changeProjectIdentity(s.Change)
-	changes := make([]map[string]string, 0, len(s.Change.Changes))
+	changes := make([]map[string]any, 0, len(s.Change.Changes))
 	for _, ch := range s.Change.Changes {
-		changes = append(changes, map[string]string{
-			"path":    ch.Path,
-			"content": ch.Content,
-			"summary": ch.Summary,
+		changes = append(changes, map[string]any{
+			"path":     ch.Path,
+			"content":  ch.Content,
+			"summary":  ch.Summary,
+			"criteria": ch.Criteria,
 		})
 	}
 	body := map[string]any{
@@ -1076,51 +1110,20 @@ func (s *State) dispatchUpdateProposal(ctx context.Context, cl *Client, reqID st
 	return nil
 }
 
-func (s *State) ensureChangeReviewed(ctx context.Context, cl *Client, reqID, sessionID string) {
+func (s *State) ensureChangeReviewed(ctx context.Context, cl *Client, reqID, sessionID string) error {
 	if s.Change == nil || s.Change.Hash == "" {
-		return
+		return fmt.Errorf("no current proposal to review")
 	}
-	wtPath := s.Change.WorktreePath
-	prevGit := s.Change.Git
-	prevTargets := s.Change.FindingTargets
-	preserveMeta := func(chg *ChangeSession) {
-		chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, wtPath)
-		if chg.Git == nil && prevGit != nil {
-			chg.Git = prevGit
-		}
-		if len(chg.FindingTargets) == 0 && len(prevTargets) > 0 {
-			chg.FindingTargets = prevTargets
-		}
-	}
-	scope := changeWorktreeScopeQuery(s.Change)
-	reviewReq := func() map[string]any {
-		projID, projRev := s.changeProjectIdentity(s.Change)
-		return map[string]any{
-			"project_id":       projID,
-			"project_revision": projRev,
-			"revision":         s.Change.Revision,
-			"hash":             s.Change.Hash,
-		}
-	}
+	current := *s.Change
+	projID, projRev := s.changeProjectIdentity(&current)
+	body := map[string]any{"project_id": projID, "project_revision": projRev, "revision": current.Revision, "hash": current.Hash}
 	var reviewed ChangeSession
-	if err := cl.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review"+scope, reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
-		preserveMeta(&reviewed)
-		s.Change = &reviewed
-		return
+	if err := cl.DoJSON(ctx, reqID+"-rev", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review"+changeWorktreeScopeQuery(&current), body, &reviewed); err != nil {
+		return err
 	}
-	checkReq := reviewReq()
-	if s.Change.Kind != "instructions" {
-		checkReq["run_tests"] = true
-	}
-	var checked ChangeSession
-	if err := cl.DoJSON(ctx, reqID+"-chk", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/checks"+scope, checkReq, &checked); err == nil && checked.ID != "" {
-		preserveMeta(&checked)
-		s.Change = &checked
-	}
-	if err := cl.DoJSON(ctx, reqID+"-rev2", http.MethodPost, "/api/projects/current/changes/"+sessionID+"/review"+scope, reviewReq(), &reviewed); err == nil && reviewed.ID != "" {
-		preserveMeta(&reviewed)
-		s.Change = &reviewed
-	}
+	reviewed.WorktreePath = current.WorktreePath
+	s.Change = &reviewed
+	return nil
 }
 
 func (s *State) dispatchDismissFinding(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
@@ -1238,6 +1241,7 @@ func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act 
 }
 
 type changeActionTask struct {
+	resumeFrom        string
 	reqID             string
 	isRepair          bool
 	session           ChangeSession
@@ -1294,6 +1298,7 @@ func (s *State) prepareChangeActionTask(reqID string, act ActionRequest) (change
 		s.markChangeWorkflowRunningOptimistic()
 	}
 	return changeActionTask{
+		resumeFrom:        client.FirstNonEmpty(act.ResumeFrom, resumableWorkflowStage(&prev)),
 		reqID:             reqID,
 		isRepair:          isRepair,
 		session:           prev,
@@ -1341,7 +1346,7 @@ func resolveRepairWorkflowMessage(explicit string, seed *ChangeSeed, chg *Change
 }
 
 func (s *State) prepareFallbackStartTask(reqID, previewID string, seed *ChangeSeed, modelsMap map[string]string, confirmed []string) (startAgentTask, bool) {
-	if seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+	if seed == nil || seed.Plan != nil || s.Project == nil || s.Project.ProjectID == "" {
 		return startAgentTask{}, false
 	}
 	paths := domain.EnsureChangeTestPaths(seed.Paths, s.Index)
@@ -1434,7 +1439,7 @@ func ensureChangeTaskTrust(ctx context.Context, cl *Client, task *changeActionTa
 
 func executeRepairWorkflowRequest(ctx context.Context, cl *Client, task *changeActionTask, projID, projRev string) (ChangeSession, error) {
 	wfSession, err := postRepairWorkflowAttempt(ctx, cl, task.reqID, task, projID, projRev, task.session.Revision, task.session.Hash)
-	if err == nil || !isRevisionConflictError(err) {
+	if err == nil || !isRevisionConflictError(err) || task.session.Plan != nil {
 		return wfSession, err
 	}
 	latest, ok := fetchLatestChangeSessionTask(ctx, cl, task.reqID+"-get", &task.session, projID, projRev)
@@ -1459,7 +1464,9 @@ func postRepairWorkflowAttempt(ctx context.Context, cl *Client, reqID string, ta
 		"models":             task.modelsMap,
 		"confirmed_profiles": task.confirmedProfiles,
 		"confirm_security":   true,
-		"auto_repair":        true,
+		"auto_repair":        task.session.Workflow != nil && task.session.Workflow.AutoRepair,
+		"plan_hash":          planHash(&task.session),
+		"resume_from":        task.resumeFrom,
 	}
 	var updated ChangeSession
 	target := "/api/projects/current/changes/" + url.PathEscape(task.session.ID) + "/workflow" + changeWorktreeScopeQuery(&task.session)

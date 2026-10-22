@@ -56,8 +56,18 @@ func (s *State) HandleKey(ev KeyEvent) {
 		s.handleKeybindsModalKey(ev)
 		return
 	}
+	if s.handleDetailScrollKey(ev) {
+		return
+	}
+	if s.Page == PagePlan {
+		s.handlePlanKey(ev)
+		return
+	}
 	if s.Page == PageIssueDetail {
 		s.handleIssueDetailKey(ev)
+		return
+	}
+	if s.handleDiffReviewKey(ev) {
 		return
 	}
 	if s.handleGlobalNavigationKey(ev) {
@@ -171,6 +181,7 @@ func (s *State) stepInspectedIssue(delta int) {
 	}
 	next := min(max(0, s.ClampedIdx()+delta), len(issues)-1)
 	s.SelectedIdx = next
+	s.queueIssueSource(issues[next])
 	s.CmdOutput = fmt.Sprintf("Inspecting issue %d/%d: %s", next+1, len(issues), issues[next].Name)
 }
 
@@ -502,6 +513,7 @@ func (s *State) openSelectedIssueDetail() {
 	idx := s.ClampedIdx()
 	s.Navigate(PageIssueDetail)
 	s.SelectedIdx = idx
+	s.queueIssueSource(issues[idx])
 	s.CmdOutput = fmt.Sprintf("Inspecting issue %d/%d: %s ([f/Enter] Fix · [j/k] Prev/Next · [i/Esc] Back)", idx+1, len(issues), issues[idx].Name)
 }
 
@@ -690,6 +702,7 @@ func (s *State) moveAgentDetailStageSelection(delta int) {
 	cur := s.effectiveAgentDetailStage()
 	next := min(4, max(1, cur+delta))
 	s.AgentStage = next
+	s.DetailScroll = 0
 	s.CmdOutput = fmt.Sprintf("Selected Stage %d/4: %s", next, domain.CanonicalStageLabel(next-1, ""))
 }
 
@@ -700,6 +713,7 @@ func (s *State) handleEditorKey(key string) bool {
 	switch key {
 	case "e":
 		s.ShowInlineWhy = !s.ShowInlineWhy
+		s.DetailScroll = 0
 		stateWord := "hidden"
 		if s.ShowInlineWhy {
 			stateWord = "enabled"

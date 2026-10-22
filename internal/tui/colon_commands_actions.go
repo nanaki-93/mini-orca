@@ -100,10 +100,10 @@ func (s *State) dispatchSingleSelectedIssue() {
 
 func (s *State) dispatchSingleIssue(issue IssueRow) {
 	seed := buildSingleIssueSeed(issue)
-	previewID := s.startLocalAgentPreview(seed)
-	s.Navigate(PageAgents)
-	s.CmdOutput = fmt.Sprintf("Dispatched Fix for %s (%s) — Agent Pipeline active", issue.Name, issue.Path)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: issue.Path, PreviewID: previewID, Seed: seed})
+	if len(seed.AcceptanceCriteria) == 0 {
+		seed.AcceptanceCriteria = []string{domain.SynthesizeIssueVerification(issue, s.Index)}
+	}
+	s.openTaskPlan(seed)
 }
 
 func buildSingleIssueSeed(issue IssueRow) *ChangeSeed {
@@ -112,6 +112,7 @@ func buildSingleIssueSeed(issue IssueRow) *ChangeSeed {
 		kind = issue.Category
 	}
 	return &ChangeSeed{
+		Plan:               &ChangePlanInput{Problem: client.FirstNonEmpty(issue.Cause, issue.Title, issue.Name), Evidence: issue.Evidence, Approach: client.FirstNonEmpty(issue.Solution, "Investigate the reported behavior and implement a focused fix with regression coverage."), NonGoals: issue.NonGoals},
 		FindingTargets:     []FindingTarget{issue.Target},
 		Title:              issue.Name,
 		Paths:              []string{issue.Path},
@@ -142,10 +143,7 @@ func (s *State) dispatchBatchIssues() {
 		return
 	}
 	seed := buildBatchIssuesSeed(batch)
-	previewID := s.startLocalAgentPreview(seed)
-	s.Navigate(PageAgents)
-	s.CmdOutput = fmt.Sprintf("Dispatched grouped agent fix for %d issues", len(batch))
-	s.enqueueAction(ActionRequest{Kind: "start-agent", PreviewID: previewID, Seed: seed})
+	s.openTaskPlan(seed)
 }
 
 func buildBatchIssuesSeed(batch []IssueRow) *ChangeSeed {
@@ -158,9 +156,6 @@ func buildBatchIssuesSeed(batch []IssueRow) *ChangeSeed {
 		"Address these %d findings across %s:\n\n%s\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.",
 		len(included), strings.Join(paths, ", "), strings.Join(itemLines, "\n\n"),
 	)
-	if len(msg) > 8000 {
-		msg = msg[:8000]
-	}
 	return &ChangeSeed{
 		FindingTargets:     targets,
 		Title:              fmt.Sprintf("Batch fix (%d issues)", len(included)),
@@ -176,7 +171,7 @@ func selectBatchIssueScope(batch []IssueRow) ([]string, []IssueRow, []FindingTar
 	var included []IssueRow
 	var targets []FindingTarget
 	for _, row := range batch {
-		if row.Path != "" && !domain.ContainsString(paths, row.Path) && len(paths) < 7 {
+		if row.Path != "" && !domain.ContainsString(paths, row.Path) {
 			paths = append(paths, row.Path)
 		}
 		if row.Path != "" && domain.ContainsString(paths, row.Path) {
@@ -207,7 +202,7 @@ func formatBatchIssueItems(rows []IssueRow) ([]string, []string) {
 		))
 		for _, ac := range row.AcceptanceCriteria {
 			trimmed := strings.TrimSpace(ac)
-			if trimmed != "" && !domain.ContainsString(criteria, trimmed) && len(criteria) < 8 {
+			if trimmed != "" && !domain.ContainsString(criteria, trimmed) {
 				criteria = append(criteria, trimmed)
 			}
 		}
@@ -273,16 +268,14 @@ func (s *State) startLocalAgentPreview(seed *ChangeSeed) string {
 
 func (s *State) dispatchFeatureIdea(idea FeatureSuggestion) {
 	seed := &ChangeSeed{
+		Plan:               &ChangePlanInput{Problem: idea.Title, Evidence: idea.Evidence, Approach: "Implement " + idea.Title + ". " + idea.Benefit},
 		Title:              idea.Title,
 		Paths:              idea.Paths,
 		Kind:               "feature",
 		Message:            fmt.Sprintf("Implement feature: %s\nBenefit: %s", idea.Title, idea.Benefit),
 		AcceptanceCriteria: idea.AcceptanceCriteria,
 	}
-	previewID := s.startLocalAgentPreview(seed)
-	s.Navigate(PageAgents)
-	s.CmdOutput = fmt.Sprintf("Dispatched feature idea %q to isolated Agent", idea.Title)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Target: idea.ID, PreviewID: previewID, Seed: seed})
+	s.openTaskPlan(seed)
 }
 
 func (s *State) toggleCurrentFileExclusion() {
@@ -313,6 +306,11 @@ func (s *State) applyAndCommitProposal(commitMsg string) {
 	}
 	if s.Change == nil {
 		s.CmdOutput = "No active proposal diff to apply."
+		return
+	}
+	if s.Change.Plan != nil && !allProposalFilesReviewed(s.Change) {
+		s.openAgentDiffInspector()
+		s.CmdOutput = "Inspect each changed file and press [w] to mark it reviewed before Apply."
 		return
 	}
 	if s.Change.State == "applied" {
@@ -382,6 +380,10 @@ func (s *State) triggerAgentRecheckOrRepair() {
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
 		return
 	}
+	if s.Change.Plan != nil && len(s.Change.ScopeSuggestions) > 0 {
+		s.openCurrentPlan()
+		return
+	}
 	if s.isChangeStale() || len(s.Change.Changes) == 0 {
 		s.restartAgentFromCurrentChange()
 		return
@@ -448,16 +450,19 @@ func (s *State) restartAgentFromCurrentChange() {
 		s.removeActiveChangeByID(s.Change.ID)
 		s.Change = nil
 	}
-	previewID := s.startLocalAgentPreview(seed)
+	s.openTaskPlan(seed)
 	if stale {
-		s.CmdOutput = fmt.Sprintf("Refreshing stale proposal %q on current project revision...", seed.Title)
-	} else {
-		s.CmdOutput = fmt.Sprintf("Retrying agent workflow for %q...", seed.Title)
+		s.CmdOutput = "Source changed. Review the refreshed plan before generating."
 	}
-	s.enqueueAction(ActionRequest{Kind: "start-agent", PreviewID: previewID, Seed: seed})
 }
 
-func (s *State) buildSeedFromCurrentChange() *ChangeSeed {
+func (s *State) buildSeedFromCurrentChange() (seed *ChangeSeed) {
+	defer func() {
+		if seed != nil && s.Change != nil && s.Change.Plan != nil {
+			input := s.Change.Plan.ChangePlanInput
+			seed.Plan = &input
+		}
+	}()
 	if s.Change == nil {
 		return nil
 	}
@@ -542,6 +547,10 @@ func (s *State) matchIssuesForTargets(targets []FindingTarget) []IssueRow {
 }
 
 func (s *State) rejectCurrentDiffHunk() {
+	if s.DiffSinceReview {
+		s.Error = "Switch to the complete proposal with [z] before rejecting a hunk."
+		return
+	}
 	active, _, ok := s.activeDiffHunk()
 	if !ok || s.Change == nil {
 		s.CmdOutput = "No modifiable diff hunk selected to reject."
@@ -554,7 +563,8 @@ func (s *State) rejectCurrentDiffHunk() {
 	}
 	fc.Content = domain.RejectHunkFromDiff(fc.Diff.Lines, active.Hunk)
 	fc.Diff.Lines = domain.RejectHunkLines(fc.Diff.Lines, active.Hunk)
-	s.Change.ReviewedHash = ""
+	s.Change.ReviewedHash, s.Change.FileReviewHash = "", ""
+	s.Change.ReviewedFiles = nil
 	s.Change.Checks = nil
 	if _, all, hasNext := s.activeDiffHunk(); hasNext {
 		s.syncDiffSelectionToHunk(min(active.GlobalIndex, len(all)-1))
@@ -1241,7 +1251,5 @@ func (s *State) execAgentMissionCommand(arg string) {
 		return
 	}
 	seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}
-	previewID := s.startLocalAgentPreview(seed)
-	s.enqueueAction(ActionRequest{Kind: "start-agent", Message: arg, PreviewID: previewID, Seed: seed})
-	s.CmdOutput = fmt.Sprintf("Dispatched custom agent mission: %s", arg)
+	s.openTaskPlan(seed)
 }

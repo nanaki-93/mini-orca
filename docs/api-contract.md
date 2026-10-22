@@ -99,6 +99,8 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
 | POST | `/api/projects/current/changes/{sessionID}/workflow` | Start creation, test writing/execution and model review for the captured scope. |
 | POST | `/api/projects/current/changes/{sessionID}/workflow/cancel` | Cancel the identified workflow without applying source. |
+| POST | `/api/projects/current/changes/{sessionID}/plan` | Save revised task intent and scope before generation. |
+| POST | `/api/projects/current/changes/{sessionID}/review-file` | Record inspection of a changed file for the current hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
@@ -620,9 +622,31 @@ executes no project code and does not write AGENTS.md.
 
 A change creation body carries `project_id`, `project_revision`, `kind`
 (`fix`, `performance`, `security`, `feature`, `instructions`), `title`, `paths` and optional
-`acceptance_criteria`. Targets are immutable; Go/Markdown file creation is supported,
-but deletes and other languages are unavailable. A manual instruction proposal adds
+`acceptance_criteria` and `plan`. Source paths must satisfy the context and write
+policies; creation is supported, while deletion is unavailable. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
+
+The TUI supplies a `plan` with `problem`, `evidence`, `approach`, `non_goals`
+and optional `read_paths`, plus at least one acceptance criterion. Creation captures
+1–8 write paths and up to 8 distinct existing read-only paths. Read context cannot
+become a write target. `plan.hash` binds the intent, criteria, source, instructions
+and workspace identity. Saving a plan makes no provider request and runs no checks.
+`POST /api/projects/current/changes/{sessionID}/plan` accepts `ChangeIdentity`,
+`plan`, `paths` and `acceptance_criteria` while the draft has no proposal. It
+recaptures the scope, advances the revision and clears plan approval. Once a proposal
+exists, changing its intent requires a new plan. Missing scope is never filled from
+an arbitrary index entry; oversized scope must be split explicitly by the user.
+Legacy API conversations and schema-1 history without `plan` retain their direct
+message flow. Planned sessions reject generation without current approval.
+
+`POST /api/projects/current/changes/{sessionID}/review-file` accepts `ChangeIdentity`
+and a changed `path`. It records `reviewed_files` and `file_review_hash` without
+model requests, checks or source writes. Planned sessions require all changed files
+reviewed at the current proposal hash before Review/Apply. A complete file review
+captures `last_reviewed_hash` and `last_reviewed_changes`; `review_diff` compares
+that snapshot with the current proposal, including files returned to original
+source. Revising a proposal clears current review progress. Per-file `summary` and
+one-based `criteria` references are advisory explanations, not verified coverage.
 
 Finding-driven changes also capture optional `finding_targets` (up to sixteen
 distinct entries). Each records the original `project_id`, producer `kind`
@@ -646,7 +670,11 @@ lines between separate edits; whitespace inside literals and Markdown remains
 visible when it changes. Source parsing/formatting checks are always
 required; code tests/vet run only with current execution trust in a copied workspace
 using fixed argv. New test files are tested against the base and candidate, and a
-reviewed regression proof stays pinned through repair. Passing parser checks alone
+passing candidate tests stay pinned through repair. For new Go tests, the
+optional baseline observation reports `outcome: failed_before_change`,
+`already_passes`, or `could_not_execute`. A build failure is not evidence of bug
+reproduction. Existing baseline and candidate tests remain required; the new-test
+observation does not replace them. Executed checks include `duration_ms`. Passing parser checks alone
 does not establish runtime correctness. Apply and Undo require `confirm: true`.
 
 Apply optionally accepts `commit_message` (non-empty, at most 4096 UTF-8 bytes),
@@ -699,10 +727,26 @@ The daemon runs creation, test writing plus fixed `go test ./...` checks, and a
 separate model review. The testing agent may change only captured `_test.go`
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
-There is one active change workflow per daemon, a 30-minute total deadline, and
+There is one active change workflow per conversation, a 30-minute total deadline, and
 each model retains its configured request timeout and retry budget. Failed checks
 stop before review. A reviewer returning `changes_requested` blocks human approval
 until a new run produces a passing proposal and approving review.
+
+For planned sessions, workflow admission requires `plan_hash` matching the
+captured plan. Approval does not bypass provider consent, execution trust or stale
+source checks. `auto_repair` defaults to false; opting in permits at most two
+automatic retries. Failed checks can expose `scope_suggestions`, but planned
+workflows never silently add targets and automatic repair stops when expansion
+would be needed. Review the suggested scope in a new plan before generation.
+
+`resume_from` accepts `create` (default), `test`, or `review`. Test-stage retry
+reuses the current implementation; critic retry requires live, passing check
+authority for the exact current proposal and reuses those checks without running
+generation or tests. Keep the model selections for reused stages; changing their
+models requires restarting from that stage. Restored historical checks cannot
+authorize that shortcut.
+Attempts, stage `started_at`/`finished_at`, check duration, failure reason and
+repair mode are exposed to the TUI. Timing is diagnostic, not a benchmark.
 
 Poll the existing guarded session GET for `workflow.status`, ordered `stages`,
 captured model metadata, and the review's `proposal_hash`, `verdict`, `summary`

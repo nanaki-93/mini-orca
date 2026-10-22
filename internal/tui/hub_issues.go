@@ -243,12 +243,13 @@ func renderDiagnosticBulletRows(th ansiTheme, labelStyle, label, bulletStyle, te
 
 func (s *State) buildIssueDetailDiagnosticLines(th ansiTheme, cur IssueRow, panelW int) []string {
 	contentW := issuePanelContentWidth(panelW)
-	diag := renderDiagnosticRow(th, th.bold+th.red, "▲ Root Cause:", th.amber, formatIssueRootCauseText(cur), contentW)
+	diag := renderDiagnosticRow(th, th.bold+th.red, "▲ Cause hypothesis:", th.amber, formatIssueRootCauseText(cur), contentW)
 	if cur.Evidence != "" {
 		diag = append(diag, renderDiagnosticRow(th, th.bold+th.cyan, "◆ Evidence:", th.fg, cur.Evidence, contentW)...)
 	}
+	diag = append(diag, s.issueSourceExcerpt(cur, th, contentW)...)
 	diag = append(diag, renderDiagnosticDivider(th, contentW))
-	diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "✔ Recommended Fix:", th.bold+th.fg, cur.Solution, contentW)...)
+	diag = append(diag, renderDiagnosticRow(th, th.bold+th.green, "Proposed approach:", th.bold+th.fg, cur.Solution, contentW)...)
 	diag = append(diag, s.formatIssueVerificationLines(th, cur, contentW)...)
 	if len(cur.NonGoals) > 0 {
 		diag = append(diag, formatIssueGuardrailLines(th, cur.NonGoals, contentW)...)
@@ -271,16 +272,14 @@ func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow, content
 	if len(cur.AcceptanceCriteria) == 1 {
 		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Verification:", th.cyan, cur.AcceptanceCriteria[0], contentW)
 	}
-	limit := min(3, len(cur.AcceptanceCriteria))
-	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Verification:", th.cyan, th.cyan, cur.AcceptanceCriteria[:limit], contentW)
+	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Verification:", th.cyan, th.cyan, cur.AcceptanceCriteria, contentW)
 }
 
 func formatIssueGuardrailLines(th ansiTheme, nonGoals []string, contentW int) []string {
 	if len(nonGoals) == 1 {
 		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Guardrails:", th.muted, nonGoals[0], contentW)
 	}
-	limit := min(3, len(nonGoals))
-	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Guardrails:", th.purple, th.muted, nonGoals[:limit], contentW)
+	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Guardrails:", th.purple, th.muted, nonGoals, contentW)
 }
 
 func formatIssueOrigin(cur IssueRow) string {
@@ -385,6 +384,11 @@ func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
 		fmt.Sprintf("%sBenefit:%s  %s%s%s", th.muted, th.reset, th.green, cur.Benefit, th.reset),
 	}
 	lines = append(lines, "")
+	contentW := issuePanelContentWidth(panelW)
+	featBox = append(featBox, renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, cur.Evidence, contentW)...)
+	featBox = append(featBox, renderDiagnosticBulletRows(th, th.cyan, "Suggested files:", th.cyan, th.fg, cur.Paths, contentW)...)
+	featBox = append(featBox, renderDiagnosticBulletRows(th, th.purple, "Acceptance:", th.purple, th.fg, cur.AcceptanceCriteria, contentW)...)
+	featBox = append(featBox, "Model suggestion · review the plan with [f] before code generation.")
 	lines = append(lines, th.renderPanelBox("FEATURE IMPLEMENTATION WORKBENCH", "CAPABILITY SPEC", panelW, featBox)...)
 	return lines
 }

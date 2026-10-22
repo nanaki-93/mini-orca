@@ -140,14 +140,16 @@ func TestIssuesFilteringSelectionAndAgentDispatch(t *testing.T) {
 	if len(s.SelectedIssueIDs) != 2 {
 		t.Fatalf("expected 2 selected issues, got %d", len(s.SelectedIssueIDs))
 	}
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
 	s.HandleKey(KeyEvent{Key: "a"})
+	approveTaskPlanForTest(t, s)
 	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "start-agent" {
 		t.Fatalf("expected start-agent action, got %+v", s.PendingActions)
 	}
 	if s.Page != PageAgents || s.Change == nil {
 		t.Fatalf("expected immediate transition to PageAgents with active ChangeSession, got page=%s change=%v", s.Page, s.Change)
 	}
-	if !strings.Contains(s.CmdOutput, "grouped agent fix for 2 issues") {
+	if !strings.Contains(s.CmdOutput, "Approved approach") {
 		t.Fatalf("unexpected command output: %s", s.CmdOutput)
 	}
 
@@ -156,7 +158,7 @@ func TestIssuesFilteringSelectionAndAgentDispatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/projects/current/changes":
-			_, _ = w.Write([]byte(`{"id":"chg-live","title":"Batch fix","state":"open","revision":1,"hash":"h1"}`))
+			_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-live","title":"Batch fix","state":"open","revision":1,"hash":"h1"}`))
 		case "/api/projects/current/changes/chg-live/workflow":
 			workflowStarted = true
 			_, _ = w.Write([]byte(`{"id":"chg-live","title":"Batch fix","state":"running","revision":1,"hash":"h1","workflow":{"id":"wf-1","status":"running"}}`))
@@ -368,7 +370,7 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		capturedPaths = body.Paths
-		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":1,"hash":"h-1","checks":[{"name":"test","state":"passed"}]}`))
+		_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":1,"hash":"h-1","checks":[{"name":"test","state":"passed"}]}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1/workflow", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","title":"Fix","state":"checked","revision":1,"hash":"h-1","checks":[{"name":"test","state":"passed"}],"workflow":{"id":"wf-1","status":"running"}}`))
@@ -485,6 +487,7 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 		Category: "bugs",
 		Target:   FindingTarget{Kind: "semantic", ID: "b1", Path: "internal/app/a.go"},
 	})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cli)
 	if len(capturedPaths) != 2 || capturedPaths[1] != "internal/app/a_test.go" {
 		t.Fatalf("expected companion test path internal/app/a_test.go in captured scope, got %v", capturedPaths)
@@ -595,6 +598,9 @@ func TestAgentStartFailureClearsPreviewAndSurfacesDetail(t *testing.T) {
 	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "mini-orca"}
 	s.Index = &ProjectIndex{Files: []IndexedFile{{Path: "main.go", Language: "Go"}}}
 	s.ExecuteCommand(":agent fix main")
+	s.ExecuteCommand(":scope main.go; main_test.go")
+	s.ExecuteCommand(":criteria Fix the reported failure and preserve existing behavior")
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cli)
 	if s.Change != nil {
 		t.Fatalf("expected failed agent start to clear fake preview session, got %+v", s.Change)
@@ -609,7 +615,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 
 	// Section 2: Tab cycles cleanly across the 5 sidebar submenu items without getting stuck on PageIssueDetail
 	s.HandleKey(KeyEvent{Key: "2"})
-	wantSec2 := []Page{PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles, PageAgents}
+	wantSec2 := []Page{PageBugs, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageAgents}
 	for _, want := range wantSec2 {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != want {
@@ -773,6 +779,7 @@ func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 
 	// 2. Press Enter to fix the bug -> navigates to PageAgents, bug becomes in_progress (hidden from open)
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 	if s.Page != PageAgents {
 		t.Fatalf("expected PageAgents after Enter on bug, got %s", s.Page)
 	}
@@ -970,7 +977,7 @@ func TestStaleSessionSkippingErrorClearingAndPausedAnalysisResume(t *testing.T) 
 			_, _ = w.Write([]byte(`{"message":"project or file changed; refresh the proposal"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":"chg-fresh","project_id":"p1","project_revision":"rev-current","title":"Unwrapped option","state":"open","revision":1,"hash":"h-fresh"}`))
+		_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-fresh","project_id":"p1","project_revision":"rev-current","title":"Unwrapped option","state":"open","revision":1,"hash":"h-fresh"}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-fresh/workflow", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"id":"chg-fresh","project_id":"p1","project_revision":"rev-current","title":"Unwrapped option","state":"running","revision":1,"hash":"h-fresh","workflow":{"id":"wf-fresh","status":"running"}}`))
@@ -1029,12 +1036,16 @@ func TestStaleSessionSkippingErrorClearingAndPausedAnalysisResume(t *testing.T) 
 		t.Fatalf("expected Navigate to clear stale s.Error, got %q", s.Error)
 	}
 
-	// 3. Starting an agent when local revision is stale auto-syncs revision and succeeds on retry
+	// 3. A stale plan fails once and requires fresh user review.
 	s.Project.ProjectRevision = "rev-stale-local"
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cli)
-	if openChangeAttempts != 2 || s.Change == nil || s.Change.ID != "chg-fresh" || s.Error != "" {
-		t.Fatalf("expected auto-resync retry to succeed on 2nd attempt, attempts=%d change=%+v err=%q", openChangeAttempts, s.Change, s.Error)
+	if openChangeAttempts != 1 || s.Change != nil || s.Error == "" {
+		t.Fatalf("stale approval was retried: attempts=%d change=%+v err=%q", openChangeAttempts, s.Change, s.Error)
+	}
+	if err := s.SyncFromDaemon(context.Background(), cli, ""); err != nil {
+		t.Fatal(err)
 	}
 
 	// 4. Pressing 'r' or Enter on PageAnalysisRun when paused resumes with matching plan.Refresh
@@ -1381,6 +1392,7 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: " "})
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 
 	var workflowMessages []string
 	var openCriteria [][]string
@@ -1393,7 +1405,7 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			openCriteria = append(openCriteria, body.AcceptanceCriteria)
-			_, _ = w.Write([]byte(`{"id":"chg-batch","project_id":"p1","project_revision":"r1","title":"Batch fix (2 issues)","state":"draft","revision":1,"hash":"h1","targets":[{"path":"internal/utils/utils.go","exists":true,"content":"package utils\n"},{"path":"internal/utils/utils_test.go","exists":true,"content":"package utils\n"}],"finding_targets":[{"project_id":"p1","kind":"security","id":"security:0953f1","path":"internal/utils/utils.go","source":"ai"},{"project_id":"p1","kind":"performance","id":"performance:5bf047","path":"internal/utils/utils.go"}]}`))
+			_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-batch","project_id":"p1","project_revision":"r1","title":"Batch fix (2 issues)","state":"draft","revision":1,"hash":"h1","targets":[{"path":"internal/utils/utils.go","exists":true,"content":"package utils\n"},{"path":"internal/utils/utils_test.go","exists":true,"content":"package utils\n"}],"finding_targets":[{"project_id":"p1","kind":"security","id":"security:0953f1","path":"internal/utils/utils.go","source":"ai"},{"project_id":"p1","kind":"performance","id":"performance:5bf047","path":"internal/utils/utils.go"}]}`))
 		case r.URL.Path == "/api/projects/current/changes/chg-batch/workflow" && r.Method == http.MethodPost:
 			var body struct {
 				Message string `json:"message"`
@@ -1435,8 +1447,9 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 		}
 	}
 
-	// 2. When Stage 1 times out with empty Changes (but non-empty Targets), pressing 'r' retries the workflow instead of calling /checks
+	// 2. Review the retry plan after Stage 1 times out, then generate without calling /checks.
 	s.HandleKey(KeyEvent{Key: "r"})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cli)
 	if checksCalled || s.Error != "" {
 		t.Fatalf("expected 'r' after Stage 1 timeout to retry workflow without calling /checks, checksCalled=%v err=%q", checksCalled, s.Error)
@@ -1494,6 +1507,7 @@ func TestIssuesSpacebarBatchEnterAndSingleRowFixKey(t *testing.T) {
 	// Move to bug-3 and press 'f' to fix ONLY the currently highlighted row (bug-3)
 	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: "f"})
+	approveTaskPlanForTest(t, s)
 	if s.Page != PageAgents {
 		t.Fatalf("expected 'f' on PageBugs to navigate to PageAgents, got %s", s.Page)
 	}
@@ -1509,6 +1523,7 @@ func TestIssuesSpacebarBatchEnterAndSingleRowFixKey(t *testing.T) {
 	s.PendingActions = nil
 	s.Navigate(PageBugs)
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 	if s.Page != PageAgents {
 		t.Fatalf("expected Enter on PageBugs to navigate to PageAgents, got %s", s.Page)
 	}
@@ -1529,10 +1544,10 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, _ *http.Request) {
 		openedCount++
 		if openedCount == 1 {
-			_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 1","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
+			_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-1","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 1","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"id":"chg-2","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
+		_, _ = w.Write([]byte(`{"plan":{"hash":"plan-1"},"id":"chg-2","project_id":"p1","project_revision":"r1","revision":1,"hash":"h1","state":"draft","title":"Mission 2","targets":[{"path":"a.go"},{"path":"a_test.go"}]}`))
 	})
 	mux.HandleFunc("/api/projects/current/changes/chg-1/workflow", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
@@ -1571,12 +1586,14 @@ func TestConcurrentRunningAgentsTrackedWithoutConflict(t *testing.T) {
 	s.Navigate(PageBugs)
 	s.SelectedIdx = 0
 	s.HandleKey(KeyEvent{Key: "f"})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cl)
 
 	// Start second agent while first is still running
 	s.Navigate(PageBugs)
 	s.SelectedIdx = 0
 	s.HandleKey(KeyEvent{Key: "f"})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cl)
 
 	items := s.AgentItems()
@@ -1703,6 +1720,7 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 	mux.HandleFunc("/api/projects/current/changes", func(w http.ResponseWriter, r *http.Request) {
 		scopedOpenWt = r.URL.Query().Get("worktree_path")
 		_ = json.NewEncoder(w).Encode(ChangeSession{
+			Plan:            &ChangePlan{Hash: "plan-1"},
 			ProjectIdentity: ProjectIdentity{ProjectID: "p-wt", ProjectRevision: "r-wt-1"},
 			ID:              "chg-wt-1",
 			Title:           "Fix race condition",
@@ -1811,6 +1829,7 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 		Category: "bugs",
 		Target:   FindingTarget{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"},
 	})
+	approveTaskPlanForTest(t, s)
 	s.FlushActions(context.Background(), cli)
 
 	if createdWtPath == "" || !strings.HasPrefix(createdBranch, "orca/fix-") || scopedOpenWt != createdWtPath {
@@ -1947,7 +1966,7 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		"Go ·",
 		"120 lines",
 		"if token == \"\" { return nil }",
-		"✔ Recommended Fix:",
+		"Proposed approach:",
 		"Enforce strict authentication/cryptographic validation",
 		"▸ Verification:",
 		"Reject empty token in ValidateToken",
@@ -2028,6 +2047,7 @@ func TestAgentRepairInWorktreeDoesNotDuplicateWorktreeRow(t *testing.T) {
 		WorktreePath:    wtPath,
 		Kind:            "fix",
 		Title:           "Discarded clipboard copy",
+		Targets:         []ChangeTarget{{Path: "internal/tui/clipboard.go"}, {Path: "internal/tui/clipboard_test.go"}},
 		State:           "proposed",
 		Revision:        2,
 		Hash:            "h-wt-1",
@@ -2062,6 +2082,7 @@ func TestAgentRepairInWorktreeDoesNotDuplicateWorktreeRow(t *testing.T) {
 	s.PendingActions = nil
 	s.Change.Changes = nil
 	s.HandleKey(KeyEvent{Key: "r"})
+	approveTaskPlanForTest(t, s)
 	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "start-agent" || s.PendingActions[0].Seed == nil || s.PendingActions[0].Seed.WorktreePath != wtPath {
 		t.Fatalf("expected restart seed to preserve WorktreePath %q, got %+v", wtPath, s.PendingActions)
 	}
@@ -2127,6 +2148,7 @@ func newConcurrentAgentsTestServer(t *testing.T, tmpRoot string, tracker *concur
 		id := fmt.Sprintf("chg-%d", seq)
 		tracker.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(ChangeSession{
+			Plan:            &ChangePlan{Hash: "plan-1"},
 			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
 			ID:              id,
 			Title:           body.Title,
@@ -2199,6 +2221,7 @@ func TestThreeConcurrentAgentsAndAnalysisRunInParallelWithoutSticking(t *testing
 	// Start agent 1, press 'b' on PageAgents to return to PageBugs, start agent 2, press 'b' to return to PageBugs, start agent 3.
 	s.Navigate(PageBugs)
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 	s.HandleKey(KeyEvent{Key: "b"})
 	if s.Page != PageBugs {
 		t.Fatalf("expected 'b' on PageAgents to navigate back to PageBugs, got %s", s.Page)
@@ -2207,11 +2230,13 @@ func TestThreeConcurrentAgentsAndAnalysisRunInParallelWithoutSticking(t *testing
 		t.Fatalf("expected 2 remaining open findings after starting agent 1, got %d", len(s.FilteredIssues()))
 	}
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 	s.HandleKey(KeyEvent{Key: "b"})
 	if len(s.FilteredIssues()) != 1 || s.FilteredIssues()[0].Target.ID != "bug-3" {
 		t.Fatalf("expected bug-3 to remain open when 2 agents are running, got %+v", s.FilteredIssues())
 	}
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	approveTaskPlanForTest(t, s)
 
 	// Before daemon flush, all 3 local previews must exist concurrently in AgentItems().
 	if len(s.AgentItems()) != 3 {

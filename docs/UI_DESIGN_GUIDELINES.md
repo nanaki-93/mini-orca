@@ -25,6 +25,18 @@ relevant action and scope. Explicit Apply/Undo and stale-evidence checks remain
 enforced. Never invent project facts or present suggestions as verified results.
 Unknown, unavailable, stale, partial, failed and canceled states retain meaning.
 
+Task selection opens an editable plan without generation. Make approach, evidence,
+write/read scope, criteria and non-goals inspectable before explicit approval.
+Automatic repair is opt-in. Failed checks may suggest additional scope, but cannot
+silently expand an approved plan. Stage retries must state which work is reused.
+
+Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
+Keep full-proposal review distinct from comparison against the previous review.
+Mark changed files individually, invalidate progress when the proposal changes,
+and show Apply's commit/merge destination. Model rationale and criterion references
+are advisory; distinguish reproduced failures, tests already passing, and checks
+that could not execute. Progress timings are diagnostics, not measured speedups.
+
 ## Verification
 
 Use deterministic Go tests (`go test -race ./internal/tui/... ./cmd/tui/...`)

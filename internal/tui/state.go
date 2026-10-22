@@ -23,6 +23,7 @@ const (
 	PageBugs           Page = "bugs"
 	PageIssueDetail    Page = "issue-detail"
 	PageFeatures       Page = "features"
+	PagePlan           Page = "plan"
 	PageAnalysisRun    Page = "analysis-run"
 	PageAnalysisFiles  Page = "analysis-files"
 	PageEditor         Page = "editor"
@@ -73,16 +74,23 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
-	Kind      string
-	Target    string
-	Message   string
-	PreviewID string
-	Seed      *ChangeSeed
-	Issue     *FindingTarget
+	Source         ProjectIdentity
+	ExistingChange *ChangeSession
+	ResumeFrom     string
+	Kind           string
+	Target         string
+	Message        string
+	PreviewID      string
+	Seed           *ChangeSeed
+	Issue          *FindingTarget
 }
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	PlanDraft         *PlanDraft
+	DetailScroll      int
+	DiffOffset        int
+	DiffSinceReview   bool
 	Page              Page
 	Palette           Palette
 	Connected         bool
@@ -132,6 +140,7 @@ type State struct {
 	Run               *AnalysisRun
 	Selection         *Selection
 	File              *FileInfo
+	IssueFile         *FileInfo
 	Symbols           []SymbolInfo
 	Change            *ChangeSession
 	ActiveChanges     []*ChangeSession
@@ -169,6 +178,7 @@ func HubTabs() []HubTab {
 				{Page: PageBugs, Label: "Issues"},
 				{Page: PageIssueDetail, Label: "Issue Detail"},
 				{Page: PageFeatures, Label: "Features"},
+				{Page: PagePlan, Label: "Task Plan"},
 				{Page: PageAnalysisRun, Label: "Last Run"},
 				{Page: PageAnalysisFiles, Label: "File Scope"},
 			},
@@ -445,6 +455,7 @@ func (s *State) ActiveHub() HubTab {
 // Navigate switches the active page, synchronizes section state, and resets selection when switching lists.
 func (s *State) Navigate(page Page) {
 	if s.Page != page {
+		s.DetailScroll = 0
 		s.Error = ""
 		preserveIssueIdx := (s.Page == PageBugs && page == PageIssueDetail) ||
 			(s.Page == PageIssueDetail && page == PageBugs)

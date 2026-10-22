@@ -9,18 +9,41 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 - **Analyze projects to find Issues**: Coordinates deterministic static/security rules alongside scoped semantic, performance, and advisory security analysis.
 - **Create structured Docs**: Synthesizes a language-agnostic engineering specification covering project purpose, how it pursues its goal, layered architecture, main dependencies, runtime scenarios, ADRs, and operational runbooks.
 - **Suggest Features**: Generates goal-aware feature ideas grounded in the repository's indexed architecture and user-defined project goals.
-- **Execute Guarded Changes & Autonomous Agents**: Prepares and verifies changes across up to eight captured Go/Markdown paths (or isolated Git worktrees) through a 4-stage pipeline—**Architect & Code → Verify & Test → Critic Review → Human Review**—with explicit diff Apply and guarded Undo.
+- **Plan and review guarded changes**: Prepares and verifies changes across up to eight captured Go/Markdown paths (or isolated Git worktrees) after an editable plan review, then through a 4-stage pipeline—**Architect & Code → Verify & Test → Critic Review → Human Review**—with explicit diff Apply and guarded Undo.
 
 ## How It Pursues the Goal
 
 1. **Deterministic Indexing & Context Policy**: Indexes repository files, symbols, and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
 2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `function`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
 3. **4-Stage Verified Change & Agent Pipeline**:
-   - **Step 1 · Architect & Code**: Generates a unified proposal or isolated worktree fix from findings, feature ideas, or chat instructions.
-   - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with bounded self-repair (up to 3 repair attempts).
+   - **Step 1 · Architect & Code**: Generates a proposal from an explicitly approved approach, write scope, read context and acceptance criteria.
+   - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with automatic repair off by default; opt in to at most two automatic retries.
    - **Step 3 · Critic Review**: Evaluates the checked diff for regressions, boundary violations, and clean-code precision before human sign-off.
-   - **Step 4 · Human Precision Gate**: Presents read-only unified/hunk diffs for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
+   - **Step 4 · Human Precision Gate**: Presents read-only unified, split and hunk diffs with per-file review for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
 4. **Keyboard-First Pure Go TUI**: Provides a 5-hub Terminal UI (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with modal vim navigation, `:command` execution, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
+
+## Reviewing a task in the TUI
+
+Selecting a fix or feature opens **Task Plan**. Edit the approach with `e`, write
+scope with `f`, and criteria with `t`. Use `:context path; path` for read-only
+context, `:boundaries item; item` for non-goals, and `:repairs on|off` for repair
+policy. `s` saves a captured draft; `g` approves it and generates code. A custom
+`:agent <request>` requires explicit scope and criteria. Use `:plan` to return to
+a draft or prepare a revised approach. Paths are never silently dropped to fit
+the eight-file write limit.
+
+Use `PgUp/PgDn` in issue, feature, plan and workflow detail views to inspect all
+evidence, criteria and diagnostics. Causes remain hypotheses until supported by
+reproduction; a test that already passed or failed to compile on the original
+source is labeled separately from a reproduced failure.
+
+In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed, `f/F`
+moves between files, `e` shows rationale and criterion references, and `z` compares
+against the last complete review. `P` opens the plan. Apply shows its commit/merge
+destination and requires review of every changed file; changed proposals clear
+review progress. `:retry test` reuses implementation, while `:retry review`
+reuses current passing checks. Attempts, stage timings and failure reasons remain
+visible in workflow details.
 
 ## Architecture
 

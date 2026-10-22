@@ -121,7 +121,7 @@ paths:
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
-      description: Start creation, test writing/execution and model review using captured profiles. Requires execution trust, a test path and consent for every selected remote profile. One active workflow per daemon; no automatic source Apply.
+      description: Start creation, test writing/execution and model review using captured profiles. Requires execution trust, a test path and consent for every selected remote profile. One active workflow per conversation; no automatic source Apply.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeWorkflowRequest'}}}}
       responses:
         '202': {description: Workflow admitted; poll the guarded session GET, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
@@ -139,13 +139,37 @@ paths:
         '200': {description: Current workflow state, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/plan:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Save revised intent and scope before proposal generation; clears approval. No provider or check execution.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangePlanRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/review-file:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Record inspection of one changed file for the current proposal hash. No provider, checks or source writes.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeFileReviewRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/review:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
-      description: Record diff review for the current checked hash.
+      description: Record diff review for the current checked hash. Planned sessions require each changed file to have been reviewed at this hash.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
@@ -1870,10 +1894,74 @@ components:
         project_revision: {type: string}
         revision: {type: integer, minimum: 0}
         hash: {type: string}
+    ChangePlanInput:
+      type: object
+      required: [problem, approach]
+      properties:
+        problem: {type: string, minLength: 1, maxLength: 8192}
+        evidence: {type: string, maxLength: 8192}
+        approach: {type: string, minLength: 1, maxLength: 8192}
+        non_goals: {type: array, maxItems: 16, items: {type: string, maxLength: 8192}}
+        read_paths: {type: array, maxItems: 8, uniqueItems: true, items: {type: string}, description: Existing context paths distinct from write targets; policy and size limits apply.}
+    ChangePlan:
+      allOf:
+        - {$ref: '#/components/schemas/ChangePlanInput'}
+        - type: object
+          required: [hash]
+          properties:
+            hash: {type: string, description: "Captured intent, criteria, source, instructions and workspace identity."}
+            approved_hash: {type: string}
+            read_targets: {type: array, items: {$ref: '#/components/schemas/ChangeTarget'}}
+    ChangePlanRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [plan, paths, acceptance_criteria]
+          properties:
+            plan: {$ref: '#/components/schemas/ChangePlanInput'}
+            paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
+            acceptance_criteria: {type: array, minItems: 1, maxItems: 16, items: {type: string, maxLength: 1024}}
+    ChangeFileReviewRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [path]
+          properties:
+            path: {type: string}
+    ChangeTarget:
+      type: object
+      properties:
+        path: {type: string}
+        hash: {type: string}
+        exists: {type: boolean}
+        content: {type: string}
+        mode: {type: integer}
+    ChangeEdit:
+      type: object
+      properties:
+        path: {type: string}
+        content: {type: string}
+        summary: {type: string, description: Advisory per-file rationale.}
+        criteria: {type: array, maxItems: 16, items: {type: integer, minimum: 1}, description: Advisory references to one-based acceptance criteria; not coverage proof.}
+        hash: {type: string}
+        diff: {$ref: '#/components/schemas/UnifiedDiff'}
+    ChangeCheckResult:
+      type: object
+      properties:
+        name: {type: string}
+        required: {type: boolean}
+        state: {type: string, enum: [not-run, passed, failed, skipped, canceled, unavailable]}
+        command: {type: array, items: {type: string}}
+        output: {type: string}
+        exit_code: {type: integer}
+        duration_ms: {type: integer, minimum: 0}
+        outcome: {type: string, enum: [failed_before_change, already_passes, could_not_execute], description: Go new-test baseline observation; separate from candidate checks and root-cause proof.}
     ChangeCreateRequest:
+      description: Supplying plan requires at least one acceptance criterion. Legacy sessions without a plan remain supported.
       type: object
       required: [project_id, project_revision, kind, title, paths]
       properties:
+        plan: {$ref: '#/components/schemas/ChangePlanInput'}
         project_id: {type: string}
         project_revision: {type: string}
         kind: {type: string, enum: [fix, performance, security, feature, instructions]}
@@ -1929,6 +2017,9 @@ components:
         - type: object
           required: [message, models]
           properties:
+            plan_hash: {type: string, description: Required matching plan.hash for planned sessions; explicitly approves captured intent.}
+            resume_from: {type: string, enum: [create, test, review], default: create}
+            auto_repair: {type: boolean, default: false, description: Opt into up to two automatic repairs within approved scope.}
             message: {type: string, minLength: 1, maxLength: 8192}
             models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
             confirmed_profiles: {type: array, items: {$ref: '#/components/schemas/ModelSelection'}}
@@ -1947,6 +2038,8 @@ components:
       properties:
         id: {type: string}
         status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
+        attempt: {type: integer, minimum: 1}
+        resume_from: {type: string, enum: [create, test, review]}
         reason: {type: string}
         auto_repair: {type: boolean}
         auto_repair_attempts: {type: integer}
@@ -1961,6 +2054,8 @@ components:
             type: object
             required: [name, status]
             properties:
+              started_at: {type: string, format: date-time}
+              finished_at: {type: string, format: date-time}
               name: {type: string, enum: [create, test, review, human_review]}
               status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting]}
               model: {$ref: '#/components/schemas/ScopedModel'}
@@ -1992,26 +2087,15 @@ components:
         hash: {type: string}
         state: {type: string, enum: [draft, applied, undone, prepared, undoing, recovery_required]}
         freshness: {type: string, enum: [current, stale]}
-        targets:
-          type: array
-          items:
-            type: object
-            properties:
-              path: {type: string}
-              hash: {type: string}
-              exists: {type: boolean}
-              content: {type: string}
-              mode: {type: integer}
-        changes:
-          type: array
-          items:
-            type: object
-            properties:
-              path: {type: string}
-              content: {type: string}
-              summary: {type: string, description: Optional concise explanation of what changed in this file and why.}
-              hash: {type: string}
-              diff: {$ref: '#/components/schemas/UnifiedDiff'}
+        plan: {$ref: '#/components/schemas/ChangePlan'}
+        scope_suggestions: {type: array, items: {type: string}, description: Failed-check suggestions requiring a newly reviewed plan; never implicit scope changes for planned sessions.}
+        reviewed_files: {type: array, uniqueItems: true, items: {type: string}}
+        file_review_hash: {type: string}
+        last_reviewed_hash: {type: string}
+        last_reviewed_changes: {type: array, items: {$ref: '#/components/schemas/ChangeEdit'}}
+        review_diff: {type: array, items: {$ref: '#/components/schemas/ChangeEdit'}, description: Differences from the last completely reviewed proposal to the current proposal.}
+        targets: {type: array, items: {$ref: '#/components/schemas/ChangeTarget'}}
+        changes: {type: array, items: {$ref: '#/components/schemas/ChangeEdit'}}
         messages:
           type: array
           items:
@@ -2020,7 +2104,7 @@ components:
               role: {type: string}
               content: {type: string}
               created_at: {type: string, format: date-time}
-        checks: {type: array, items: {type: object}}
+        checks: {type: array, items: {$ref: '#/components/schemas/ChangeCheckResult'}}
         check_options: {type: object, properties: {run_tests: {type: boolean}, run_lint: {type: boolean}}}
         reviewed_hash: {type: string}
         repair_attempts: {type: integer, maximum: 3}

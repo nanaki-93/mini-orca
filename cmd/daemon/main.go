@@ -202,6 +202,8 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/workflow", changeHandler.StartWorkflow)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/workflow/cancel", changeHandler.CancelWorkflow)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review", changeHandler.Review)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review-file", changeHandler.ReviewFile)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/plan", changeHandler.Plan)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/apply", changeHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/commit", changeHandler.Commit)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/undo", changeHandler.Undo)

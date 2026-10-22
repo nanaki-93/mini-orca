@@ -61,7 +61,7 @@ func TestChangeChecksRequireTrustAndProveNewTests(t *testing.T) {
 	var baseline, tests bool
 	for _, check := range checked.Checks {
 		if check.Name == "regression baseline" {
-			baseline = check.State == CheckPassed
+			baseline = check.State == CheckUnavailable && check.Outcome == "could_not_execute" && !check.Required
 		}
 		if check.Name == "tests" {
 			tests = check.State == CheckPassed

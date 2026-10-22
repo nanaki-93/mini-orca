@@ -169,3 +169,21 @@ func (h *ChangeHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.VerifyChange(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+
+func (h *ChangeHandler) ReviewFile(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeFileReviewRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.ReviewChangeFile(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}
+
+func (h *ChangeHandler) Plan(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangePlanRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.UpdateChangePlan(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}

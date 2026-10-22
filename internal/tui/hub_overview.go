@@ -16,6 +16,8 @@ func (s *State) renderActivePage(th ansiTheme, width int) []string {
 		return s.renderRepoPage(th, width)
 	case PageProject:
 		return s.renderProjectPage(th, width)
+	case PagePlan:
+		return s.renderPlanPage(th, width)
 	case PageAgents:
 		return s.renderAgentsPage(th, width)
 	case PageBugs:

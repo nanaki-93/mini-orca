@@ -241,7 +241,7 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	lines := renderPageHeader(th, "[2] AGENT STUDIO · WORKFLOW DEBUG & CHECK INSPECTOR", "[↑/↓] Select Stage · [i/Esc] Back to Pipeline · [r] Repair/Refresh · [d] Diff · [x] Reject")
 	activeStage := s.activeAgentStageNumber()
 	selectedStage := s.effectiveAgentDetailStage()
-	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg)}
+	pipelineLines := []string{renderPipelineStepper(th, activeStage, chg), workflowTimingSummary(chg), ":retry test or :retry review reuses earlier results when still current."}
 	if stageSummary := s.renderWorkflowStagesLine(th); stageSummary != "" {
 		pipelineLines = append(pipelineLines, stageSummary)
 	}
@@ -301,6 +301,7 @@ func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, activeStage, s
 				modelName = st.Model.Model
 			}
 			stErr = strings.TrimSpace(st.Reason)
+			modelName += " · " + workflowElapsed(st.StartedAt, st.FinishedAt)
 		}
 		out = append(out, fmt.Sprintf("  %s%s%d. %-18s%s  %s  %smodel:%s%s",
 			cursor, tStyle, stageNum, stageName, th.reset,
@@ -402,9 +403,15 @@ func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 		cmdStr := strings.Join(chk.Command, " ")
 		out = append(out, fmt.Sprintf("%s  %s%-18s%s (exit %d)  %s%s%s",
 			th.statusBadge(chk.State), th.bold+th.fg, chk.Name, th.reset, chk.ExitCode, th.muted, cmdStr, th.reset))
-		if !strings.EqualFold(chk.State, "passed") {
-			out = append(out, formatCheckOutputLines(th, chk.Output, 10)...)
+		if note := baselineOutcomeLabel(chk); note != "" {
+			out = append(out, note)
 		}
+		elapsed := "not recorded"
+		if chk.DurationMS > 0 {
+			elapsed = fmt.Sprintf("%dms", chk.DurationMS)
+		}
+		out = append(out, "    Duration: "+elapsed)
+		out = append(out, formatCheckOutputLines(th, chk.Output, len(strings.Split(chk.Output, "\n")))...)
 	}
 	return out
 }

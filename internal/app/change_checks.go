@@ -120,7 +120,7 @@ func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 		return
 	}
 	for _, check := range checks {
-		if check.Name == "regression baseline" && check.State == CheckPassed {
+		if check.Name == "regression baseline" && (check.State == CheckPassed || check.Outcome != "" && check.State != CheckCanceled) {
 			session.PinnedTests = changeTestEdits(session.Changes)
 		}
 	}
@@ -348,9 +348,7 @@ func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string
 		return nil, err
 	}
 	baseline := s.runTaskTestCheck(ctx, workspace, session.ProjectRevision, "regression baseline", []string{"go", "test", "./..."}, false)
-	if baseline.State != CheckCanceled {
-		baseline.State = CheckPassed
-	}
+	classifyRegressionBaseline(&baseline)
 	checks = append(checks, baseline)
 	return checks, nil
 }
@@ -428,6 +426,12 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 	if !canHumanReviewProposal(session) || len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) {
 		return nil, fmt.Errorf("complete current proposal checks before review")
 	}
+	if err := requireApprovedChangePlan(session); err != nil {
+		return nil, err
+	}
+	if session.Plan != nil && (!allChangeFilesReviewed(session) || !s.hasLivePassingChecks(session)) {
+		return nil, fmt.Errorf("run current checks and mark each changed file reviewed before Apply")
+	}
 	session.ReviewedHash = session.Hash
 	if session.Workflow != nil {
 		session.Workflow.Stages[3].Status = "completed"
@@ -485,12 +489,21 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 }
 
 func expandTargetsFromFailedChecks(root string, session *ChangeSession) {
-	if session == nil || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) {
+	if session == nil {
+		return
+	}
+	session.ScopeSuggestions = nil
+	if len(session.Checks) == 0 || requiredChecksPassed(session.Checks) {
 		return
 	}
 	existingPaths := collectSessionTargetPaths(session)
 	failedOutputs := collectFailedCheckOutputs(session.Checks)
-	for _, path := range changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath) {
+	paths := changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath)
+	if session.Plan != nil {
+		session.ScopeSuggestions = paths
+		return
+	}
+	for _, path := range paths {
 		captureExpandedSessionTarget(root, session, path)
 	}
 }

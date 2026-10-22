@@ -1,0 +1,127 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
+)
+
+func (s *State) diffChanges() []FileChange {
+	if s.Change == nil {
+		return nil
+	}
+	if s.DiffSinceReview {
+		return s.Change.ReviewDiff
+	}
+	return domain.EffectiveSessionChanges(s.Change)
+}
+
+func (s *State) handleDiffReviewKey(ev KeyEvent) bool {
+	if s.Page != PageEditor || s.BrowseFiles || s.Change == nil {
+		return false
+	}
+	switch ev.Key {
+	case "h", "ArrowLeft":
+		s.DiffOffset = max(0, s.DiffOffset-12)
+	case "l", "ArrowRight":
+		s.DiffOffset += 12
+	case "0":
+		s.DiffOffset = 0
+	case "w":
+		s.reviewCurrentDiffFile()
+	case "z":
+		if s.Change == nil || s.Change.LastReviewedHash == "" {
+			s.CmdOutput = "No complete file review recorded yet. Mark each file with [w]."
+			return true
+		}
+		s.DiffSinceReview = !s.DiffSinceReview
+		s.HunkIdx, s.SelectedIdx, s.DiffOffset = 0, 0, 0
+	case "P":
+		s.openCurrentPlan()
+	default:
+		return false
+	}
+	return true
+}
+
+func shiftedCode(text string, offset int) string {
+	runes := []rune(theme.SanitizeCodeText(text))
+	return string(runes[min(offset, len(runes)):])
+}
+
+func (s *State) diffReviewOverview(th ansiTheme, active FileDiffHunk, width int) []string {
+	if s.Change == nil {
+		return nil
+	}
+	var labels []string
+	for _, file := range domain.EffectiveSessionChanges(s.Change) {
+		mark := "○"
+		if s.Change.FileReviewHash == s.Change.Hash && domain.ContainsString(s.Change.ReviewedFiles, file.Path) {
+			mark = "✓"
+		}
+		labels = append(labels, mark+" "+file.Path)
+	}
+	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
+	rows := renderDiagnosticRow(th, th.cyan, "Files:", th.fg, strings.Join(labels, " · "), contentW)
+	mode := "Complete proposal"
+	if s.DiffSinceReview {
+		mode = "Changes since last complete review"
+	}
+	rows = append(rows, fmt.Sprintf("%s · column offset %d · [h/l] Scroll · [w] Reviewed · [z] Compare · [P] Plan", mode, s.DiffOffset))
+	for _, file := range s.diffChanges() {
+		if file.Path != active.Path {
+			continue
+		}
+		var criteria []string
+		for _, n := range file.Criteria {
+			if n > 0 && n <= len(s.Change.AcceptanceCriteria) {
+				criteria = append(criteria, fmt.Sprintf("%d. %s", n, s.Change.AcceptanceCriteria[n-1]))
+			}
+		}
+		if s.ShowInlineWhy && len(criteria) > 0 {
+			rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Acceptance:", th.purple, th.fg, criteria, contentW)...)
+		}
+	}
+	return append(rows, s.diffApplyDestination())
+}
+
+func shiftedDiffLine(line DiffLine, offset int) DiffLine {
+	line.Text = shiftedCode(line.Text, offset)
+	return line
+}
+
+func (s *State) diffApplyDestination() string {
+	_, branch := s.mainGitIdentity()
+	if branch == "" {
+		branch = "current checkout"
+	}
+	if s.Change.WorktreePath != "" {
+		return "Apply: commit in " + s.Change.WorktreePath + ", then merge into " + branch
+	}
+	return "Apply: write and commit reviewed files in " + branch
+}
+
+func (s *State) diffMetadataWindow(rows []string, panelW int) []string {
+	var wrapped []string
+	for _, row := range rows {
+		wrapped = append(wrapped, theme.WrapVisibleLine(row, issuePanelContentWidth(panelW))...)
+	}
+	budget := s.diffMetadataRows()
+	if len(wrapped) <= budget {
+		s.DetailScroll = 0
+		return wrapped
+	}
+	s.DetailScroll = min(s.DetailScroll, len(wrapped)-budget)
+	first := s.DetailScroll
+	out := append([]string(nil), wrapped[first:first+budget]...)
+	return append(out, fmt.Sprintf("[PgUp/PgDn] Details %d–%d/%d · [e] Why", first+1, first+budget, len(wrapped)))
+}
+
+func (s *State) diffMetadataRows() int {
+	if s.viewportBodyRows <= 0 {
+		return 12
+	}
+	return max(2, s.viewportBodyRows/3-2)
+}

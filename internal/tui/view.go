@@ -112,7 +112,8 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRow
 		body = append(body, s.renderKeybindsModal(th, contentWidth)...)
 	default:
 		s.viewportBodyRows = max(1, targetBodyRows-4)
-		body = append(body, s.renderActivePage(th, contentWidth)...)
+		page := s.renderActivePage(th, contentWidth)
+		body = append(body, s.scrollDetails(th, page, max(1, targetBodyRows-len(body)))...)
 		body = s.appendBottomFooterDock(th, contentWidth, targetBodyRows, body)
 	}
 	return body

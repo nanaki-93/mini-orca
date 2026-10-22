@@ -522,13 +522,17 @@ func effectiveAgentSessionStatus(change *client.ChangeSession) string {
 
 // CountPassedChecks returns the number of passed (or non-required skipped) checks and total checks.
 func CountPassedChecks(checks []client.Check) (int, int) {
-	passed := 0
+	passed, total := 0, 0
 	for _, c := range checks {
+		if !c.Required && c.Outcome != "" {
+			continue
+		}
+		total++
 		if c.State == "passed" || (!c.Required && c.State == "skipped") {
 			passed++
 		}
 	}
-	return passed, len(checks)
+	return passed, total
 }
 
 func classifyAgentStage(change *client.ChangeSession, passed, total int) (int, string) {

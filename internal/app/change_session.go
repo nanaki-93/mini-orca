@@ -47,13 +47,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if err != nil {
 		return nil, err
 	}
-	_, manifest, err := composeChangePromptContext(root, session)
-	if err != nil {
-		return nil, err
-	}
-	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
-	session.WorkspaceHash, err = workspaceFingerprint(ctx, root)
-	if err != nil {
+	if err := s.captureChangePromptSnapshot(ctx, root, session, request.Plan); err != nil {
 		return nil, err
 	}
 	session.Hash = changeProposalHash(session.Changes)
@@ -124,7 +118,11 @@ func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession
 	if policy.Version() != session.PolicyFingerprint {
 		return project.ErrRevisionConflict
 	}
-	for _, expected := range session.Targets {
+	targets := append([]ChangeTarget(nil), session.Targets...)
+	if session.Plan != nil {
+		targets = append(targets, session.Plan.ReadTargets...)
+	}
+	for _, expected := range targets {
 		current, err := captureChangeTarget(root, expected.Path)
 		if err != nil {
 			return err
@@ -343,6 +341,15 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 		}
 		if edit != nil {
 			edit.Summary = sanitizeEditSummary(input.Summary)
+			if len(input.Criteria) > 16 {
+				return nil, fmt.Errorf("at most 16 criterion references per file")
+			}
+			for _, criterion := range input.Criteria {
+				if criterion < 1 || criterion > len(session.AcceptanceCriteria) {
+					return nil, fmt.Errorf("file criterion must reference an acceptance criterion")
+				}
+			}
+			edit.Criteria = input.Criteria
 			edits = append(edits, *edit)
 		}
 	}
@@ -368,6 +375,9 @@ func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessag
 }
 
 func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {
+	if err := requireApprovedChangePlan(session); err != nil {
+		return nil, err
+	}
 	stageZeroWorkflow := ctx.Value(changeWorkflowContextKey{}) != nil
 	text, manifest, err := composeChangeStagePromptContext(root, session, stageZeroWorkflow)
 	if err != nil {

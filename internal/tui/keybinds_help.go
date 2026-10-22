@@ -165,23 +165,29 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		title:     "[2] AGENT STUDIO · PIPELINE & WORKTREES",
 		primary:   []keyDesc{{"i / Enter", "Agent detail"}, {"d", "Inspect diff"}},
 		secondary: []keyDesc{{"a / c", "Apply & commit"}, {"r / x", "Repair / reject"}},
-		commands:  []keyDesc{{":agent <msg>", "New mission"}, {":reject", "Reject fix"}},
+		commands:  []keyDesc{{":plan", "Review approach"}, {":retry <stage>", "Resume stage"}},
+	},
+	PagePlan: {
+		title:     "[2] AGENT STUDIO · TASK PLAN",
+		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}},
+		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"PgUp/PgDn", "Scroll details"}},
+		commands:  []keyDesc{{":context paths", "Read-only context"}, {":repairs on|off", "Automatic repair"}},
 	},
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
-		primary:   []keyDesc{{"Space / x", "Select batch"}, {"Enter / a", "Dispatch fix"}},
+		primary:   []keyDesc{{"Space / x", "Select batch"}, {"Enter / a", "Review fix plan"}},
 		secondary: []keyDesc{{"s / t", "Status / type"}, {"i / d", "Inspect / delete"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
-		primary:   []keyDesc{{"Enter / f", "Dispatch fix"}, {"i / Esc", "Back to issues"}},
+		primary:   []keyDesc{{"Enter / f", "Review fix plan"}, {"i / Esc", "Back to issues"}},
 		secondary: []keyDesc{{"j/k / ←/→", "Prev/next issue"}, {"o / d", "Open / delete"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageFeatures: {
 		title:     "[2] AGENT STUDIO · FEATURE SUGGESTIONS",
-		primary:   []keyDesc{{"Enter / a", "Build feature"}, {"d", "Dismiss idea"}},
+		primary:   []keyDesc{{"Enter / a", "Review feature plan"}, {"d", "Dismiss idea"}},
 		secondary: []keyDesc{{"r", "Run/resume scan"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":agent <msg>", "Custom feature"}, {":analyze", "Run analysis"}},
 	},
@@ -203,7 +209,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
 		title:     "[3] CODE & DIFF · INSPECTOR",
 		primary:   []keyDesc{{"Enter / a", "Apply & commit"}, {"x", "Reject hunk"}},
-		secondary: []keyDesc{{"e", "Toggle why"}, {"o / u", "Files / undo"}},
+		secondary: []keyDesc{{"h/l", "Scroll long lines"}, {"w / z", "Reviewed / compare"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
 	},
 	PageGit: {

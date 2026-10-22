@@ -56,6 +56,9 @@ func loadChangeSession(root, id string) (*ChangeSession, error) {
 }
 
 func validateStoredChange(session ChangeSession) error {
+	if err := validateStoredPlan(&session); err != nil {
+		return err
+	}
 	if err := validateChangeFindingTargets(&session); err != nil {
 		return err
 	}
@@ -69,19 +72,14 @@ func validateStoredChange(session ChangeSession) error {
 	if err := validateStoredEdits(session.Changes, seen); err != nil {
 		return err
 	}
+	if err := validateStoredFileReview(&session, seen); err != nil {
+		return err
+	}
 	if session.Hash != changeProposalHash(session.Changes) {
 		return fmt.Errorf("corrupt proposal identity")
 	}
-	for _, pinned := range session.PinnedTests {
-		found := false
-		for _, edit := range session.Changes {
-			if edit.Path == pinned.Path && edit.Hash == pinned.Hash {
-				found = true
-			}
-		}
-		if !found {
-			return fmt.Errorf("proposal dropped or changed a pinned regression test")
-		}
+	if err := validatePinnedChangeTests(&session); err != nil {
+		return err
 	}
 	return validateStoredWorkflow(session.Workflow)
 }
@@ -109,6 +107,7 @@ func boundedChangeFile(file *os.File) error {
 }
 
 func storeChangeSession(root string, session *ChangeSession) error {
+	refreshChangeReviewDiff(session)
 	if err := validateStoredChange(*session); err != nil {
 		return err
 	}
@@ -162,4 +161,19 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].UpdatedAt.After(result[j].UpdatedAt) })
 	return result, nil
+}
+
+func validatePinnedChangeTests(session *ChangeSession) error {
+	for _, pinned := range session.PinnedTests {
+		found := false
+		for _, edit := range session.Changes {
+			if edit.Path == pinned.Path && edit.Hash == pinned.Hash {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("proposal dropped or changed a pinned regression test")
+		}
+	}
+	return nil
 }

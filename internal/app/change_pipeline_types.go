@@ -29,6 +29,8 @@ func (models ChangeWorkflowModels) validate() error {
 }
 
 type ChangeWorkflowRequest struct {
+	PlanHash   string `json:"plan_hash,omitempty"`
+	ResumeFrom string `json:"resume_from,omitempty"`
 	ChangeIdentity
 	Message           string               `json:"message"`
 	Models            ChangeWorkflowModels `json:"models"`
@@ -44,10 +46,12 @@ type ChangeWorkflowControl struct {
 }
 
 type ChangeWorkflowStage struct {
-	Name   string          `json:"name"`
-	Status string          `json:"status"`
-	Reason string          `json:"reason,omitempty"`
-	Model  *EffectiveModel `json:"model,omitempty"`
+	StartedAt  time.Time       `json:"started_at,omitempty"`
+	FinishedAt time.Time       `json:"finished_at,omitempty"`
+	Name       string          `json:"name"`
+	Status     string          `json:"status"`
+	Reason     string          `json:"reason,omitempty"`
+	Model      *EffectiveModel `json:"model,omitempty"`
 }
 
 type ChangeWorkflowReview struct {
@@ -60,6 +64,8 @@ type ChangeWorkflowReview struct {
 // Workflow reports live in private change history alongside captured source.
 // A model verdict never establishes human approval or measured performance.
 type ChangeWorkflow struct {
+	Attempt            int                   `json:"attempt,omitempty"`
+	ResumeFrom         string                `json:"resume_from,omitempty"`
 	ID                 string                `json:"id"`
 	Status             string                `json:"status"`
 	Reason             string                `json:"reason,omitempty"`
@@ -79,6 +85,7 @@ type changeWorkflowContextKey struct{}
 type changeWorkflowJob struct {
 	root, sessionID, id string
 	models              ChangeWorkflowModels
+	startStage          int
 	autoRepair          bool
 	cancel              context.CancelFunc
 	done                chan struct{}
