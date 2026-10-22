@@ -40,8 +40,9 @@ that could not execute. Progress timings are diagnostics, not measured speedups.
 Keep lists focused on selection and next actions. Task stages, feature evidence,
 and worktree recovery belong in detail views. Plans separate approach, evidence,
 scope and acceptance; issue details separate problem, evidence and solution.
-`Tab` / `Shift+Tab` switch these sections without requests or mutations. Preserve
-full content through scrolling. Avoid repeated workspace statistics, model routing
+`Tab` / `Shift+Tab` always switch sidebar views, including from task plans and
+detail pages. Left/Right (or `h`/`l`) switch detail sections without requests or
+mutations. Preserve full content through scrolling. Avoid repeated workspace statistics, model routing
 and settings panels outside their own pages. Diff explanations are initially
 collapsed and remain reachable with `e`.
 

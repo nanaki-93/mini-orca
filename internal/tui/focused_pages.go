@@ -36,9 +36,9 @@ func (s *State) detailSections() []string {
 }
 
 func (s *State) handleFocusedPageKey(ev KeyEvent) bool {
-	if ev.Key == "Tab" && len(s.detailSections()) > 0 {
+	if (ev.Key == "ArrowLeft" || ev.Key == "ArrowRight" || ev.Key == "h" || ev.Key == "l") && len(s.detailSections()) > 0 {
 		delta := 1
-		if ev.Shift {
+		if ev.Key == "ArrowLeft" || ev.Key == "h" {
 			delta = -1
 		}
 		s.DetailSection = (s.DetailSection + delta + len(s.detailSections())) % len(s.detailSections())
@@ -74,7 +74,7 @@ func (s *State) renderDetailSections(th ansiTheme) []string {
 			tabs = append(tabs, th.muted+label+th.reset)
 		}
 	}
-	return []string{"  " + strings.Join(tabs, "  ·  "), "  " + th.muted + "Tab / Shift+Tab: change section · PgUp/PgDn: scroll" + th.reset, ""}
+	return []string{"  " + strings.Join(tabs, "  ·  "), "  " + th.muted + "←/→: section · Tab: menu · PgUp/PgDn: scroll" + th.reset, ""}
 }
 
 func (s *State) renderPlanSection(th ansiTheme, width int) []string {

@@ -139,9 +139,9 @@ func (s *State) handleIssueDetailKey(ev KeyEvent) {
 	case "Escape", "Backspace", "i", "b", "q":
 		s.Navigate(PageBugs)
 		s.CmdOutput = "Returned to Issues list"
-	case "j", "ArrowDown", "n", "ArrowRight":
+	case "j", "ArrowDown", "n":
 		s.stepInspectedIssue(1)
-	case "k", "ArrowUp", "N", "ArrowLeft":
+	case "k", "ArrowUp", "N":
 		s.stepInspectedIssue(-1)
 	case "1", "2", "3", "4", "5":
 		s.switchHubByKey(ev.Key)

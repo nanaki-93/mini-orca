@@ -138,7 +138,7 @@ func TestDetailsRemainReachableBeyondInitialViewport(t *testing.T) {
 			frames += s.Render(90, 24)
 			s.HandleKey(KeyEvent{Key: "PageDown"})
 		}
-		s.HandleKey(KeyEvent{Key: "Tab"})
+		s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	}
 	if !strings.Contains(frames, "FOURTH_CRITERION") || !strings.Contains(frames, "FOURTH_BOUNDARY") {
 		t.Fatal("plan detail was truncated instead of scrollable")

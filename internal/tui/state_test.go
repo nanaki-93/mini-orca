@@ -1949,7 +1949,7 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		t.Fatalf("expected Issue Detail metadata panel to omit Finding row and finding ID in title row:\n%s", detailFrame)
 	}
 	for section := 0; section < 2; section++ {
-		s.HandleKey(KeyEvent{Key: "Tab"})
+		s.HandleKey(KeyEvent{Key: "ArrowRight"})
 		detailFrame += s.Render(160, 60)
 	}
 	for _, want := range []string{
@@ -1988,10 +1988,15 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 			s.IssueView, s.IssueCategory, s.SelectedIssueIDs)
 	}
 
-	// Left/Right arrows and j/k step between issues inside PageIssueDetail without changing IssueView status
+	// j/k step between issues while Left/Right preserve the inspected issue.
 	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	if s.SelectedIdx != 1 || s.DetailSection != 1 {
+		t.Fatal("section navigation changed the inspected issue")
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	s.HandleKey(KeyEvent{Key: "k"})
 	if s.IssueView != "open" || s.SelectedIssue() == nil || s.SelectedIssue().ID != "semantic:f-first" {
-		t.Fatalf("expected ArrowLeft in PageIssueDetail to step to 1st issue without changing status, got view=%s issue=%+v",
+		t.Fatalf("expected k in PageIssueDetail to step to 1st issue without changing status, got view=%s issue=%+v",
 			s.IssueView, s.SelectedIssue())
 	}
 	firstDetailFrame := s.Render(120, 44)
@@ -2003,10 +2008,10 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 			t.Fatalf("expected 1st issue detail frame to include specific remediation context %q:\n%s", wantFirst, firstDetailFrame)
 		}
 	}
-	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: "j"})
 	if s.SelectedIssue() == nil || s.SelectedIssue().ID != "semantic:f-third" {
-		t.Fatalf("expected ArrowRight + j in PageIssueDetail to step to 3rd issue, got %+v", s.SelectedIssue())
+		t.Fatalf("expected j twice in PageIssueDetail to step to 3rd issue, got %+v", s.SelectedIssue())
 	}
 
 	// Pressing 'i' (or Esc) returns to PageBugs keeping cursor on the inspected 3rd issue (index 2)

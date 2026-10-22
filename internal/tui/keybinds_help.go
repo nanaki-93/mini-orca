@@ -170,7 +170,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PagePlan: {
 		title:     "[2] AGENT STUDIO · TASK PLAN",
 		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}},
-		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"Tab", "Change section"}},
+		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"←/→", "Change section"}},
 		commands:  []keyDesc{{":replan", "Use current base"}, {":repairs on|off", "Automatic repair"}},
 	},
 	PageBugs: {
@@ -182,7 +182,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageIssueDetail: {
 		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
 		primary:   []keyDesc{{"Enter / f", "Review fix plan"}, {"i / Esc", "Back to issues"}},
-		secondary: []keyDesc{{"Tab", "Change section"}, {"j/k", "Prev/next issue"}},
+		secondary: []keyDesc{{"←/→", "Change section"}, {"j/k", "Prev/next issue"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageFeatures: {
@@ -194,7 +194,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageFeatureDetail: {
 		title:     "FEATURE",
 		primary:   []keyDesc{{"f / Enter", "Review feature plan"}, {"Esc", "Back"}},
-		secondary: []keyDesc{{"Tab", "Change section"}, {"PgUp/PgDn", "Scroll"}},
+		secondary: []keyDesc{{"←/→", "Change section"}, {"PgUp/PgDn", "Scroll"}},
 		commands:  []keyDesc{{":agent <goal>", "Custom feature"}},
 	},
 	PageAnalysisRun: {

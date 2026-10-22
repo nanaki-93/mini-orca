@@ -7,6 +7,41 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
+func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
+	for _, tc := range []struct {
+		page, next, previous Page
+	}{
+		{PagePlan, PageAnalysisRun, PageFeatures},
+		{PageIssueDetail, PageFeatures, PageAgents},
+		{PageFeatureDetail, PagePlan, PageBugs},
+	} {
+		for _, reverse := range []bool{false, true} {
+			s := NewState()
+			s.openTaskPlan(&ChangeSeed{Title: "Keep draft", Paths: []string{"main.go"}, Message: "Preserve my approach"})
+			draft := s.PlanDraft
+			s.Navigate(tc.page)
+			s.DetailSection = 1
+			s.HandleKey(KeyEvent{Key: "Tab", Shift: reverse})
+			want := tc.next
+			if reverse {
+				want = tc.previous
+			}
+			if s.Page != want || s.PlanDraft != draft || len(s.PendingActions) != 0 {
+				t.Fatalf("Tab from %s (reverse=%t): page=%s, draft preserved=%t, actions=%v", tc.page, reverse, s.Page, s.PlanDraft == draft, s.PendingActions)
+			}
+		}
+	}
+
+	s := NewState()
+	s.openTaskPlan(&ChangeSeed{Title: "Keep draft", Paths: []string{"main.go"}})
+	for _, page := range []Page{PageAnalysisRun, PageAnalysisFiles, PageAgents, PageBugs, PageFeatures, PagePlan} {
+		s.HandleKey(KeyEvent{Key: "Tab"})
+		if s.Page != page {
+			t.Fatalf("sidebar cycle stopped at %s, want %s", s.Page, page)
+		}
+	}
+}
+
 func TestFocusedPlanSectionsAreSeparateAndNavigationIsPassive(t *testing.T) {
 	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
 		for _, size := range [][2]int{{80, 24}, {120, 30}, {160, 40}} {
@@ -26,12 +61,12 @@ func TestFocusedPlanSectionsAreSeparateAndNavigationIsPassive(t *testing.T) {
 						t.Fatalf("invalid row width: %d", theme.VisibleRuneCount(row))
 					}
 				}
-				s.HandleKey(KeyEvent{Key: "Tab"})
+				s.HandleKey(KeyEvent{Key: "ArrowRight"})
 			}
 			if len(s.PendingActions) != 0 || s.DetailSection != 0 {
 				t.Fatal("section navigation dispatched or did not wrap")
 			}
-			s.HandleKey(KeyEvent{Key: "Tab", Shift: true})
+			s.HandleKey(KeyEvent{Key: "ArrowLeft"})
 			if s.DetailSection != 3 {
 				t.Fatal("reverse section navigation failed")
 			}
@@ -48,7 +83,7 @@ func TestFeatureInspectionAndReturnPreserveSelection(t *testing.T) {
 	if s.Page != PageFeatureDetail || s.SelectedIdx != 1 || len(s.PendingActions) != 0 {
 		t.Fatal("feature inspection dispatched or lost selection")
 	}
-	s.HandleKey(KeyEvent{Key: "Tab"})
+	s.HandleKey(KeyEvent{Key: "ArrowRight"})
 	if !strings.Contains(s.Render(120, 35), "FEATURE_EVIDENCE") {
 		t.Fatal("feature evidence inaccessible")
 	}
