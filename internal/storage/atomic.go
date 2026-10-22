@@ -91,13 +91,6 @@ func validateMetadataFileTarget(path string) error {
 	} else if err := rejectDirectSymlinkTarget(clean); err != nil {
 		return err
 	}
-	info, err := os.Lstat(clean)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if err == nil && info.IsDir() {
-		return fmt.Errorf("metadata target is a directory")
-	}
 	return nil
 }
 

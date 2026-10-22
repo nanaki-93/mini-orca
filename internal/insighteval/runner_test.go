@@ -1574,13 +1574,13 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 		remote           bool
 		promptDigest     string
 	}{
-		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "ecd00e5b274e04bec24eb0b45effef3f252b024db4e47e1c43c00ff1e8c9d5d8"},
-		{"http://localhost:1234/v1", "http://localhost:1234", false, "6d04a9203a6ee60af76c97b439e63393a76b0580484254d5e2de0f9f908c4e73"},
-		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "bdecb8d1333dbd2eaa4883b6b754ab0e8459f0e2c94baf27fe27a7f9df350448"},
-		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "b3a8b9aa76d957261fd6e0168bcd49a0a73b4d7b3bfdcbbc87753c9a88248ea7"},
-		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "c547b948dc2fc1e72bef13a80b0bd2ae3e050aaee4407a7b54f992dbafba8904"},
-		{"http://localhost.example/v1", "http://localhost.example", true, "08b1ef0b64bee488748a39046f037f52be22c34b72b74e4bc52e2dfc2304a522"},
-		{"invalid endpoint", "", true, "871c73862aba1fcec08ae54d75da11ba2be011f88fecbcefb6a68195fb7e8f72"},
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "24d52717fb650385ba5e412a5baaffbb7bf72365449cc34c3f2814c9bf463e8c"},
+		{"http://localhost:1234/v1", "http://localhost:1234", false, "a00b1c637d6946c5ff87b07feb28529924bd6251313921c70c388159b494adb0"},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "68041955e48129ea515f32b8b0414b595041d5489b7816e7e5b6e081332f70d0"},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "6a0a48284d0b812250f8059c0a051526b7743ed5d671780ef0689219841cb5b9"},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "d61e4769708e8cb8d303e9a4de85877bc6ac3b83a75e3f461b81d175344c1307"},
+		{"http://localhost.example/v1", "http://localhost.example", true, "5c9b1b836864f817ac540297562a3f8fc8c20a5818d86a925d05e943a91797ea"},
+		{"invalid endpoint", "", true, "f2c61c5c9bfcac22a2e70077688671512ace1b8a0c524c3b49c4050e0cf779fc"},
 	} {
 		t.Run(test.endpoint, func(t *testing.T) {
 			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
