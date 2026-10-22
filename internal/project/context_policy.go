@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 const contextPolicyVersion = "3"
@@ -50,7 +52,10 @@ func NewContextPolicy(root string) (*ContextPolicy, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(canonical, ".mini-orca", "context-policy.json")
+	configPath, err := storage.MetadataPath(canonical, ".mini-orca", "context-policy.json")
+	if err != nil {
+		return nil, fmt.Errorf("read context policy: %w", err)
+	}
 	data, err := os.ReadFile(configPath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read context policy: %w", err)

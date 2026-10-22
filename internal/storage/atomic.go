@@ -3,11 +3,141 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
+
+// ErrSymlink reports that a metadata path or one of its directory components is a symlink.
+var ErrSymlink = errors.New("metadata path contains a symlink")
+
+// MetadataPath resolves a project-contained path under .mini-orca and rejects
+// symlink components before reads, writes, or removals.
+func MetadataPath(root string, parts ...string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", fmt.Errorf("metadata project root is required")
+	}
+	cleanRoot := filepath.Clean(root)
+	segments, err := normalizeMetadataSegments(parts)
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Join(append([]string{cleanRoot}, segments...)...)
+	rel, err := filepath.Rel(cleanRoot, candidate)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("metadata path escapes project directory")
+	}
+	if err := inspectMetadataSegments(cleanRoot, segments); err != nil {
+		return "", err
+	}
+	return candidate, nil
+}
+
+func normalizeMetadataSegments(parts []string) ([]string, error) {
+	var segments []string
+	for index, part := range parts {
+		if part == "" && index == len(parts)-1 && len(segments) > 0 {
+			continue
+		}
+		if part == "" || strings.Contains(part, "\\") || filepath.IsAbs(part) {
+			return nil, fmt.Errorf("metadata path escapes project directory")
+		}
+		for _, segment := range strings.Split(filepath.ToSlash(part), "/") {
+			if segment == "" || segment == "." || segment == ".." {
+				return nil, fmt.Errorf("metadata path escapes project directory")
+			}
+			segments = append(segments, segment)
+		}
+	}
+	if len(segments) == 0 || segments[0] != ".mini-orca" {
+		return nil, fmt.Errorf("metadata path must stay under .mini-orca")
+	}
+	return segments, nil
+}
+
+func inspectMetadataSegments(cleanRoot string, segments []string) error {
+	current := cleanRoot
+	for index, segment := range segments {
+		current = filepath.Join(current, segment)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrSymlink
+		}
+		if index < len(segments)-1 && !info.IsDir() {
+			return fmt.Errorf("metadata parent is not a directory")
+		}
+	}
+	return nil
+}
+
+func validateMetadataFileTarget(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("metadata path is required")
+	}
+	clean := filepath.Clean(path)
+	if root, segments, ok := splitMiniOrcaPath(clean); ok {
+		if _, err := MetadataPath(root, segments...); err != nil {
+			return err
+		}
+	} else if err := rejectDirectSymlinkTarget(clean); err != nil {
+		return err
+	}
+	info, err := os.Lstat(clean)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && info.IsDir() {
+		return fmt.Errorf("metadata target is a directory")
+	}
+	return nil
+}
+
+func splitMiniOrcaPath(clean string) (string, []string, bool) {
+	var tail []string
+	current := clean
+	for {
+		base := filepath.Base(current)
+		parent := filepath.Dir(current)
+		if base == ".mini-orca" && parent != current {
+			segments := make([]string, 0, len(tail)+1)
+			segments = append(segments, ".mini-orca")
+			for i := len(tail) - 1; i >= 0; i-- {
+				segments = append(segments, tail[i])
+			}
+			return parent, segments, true
+		}
+		if parent == current {
+			return "", nil, false
+		}
+		tail = append(tail, base)
+		current = parent
+	}
+}
+
+func rejectDirectSymlinkTarget(clean string) error {
+	for _, candidate := range []string{filepath.Dir(clean), clean} {
+		info, err := os.Lstat(candidate)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrSymlink
+		}
+	}
+	return nil
+}
 
 // WriteFile replaces path with data through a same-directory temporary file.
 // Metadata directories and files are private to the current user. The source
@@ -46,6 +176,9 @@ func writeFile(path string, data []byte, mode os.FileMode, operations atomicFile
 }
 
 func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize func() error, operations atomicFileOperations) error {
+	if err := validateMetadataFileTarget(path); err != nil {
+		return fmt.Errorf("validate metadata path: %w", err)
+	}
 	directory := filepath.Dir(path)
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return fmt.Errorf("create metadata directory: %w", err)
@@ -62,14 +195,8 @@ func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize f
 		}
 		_ = os.Remove(temporaryPath)
 	}()
-	if _, err := operations.write(temporary, data); err != nil {
-		return fmt.Errorf("write metadata: %w", err)
-	}
-	if err := operations.chmod(temporary, mode); err != nil {
-		return fmt.Errorf("set metadata permissions: %w", err)
-	}
-	if err := operations.sync(temporary); err != nil {
-		return fmt.Errorf("sync metadata: %w", err)
+	if err := writeAndSyncTemp(temporary, data, mode, operations); err != nil {
+		return err
 	}
 	if err := operations.close(temporary); err != nil {
 		closed = true
@@ -81,8 +208,24 @@ func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize f
 			return fmt.Errorf("authorize metadata replacement: %w", err)
 		}
 	}
+	if err := validateMetadataFileTarget(path); err != nil {
+		return fmt.Errorf("validate metadata path: %w", err)
+	}
 	if err := operations.replace(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace metadata: %w", err)
+	}
+	return nil
+}
+
+func writeAndSyncTemp(temporary *os.File, data []byte, mode os.FileMode, operations atomicFileOperations) error {
+	if _, err := operations.write(temporary, data); err != nil {
+		return fmt.Errorf("write metadata: %w", err)
+	}
+	if err := operations.chmod(temporary, mode); err != nil {
+		return fmt.Errorf("set metadata permissions: %w", err)
+	}
+	if err := operations.sync(temporary); err != nil {
+		return fmt.Errorf("sync metadata: %w", err)
 	}
 	return nil
 }
@@ -90,6 +233,9 @@ func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize f
 // RecoverCorrupt preserves an unreadable metadata file using the established
 // .corrupt-<UTC timestamp> suffix. Stores opt into recovery explicitly.
 func RecoverCorrupt(path string) error {
+	if err := validateMetadataFileTarget(path); err != nil {
+		return fmt.Errorf("recover corrupt metadata: %w", err)
+	}
 	corrupt := path + ".corrupt-" + time.Now().UTC().Format("20060102T150405.000000000")
 	if err := os.Rename(path, corrupt); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("recover corrupt metadata: %w", err)

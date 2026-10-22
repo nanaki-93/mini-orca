@@ -214,3 +214,36 @@ func findIndexFile(index *ProjectIndex, path string) *IndexFile {
 	}
 	return nil
 }
+
+func TestBuildIndexRejectsSymlinkedMetadataWithoutOverwritingOutsideFiles(t *testing.T) {
+	for _, mode := range []string{"directory", "file"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			writeIndexFixture(t, root, "main.go", "package main\nfunc main() {}\n")
+			outside := t.TempDir()
+			outsideIndex := filepath.Join(outside, "index.json")
+			if err := os.WriteFile(outsideIndex, []byte("keep-outside-index"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if mode == "directory" {
+				if err := os.Symlink(outside, filepath.Join(root, ".mini-orca")); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Join(root, ".mini-orca"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(outsideIndex, filepath.Join(root, indexRelativePath)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := BuildIndex(root, "sha256:project", "sha256:revision"); err == nil {
+				t.Fatalf("BuildIndex succeeded with symlinked %s metadata", mode)
+			}
+			data, err := os.ReadFile(outsideIndex)
+			if err != nil || string(data) != "keep-outside-index" {
+				t.Fatalf("outside index.json was modified: %q, %v", data, err)
+			}
+		})
+	}
+}

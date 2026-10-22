@@ -221,11 +221,15 @@ func StoreProjectDocsReport(root string, report ProjectDocsReport) error {
 	if report.UpdatedAt.IsZero() {
 		report.UpdatedAt = time.Now().UTC()
 	}
+	path, err := storage.MetadataPath(root, projectDocsReportPath)
+	if err != nil {
+		return fmt.Errorf("store project docs report: %w", err)
+	}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode project docs report: %w", err)
 	}
-	if err := storage.WriteFile(filepath.Join(root, projectDocsReportPath), data, 0600); err != nil {
+	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store project docs report: %w", err)
 	}
 	return nil
@@ -234,7 +238,11 @@ func StoreProjectDocsReport(root string, report ProjectDocsReport) error {
 // LoadProjectDocsReport reads a stored engineering specification and marks it
 // stale when the project revision has changed.
 func LoadProjectDocsReport(root, projectID, projectRevision string) (*ProjectDocsReport, error) {
-	data, err := os.ReadFile(filepath.Join(root, projectDocsReportPath))
+	path, err := storage.MetadataPath(root, projectDocsReportPath)
+	if err != nil {
+		return nil, fmt.Errorf("read project docs report: %w", err)
+	}
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}

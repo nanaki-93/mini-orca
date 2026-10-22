@@ -309,14 +309,18 @@ func (c *SecurityReportCache) store(report SecurityFileReport, indexed IndexFile
 	if !validStoredSecurityReport(report, &indexed) {
 		return fmt.Errorf("security report is invalid")
 	}
+	path, err := c.resolveCachePath(report.Path, report.Source)
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode security report: %w", err)
 	}
 	if authorize == nil {
-		return storage.WriteFile(c.cachePath(report.Path, report.Source), data, 0600)
+		return storage.WriteFile(path, data, 0600)
 	}
-	return storage.WriteFileAuthorized(c.cachePath(report.Path, report.Source), data, 0600, authorize)
+	return storage.WriteFileAuthorized(path, data, 0600, authorize)
 }
 func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileReport, error) {
 	securityCacheMu.Lock()
@@ -325,7 +329,10 @@ func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileRepo
 	if err := validSecurityInput(input); err != nil {
 		return nil, err
 	}
-	path := c.cachePath(input.Path, input.Source)
+	path, err := c.resolveCachePath(input.Path, input.Source)
+	if err != nil {
+		return nil, fmt.Errorf("read security cache: %w", err)
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -353,10 +360,19 @@ func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileRepo
 func (c *SecurityReportCache) Clear() error {
 	securityCacheMu.Lock()
 	defer securityCacheMu.Unlock()
-	if err := os.RemoveAll(filepath.Join(c.root, ".mini-orca", "security", "files")); err != nil {
+	directory, err := storage.MetadataPath(c.root, ".mini-orca", "security", "files")
+	if err != nil {
+		return fmt.Errorf("clear security cache: %w", err)
+	}
+	if err := os.RemoveAll(directory); err != nil {
 		return fmt.Errorf("clear security cache: %w", err)
 	}
 	return nil
+}
+
+func (c *SecurityReportCache) resolveCachePath(path, source string) (string, error) {
+	key := sha256.Sum256([]byte(source + "\x00" + path))
+	return storage.MetadataPath(c.root, ".mini-orca", "security", "files", hex.EncodeToString(key[:])+".json")
 }
 
 func (c *SecurityReportCache) reportCurrent(report SecurityFileReport, input SecurityReportInput) (bool, error) {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
@@ -77,6 +76,9 @@ func VerifyProjectSources(ctx context.Context, root string, index *ProjectIndex)
 func buildIndex(root, id, revision string, persist bool) (*ProjectIndex, error) {
 	canonical, err := CanonicalRoot(root)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := storage.MetadataPath(canonical, indexRelativePath); err != nil {
 		return nil, err
 	}
 	policy, err := NewContextPolicy(canonical)
@@ -154,7 +156,11 @@ func buildIndexFile(root, relative string, previous IndexFile) (IndexFile, error
 }
 
 func loadIndex(root string) (*ProjectIndex, error) {
-	data, err := os.ReadFile(filepath.Join(root, indexRelativePath))
+	path, err := storage.MetadataPath(root, indexRelativePath)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -169,11 +175,15 @@ func loadIndex(root string) (*ProjectIndex, error) {
 }
 
 func writeIndex(root string, index *ProjectIndex) error {
+	path, err := storage.MetadataPath(root, indexRelativePath)
+	if err != nil {
+		return fmt.Errorf("store index: %w", err)
+	}
 	data, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode index: %w", err)
 	}
-	if err := storage.WriteFile(filepath.Join(root, indexRelativePath), data, 0600); err != nil {
+	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store index: %w", err)
 	}
 	return nil

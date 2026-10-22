@@ -151,7 +151,10 @@ func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error)
 	if err := c.validateInputWithPolicy(input, policy); err != nil {
 		return nil, err
 	}
-	path := c.cachePath(input.Path)
+	path, err := storage.MetadataPath(c.root, fileAnalysisRelativeDir, analysisPathKey(normalizedAnalysisPath(input.Path))+".json")
+	if err != nil {
+		return nil, fmt.Errorf("read file analysis cache: %w", err)
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return newMissingAnalysis(input), nil
@@ -211,11 +214,15 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	if analysis.GeneratedAt.IsZero() {
 		analysis.GeneratedAt = time.Now().UTC()
 	}
+	path, err := storage.MetadataPath(c.root, fileAnalysisRelativeDir, analysisPathKey(analysis.Path)+".json")
+	if err != nil {
+		return fmt.Errorf("store file analysis cache: %w", err)
+	}
 	data, err := json.MarshalIndent(analysis, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode file analysis cache: %w", err)
 	}
-	if err := storage.WriteFile(c.cachePath(analysis.Path), data, 0600); err != nil {
+	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store file analysis cache: %w", err)
 	}
 	return nil
@@ -225,7 +232,11 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 func (c *FileAnalysisCache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := os.RemoveAll(filepath.Join(c.root, fileAnalysisRelativeDir)); err != nil {
+	directory, err := storage.MetadataPath(c.root, fileAnalysisRelativeDir)
+	if err != nil {
+		return fmt.Errorf("clear file analysis cache: %w", err)
+	}
+	if err := os.RemoveAll(directory); err != nil {
 		return fmt.Errorf("clear file analysis cache: %w", err)
 	}
 	return nil

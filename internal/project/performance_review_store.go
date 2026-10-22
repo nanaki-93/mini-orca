@@ -244,11 +244,15 @@ func StorePerformanceFileReport(root string, report PerformanceFileReport) error
 	}
 	mu.Lock()
 	defer mu.Unlock()
+	cachePath, err := resolvePerformanceCachePath(root, report.Path)
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
 	}
-	return storage.WriteFile(performanceCachePath(root, report.Path), data, 0600)
+	return storage.WriteFile(cachePath, data, 0600)
 }
 
 func ClearPerformanceFileReports(root string) error {
@@ -262,7 +266,11 @@ func ClearPerformanceFileReports(root string) error {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if err := os.RemoveAll(filepath.Join(canonical, ".mini-orca", "performance", "files")); err != nil {
+	directory, err := storage.MetadataPath(canonical, ".mini-orca", "performance", "files")
+	if err != nil {
+		return fmt.Errorf("clear performance cache: %w", err)
+	}
+	if err := os.RemoveAll(directory); err != nil {
 		return fmt.Errorf("clear performance cache: %w", err)
 	}
 	return nil
@@ -281,7 +289,10 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	cachePath := performanceCachePath(root, path)
+	cachePath, err := resolvePerformanceCachePath(root, path)
+	if err != nil {
+		return nil, fmt.Errorf("read performance cache: %w", err)
+	}
 	data, err := os.ReadFile(cachePath)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -306,6 +317,11 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 		report.Status = "stale"
 	}
 	return clonePerformanceFileReport(&report), nil
+}
+
+func resolvePerformanceCachePath(root, path string) (string, error) {
+	key := sha256.Sum256([]byte(path))
+	return storage.MetadataPath(root, ".mini-orca", "performance", "files", hex.EncodeToString(key[:])+".json")
 }
 
 func parsePerformanceFileReport(data []byte, path string) (PerformanceFileReport, bool) {

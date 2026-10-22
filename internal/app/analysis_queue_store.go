@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -35,7 +34,11 @@ func validateAnalysisExcludedPaths(paths []string) error {
 }
 
 func loadAnalysisSelection(root string) ([]string, error) {
-	file, err := os.Open(filepath.Join(root, analysisSelectionRelativePath))
+	path, err := storage.MetadataPath(root, analysisSelectionRelativePath)
+	if err != nil {
+		return nil, fmt.Errorf("read analysis selection: %w", err)
+	}
+	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return []string{}, nil
 	}
@@ -63,11 +66,15 @@ func loadAnalysisSelection(root string) ([]string, error) {
 }
 
 func saveAnalysisSelection(root string, paths []string) error {
+	path, err := storage.MetadataPath(root, analysisSelectionRelativePath)
+	if err != nil {
+		return fmt.Errorf("save analysis selection: %w", err)
+	}
 	var data bytes.Buffer
 	if err := json.NewEncoder(&data).Encode(storedAnalysisSelection{SchemaVersion: "1", ExcludedPaths: paths}); err != nil {
 		return err
 	}
-	if err := storage.WriteFile(filepath.Join(root, analysisSelectionRelativePath), data.Bytes(), 0600); err != nil {
+	if err := storage.WriteFile(path, data.Bytes(), 0600); err != nil {
 		return fmt.Errorf("save analysis selection: %w", err)
 	}
 	return nil

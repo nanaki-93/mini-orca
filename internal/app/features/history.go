@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -63,21 +62,7 @@ type FeatureGenerationOutcome struct {
 // MetadataPath disallows metadata-directory aliases before either reads
 // or writes. Source-write path policy deliberately does not admit metadata.
 func MetadataPath(root, name string) (string, error) {
-	current := root
-	for _, part := range []string{".mini-orca", "changes", name} {
-		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("change history contains a symlink")
-		}
-	}
-	return current, nil
+	return storage.MetadataPath(root, ".mini-orca", "changes", name)
 }
 
 func ContentHash(content []byte) string {

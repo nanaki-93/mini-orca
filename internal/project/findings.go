@@ -213,7 +213,11 @@ func (s *FindingStore) Clear() error {
 }
 
 func (s *FindingStore) clearLocked() error {
-	if err := os.Remove(filepath.Join(s.root, findingStorePath)); err != nil && !os.IsNotExist(err) {
+	path, err := storage.MetadataPath(s.root, findingStorePath)
+	if err != nil {
+		return fmt.Errorf("clear findings: %w", err)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("clear findings: %w", err)
 	}
 	return nil
@@ -256,7 +260,10 @@ func findingMatchesAnyTarget(finding UnifiedFinding, targets []FindingTarget) bo
 }
 
 func (s *FindingStore) loadLocked(recoverCorrupt bool) (*findingDocument, error) {
-	path := filepath.Join(s.root, findingStorePath)
+	path, err := storage.MetadataPath(s.root, findingStorePath)
+	if err != nil {
+		return nil, fmt.Errorf("read findings: %w", err)
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return &findingDocument{SchemaVersion: findingStoreSchema, Findings: []UnifiedFinding{}}, nil
@@ -278,11 +285,15 @@ func (s *FindingStore) loadLocked(recoverCorrupt bool) (*findingDocument, error)
 }
 
 func (s *FindingStore) storeLocked(document *findingDocument) error {
+	path, err := storage.MetadataPath(s.root, findingStorePath)
+	if err != nil {
+		return fmt.Errorf("store findings: %w", err)
+	}
 	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode findings: %w", err)
 	}
-	if err := storage.WriteFile(filepath.Join(s.root, findingStorePath), data, 0600); err != nil {
+	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store findings: %w", err)
 	}
 	return nil

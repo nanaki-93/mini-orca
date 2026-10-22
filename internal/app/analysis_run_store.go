@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -77,7 +76,11 @@ func cloneAnalysisRun(run *AnalysisRun) *AnalysisRun {
 }
 
 func loadAnalysisRun(root string) (*AnalysisRun, error) {
-	file, err := os.Open(filepath.Join(root, analysisRunRelativePath))
+	path, err := storage.MetadataPath(root, analysisRunRelativePath)
+	if err != nil {
+		return nil, fmt.Errorf("read analysis progress: %w", err)
+	}
+	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -189,12 +192,16 @@ func (s *Service) saveAnalysisRunLocked(recoverFault bool) error {
 	if err == nil && len(data) > maxAnalysisRunMetadataBytes {
 		err = fmt.Errorf("analysis progress exceeds metadata size limit")
 	}
+	var targetPath string
+	if err == nil {
+		targetPath, err = storage.MetadataPath(c.root, analysisRunRelativePath)
+	}
 	if err == nil {
 		write := s.writeAnalysisRun
 		if write == nil {
 			write = storage.WriteFile
 		}
-		err = write(filepath.Join(c.root, analysisRunRelativePath), data, 0600)
+		err = write(targetPath, data, 0600)
 	}
 	if err != nil {
 		s.failAnalysisPersistenceLocked()

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -185,7 +184,11 @@ func validProjectAnalysisSeverity(value string) bool {
 // LoadProjectAnalysisReport returns a stored report. A valid report with
 // changed project, model, profile, or prompt inputs is marked stale.
 func LoadProjectAnalysisReport(root string, input ProjectAnalysisInput) (*ProjectAnalysisReport, error) {
-	data, err := os.ReadFile(filepath.Join(root, projectAnalysisReportPath))
+	path, err := storage.MetadataPath(root, projectAnalysisReportPath)
+	if err != nil {
+		return nil, fmt.Errorf("read project analysis report: %w", err)
+	}
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -208,11 +211,15 @@ func StoreProjectAnalysisReport(root string, report ProjectAnalysisReport) error
 	if !validStoredProjectAnalysisReport(report) {
 		return fmt.Errorf("project analysis report is invalid")
 	}
+	path, err := storage.MetadataPath(root, projectAnalysisReportPath)
+	if err != nil {
+		return fmt.Errorf("store project analysis report: %w", err)
+	}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode project analysis report: %w", err)
 	}
-	if err := storage.WriteFile(filepath.Join(root, projectAnalysisReportPath), data, 0600); err != nil {
+	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store project analysis report: %w", err)
 	}
 	return nil

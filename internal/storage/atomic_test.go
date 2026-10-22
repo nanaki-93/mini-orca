@@ -167,3 +167,53 @@ func TestRecoverCorruptUsesEstablishedSuffix(t *testing.T) {
 		t.Fatalf("corrupt backup = %v, %v", backups, err)
 	}
 }
+
+func TestMetadataPathEnforcesProjectContainmentAndRejectsSymlinks(t *testing.T) {
+	root := t.TempDir()
+	for _, invalid := range [][]string{
+		{"../outside.json"},
+		{"index.json"},
+		{".mini-orca", "..", "outside.json"},
+		{".mini-orca", "changes", "../index.json"},
+		{filepath.Join(root, ".mini-orca", "index.json")},
+	} {
+		if got, err := MetadataPath(root, invalid...); err == nil {
+			t.Fatalf("MetadataPath(%v) = %q, want containment error", invalid, got)
+		}
+	}
+
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "index.json")
+	if err := os.WriteFile(outsideFile, []byte("outside"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".mini-orca")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MetadataPath(root, ".mini-orca/index.json"); !errors.Is(err, ErrSymlink) {
+		t.Fatalf("symlinked .mini-orca error = %v, want ErrSymlink", err)
+	}
+}
+
+func TestWriteFileAndRecoverCorruptRejectSymlinksWithoutModifyingTarget(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	outsideIndex := filepath.Join(outside, "index.json")
+	if err := os.WriteFile(outsideIndex, []byte("preserve-outside"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".mini-orca")); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, ".mini-orca", "index.json")
+	if err := WriteFile(target, []byte("overwrite"), 0600); !errors.Is(err, ErrSymlink) {
+		t.Fatalf("WriteFile through symlinked .mini-orca = %v, want ErrSymlink", err)
+	}
+	if err := RecoverCorrupt(target); !errors.Is(err, ErrSymlink) {
+		t.Fatalf("RecoverCorrupt through symlinked .mini-orca = %v, want ErrSymlink", err)
+	}
+	data, err := os.ReadFile(outsideIndex)
+	if err != nil || string(data) != "preserve-outside" {
+		t.Fatalf("outside index modified: %q, %v", data, err)
+	}
+}

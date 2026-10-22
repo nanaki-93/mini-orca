@@ -419,7 +419,11 @@ func cloneGoScanReport(source *GoScanReport) *GoScanReport {
 }
 
 func loadGoScanReport(root string) (*GoScanReport, error) {
-	data, err := os.ReadFile(filepath.Join(root, goScanPath))
+	path, err := storage.MetadataPath(root, goScanPath)
+	if err != nil {
+		return nil, fmt.Errorf("read go scan report: %w", err)
+	}
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -438,7 +442,10 @@ func marshalGoScanReport(report *GoScanReport) ([]byte, error) {
 }
 
 func writeGoScanReport(root string, data []byte) error {
-	path := filepath.Join(root, goScanPath)
+	path, err := storage.MetadataPath(root, goScanPath)
+	if err != nil {
+		return fmt.Errorf("store scan report: %w", err)
+	}
 	if err := storage.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("store scan report: %w", err)
 	}
