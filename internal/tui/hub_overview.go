@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 func (s *State) renderActivePage(th ansiTheme, width int) []string {
@@ -69,13 +69,13 @@ func adaptivePanelWidth(width int) int {
 func renderPageHeader(th ansiTheme, title, subtitle string) []string {
 	if strings.TrimSpace(subtitle) == "" {
 		return []string{
-			fmt.Sprintf("  %s%s%s", th.bold+th.accent, title, th.reset),
+			fmt.Sprintf("  %s%s%s", th.bold+th.fg, title, th.reset),
 			"",
 		}
 	}
 	return []string{
-		fmt.Sprintf("  %s%s%s   %s· %s%s", th.bold+th.accent, title, th.reset, th.muted, subtitle, th.reset),
-		"",
+		fmt.Sprintf("  %s%s%s", th.bold+th.fg, title, th.reset),
+		fmt.Sprintf("  %s%s%s", th.muted, subtitle, th.reset),
 	}
 }
 
@@ -106,55 +106,11 @@ func appendWindowFooter(th ansiTheme, lines []string, start, end, total int) []s
 	return append(lines, fmt.Sprintf("  %sShowing %d–%d of %d items%s", th.muted, start+1, end, total, th.reset))
 }
 
-func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	allIssues := s.CollectAllIssues()
-	summary := domain.ComputeIssueSummary(allIssues, s.Features)
-	cards := [][2]string{
-		{"OPEN FINDINGS", fmt.Sprintf("%s%d%s open %s(%d active)%s", th.bold+th.red, summary.TotalOpen, th.reset, th.muted, summary.InProgress, th.reset)},
-		{"RESOLVED", fmt.Sprintf("%s%d%s verified", th.bold+th.green, summary.Done, th.reset)},
-		{"RISK BREAKDOWN", fmt.Sprintf("%sB:%d%s  %sS:%d%s  %sP:%d%s", th.bold+th.red, summary.Bugs, th.reset, th.bold+th.amber, summary.Security, th.reset, th.cyan, summary.Performance, th.reset)},
-		{"FEATURE IDEAS", fmt.Sprintf("%s%d%s ready", th.bold+th.purple, summary.Features, th.reset)},
-	}
-	lines := renderPageHeader(th, "OVERVIEW", "Plan → Generate → Verify → Review → Integrate")
-	lines = append(lines, th.renderKPICards(cards, width)...)
-
-	focusStatus := fmt.Sprintf("%s  %sNo open findings recorded%s", th.padBadge("CLEAN", 12), th.green, th.reset)
-	if summary.TotalOpen > 0 {
-		focusStatus = fmt.Sprintf("%s  %s%d open%s (%s%d bugs%s · %s%d security%s)",
-			th.padBadge("OPEN", 12), th.bold+th.amber, summary.TotalOpen, th.reset, th.red, summary.Bugs, th.reset, th.amber, summary.Security, th.reset)
-	}
-	agentSummary := fmt.Sprintf("%s  %sNone%s", th.padBadge("IDLE", 12), th.muted, th.reset)
-	if s.HasActiveProposal() {
-		agentSummary = fmt.Sprintf("%s  %s%s%s", th.padBadge(s.Change.State, 12), th.bold+th.fg, s.Change.Title, th.reset)
-	}
-	scanState := "IDLE"
-	if s.Scan != nil && s.Scan.Status != "" {
-		scanState = s.Scan.Status
-	}
-	focusBody := []string{
-		fmt.Sprintf("%s%-15s%s %s", th.bold+th.cyan, "Triage:", th.reset, focusStatus),
-		fmt.Sprintf("%s%-15s%s %s", th.bold+th.purple, "Agent:", th.reset, agentSummary),
-		fmt.Sprintf("%s%-15s%s %s  %s(%d features)%s", th.bold+th.green, "Verification:", th.reset, th.padBadge(scanState, 12), th.muted, summary.Features, th.reset),
-	}
-	if s.Run != nil && s.Run.Status != "" {
-		runNote := fmt.Sprintf("%s  (%ds)", th.padBadge(s.Run.Status, 12), s.Run.ElapsedSeconds)
-		if s.isAnalysisPausedOrInterrupted() {
-			reason := client.FirstNonEmpty(s.Run.Reason, "Window allowance reached")
-			runNote = fmt.Sprintf("%s  %s%s%s · %s[r] Resume%s",
-				th.padBadge(s.Run.Status, 12), th.amber, reason, th.reset, th.bold+th.cyan, th.reset)
-		}
-		focusBody = append(focusBody, fmt.Sprintf("%s%-15s%s %s", th.bold+th.amber, "Analysis:", th.reset, runNote))
-	}
-	lines = append(lines, "")
-	return append(lines, th.renderPanelBox("", "", panelW, focusBody)...)
-}
-
 func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[1] OVERVIEW · REPOSITORY PROFILE", "Indexed codebase & language inventory")
+	lines := renderPageHeader(th, "REPOSITORY", "Project identity and indexed files")
 	if s.Project == nil {
-		return append(lines, fmt.Sprintf("  %sNo project loaded.%s", th.muted, th.reset))
+		return append(lines, "", "  No project loaded. [o] Open project")
 	}
 	branch := "detached"
 	if s.Repository != nil && s.Repository.Branch != "" {
@@ -172,9 +128,7 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	lines = append(lines, th.renderPanelBox("", "", panelW, meta)...)
 	if s.Index != nil && len(s.Index.Files) > 0 {
 		lines = append(lines, "")
-		limit := min(s.adaptiveWindowRows(14, 8), len(s.Index.Files))
-		for i := 0; i < limit; i++ {
-			f := s.Index.Files[i]
+		for _, f := range s.Index.Files {
 			lines = append(lines, fmt.Sprintf("  %s•%s %-42s %s%s · %d lines%s",
 				th.accent, th.reset, f.Path, th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
 		}
@@ -183,27 +137,18 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderProjectPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[1] OVERVIEW · VERIFICATION TESTS & CHECKS", "Automated quality gates & tests")
+	lines := renderPageHeader(th, "CHECKS", "Verification results and diagnostic output")
 	if s.Scan == nil || len(s.Scan.Phases) == 0 {
-		empty := []string{
-			"No verification checks recorded.",
-		}
-		return append(lines, th.renderPanelBox("", "", panelW, empty)...)
+		return append(lines, "", "  No verification checks recorded.", "  [t] Run checks · :trust to manage execution permission")
 	}
-	lines = append(lines, th.renderTableHeader("    PHASE             STATUS        STATE             COMMAND", width)...)
+	lines = append(lines, "", "  "+th.statusBadge(s.Scan.Status), "")
 	selected := s.ClampedIdx()
-	for idx, ph := range s.Scan.Phases {
-		cursor := th.renderCursorPrefix(idx == selected)
-		nameStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-16s%s  %s  %sstate:%-10s  cmd:%s%s",
-			cursor, nameStyle, ph.Name, th.reset, th.padBadge(ph.State, 12), th.muted, ph.State, strings.Join(ph.Command, " "), th.reset,
-		))
-		if strings.EqualFold(ph.State, "failed") && strings.TrimSpace(ph.Output) != "" {
-			lines = append(lines, fmt.Sprintf("    %s▲ Check Failure:%s %s%s%s",
-				th.critBg, th.reset, th.bold+th.red, strings.TrimSpace(ph.Output), th.reset))
-		}
+	start, end := windowBounds(len(s.Scan.Phases), selected, s.adaptiveWindowRows(12, 6))
+	for idx := start; idx < end; idx++ {
+		ph := s.Scan.Phases[idx]
+		name := theme.TruncatePlain(ph.Name, max(12, width-26))
+		lines = append(lines, "  "+th.renderCursorPrefix(idx == selected)+rowTitleStyle(th, idx == selected)+theme.PadVisibleRight(name, max(12, width-26))+th.reset+"  "+th.statusBadge(ph.State))
 	}
-	return lines
+	lines = appendWindowFooter(th, lines, start, end, len(s.Scan.Phases))
+	return append(append(lines, ""), s.renderCheckDetails(th, width)...)
 }

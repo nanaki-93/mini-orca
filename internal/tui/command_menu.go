@@ -56,6 +56,9 @@ func commandCatalog() []commandItem {
 }
 
 func (s *State) commandMatches() []commandItem {
+	if s.commandArgumentContext() != nil {
+		return nil
+	}
 	query := strings.ToLower(strings.TrimSpace(s.CmdInput))
 	var items []commandItem
 	for _, item := range commandCatalog() {
@@ -76,6 +79,19 @@ func (s *State) commandMatches() []commandItem {
 		}
 	}
 	return items
+}
+
+func (s *State) commandArgumentContext() *commandItem {
+	command, _, hasSpace := strings.Cut(strings.TrimLeft(s.CmdInput, " "), " ")
+	if !hasSpace {
+		return nil
+	}
+	for _, item := range commandCatalog() {
+		if item.argument && strings.EqualFold(command, item.command) {
+			return &item
+		}
+	}
+	return nil
 }
 
 func (s *State) openCommandInput(value string) {
@@ -231,6 +247,11 @@ func (s *State) completeCommand(execute bool) {
 
 func (s *State) renderCommandMenu(th ansiTheme, width, rows int) []string {
 	lines := renderPageHeader(th, "COMMANDS", "Search by name, or type a colon command")
+	if item := s.commandArgumentContext(); item != nil {
+		lines = append(lines, "", "  "+th.bold+th.fg+item.title+th.reset)
+		lines = appendWrappedText(lines, item.hint, width)
+		return append(lines, "", "  Enter: submit · Esc: cancel", "  ←/→: cursor · Ctrl+P/N: history · Ctrl+U: clear")
+	}
 	items := s.commandMatches()
 	if len(items) == 0 {
 		return append(lines, "  Press Enter to run your command.", "", "  Ctrl+P / Ctrl+N: previous / next command", "  ←/→: move cursor · Home/End: jump · Ctrl+U: clear")

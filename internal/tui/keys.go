@@ -9,10 +9,11 @@ import (
 
 // KeyEvent represents a decoded terminal keystroke.
 type KeyEvent struct {
-	Key   string
-	Shift bool
-	Ctrl  bool
-	Text  string
+	Key    string
+	Shift  bool
+	Ctrl   bool
+	Pasted bool
+	Text   string
 }
 
 var paletteOrder = []struct {
@@ -41,20 +42,14 @@ func (s *State) CyclePalette() {
 
 // HandleKey processes a single keystroke and updates the TUI state deterministically.
 func (s *State) HandleKey(ev KeyEvent) {
+	if ev.Pasted && !s.CmdActive {
+		return
+	}
 	if ev.Ctrl && strings.EqualFold(ev.Key, "c") {
 		s.Quitting = true
 		return
 	}
-	if s.CmdActive {
-		s.handleCommandInputKey(ev)
-		return
-	}
-	if s.Confirmation != nil {
-		s.handleConfirmationKey(ev)
-		return
-	}
-	if s.ShowKeybindsModal {
-		s.handleKeybindsModalKey(ev)
+	if s.handleOverlayKey(ev) {
 		return
 	}
 	if s.handleFocusedPageKey(ev) {
@@ -80,6 +75,29 @@ func (s *State) HandleKey(ev KeyEvent) {
 	s.handlePageScopedKey(ev)
 }
 
+func (s *State) handleOverlayKey(ev KeyEvent) bool {
+	if s.CmdActive {
+		s.handleCommandInputKey(ev)
+		return true
+	}
+	if !s.ShowKeybindsModal && s.handleDialogScrollKey(ev) {
+		return true
+	}
+	if s.Confirmation != nil {
+		s.handleConfirmationKey(ev)
+		return true
+	}
+	if s.ShowKeybindsModal {
+		s.handleKeybindsModalKey(ev)
+		return true
+	}
+	if s.Error != "" {
+		s.handleErrorOverlayKey(ev)
+		return true
+	}
+	return false
+}
+
 func (s *State) handleConfirmationKey(ev KeyEvent) {
 	switch ev.Key {
 	case "y", "Y", "Enter":
@@ -99,6 +117,14 @@ func (s *State) handleKeybindsModalKey(ev KeyEvent) {
 	case "Escape", "?", "Enter", "q":
 		s.ShowKeybindsModal = false
 		s.KeybindsScroll = 0
+	case "PageDown":
+		s.KeybindsScroll += max(1, s.viewportBodyRows-4)
+	case "PageUp":
+		s.KeybindsScroll = max(0, s.KeybindsScroll-max(1, s.viewportBodyRows-4))
+	case "Home":
+		s.KeybindsScroll = 0
+	case "End":
+		s.KeybindsScroll = 1 << 30
 	case "j", "ArrowDown":
 		s.KeybindsScroll++
 	case "k", "ArrowUp":
@@ -345,6 +371,13 @@ func (s *State) stepHorizontalSection(forward bool) {
 }
 
 func (s *State) moveSelection(delta int) {
+	if s.isReadingPage() {
+		s.DetailScroll = max(0, s.DetailScroll+delta)
+		s.viewport.followSelection = false
+		return
+	}
+	s.viewport.followSelection = true
+
 	switch s.EffectivePage() {
 	case PageAgents:
 		if s.AgentDetailOpen {
@@ -366,6 +399,7 @@ func (s *State) moveSelection(delta int) {
 		next = maxIdx
 	}
 	s.SelectedIdx = next
+	s.DetailScroll = 0
 	if s.Page == PageAgents {
 		s.syncSelectedAgentSession()
 	}

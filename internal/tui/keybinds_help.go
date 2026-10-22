@@ -84,7 +84,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 		{"1-5 / Tab", "Switch hub / tab"},
 		{"Enter / Esc", "Activate / back"},
 		{"? / :", "Help / command"},
-		{"p / q", "Theme / quit TUI"},
+		{"p / Ctrl+C", "Theme / quit"},
 	}
 	var pageItems []keyDesc
 	pageItems = append(pageItems, spec.primary...)
@@ -117,10 +117,11 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 
 	rightMeta := "[?] / Esc"
 	if s.viewportBodyRows > 0 {
-		maxInner := max(6, s.viewportBodyRows-3)
+		maxInner := max(1, s.viewportBodyRows-3)
 		if len(body) > maxInner {
 			maxScroll := len(body) - maxInner
 			scroll := min(max(0, s.KeybindsScroll), maxScroll)
+			s.KeybindsScroll = scroll
 			body = body[scroll : scroll+maxInner]
 			rightMeta = fmt.Sprintf("[j/k] %d-%d/%d · [?] / Esc", scroll+1, scroll+maxInner, len(body)+maxScroll)
 		} else {
@@ -129,7 +130,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 			}
 		}
 	}
-	return th.renderPanelBox("KEYBINDINGS & COLON COMMANDS REFERENCE", rightMeta, boxW, body)
+	return th.renderPanelBox("KEYBOARD REFERENCE", rightMeta, boxW, body)
 }
 
 func lookupPageHelpSpec(page Page) pageHelpSpec {
@@ -145,7 +146,7 @@ func lookupPageHelpSpec(page Page) pageHelpSpec {
 var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageSummary: {
 		title:     "[1] OVERVIEW · EXECUTIVE DASHBOARD",
-		primary:   []keyDesc{{"Enter / a", "Fix top issue"}, {"r", "Run/resume scan"}},
+		primary:   []keyDesc{{"Enter", "Open selected area"}, {"o", "Switch project"}},
 		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"t", "Run checks/tests"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":test", "Run checks"}},
 	},
@@ -198,13 +199,13 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":agent <goal>", "Custom feature"}},
 	},
 	PageAnalysisRun: {
-		title:     "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG",
+		title:     "ANALYSIS",
 		primary:   []keyDesc{{"r", "Run/resume scan"}, {"P / R", "Pause / retry"}},
 		secondary: []keyDesc{{"x", "Reset config"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":batch <n>", "Set batch size"}, {":budget <s>", "Set time budget"}},
 	},
 	PageAnalysisFiles: {
-		title:     "[2] AGENT STUDIO · FILE SCOPE",
+		title:     "FILE SCOPE",
 		primary:   []keyDesc{{"Enter / Space", "Toggle scope"}, {"r", "Run scoped scan"}},
 		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":open <file>", "Open file"}, {":analyze", "Run analysis"}},
@@ -213,7 +214,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 
 var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
-		title:     "[3] CODE & DIFF · INSPECTOR",
+		title:     "FILES & DIFF",
 		primary:   []keyDesc{{"Enter / a", "Apply & commit"}, {"x", "Reject hunk"}},
 		secondary: []keyDesc{{"h/l", "Scroll long lines"}, {"w / z", "Reviewed / compare"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
@@ -231,7 +232,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":merge", "Merge worktree"}},
 	},
 	PageHistory: {
-		title:     "[3] CODE & DIFF · SAVED PROPOSALS",
+		title:     "PROPOSAL HISTORY",
 		primary:   []keyDesc{{"Enter", "Load proposal"}, {"a / c", "Apply & commit"}},
 		secondary: []keyDesc{{"u", "Guarded undo"}, {"d", "Inspect diff"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
@@ -243,7 +244,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDocsComponents: {
-		title:     "[4] HANDBOOK & ARCH · ARCHITECTURAL COMPONENTS",
+		title:     "COMPONENTS",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
@@ -255,7 +256,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDiagrams: {
-		title:     "[4] HANDBOOK & ARCH · ARCHITECTURE DIAGRAM",
+		title:     "ARCHITECTURE DIAGRAM",
 		primary:   []keyDesc{{"r", "Refresh diagram"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
@@ -273,13 +274,13 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":model <s> <id>", "Set model"}, {":preset <id>", "Apply preset"}},
 	},
 	PageBootstrap: {
-		title:     "[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST",
+		title:     "PROJECT SETUP",
 		primary:   []keyDesc{{"Enter / b", "Bootstrap pillar"}, {"t", "Toggle trust"}},
 		secondary: []keyDesc{{"g", "Graduate lesson"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":bootstrap", "Bootstrap rules"}, {":trust", "Toggle trust"}},
 	},
 	PageLessons: {
-		title:     "[5] GOVERNANCE & RULES · HARNESS² LESSONS",
+		title:     "LESSONS",
 		primary:   []keyDesc{{"Enter / g", "Graduate lesson"}, {"a / c", "Apply & commit"}},
 		secondary: []keyDesc{{"d", "Inspect diff"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":apply", "Apply AGENTS.md"}, {":undo", "Guarded undo"}},

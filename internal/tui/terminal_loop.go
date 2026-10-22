@@ -315,50 +315,38 @@ func (m *BubbleModel) View() string {
 	return m.state.Render(m.width, m.height)
 }
 
+var teaNavigationKeys = map[tea.KeyType]KeyEvent{
+	tea.KeyHome:      {Key: "Home"},
+	tea.KeyEnd:       {Key: "End"},
+	tea.KeyDelete:    {Key: "Delete"},
+	tea.KeyPgUp:      {Key: "PageUp"},
+	tea.KeyPgDown:    {Key: "PageDown"},
+	tea.KeyUp:        {Key: "ArrowUp"},
+	tea.KeyDown:      {Key: "ArrowDown"},
+	tea.KeyLeft:      {Key: "ArrowLeft"},
+	tea.KeyRight:     {Key: "ArrowRight"},
+	tea.KeyTab:       {Key: "Tab"},
+	tea.KeyShiftTab:  {Key: "Tab", Shift: true},
+	tea.KeyEnter:     {Key: "Enter"},
+	tea.KeyEsc:       {Key: "Escape"},
+	tea.KeyBackspace: {Key: "Backspace"},
+	tea.KeySpace:     {Key: " "},
+	tea.KeyCtrlC:     {Key: "c", Ctrl: true},
+	tea.KeyCtrlA:     {Key: "a", Ctrl: true},
+	tea.KeyCtrlE:     {Key: "e", Ctrl: true},
+	tea.KeyCtrlU:     {Key: "u", Ctrl: true},
+	tea.KeyCtrlP:     {Key: "p", Ctrl: true},
+	tea.KeyCtrlN:     {Key: "n", Ctrl: true},
+}
+
 func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
-	switch msg.Type {
-	case tea.KeyRunes:
-		return KeyEvent{Key: string(msg.Runes), Text: string(msg.Runes)}
-	case tea.KeyHome:
-		return KeyEvent{Key: "Home"}
-	case tea.KeyEnd:
-		return KeyEvent{Key: "End"}
-	case tea.KeyDelete:
-		return KeyEvent{Key: "Delete"}
-	case tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyCtrlU, tea.KeyCtrlP, tea.KeyCtrlN:
-		return KeyEvent{Key: strings.TrimPrefix(msg.String(), "ctrl+"), Ctrl: true}
-	case tea.KeyPgUp:
-		return KeyEvent{Key: "PageUp"}
-	case tea.KeyPgDown:
-		return KeyEvent{Key: "PageDown"}
-	case tea.KeyUp:
-		return KeyEvent{Key: "ArrowUp"}
-	case tea.KeyDown:
-		return KeyEvent{Key: "ArrowDown"}
-	case tea.KeyLeft:
-		return KeyEvent{Key: "ArrowLeft"}
-	case tea.KeyRight:
-		return KeyEvent{Key: "ArrowRight"}
-	case tea.KeyTab:
-		return KeyEvent{Key: "Tab"}
-	case tea.KeyShiftTab:
-		return KeyEvent{Key: "Tab", Shift: true}
-	case tea.KeyEnter:
-		return KeyEvent{Key: "Enter"}
-	case tea.KeyEsc:
-		return KeyEvent{Key: "Escape"}
-	case tea.KeyBackspace:
-		return KeyEvent{Key: "Backspace"}
-	case tea.KeySpace:
-		return KeyEvent{Key: " "}
-	case tea.KeyCtrlC:
-		return KeyEvent{Key: "c", Ctrl: true}
-	default:
-		if msg.String() == "space" {
-			return KeyEvent{Key: " "}
-		}
-		return KeyEvent{Key: msg.String()}
+	if msg.Type == tea.KeyRunes {
+		return KeyEvent{Key: string(msg.Runes), Text: string(msg.Runes), Pasted: msg.Paste}
 	}
+	if key, ok := teaNavigationKeys[msg.Type]; ok {
+		return key
+	}
+	return KeyEvent{Key: msg.String()}
 }
 
 // RunSession runs an interactive terminal session using Bubble Tea on TTYs or deterministic model updates on streams.

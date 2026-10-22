@@ -36,6 +36,9 @@ func (s *State) detailSections() []string {
 }
 
 func (s *State) handleFocusedPageKey(ev KeyEvent) bool {
+	if s.handleSourceViewportKey(ev.Key) {
+		return true
+	}
 	if (ev.Key == "ArrowLeft" || ev.Key == "ArrowRight" || ev.Key == "h" || ev.Key == "l") && len(s.detailSections()) > 0 {
 		delta := 1
 		if ev.Key == "ArrowLeft" || ev.Key == "h" {

@@ -28,6 +28,7 @@ const (
 
 type PaletteColors struct {
 	Name         string
+	BgCode       string
 	AccentCode   string
 	AccentBgCode string
 	FgCode       string
@@ -47,29 +48,29 @@ func ColorsForPalette(p Palette) PaletteColors {
 	switch p {
 	case PaletteCRT:
 		return PaletteColors{
-			Name: "CRT PHOSPHOR", AccentCode: "46", AccentBgCode: "28", FgCode: "120", MutedCode: "28",
+			Name: "CRT PHOSPHOR", BgCode: "232", AccentCode: "46", AccentBgCode: "28", FgCode: "120", MutedCode: "71",
 			BorderCode: "28", SelBgCode: "22", GreenCode: "46", AmberCode: "226",
 			RedCode: "196", PurpleCode: "83", CyanCode: "50",
 			ProgStart: "#00aa00", ProgEnd: "#00ff66",
 		}
 	case PaletteAmber:
 		return PaletteColors{
-			Name: "AMBER TERMINAL", AccentCode: "214", AccentBgCode: "130", FgCode: "222", MutedCode: "136",
+			Name: "AMBER TERMINAL", BgCode: "234", AccentCode: "214", AccentBgCode: "130", FgCode: "222", MutedCode: "136",
 			BorderCode: "136", SelBgCode: "236", GreenCode: "142", AmberCode: "214",
 			RedCode: "203", PurpleCode: "179", CyanCode: "215",
 			ProgStart: "#d78700", ProgEnd: "#ffd75f",
 		}
 	case PalettePaper:
 		return PaletteColors{
-			Name: "PAPER LIGHT", AccentCode: "25", AccentBgCode: "25", FgCode: "235", MutedCode: "242",
+			Name: "PAPER LIGHT", BgCode: "255", AccentCode: "25", AccentBgCode: "25", FgCode: "235", MutedCode: "242",
 			BorderCode: "247", SelBgCode: "252", GreenCode: "28", AmberCode: "130",
 			RedCode: "160", PurpleCode: "91", CyanCode: "31",
 			ProgStart: "#005f87", ProgEnd: "#0087af",
 		}
 	default:
 		return PaletteColors{
-			Name: "TOKYO ENTERPRISE", AccentCode: "111", AccentBgCode: "62", FgCode: "253", MutedCode: "244",
-			BorderCode: "239", SelBgCode: "236", GreenCode: "114", AmberCode: "215",
+			Name: "TOKYO ENTERPRISE", BgCode: "234", AccentCode: "111", AccentBgCode: "62", FgCode: "253", MutedCode: "246",
+			BorderCode: "240", SelBgCode: "236", GreenCode: "114", AmberCode: "215",
 			RedCode: "203", PurpleCode: "176", CyanCode: "117",
 			ProgStart: "#5f87ff", ProgEnd: "#87d7ff",
 		}
@@ -359,9 +360,6 @@ func RenderPanelBox(titleStyle, mutedStyle, cardStyle lipgloss.Style, border, re
 			header = header + strings.Repeat(" ", gap) + meta
 		}
 		allLines = append(allLines, PadVisibleRight(header, contentW))
-		if len(body) > 0 {
-			allLines = append(allLines, border+strings.Repeat("─", contentW)+reset)
-		}
 	}
 	for _, line := range body {
 		allLines = append(allLines, WrapVisibleLine(line, contentW)...)
@@ -391,23 +389,18 @@ func RenderErrorBanner(errorBoxStyle lipgloss.Style, critBg, boldRed, reset, err
 	return out
 }
 
-// RenderKPICards renders a horizontal strip of Lip Gloss KPI cards joined with lipgloss.JoinHorizontal.
-func RenderKPICards(mutedStyle, cardStyle lipgloss.Style, cards [][2]string, totalWidth int) []string {
+// RenderMetrics shows a compact, evenly spaced strip of workspace counts.
+func RenderMetrics(mutedStyle lipgloss.Style, cards [][2]string, totalWidth int) []string {
 	if len(cards) == 0 {
 		return nil
 	}
-	cardInner := max(10, (totalWidth-4)/len(cards)-4)
-	var boxes []string
-	for _, c := range cards {
-		label := PadVisibleRight(mutedStyle.Render(TruncatePlain(strings.ToUpper(c[0]), cardInner)), cardInner)
-		val := PadVisibleRight(c[1], cardInner)
-		box := cardStyle.Render(label + "\n" + val)
-		boxes = append(boxes, box)
+	column := max(1, (totalWidth-4)/len(cards))
+	var labels, values strings.Builder
+	labels.WriteString("  ")
+	values.WriteString("  ")
+	for _, item := range cards {
+		labels.WriteString(PadVisibleRight(mutedStyle.Render(item[0]), column))
+		values.WriteString(PadVisibleRight(item[1], column))
 	}
-	joined := lipgloss.JoinHorizontal(lipgloss.Top, boxes...)
-	var out []string
-	for _, line := range strings.Split(joined, "\n") {
-		out = append(out, "  "+line)
-	}
-	return out
+	return []string{values.String(), labels.String()}
 }

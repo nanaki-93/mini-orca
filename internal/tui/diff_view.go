@@ -136,7 +136,14 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	meta = append(meta, s.diffReviewOverview(th, active, width)...)
 	stateTag := strings.ToUpper(client.FirstNonEmpty(s.Change.State, "draft"))
 	rightTag := fmt.Sprintf("%s · +%d / -%d", stateTag, added, removed)
-	lines := th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, s.diffMetadataWindow(meta, panelW))
+	lines := s.diffMetadataWindow(meta, panelW)
+	if s.viewportBodyRows > 0 && s.viewportBodyRows < 14 {
+		for i := range lines {
+			lines[i] = "  " + lines[i]
+		}
+	} else {
+		lines = th.renderPanelBox("GUARDED DIFF REVIEW", rightTag, panelW, lines)
+	}
 
 	switch mode {
 	case "split":
@@ -202,7 +209,7 @@ func formatDualNumberDiffLine(th ansiTheme, dl DiffLine, selected bool, codeCol 
 }
 
 func (s *State) renderSplitHunkDiff(th ansiTheme, width int, active FileDiffHunk, totalHunks, rowBudget int) []string {
-	halfW := max(26, (width-7)/2)
+	halfW := max(17, (width-7)/2)
 	leftHdr := theme.PadVisibleRight(" OLD │ BEFORE (ORIGINAL)", halfW)
 	rightHdr := theme.PadVisibleRight(fmt.Sprintf(" NEW │ AFTER (HUNK #%d/%d)", active.GlobalIndex+1, totalHunks), halfW)
 	lines := th.renderTableHeader("   "+leftHdr+" │ "+rightHdr, width)

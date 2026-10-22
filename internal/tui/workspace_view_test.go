@@ -8,7 +8,7 @@ import (
 )
 
 func TestWorkspaceFitsActualTerminalAndKeepsActiveNavigation(t *testing.T) {
-	for _, dims := range [][2]int{{1, 1}, {40, 10}, {52, 16}, {60, 20}, {80, 24}, {99, 30}, {100, 20}, {120, 40}, {320, 125}} {
+	for _, dims := range [][2]int{{1, 1}, {40, 10}, {52, 16}, {60, 20}, {80, 24}, {99, 30}, {100, 16}, {100, 20}, {120, 40}, {320, 125}} {
 		for _, hub := range HubTabs() {
 			for _, page := range hub.SubPages {
 				s := NewState()

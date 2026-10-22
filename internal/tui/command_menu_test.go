@@ -61,8 +61,32 @@ func TestCommandMenuCompletesAndSubmitsExplicitProjectPath(t *testing.T) {
 	}
 }
 
+func TestCommandArgumentsAreNeverTreatedAsSearchTerms(t *testing.T) {
+	for _, argument := range []string{"open", "project", "switch project"} {
+		s := NewState()
+		s.openCommandInput("project " + argument)
+		if len(s.commandMatches()) != 0 {
+			t.Fatal("argument input must not select a different command")
+		}
+		s.HandleKey(KeyEvent{Key: "Enter"})
+		if len(s.PendingActions) != 1 || s.PendingActions[0].Target != argument {
+			t.Fatalf("argument %q was consumed as a search: %+v", argument, s.PendingActions)
+		}
+	}
+	s := NewState()
+	s.openCommandInput("agent task")
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.PlanDraft == nil || s.PlanDraft.Seed.Title != "task" || len(s.PendingActions) != 0 {
+		t.Fatal("task text must open its plan unchanged without starting generation")
+	}
+}
+
 func TestCommandInputEditingPasteAndHistory(t *testing.T) {
 	s := NewState()
+	s.HandleKey(keyEventFromTea(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Paste: true}))
+	if len(s.PendingActions) != 0 {
+		t.Fatal("pasting outside the command editor must not trigger shortcuts")
+	}
 	s.openCommandInput("project /tmp/猫")
 	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
 	s.HandleKey(KeyEvent{Text: "新"})

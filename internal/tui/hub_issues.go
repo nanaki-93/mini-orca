@@ -10,70 +10,34 @@ import (
 )
 
 func (s *State) renderBugsPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	batchBadge := ""
-	if len(s.SelectedIssueIDs) > 0 {
-		batchBadge = fmt.Sprintf("   %s BATCH SELECTED: %d ([Enter] Run Batch) %s", th.warnBg, len(s.SelectedIssueIDs), th.reset)
-	}
-	openCount, inProgCount, doneCount := s.IssueStatusCounts()
-	statusStrip := s.renderIssueStatusFilterStrip(th, openCount, inProgCount, doneCount)
-	lines := []string{
-		fmt.Sprintf(
-			"  %s[2] AGENT STUDIO · ISSUES & BUGS%s   %sCategory (t):%s %s[%s]%s   %sStatus (s):%s %s%s",
-			th.bold+th.accent, th.reset,
-			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(s.IssueCategory), th.reset,
-			th.muted, th.reset, statusStrip, batchBadge,
-		),
-		"",
-	}
-	nameCol := max(18, width-62)
-	headerCols := fmt.Sprintf("    %-3s %-10s  %-9s  %-*s  %-18s  %s", "SEL", "SEVERITY", "CATEGORY", nameCol, "FINDING", "LOCATION", "STATUS")
-	lines = append(lines, th.renderTableHeader(headerCols, width)...)
+	open, active, done := s.IssueStatusCounts()
+	lines := renderPageHeader(th, "ISSUES", "Investigate findings, then prepare a fix plan")
+	lines = append(lines, "", "  "+s.renderIssueStatusFilterStrip(th, open, active, done))
+	lines = append(lines, fmt.Sprintf("  %s[t] Category: %s · [s] Status · %d selected%s", th.muted, s.IssueCategory, len(s.SelectedIssueIDs), th.reset), "")
 	filtered := s.FilteredIssues()
 	if len(filtered) == 0 {
-		return append(lines, fmt.Sprintf(
-			"  %sNo findings in [%s] status (open:%d · in_progress:%d · done:%d) — press [s] for status or [t] for category.%s",
-			th.muted, strings.ToUpper(s.IssueView), openCount, inProgCount, doneCount, th.reset,
-		))
+		return append(lines, "  No findings match these filters.", "  [s] Change status · [t] Change category · [r] Analyze")
 	}
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(filtered), selected, s.adaptiveWindowRows(15, 9))
+	start, end := windowBounds(len(filtered), selected, s.adaptiveWindowRows(12, 8))
 	for idx := start; idx < end; idx++ {
 		row := filtered[idx]
-		cursor := th.renderCursorPrefix(idx == selected)
-		mark := th.muted + "[ ]" + th.reset
+		mark := "[ ]"
 		if domain.ContainsString(s.SelectedIssueIDs, row.ID) {
-			mark = th.amber + "[x]" + th.reset
+			mark = "[x]"
 		}
-		loc := theme.TruncatePlain(fmt.Sprintf("%s:%d", row.Path, row.Line), 18)
-		cat := theme.TruncatePlain(row.Category, 9)
-		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s %s  %s%-9s%s  %s%-*s%s  %s%-18s%s  %s",
-			cursor, mark, th.severityBadge(row.Severity),
-			th.purple, cat, th.reset,
-			tStyle, nameCol, theme.TruncatePlain(row.Name, nameCol), th.reset,
-			th.muted, loc, th.reset,
-			th.statusBadge(row.Status),
-		))
+		prefix := "  " + th.renderCursorPrefix(idx == selected) + th.muted + mark + th.reset + " " + th.severityBadge(row.Severity) + " "
+		nameWidth := max(1, width-theme.VisibleRuneCount(prefix)-2)
+		lines = append(lines, prefix+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(row.Name, nameWidth)+th.reset)
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(filtered))
-	if cur := s.SelectedIssue(); cur != nil {
-		footer := []string{
-			fmt.Sprintf("%sFinding:%s   %s  %s%s%s",
-				th.muted, th.reset, th.severityBadge(cur.Severity), th.bold+th.fg, cur.Title, th.reset),
-			fmt.Sprintf("%sLocation:%s  %s%s:%d%s   %sSummary:%s %s",
-				th.muted, th.reset, th.cyan, cur.Path, cur.Line, th.reset,
-				th.muted, th.reset, cur.Cause),
-		}
-		if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
-			footer = append(footer, fmt.Sprintf("%sCommit:%s    %s%s%s",
-				th.muted, th.reset, th.green, formatIssueCommitLink(cur.CommitCode, cur.CommitOID), th.reset))
-		}
-		footer = append(footer, fmt.Sprintf("%sActions:%s   %s[Space]%s Select Batch · %s[Enter]%s Run Batch · %s[f]%s Fix Row · %s[i]%s Inspect · %s[s]%s Status · %s[d]%s Delete",
-			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset))
-		lines = append(lines, "")
-		lines = append(lines, th.renderPanelBox("SELECTED FINDING FOCUS", strings.ToUpper(cur.Category), panelW, footer)...)
+	cur := filtered[selected]
+	lines = append(lines, "", "  "+th.muted+"SELECTED FINDING"+th.reset)
+	lines = appendWrappedText(lines, th.bold+th.fg+cur.Name+th.reset, width)
+	lines = appendWrappedText(lines, th.cyan+formatIssueLocationSpan(cur)+th.reset, width)
+	lines = appendWrappedText(lines, th.statusBadge(cur.Status)+" · "+cur.Category+" · "+formatIssueOrigin(cur), width)
+	if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
+		lines = appendWrappedText(lines, "Commit: "+formatIssueCommitLink(cur.CommitCode, cur.CommitOID), width)
 	}
 	return lines
 }
@@ -334,25 +298,21 @@ func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, conte
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · FEATURES & ENHANCEMENTS", "Architecture-aligned capability proposals")
+	lines := renderPageHeader(th, "FEATURES", "Model suggestions · Inspect evidence before planning")
 	features := s.activeFeatures()
 	if len(features) == 0 {
-		return append(lines, fmt.Sprintf("  %sNo active feature proposals queued.%s", th.muted, th.reset))
+		return append(lines, "", "  No feature ideas saved yet.", "  [r] Analyze for ideas · :agent <request> to plan your own")
 	}
-	lines = append(lines, th.renderTableHeader("   EFFORT      FEATURE PROPOSAL                    STRATEGIC BENEFIT", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(features), selected, s.adaptiveWindowRows(15, 9))
+	lines = append(lines, "")
+	start, end := windowBounds(len(features), selected, s.adaptiveWindowRows(9, 8))
 	for idx := start; idx < end; idx++ {
 		f := features[idx]
-		cursor := th.renderCursorPrefix(idx == selected)
-		effort := strings.ToUpper(client.FirstNonEmpty(f.Effort, "med"))
-		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s  %s%-32s%s  %s%s%s",
-			cursor, th.severityBadge(effort), tStyle, f.Title, th.reset,
-			th.muted, f.Benefit, th.reset,
-		))
+		lines = append(lines, "  "+th.renderCursorPrefix(idx == selected)+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(f.Title, width-6)+th.reset)
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(features))
-	return append(lines, "", "  [Enter] Inspect feature · [f] Plan implementation")
+	feature := features[selected]
+	lines = append(lines, "", "  "+th.muted+"SELECTED IDEA · Effort: "+client.FirstNonEmpty(feature.Effort, "unspecified")+th.reset)
+	lines = appendWrappedText(lines, th.bold+th.fg+feature.Title+th.reset, width)
+	return appendWrappedText(lines, feature.Benefit, width)
 }

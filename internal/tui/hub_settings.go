@@ -11,7 +11,7 @@ import (
 
 func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · LAST ANALYSIS RUN & CONFIG", "Section coverage, execution telemetry & run parameters")
+	lines := renderPageHeader(th, "ANALYSIS", "Section coverage, execution telemetry & run parameters")
 	selected := s.ClampedIdx()
 	if s.Run == nil {
 		lines = append(lines, fmt.Sprintf("  %sNo analysis run recorded yet — press [r] or run :analyze to start.%s", th.muted, th.reset), "")
@@ -150,7 +150,7 @@ func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selecte
 }
 
 func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "[2] AGENT STUDIO · FILE SCOPE", "Captured path inclusion & per-file analysis stage diagnostics")
+	lines := renderPageHeader(th, "FILE SCOPE", "Captured path inclusion & per-file analysis stage diagnostics")
 	if s.Index == nil || len(s.Index.Files) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo indexed files available.%s", th.muted, th.reset))
 	}
@@ -375,7 +375,7 @@ func renderModelPresetInspector(th ansiTheme, panelW int, preset ModelPreset) []
 func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 	pillars := domain.EvaluateBootstrapChecklist(s.Index, s.Instructions)
 	readyCount := countReadyPillars(pillars)
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · BOOTSTRAP CHECKLIST", "Repository readiness & AGENTS.md pillars")
+	lines := renderPageHeader(th, "PROJECT SETUP", "Repository readiness & AGENTS.md pillars")
 	lines = append(lines, fmt.Sprintf("  %sGovernance Readiness:%s %s %s(%d/%d pillars active)%s",
 		th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), th.bold+th.fg, readyCount, len(pillars), th.reset), "")
 	lines = append(lines, th.renderTableHeader("    STATUS      GOVERNANCE PILLAR             DESCRIPTION", width)...)
@@ -395,7 +395,7 @@ func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 
 func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · HARNESS² LESSONS", "Graduated engineering guardrails & AGENTS.md rules")
+	lines := renderPageHeader(th, "LESSONS", "Graduated engineering guardrails & AGENTS.md rules")
 	lines = append(lines, th.renderTableHeader("    STATUS        HARNESS² GUARDRAIL LESSON", width)...)
 	lessons := s.AllHarnessLessons()
 	selected := s.ClampedIdx()

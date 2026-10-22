@@ -19,7 +19,7 @@ func (s *State) diffChanges() []FileChange {
 }
 
 func (s *State) handleDiffReviewKey(ev KeyEvent) bool {
-	if s.Page != PageEditor || s.BrowseFiles || s.Change == nil {
+	if s.Page != PageEditor || !s.isViewingDiff() {
 		return false
 	}
 	switch ev.Key {
@@ -129,6 +129,9 @@ func (s *State) diffMetadataWindow(rows []string, panelW int) []string {
 func (s *State) diffMetadataRows() int {
 	if s.viewportBodyRows <= 0 {
 		return 12
+	}
+	if s.viewportBodyRows < 10 {
+		return 1
 	}
 	return max(2, s.viewportBodyRows/3-2)
 }

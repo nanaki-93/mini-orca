@@ -13,10 +13,10 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if s.AgentDetailOpen && s.Change != nil {
 		return s.renderAgentDebugPage(th, width)
 	}
-	lines := renderPageHeader(th, "TASKS", "[Enter] Stages · [d] Diff · [x] Cancel/Reject · [b] Issues")
+	lines := renderPageHeader(th, "TASKS", "Plan → Generate → Verify → Review → Integrate")
 	items := s.AgentItems()
 	if len(items) == 0 {
-		return append(lines, "  No active tasks.", "", "  Select an issue or feature to review a plan before generation.")
+		return append(lines, "  No active tasks.", "", "  [n] New task · [b] Issues · :features for ideas")
 	}
 	selected := s.ClampedIdx()
 	titleW := max(12, width-29)
@@ -269,7 +269,7 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	case "failed", "changes_requested", "interrupted":
 		next = "[Enter] Inspect failure · :retry test or :retry review"
 	case "ready", "checked", "reviewed":
-		next = "[d] Review changed files before Apply"
+		next = "[d] Review changed files before Apply · [x] Reject"
 	}
 	return "  " + th.cyan + next + th.reset
 }
@@ -378,7 +378,7 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	} else if !s.BrowseFiles && s.File != nil {
 		subRight = theme.SanitizeCodeText(s.File.Path)
 	}
-	lines := renderPageHeader(th, "[3] CODE & DIFF · INSPECTOR", subRight)
+	lines := renderPageHeader(th, "FILES & DIFF", subRight)
 	if s.isViewingDiff() {
 		lines = append(lines, s.renderChangeDiffLines(th, width)...)
 		return lines
@@ -390,11 +390,11 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 		lines = append(lines, th.renderPanelBox("READ-ONLY SOURCE VIEWER", "SOURCE", panelW, []string{header})...)
 		if s.File.Content != "" {
 			rawLines := strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")
-			codeCol := max(16, width-12)
+			codeCol := max(16, width-14)
 			start, end := windowBounds(len(rawLines), s.ClampedIdx(), s.adaptiveWindowRows(10, 14))
 			for idx := start; idx < end; idx++ {
-				codeText := theme.TruncatePlain(theme.SanitizeCodeText(rawLines[idx]), codeCol)
-				lines = append(lines, fmt.Sprintf("  %s%4d │%s %s", th.muted, idx+1, th.reset, codeText))
+				codeText := theme.TruncatePlain(shiftedCode(rawLines[idx], s.DiffOffset), codeCol)
+				lines = append(lines, fmt.Sprintf("  %s%s%4d │%s %s", th.renderCursorPrefix(idx == s.ClampedIdx()), th.muted, idx+1, th.reset, codeText))
 			}
 			lines = appendWindowFooter(th, lines, start, end, len(rawLines))
 		}
@@ -439,7 +439,7 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[3] CODE & DIFF · SAVED PROPOSALS", "Guarded change history & audit trail")
+	lines := renderPageHeader(th, "PROPOSAL HISTORY", "Guarded change history & audit trail")
 	if len(s.ChangeHistory) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo saved proposals in history.%s", th.muted, th.reset))
 	}

@@ -10,7 +10,9 @@ import (
 // ActivateCurrentRow performs the primary Enter action for the currently highlighted row.
 func (s *State) ActivateCurrentRow() {
 	switch s.Page {
-	case PageSummary, PageBugs, PageIssueDetail:
+	case PageSummary:
+		s.activateDashboardRow()
+	case PageBugs, PageIssueDetail:
 		s.activateIssueRow()
 	case PageRepo:
 		s.CmdOutput = "Reindexing repository..."
@@ -185,6 +187,7 @@ func (s *State) openFileInEditor(path string) {
 		return
 	}
 	s.BrowseFiles = false
+	s.DiffOffset = 0
 	s.File = &FileInfo{Path: path, Name: path}
 	s.Navigate(PageEditor)
 	s.CmdOutput = fmt.Sprintf("Opened %s", path)

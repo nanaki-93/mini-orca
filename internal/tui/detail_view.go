@@ -10,44 +10,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
-func (s *State) hasScrollableDetails() bool {
-	return len(s.detailSections()) > 0 || s.EffectivePage() == PageModels || s.Page == PageWorktreeDetail || s.Page == PageAgents && s.AgentDetailOpen
-}
-
-func (s *State) handleDetailScrollKey(ev KeyEvent) bool {
-	if !s.hasScrollableDetails() && !(s.Page == PageEditor && s.isViewingDiff()) {
-		return false
-	}
-	step := 8
-	if s.Page == PageEditor {
-		step = s.diffMetadataRows()
-	}
-	switch ev.Key {
-	case "PageDown":
-		s.DetailScroll += step
-	case "PageUp":
-		s.DetailScroll = max(0, s.DetailScroll-step)
-	default:
-		return false
-	}
-	return true
-}
-
-func (s *State) scrollDetails(th ansiTheme, body []string, rows int) []string {
-	if !s.hasScrollableDetails() {
-		return body
-	}
-	if len(body) <= rows {
-		s.DetailScroll = 0
-		return body
-	}
-	visible := max(1, rows-1)
-	s.DetailScroll = min(s.DetailScroll, max(0, len(body)-visible))
-	start := s.DetailScroll
-	out := append([]string(nil), body[start:min(len(body), start+visible)]...)
-	return append(out, fmt.Sprintf("  %s[PgUp/PgDn] Scroll details · lines %d–%d of %d%s", th.cyan, start+1, min(len(body), start+visible), len(body), th.reset))
-}
-
 func (s *State) issueSourceExcerpt(cur IssueRow, th ansiTheme, contentW int) []string {
 	if s.IssueFile == nil || s.IssueFile.Path != cur.Path {
 		return nil

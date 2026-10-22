@@ -12,6 +12,7 @@ type ansiTheme struct {
 	accent         string
 	accentBg       string
 	fg             string
+	bg             string
 	muted          string
 	border         string
 	critBg         string
@@ -48,6 +49,7 @@ func themeForPalette(p Palette) ansiTheme {
 		accent:   "\033[1;38;5;" + c.AccentCode + "m",
 		accentBg: "\033[1;38;5;255;48;5;" + c.AccentBgCode + "m",
 		fg:       "\033[38;5;" + c.FgCode + "m",
+		bg:       "\033[48;5;" + c.BgCode + "m",
 		muted:    "\033[38;5;" + c.MutedCode + "m",
 		border:   "\033[38;5;" + c.BorderCode + "m",
 		critBg:   "\033[1;38;5;255;48;5;160m",
@@ -161,8 +163,8 @@ func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
 	return theme.RenderErrorBanner(th.errorBoxStyle, th.critBg, th.bold+th.red, th.reset, errText, innerWidth)
 }
 
-func (th ansiTheme) renderKPICards(cards [][2]string, totalWidth int) []string {
-	return theme.RenderKPICards(th.mutedStyle, th.cardStyle, cards, totalWidth)
+func (th ansiTheme) renderMetrics(cards [][2]string, totalWidth int) []string {
+	return theme.RenderMetrics(th.mutedStyle, cards, totalWidth)
 }
 
 func (th ansiTheme) renderTableHeader(columns string, width int) []string {

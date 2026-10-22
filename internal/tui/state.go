@@ -130,6 +130,7 @@ type State struct {
 	AnalysisConfig      AnalysisRunConfig
 	PendingActions      []ActionRequest
 	Quitting            bool
+	viewport            viewportMemory
 	viewportBodyRows    int
 	nextPreviewSeq      int
 	commandCursor       int
@@ -261,7 +262,7 @@ func (s *State) adaptiveWindowRows(overhead, defaultMin int) int {
 	if s.viewportBodyRows <= 0 {
 		return defaultMin
 	}
-	return max(defaultMin, s.viewportBodyRows-overhead)
+	return max(1, s.viewportBodyRows-overhead)
 }
 
 // AllModelPresets returns the built-in presets followed by any user-saved custom presets.
@@ -465,6 +466,7 @@ func (s *State) ActiveHub() HubTab {
 // Navigate switches the active page, synchronizes section state, and resets selection when switching lists.
 func (s *State) Navigate(page Page) {
 	if s.Page != page {
+		s.viewport.followSelection = true
 		s.DetailScroll = 0
 		s.DetailSection = 0
 		s.Error = ""
@@ -983,8 +985,10 @@ func matchesIssueView(status, view string) bool {
 func (s *State) ActiveListLength() int {
 	switch s.Page {
 	case PageSummary:
-		open := s.openIssues()
-		return min(8, len(open))
+		if s.Project == nil {
+			return 1
+		}
+		return len(dashboardPages)
 	case PageProject:
 		if s.Scan != nil && len(s.Scan.Phases) > 0 {
 			return len(s.Scan.Phases)

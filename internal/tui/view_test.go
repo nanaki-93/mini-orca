@@ -159,7 +159,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	for _, sec := range []string{"trust", "models", "bootstrap", "lessons"} {
 		s.RulesSection = sec
 		govFrame := s.Render(110, 34)
-		if !strings.Contains(govFrame, "[5] GOVERNANCE & RULES") && !(sec == "trust" && strings.Contains(govFrame, "PROJECT TRUST")) && !(sec == "models" && strings.Contains(govFrame, "MODEL DETAILS")) {
+		if !strings.Contains(govFrame, "PROJECT SETUP") && !strings.Contains(govFrame, "LESSONS") && !(sec == "trust" && strings.Contains(govFrame, "PROJECT TRUST")) && !(sec == "models" && strings.Contains(govFrame, "MODEL DETAILS")) {
 			t.Fatalf("expected governance header for section %s", sec)
 		}
 	}
@@ -250,7 +250,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 
 	s.HandleKey(KeyEvent{Key: "?"})
 	helpOut := s.Render(120, 36)
-	if !strings.Contains(helpOut, "KEYBINDINGS & COLON COMMANDS REFERENCE") {
+	if !strings.Contains(helpOut, "KEYBOARD REFERENCE") {
 		t.Fatalf("expected on-demand keybindings modal when pressing '?':\n%s", helpOut)
 	}
 	s.HandleKey(KeyEvent{Key: "Escape"})
@@ -340,7 +340,7 @@ func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 
 		frame := s.Render(120, 36)
 		for _, token := range []string{
-			"KEYBINDINGS & COLON COMMANDS REFERENCE",
+			"KEYBOARD REFERENCE",
 			"PAGE SHORTCUTS · " + spec.title,
 			spec.primary[0].desc,
 			spec.commands[0].key,

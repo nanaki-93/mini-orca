@@ -14,11 +14,15 @@ const sidebarMenuWidth = 24
 func (s *State) Render(width, height int) string {
 	width, height = theme.ClampWidth(width), theme.ClampHeight(height)
 	th := themeForPalette(s.Palette)
+	if s.viewport.width != width || s.viewport.height != height {
+		s.viewport.width, s.viewport.height = width, height
+		s.viewport.followSelection = true
+	}
 	if width < 52 || height < 16 {
 		return s.renderSmallTerminal(th, width, height)
 	}
 	header := []string{s.renderBrandBar(th, width), s.renderStatusBar(th, width)}
-	sidebar := width >= 100
+	sidebar := width >= 100 && height >= 20
 	if !sidebar {
 		header = append(header, s.renderHubBar(th, width), s.renderSubViewBar(th, width))
 	}
@@ -59,7 +63,8 @@ func fitFrame(th ansiTheme, lines []string, width, height int) string {
 		if i < len(lines) {
 			row = lines[i]
 		}
-		out[i] = th.fg + theme.PadVisibleRight(row, width) + th.reset
+		row = strings.ReplaceAll(row, th.reset, th.reset+th.bg+th.fg)
+		out[i] = th.bg + th.fg + theme.PadVisibleRight(row, width) + th.reset
 	}
 	return strings.Join(out, "\n")
 }
@@ -91,27 +96,27 @@ func alignBar(left, right string, width int) string {
 	return theme.PadVisibleRight(left, leftWidth) + "  " + right
 }
 
-func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRows int) []string {
+func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
+	s.viewportBodyRows = max(1, rows-1)
 	var body []string
-	body = append(body, "")
-	if s.Error != "" && !s.CmdActive {
-		body = append(body, th.renderErrorBanner(s.Error, contentWidth-4)...)
-		body = append(body, "")
-	}
 	switch {
 	case s.CmdActive:
-		body = append(body, s.renderCommandMenu(th, contentWidth, targetBodyRows-len(body))...)
+		body = s.renderCommandMenu(th, width, rows-1)
 	case s.Confirmation != nil:
-		body = append(body, s.renderConfirmationModal(th, contentWidth)...)
+		body = s.renderDialog(th, width, rows-1)
 	case s.ShowKeybindsModal:
-		s.viewportBodyRows = max(1, targetBodyRows-len(body))
-		body = append(body, s.renderKeybindsModal(th, contentWidth)...)
+		body = s.renderKeybindsModal(th, width)
+	case s.Error != "":
+		body = s.renderDialog(th, width, rows-1)
 	default:
-		s.viewportBodyRows = max(1, targetBodyRows-4)
-		page := s.renderActivePage(th, contentWidth)
-		body = append(body, s.scrollDetails(th, page, max(1, targetBodyRows-len(body)))...)
+		s.viewport.dialogKey, s.viewport.dialogScroll = "", 0
+		body = s.renderActivePage(th, width)
+		if !(s.Page == PageEditor && s.isViewingDiff()) {
+			body = wrapWorkspaceLines(body, width)
+		}
+		body = s.scrollDetails(th, body, rows-1)
 	}
-	return body
+	return append([]string{""}, body...)
 }
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
@@ -258,19 +263,26 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 }
 
 func (s *State) renderActionBar(th ansiTheme, width int) string {
-	items := lookupPageHelpSpec(s.EffectivePage()).primary
+	items := s.pageActions()
 	if s.Confirmation != nil {
 		items = []keyDesc{{"y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm")}, {"n/Esc", "Cancel"}}
 	} else if s.CmdActive {
 		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}, {"Esc", "Cancel"}}
+	} else if s.Error != "" && !s.ShowKeybindsModal {
+		items = []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}
 	} else if s.ShowKeybindsModal {
 		items = []keyDesc{{"↑/↓", "Scroll help"}, {"Esc", "Close"}}
 	}
+	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
+	available := width - theme.VisibleRuneCount(right) - 3
 	var hints []string
 	for _, item := range items {
-		hints = append(hints, th.keyPill(item.key, item.desc))
+		hint := th.keyPill(item.key, item.desc)
+		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "  ")) > available {
+			break
+		}
+		hints = append(hints, hint)
 	}
-	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
 	return alignBar(" "+strings.Join(hints, "  "), right, width)
 }
 
@@ -299,7 +311,7 @@ func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
 			th.keyPill("y/Enter", client.FirstNonEmpty(c.AcceptLabel, "Confirm")),
 			th.keyPill("n/Esc", "Cancel")),
 	}
-	return th.renderPanelBox("CONFIRMATION REQUIRED", "SECURITY & GOVERNANCE GATE", min(82, width-6), body)
+	return th.renderPanelBox("CONFIRMATION REQUIRED", "PgUp/PgDn: details", min(82, width-6), body)
 }
 
 func (s *State) renderCommandBar(th ansiTheme, width int) string {
@@ -311,7 +323,7 @@ func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	}
 	message := client.FirstNonEmpty(s.Busy, s.CmdOutput)
 	if message == "Workspace ready" {
-		message = "1–5: workspace · Tab: view · ↑/↓: select"
+		message = "1–5: workspace · Tab: view · ↑/↓: select · PgUp/PgDn: scroll"
 	}
 	return " " + th.muted + theme.TruncatePlain(message, width-2) + th.reset
 }
