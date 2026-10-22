@@ -85,7 +85,9 @@ func (s *State) loadProjectResources(ctx context.Context, client *Client) {
 		s.GitWorkspace = &gitWS
 		s.Repository = &gitWS.GitRepository
 	}
-	s.syncExecutionTrust(ctx, client, revQuery)
+	if err := s.syncExecutionTrust(ctx, client, revQuery); err != nil {
+		s.Error = err.Error()
+	}
 	if idQuery != "" {
 		s.loadGuardedProjectResources(ctx, client, idQuery, revQuery)
 	}
@@ -103,13 +105,14 @@ func (s *State) resourceQueries() (string, string) {
 	return revQuery, idQuery
 }
 
-func (s *State) syncExecutionTrust(ctx context.Context, client *Client, revQuery string) {
+func (s *State) syncExecutionTrust(ctx context.Context, client *Client, revQuery string) error {
 	var trust ExecutionTrust
-	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust"+revQuery, nil, &trust); err == nil {
-		s.WorkspaceTrust = trust.Trusted
-		return
+	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust"+revQuery, nil, &trust); err != nil {
+		s.WorkspaceTrust = false
+		return fmt.Errorf("restore project trust: %w", err)
 	}
-	s.WorkspaceTrust = false
+	s.WorkspaceTrust = trust.Trusted
+	return nil
 }
 
 func (s *State) loadGuardedProjectResources(ctx context.Context, cl *Client, idQuery, revQuery string) {

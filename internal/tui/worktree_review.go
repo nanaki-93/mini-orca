@@ -262,7 +262,9 @@ func (s *State) refreshWorktrees(ctx context.Context, cl *Client, reqID string, 
 	s.Project, s.Index, s.Repository, s.GitWorkspace = &project, &index, &workspace.GitRepository, &workspace
 	if revisionChanged {
 		revQuery, _ := s.resourceQueries()
-		s.syncExecutionTrust(ctx, cl, revQuery)
+		if err := s.syncExecutionTrust(ctx, cl, revQuery); err != nil {
+			return fmt.Errorf("worktrees refreshed, but %w", err)
+		}
 	}
 	for i, wt := range workspace.Worktrees {
 		if wt.Path == act.Target {

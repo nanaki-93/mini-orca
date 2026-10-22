@@ -99,7 +99,9 @@ func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) e
 	}
 	if s.Project != nil {
 		revQuery, _ := s.resourceQueries()
-		s.syncExecutionTrust(ctx, cl, revQuery)
+		if err := s.syncExecutionTrust(ctx, cl, revQuery); err != nil {
+			return fmt.Errorf("index updated, but %w", err)
+		}
 	}
 	return nil
 }
