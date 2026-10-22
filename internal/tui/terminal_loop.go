@@ -144,6 +144,10 @@ type startAgentResultMsg struct {
 	res startAgentResult
 }
 
+type changeActionResultMsg struct {
+	res changeActionResult
+}
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -201,6 +205,11 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeAgentStarts--
 		}
 		_ = m.state.applyStartAgentResult(ev.res)
+	case changeActionResultMsg:
+		if m.activeAgentStarts > 0 {
+			m.activeAgentStarts--
+		}
+		_ = m.state.applyChangeActionResult(ev.res)
 	case pollTickMsg:
 		m.pollScheduled = false
 		if cmd := m.startAsyncPollCmd(); cmd != nil {
@@ -251,14 +260,8 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 	var cmds []tea.Cmd
 	for _, act := range actions {
 		reqID := nextTUIReqID("act-" + act.Kind)
-		if act.Kind == "start-agent" {
-			if task, ok := m.state.prepareStartAgentTask(reqID, act); ok {
-				m.activeAgentStarts++
-				t := task
-				cmds = append(cmds, func() tea.Msg {
-					return startAgentResultMsg{res: executeStartAgentTask(m.ctx, m.client, t)}
-				})
-			}
+		if cmd, ok := m.prepareAsyncActionCmd(reqID, act); ok {
+			cmds = append(cmds, cmd)
 			continue
 		}
 		if err := m.state.dispatchAction(m.ctx, m.client, reqID, act); err != nil {
@@ -266,6 +269,31 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 		}
 	}
 	return cmds
+}
+
+func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
+	switch act.Kind {
+	case "start-agent":
+		task, ok := m.state.prepareStartAgentTask(reqID, act)
+		if !ok {
+			return nil, true
+		}
+		m.activeAgentStarts++
+		return func() tea.Msg {
+			return startAgentResultMsg{res: executeStartAgentTask(m.ctx, m.client, task)}
+		}, true
+	case "repair-change", "check-change":
+		task, ok := m.state.prepareChangeActionTask(reqID, act)
+		if !ok {
+			return nil, true
+		}
+		m.activeAgentStarts++
+		return func() tea.Msg {
+			return changeActionResultMsg{res: executeChangeActionTask(m.ctx, m.client, task)}
+		}, true
+	default:
+		return nil, false
+	}
 }
 
 func (m *BubbleModel) startAsyncPollCmd() tea.Cmd {

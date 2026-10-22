@@ -54,33 +54,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.CheckOptions
 	if current.Workflow != nil {
-		if ctx.Value(changeWorkflowContextKey{}) == nil {
-			if requiredChecksPassed(checks) && !canHumanReviewProposal(current) {
-				current.Workflow.Status, current.Workflow.Reason = "awaiting_human_review", ""
-				for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
-					current.Workflow.Stages[i].Status = "completed"
-				}
-				current.Workflow.Review = &ChangeWorkflowReview{
-					ProposalHash: current.Hash,
-					Verdict:      "approve",
-					Summary:      "Verified by deterministic proposal checks.",
-					Findings:     []string{},
-				}
-			} else if !requiredChecksPassed(checks) {
-				current.Workflow.Status, current.Workflow.Reason = workflowFailure(errWorkflowChecksFailed, checks)
-				if len(current.Workflow.Stages) > 1 {
-					current.Workflow.Stages[1].Status = "failed"
-				}
-			}
-		}
-		if canHumanReviewProposal(current) {
-			for i := 0; i < 3 && i < len(current.Workflow.Stages); i++ {
-				current.Workflow.Stages[i].Status = "completed"
-			}
-			if len(current.Workflow.Stages) > 3 {
-				current.Workflow.Stages[3].Status = "waiting"
-			}
-		}
+		reconcileWorkflowAfterChecks(current, checks, ctx.Value(changeWorkflowContextKey{}) != nil)
 	}
 	pinChangeRegression(current, checks)
 	if err := storeChangeSession(root, current); err != nil {
@@ -88,6 +62,42 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	}
 	s.changeAuthority[current.ProjectID+"/"+id] = "checks:" + current.Hash
 	return current, nil
+}
+
+func reconcileWorkflowAfterChecks(current *ChangeSession, checks []CheckResult, inWorkflowJob bool) {
+	wf := current.Workflow
+	if !inWorkflowJob {
+		if requiredChecksPassed(checks) && !canHumanReviewProposal(current) {
+			wf.Status, wf.Reason = "awaiting_human_review", ""
+			markLeadingWorkflowStagesCompleted(wf)
+			wf.Review = &ChangeWorkflowReview{
+				ProposalHash: current.Hash,
+				Verdict:      "approve",
+				Summary:      "Verified by deterministic proposal checks.",
+				Findings:     []string{},
+			}
+		} else if !requiredChecksPassed(checks) {
+			wf.Status, wf.Reason = workflowFailure(errWorkflowChecksFailed, checks)
+			if len(wf.Stages) > 0 && (wf.Stages[0].Status == "failed" || wf.Stages[0].Status == "interrupted") {
+				wf.Stages[0].Status, wf.Stages[0].Reason = "completed", ""
+			}
+			if len(wf.Stages) > 1 {
+				wf.Stages[1].Status, wf.Stages[1].Reason = "failed", wf.Reason
+			}
+		}
+	}
+	if canHumanReviewProposal(current) {
+		markLeadingWorkflowStagesCompleted(wf)
+		if len(wf.Stages) > 3 {
+			wf.Stages[3].Status = "waiting"
+		}
+	}
+}
+
+func markLeadingWorkflowStagesCompleted(wf *ChangeWorkflow) {
+	for i := 0; i < 3 && i < len(wf.Stages); i++ {
+		wf.Stages[i].Status, wf.Stages[i].Reason = "completed", ""
+	}
 }
 
 func pinChangeRegression(session *ChangeSession, checks []CheckResult) {

@@ -1135,55 +1135,312 @@ func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act 
 	return nil
 }
 
+type changeActionTask struct {
+	reqID             string
+	isRepair          bool
+	session           ChangeSession
+	prevSession       ChangeSession
+	projID            string
+	projRev           string
+	workspaceTrust    bool
+	message           string
+	modelsMap         map[string]string
+	confirmedProfiles []string
+	fallbackStart     startAgentTask
+	hasFallbackStart  bool
+}
+
+type changeActionResult struct {
+	task          changeActionTask
+	updated       ChangeSession
+	fallbackRes   *startAgentResult
+	usedFallback  bool
+	staleFallback bool
+	err           error
+}
+
 func (s *State) dispatchCheckChange(ctx context.Context, cl *Client, reqID string) error {
-	return s.postChangeSessionAction(ctx, cl, reqID, "/checks", map[string]any{
-		"run_tests": true,
-		"run_lint":  true,
-	})
+	return s.dispatchChangeSessionTask(ctx, cl, reqID, ActionRequest{Kind: "check-change"})
 }
 
 func (s *State) dispatchRepairChange(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
-	return s.postChangeSessionAction(ctx, cl, reqID, "/messages", map[string]any{
-		"message":                 client.FirstNonEmpty(act.Message, "Repair the current proposal to satisfy failed checks."),
-		"confirm_remote_provider": true,
-		"repair":                  true,
-	})
+	act.Kind = "repair-change"
+	return s.dispatchChangeSessionTask(ctx, cl, reqID, act)
 }
 
-func (s *State) postChangeSessionAction(ctx context.Context, cl *Client, reqID, suffix string, extra map[string]any) error {
-	if s.Change == nil || s.Project == nil {
+func (s *State) dispatchChangeSessionTask(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	task, ok := s.prepareChangeActionTask(reqID, act)
+	if !ok {
 		return nil
 	}
-	_ = s.ensureExecutionTrust(ctx, cl, reqID+"-trust")
-	wtPath := s.Change.WorktreePath
+	res := executeChangeActionTask(ctx, cl, task)
+	return s.applyChangeActionResult(res)
+}
+
+func (s *State) prepareChangeActionTask(reqID string, act ActionRequest) (changeActionTask, bool) {
+	if s.Change == nil || s.Project == nil || s.Change.ID == "" {
+		return changeActionTask{}, false
+	}
+	prev := cloneChangeSessionSnapshot(s.Change)
 	projID, projRev := s.changeProjectIdentity(s.Change)
+	modelsMap, confirmedProfiles := s.workflowModelsPayload()
+	seed := s.buildSeedFromCurrentChange()
+	msg := resolveRepairWorkflowMessage(act.Message, seed, s.Change)
+	fallback, hasFallback := s.prepareFallbackStartTask(reqID+"-refresh", s.Change.ID, seed, modelsMap, confirmedProfiles)
+	isRepair := act.Kind == "repair-change"
+	if isRepair {
+		s.markChangeWorkflowRunningOptimistic()
+	}
+	return changeActionTask{
+		reqID:             reqID,
+		isRepair:          isRepair,
+		session:           prev,
+		prevSession:       prev,
+		projID:            projID,
+		projRev:           projRev,
+		workspaceTrust:    s.WorkspaceTrust,
+		message:           msg,
+		modelsMap:         modelsMap,
+		confirmedProfiles: confirmedProfiles,
+		fallbackStart:     fallback,
+		hasFallbackStart:  hasFallback,
+	}, true
+}
+
+func cloneChangeSessionSnapshot(chg *ChangeSession) ChangeSession {
+	if chg == nil {
+		return ChangeSession{}
+	}
+	cp := *chg
+	cp.Targets = append([]ChangeTarget(nil), chg.Targets...)
+	cp.Changes = append([]FileChange(nil), chg.Changes...)
+	cp.Checks = append([]Check(nil), chg.Checks...)
+	cp.FindingTargets = append([]FindingTarget(nil), chg.FindingTargets...)
+	if chg.Workflow != nil {
+		wf := *chg.Workflow
+		wf.Stages = append([]ChangeWorkflowStage(nil), chg.Workflow.Stages...)
+		cp.Workflow = &wf
+	}
+	return cp
+}
+
+func resolveRepairWorkflowMessage(explicit string, seed *ChangeSeed, chg *ChangeSession) string {
+	if msg := strings.TrimSpace(explicit); msg != "" {
+		return msg
+	}
+	if seed != nil && strings.TrimSpace(seed.Message) != "" {
+		return strings.TrimSpace(seed.Message)
+	}
+	fallback := "Repair the current proposal to satisfy failed checks."
+	if chg != nil {
+		return firstUserChangeMessage(chg, client.FirstNonEmpty(chg.Title, fallback))
+	}
+	return fallback
+}
+
+func (s *State) prepareFallbackStartTask(reqID, previewID string, seed *ChangeSeed, modelsMap map[string]string, confirmed []string) (startAgentTask, bool) {
+	if seed == nil || s.Project == nil || s.Project.ProjectID == "" {
+		return startAgentTask{}, false
+	}
+	paths := domain.EnsureChangeTestPaths(seed.Paths, s.Index)
+	if len(paths) == 0 {
+		return startAgentTask{}, false
+	}
+	root := s.Project.Path
+	if root == "" && s.Repository != nil {
+		root = s.Repository.Root
+	}
+	head, branch := s.mainGitIdentity()
+	return startAgentTask{
+		reqID:             reqID,
+		act:               ActionRequest{Kind: "start-agent", PreviewID: previewID, Seed: seed},
+		projectID:         s.Project.ProjectID,
+		projectRevision:   s.Project.ProjectRevision,
+		root:              root,
+		head:              head,
+		branch:            branch,
+		workspaceTrust:    s.WorkspaceTrust,
+		paths:             paths,
+		modelsMap:         modelsMap,
+		confirmedProfiles: confirmed,
+		existingWorktrees: s.worktreeCollisionEntries(),
+	}, true
+}
+
+func (s *State) markChangeWorkflowRunningOptimistic() {
+	if s.Change == nil {
+		return
+	}
+	if s.Change.State == "failed" || s.Change.State == "interrupted" {
+		s.Change.State = "proposed"
+	}
+	if s.Change.Workflow == nil {
+		s.Change.Workflow = &ChangeWorkflow{ID: "wf-" + s.Change.ID}
+	}
+	s.Change.Workflow.Status = "running"
+	s.Change.Workflow.Reason = ""
+	if len(s.Change.Workflow.Stages) < 4 {
+		s.Change.Workflow.Stages = []ChangeWorkflowStage{
+			{Name: "Architect & Code", Status: "running"},
+			{Name: "Verify & Test", Status: "pending"},
+			{Name: "Critic Review", Status: "pending"},
+			{Name: "Human Review", Status: "blocked"},
+		}
+	} else {
+		s.Change.Workflow.Stages[0].Status, s.Change.Workflow.Stages[0].Reason = "running", ""
+		s.Change.Workflow.Stages[1].Status, s.Change.Workflow.Stages[1].Reason = "pending", ""
+		s.Change.Workflow.Stages[2].Status, s.Change.Workflow.Stages[2].Reason = "pending", ""
+		s.Change.Workflow.Stages[3].Status, s.Change.Workflow.Stages[3].Reason = "blocked", ""
+	}
+	s.upsertActiveChange(s.Change)
+}
+
+func executeChangeActionTask(ctx context.Context, cl *Client, task changeActionTask) changeActionResult {
+	projID, projRev := ensureChangeTaskTrust(ctx, cl, &task)
+	var updated ChangeSession
+	var err error
+	if task.isRepair {
+		updated, err = executeRepairWorkflowRequest(ctx, cl, &task, projID, projRev)
+	} else {
+		updated, err = executeCheckChangeRequest(ctx, cl, &task, projID, projRev)
+	}
+	if err != nil && task.hasFallbackStart && shouldFallbackChangeAction(err, task.isRepair) {
+		startRes := executeStartAgentTask(ctx, cl, task.fallbackStart)
+		return changeActionResult{
+			task:          task,
+			fallbackRes:   &startRes,
+			usedFallback:  true,
+			staleFallback: isRevisionConflictError(err),
+			err:           startRes.err,
+		}
+	}
+	return changeActionResult{task: task, updated: updated, err: err}
+}
+
+func ensureChangeTaskTrust(ctx context.Context, cl *Client, task *changeActionTask) (string, string) {
+	projID, projRev := task.projID, task.projRev
+	if task.session.WorktreePath != "" {
+		return resolveWorktreeIdentityTask(ctx, cl, task.reqID+"-wt", task.session.WorktreePath, projID, projRev, task.workspaceTrust)
+	}
+	if task.workspaceTrust && projRev != "" {
+		body := map[string]any{"project_revision": projRev, "confirm": true}
+		var trust ExecutionTrust
+		_ = cl.DoJSON(ctx, task.reqID+"-trust", http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+	}
+	return projID, projRev
+}
+
+func executeRepairWorkflowRequest(ctx context.Context, cl *Client, task *changeActionTask, projID, projRev string) (ChangeSession, error) {
+	wfSession, err := postRepairWorkflowAttempt(ctx, cl, task.reqID, task, projID, projRev, task.session.Revision, task.session.Hash)
+	if err == nil || !isRevisionConflictError(err) {
+		return wfSession, err
+	}
+	latest, ok := fetchLatestChangeSessionTask(ctx, cl, task.reqID+"-get", &task.session, projID, projRev)
+	if !ok {
+		return wfSession, err
+	}
+	if latest.Workflow != nil && latest.Workflow.Status == "running" {
+		return latest, nil
+	}
+	lProjID := client.FirstNonEmpty(latest.ProjectID, projID)
+	lProjRev := client.FirstNonEmpty(latest.ProjectRevision, projRev)
+	return postRepairWorkflowAttempt(ctx, cl, task.reqID+"-retry", task, lProjID, lProjRev, latest.Revision, latest.Hash)
+}
+
+func postRepairWorkflowAttempt(ctx context.Context, cl *Client, reqID string, task *changeActionTask, projID, projRev string, rev int, hash string) (ChangeSession, error) {
+	req := map[string]any{
+		"project_id":         projID,
+		"project_revision":   projRev,
+		"revision":           rev,
+		"hash":               hash,
+		"message":            task.message,
+		"models":             task.modelsMap,
+		"confirmed_profiles": task.confirmedProfiles,
+		"confirm_security":   true,
+		"auto_repair":        true,
+	}
+	var updated ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(task.session.ID) + "/workflow" + changeWorktreeScopeQuery(&task.session)
+	err := cl.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated)
+	return updated, err
+}
+
+func fetchLatestChangeSessionTask(ctx context.Context, cl *Client, reqID string, session *ChangeSession, projID, projRev string) (ChangeSession, bool) {
+	if session == nil || session.ID == "" || projID == "" || projRev == "" {
+		return ChangeSession{}, false
+	}
+	q := fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(projID), url.QueryEscape(projRev))
+	if session.WorktreePath != "" {
+		q += "&worktree_path=" + url.QueryEscape(session.WorktreePath)
+	}
+	var latest ChangeSession
+	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + q
+	if err := cl.DoJSON(ctx, reqID, http.MethodGet, target, nil, &latest); err != nil || latest.ID == "" {
+		return ChangeSession{}, false
+	}
+	return latest, true
+}
+
+func executeCheckChangeRequest(ctx context.Context, cl *Client, task *changeActionTask, projID, projRev string) (ChangeSession, error) {
 	req := map[string]any{
 		"project_id":       projID,
 		"project_revision": projRev,
-		"revision":         s.Change.Revision,
-		"hash":             s.Change.Hash,
-	}
-	for k, v := range extra {
-		req[k] = v
+		"revision":         task.session.Revision,
+		"hash":             task.session.Hash,
+		"run_tests":        true,
+		"run_lint":         true,
 	}
 	var updated ChangeSession
-	target := "/api/projects/current/changes/" + url.PathEscape(s.Change.ID) + suffix + changeWorktreeScopeQuery(s.Change)
-	if err := cl.DoJSON(ctx, reqID, http.MethodPost, target, req, &updated); err != nil {
-		if isRevisionConflictError(err) {
-			if seed := s.buildSeedFromCurrentChange(); seed != nil {
-				if s.Change != nil && s.Change.ID != "" {
-					s.removeActiveChangeByID(s.Change.ID)
-				}
-				s.syncProjectRevision(ctx, cl, reqID+"-sync")
-				s.CmdOutput = fmt.Sprintf("Proposal was stale — started fresh agent mission for %q", seed.Title)
-				return s.dispatchStartAgent(ctx, cl, reqID+"-refresh", ActionRequest{Kind: "start-agent", Seed: seed})
-			}
-		}
-		return err
+	target := "/api/projects/current/changes/" + url.PathEscape(task.session.ID) + "/checks" + changeWorktreeScopeQuery(&task.session)
+	err := cl.DoJSON(ctx, task.reqID, http.MethodPost, target, req, &updated)
+	return updated, err
+}
+
+func shouldFallbackChangeAction(err error, isRepair bool) bool {
+	if isRevisionConflictError(err) {
+		return true
 	}
-	updated.WorktreePath = client.FirstNonEmpty(updated.WorktreePath, wtPath)
+	if !isRepair || err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "include a test path") ||
+		strings.Contains(msg, "start a new feature") ||
+		strings.Contains(msg, "not found")
+}
+
+func (s *State) applyChangeActionResult(res changeActionResult) error {
+	if res.usedFallback && res.fallbackRes != nil {
+		if res.task.session.ID != "" && res.fallbackRes.session.ID != "" && res.fallbackRes.session.ID != res.task.session.ID {
+			s.removeActiveChangeByID(res.task.session.ID)
+		}
+		if err := s.applyStartAgentResult(*res.fallbackRes); err != nil {
+			return err
+		}
+		if res.staleFallback && res.task.fallbackStart.act.Seed != nil {
+			s.CmdOutput = fmt.Sprintf("Proposal was stale — started fresh agent mission for %q", res.task.fallbackStart.act.Seed.Title)
+		}
+		return nil
+	}
+	if res.err != nil {
+		if res.task.isRepair {
+			prev := res.task.prevSession
+			s.Change = &prev
+			s.upsertActiveChange(&prev)
+		}
+		s.Error = res.err.Error()
+		return res.err
+	}
+	updated := res.updated
+	updated.WorktreePath = client.FirstNonEmpty(updated.WorktreePath, res.task.session.WorktreePath)
+	if len(updated.FindingTargets) == 0 && len(res.task.session.FindingTargets) > 0 {
+		updated.FindingTargets = res.task.session.FindingTargets
+	}
 	s.Change = &updated
 	s.upsertActiveChange(&updated)
+	if s.Page == PageAgents {
+		s.syncSelectedIdxToCurrentChange()
+	}
 	return nil
 }
 

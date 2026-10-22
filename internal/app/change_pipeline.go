@@ -180,7 +180,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 		session.Workflow.Stages[i].Status = "pending"
 		session.Workflow.Stages[i].Reason = ""
 	}
-	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	session.ReviewedHash = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	if err := storeChangeSession(job.root, session); err != nil {
 		return "", false

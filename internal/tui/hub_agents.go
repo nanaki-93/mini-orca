@@ -211,13 +211,21 @@ func (s *State) activeAgentStageNumber() int {
 	if len(items) > 0 {
 		idx := s.ClampedIdx()
 		if idx >= 0 && idx < len(items) && items[idx].StageNumber >= 1 && items[idx].StageNumber <= 4 {
-			if items[idx].StageNumber == 1 && s.Change != nil && len(s.Change.Checks) > 0 {
+			if items[idx].StageNumber == 1 && s.Change != nil && len(s.Change.Checks) > 0 && !isStageOneFailedOrInterrupted(s.Change.Workflow) {
 				return 2
 			}
 			return items[idx].StageNumber
 		}
 	}
 	return 1
+}
+
+func isStageOneFailedOrInterrupted(wf *ChangeWorkflow) bool {
+	if wf == nil || len(wf.Stages) == 0 {
+		return false
+	}
+	st := wf.Stages[0].Status
+	return st == "failed" || st == "interrupted"
 }
 
 func (s *State) effectiveAgentDetailStage() int {

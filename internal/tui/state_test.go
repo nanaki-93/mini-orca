@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
@@ -2233,5 +2234,138 @@ func TestThreeConcurrentAgentsAndAnalysisRunInParallelWithoutSticking(t *testing
 		if tracker.polled[id] == 0 {
 			t.Fatalf("expected %s to be polled concurrently, got %v", id, tracker.polled)
 		}
+	}
+}
+
+func TestRerunFailedAgentWorkflowDispatchesAsyncWorkflowWithoutFreezingTUI(t *testing.T) {
+	var wfCalls, checkCalls, msgCalls int
+	var mu sync.Mutex
+	wfEntered := make(chan struct{}, 2)
+	releaseWf := make(chan struct{})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/projects/current/execution-trust", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(ExecutionTrust{Trusted: true})
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-timeout/workflow", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		wfCalls++
+		mu.Unlock()
+		wfEntered <- struct{}{}
+		<-releaseWf
+		_ = json.NewEncoder(w).Encode(ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+			ID:              "chg-timeout",
+			Title:           "Empty master password save",
+			Kind:            "fix",
+			Revision:        3,
+			Hash:            "h-3",
+			State:           "proposed",
+			Changes:         []FileChange{{Path: "vault.go", Content: "package vault\n"}},
+			Workflow: &ChangeWorkflow{
+				ID:     "wf-3",
+				Status: "running",
+				Stages: []ChangeWorkflowStage{
+					{Name: "create", Status: "running"},
+					{Name: "test", Status: "pending"},
+					{Name: "review", Status: "pending"},
+					{Name: "human_review", Status: "blocked"},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-timeout/checks", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		checkCalls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	mux.HandleFunc("/api/projects/current/changes/chg-timeout/messages", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		msgCalls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "vault"}
+	chg := &ChangeSession{
+		ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"},
+		ID:              "chg-timeout",
+		Title:           "Empty master password save",
+		Kind:            "fix",
+		Revision:        2,
+		Hash:            "h-2",
+		State:           "proposed",
+		Targets:         []ChangeTarget{{Path: "vault.go", Exists: true}, {Path: "vault_test.go", Exists: true}},
+		Changes:         []FileChange{{Path: "vault.go", Content: "package vault\n"}},
+		Workflow: &ChangeWorkflow{
+			ID:     "wf-2",
+			Status: "failed",
+			Reason: "Workflow timed out. Reduce scope or check the selected provider.",
+			Stages: []ChangeWorkflowStage{
+				{Name: "create", Status: "failed", Reason: "Workflow timed out. Reduce scope or check the selected provider."},
+				{Name: "test", Status: "pending"},
+				{Name: "review", Status: "pending"},
+				{Name: "human_review", Status: "blocked"},
+			},
+		},
+	}
+	s.Change = chg
+	s.ActiveChanges = []*ChangeSession{chg}
+	s.Navigate(PageAgents)
+	s.AgentDetailOpen = true
+
+	m := NewBubbleModel(context.Background(), s, cli, 120, 40)
+
+	// Pressing Enter (or 'r') inside the Agent Debug Inspector on a Stage 1 timeout with existing Changes
+	// must NOT block Update() or call /checks or /messages; it must optimistically transition to running and return a tea.Cmd.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil async tea.Cmd when rerunning failed workflow")
+	}
+	if s.Change.Workflow.Status != "running" || s.Change.Workflow.Stages[0].Status != "running" {
+		t.Fatalf("expected optimistic running status immediately after key event, got %+v", s.Change.Workflow)
+	}
+
+	// Execute the returned tea.Cmd batch in a goroutine to verify it hits /workflow asynchronously.
+	doneMsg := make(chan tea.Msg, 4)
+	go func() {
+		top := cmd()
+		if batch, ok := top.(tea.BatchMsg); ok {
+			for _, sub := range batch {
+				if sub == nil {
+					continue
+				}
+				go func(fn tea.Cmd) {
+					if m := fn(); m != nil {
+						if _, isTick := m.(pollTickMsg); !isTick {
+							doneMsg <- m
+						}
+					}
+				}(sub)
+			}
+			return
+		}
+		doneMsg <- top
+	}()
+	<-wfEntered
+	close(releaseWf)
+	m.Update(<-doneMsg)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if wfCalls != 1 || checkCalls != 0 || msgCalls != 0 {
+		t.Fatalf("expected 1 /workflow call and 0 /checks or /messages calls, got wf=%d checks=%d msgs=%d", wfCalls, checkCalls, msgCalls)
+	}
+	if s.Change.Revision != 3 || s.Change.Workflow.ID != "wf-3" || s.Change.Workflow.Status != "running" {
+		t.Fatalf("expected updated running workflow wf-3 on state, got %+v", s.Change)
 	}
 }

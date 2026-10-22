@@ -626,3 +626,56 @@ func TestConcurrentChangeWorkflowsDoNotConflict(t *testing.T) {
 		t.Fatalf("expected both concurrent workflows to succeed, got first=%+v second=%+v", res1.Workflow, res2.Workflow)
 	}
 }
+
+func TestChangeWorkflowAutoRepairStageOneTimeoutPreservesCheckEvidenceAndReconcilesStages(t *testing.T) {
+	var createCalls atomic.Int32
+	s, _, session := workflowService(t, [3]func() string{
+		func() string {
+			switch createCalls.Add(1) {
+			case 1:
+				return workflowImplementation
+			case 2:
+				return "invalid-json-causing-stage1-failure"
+			default:
+				return strings.ReplaceAll(workflowImplementation, "return 2", "return 99")
+			}
+		},
+		func() string { return strings.ReplaceAll(workflowTests, "Helper() != 2", "Helper() != 99") },
+		func() string { return workflowApproval },
+	})
+	req := workflowRequest(session)
+	req.AutoRepair = true
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
+		t.Fatal(err)
+	}
+	failed := finishedWorkflow(t, s, session.ID)
+	if failed.Workflow.Status != "failed" || failed.Workflow.Stages[0].Status != "failed" || failed.Workflow.Stages[1].Status != "skipped" {
+		t.Fatalf("expected auto-repair Stage 0 failure to leave only Stage 0 failed, got %+v", failed.Workflow)
+	}
+	if len(failed.Checks) == 0 || requiredChecksPassed(failed.Checks) {
+		t.Fatalf("expected failed checks from Attempt 0 to be preserved when Auto-Repair Stage 0 fails, got %+v", failed.Checks)
+	}
+
+	// If manual CheckChange runs after a Stage 0 failure, Stage 0 must not remain failed alongside Stage 1.
+	checked, err := s.CheckChange(context.Background(), failed.ID, ChangeCheckRequest{
+		ChangeIdentity: changeIdentity(failed),
+		CheckOptions:   CheckOptions{RunTests: true},
+	})
+	if err != nil {
+		t.Fatalf("CheckChange after Stage 0 failure: %v", err)
+	}
+	if checked.Workflow.Stages[0].Status == "failed" || checked.Workflow.Stages[0].Reason != "" || checked.Workflow.Stages[1].Status != "failed" {
+		t.Fatalf("expected Stage 0 failure to clear when Stage 1 check failure is recorded, got %+v", checked.Workflow.Stages)
+	}
+
+	// Rerunning the workflow via StartChangeWorkflow must include the preserved check failure and recover cleanly.
+	rerunReq := workflowRequest(checked)
+	rerunReq.AutoRepair = true
+	if _, err := s.StartChangeWorkflow(context.Background(), checked.ID, rerunReq); err != nil {
+		t.Fatalf("rerun StartChangeWorkflow failed: %v", err)
+	}
+	recovered := finishedWorkflow(t, s, checked.ID)
+	if recovered.Workflow.Status != "awaiting_human_review" {
+		t.Fatalf("expected rerun workflow to reach awaiting_human_review, got %+v", recovered.Workflow)
+	}
+}

@@ -362,7 +362,7 @@ func (s *State) triggerAgentRecheckOrRepair() {
 		return
 	}
 	passed, total := domain.CountPassedChecks(s.Change.Checks)
-	if total > 0 && passed < total {
+	if (total > 0 && passed < total) || s.isWorkflowFailedOrInterrupted() {
 		s.CmdOutput = "Triggering agent self-repair..."
 		s.enqueueAction(ActionRequest{Kind: "repair-change", Target: s.Change.ID})
 		return
@@ -373,6 +373,28 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	}
 	s.CmdOutput = "Re-running deterministic verification checks..."
 	s.enqueueAction(ActionRequest{Kind: "check-change", Target: s.Change.ID})
+}
+
+func (s *State) isWorkflowFailedOrInterrupted() bool {
+	if s.Change == nil {
+		return false
+	}
+	if s.Change.State == "failed" || s.Change.State == "interrupted" {
+		return true
+	}
+	if s.Change.Workflow == nil {
+		return false
+	}
+	switch s.Change.Workflow.Status {
+	case "failed", "interrupted", "outdated":
+		return true
+	}
+	for _, st := range s.Change.Workflow.Stages {
+		if st.Status == "failed" || st.Status == "interrupted" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) isChangeStale() bool {
