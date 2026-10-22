@@ -54,6 +54,10 @@ func TestChangeVerifyRequiresFreshTrustAndPersistsEvidence(t *testing.T) {
 	if err != nil || verified.Status != "verified" || !requiredChecksPassed(verified.Checks) {
 		t.Fatalf("verification: %+v, %v", verified, err)
 	}
+	// Verification history must not restore consent after an explicit revocation.
+	if _, err := service.TrustProjectExecution(context.Background(), identity.ProjectRevision, false); err != nil {
+		t.Fatal(err)
+	}
 	restarted, err := New(scopedTestConfig("http://127.0.0.1:1"), service.manager)
 	if err != nil {
 		t.Fatal(err)
