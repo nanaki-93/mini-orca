@@ -330,6 +330,19 @@ func (s *State) requestGuardedUndo() {
 }
 
 func (s *State) mergeSelectedWorktree() {
+	if s.Page == PageAgents {
+		s.syncSelectedAgentSession()
+		if s.Change != nil && s.Change.WorktreePath != "" {
+			if s.Change.Commit == nil || s.Change.Commit.State != "committed" {
+				s.applyAndCommitProposal("")
+				return
+			}
+			_, mainBranch := s.mainGitIdentity()
+			s.CmdOutput = fmt.Sprintf("Merging %s into %s...", s.Change.WorktreePath, client.FirstNonEmpty(mainBranch, "main"))
+			s.enqueueAction(ActionRequest{Kind: "merge-worktree", Target: s.Change.WorktreePath})
+			return
+		}
+	}
 	if s.GitWorkspace == nil {
 		return
 	}

@@ -53,14 +53,11 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projectPath string) {
 	var proj Project
 	body := map[string]string{"project_path": projectPath}
-	if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err == nil {
-		s.Project = &proj
+	if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err != nil {
+		s.Error = err.Error()
 		return
 	}
-	importBody := map[string]any{"project_path": projectPath, "confirm_remote_provider": true}
-	if err := client.DoJSON(ctx, "sync-import", http.MethodPost, "/api/projects/import", importBody, &proj); err == nil {
-		s.Project = &proj
-	}
+	s.Project = &proj
 }
 
 func (s *State) loadProjectResources(ctx context.Context, client *Client) {
@@ -109,29 +106,24 @@ func (s *State) resourceQueries() (string, string) {
 func (s *State) syncExecutionTrust(ctx context.Context, client *Client, revQuery string) {
 	var trust ExecutionTrust
 	if err := client.DoJSON(ctx, "sync-trust", http.MethodGet, "/api/projects/current/execution-trust"+revQuery, nil, &trust); err == nil {
-		if trust.Trusted {
-			s.WorkspaceTrust = true
-			return
-		}
-		if s.WorkspaceTrust && s.Project.ProjectRevision != "" {
-			_ = s.ensureExecutionTrust(ctx, client, "sync-trust-grant")
-			return
-		}
 		s.WorkspaceTrust = trust.Trusted
+		return
 	}
+	s.WorkspaceTrust = false
 }
 
-func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client, idQuery, revQuery string) {
+func (s *State) loadGuardedProjectResources(ctx context.Context, cl *Client, idQuery, revQuery string) {
 	var feat FeatureReport
-	if err := client.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
+	if err := cl.DoJSON(ctx, "sync-features", http.MethodGet, "/api/projects/current/features"+idQuery, nil, &feat); err == nil {
 		s.Features = &feat
 	}
 	var history []ChangeHistoryEntry
-	if err := client.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
+	if err := cl.DoJSON(ctx, "sync-changes", http.MethodGet, "/api/projects/current/changes"+idQuery, nil, &history); err == nil {
 		s.ChangeHistory = history
 	}
+	s.mergeWorktreeSessionsIntoHistory()
 	var rec ChangeMutation
-	if err := client.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
+	if err := cl.DoJSON(ctx, "sync-recovery", http.MethodGet, "/api/projects/current/changes/recovery"+idQuery, nil, &rec); err == nil && rec.SessionID != "" {
 		s.ChangeReceipt = &rec
 	}
 	projRev := s.projectRevision()
@@ -139,42 +131,93 @@ func (s *State) loadGuardedProjectResources(ctx context.Context, client *Client,
 		s.Change = nil
 	}
 	if s.Change == nil && len(s.ChangeHistory) > 0 {
-		if chgID := pickInitialChangeID(s.ChangeHistory, projRev); chgID != "" {
+		if entry, ok := pickInitialChangeEntry(s.ChangeHistory, projRev); ok {
 			var chg ChangeSession
-			target := "/api/projects/current/changes/" + url.PathEscape(chgID) + idQuery
-			if err := client.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
-				s.Change = &chg
-				s.upsertActiveChange(&chg)
+			target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + s.historyEntryResourceQuery(entry, idQuery)
+			if err := cl.DoJSON(ctx, "sync-latest-change", http.MethodGet, target, nil, &chg); err == nil {
+				chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, entry.WorktreePath)
+				if isUsableInitialChange(&chg, projRev) {
+					s.Change = &chg
+					s.upsertActiveChange(&chg)
+				}
 			}
 		}
 	}
-	s.syncActiveHistoryChanges(ctx, client, idQuery, projRev)
-	s.loadAuxResources(ctx, client, idQuery, revQuery)
+	s.syncActiveHistoryChanges(ctx, cl, idQuery, projRev)
+	s.loadAuxResources(ctx, cl, idQuery, revQuery)
 }
 
-func (s *State) syncActiveHistoryChanges(ctx context.Context, client *Client, idQuery, projRev string) {
+func (s *State) mergeWorktreeSessionsIntoHistory() {
+	if s.GitWorkspace == nil {
+		return
+	}
+	seen := make(map[string]bool, len(s.ChangeHistory))
+	for _, entry := range s.ChangeHistory {
+		if entry.ID != "" {
+			seen[entry.ID] = true
+		}
+	}
+	for _, wt := range s.GitWorkspace.Worktrees {
+		if wt.Current || wt.Path == "" {
+			continue
+		}
+		for _, entry := range wt.Sessions {
+			if entry.ID == "" || seen[entry.ID] {
+				continue
+			}
+			entry.WorktreePath = wt.Path
+			seen[entry.ID] = true
+			s.ChangeHistory = append(s.ChangeHistory, entry)
+		}
+	}
+}
+
+func (s *State) historyEntryResourceQuery(entry ChangeHistoryEntry, fallbackQuery string) string {
+	projID := client.FirstNonEmpty(entry.ProjectID, s.projectID())
+	projRev := client.FirstNonEmpty(entry.ProjectRevision, s.projectRevision())
+	if projID == "" || projRev == "" {
+		return fallbackQuery
+	}
+	q := fmt.Sprintf("?project_id=%s&project_revision=%s", url.QueryEscape(projID), url.QueryEscape(projRev))
+	if entry.WorktreePath != "" {
+		q += "&worktree_path=" + url.QueryEscape(entry.WorktreePath)
+	}
+	return q
+}
+
+func (s *State) syncActiveHistoryChanges(ctx context.Context, cl *Client, idQuery, projRev string) {
 	for idx, entry := range s.ChangeHistory {
-		if (entry.WorkflowStatus != "running" && entry.WorkflowStatus != "canceling") || !isUsableHistoryEntry(entry, projRev) {
+		if !isUsableHistoryEntry(entry, projRev) {
+			continue
+		}
+		if entry.WorktreePath == "" && entry.WorkflowStatus != "running" && entry.WorkflowStatus != "canceling" {
 			continue
 		}
 		if s.Change != nil && s.Change.ID == entry.ID {
 			continue
 		}
 		var chg ChangeSession
-		target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + idQuery
-		if err := client.DoJSON(ctx, fmt.Sprintf("sync-active-change-%d", idx), http.MethodGet, target, nil, &chg); err == nil && isUsableInitialChange(&chg, projRev) {
-			s.upsertActiveChange(&chg)
+		target := "/api/projects/current/changes/" + url.PathEscape(entry.ID) + s.historyEntryResourceQuery(entry, idQuery)
+		if err := cl.DoJSON(ctx, fmt.Sprintf("sync-active-change-%d", idx), http.MethodGet, target, nil, &chg); err == nil {
+			chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, entry.WorktreePath)
+			if isUsableInitialChange(&chg, projRev) {
+				s.upsertActiveChange(&chg)
+				if s.Change == nil {
+					cp := chg
+					s.Change = &cp
+				}
+			}
 		}
 	}
 }
 
-func pickInitialChangeID(history []ChangeHistoryEntry, projectRev string) string {
+func pickInitialChangeEntry(history []ChangeHistoryEntry, projectRev string) (ChangeHistoryEntry, bool) {
 	for _, entry := range history {
 		if isUsableHistoryEntry(entry, projectRev) {
-			return entry.ID
+			return entry, true
 		}
 	}
-	return ""
+	return ChangeHistoryEntry{}, false
 }
 
 func isUsableHistoryEntry(entry ChangeHistoryEntry, projectRev string) bool {
@@ -184,7 +227,7 @@ func isUsableHistoryEntry(entry ChangeHistoryEntry, projectRev string) bool {
 	if isInactiveAgentStatus(entry.State) || isInactiveAgentStatus(entry.WorkflowStatus) {
 		return false
 	}
-	if projectRev != "" && entry.ProjectRevision != "" && entry.ProjectRevision != projectRev {
+	if entry.WorktreePath == "" && projectRev != "" && entry.ProjectRevision != "" && entry.ProjectRevision != projectRev {
 		return false
 	}
 	return true
@@ -200,7 +243,7 @@ func isUsableInitialChange(chg *ChangeSession, projectRev string) bool {
 	if chg.Workflow != nil && isInactiveAgentStatus(chg.Workflow.Status) {
 		return false
 	}
-	if projectRev != "" && chg.ProjectRevision != "" && chg.ProjectRevision != projectRev {
+	if chg.WorktreePath == "" && projectRev != "" && chg.ProjectRevision != "" && chg.ProjectRevision != projectRev {
 		return false
 	}
 	return true
@@ -314,6 +357,7 @@ type pollSnapshot struct {
 type pollResult struct {
 	changes        []ChangeSession
 	changeOK       []bool
+	prevRun        *AnalysisRun
 	hasRun         bool
 	run            AnalysisRun
 	sectionResults map[string]SectionResults
@@ -376,6 +420,7 @@ func executePollSnapshot(ctx context.Context, cl *Client, snap pollSnapshot) pol
 	res := pollResult{
 		changes:  make([]ChangeSession, len(snap.workflows)),
 		changeOK: make([]bool, len(snap.workflows)),
+		prevRun:  snap.prevRun,
 	}
 	var wg sync.WaitGroup
 	for idx, wf := range snap.workflows {
@@ -467,7 +512,7 @@ func (s *State) applyPollResult(res pollResult) {
 		}
 		s.announceWorkflowTransition(&cp)
 	}
-	if res.hasRun {
+	if res.hasRun && s.canApplyPolledAnalysisRun(res.prevRun, &res.run) {
 		run := res.run
 		s.Run = &run
 		if len(res.sectionResults) > 0 {
@@ -493,6 +538,28 @@ func (s *State) applyPollResult(res pollResult) {
 		scan := res.scan
 		s.Scan = &scan
 	}
+}
+
+func (s *State) canApplyPolledAnalysisRun(prevRun, next *AnalysisRun) bool {
+	if next == nil || next.Identity.ID == "" {
+		return false
+	}
+	if (next.Identity.ProjectID != "" || next.Identity.ProjectRevision != "") && !s.AcceptProjectResponse(next.Identity.ProjectIdentity) {
+		return false
+	}
+	if s.Run == nil {
+		return prevRun == nil
+	}
+	if prevRun != nil && (s.Run.Identity.ID != prevRun.Identity.ID || s.Run.Identity.Generation != prevRun.Identity.Generation) {
+		return false
+	}
+	if s.Run.Identity.ID != "" && next.Identity.ID != s.Run.Identity.ID {
+		return false
+	}
+	if s.Run.Identity.Generation != "" && next.Identity.Generation != "" && next.Identity.Generation != s.Run.Identity.Generation {
+		return false
+	}
+	return true
 }
 
 func (s *State) announceAnalysisTransition(run *AnalysisRun) {
@@ -583,7 +650,7 @@ func (s *State) ensureExecutionTrust(ctx context.Context, cl *Client, reqID stri
 	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust); err != nil {
 		return err
 	}
-	s.WorkspaceTrust = trust.Trusted || s.WorkspaceTrust
+	s.WorkspaceTrust = trust.Trusted
 	return nil
 }
 
@@ -675,8 +742,20 @@ func (s *State) removeFindingCompletions(targets []FindingTarget) {
 }
 
 func (s *State) activeGitIdentity() (string, string) {
-	if s.Change != nil && s.Change.Git != nil && s.Change.Git.Head != "" && s.Change.Git.Branch != "" {
-		return s.Change.Git.Head, s.Change.Git.Branch
+	if s.Change != nil {
+		if s.Change.Git != nil && s.Change.Git.Head != "" && s.Change.Git.Branch != "" {
+			return s.Change.Git.Head, s.Change.Git.Branch
+		}
+		if s.Change.WorktreePath != "" {
+			if s.GitWorkspace != nil {
+				for _, wt := range s.GitWorkspace.Worktrees {
+					if wt.Path == s.Change.WorktreePath && wt.Head != "" && wt.Branch != "" {
+						return wt.Head, wt.Branch
+					}
+				}
+			}
+			return "", ""
+		}
 	}
 	return s.mainGitIdentity()
 }

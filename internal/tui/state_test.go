@@ -647,12 +647,12 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 initial state: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
-	if s.Page != PageInstructions || s.WorkspaceTrust {
-		t.Fatalf("expected ArrowRight on PageInstructions to toggle WorkspaceTrust without navigating away, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
+	if s.Page != PageInstructions || !s.WorkspaceTrust {
+		t.Fatalf("expected ArrowRight on PageInstructions to toggle WorkspaceTrust to true without navigating away, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
 	}
 	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
-	if s.Page != PageInstructions || !s.WorkspaceTrust {
-		t.Fatalf("expected ArrowLeft on PageInstructions to toggle WorkspaceTrust back to true, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
+	if s.Page != PageInstructions || s.WorkspaceTrust {
+		t.Fatalf("expected ArrowLeft on PageInstructions to toggle WorkspaceTrust back to false, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
 	}
 	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageModels || s.RulesSection != "models" {
@@ -2367,5 +2367,254 @@ func TestRerunFailedAgentWorkflowDispatchesAsyncWorkflowWithoutFreezingTUI(t *te
 	}
 	if s.Change.Revision != 3 || s.Change.Workflow.ID != "wf-3" || s.Change.Workflow.Status != "running" {
 		t.Fatalf("expected updated running workflow wf-3 on state, got %+v", s.Change)
+	}
+}
+
+func TestOpenProjectNeverImportsWithRemoteProviderConsent(t *testing.T) {
+	restoreCalled := false
+	importCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/restore":
+			restoreCalled = true
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"type":"not_found","message":"no saved project report"}`))
+		case "/api/projects/import":
+			importCalled = true
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","name":"demo","path":"/repo"}`))
+		case "/api/projects/current":
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","name":"demo","path":"/repo"}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	s := NewState()
+	if err := s.SyncFromDaemon(context.Background(), cli, "/repo"); err != nil {
+		t.Fatalf("SyncFromDaemon failed: %v", err)
+	}
+	if !restoreCalled {
+		t.Fatal("expected /api/projects/restore to be called")
+	}
+	if importCalled {
+		t.Fatal("opening a project must never automatically call /api/projects/import")
+	}
+}
+
+func TestStartupDoesNotSilentlyGrantExecutionTrust(t *testing.T) {
+	trustPosts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/current":
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","name":"demo","path":"/repo"}`))
+		case "/api/projects/current/execution-trust":
+			if r.Method == http.MethodPost {
+				trustPosts++
+			}
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","trusted":false,"status":"untrusted"}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	s := NewState()
+	if s.WorkspaceTrust {
+		t.Fatal("expected NewState to default WorkspaceTrust to false")
+	}
+	if err := s.SyncFromDaemon(context.Background(), cli, ""); err != nil {
+		t.Fatalf("SyncFromDaemon failed: %v", err)
+	}
+	if s.WorkspaceTrust {
+		t.Fatal("expected WorkspaceTrust to remain false when daemon reports untrusted")
+	}
+	if trustPosts != 0 {
+		t.Fatalf("expected 0 POSTs to /execution-trust on startup, got %d", trustPosts)
+	}
+}
+
+func TestFailedMutationsDoNotMarkFindingsDone(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	applyMode := "recovery_required"
+	mergeFail := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/review"):
+			_, _ = w.Write([]byte(`{"id":"chg-1","project_id":"wt-p1","project_revision":"wt-r1","title":"Fix bug","state":"reviewed","revision":1,"hash":"h-1","reviewed_hash":"h-1","checks":[{"name":"test","state":"passed"}]}`))
+		case strings.HasSuffix(r.URL.Path, "/apply"):
+			switch applyMode {
+			case "recovery_required":
+				_, _ = w.Write([]byte(`{"session_id":"chg-1","project_id":"wt-p1","project_revision":"wt-r1","state":"recovery_required","hash":"h-1","warnings":["apply failed mid-write"]}`))
+			case "commit_failed":
+				_, _ = w.Write([]byte(`{"session_id":"chg-1","project_id":"wt-p1","project_revision":"wt-r1","state":"applied","hash":"h-1","commit":{"state":"failed","error":"git commit rejected"}}`))
+			case "merge_failed":
+				_, _ = w.Write([]byte(`{"session_id":"chg-1","project_id":"wt-p1","project_revision":"wt-r2","state":"applied","hash":"h-1","commit":{"state":"committed","oid":"c123","branch":"orca/fix"}}`))
+			}
+		case r.URL.Path == "/api/projects/current/git/merge":
+			if mergeFail {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"type":"conflict","message":"merge conflict"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"state":"merged","removed_worktree":"/repo/.worktrees/fix"}`))
+		case r.URL.Path == "/api/projects/current/execution-trust":
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","trusted":true,"status":"trusted"}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	newProposalState := func() *State {
+		s := NewState()
+		s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Path: "/repo"}
+		s.GitWorkspace = &GitWorkspace{
+			GitRepository: GitRepository{GitIdentity: GitIdentity{Head: "main123", Branch: "main"}},
+			Worktrees: []GitWorktree{{
+				GitIdentity: GitIdentity{Head: "wt123", Branch: "orca/fix"},
+				Path:        "/repo/.worktrees/fix",
+				Mergeable:   true,
+			}},
+		}
+		chg := &ChangeSession{
+			ProjectIdentity: ProjectIdentity{ProjectID: "wt-p1", ProjectRevision: "wt-r1"},
+			ID:              "chg-1",
+			Title:           "Fix bug",
+			State:           "checked",
+			Revision:        1,
+			Hash:            "h-1",
+			WorktreePath:    "/repo/.worktrees/fix",
+			Checks:          []Check{{Name: "test", State: "passed"}},
+			FindingTargets:  []FindingTarget{{ProjectID: "p1", Kind: "semantic", ID: "f-1", Path: "a.go"}},
+		}
+		s.Change = chg
+		s.ActiveChanges = []*ChangeSession{chg}
+		return s
+	}
+
+	// 1. recovery_required must NOT mark finding done
+	s := newProposalState()
+	s.applyAndCommitProposal("")
+	s.FlushActions(context.Background(), cli)
+	if len(s.CompletedFindings) != 0 {
+		t.Fatalf("expected 0 completed findings on recovery_required, got %+v", s.CompletedFindings)
+	}
+	if s.Change == nil || s.Change.State != "recovery_required" {
+		t.Fatalf("expected proposal state recovery_required to be preserved, got %+v", s.Change)
+	}
+
+	// 2. failed commit must NOT mark finding done
+	applyMode = "commit_failed"
+	s = newProposalState()
+	s.applyAndCommitProposal("")
+	s.FlushActions(context.Background(), cli)
+	if len(s.CompletedFindings) != 0 {
+		t.Fatalf("expected 0 completed findings on commit failure, got %+v", s.CompletedFindings)
+	}
+
+	// 3. failed merge must NOT mark finding done before merge succeeds
+	applyMode = "merge_failed"
+	mergeFail = true
+	s = newProposalState()
+	s.applyAndCommitProposal("")
+	s.FlushActions(context.Background(), cli)
+	if len(s.CompletedFindings) != 0 {
+		t.Fatalf("expected 0 completed findings when worktree merge fails, got %+v", s.CompletedFindings)
+	}
+	if s.Change == nil || s.Change.ID != "chg-1" {
+		t.Fatalf("expected proposal to remain active after failed merge so user can retry, got %+v", s.Change)
+	}
+}
+
+func TestPendingWorktreeProposalsRestoredOnStartup(t *testing.T) {
+	var requestedWorktreeQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/current":
+			_, _ = w.Write([]byte(`{"project_id":"p1","project_revision":"r1","name":"demo","path":"/repo"}`))
+		case "/api/projects/current/git/workspace":
+			_, _ = w.Write([]byte(`{
+				"project_id":"p1","project_revision":"r1","head":"abc1234","branch":"main",
+				"worktrees":[{
+					"path":"/repo/.worktrees/fix-1","branch":"orca/fix-1","head":"def5678","clean":true,"mergeable":true,
+					"sessions":[{"id":"chg-wt-1","project_id":"wt-p1","project_revision":"wt-r1","kind":"fix","title":"Worktree Fix","state":"reviewed","freshness":"current","revision":2,"hash":"h-wt-1"}]
+				}]
+			}`))
+		case "/api/projects/current/changes":
+			_, _ = w.Write([]byte(`[]`))
+		case "/api/projects/current/changes/chg-wt-1":
+			requestedWorktreeQuery = r.URL.RawQuery
+			_, _ = w.Write([]byte(`{
+				"id":"chg-wt-1","project_id":"wt-p1","project_revision":"wt-r1","kind":"fix","title":"Worktree Fix",
+				"state":"reviewed","freshness":"current","revision":2,"hash":"h-wt-1",
+				"changes":[{"path":"main.go","content":"package main\n"}],
+				"checks":[{"name":"test","state":"passed"}]
+			}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	s := NewState()
+	if err := s.SyncFromDaemon(context.Background(), cli, ""); err != nil {
+		t.Fatalf("SyncFromDaemon failed: %v", err)
+	}
+	if !strings.Contains(requestedWorktreeQuery, "project_id=wt-p1") || !strings.Contains(requestedWorktreeQuery, "worktree_path=") {
+		t.Fatalf("expected worktree identity and worktree_path in session hydrate query, got %q", requestedWorktreeQuery)
+	}
+	if s.Change == nil || s.Change.ID != "chg-wt-1" || s.Change.WorktreePath != "/repo/.worktrees/fix-1" {
+		t.Fatalf("expected worktree proposal chg-wt-1 to be hydrated as active Change with WorktreePath, got %+v", s.Change)
+	}
+	if len(s.ActiveChanges) != 1 || s.ActiveChanges[0].ID != "chg-wt-1" {
+		t.Fatalf("expected ActiveChanges to contain hydrated worktree session, got %+v", s.ActiveChanges)
+	}
+}
+
+func TestDelayedPollDoesNotOverwriteNewerAnalysisRun(t *testing.T) {
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}}
+	oldRun := &AnalysisRun{
+		Identity: RunIdentity{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "run-1", Generation: "g1"},
+		Status:   "running",
+	}
+	newRun := &AnalysisRun{
+		Identity: RunIdentity{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "run-2", Generation: "g2"},
+		Status:   "running",
+	}
+	s.Run = newRun
+
+	s.applyPollResult(pollResult{
+		prevRun: oldRun,
+		hasRun:  true,
+		run: AnalysisRun{
+			Identity: RunIdentity{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, ID: "run-1", Generation: "g1"},
+			Status:   "completed",
+		},
+	})
+	if s.Run == nil || s.Run.Identity.ID != "run-2" || s.Run.Status != "running" {
+		t.Fatalf("expected delayed poll for run-1 to be rejected in favor of running run-2, got %+v", s.Run)
 	}
 }

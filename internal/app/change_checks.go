@@ -68,32 +68,45 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 
 func reconcileWorkflowAfterChecks(current *ChangeSession, checks []CheckResult, inWorkflowJob bool) {
 	wf := current.Workflow
-	if !inWorkflowJob {
-		if requiredChecksPassed(checks) && !canHumanReviewProposal(current) {
-			wf.Status, wf.Reason = "awaiting_human_review", ""
-			markLeadingWorkflowStagesCompleted(wf)
-			wf.Review = &ChangeWorkflowReview{
-				ProposalHash: current.Hash,
-				Verdict:      "approve",
-				Summary:      "Verified by deterministic proposal checks.",
-				Findings:     []string{},
-			}
-		} else if !requiredChecksPassed(checks) {
-			wf.Status, wf.Reason = workflowFailure(errWorkflowChecksFailed, checks)
-			if len(wf.Stages) > 0 && (wf.Stages[0].Status == "failed" || wf.Stages[0].Status == "interrupted") {
-				wf.Stages[0].Status, wf.Stages[0].Reason = "completed", ""
-			}
-			if len(wf.Stages) > 1 {
-				wf.Stages[1].Status, wf.Stages[1].Reason = "failed", wf.Reason
-			}
-		}
+	if !inWorkflowJob && !reconcileManualCheckStages(wf, current.Hash, checks) {
+		return
 	}
 	if canHumanReviewProposal(current) {
 		markLeadingWorkflowStagesCompleted(wf)
 		if len(wf.Stages) > 3 {
 			wf.Stages[3].Status = "waiting"
 		}
+		return
 	}
+	if len(wf.Stages) > 3 {
+		wf.Stages[3].Status = "blocked"
+	}
+}
+
+func reconcileManualCheckStages(wf *ChangeWorkflow, hash string, checks []CheckResult) bool {
+	if !requiredChecksPassed(checks) {
+		wf.Status, wf.Reason = workflowFailure(errWorkflowChecksFailed, checks)
+		if len(wf.Stages) > 0 && (wf.Stages[0].Status == "failed" || wf.Stages[0].Status == "interrupted") {
+			wf.Stages[0].Status, wf.Stages[0].Reason = "completed", ""
+		}
+		if len(wf.Stages) > 1 {
+			wf.Stages[1].Status, wf.Stages[1].Reason = "failed", wf.Reason
+		}
+		if len(wf.Stages) > 3 {
+			wf.Stages[3].Status = "blocked"
+		}
+		return false
+	}
+	if len(wf.Stages) > 0 {
+		wf.Stages[0].Status, wf.Stages[0].Reason = "completed", ""
+	}
+	if len(wf.Stages) > 1 {
+		wf.Stages[1].Status, wf.Stages[1].Reason = "completed", ""
+	}
+	if wf.Review != nil && wf.Review.ProposalHash == hash && wf.Review.Verdict == "approve" {
+		wf.Status, wf.Reason = "awaiting_human_review", ""
+	}
+	return true
 }
 
 func markLeadingWorkflowStagesCompleted(wf *ChangeWorkflow) {
@@ -189,13 +202,18 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 		}
 	}
 	if options.RunTests {
-		if len(newChangeTestEdits(session)) > 0 {
-			checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
-		}
 		if runner != "" && testTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
+			testCheck := s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true)
+			if len(newChangeTestEdits(session)) > 0 {
+				checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: testCheck.State, Output: testCheck.Output})
+			}
+			checks = append(checks, testCheck)
 		} else {
-			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
+			msg := "No executable test runner is configured or available for this workspace."
+			if len(newChangeTestEdits(session)) > 0 {
+				checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckUnavailable, Output: msg})
+			}
+			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckUnavailable, Output: msg})
 		}
 	}
 	return checks, ctx.Err()

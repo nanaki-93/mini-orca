@@ -328,6 +328,9 @@ func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"ts-fixture"}`), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "Makefile"), []byte("test:\n\t@true\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "app.ts"), []byte("import { helper } from './helper';\nexport function compute(): number {\n  return 1;\n}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -513,11 +516,11 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 		ChangeIdentity: changeIdentity(repaired),
 		CheckOptions:   CheckOptions{RunTests: true},
 	})
-	if err != nil || !requiredChecksPassed(checked.Checks) || checked.Workflow.Status != "awaiting_human_review" || checked.Workflow.Stages[1].Status != "completed" || checked.Workflow.Stages[3].Status != "waiting" || len(checked.PinnedTests) != 1 {
-		t.Fatalf("repaired workflow checks did not transition to awaiting_human_review: %+v, err=%v", checked, err)
+	if err != nil || !requiredChecksPassed(checked.Checks) || checked.Workflow.Stages[1].Status != "completed" || checked.Workflow.Stages[3].Status != "blocked" || checked.Workflow.Review != nil || len(checked.PinnedTests) != 1 {
+		t.Fatalf("repaired workflow checks should complete test stage without fabricating critic review: %+v, err=%v", checked, err)
 	}
-	if _, err := failS.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err != nil {
-		t.Fatalf("human review after repaired workflow checks failed: %v", err)
+	if _, err := failS.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+		t.Fatalf("expected human review to remain blocked until critic review approves the proposal")
 	}
 
 	var rerunCreateCalls atomic.Int32

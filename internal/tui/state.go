@@ -225,7 +225,7 @@ func NewState() *State {
 			"function": "function",
 		},
 		AnalysisConfig: domain.DefaultAnalysisRunConfig(),
-		WorkspaceTrust: true,
+		WorkspaceTrust: false,
 		Results:        make(map[string]SectionResults),
 		CmdOutput:      "Workspace ready",
 	}

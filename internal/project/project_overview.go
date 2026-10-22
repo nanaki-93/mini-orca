@@ -180,7 +180,10 @@ func (a *Analyzer) Restore(root string) (*Analysis, error) {
 		return nil, fmt.Errorf("load stored project analysis: %w", err)
 	}
 	if report == nil {
-		return nil, fmt.Errorf("stored project analysis not found")
+		fallback := newProjectAnalysisReportWithProvenance(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile, a.scope, a.providerOrigin, a.reasoningEffort)
+		fallback.Status = ProjectAnalysisStatusUnavailable
+		fallback.Failure = "Project analysis has not run yet. Run project analysis to create its report."
+		report = &fallback
 	}
 	analysis.Report = *report
 	analysis.AIStatus = report.Status

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
@@ -40,6 +42,7 @@ func (s *Service) removeGitWorktree(ctx context.Context, root string, source *Gi
 	if _, err := gitRead(ctx, root, "worktree", "remove", "--", source.Path); err != nil {
 		return err
 	}
+	_ = os.Remove(filepath.Join(root, ".worktrees"))
 	s.worktreesMu.Lock()
 	delete(s.worktrees, source.Path)
 	s.worktreesMu.Unlock()

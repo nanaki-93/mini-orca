@@ -351,3 +351,84 @@ func TestPolyglotArchitectureBoundariesQualityBudgetsAndEcosystemRunners(t *test
 		t.Fatalf("expected both polyglot architecture boundaries and custom complexity budget to fail, got %+v", checked.Checks)
 	}
 }
+
+func TestNonGoRequiredTestsWithoutRunnerAreUnavailableAndBlockVerification(t *testing.T) {
+	pyReply := `{"explanation":"Broken Python module.","changes":[{"path":"app.py","content":"def broken(:\n    pass\n"},{"path":"test_app.py","content":"def test_always_fails():\n    assert False\n"}]}`
+	server := changeProvider(t, func() string { return pyReply })
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "app.py"), []byte("def broken():\n    return 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "py-no-runner", Path: root, Type: "python"}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(scopedTestConfig(server.URL), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := prepareChangeFixture(t, service, "app.py", "test_app.py")
+	if _, err := service.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{
+		ChangeIdentity: changeIdentity(session),
+		CheckOptions:   CheckOptions{RunTests: true},
+	})
+	if err != nil {
+		t.Fatalf("CheckChange returned unexpected error: %v", err)
+	}
+	if requiredChecksPassed(checked.Checks) {
+		t.Fatalf("expected required checks not to pass without an executable test runner, got %+v", checked.Checks)
+	}
+	var testsUnavailable, baselineUnavailable bool
+	for _, chk := range checked.Checks {
+		if chk.Name == "tests" && chk.Required && chk.State == CheckUnavailable {
+			testsUnavailable = true
+		}
+		if chk.Name == "regression baseline" && chk.Required && chk.State == CheckUnavailable {
+			baselineUnavailable = true
+		}
+	}
+	if !testsUnavailable || !baselineUnavailable {
+		t.Fatalf("expected tests and regression baseline checks to be unavailable, got %+v", checked.Checks)
+	}
+	if _, err := service.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+		t.Fatalf("expected ReviewChange to fail when required tests did not execute")
+	}
+}
+
+func TestRerunningChecksPreservesCriticRejectionAndBlocksApproval(t *testing.T) {
+	s, _, session := workflowService(t, [3]func() string{
+		func() string { return workflowImplementation },
+		func() string { return workflowTests },
+		func() string {
+			return `{"verdict":"changes_requested","summary":"Missing edge-case guard.","findings":["Handle zero input explicitly"]}`
+		},
+	})
+	req := workflowRequest(session)
+	req.AutoRepair = false
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
+		t.Fatal(err)
+	}
+	rejected := finishedWorkflow(t, s, session.ID)
+	if rejected.Workflow == nil || rejected.Workflow.Status != "changes_requested" || rejected.Workflow.Review == nil || rejected.Workflow.Review.Verdict != "changes_requested" {
+		t.Fatalf("expected critic changes_requested verdict, got %+v", rejected.Workflow)
+	}
+	checked, err := s.CheckChange(context.Background(), rejected.ID, ChangeCheckRequest{
+		ChangeIdentity: changeIdentity(rejected),
+		CheckOptions:   CheckOptions{RunTests: true},
+	})
+	if err != nil {
+		t.Fatalf("CheckChange after critic rejection failed: %v", err)
+	}
+	if checked.Workflow.Status != "changes_requested" || checked.Workflow.Review == nil || checked.Workflow.Review.Verdict != "changes_requested" || len(checked.Workflow.Review.Findings) != 1 {
+		t.Fatalf("expected CheckChange to preserve critic rejection and findings, got %+v", checked.Workflow)
+	}
+	if _, err := s.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+		t.Fatalf("expected ReviewChange to remain blocked after rerunning deterministic checks on a critic-rejected proposal")
+	}
+}

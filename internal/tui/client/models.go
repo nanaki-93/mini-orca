@@ -649,6 +649,7 @@ type ChangeHistoryEntry struct {
 	Paths          []string        `json:"paths,omitempty"`
 	WorkflowStatus string          `json:"workflow_status,omitempty"`
 	WorkflowReason string          `json:"workflow_reason,omitempty"`
+	WorktreePath   string          `json:"worktree_path,omitempty"`
 }
 
 // ChangeMutation captures the receipt returned by Apply, Commit, or Undo.
