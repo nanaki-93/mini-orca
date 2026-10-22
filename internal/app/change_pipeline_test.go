@@ -679,3 +679,76 @@ func TestChangeWorkflowAutoRepairStageOneTimeoutPreservesCheckEvidenceAndReconci
 		t.Fatalf("expected rerun workflow to reach awaiting_human_review, got %+v", recovered.Workflow)
 	}
 }
+
+func TestChangeWorkflowExpandsUncapturedFailingTestTargetsAndPassesRetryFeedbackToTestStage(t *testing.T) {
+	var testCalls atomic.Int32
+	s, root, _ := workflowService(t, [3]func() string{
+		func() string {
+			return `{"explanation":"Validate nil password in SavePassword.","changes":[{"path":"cmd/master.go","content":"package cmd\nimport \"example.test/workflow/internal/utils\"\nfunc SavePassword(p []byte) bool {\n\tif len(p) == 0 {\n\t\treturn false\n\t}\n\treturn utils.NotEmpty(p)\n}\n"}]}`
+		},
+		func() string {
+			if testCalls.Add(1) == 1 {
+				return `{"explanation":"Add SavePassword test in master_test.go.","changes":[{"path":"cmd/master_test.go","content":"package cmd\nimport \"testing\"\nfunc TestSavePassword(t *testing.T) {\n\tif SavePassword(nil) {\n\t\tt.Fatal(\"expected false on nil\")\n\t}\n}\n"}]}`
+			}
+			return `{"explanation":"Update sibling add_test.go expectation alongside master_test.go.","changes":[{"path":"cmd/master_test.go","content":"package cmd\nimport \"testing\"\nfunc TestSavePassword(t *testing.T) {\n\tif SavePassword(nil) {\n\t\tt.Fatal(\"expected false on nil\")\n\t}\n}\n"},{"path":"cmd/add_test.go","content":"package cmd\nimport \"testing\"\nfunc TestSavePasswordWhenEmpty(t *testing.T) {\n\tif SavePassword(nil) {\n\t\tt.Fatal(\"expected false on nil\")\n\t}\n}\n"}]}`
+		},
+		func() string { return workflowApproval },
+	})
+	for rel, content := range map[string]string{
+		"internal/utils/utils.go":      "package utils\nfunc NotEmpty(b []byte) bool { return len(b) > 0 }\n",
+		"internal/utils/utils_test.go": "package utils\nimport \"testing\"\nfunc TestNotEmpty(t *testing.T) { if !NotEmpty([]byte(\"a\")) { t.Fatal(\"bad\") } }\n",
+		"cmd/master.go":                "package cmd\nimport \"example.test/workflow/internal/utils\"\nfunc SavePassword(p []byte) bool {\n\tif p != nil && len(p) == 0 {\n\t\treturn false\n\t}\n\t_ = utils.NotEmpty(p)\n\treturn true\n}\n",
+		"cmd/master_test.go":           "package cmd\nimport \"testing\"\n// BULKY_TEST_BODY_MARKER\nfunc TestSavePassword(t *testing.T) {\n\tif !SavePassword([]byte(\"secret123\")) {\n\t\tt.Fatal(\"expected true\")\n\t}\n}\n",
+		"cmd/add_test.go":              "package cmd\nimport \"testing\"\nfunc TestSavePasswordWhenEmpty(t *testing.T) {\n\tif !SavePassword(nil) {\n\t\tt.Fatal(\"legacy test expected nil to succeed\")\n\t}\n}\n",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	// Open session capturing ONLY cmd/master.go and cmd/master_test.go (omitting cmd/add_test.go).
+	session := openChangeFixture(t, s, "cmd/master.go", "cmd/master_test.go")
+	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify Stage 0 prompt context omits BULKY_TEST_BODY_MARKER and includes imported local Go declarations.
+	stageZeroText, _, err := composeChangeStagePromptContext(root, session, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stageZeroText, "BULKY_TEST_BODY_MARKER") {
+		t.Fatalf("expected Stage 0 workflow prompt to summarize test target declarations instead of full body, got:\n%s", stageZeroText)
+	}
+	if !strings.Contains(stageZeroText, "func NotEmpty(b []byte) bool") {
+		t.Fatalf("expected Stage 0 workflow prompt to include local imported package declarations from internal/utils, got:\n%s", stageZeroText)
+	}
+
+	req := workflowRequest(session)
+	req.AutoRepair = true
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
+		t.Fatal(err)
+	}
+	healed := finishedWorkflow(t, s, session.ID)
+	if healed.Workflow.Status != "awaiting_human_review" || healed.Workflow.AutoRepairAttempts != 1 {
+		t.Fatalf("expected workflow to auto-expand cmd/add_test.go and heal on attempt 1, got workflow=%+v checks=%+v", healed.Workflow, healed.Checks)
+	}
+	if changeTarget(healed, "cmd/add_test.go") == nil {
+		t.Fatalf("expected cmd/add_test.go to be dynamically added to session.Targets, got %+v", healed.Targets)
+	}
+	var testStageSawFailure bool
+	for _, msg := range healed.Messages {
+		if msg.Role == "user" && strings.HasPrefix(msg.Content, "Write meaningful regression and boundary tests") && strings.Contains(msg.Content, "Previous check failures to resolve:") && strings.Contains(msg.Content, "add_test.go") {
+			testStageSawFailure = true
+		}
+	}
+	if !testStageSawFailure {
+		t.Fatalf("expected Stage 1 testing agent prompt to include previous check failure evidence on auto-repair, got messages=%+v", healed.Messages)
+	}
+}

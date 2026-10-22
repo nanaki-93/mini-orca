@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -53,6 +54,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	}
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.CheckOptions
+	expandTargetsFromFailedChecks(root, current)
 	if current.Workflow != nil {
 		reconcileWorkflowAfterChecks(current, checks, ctx.Value(changeWorkflowContextKey{}) != nil)
 	}
@@ -449,6 +451,7 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 		return nil, root, fmt.Errorf("repair requires current failed checks and fewer than three attempts")
 	}
 	session.RepairAttempts++
+	expandTargetsFromFailedChecks(root, session)
 	if session.Workflow != nil {
 		if probeSummary, lessons := probeWorkflowFriction(session.Workflow, session.Checks); probeSummary != "" || len(lessons) > 0 {
 			if probeSummary != "" {
@@ -461,6 +464,61 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 		return nil, root, err
 	}
 	return session, root, nil
+}
+
+func expandTargetsFromFailedChecks(root string, session *ChangeSession) {
+	if session == nil || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) {
+		return
+	}
+	existingPaths, existingContents := collectSessionTargetSnapshot(session)
+	failedOutputs := collectFailedCheckOutputs(session.Checks)
+	for _, path := range changes.ResolveExpandedTargetPaths(root, existingPaths, existingContents, failedOutputs, isTestFilePath) {
+		captureExpandedSessionTarget(root, session, path)
+	}
+}
+
+func collectSessionTargetSnapshot(session *ChangeSession) ([]string, map[string]string) {
+	paths := make([]string, 0, len(session.Targets))
+	contents := make(map[string]string, len(session.Targets))
+	for _, t := range session.Targets {
+		paths = append(paths, t.Path)
+		contents[t.Path] = t.Content
+	}
+	for _, edit := range session.Changes {
+		if edit.Content != "" {
+			contents[edit.Path] = edit.Content
+		}
+	}
+	return paths, contents
+}
+
+func collectFailedCheckOutputs(checks []CheckResult) []string {
+	var out []string
+	for _, check := range checks {
+		if check.State != CheckPassed && check.State != CheckSkipped && strings.TrimSpace(check.Output) != "" {
+			out = append(out, check.Output)
+		}
+	}
+	return out
+}
+
+func captureExpandedSessionTarget(root string, session *ChangeSession, path string) {
+	if changeTarget(session, path) != nil {
+		return
+	}
+	target, err := captureChangeTarget(root, path)
+	if err != nil {
+		return
+	}
+	instructions, err := project.ResolveInstructions(root, path)
+	if err != nil {
+		return
+	}
+	if session.Instructions == nil {
+		session.Instructions = map[string]string{}
+	}
+	session.Targets = append(session.Targets, target)
+	session.Instructions[path] = instructions.Fingerprint
 }
 
 func changeCheckEvidence(checks []CheckResult) string {

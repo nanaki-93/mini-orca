@@ -486,6 +486,16 @@ func firstUserChangeMessage(chg *ChangeSession, title string) string {
 			return m.Content
 		}
 	}
+	if chg != nil && (len(chg.FindingTargets) > 0 || len(chg.AcceptanceCriteria) > 0) {
+		msg := fmt.Sprintf("Resolve issue: %s", title)
+		if len(chg.FindingTargets) > 0 && chg.FindingTargets[0].Path != "" {
+			msg += fmt.Sprintf("\nLocation: %s", chg.FindingTargets[0].Path)
+		}
+		if len(chg.AcceptanceCriteria) > 0 {
+			msg += "\nProposed solution: " + strings.Join(chg.AcceptanceCriteria, " ")
+		}
+		return msg
+	}
 	return fmt.Sprintf("Refresh and complete proposal: %s", title)
 }
 

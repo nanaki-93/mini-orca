@@ -368,11 +368,12 @@ func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessag
 }
 
 func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {
-	text, manifest, err := composeChangePromptContext(root, session)
+	stageZeroWorkflow := ctx.Value(changeWorkflowContextKey{}) != nil
+	text, manifest, err := composeChangeStagePromptContext(root, session, stageZeroWorkflow)
 	if err != nil {
 		return nil, err
 	}
-	messages, err := changeMessages(session, request.Message, text)
+	messages, err := changeStageMessages(session, request.Message, text, stageZeroWorkflow)
 	if err != nil {
 		return nil, err
 	}

@@ -166,12 +166,32 @@ func failedWorkflowCheckEvidence(checks []CheckResult) string {
 	return strings.TrimSpace(text.String())
 }
 
-func (s *Service) generateWorkflowTests(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime) (*ChangeSession, error) {
+func workflowTestStageMessage(stageMessage string) string {
+	for _, marker := range []string{
+		"\n\nCritic review feedback:",
+		"\n\nPrevious check failures to resolve:",
+		"\n\nPrevious workflow failure to resolve:",
+		"\n\nHarness² Propose-Probe-Compose:",
+	} {
+		if idx := strings.Index(stageMessage, marker); idx >= 0 {
+			combined := workflowTestPrompt + stageMessage[idx:]
+			if len(combined) > 8192 {
+				return combined[:8192]
+			}
+			return combined
+		}
+	}
+	return workflowTestPrompt
+}
+
+func (s *Service) generateWorkflowTests(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime, message string) (*ChangeSession, error) {
 	text, _, err := composeChangePromptContext(root, session)
 	if err != nil {
 		return nil, err
 	}
-	message := workflowTestPrompt
+	if strings.TrimSpace(message) == "" {
+		message = workflowTestPrompt
+	}
 	messages, err := changeMessages(session, message, text)
 	if err != nil {
 		return nil, err

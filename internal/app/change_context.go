@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -66,9 +67,14 @@ func captureChangeTarget(root, path string) (ChangeTarget, error) {
 }
 
 func composeChangePromptContext(root string, session *ChangeSession) (string, project.ContextManifest, error) {
+	return composeChangeStagePromptContext(root, session, false)
+}
+
+func composeChangeStagePromptContext(root string, session *ChangeSession, stageZeroWorkflow bool) (string, project.ContextManifest, error) {
 	manifest := project.ContextManifest{Included: []project.ContextFile{}, Excluded: []project.ContextDecision{}, ByteLimit: maxChangeBytes}
 	var text strings.Builder
 	seenInstructions := map[string]bool{}
+	omitTestBodies := stageZeroWorkflow && hasNonTestTarget(session.Targets)
 	for _, target := range session.Targets {
 		instructions, err := project.ResolveInstructions(root, target.Path)
 		if err != nil {
@@ -85,7 +91,11 @@ func composeChangePromptContext(root string, session *ChangeSession) (string, pr
 			text.WriteString("\nGuide " + file.Path + " (applies within " + file.Scope + "):\n" + file.Content + "\n")
 			manifest.Included = append(manifest.Included, project.ContextFile{Path: file.Path, Hash: file.Hash, SizeBytes: int64(len(file.Content))})
 		}
-		text.WriteString("\nCaptured target " + target.Path + ":\n" + target.Content + "\n")
+		if omitTestBodies && isTestFilePath(target.Path) {
+			text.WriteString("\nCaptured test target " + target.Path + " (handled by Stage 2 testing agent):\n" + summarizeTestTargetDecls(target) + "\n")
+		} else {
+			text.WriteString("\nCaptured target " + target.Path + ":\n" + target.Content + "\n")
+		}
 		manifest.Included = append(manifest.Included, project.ContextFile{Path: target.Path, Hash: target.Hash, SizeBytes: int64(len(target.Content))})
 	}
 	if text.Len() < 12000 {
@@ -99,6 +109,34 @@ func composeChangePromptContext(root string, session *ChangeSession) (string, pr
 	return text.String(), manifest, nil
 }
 
+func hasNonTestTarget(targets []ChangeTarget) bool {
+	for _, target := range targets {
+		if !isTestFilePath(target.Path) {
+			return true
+		}
+	}
+	return false
+}
+
+func summarizeTestTargetDecls(target ChangeTarget) string {
+	if !target.Exists || strings.TrimSpace(target.Content) == "" {
+		return "  (new test file)"
+	}
+	if filepath.Ext(target.Path) == ".go" {
+		if decls := extractGoDeclsFromText(target.Content); len(decls) > 0 {
+			joined := strings.Join(decls, "\n")
+			if len(joined) > 1600 {
+				return joined[:1600] + "\n  ..."
+			}
+			return joined
+		}
+	}
+	if len(target.Content) <= 1200 {
+		return target.Content
+	}
+	return target.Content[:1200] + "\n..."
+}
+
 func samePackageGoDecls(root string, session *ChangeSession) string {
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
@@ -109,10 +147,27 @@ func samePackageGoDecls(root string, session *ChangeSession) string {
 	for _, dir := range goDirs {
 		appendDirGoDecls(root, dir, captured, policy, &out)
 	}
+	appendImportedLocalGoDecls(root, session.Targets, captured, policy, &out)
 	for _, dir := range collectPolyglotTargetDirs(session.Targets) {
 		appendDirPolyglotDecls(root, dir, captured, policy, &out)
 	}
 	return out.String()
+}
+
+func appendImportedLocalGoDecls(root string, targets []ChangeTarget, captured map[string]bool, policy *project.ContextPolicy, out *strings.Builder) {
+	modPath := changes.ReadGoModulePath(root)
+	if modPath == "" {
+		return
+	}
+	var contents []string
+	for _, t := range targets {
+		if filepath.Ext(t.Path) == ".go" && t.Content != "" {
+			contents = append(contents, t.Content)
+		}
+	}
+	for _, dir := range changes.LocalImportedGoDirs(root, modPath, contents) {
+		appendDirGoDecls(root, dir, captured, policy, out)
+	}
 }
 
 func collectPolyglotTargetDirs(targets []ChangeTarget) []string {
@@ -236,10 +291,14 @@ func extractGoFileDecls(absPath string) []string {
 	if err != nil || len(data) > 32768 {
 		return nil
 	}
+	return extractGoDeclsFromText(string(data))
+}
+
+func extractGoDeclsFromText(text string) []string {
 	var decls []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "var ") && !strings.HasPrefix(trimmed, "type ") && !strings.HasPrefix(trimmed, "func ") {
+		if !strings.HasPrefix(trimmed, "const ") && !strings.HasPrefix(trimmed, "var ") && !strings.HasPrefix(trimmed, "type ") && !strings.HasPrefix(trimmed, "func ") {
 			continue
 		}
 		if idx := strings.Index(trimmed, "{"); idx > 0 {
@@ -251,12 +310,23 @@ func extractGoFileDecls(absPath string) []string {
 }
 
 func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMessage, error) {
+	return changeStageMessages(session, message, text, false)
+}
+
+func changeStageMessages(session *ChangeSession, message, text string, stageZeroWorkflow bool) ([]llm.ChatMessage, error) {
 	explanationGuidance := ""
 	if session.Kind == "fix" || session.Kind == "performance" || session.Kind == "security" {
 		explanationGuidance = " The explanation field is displayed under Proposed solution. Describe only the correction and how each changed file implements it. Do not repeat the cause or diagnostic background; they are displayed separately. Include unresolved failures, limitations and uncertainty affecting the solution."
 	}
+	omitTestBodies := stageZeroWorkflow && hasNonTestTarget(session.Targets)
+	if omitTestBodies {
+		explanationGuidance += " In this workflow stage, focus on non-test implementation targets; the dedicated testing stage will write and update captured test files next."
+	}
 	previous := make([]ChangeEditInput, 0, len(session.Changes))
 	for _, edit := range session.Changes {
+		if omitTestBodies && isTestFilePath(edit.Path) {
+			continue
+		}
 		previous = append(previous, ChangeEditInput{Path: edit.Path, Content: edit.Content})
 	}
 	input, err := json.Marshal(struct {

@@ -57,6 +57,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := s.admitChangeWorkflow(session, request, len(cleanedMessages)); err != nil {
 		return nil, err
 	}
+	expandTargetsFromFailedChecks(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	now := time.Now().UTC()
 	session.Revision++ // Invalidates operations admitted before this run.
@@ -66,7 +67,11 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
 	}
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
-	session.Workflow, session.Checks, session.ReviewedHash, session.PinnedTests = w, []CheckResult{}, "", nil
+	retainedChecks := []CheckResult{}
+	if len(session.Changes) > 0 && !requiredChecksPassed(session.Checks) {
+		retainedChecks = session.Checks
+	}
+	session.Workflow, session.Checks, session.ReviewedHash, session.PinnedTests = w, retainedChecks, "", nil
 	session.Messages = cleanedMessages
 	session.UpdatedAt = now
 	if err := storeChangeSession(root, session); err != nil {
@@ -119,7 +124,7 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	defer job.cancel()
 	defer close(job.done)
 	var runErr error
-	currentMessage := message
+	currentMessage := s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
 			nextMsg, ok := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
@@ -140,6 +145,28 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	s.finishChangeWorkflow(ctx, job, runErr)
 }
 
+func (s *Service) probeUncheckedChangesBeforeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) string {
+	if strings.Contains(message, "Previous check failures to resolve:") || strings.Contains(message, "Critic review feedback:") {
+		return message
+	}
+	s.changesMu.Lock()
+	session, err := loadChangeSession(job.root, job.sessionID)
+	needsProbe := err == nil && session.Workflow != nil && session.Workflow.ID == job.id && len(session.Changes) > 0 && len(session.Checks) == 0
+	var id ChangeIdentity
+	if needsProbe {
+		id = identityForChange(session)
+	}
+	s.changesMu.Unlock()
+	if !needsProbe {
+		return message
+	}
+	checked, err := s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: id, CheckOptions: CheckOptions{RunTests: true}})
+	if err != nil || requiredChecksPassed(checked.Checks) {
+		return message
+	}
+	return workflowRetryMessage(message, checked.Workflow, checked.Checks)
+}
+
 func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkflowJob, runErr error) bool {
 	if ctx.Err() != nil {
 		return false
@@ -153,10 +180,10 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	session, err := loadChangeSession(job.root, job.sessionID)
-	if err != nil || session.Workflow == nil || session.Workflow.Review == nil {
+	if err != nil || session.Workflow == nil || session.Workflow.ID != job.id {
 		return false
 	}
-	return session.Workflow.Review.Verdict == "changes_requested"
+	return session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
 }
 
 func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, bool) {
@@ -169,6 +196,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
 		return "", false
 	}
+	expandTargetsFromFailedChecks(job.root, session)
 	probe, lessons := probeWorkflowFriction(session.Workflow, session.Checks)
 	session.Workflow.ProbeSummary = probe
 	session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
@@ -197,10 +225,10 @@ func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWor
 	runtime := s.workflowStageRuntime(stage, job.models.selections()[stage])
 	switch stage {
 	case 0:
-		isRepair := session.Workflow != nil && session.Workflow.AutoRepairAttempts > 0
+		isRepair := (session.Workflow != nil && session.Workflow.AutoRepairAttempts > 0) || strings.Contains(message, "Previous check failures to resolve:")
 		_, err = s.generateChangeWithRuntime(ctx, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message, Repair: isRepair}, runtime)
 	case 1:
-		session, err = s.generateWorkflowTests(ctx, job.root, session, runtime)
+		session, err = s.generateWorkflowTests(ctx, job.root, session, runtime, workflowTestStageMessage(message))
 		if err == nil {
 			session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), CheckOptions: CheckOptions{RunTests: true}})
 		}
