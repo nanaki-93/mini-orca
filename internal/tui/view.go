@@ -10,90 +10,85 @@ import (
 
 const sidebarMenuWidth = 24
 
-// Render generates a complete, full-screen adaptive ANSI terminal frame for the current TUI state.
+// Render generates a full-screen frame that never exceeds the terminal's dimensions.
 func (s *State) Render(width, height int) string {
-	frameWidth := theme.ClampWidth(width)
-	frameHeight := theme.ClampHeight(height)
+	width, height = theme.ClampWidth(width), theme.ClampHeight(height)
 	th := themeForPalette(s.Palette)
-
-	if frameWidth < 96 {
-		return s.renderCompactFrame(th, frameWidth, frameHeight)
+	if width < 52 || height < 16 {
+		return s.renderSmallTerminal(th, width, height)
 	}
-	return s.renderSplitFrame(th, frameWidth, frameHeight)
-}
-
-func (s *State) renderSplitFrame(th ansiTheme, frameWidth, frameHeight int) string {
-	contentWidth := max(44, frameWidth-2-sidebarMenuWidth-1)
-
-	header := []string{
-		s.renderTopBorder(th, frameWidth, frameHeight),
-		th.wrapFrameLine(s.renderStatusBar(th, frameWidth), frameWidth),
-		s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┳", "┫", "━"),
+	header := []string{s.renderBrandBar(th, width), s.renderStatusBar(th, width)}
+	sidebar := width >= 100
+	if !sidebar {
+		header = append(header, s.renderHubBar(th, width), s.renderSubViewBar(th, width))
 	}
-
-	footer := []string{
-		s.renderSplitRule(th, frameWidth, sidebarMenuWidth, "┣", "┻", "┫", "━"),
-		th.wrapFrameLine(s.renderCommandBar(th, frameWidth), frameWidth),
-		s.renderBottomBorder(th, frameWidth),
+	rule := th.border + strings.Repeat("─", width) + th.reset
+	header = append(header, rule)
+	footer := []string{rule, s.renderActionBar(th, width), s.renderCommandBar(th, width)}
+	bodyRows := height - len(header) - len(footer)
+	contentWidth := width
+	if sidebar {
+		contentWidth -= sidebarMenuWidth + 1
 	}
-
-	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
-	s.viewportBodyRows = targetBodyRows
-	sidebar := s.renderSidebarMenu(th, sidebarMenuWidth, targetBodyRows)
-	rightBody := s.renderWorkspaceContent(th, contentWidth, targetBodyRows)
-
-	body := make([]string, 0, targetBodyRows)
-	for i := 0; i < targetBodyRows; i++ {
-		var leftLine, rightLine string
-		if i < len(sidebar) {
-			leftLine = sidebar[i]
+	s.viewportBodyRows = bodyRows
+	body := s.renderWorkspaceContent(th, contentWidth, bodyRows)
+	if sidebar {
+		menu := s.renderSidebarMenu(th, sidebarMenuWidth, bodyRows)
+		for i := 0; i < bodyRows; i++ {
+			if i >= len(body) {
+				body = append(body, "")
+			}
+			body[i] = theme.PadVisibleRight(menu[i], sidebarMenuWidth) + th.border + "│" + th.reset + body[i]
 		}
-		if i < len(rightBody) {
-			rightLine = rightBody[i]
-		}
-		body = append(body, theme.PadVisibleRight(leftLine, sidebarMenuWidth)+
-			th.border+"│"+th.reset+
-			theme.PadVisibleRight(rightLine, contentWidth))
 	}
-	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
-}
-
-func (s *State) renderCompactFrame(th ansiTheme, frameWidth, frameHeight int) string {
-	header := []string{
-		s.renderTopBorder(th, frameWidth, frameHeight),
-		th.wrapFrameLine(s.renderStatusBar(th, frameWidth), frameWidth),
-		s.renderHorizontalRule(th, frameWidth, "┣", "┫", "━"),
-		th.wrapFrameLine(s.renderHubBar(th, frameWidth), frameWidth),
-	}
-	if sub := s.renderSubViewBar(th, frameWidth); sub != "" {
-		header = append(header, th.wrapFrameLine(sub, frameWidth))
-	}
-	header = append(header, s.renderHorizontalRule(th, frameWidth, "┠", "┨", "─"))
-
-	footer := []string{
-		s.renderHorizontalRule(th, frameWidth, "┣", "┫", "━"),
-		th.wrapFrameLine(s.renderCommandBar(th, frameWidth), frameWidth),
-		s.renderBottomBorder(th, frameWidth),
-	}
-	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
-	s.viewportBodyRows = targetBodyRows
-	body := s.renderWorkspaceContent(th, frameWidth-2, targetBodyRows)
-	return assembleFrame(th, frameWidth, frameHeight, header, body, footer)
-}
-
-func assembleFrame(th ansiTheme, frameWidth, frameHeight int, header, body, footer []string) string {
-	targetBodyRows := max(1, frameHeight-len(header)-len(footer))
-	lines := make([]string, 0, len(header)+targetBodyRows+len(footer))
-	lines = append(lines, header...)
-	for i := 0; i < targetBodyRows; i++ {
-		var row string
+	lines := append([]string(nil), header...)
+	for i := 0; i < bodyRows; i++ {
+		row := ""
 		if i < len(body) {
 			row = body[i]
 		}
-		lines = append(lines, th.wrapFrameLine(row, frameWidth))
+		lines = append(lines, row)
 	}
-	lines = append(lines, footer...)
-	return strings.Join(lines, "\n")
+	return fitFrame(th, append(lines, footer...), width, height)
+}
+
+func fitFrame(th ansiTheme, lines []string, width, height int) string {
+	out := make([]string, height)
+	for i := range out {
+		row := ""
+		if i < len(lines) {
+			row = lines[i]
+		}
+		out[i] = th.fg + theme.PadVisibleRight(row, width) + th.reset
+	}
+	return strings.Join(out, "\n")
+}
+
+func (s *State) renderSmallTerminal(th ansiTheme, width, height int) string {
+	lines := []string{"MINI-ORCA", "", "Enlarge the terminal to 52 × 16.", "Your workspace is preserved.", "", "Ctrl+C: quit"}
+	if s.CmdActive {
+		lines = []string{"MINI-ORCA", s.renderCommandBar(th, width), "Enter: run · Esc: cancel"}
+	}
+	return fitFrame(th, lines, width, height)
+}
+
+func (s *State) renderBrandBar(th ansiTheme, width int) string {
+	name := "Open a project to begin"
+	if s.Project != nil {
+		name = client.FirstNonEmpty(s.Project.Name, s.Project.Path)
+	}
+	connection := th.amber + "○ Offline" + th.reset
+	if s.Connected {
+		connection = th.green + "● Connected" + th.reset
+	}
+	brand := " " + th.bold + th.fg + "MINI-ORCA" + th.reset
+	left := brand + th.border + "  /  " + th.reset + th.fg + theme.TruncatePlain(name, max(8, width-32)) + th.reset
+	return alignBar(left, connection+" ", width)
+}
+
+func alignBar(left, right string, width int) string {
+	leftWidth := max(0, width-theme.VisibleRuneCount(right)-2)
+	return theme.PadVisibleRight(left, leftWidth) + "  " + right
 }
 
 func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRows int) []string {
@@ -117,39 +112,32 @@ func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRow
 	return body
 }
 
-func (s *State) renderSidebarMenu(th ansiTheme, width, targetBodyRows int) []string {
+func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 	active := s.ActiveHub()
-	tabs := HubTabs()
 	subPages := s.renderSidebarSubPages(th, active, width)
 	models := s.renderSidebarModels(th, width)
-	// Keep every navigation row and model visible before adding decoration.
-	roomy := targetBodyRows >= len(tabs)+len(subPages)+len(models)+4
+	roomy := rows >= len(HubTabs())+len(subPages)+len(models)+5
 	var lines []string
 	if roomy {
-		lines = append(lines,
-			"",
-			fmt.Sprintf("  %sNAVIGATION%s", th.bold+th.cyan, th.reset),
-			fmt.Sprintf("  %s%s%s", th.border, strings.Repeat("─", max(8, width-4)), th.reset),
-		)
+		lines = append(lines, "", "  "+th.muted+"WORKSPACE"+th.reset, "")
 	}
-	for _, tab := range tabs {
-		isActiveHub := tab.Key == active.Key
-		if isActiveHub {
-			badge := fmt.Sprintf(" ▸ %s. %-*s", tab.Key, max(1, width-8), theme.TruncatePlain(strings.ToUpper(tab.Label), width-8))
-			lines = append(lines, " "+th.accentBg+theme.TruncatePlain(badge, width-2)+th.reset)
+	for _, tab := range HubTabs() {
+		style := th.muted
+		if tab.Key == active.Key {
+			style = th.bold + th.fg
+		}
+		lines = append(lines, "  "+style+tab.Key+"  "+tab.Label+th.reset)
+		if tab.Key == active.Key {
 			lines = append(lines, subPages...)
 			if roomy {
 				lines = append(lines, "")
 			}
-		} else {
-			lines = append(lines, fmt.Sprintf("   %s%s.%s %s%s%s",
-				th.muted, tab.Key, th.reset, th.fg, theme.TruncatePlain(tab.Label, width-7), th.reset))
 		}
 	}
-	if targetBodyRows-len(lines) >= len(models)+2 {
-		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.bold + th.cyan + "MODELS" + th.reset}, models...)
+	if rows-len(lines) >= len(models)+2 {
+		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.muted + "MODELS" + th.reset}, models...)
 	}
-	for len(lines) < targetBodyRows-len(models) {
+	for len(lines) < rows-len(models) {
 		lines = append(lines, "")
 	}
 	return append(lines, models...)
@@ -168,141 +156,120 @@ func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []string {
-	var visible []HubSubPage
-	for _, sp := range tab.SubPages {
-		if sp.Page != PageIssueDetail {
-			visible = append(visible, sp)
-		}
-	}
 	curPage := parentPage(s.EffectivePage())
 	var out []string
-	for idx, sp := range visible {
-		branch := "├─"
-		if idx == len(visible)-1 {
-			branch = "└─"
+	for _, sp := range tab.SubPages {
+		if sp.Page == PageIssueDetail {
+			continue
 		}
-		label := theme.TruncatePlain(sp.Label, width-9)
+		label := theme.TruncatePlain(sp.Label, width-8)
 		if sp.Page == curPage {
-			out = append(out, fmt.Sprintf("  %s%s%s %s◆ %s%s", th.border, branch, th.reset, th.bold+th.accent, label, th.reset))
+			out = append(out, "    "+th.subActiveStyle.Render(theme.PadVisibleRight("▸ "+label, width-6)))
 		} else {
-			out = append(out, fmt.Sprintf("  %s%s%s %s◇ %s%s", th.border, branch, th.reset, th.muted, label, th.reset))
+			out = append(out, "      "+th.muted+label+th.reset)
 		}
 	}
 	return out
 }
 
-func (s *State) renderTopBorder(th ansiTheme, width, height int) string {
-	tag := fmt.Sprintf(" ◆ MINI-ORCA // TUI · %s · %dx%d ", th.name, width, height)
-	fill := max(4, width-theme.VisibleRuneCount(tag)-2)
-	return fmt.Sprintf("%s┏%s%s%s%s┓%s", th.border, th.accent, tag, th.border, strings.Repeat("━", fill), th.reset)
-}
-
-func (s *State) renderBottomBorder(th ansiTheme, width int) string {
-	return fmt.Sprintf("%s┗%s┛%s", th.border, strings.Repeat("━", max(10, width-2)), th.reset)
-}
-
-func (s *State) renderHorizontalRule(th ansiTheme, width int, left, right, ch string) string {
-	return fmt.Sprintf("%s%s%s%s%s", th.border, left, strings.Repeat(ch, max(10, width-2)), right, th.reset)
-}
-
-func (s *State) renderSplitRule(th ansiTheme, width, leftPaneWidth int, left, mid, right, ch string) string {
-	inner := max(10, width-2)
-	rightPaneWidth := max(4, inner-leftPaneWidth-1)
-	return fmt.Sprintf("%s%s%s%s%s%s%s",
-		th.border,
-		left,
-		strings.Repeat(ch, leftPaneWidth),
-		mid,
-		strings.Repeat(ch, rightPaneWidth),
-		right,
-		th.reset,
-	)
-}
-
 func (s *State) renderStatusBar(th ansiTheme, width int) string {
-	connBadge := th.okBg + " ● ONLINE " + th.reset
-	if !s.Connected {
-		connBadge = th.warnBg + " ○ OFFLINE " + th.reset
+	left := " " + th.muted + "Local workspace" + th.reset
+	if s.Project != nil {
+		branch := "Git unavailable"
+		if s.Repository != nil && s.Repository.Available {
+			branch = client.FirstNonEmpty(s.Repository.Branch, "Detached HEAD")
+		}
+		left = " " + th.muted + theme.TruncatePlain(branch, 24) + th.reset
+		if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
+			left += th.amber + " · Modified" + th.reset
+		}
+		trust := "Checks need trust"
+		if s.WorkspaceTrust {
+			trust = "Checks trusted"
+		}
+		if width >= 80 {
+			left += th.muted + "  ·  " + trust + th.reset
+		}
 	}
-	projName := "no-project"
-	if s.Project != nil && s.Project.Name != "" {
-		projName = theme.TruncatePlain(s.Project.Name, 26)
+	activity := ""
+	if s.Run != nil && s.Run.Status != "" {
+		done, total := runAggregateCoverage(s.Run)
+		activity = "Analysis " + s.Run.Status
+		if total > 0 {
+			activity += fmt.Sprintf(" · %d/%d", done, total)
+		}
 	}
-	branch := "no branch"
-	if s.Repository != nil && s.Repository.Branch != "" {
-		branch = theme.TruncatePlain(s.Repository.Branch, 20)
+	if s.Busy != "" {
+		activity = "Working · " + s.Busy
 	}
-	dirty := ""
-	if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
-		dirty = " " + th.statusBadge("DIRTY")
-	}
-	ver := ""
-	if s.Version != "" {
-		ver = "  " + th.muted + "v" + s.Version + th.reset
-	}
-	content := fmt.Sprintf(
-		"  %s%s   %s%s%s   %sgit:%s %s%s%s",
-		connBadge, ver,
-		th.bold+th.fg, projName, th.reset,
-		th.muted, th.reset, th.cyan, branch, dirty,
-	)
-	if parts := s.renderProgressParts(th); len(parts) > 0 {
-		content += th.border + "  │  " + th.reset + strings.Join(parts, th.border+"  │  "+th.reset)
-	}
-	return theme.PadVisibleRight(content, width-2)
+	return alignBar(left, th.muted+theme.TruncatePlain(activity, max(10, width/2-2))+th.reset+" ", width)
 }
 
 func (s *State) renderHubBar(th ansiTheme, width int) string {
 	active := s.ActiveHub()
 	var parts []string
 	for _, tab := range HubTabs() {
+		label := tab.Key + " " + tab.Label
 		if tab.Key == active.Key {
-			parts = append(parts, th.activeTabStyle.Render("▸ "+tab.Label))
+			parts = append(parts, th.activeTabStyle.Render(label))
 		} else {
-			parts = append(parts, th.idleTabStyle.Render(tab.Label))
+			parts = append(parts, th.idleTabStyle.Render(label))
 		}
 	}
-	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("MENU:"), strings.Join(parts, th.border+"│"+th.reset))
-	return theme.PadVisibleRight(row, width-2)
+	return theme.PadVisibleRight(" "+strings.Join(parts, " "), width)
 }
 
 func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 	hub := s.ActiveHub()
-	if len(hub.SubPages) == 0 {
-		return ""
-	}
-	curPage := parentPage(s.EffectivePage())
-	var parts []string
+	page := parentPage(s.EffectivePage())
+	var labels []string
+	active := 0
 	for _, sp := range hub.SubPages {
-		if sp.Page == PageIssueDetail && curPage != PageIssueDetail {
+		if sp.Page == PageIssueDetail {
 			continue
 		}
-		if sp.Page == curPage {
-			parts = append(parts, th.subActiveStyle.Render("◆ "+sp.Label))
+		label := sp.Label
+		if sp.Page == page {
+			active = len(labels)
+			label = th.bold + th.cyan + "▸ " + label + th.reset
 		} else {
-			parts = append(parts, th.subIdleStyle.Render("◇ "+sp.Label))
+			label = th.muted + label + th.reset
 		}
+		labels = append(labels, label)
 	}
-	row := fmt.Sprintf("  %s %s", th.labelStyle.Render("VIEW:"), strings.Join(parts, th.border+"·"+th.reset))
-	return theme.PadVisibleRight(row, width-2)
+	// Center the visible tabs on the current view; Tab always reaches the rest.
+	start, end := active, active+1
+	for start > 0 && theme.VisibleRuneCount(strings.Join(labels[start-1:end], "  ")) <= width-12 {
+		start--
+	}
+	for end < len(labels) && theme.VisibleRuneCount(strings.Join(labels[start:end+1], "  ")) <= width-12 {
+		end++
+	}
+	prefix, suffix := "  ", ""
+	if start > 0 {
+		prefix = "‹ "
+	}
+	if end < len(labels) {
+		suffix = " ›"
+	}
+	return prefix + strings.Join(labels[start:end], "  ") + suffix
 }
 
-func (s *State) renderProgressParts(th ansiTheme) []string {
-	var parts []string
-	if s.Run != nil && s.Run.Status != "" {
-		done, total := runAggregateCoverage(s.Run)
-		bar := th.renderProgressBar(done, total, 8)
-		runText := fmt.Sprintf("Analysis %s %s (%ds)", th.statusBadge(s.Run.Status), bar, s.Run.ElapsedSeconds)
-		if s.isAnalysisPausedOrInterrupted() {
-			reason := theme.TruncatePlain(client.FirstNonEmpty(s.Run.Reason, "window paused"), 28)
-			runText += fmt.Sprintf(" %s%s · [r] Resume%s", th.amber, reason, th.reset)
-		}
-		parts = append(parts, runText)
+func (s *State) renderActionBar(th ansiTheme, width int) string {
+	items := lookupPageHelpSpec(s.EffectivePage()).primary
+	if s.Confirmation != nil {
+		items = []keyDesc{{"y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm")}, {"n/Esc", "Cancel"}}
+	} else if s.CmdActive {
+		items = []keyDesc{{"Enter", "Run command"}, {"Esc", "Cancel"}}
+	} else if s.ShowKeybindsModal {
+		items = []keyDesc{{"↑/↓", "Scroll help"}, {"Esc", "Close"}}
 	}
-	if s.Busy != "" {
-		parts = append(parts, th.warnBg+" ⟳ BUSY: "+theme.TruncatePlain(s.Busy, 22)+" "+th.reset)
+	var hints []string
+	for _, item := range items {
+		hints = append(hints, th.keyPill(item.key, item.desc))
 	}
-	return parts
+	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
+	return alignBar(" "+strings.Join(hints, "  "), right, width)
 }
 
 func runAggregateCoverage(run *AnalysisRun) (int, int) {
@@ -335,18 +302,14 @@ func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
 
 func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	if s.CmdActive {
-		return th.renderCommandInput(s.CmdInput)
+		return th.renderCommandInput(s.CmdInput, width)
 	}
 	if s.Error != "" {
-		return fmt.Sprintf(" %s ▲ ERROR %s  %s%s%s",
-			th.critBg, th.reset, th.bold+th.red, s.Error, th.reset)
+		return " " + th.red + "Error · " + th.reset + theme.TruncatePlain(s.Error, max(1, width-24)) + th.muted + "  [Esc] Dismiss" + th.reset
 	}
-	badge := th.okBg + " ● READY " + th.reset
-	if s.Busy != "" {
-		badge = th.warnBg + " ⟳ BUSY " + th.reset
+	message := client.FirstNonEmpty(s.Busy, s.CmdOutput)
+	if message == "Workspace ready" {
+		message = "1–5: workspace · Tab: view · ↑/↓: select"
 	}
-	left := fmt.Sprintf(" %s  %s%s%s", badge, th.fg, s.CmdOutput, th.reset)
-	right := fmt.Sprintf("%s[?] Keys  [:] Cmd%s ", th.muted, th.reset)
-	gap := max(2, width-2-theme.VisibleRuneCount(left)-theme.VisibleRuneCount(right))
-	return left + strings.Repeat(" ", gap) + right
+	return " " + th.muted + theme.TruncatePlain(message, width-2) + th.reset
 }

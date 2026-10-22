@@ -6,11 +6,11 @@ import (
 )
 
 func TestSanitizeAndTruncateVisibleWidth(t *testing.T) {
-	if got := ClampWidth(40); got != 68 {
-		t.Fatalf("expected ClampWidth(40)=68, got %d", got)
+	if got := ClampWidth(40); got != 40 {
+		t.Fatalf("expected ClampWidth(40)=40, got %d", got)
 	}
-	if got := ClampHeight(10); got != 20 {
-		t.Fatalf("expected ClampHeight(10)=20, got %d", got)
+	if got := ClampHeight(10); got != 10 {
+		t.Fatalf("expected ClampHeight(10)=10, got %d", got)
 	}
 	code := SanitizeCodeText("a\tb\x1b[2Jc")
 	if strings.Contains(code, "\x1b") || !strings.Contains(code, "\\x1b") {

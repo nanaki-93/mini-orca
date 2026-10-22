@@ -9,7 +9,6 @@ import (
 )
 
 type ansiTheme struct {
-	name           string
 	accent         string
 	accentBg       string
 	fg             string
@@ -30,9 +29,7 @@ type ansiTheme struct {
 	activeTabStyle lipgloss.Style
 	idleTabStyle   lipgloss.Style
 	subActiveStyle lipgloss.Style
-	subIdleStyle   lipgloss.Style
 	titleStyle     lipgloss.Style
-	labelStyle     lipgloss.Style
 	mutedStyle     lipgloss.Style
 	errorBoxStyle  lipgloss.Style
 	progStartHex   string
@@ -42,14 +39,12 @@ type ansiTheme struct {
 func themeForPalette(p Palette) ansiTheme {
 	c := theme.ColorsForPalette(p)
 	accentCol := lipgloss.Color(c.AccentCode)
-	fgCol := lipgloss.Color(c.FgCode)
 	mutedCol := lipgloss.Color(c.MutedCode)
 	borderCol := lipgloss.Color(c.BorderCode)
 	selBgCol := lipgloss.Color(c.SelBgCode)
 	redCol := lipgloss.Color(c.RedCode)
 
 	return ansiTheme{
-		name:     c.Name,
 		accent:   "\033[1;38;5;" + c.AccentCode + "m",
 		accentBg: "\033[1;38;5;255;48;5;" + c.AccentBgCode + "m",
 		fg:       "\033[38;5;" + c.FgCode + "m",
@@ -84,15 +79,9 @@ func themeForPalette(p Palette) ansiTheme {
 			Foreground(accentCol).
 			Background(selBgCol).
 			Padding(0, 1),
-		subIdleStyle: lipgloss.NewStyle().
-			Foreground(mutedCol).
-			Padding(0, 1),
 		titleStyle: lipgloss.NewStyle().
 			Bold(true).
 			Foreground(accentCol),
-		labelStyle: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(fgCol),
 		mutedStyle: lipgloss.NewStyle().
 			Foreground(mutedCol),
 		errorBoxStyle: lipgloss.NewStyle().
@@ -104,18 +93,12 @@ func themeForPalette(p Palette) ansiTheme {
 	}
 }
 
-func (th ansiTheme) wrapFrameLine(line string, width int) string {
-	inner := max(10, width-2)
-	padded := theme.PadVisibleRight(line, inner)
-	return fmt.Sprintf("%s┃%s%s%s┃%s", th.border, th.reset, padded, th.border, th.reset)
-}
-
 func (th ansiTheme) keyPill(k, desc string) string {
 	return theme.KeyPill(th.cyan, th.fg, th.reset, k, desc)
 }
 
-func (th ansiTheme) renderCommandInput(value string) string {
-	return theme.RenderCommandInput(th.accentBg, th.bold+th.fg, th.reset, value)
+func (th ansiTheme) renderCommandInput(value string, width int) string {
+	return theme.RenderCommandInput(th.bold+th.fg, th.reset, value, width)
 }
 
 func (th ansiTheme) renderProgressBar(done, total, barWidth int) string {

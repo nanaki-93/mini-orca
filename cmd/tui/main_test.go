@@ -48,7 +48,7 @@ func TestRunOnceRendersSyncedWorkspace(t *testing.T) {
 		t.Fatalf("run failed: %v", err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "MINI-ORCA // TUI") || !strings.Contains(rendered, "ARCHITECTURE DIAGRAM") {
+	if !strings.Contains(rendered, "MINI-ORCA") || !strings.Contains(rendered, "ARCHITECTURE DIAGRAM") {
 		t.Fatalf("unexpected rendered output:\n%s", rendered)
 	}
 }

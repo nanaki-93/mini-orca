@@ -81,12 +81,6 @@ func ClampWidth(width int) int {
 	if width <= 0 {
 		return 120
 	}
-	if width < 68 {
-		return 68
-	}
-	if width > 300 {
-		return 300
-	}
 	return width
 }
 
@@ -94,12 +88,6 @@ func ClampWidth(width int) int {
 func ClampHeight(height int) int {
 	if height <= 0 {
 		return 34
-	}
-	if height < 20 {
-		return 20
-	}
-	if height > 120 {
-		return 120
 	}
 	return height
 }
@@ -268,12 +256,14 @@ func KeyPill(cyan, fg, reset, k, desc string) string {
 }
 
 // RenderCommandInput renders the colon command bar using Bubbles textinput.Model.
-func RenderCommandInput(accentBg, boldFg, reset, value string) string {
+func RenderCommandInput(boldFg, reset, value string, width int) string {
 	ti := textinput.New()
 	ti.Prompt = ":"
+	ti.Width = max(1, width-6)
 	ti.SetValue(value)
+	ti.CursorEnd()
 	ti.Focus()
-	return fmt.Sprintf(" %s : COMMAND %s  %s%s%s", accentBg, reset, boldFg, ti.View(), reset)
+	return fmt.Sprintf(" %s%s%s", boldFg, ti.View(), reset)
 }
 
 // RenderProgressBar draws a smooth Bubbles progress.Model bar with percentage.

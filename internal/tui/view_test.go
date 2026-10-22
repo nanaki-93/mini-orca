@@ -75,11 +75,11 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	for _, p := range pages {
 		s.Navigate(p)
 		frame := s.Render(120, 40)
-		if got := strings.Count(frame, "MINI-ORCA // TUI"); got != 1 {
-			t.Fatalf("expected MINI-ORCA // TUI exactly once in header on page %s, got %d", p, got)
+		if got := strings.Count(frame, "MINI-ORCA"); got != 1 {
+			t.Fatalf("expected MINI-ORCA exactly once in header on page %s, got %d", p, got)
 		}
-		if !strings.Contains(frame, "┏") || !strings.Contains(frame, "┗") {
-			t.Fatalf("expected enterprise frame borders on page %s", p)
+		if !strings.Contains(frame, "WORKSPACE") || !strings.Contains(frame, "│") {
+			t.Fatalf("expected workspace navigation on page %s", p)
 		}
 	}
 
@@ -108,14 +108,14 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	_ = bm.Init()
 	_, _ = bm.Update(tea.WindowSizeMsg{Width: 130, Height: 38})
 	_, _ = bm.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if !strings.Contains(bm.View(), "130x38") {
+	if len(strings.Split(bm.View(), "\n")) != 38 || theme.VisibleRuneCount(strings.Split(bm.View(), "\n")[0]) != 130 {
 		t.Fatalf("expected BubbleModel View to reflect updated 130x38 window size")
 	}
 
 	for _, pal := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
 		s.Palette = pal
 		frame := s.Render(100, 30)
-		if !strings.Contains(frame, themeForPalette(pal).name) {
+		if !strings.Contains(frame, themeForPalette(pal).fg) {
 			t.Fatalf("expected palette %s in frame", pal)
 		}
 	}
@@ -221,7 +221,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	// Navigation uses a narrow sidebar without repeating settings or telemetry.
 	s.Navigate(PageSummary)
 	splitOut := s.Render(120, 36)
-	if !strings.Contains(splitOut, "NAVIGATION") || !strings.Contains(splitOut, "┳") {
+	if !strings.Contains(splitOut, "WORKSPACE") || !strings.Contains(splitOut, "│") {
 		t.Fatalf("missing split navigation: %s", splitOut)
 	}
 	for _, redundant := range []string{"WORKSPACE PULSE", "MODEL ROUTING", "palette:"} {
@@ -232,19 +232,19 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 
 	// Verify sidebar highlight moves in Sections 4 and 5 when stepping through submenus
 	s.HandleKey(KeyEvent{Key: "4"})
-	if !strings.Contains(s.Render(120, 36), "◆ Context & Deps") {
+	if !strings.Contains(s.Render(120, 36), "▸ Context & Deps") {
 		t.Fatal("expected Section 4 initial highlight on Context & Deps")
 	}
 	s.HandleKey(KeyEvent{Key: "l"})
-	if !strings.Contains(s.Render(120, 36), "◆ Components") {
+	if !strings.Contains(s.Render(120, 36), "▸ Components") {
 		t.Fatal("expected Section 4 highlight to move to Components after 'l'")
 	}
 	s.HandleKey(KeyEvent{Key: "5"})
-	if !strings.Contains(s.Render(120, 36), "◆ Trust Policy") {
+	if !strings.Contains(s.Render(120, 36), "▸ Trust") {
 		t.Fatal("expected Section 5 initial highlight on Trust Policy")
 	}
 	s.HandleKey(KeyEvent{Key: "l"})
-	if !strings.Contains(s.Render(120, 36), "◆ Model Routing") {
+	if !strings.Contains(s.Render(120, 36), "▸ Models") {
 		t.Fatal("expected Section 5 highlight to move to Model Routing after 'l'")
 	}
 
@@ -313,7 +313,7 @@ func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
 	if !s.Quitting {
 		t.Fatal("expected session to quit after :q")
 	}
-	if !strings.Contains(output.String(), "MINI-ORCA // TUI") {
+	if !strings.Contains(output.String(), "MINI-ORCA") {
 		t.Fatal("expected rendered frames in output")
 	}
 }
@@ -857,7 +857,7 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		if strings.Contains(frame, "WORKSPACE PULSE") || strings.Contains(frame, "MODEL ROUTING") || strings.Contains(frame, "palette:") {
 			t.Fatalf("duplicated global settings on %s: %s", p, frame)
 		}
-		if !strings.Contains(frame, "[?] Keys  [:] Cmd") || len(strings.Split(frame, "\n")) != 46 {
+		if !strings.Contains(frame, "[?] Help  [:] Commands") || len(strings.Split(frame, "\n")) != 46 {
 			t.Fatalf("lost command access or frame height on %s: %s", p, frame)
 		}
 	}
@@ -885,7 +885,7 @@ func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 					}
 				}
 				for _, tab := range HubTabs() {
-					if !strings.Contains(sidebar.String(), tab.Key+".") {
+					if !strings.Contains(sidebar.String(), tab.Key+"  "+tab.Label) {
 						t.Fatalf("models displaced navigation to %s at height %d", tab.Page, height)
 					}
 				}

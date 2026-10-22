@@ -166,7 +166,7 @@ func HubTabs() []HubTab {
 		{
 			Key:   "1",
 			Page:  PageSummary,
-			Label: "Overview",
+			Label: "Project",
 			SubPages: []HubSubPage{
 				{Page: PageSummary, Label: "Dashboard"},
 				{Page: PageRepo, Label: "Repository"},
@@ -176,23 +176,23 @@ func HubTabs() []HubTab {
 		{
 			Key:   "2",
 			Page:  PageAgents,
-			Label: "Agent Studio",
+			Label: "Work",
 			SubPages: []HubSubPage{
-				{Page: PageAgents, Label: "Pipeline"},
+				{Page: PageAgents, Label: "Tasks"},
 				{Page: PageBugs, Label: "Issues"},
 				{Page: PageIssueDetail, Label: "Issue Detail"},
 				{Page: PageFeatures, Label: "Features"},
 				{Page: PagePlan, Label: "Task Plan"},
-				{Page: PageAnalysisRun, Label: "Last Run"},
+				{Page: PageAnalysisRun, Label: "Analysis"},
 				{Page: PageAnalysisFiles, Label: "File Scope"},
 			},
 		},
 		{
 			Key:   "3",
 			Page:  PageEditor,
-			Label: "Code & Diff",
+			Label: "Code",
 			SubPages: []HubSubPage{
-				{Page: PageEditor, Label: "Inspector"},
+				{Page: PageEditor, Label: "Files & Diff"},
 				{Page: PageGit, Label: "Worktrees"},
 				{Page: PageHistory, Label: "Proposals"},
 			},
@@ -200,7 +200,7 @@ func HubTabs() []HubTab {
 		{
 			Key:   "4",
 			Page:  PageDocs,
-			Label: "Handbook",
+			Label: "Docs",
 			SubPages: []HubSubPage{
 				{Page: PageDocs, Label: "Context & Deps"},
 				{Page: PageDocsComponents, Label: "Components"},
@@ -213,8 +213,8 @@ func HubTabs() []HubTab {
 			Page:  PageInstructions,
 			Label: "Settings",
 			SubPages: []HubSubPage{
-				{Page: PageInstructions, Label: "Trust Policy"},
-				{Page: PageModels, Label: "Model Routing"},
+				{Page: PageInstructions, Label: "Trust"},
+				{Page: PageModels, Label: "Models"},
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
 			},
