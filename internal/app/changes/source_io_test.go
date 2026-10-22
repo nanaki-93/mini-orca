@@ -49,22 +49,26 @@ func TestResolveExpandedTargetPathsFromCheckOutputsAndImports(t *testing.T) {
 	}
 	isTest := func(p string) bool { return filepath.Ext(p) == ".go" && len(p) > 8 && p[len(p)-8:] == "_test.go" }
 
-	// Case 1: Sibling test failure in same package (e.g. add_test.go:236) + coupled local package import (internal/utils).
+	// Case 1: Sibling test failure in same package (e.g. add_test.go:236) must not expand unreferenced imported packages (internal/utils).
 	existing1 := []string{"cmd/master.go", "cmd/master_test.go"}
-	contents1 := map[string]string{
-		"cmd/master.go": "package cmd\nimport (\n\t\"example.test/pwd-manager/internal/model\"\n\t\"example.test/pwd-manager/internal/utils\"\n)\n",
-	}
-	out1 := []string{"--- FAIL: TestSavePasswordWhenMasterPasswordEmpty (0.00s)\n    add_test.go:236: expected \"Password saved\", got \"\"\nFAIL\nFAIL\texample.test/pwd-manager/cmd\t0.200s"}
-	got1 := ResolveExpandedTargetPaths(root, existing1, contents1, out1, isTest)
-	if len(got1) != 3 || got1[0] != "cmd/add_test.go" || got1[1] != "internal/utils/utils.go" || got1[2] != "internal/utils/utils_test.go" {
-		t.Fatalf("case 1 expanded targets = %+v, want [cmd/add_test.go internal/utils/utils.go internal/utils/utils_test.go]", got1)
+	out1 := []string{"ok  \texample.test/pwd-manager/internal/utils\t0.100s\n--- FAIL: TestSavePasswordWhenMasterPasswordEmpty (0.00s)\n    add_test.go:236: expected \"Password saved\", got \"\"\nFAIL\nFAIL\texample.test/pwd-manager/cmd\t0.200s"}
+	got1 := ResolveExpandedTargetPaths(root, existing1, out1, isTest)
+	if len(got1) != 1 || got1[0] != "cmd/add_test.go" {
+		t.Fatalf("case 1 expanded targets = %+v, want [cmd/add_test.go]", got1)
 	}
 
 	// Case 2: Cross-package caller failure when editing internal/utils/utils.go.
 	existing2 := []string{"internal/utils/utils.go", "internal/utils/utils_test.go"}
 	out2 := []string{"--- FAIL: TestExecMasterCmd (0.00s)\n    master_test.go:179: missing key\nFAIL\texample.test/pwd-manager/cmd\t0.200s"}
-	got2 := ResolveExpandedTargetPaths(root, existing2, nil, out2, isTest)
+	got2 := ResolveExpandedTargetPaths(root, existing2, out2, isTest)
 	if len(got2) != 2 || got2[0] != "cmd/master.go" || got2[1] != "cmd/master_test.go" {
 		t.Fatalf("case 2 expanded targets = %+v, want [cmd/master.go cmd/master_test.go]", got2)
+	}
+
+	// Case 3: Imported package file explicitly referenced in failure output is expanded with its companion test.
+	out3 := []string{"internal/utils/utils.go:12:4: undefined: Helper\nFAIL\texample.test/pwd-manager/internal/utils [build failed]"}
+	got3 := ResolveExpandedTargetPaths(root, existing1, out3, isTest)
+	if len(got3) != 2 || got3[0] != "internal/utils/utils.go" || got3[1] != "internal/utils/utils_test.go" {
+		t.Fatalf("case 3 expanded targets = %+v, want [internal/utils/utils.go internal/utils/utils_test.go]", got3)
 	}
 }

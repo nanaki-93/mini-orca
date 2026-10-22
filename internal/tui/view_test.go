@@ -624,10 +624,18 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 	}
 	s.Navigate(PageEditor)
 
-	// 1. Verify no inline KEYS: or FILES: bar clutters the diff screen
+	// 1. Verify no inline KEYS: or FILES: bar clutters the diff screen and untouched target files do not appear in the diff
 	frame := s.Render(120, 36)
 	if strings.Contains(frame, "KEYS:") || strings.Contains(frame, "FILES:") {
 		t.Fatalf("expected clean diff screen without inline KEYS: or FILES: rows:\n%s", frame)
+	}
+	if !strings.Contains(frame, "File 1/1:") || !strings.Contains(frame, "(+20/-0)") || strings.Contains(frame, "File 1/2:") {
+		t.Fatalf("expected diff header to count only touched file (File 1/1 with +20/-0), got:\n%s", frame)
+	}
+	for _, row := range s.unifiedDiffRows() {
+		if strings.Contains(row.HeaderText, "internal/utils/utils.go") {
+			t.Fatalf("expected untouched target file internal/utils/utils.go to be excluded from unified diff rows, got %q", row.HeaderText)
+		}
 	}
 
 	// 2. Verify 'n' pages through a >14-line single hunk before switching hunks
@@ -636,10 +644,10 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 		t.Fatalf("expected 'n' in 20-line hunk to page down within hunk #1 first, got HunkIdx=%d SelectedIdx=%d", s.HunkIdx, s.SelectedIdx)
 	}
 
-	// 3. Verify 'f' switches to the captured target file (internal/utils/utils.go) even when only utils_test.go is in Changes
+	// 3. Verify 'f' does not cycle into untouched captured target files (internal/utils/utils.go)
 	s.HandleKey(KeyEvent{Key: "f"})
-	if s.HunkIdx != 1 || !strings.Contains(s.CmdOutput, "internal/utils/utils.go") {
-		t.Fatalf("expected 'f' to switch to captured target file internal/utils/utils.go, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	if s.HunkIdx != 0 || !strings.Contains(s.CmdOutput, "Single file in proposal: internal/utils/utils_test.go") {
+		t.Fatalf("expected 'f' to stay on touched file and report single file in proposal, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
 	}
 
 	// 4. Verify 'a' (Accept) and 'Enter' on Diff page enqueue apply-commit

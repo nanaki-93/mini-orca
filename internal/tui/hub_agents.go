@@ -316,9 +316,10 @@ func renderAgentDebugStageLines(th ansiTheme, chg *ChangeSession, activeStage, s
 }
 
 func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, chg *ChangeSession, activeStage, selectedStage int) []string {
+	touched := domain.EffectiveSessionChanges(chg)
 	switch selectedStage {
 	case 1:
-		return th.renderPanelBox("STAGE 1 · ARCHITECT & CODE", fmt.Sprintf("%d FILES", len(chg.Changes)), panelW, s.renderStage1CodeDetailLines(th, chg))
+		return th.renderPanelBox("STAGE 1 · ARCHITECT & CODE", fmt.Sprintf("%d FILES", len(touched)), panelW, s.renderStage1CodeDetailLines(th, chg))
 	case 2:
 		return th.renderPanelBox("VERIFICATION CHECKS & DIAGNOSTIC OUTPUT", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))
 	case 3:
@@ -334,19 +335,20 @@ func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, ch
 }
 
 func (s *State) renderStage1CodeDetailLines(th ansiTheme, chg *ChangeSession) []string {
-	if chg == nil || len(chg.Changes) == 0 {
+	touched := domain.EffectiveSessionChanges(chg)
+	if len(touched) == 0 {
 		if s.hasRunningWorkflow() {
 			return []string{fmt.Sprintf("%sGenerating code proposal for target files...%s", th.amber, th.reset)}
 		}
 		return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
 	}
-	added, removed, badge := domain.ClassifyDiffScope(chg.Changes)
+	added, removed, badge := domain.ClassifyDiffScope(touched)
 	out := []string{
 		fmt.Sprintf("%sScope:%s %s   %sDelta:%s %s+%d%s/%s-%d%s across %d file(s)",
 			th.muted, th.reset, th.statusBadge(badge),
-			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(chg.Changes)),
+			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(touched)),
 	}
-	for _, fc := range chg.Changes {
+	for _, fc := range touched {
 		if strings.TrimSpace(fc.Summary) != "" {
 			out = append(out, fmt.Sprintf("  %s•%s %s%s%s — %s", th.cyan, th.reset, th.bold+th.fg, fc.Path, th.reset, strings.TrimSpace(fc.Summary)))
 		} else {
@@ -376,12 +378,13 @@ func (s *State) renderStage3CriticDetailLines(th ansiTheme, chg *ChangeSession, 
 
 func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSession, activeStage int) []string {
 	stStatus := normalizePipelineStageBadge(4, resolvePipelineStageStatus(activeStage, chg, 4), chg)
-	added, removed, badge := domain.ClassifyDiffScope(chg.Changes)
+	touched := domain.EffectiveSessionChanges(chg)
+	added, removed, badge := domain.ClassifyDiffScope(touched)
 	return []string{
 		fmt.Sprintf("%sGate:%s    %s   %sScope:%s %s   %sDelta:%s %s+%d%s/%s-%d%s (%d files)",
 			th.muted, th.reset, th.statusBadge(stStatus),
 			th.muted, th.reset, th.statusBadge(badge),
-			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(chg.Changes)),
+			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(touched)),
 		fmt.Sprintf("%sActions:%s %s[d]%s Inspect Diff · %s[a/c]%s Apply & Commit · %s[x]%s Reject Fix · %s[u]%s Guarded Undo",
 			th.muted, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
 	}

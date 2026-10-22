@@ -408,7 +408,20 @@ func makeChangeEdit(session *ChangeSession, path, content string) (*ChangeEdit, 
 			content = string(formatted)
 		}
 	}
-	return &ChangeEdit{Path: path, Content: content, Hash: contentHash([]byte(content)), Diff: diff.BuildUnifiedDiff(path, target.Content, content)}, nil
+	unified := diff.BuildUnifiedDiff(path, target.Content, content)
+	if !hasUnifiedDiffChanges(unified) {
+		return nil, nil
+	}
+	return &ChangeEdit{Path: path, Content: content, Hash: contentHash([]byte(content)), Diff: unified}, nil
+}
+
+func hasUnifiedDiffChanges(d diff.UnifiedDiff) bool {
+	for _, line := range d.Lines {
+		if line.Kind == "added" || line.Kind == "removed" {
+			return true
+		}
+	}
+	return false
 }
 
 func changeTarget(session *ChangeSession, path string) *ChangeTarget {

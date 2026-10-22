@@ -204,78 +204,58 @@ func ClassifyDiffScope(changes []client.FileChange) (added int, removed int, bad
 	}
 }
 
-// EffectiveSessionChanges returns all modified files in the proposal plus any captured target files not already in Changes.
+// EffectiveSessionChanges returns all modified files in the proposal that contain actual line additions or removals.
 func EffectiveSessionChanges(change *client.ChangeSession) []client.FileChange {
-	if change == nil {
+	if change == nil || len(change.Changes) == 0 {
 		return nil
 	}
-	seen := make(map[string]bool, len(change.Changes))
-	out := make([]client.FileChange, 0, len(change.Changes)+len(change.Targets))
+	out := make([]client.FileChange, 0, len(change.Changes))
 	for _, fc := range change.Changes {
-		seen[fc.Path] = true
-		out = append(out, fc)
-	}
-	for _, t := range change.Targets {
-		if t.Path == "" || seen[t.Path] || !t.Exists || strings.TrimSpace(t.Content) == "" {
-			continue
+		if add, rem := countFileDiffLines(fc.Diff.Lines); add > 0 || rem > 0 {
+			out = append(out, fc)
 		}
-		seen[t.Path] = true
-		out = append(out, client.FileChange{
-			Path:    t.Path,
-			Summary: "Captured target file in scope (unchanged)",
-			Content: t.Content,
-			Diff:    client.FileDiff{Lines: buildContextDiffLines(t.Content)},
-		})
 	}
 	return out
 }
 
-func buildContextDiffLines(content string) []client.DiffLine {
-	raw := strings.Split(strings.ReplaceAll(strings.TrimRight(content, "\r\n"), "\r\n", "\n"), "\n")
-	lines := make([]client.DiffLine, 0, len(raw))
-	for idx, text := range raw {
-		lines = append(lines, client.DiffLine{
-			Kind:    "context",
-			OldLine: idx + 1,
-			NewLine: idx + 1,
-			Text:    text,
-		})
-	}
-	return lines
-}
-
-// CollectChangeHunks extracts all hunks across all files in a ChangeSession.
+// CollectChangeHunks extracts all hunks across all touched files in a ChangeSession.
 func CollectChangeHunks(changes []client.FileChange) []FileDiffHunk {
 	if len(changes) == 0 {
 		return nil
 	}
-	var out []FileDiffHunk
-	for fIdx, fc := range changes {
-		fAdd, fRem := countFileDiffLines(fc.Diff.Lines)
+	type touchedFile struct {
+		fc      client.FileChange
+		hunks   []DiffHunk
+		added   int
+		removed int
+	}
+	touched := make([]touchedFile, 0, len(changes))
+	for _, fc := range changes {
 		hunks := SplitDiffIntoHunks(fc.Diff.Lines)
-		if len(hunks) == 0 && len(fc.Diff.Lines) > 0 {
-			oldStart, oldEnd := lineBounds(fc.Diff.Lines, true)
-			newStart, newEnd := lineBounds(fc.Diff.Lines, false)
-			hunks = []DiffHunk{{
-				Index:    0,
-				OldStart: oldStart,
-				OldEnd:   oldEnd,
-				NewStart: newStart,
-				NewEnd:   newEnd,
-				Lines:    fc.Diff.Lines,
-			}}
+		if len(hunks) == 0 {
+			continue
 		}
-		for hIdx, h := range hunks {
+		fAdd, fRem := countFileDiffLines(fc.Diff.Lines)
+		touched = append(touched, touchedFile{
+			fc:      fc,
+			hunks:   hunks,
+			added:   fAdd,
+			removed: fRem,
+		})
+	}
+	var out []FileDiffHunk
+	for fIdx, tf := range touched {
+		for hIdx, h := range tf.hunks {
 			out = append(out, FileDiffHunk{
 				GlobalIndex:   len(out),
 				FileIndex:     fIdx,
-				FileTotal:     len(changes),
-				Path:          fc.Path,
-				Summary:       fc.Summary,
-				FileAdded:     fAdd,
-				FileRemoved:   fRem,
+				FileTotal:     len(touched),
+				Path:          tf.fc.Path,
+				Summary:       tf.fc.Summary,
+				FileAdded:     tf.added,
+				FileRemoved:   tf.removed,
 				FileHunkIndex: hIdx,
-				FileHunkTotal: len(hunks),
+				FileHunkTotal: len(tf.hunks),
 				Hunk:          h,
 			})
 		}

@@ -129,7 +129,7 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	if !ok {
 		return []string{fmt.Sprintf("  %sNo diff lines available.%s", th.muted, th.reset)}
 	}
-	added, removed, _ := domain.ClassifyDiffScope(s.Change.Changes)
+	added, removed, _ := domain.ClassifyDiffScope(domain.EffectiveSessionChanges(s.Change))
 	mode := s.EffectiveDiffMode()
 	meta := s.buildDiffReviewMeta(th, active, len(allHunks), added, removed)
 	stateTag := strings.ToUpper(client.FirstNonEmpty(s.Change.State, "draft"))
@@ -147,9 +147,10 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 }
 
 func (s *State) buildDiffReviewMeta(th ansiTheme, active FileDiffHunk, totalHunks, _, _ int) []string {
-	fileScope := fmt.Sprintf("%sFile %d/%d:%s %s%s%s",
+	fileScope := fmt.Sprintf("%sFile %d/%d:%s %s%s%s %s(+%d/-%d)%s",
 		th.muted, active.FileIndex+1, max(1, active.FileTotal), th.reset,
-		th.cyan, active.Path, th.reset)
+		th.cyan, active.Path, th.reset,
+		th.muted, active.FileAdded, active.FileRemoved, th.reset)
 	meta := []string{
 		fmt.Sprintf(
 			"%sHunk #%d/%d%s · %s · %sProposal:%s %s%s%s",

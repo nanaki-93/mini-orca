@@ -14,13 +14,12 @@ const (
 	maxAutoCapturedFileBytes  = 24 * 1024
 )
 
-// ResolveExpandedTargetPaths inspects failed check outputs and coupled local Go
-// imports to discover uncaptured repository files that should be added to a
-// change session's target scope for self-repair.
+// ResolveExpandedTargetPaths inspects failed check outputs to discover
+// uncaptured repository files that should be added to a change session's
+// target scope for self-repair.
 func ResolveExpandedTargetPaths(
 	root string,
 	existingPaths []string,
-	existingContents map[string]string,
 	failedOutputs []string,
 	isTestPath func(string) bool,
 ) []string {
@@ -40,9 +39,6 @@ func ResolveExpandedTargetPaths(
 		if state.full() {
 			return state.added
 		}
-	}
-	if len(existingPaths)+len(state.added) < 6 && modPath != "" {
-		state.expandCoupledLocalGoImports(existingPaths, existingContents, modPath)
 	}
 	return state.added
 }
@@ -106,7 +102,6 @@ func extractModuleSubpath(line, prefix string) string {
 type expansionState struct {
 	root                 string
 	policy               *project.ContextPolicy
-	isTestPath           func(string) bool
 	seen                 map[string]bool
 	initialNonTestGoDirs map[string]bool
 	initialCount         int
@@ -126,7 +121,6 @@ func newExpansionState(root string, existingPaths []string, policy *project.Cont
 	return &expansionState{
 		root:                 root,
 		policy:               policy,
-		isTestPath:           isTestPath,
 		seen:                 seen,
 		initialNonTestGoDirs: nonTestDirs,
 		initialCount:         len(existingPaths),
@@ -164,55 +158,6 @@ func (s *expansionState) addResolvedFileAndCompanion(rel string) {
 	}
 }
 
-func (s *expansionState) expandCoupledLocalGoImports(existingPaths []string, existingContents map[string]string, modPath string) {
-	var goContents []string
-	for _, p := range existingPaths {
-		if strings.HasSuffix(p, ".go") && (s.isTestPath == nil || !s.isTestPath(p)) {
-			if content := existingContents[p]; content != "" {
-				goContents = append(goContents, content)
-			}
-		}
-	}
-	for _, dir := range LocalImportedGoDirs(s.root, modPath, goContents) {
-		impls, tests := listSmallPackageGoFiles(s.root, dir, s.policy)
-		if len(impls) == 0 || len(impls) > 2 || len(tests) == 0 {
-			continue
-		}
-		for _, impl := range impls {
-			s.appendPath(impl)
-		}
-		for _, testFile := range tests {
-			s.appendPath(testFile)
-		}
-	}
-}
-
-func listSmallPackageGoFiles(root, dir string, policy *project.ContextPolicy) ([]string, []string) {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
-	if err != nil {
-		return nil, nil
-	}
-	var impls, tests []string
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
-			continue
-		}
-		rel := entry.Name()
-		if dir != "." {
-			rel = dir + "/" + entry.Name()
-		}
-		if !isValidRepoSourceFile(root, rel, policy) {
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), "_test.go") {
-			tests = append(tests, rel)
-		} else {
-			impls = append(impls, rel)
-		}
-	}
-	return impls, tests
-}
-
 func collectSearchDirs(existingPaths, failedOutputs []string, modPath string) []string {
 	var dirs []string
 	seen := map[string]bool{}
@@ -231,14 +176,25 @@ func collectSearchDirs(existingPaths, failedOutputs []string, modPath string) []
 	}
 	prefix := modPath + "/"
 	for _, out := range failedOutputs {
-		for _, token := range strings.Fields(out) {
-			if idx := strings.Index(token, prefix); idx >= 0 {
-				sub := strings.Trim(token[idx+len(prefix):], `":;(),[]`)
-				addDir(sub)
+		for _, line := range strings.Split(out, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if isPassingOrSkippedGoTestLine(trimmed) {
+				continue
+			}
+			for _, token := range strings.Fields(trimmed) {
+				if idx := strings.Index(token, prefix); idx >= 0 {
+					sub := strings.Trim(token[idx+len(prefix):], `":;(),[]`)
+					addDir(sub)
+				}
 			}
 		}
 	}
 	return dirs
+}
+
+func isPassingOrSkippedGoTestLine(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "ok ") || strings.HasPrefix(trimmed, "ok\t") ||
+		strings.HasPrefix(trimmed, "? ") || strings.HasPrefix(trimmed, "?\t")
 }
 
 func extractCheckFileTokens(failedOutputs []string, modPath string) []string {

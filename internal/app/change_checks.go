@@ -488,26 +488,19 @@ func expandTargetsFromFailedChecks(root string, session *ChangeSession) {
 	if session == nil || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) {
 		return
 	}
-	existingPaths, existingContents := collectSessionTargetSnapshot(session)
+	existingPaths := collectSessionTargetPaths(session)
 	failedOutputs := collectFailedCheckOutputs(session.Checks)
-	for _, path := range changes.ResolveExpandedTargetPaths(root, existingPaths, existingContents, failedOutputs, isTestFilePath) {
+	for _, path := range changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath) {
 		captureExpandedSessionTarget(root, session, path)
 	}
 }
 
-func collectSessionTargetSnapshot(session *ChangeSession) ([]string, map[string]string) {
+func collectSessionTargetPaths(session *ChangeSession) []string {
 	paths := make([]string, 0, len(session.Targets))
-	contents := make(map[string]string, len(session.Targets))
 	for _, t := range session.Targets {
 		paths = append(paths, t.Path)
-		contents[t.Path] = t.Content
 	}
-	for _, edit := range session.Changes {
-		if edit.Content != "" {
-			contents[edit.Path] = edit.Content
-		}
-	}
-	return paths, contents
+	return paths
 }
 
 func collectFailedCheckOutputs(checks []CheckResult) []string {

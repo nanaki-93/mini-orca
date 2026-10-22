@@ -543,11 +543,15 @@ func (s *State) matchIssuesForTargets(targets []FindingTarget) []IssueRow {
 
 func (s *State) rejectCurrentDiffHunk() {
 	active, _, ok := s.activeDiffHunk()
-	if !ok || active.FileIndex < 0 || active.FileIndex >= len(s.Change.Changes) {
+	if !ok || s.Change == nil {
 		s.CmdOutput = "No modifiable diff hunk selected to reject."
 		return
 	}
-	fc := &s.Change.Changes[active.FileIndex]
+	fc := findChangeFileByPathOrIndex(s.Change.Changes, active.Path, active.FileIndex)
+	if fc == nil {
+		s.CmdOutput = "No modifiable diff hunk selected to reject."
+		return
+	}
 	fc.Content = domain.RejectHunkFromDiff(fc.Diff.Lines, active.Hunk)
 	fc.Diff.Lines = domain.RejectHunkLines(fc.Diff.Lines, active.Hunk)
 	s.Change.ReviewedHash = ""
@@ -565,6 +569,18 @@ func (s *State) rejectCurrentDiffHunk() {
 		return
 	}
 	s.enqueueAction(ActionRequest{Kind: "update-proposal", Target: s.Change.ID, Message: msg})
+}
+
+func findChangeFileByPathOrIndex(changes []FileChange, path string, idx int) *FileChange {
+	for i := range changes {
+		if changes[i].Path == path {
+			return &changes[i]
+		}
+	}
+	if idx >= 0 && idx < len(changes) {
+		return &changes[idx]
+	}
+	return nil
 }
 
 func (s *State) toggleWorkspaceTrust() {

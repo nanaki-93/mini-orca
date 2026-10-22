@@ -792,10 +792,6 @@ func (s *State) stepDiffFile(forward bool) {
 		return
 	}
 	if active.FileTotal <= 1 {
-		if s.Index != nil && len(s.Index.Files) > 0 {
-			s.stepIndexedEditorFile(forward)
-			return
-		}
 		s.CmdOutput = fmt.Sprintf("Single file in proposal: %s", active.Path)
 		return
 	}
