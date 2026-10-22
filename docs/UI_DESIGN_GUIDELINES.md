@@ -5,6 +5,13 @@ action prominent; disclose supporting metadata and explanations on demand.
 Routine actions execute from their keyboard shortcuts or colon commands without
 redundant dialogs. Palette, typography, navigation and layout may evolve as needed.
 
+The workspace uses five areas: **Project**, **Work**, **Code**, **Docs** and
+**Settings**. The dashboard links to issues, tasks, analysis and checks without
+starting work. Keep project identity, connection and Git state visible above the
+content; keep contextual actions and command access below it. Use short page
+titles, restrained borders and explicit text states. Counts summarize recorded
+data; an empty list does not prove the project is clean.
+
 ## Interaction and accessibility
 
 Keep actions, current state, errors and recovery paths clear. Use consistent
@@ -16,6 +23,24 @@ requests or jobs run and prevent duplicate submission.
 Preserve access to findings, explanations and diagnostics. Long paths and narrow
 terminal viewports must not hide actions or corrupt layout. Model-authored text
 remains inert; source and composed diffs stay read-only in review panes.
+
+At 100 columns and 20 rows or above, use the sidebar; below that, keep numbered
+workspace tabs and the active view visible. Fit the real terminal dimensions, including
+when showing a resize prompt below 52 columns or 16 rows. Small diff panes must
+retain visible code, and split diffs must retain both sides. Palettes supply their
+own backgrounds so the Paper palette remains readable in dark terminals too.
+
+The colon menu supports search, completion, editable arguments and session command
+history. Browsing or completing a command is passive. Enter explicitly runs the
+chosen command; commands requiring arguments stay in the editor until supplied.
+Pasted text is inert outside that editor. Keep existing guards on every command
+route. Opening a project and planning a custom task have visible prompt shortcuts.
+
+Use Page Up/Down for overflowing pages, diagnostics, help and dialogs; Home/End
+reaches the beginning/end. Keep confirmation actions visible while its message
+scrolls. Error overlays expose recovery and command access and consume shortcuts
+that would otherwise act on the obscured page. Source views support paging and
+horizontal panning without exposing diff-review actions.
 
 ## Product behavior
 

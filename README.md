@@ -20,12 +20,43 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
    - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with automatic repair off by default; opt in to at most two automatic retries.
    - **Step 3 · Critic Review**: Evaluates the checked diff for regressions, boundary violations, and clean-code precision before human sign-off.
    - **Step 4 · Human Precision Gate**: Presents read-only unified, split and hunk diffs with per-file review for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
-4. **Keyboard-First Pure Go TUI**: Provides a 5-hub Terminal UI (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with modal vim navigation, `:command` execution, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
+4. **Keyboard-First Pure Go TUI**: Provides a responsive workspace (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with a project dashboard, searchable commands, arrow/Vim navigation, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
+
+## Navigating the workspace
+
+The dashboard shows issues, tasks, analysis coverage and verification status.
+Use `↑/↓` to select an activity and `Enter` to open it. Checks and analysis that
+have not run are labeled separately from successful results. Press `o` on the
+dashboard or Repository page to enter a project path; paths may contain spaces.
+
+| Key | Workspace | Contents |
+| --- | --- | --- |
+| `1` | Project | Dashboard, repository inventory, tests and check output |
+| `2` | Work | Tasks, issues, features, task plans, analysis and file scope |
+| `3` | Code | Read-only files and diffs, worktrees, saved proposals |
+| `4` | Docs | Context, dependencies, components, decisions and architecture |
+| `5` | Settings | Project trust, models, bootstrap checklist and lessons |
+
+`Tab` / `Shift+Tab` cycle views within a workspace. Use `↑/↓` or `j/k` to
+select rows, `PgUp/PgDn` to read long pages, and `Esc` to return from details.
+The bottom bar shows actions for the current view. `?` opens the keyboard
+reference, `p` changes the palette, and `Ctrl+C` quits.
+
+Press `:` to search commands by name or type a command directly. `↑/↓` selects a
+suggestion, `Tab` completes it, and `Enter` runs it. Commands needing a path or
+request open an editable prompt first. Use `←/→`, `Home/End` and `Delete` to
+edit; `Ctrl+P/N` recalls session history and `Ctrl+U` clears the input. `Esc`
+cancels without running anything. On the Tasks page, `n` opens a new-task prompt.
+
+Wide terminals use a sidebar with a compact model summary; narrow terminals use
+navigation tabs. Frames fit the actual terminal size, with a resize prompt below
+52 columns or 16 rows. A larger terminal is recommended for reviewing diffs.
 
 ## Reviewing a task in the TUI
 
 Selecting a fix opens **Task Plan**. In Features, `Enter` opens its details and
-`f` prepares a plan. `Tab` / `Shift+Tab` switch focused detail sections. Edit the approach with `e`, write
+`f` prepares a plan. `←/→` or `h/l` switch focused detail sections; `Tab` / `Shift+Tab`
+continue to switch workspace views. Edit the approach with `e`, write
 scope with `f`, and criteria with `t`. Use `:context path; path` for read-only
 context, `:boundaries item; item` for non-goals, and `:repairs on|off` for repair
 policy. `s` saves a captured draft; `g` approves it and generates code. A custom
@@ -37,6 +68,11 @@ Use `PgUp/PgDn` in issue, feature, plan and workflow detail views to inspect all
 evidence, criteria and diagnostics. Causes remain hypotheses until supported by
 reproduction; a test that already passed or failed to compile on the original
 source is labeled separately from a reproduced failure.
+
+Repository inventories, handbook pages, check logs and long error or confirmation
+messages also scroll. Confirmation actions stay in the bottom bar. In the source
+viewer, `PgUp/PgDn` moves through lines, `Home/End` jumps to the first/last line,
+and `h/l` pans long lines (`0` resets the horizontal position).
 
 In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed, `f/F`
 moves between files, `e` shows rationale and criterion references, and `z` compares
