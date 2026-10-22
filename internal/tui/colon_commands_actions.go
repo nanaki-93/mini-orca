@@ -599,8 +599,8 @@ func (s *State) toggleWorkspaceTrust() {
 	if s.WorkspaceTrust {
 		word = "granted"
 	}
-	s.CmdOutput = fmt.Sprintf("Workspace trust %s", word)
-	s.enqueueAction(ActionRequest{Kind: "set-trust", Target: word})
+	s.CmdOutput = "Saving project trust..."
+	s.enqueueAction(ActionRequest{Kind: "set-trust", Target: word, Source: ProjectIdentity{ProjectID: s.projectID(), ProjectRevision: s.projectRevision()}})
 }
 
 // IsLessonGraduated reports whether a Harness² lesson has been graduated or is already present in AGENTS.md.

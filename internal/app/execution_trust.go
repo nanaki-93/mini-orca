@@ -10,9 +10,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-// ExecutionTrust is the explicit, in-memory authorization to run imported
-// project code for one active project revision. It is deliberately unrelated
-// to model-provider confirmation.
+// ExecutionTrust binds remembered project consent to the current revision and
+// workspace snapshot. It is unrelated to model-provider confirmation.
 type ExecutionTrust struct {
 	ProjectID       string     `json:"project_id"`
 	ProjectRevision string     `json:"project_revision"`
@@ -22,13 +21,16 @@ type ExecutionTrust struct {
 }
 
 type executionTrustStore struct {
-	mu            sync.Mutex
-	project       string
-	revision      string
-	workspaceHash string
+	mu             sync.Mutex
+	project        string
+	revision       string
+	workspaceHash  string
+	restorePending bool
 }
 
-func newExecutionTrustStore() *executionTrustStore { return &executionTrustStore{} }
+func newExecutionTrustStore() *executionTrustStore {
+	return &executionTrustStore{restorePending: true}
+}
 
 func projectCodeCommands(root, taskName string) ([][]string, error) {
 	if taskName == "" {
@@ -54,70 +56,118 @@ func projectCodeCommands(root, taskName string) ([][]string, error) {
 	return [][]string{{"go", "test", "./...", "-run", "^" + regexp.QuoteMeta(taskName) + "$"}}, nil
 }
 
-func (s *Service) ExecutionTrust(revision, taskName string) (*ExecutionTrust, error) {
-	analysis, err := s.manager.Analysis()
-	if err != nil {
+func (s *Service) ExecutionTrust(ctx context.Context, revision, taskName string) (*ExecutionTrust, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if revision == "" || revision != analysis.ProjectRevision {
-		return nil, project.ErrRevisionConflict
+	root, trust, err := s.executionTrustScope(revision, taskName)
+	if err != nil {
+		return nil, err
 	}
 	s.executionTrust.mu.Lock()
-	trusted := s.executionTrust.project == analysis.ProjectID && s.executionTrust.revision == analysis.ProjectRevision && s.executionTrust.workspaceHash != ""
-	workspaceHash := ""
-	if trusted {
-		workspaceHash = s.executionTrust.workspaceHash
+	defer s.executionTrust.mu.Unlock()
+	if s.executionTrust.restorePending {
+		if err := s.restoreExecutionTrustLocked(ctx, root, trust); err != nil {
+			return nil, err
+		}
 	}
-	s.executionTrust.mu.Unlock()
-	commands, err := projectCodeCommands(s.manager.Root(), taskName)
-	if err != nil {
-		return nil, err
+	trust.Trusted = s.executionTrust.project == trust.ProjectID && s.executionTrust.revision == trust.ProjectRevision && s.executionTrust.workspaceHash != ""
+	if trust.Trusted {
+		trust.WorkspaceHash = s.executionTrust.workspaceHash
 	}
-	return &ExecutionTrust{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, WorkspaceHash: workspaceHash, Trusted: trusted, Commands: commands}, nil
+	return trust, nil
 }
 
-// TrustProjectExecution records or revokes the user's current-session consent
+func (s *Service) executionTrustScope(revision, taskName string) (string, *ExecutionTrust, error) {
+	root := s.manager.Root()
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return "", nil, err
+	}
+	if revision == "" || revision != analysis.ProjectRevision {
+		return "", nil, project.ErrRevisionConflict
+	}
+	commands, err := projectCodeCommands(root, taskName)
+	if err != nil {
+		return "", nil, err
+	}
+	return root, &ExecutionTrust{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Commands: commands}, nil
+}
+
+// TrustProjectExecution records or revokes the user's remembered project consent
 // after the client has shown the fixed command scope returned by ExecutionTrust.
-func (s *Service) TrustProjectExecution(revision string, confirm bool) (*ExecutionTrust, error) {
-	trust, err := s.ExecutionTrust(revision, "")
+func (s *Service) TrustProjectExecution(ctx context.Context, revision string, confirm bool) (*ExecutionTrust, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, trust, err := s.executionTrustScope(revision, "")
 	if err != nil {
 		return nil, err
 	}
 	if !confirm {
-		if !trust.Trusted {
+		current, err := s.ExecutionTrust(ctx, revision, "")
+		if err != nil {
+			return nil, err
+		}
+		if !current.Trusted {
 			return nil, fmt.Errorf("trusted local execution requires explicit confirmation")
 		}
-		s.clearExecutionTrust()
-		trust.Trusted = false
-		trust.WorkspaceHash = ""
-		return trust, nil
-	}
-	index, err := s.manager.Index()
-	if err != nil {
-		return nil, err
-	}
-	if index.ProjectID != trust.ProjectID || index.ProjectRevision != trust.ProjectRevision {
-		return nil, project.ErrRevisionConflict
-	}
-	if err := project.VerifyProjectSources(context.Background(), s.manager.Root(), index); err != nil {
-		return nil, err
-	}
-	workspaceHash, err := workspaceFingerprint(context.Background(), s.manager.Root())
-	if err != nil {
-		return nil, err
+	} else {
+		trust.WorkspaceHash, err = s.executionTrustWorkspace(ctx, root, trust)
+		if err != nil {
+			return nil, err
+		}
 	}
 	s.executionTrust.mu.Lock()
+	defer s.executionTrust.mu.Unlock()
+	if err := s.checkExecutionTrustIdentity(root, trust); err != nil {
+		return nil, err
+	}
+	if err := writeRememberedExecutionTrust(ctx, root, trust.ProjectID, trust.Commands, confirm); err != nil {
+		return nil, err
+	}
 	s.executionTrust.project = trust.ProjectID
 	s.executionTrust.revision = trust.ProjectRevision
-	s.executionTrust.workspaceHash = workspaceHash
-	s.executionTrust.mu.Unlock()
-	trust.Trusted = true
-	trust.WorkspaceHash = workspaceHash
+	s.executionTrust.workspaceHash = trust.WorkspaceHash
+	s.executionTrust.restorePending = false
+	trust.Trusted = confirm
 	return trust, nil
 }
 
-func (s *Service) requireProjectExecutionTrust(revision string) error {
-	trust, err := s.ExecutionTrust(revision, "")
+func (s *Service) checkExecutionTrustIdentity(root string, trust *ExecutionTrust) error {
+	index, err := s.manager.Index()
+	if err != nil {
+		return err
+	}
+	if s.manager.Root() != root || index.ProjectID != trust.ProjectID || index.ProjectRevision != trust.ProjectRevision {
+		return project.ErrRevisionConflict
+	}
+	return nil
+}
+
+func (s *Service) executionTrustWorkspace(ctx context.Context, root string, trust *ExecutionTrust) (string, error) {
+	if err := s.checkExecutionTrustIdentity(root, trust); err != nil {
+		return "", err
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return "", err
+	}
+	if err := project.VerifyProjectSources(ctx, root, index); err != nil {
+		return "", err
+	}
+	workspaceHash, err := workspaceFingerprint(ctx, root)
+	if err != nil {
+		return "", err
+	}
+	if err := s.checkExecutionTrustIdentity(root, trust); err != nil {
+		return "", err
+	}
+	return workspaceHash, nil
+}
+
+func (s *Service) requireProjectExecutionTrust(ctx context.Context, revision string) error {
+	trust, err := s.ExecutionTrust(ctx, revision, "")
 	if err != nil {
 		return err
 	}
@@ -127,8 +177,8 @@ func (s *Service) requireProjectExecutionTrust(revision string) error {
 	return nil
 }
 
-func (s *Service) requireWorkspaceExecutionTrust(revision, workspaceHash string) error {
-	trust, err := s.ExecutionTrust(revision, "")
+func (s *Service) requireWorkspaceExecutionTrust(ctx context.Context, revision, workspaceHash string) error {
+	trust, err := s.ExecutionTrust(ctx, revision, "")
 	if err != nil {
 		return err
 	}
@@ -142,10 +192,15 @@ func (s *Service) requireWorkspaceExecutionTrust(revision, workspaceHash string)
 }
 
 func (s *Service) clearExecutionTrust() {
+	s.resetExecutionTrust(false)
+}
+
+func (s *Service) resetExecutionTrust(restore bool) {
 	s.executionTrust.mu.Lock()
 	s.executionTrust.project = ""
 	s.executionTrust.revision = ""
 	s.executionTrust.workspaceHash = ""
+	s.executionTrust.restorePending = restore
 	s.executionTrust.mu.Unlock()
 }
 
@@ -156,10 +211,10 @@ type BootstrapExecResult = sandbox.BootstrapResult
 // in the active project root when the corresponding configuration files and binaries exist.
 func (s *Service) ExecuteBootstrapToolchain(ctx context.Context, revision string, confirm bool) (*BootstrapExecResult, error) {
 	if confirm {
-		if _, err := s.TrustProjectExecution(revision, true); err != nil {
+		if _, err := s.TrustProjectExecution(ctx, revision, true); err != nil {
 			return nil, err
 		}
-	} else if err := s.requireProjectExecutionTrust(revision); err != nil {
+	} else if err := s.requireProjectExecutionTrust(ctx, revision); err != nil {
 		return nil, err
 	}
 	analysis, err := s.manager.Analysis()

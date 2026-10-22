@@ -56,7 +56,7 @@ func TestCleanupMergedHTTPGuardsIdentityAndReturnsRemovalReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := fixture.service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	request := app.GitMutationRequest{GitIdentity: repo.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Confirm: true, ConfirmExecution: true, TargetBranch: "fix", Path: filepath.Join(root, ".worktrees", "fix")}

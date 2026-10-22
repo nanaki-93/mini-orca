@@ -39,7 +39,7 @@ func workflowService(t *testing.T, outputs [3]func() string) (*Service, string, 
 	}
 	t.Cleanup(s.CancelChangeWorkflows)
 	session := openChangeFixture(t, s, "new.go", "new_test.go")
-	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := s.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	return s, root, session
@@ -123,7 +123,7 @@ func TestChangeWorkflowAdmissionGuardsDispatchNothing(t *testing.T) {
 			switch name {
 			case "untrusted":
 				s.clearExecutionTrust()
-				defer s.TrustProjectExecution(session.ProjectRevision, true)
+				defer s.TrustProjectExecution(context.Background(), session.ProjectRevision, true)
 			case "profile":
 				request.Models.Test = "arbitrary-model"
 			case "remote":
@@ -368,7 +368,7 @@ func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
 	}
 
 	session := openChangeFixture(t, s, "app.ts", "app.test.ts")
-	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := s.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {
@@ -410,7 +410,7 @@ func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) 
 		t.Fatal(err)
 	}
 	session := openChangeFixture(t, s, "main.go", "new.go", "new_test.go")
-	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := s.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	req := workflowRequest(session)
@@ -467,7 +467,7 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 		t.Fatal(err)
 	}
 	session := openChangeFixture(t, s, "existing.go", "existing_test.go")
-	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := s.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {
@@ -717,7 +717,7 @@ func TestChangeWorkflowExpandsUncapturedFailingTestTargetsAndPassesRetryFeedback
 	}
 	// Open session capturing ONLY cmd/master.go and cmd/master_test.go (omitting cmd/add_test.go).
 	session := openChangeFixture(t, s, "cmd/master.go", "cmd/master_test.go")
-	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := s.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 

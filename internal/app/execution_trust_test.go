@@ -29,40 +29,40 @@ func TestProjectExecutionTrustDeniesCommandsUntilExplicitlyConfirmed(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	trust, err := service.ExecutionTrust(analysis.ProjectRevision, "")
+	trust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "")
 	if err != nil || trust.Trusted || len(trust.Commands) != 1 || strings.Join(trust.Commands[0], " ") != "go test ./..." {
 		t.Fatalf("initial trust = %+v, %v", trust, err)
 	}
-	if _, err := service.StartGoScan(analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
+	if _, err := service.StartGoScan(context.Background(), analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
 		t.Fatalf("untrusted scan error = %v", err)
 	}
-	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, false); err == nil {
+	if _, err := service.TrustProjectExecution(context.Background(), analysis.ProjectRevision, false); err == nil {
 		t.Fatal("denied confirmation authorized project execution")
 	}
-	trust, err = service.TrustProjectExecution(analysis.ProjectRevision, true)
+	trust, err = service.TrustProjectExecution(context.Background(), analysis.ProjectRevision, true)
 	if err != nil || !trust.Trusted {
 		t.Fatalf("trusted execution = %+v, %v", trust, err)
 	}
-	taskTrust, err := service.ExecutionTrust(analysis.ProjectRevision, "TestRun")
+	taskTrust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "TestRun")
 	if err != nil || strings.Join(taskTrust.Commands[0], " ") != "go test ./... -run ^TestRun$" {
 		t.Fatalf("task test scope = %+v, %v", taskTrust, err)
 	}
-	if _, err := service.ExecutionTrust(analysis.ProjectRevision, "not-a-test"); err == nil {
+	if _, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "not-a-test"); err == nil {
 		t.Fatal("invalid task test scope was accepted")
 	}
-	if unicodeTrust, err := service.ExecutionTrust(analysis.ProjectRevision, "TestÅ"); err != nil || strings.Join(unicodeTrust.Commands[0], " ") != "go test ./... -run ^TestÅ$" {
+	if unicodeTrust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "TestÅ"); err != nil || strings.Join(unicodeTrust.Commands[0], " ") != "go test ./... -run ^TestÅ$" {
 		t.Fatalf("unicode task test scope = %+v, %v", unicodeTrust, err)
 	}
-	revoked, err := service.TrustProjectExecution(analysis.ProjectRevision, false)
+	revoked, err := service.TrustProjectExecution(context.Background(), analysis.ProjectRevision, false)
 	if err != nil || revoked.Trusted {
 		t.Fatalf("revoked execution trust = %+v, %v", revoked, err)
 	}
-	if _, err := service.StartGoScan(analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
+	if _, err := service.StartGoScan(context.Background(), analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
 		t.Fatalf("revoked scan error = %v", err)
 	}
 }
 
-func TestProjectExecutionTrustResetsAfterReindex(t *testing.T) {
+func TestProjectExecutionTrustRebindsAfterReindex(t *testing.T) {
 	service, _, _ := newGoScanService(t, map[string]string{"go.mod": "module fixture\n\ngo 1.22\n", "main.go": "package fixture\n"})
 	if _, err := service.Reindex(); err != nil {
 		t.Fatal(err)
@@ -71,11 +71,8 @@ func TestProjectExecutionTrustResetsAfterReindex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if trust, err := service.ExecutionTrust(analysis.ProjectRevision, ""); err != nil || trust.Trusted {
+	if trust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, ""); err != nil || !trust.Trusted || trust.WorkspaceHash == "" {
 		t.Fatalf("reindexed trust = %+v, %v", trust, err)
-	}
-	if _, err := service.StartGoScan(analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {
-		t.Fatalf("reindexed scan was authorized: %v", err)
 	}
 }
 
@@ -91,7 +88,7 @@ func TestProjectCodeProcessRechecksTheOriginalRevisionAtStart(t *testing.T) {
 	if updated.ProjectRevision == originalRevision {
 		t.Fatal("fixture did not change project revision")
 	}
-	if _, err := service.TrustProjectExecution(updated.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), updated.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	_, err = service.runCheckCommand(context.Background(), t.TempDir(), []string{"go", "version"}, originalRevision, true)

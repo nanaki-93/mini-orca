@@ -42,7 +42,7 @@ func TestChangeVerifyRequiresFreshTrustAndPersistsEvidence(t *testing.T) {
 	if _, err := service.VerifyChange(context.Background(), session.ID, identity); err == nil {
 		t.Fatal("verification ran without post-Apply execution trust")
 	}
-	if _, err := service.TrustProjectExecution(identity.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), identity.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	stale := identity
@@ -76,7 +76,7 @@ func TestChangeVerifyRequiresFreshTrustAndPersistsEvidence(t *testing.T) {
 
 func TestChangeVerifyFailedCanceledAndUnavailableKeepAppliedFiles(t *testing.T) {
 	service, root, session, identity := appliedVerificationFixture(t, true)
-	if _, err := service.TrustProjectExecution(identity.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), identity.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	evidence, err := service.VerifyChange(context.Background(), session.ID, identity)
@@ -112,7 +112,7 @@ func TestChangeVerifyFailedCanceledAndUnavailableKeepAppliedFiles(t *testing.T) 
 
 func TestChangeVerifyRejectsLateEvidenceAfterSourceChanges(t *testing.T) {
 	service, root, session, identity := appliedVerificationFixture(t, false)
-	if _, err := service.TrustProjectExecution(identity.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), identity.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	_, err := service.verifyChangeWithChecks(context.Background(), session.ID, identity, func(context.Context, string, *changeJournal, string) ([]CheckResult, error) {

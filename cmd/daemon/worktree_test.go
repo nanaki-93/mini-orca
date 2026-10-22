@@ -45,7 +45,7 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	created, err := service.CreateGitWorktree(context.Background(), app.GitMutationRequest{
@@ -198,7 +198,7 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 		}
 	}
 	index, _ = manager.Index()
-	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	discard := app.GitMutationRequest{

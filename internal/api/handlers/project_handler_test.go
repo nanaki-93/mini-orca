@@ -434,6 +434,16 @@ func TestExecutionTrustIsExplicitAndRevisionBound(t *testing.T) {
 	if trusted.Code != http.StatusOK || !strings.Contains(trusted.Body.String(), `"trusted":true`) {
 		t.Fatalf("trusted scope = %d %s", trusted.Code, trusted.Body.String())
 	}
+	service, err = app.New(scopedHandlerConfig("http://127.0.0.1:1"), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler = NewProjectHandler(manager, service)
+	restored := httptest.NewRecorder()
+	handler.ExecutionTrust(restored, httptest.NewRequest(http.MethodGet, "/api/projects/current/execution-trust?project_revision="+index.ProjectRevision, nil))
+	if restored.Code != http.StatusOK || !strings.Contains(restored.Body.String(), `"trusted":true`) {
+		t.Fatalf("restarted service lost saved consent: %d %s", restored.Code, restored.Body.String())
+	}
 	revoked := httptest.NewRecorder()
 	handler.TrustProjectExecution(revoked, httptest.NewRequest(http.MethodPost, "/api/projects/current/execution-trust", bytes.NewBufferString(`{"project_revision":"`+index.ProjectRevision+`","confirm":false}`)))
 	if revoked.Code != http.StatusOK || !strings.Contains(revoked.Body.String(), `"trusted":false`) {
@@ -677,7 +687,7 @@ func TestProjectEventsSSEStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewProjectHandler(manager, service)

@@ -65,7 +65,7 @@ func newGoScanController() *goScanController {
 // ScanGoProject performs parser, vet, and test phases only after an explicit
 // request for the active revision. Tool commands run in a copied workspace.
 func (s *Service) ScanGoProject(ctx context.Context, revision string) (*GoScanReport, error) {
-	if err := s.requireProjectExecutionTrust(revision); err != nil {
+	if err := s.requireProjectExecutionTrust(ctx, revision); err != nil {
 		return nil, err
 	}
 	scan, err := s.prepareGoScan(revision)
@@ -99,7 +99,7 @@ func (s *Service) validateGoScanWorkspace(ctx context.Context, scan *preparedGoS
 	if err != nil {
 		return err
 	}
-	if err := s.requireWorkspaceExecutionTrust(scan.report.ProjectRevision, workspaceHash); err != nil {
+	if err := s.requireWorkspaceExecutionTrust(ctx, scan.report.ProjectRevision, workspaceHash); err != nil {
 		return err
 	}
 	if err := project.VerifyProjectSources(ctx, scan.workspace, scan.index); err != nil {
@@ -210,7 +210,7 @@ func (s *Service) completeGoScan(ctx context.Context, root string, report *GoSca
 // StartGoScan starts one explicit copied-workspace scan for the active revision and
 // returns immediately with source-free progress. Repeated calls reuse the
 // active scan instead of running verification commands concurrently.
-func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
+func (s *Service) StartGoScan(ctx context.Context, revision string) (*GoScanReport, error) {
 	analysis, err := s.manager.Analysis()
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (s *Service) StartGoScan(revision string) (*GoScanReport, error) {
 	if revision == "" || revision != analysis.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
-	if err := s.requireProjectExecutionTrust(revision); err != nil {
+	if err := s.requireProjectExecutionTrust(ctx, revision); err != nil {
 		return nil, err
 	}
 	worker, cancel := context.WithCancel(context.Background())
@@ -368,7 +368,7 @@ func (s *Service) runGoScanPhase(ctx context.Context, scan *preparedGoScan, name
 	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
 	defer cancel()
 	result, err := sandbox.RunCommandWithStart(timed, scan.workspace, command, true, func() error {
-		if err := s.requireWorkspaceExecutionTrust(scan.report.ProjectRevision, scan.workspaceHash); err != nil {
+		if err := s.requireWorkspaceExecutionTrust(timed, scan.report.ProjectRevision, scan.workspaceHash); err != nil {
 			return err
 		}
 		return (workspaceIdentity{fingerprint: scan.workspaceHash}).verifyCurrent(timed, scan.root)

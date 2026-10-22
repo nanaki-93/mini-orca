@@ -53,7 +53,7 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 		t.Fatalf("missing intent/trust: %d", denied.Code)
 	}
 	request.ConfirmSecurity = true
-	if _, err := h.service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := h.service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	unavailable := request

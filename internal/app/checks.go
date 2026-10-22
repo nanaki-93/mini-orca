@@ -77,7 +77,7 @@ func (s *Service) runCheckCommand(ctx context.Context, workspace string, command
 		return sandbox.RunCommand(ctx, workspace, command)
 	}
 	return sandbox.RunCommandWithStart(ctx, workspace, command, true, func() error {
-		return s.requireProjectExecutionTrust(revision)
+		return s.requireProjectExecutionTrust(ctx, revision)
 	})
 }
 

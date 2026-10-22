@@ -691,18 +691,18 @@ paths:
           schema: {type: string}
           description: Exact generated Go test name for a task-test trust preview.
       responses:
-        '200': {description: Current-session trust and the exact project-code command scope, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
+        '200': {description: Remembered project trust bound to current sources and the exact command scope, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
     post:
       tags: [Projects]
-      summary: Explicitly trust local execution for the current project revision
+      summary: Save or revoke local execution trust for the current project path
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrustRequest'}}}
       responses:
-        '200': {description: Current-session trust recorded, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
+        '200': {description: Project trust decision saved in private user settings, content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrust'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
@@ -1223,7 +1223,7 @@ components:
       properties:
         project_id: {type: string}
         project_revision: {type: string}
-        trusted: {type: boolean, description: In-memory authorization for this daemon session only.}
+        trusted: {type: boolean, description: Remembered consent for this canonical project path, validated against the current revision and workspace. Revoked consent remains revoked after restart.}
         commands:
           type: array
           description: Exact argv vectors for this requested scan or task-test action; gofmt and go vet are source-only and omitted.

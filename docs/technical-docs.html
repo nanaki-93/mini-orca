@@ -1168,7 +1168,7 @@
 
       // Scan & Execution Trust (5) -> scan_trust_handler.go
       { method: "GET", path: "/api/projects/current/execution-trust", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "Read-Only", desc: "Reads current-revision execution trust status and exact fixed argv scope." },
-      { method: "POST", path: "/api/projects/current/execution-trust", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "In-Memory Trust", desc: "Grants execution trust for the current project_revision." },
+      { method: "POST", path: "/api/projects/current/execution-trust", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "User Settings", desc: "Saves or revokes project execution trust and validates the current revision." },
       { method: "GET", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "Read-Only", desc: "Reads status of an explicitly started sandboxed Go scan." },
       { method: "POST", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "Sandbox Subprocess", desc: "Starts a Go parser/vet/test scan in an isolated temporary copied workspace." },
       { method: "DELETE", path: "/api/projects/current/scan", cat: "Scan & Execution Trust", handler: "scan_trust_handler.go", effect: "Cancel Scan", desc: "Cancels the active Go scan and terminates its Unix process group." },

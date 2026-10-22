@@ -34,7 +34,7 @@ func TestGitMergeRemovesUnignoredMetadataAfterStoppingImplementation(t *testing.
 		t.Fatal(err)
 	}
 	session := openChangeFixture(t, child, "new.go", "new_test.go")
-	if _, err := child.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := child.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := child.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {

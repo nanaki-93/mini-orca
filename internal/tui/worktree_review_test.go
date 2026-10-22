@@ -287,6 +287,8 @@ func TestWorktreeRefreshReadsCurrentIdentityWithoutMutations(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(GitWorkspace{GitRepository: GitRepository{ProjectIdentity: current, GitIdentity: GitIdentity{Head: "merged", Branch: "main"}}, Worktrees: []GitWorktree{{Path: "/repo/task", Integration: "merged"}}})
 		case "/api/projects/current/index":
 			_ = json.NewEncoder(w).Encode(ProjectIndex{ProjectIdentity: current})
+		case "/api/projects/current/execution-trust":
+			_ = json.NewEncoder(w).Encode(ExecutionTrust{Trusted: false})
 		default:
 			t.Errorf("unexpected request: %s", r.URL.Path)
 		}
@@ -299,7 +301,7 @@ func TestWorktreeRefreshReadsCurrentIdentityWithoutMutations(t *testing.T) {
 	defer cl.Close()
 	s.HandleKey(KeyEvent{Key: "r"})
 	s.FlushActions(context.Background(), cl)
-	if s.Error != "" || s.projectRevision() != "new" || s.Repository.Head != "merged" || calls != 3 || s.WorkspaceTrust {
+	if s.Error != "" || s.projectRevision() != "new" || s.Repository.Head != "merged" || calls != 4 || s.WorkspaceTrust {
 		t.Fatalf("refresh lost identity or inherited trust: %+v", s)
 	}
 }
@@ -324,6 +326,10 @@ func TestExternalMergeRecoveryUpdatesIndexBeforeTrustAndCleanup(t *testing.T) {
 		case "/api/projects/current/index":
 			_ = json.NewEncoder(w).Encode(ProjectIndex{ProjectIdentity: current})
 		case "/api/projects/current/execution-trust":
+			if r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode(ExecutionTrust{Trusted: true})
+				return
+			}
 			var body struct {
 				Revision string `json:"project_revision"`
 				Confirm  bool   `json:"confirm"`
@@ -350,11 +356,9 @@ func TestExternalMergeRecoveryUpdatesIndexBeforeTrustAndCleanup(t *testing.T) {
 	defer cl.Close()
 	s.HandleKey(KeyEvent{Key: "R"})
 	s.FlushActions(context.Background(), cl)
-	if s.Error != "" || s.WorkspaceTrust || s.projectRevision() != "resolved" || len(calls) != 4 || len(s.GitWorkspace.Worktrees) != 1 {
-		t.Fatalf("index update silently trusted, removed worktree or failed: %s; calls=%v", s.Error, calls)
+	if s.Error != "" || !s.WorkspaceTrust || s.projectRevision() != "resolved" || len(calls) != 5 || len(s.GitWorkspace.Worktrees) != 1 {
+		t.Fatalf("index update lost saved trust, removed worktree or failed: %s; calls=%v", s.Error, calls)
 	}
-	s.ExecuteCommand("trust")
-	s.FlushActions(context.Background(), cl)
 	s.HandleKey(KeyEvent{Key: "c"})
 	s.FlushActions(context.Background(), cl)
 	if s.Error != "" || len(s.GitWorkspace.Worktrees) != 0 || len(calls) != 7 {

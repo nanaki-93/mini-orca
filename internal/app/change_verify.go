@@ -37,7 +37,7 @@ func (s *Service) verifyChangeWithChecks(ctx context.Context, id string, identit
 		return nil, err
 	}
 	if changeHasGo(journal.Session.Changes) {
-		if err := s.requireProjectExecutionTrust(identity.ProjectRevision); err != nil {
+		if err := s.requireProjectExecutionTrust(ctx, identity.ProjectRevision); err != nil {
 			return nil, err
 		}
 	}

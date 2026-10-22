@@ -96,7 +96,7 @@ func (s *State) postCapturedWorktreeRemoval(ctx context.Context, cl *Client, req
 		return mergeWorktreeResponse{}, fmt.Errorf("project changed; refresh Worktrees before cleanup")
 	}
 	if err := s.ensureExecutionTrust(ctx, cl, reqID+"-trust"); err != nil {
-		return mergeWorktreeResponse{}, fmt.Errorf("verify cleanup trust: %w; after external changes, use [R] Update index and grant trust again", err)
+		return mergeWorktreeResponse{}, fmt.Errorf("verify cleanup trust: %w; after external changes, use [R] Update index to refresh the trusted workspace", err)
 	}
 	var result mergeWorktreeResponse
 	err := cl.DoJSON(ctx, reqID, http.MethodPost, endpoint, intent, &result)
@@ -155,14 +155,14 @@ func (s *State) renderWorktreeDetail(th ansiTheme, width int) []string {
 	rows = append(rows, renderDiagnosticRow(th, th.red, "Error:", th.fg, wt.Error, contentW)...)
 	if wt.Integration == "merged" {
 		rows = append(rows, "This commit is included in the current branch. [c] verifies and removes the clean worktree, retaining its branch.")
-		rows = append(rows, "After external changes: [R] updates the project index, then :trust grants execution trust for that revision before cleanup.")
+		rows = append(rows, "After external changes, [R] updates the index and restores saved project trust. Use :trust if consent is still required.")
 	}
 	if wt.Integration == "behind" {
 		rows = append(rows, "The destination advanced since this task branched. Overlapping paths need review; they do not prove a conflict.")
 		rows = append(rows, renderDiagnosticBulletRows(th, th.amber, "Changed on both branches:", th.amber, th.fg, wt.OverlapPaths, contentW)...)
 	}
 	if s.Repository != nil && s.Repository.MergeHead != "" {
-		rows = append(rows, "A merge is in progress in the current checkout. Resolve conflicts with your external Git tool and commit the merge. Then [R] Update index, :trust, and [c] Cleanup.")
+		rows = append(rows, "A merge is in progress in the current checkout. Resolve conflicts with your external Git tool and commit the merge. Then [R] Update index and [c] Cleanup; use :trust if consent is required.")
 		rows = append(rows, renderDiagnosticBulletRows(th, th.red, "Unresolved files:", th.red, th.fg, s.Repository.Conflicts, contentW)...)
 	}
 	rows = append(rows, "[r] only reads status. [R] reindexes local facts and stops outdated checks and workflows in the destination checkout.")
@@ -214,11 +214,13 @@ func (s *State) reindexWorktrees(ctx context.Context, cl *Client, reqID string, 
 	if err := s.dispatchReindex(ctx, cl, reqID); err != nil {
 		return err
 	}
-	s.WorkspaceTrust = false
 	if err := s.refreshWorktrees(ctx, cl, reqID+"-refresh", act); err != nil {
 		return fmt.Errorf("index updated, but Worktrees refresh failed: %w", err)
 	}
-	s.CmdOutput = "Index updated. Use :trust to grant execution trust for this revision, then [c] to clean up the integrated worktree."
+	s.CmdOutput = "Index updated. [c] Clean up the selected worktree."
+	if !s.WorkspaceTrust {
+		s.CmdOutput = "Index updated. Use :trust to grant project execution trust, then [c] to clean up the worktree."
+	}
 	return nil
 }
 
@@ -242,10 +244,15 @@ func (s *State) refreshWorktrees(ctx context.Context, cl *Client, reqID string, 
 	if s.projectID() != act.Source.ProjectID || workspace.ProjectIdentity != project.ProjectIdentity || index.ProjectIdentity != project.ProjectIdentity {
 		return fmt.Errorf("project changed during refresh; retry Worktrees refresh")
 	}
-	if s.projectRevision() != project.ProjectRevision {
+	revisionChanged := s.projectRevision() != project.ProjectRevision
+	if revisionChanged {
 		s.WorkspaceTrust = false
 	}
 	s.Project, s.Index, s.Repository, s.GitWorkspace = &project, &index, &workspace.GitRepository, &workspace
+	if revisionChanged {
+		revQuery, _ := s.resourceQueries()
+		s.syncExecutionTrust(ctx, cl, revQuery)
+	}
 	for i, wt := range workspace.Worktrees {
 		if wt.Path == act.Target {
 			s.SelectedIdx = i

@@ -89,10 +89,10 @@ func TestGoScanLifecycleStartsReadsAndCancels(t *testing.T) {
 		"main.go":      "package fixture\n",
 		"main_test.go": "package fixture\nimport (\"testing\"; \"time\")\nfunc TestSlow(t *testing.T) { time.Sleep(time.Second) }\n",
 	})
-	if _, err := service.StartGoScan("stale"); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.StartGoScan(context.Background(), "stale"); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("stale start = %v", err)
 	}
-	started, err := service.StartGoScan(revision)
+	started, err := service.StartGoScan(context.Background(), revision)
 	if err != nil || started.Status != "running" {
 		t.Fatalf("started scan = %+v, %v", started, err)
 	}
@@ -128,7 +128,7 @@ func TestGoScanLifecyclePersistsWorkspaceLimitFailure(t *testing.T) {
 	if err := os.Truncate(largePath, sandbox.MaxWorkspaceBytes+1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.StartGoScan(revision); err != nil {
+	if _, err := service.StartGoScan(context.Background(), revision); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(time.Second)
@@ -320,7 +320,7 @@ func newGoScanService(t *testing.T, files map[string]string) (*Service, string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), analysis.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	return service, root, analysis.ProjectRevision
@@ -331,7 +331,7 @@ func TestGoScanDrainedOnServiceShutdown(t *testing.T) {
 		"go.mod":  "module fixture\n\ngo 1.22\n",
 		"main.go": "package fixture\n",
 	})
-	started, err := service.StartGoScan(revision)
+	started, err := service.StartGoScan(context.Background(), revision)
 	if err != nil || started == nil {
 		t.Fatalf("StartGoScan failed: %+v, %v", started, err)
 	}
@@ -369,7 +369,7 @@ func TestScanGoProjectRejectsUnindexedWorkspaceChangesUnderStaleTrust(t *testing
 	if report, err := service.GoScanProgress(revision); err != nil || report != nil {
 		t.Fatalf("expected no verified scan report for modified workspace, got %+v, %v", report, err)
 	}
-	if _, err := service.TrustProjectExecution(revision, true); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := service.TrustProjectExecution(context.Background(), revision, true); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("expected TrustProjectExecution to reject stale cached revision before reindex, got %v", err)
 	}
 }

@@ -30,7 +30,7 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 	request.RunTests = request.RunTests || session.CheckOptions.RunTests
 	request.RunLint = request.RunLint || session.CheckOptions.RunLint
 	if request.RunTests || request.RunLint {
-		if err := s.requireProjectExecutionTrust(session.ProjectRevision); err != nil {
+		if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
 			return nil, err
 		}
 	}

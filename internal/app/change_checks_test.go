@@ -51,7 +51,7 @@ func TestChangeChecksRequireTrustAndProveNewTests(t *testing.T) {
 	if _, err := service.CheckChange(context.Background(), session.ID, request); err == nil {
 		t.Fatal("checks ran without trust")
 	}
-	if _, err := service.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	checked, err := service.CheckChange(context.Background(), session.ID, request)
@@ -167,11 +167,11 @@ func TestNonGoJustfileChecksAndTestsExecuteUnderTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trust, err := service.ExecutionTrust(analysis.ProjectRevision, "")
+	trust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "")
 	if err != nil || len(trust.Commands) != 2 || strings.Join(trust.Commands[0], " ") != "just test" || strings.Join(trust.Commands[1], " ") != "just check" {
 		t.Fatalf("expected just test and just check in execution trust commands, got %+v, err=%v", trust, err)
 	}
-	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), analysis.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	session := prepareChangeFixture(t, service, "app.ts", "app.test.ts")
@@ -325,7 +325,7 @@ func TestPolyglotArchitectureBoundariesQualityBudgetsAndEcosystemRunners(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	trust, err := service.ExecutionTrust(analysis.ProjectRevision, "")
+	trust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "")
 	if err != nil || len(trust.Commands) != 2 || strings.Join(trust.Commands[0], " ") != "npm test" || strings.Join(trust.Commands[1], " ") != "npm run check" {
 		t.Fatalf("expected npm test and npm run check in execution trust commands, got %+v, err=%v", trust, err)
 	}
@@ -371,7 +371,7 @@ func TestNonGoRequiredTestsWithoutRunnerAreUnavailableAndBlockVerification(t *te
 		t.Fatal(err)
 	}
 	session := prepareChangeFixture(t, service, "app.py", "test_app.py")
-	if _, err := service.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{

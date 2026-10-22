@@ -216,7 +216,7 @@ func TestCriticRetryCannotReuseHistoricalCheckAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(restarted.CancelChangeWorkflows)
-	if _, err := restarted.TrustProjectExecution(ready.ProjectRevision, true); err != nil {
+	if _, err := restarted.TrustProjectExecution(context.Background(), ready.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	request = workflowRequest(ready)

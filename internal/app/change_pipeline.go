@@ -54,7 +54,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 		return nil, err
 	}
 	cleanedMessages := stripWorkflowTestMessages(session.Messages)
-	if err := s.admitChangeWorkflow(session, request, len(cleanedMessages)); err != nil {
+	if err := s.admitChangeWorkflow(ctx, session, request, len(cleanedMessages)); err != nil {
 		return nil, err
 	}
 	if err := approveWorkflowPlan(session, request.PlanHash); err != nil {
@@ -86,7 +86,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	return session, nil
 }
 
-func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWorkflowRequest, messageCount int) error {
+func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSession, request ChangeWorkflowRequest, messageCount int) error {
 	s.changeWorkflow.mu.Lock()
 	existing := s.changeWorkflow.getJob(session.ID)
 	busy := existing != nil && !existing.finished
@@ -113,7 +113,7 @@ func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWork
 			return err
 		}
 	}
-	return s.requireProjectExecutionTrust(session.ProjectRevision)
+	return s.requireProjectExecutionTrust(ctx, session.ProjectRevision)
 }
 
 const maxWorkflowAutoRepairs = 2
@@ -266,7 +266,7 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
 		return nil, err
 	}
-	if err := s.requireProjectExecutionTrust(session.ProjectRevision); err != nil {
+	if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
 		return nil, err
 	}
 	if stage > 0 {

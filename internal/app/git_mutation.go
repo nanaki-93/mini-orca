@@ -27,7 +27,7 @@ func (s *Service) gitMutationPreflight(ctx context.Context, request GitMutationR
 	if err := requireMatchingGitIdentity(&expected, request.GitIdentity); err != nil {
 		return nil, err
 	}
-	if err := s.requireProjectExecutionTrust(request.ProjectRevision); err != nil {
+	if err := s.requireProjectExecutionTrust(ctx, request.ProjectRevision); err != nil {
 		return nil, err
 	}
 	return repository, nil

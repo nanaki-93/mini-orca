@@ -68,8 +68,8 @@ untrusted networks.
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
 | GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, or change workflows transition state. |
-| GET | `/api/projects/current/execution-trust` | Read current-session trusted local execution status and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
-| POST | `/api/projects/current/execution-trust` | Explicitly trust local execution for the current project revision. |
+| GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
+| POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
 | GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |
@@ -136,7 +136,7 @@ Security review requests require `project_id`, `project_revision`, `base_file_ha
 
 ## Trusted local execution
 
-Import, restore, navigation, indexing, parsing, and `gofmt`/`go vet` source analysis never execute imported project code. `go test` can execute package initialization and tests, including generated temporary task tests. Before it can run, the client reads the exact argv scope from `GET /api/projects/current/execution-trust`; pass the validated generated test name as `task_test_name` to receive its exact `-run` argv. The client then explicitly posts `confirm: true` for the active project revision. This in-memory trust is separate from remote-model consent and is cleared when the project is replaced, restored, or reindexed. Commands run only in a temporary copied workspace with a small toolchain environment allowlist; this is trusted local execution, not sandboxing. On supported Unix platforms cancellation owns the command process group and its descendants. Other platforms reject project-code execution when that ownership is unavailable; source-only commands remain available.
+Import, restore, navigation, indexing, parsing, and `gofmt`/`go vet` source analysis never execute imported project code. `go test` can execute package initialization and tests, including generated temporary task tests. Before it can run, the client reads the exact argv scope from `GET /api/projects/current/execution-trust`; pass the validated generated test name as `task_test_name` to receive its exact `-run` argv. The client then explicitly posts `confirm: true` for the active project revision. This choice is saved in private user settings for the canonical project path and remains separate from remote-model consent. Reopening or reindexing a trusted project validates its current sources and captures a new workspace fingerprint; old revisions and workspace hashes never authorize new jobs. Other project paths and worktrees require their own consent, and a changed command scope requires confirmation again. Posting `confirm: false` revokes saved trust. Invalid or unreadable settings fail closed, and persistence failures are returned as errors. Navigation and trust restoration do not execute project code or dispatch a provider. Commands run only in a temporary copied workspace with a small toolchain environment allowlist; this is trusted local execution, not sandboxing. On supported Unix platforms cancellation owns the command process group and its descendants. Other platforms reject project-code execution when that ownership is unavailable; source-only commands remain available.
 
 ## Project intelligence and limits
 

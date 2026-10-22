@@ -53,7 +53,9 @@ is passive; cleanup is explicit and must wait for the daemon's removal receipt.
 Keep integration, merge conflicts and cleanup warnings distinct. External merge
 resolution must remain recoverable through refresh and guarded cleanup.
 Updating the index after external changes is a separate explicit action; it stops
-outdated destination checks and workflows and clears execution trust.
+outdated destination checks and workflows. Remember project trust across reopening
+and reindexing, rebinding execution authority to current validated sources. Keep
+revocation available and report failures to save or restore trust.
 
 ## Verification
 

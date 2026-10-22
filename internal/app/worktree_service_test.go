@@ -46,11 +46,11 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 			t.Fatal("reopening lost the worker owner")
 		}
 		session := openChangeFixture(t, child, "new.go", "new_test.go")
-		trust, err := child.ExecutionTrust(session.ProjectRevision, "")
+		trust, err := child.ExecutionTrust(context.Background(), session.ProjectRevision, "")
 		if err != nil || trust.Trusted {
 			t.Fatal("worktree inherited execution consent")
 		}
-		if _, err := child.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		if _, err := child.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 			t.Fatal(err)
 		}
 		sessions[i], err = child.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session))
@@ -156,7 +156,7 @@ func TestWorktreeWorkersStopOnShutdownAndProjectReplacement(t *testing.T) {
 				t.Fatal(err)
 			}
 			session := openChangeFixture(t, child, "new.go", "new_test.go")
-			if _, err := child.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+			if _, err := child.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := child.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {

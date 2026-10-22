@@ -273,14 +273,13 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 	if !s.WorkspaceTrust {
 		trustBadge = th.statusBadge("UNTRUSTED")
 	}
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · TRUST POLICY", "Execution sandbox & repository consent")
+	lines := renderPageHeader(th, "PROJECT TRUST", "[Enter / :trust] Grant or revoke")
 	body := []string{
-		fmt.Sprintf("%sExecution Trust:%s %s  %s(active workspace consent: %v)%s",
-			th.bold+th.fg, th.reset, trustBadge, th.muted, s.WorkspaceTrust, th.reset),
-		fmt.Sprintf("%sSandbox Policy:%s  Project-code checks run in isolated worktrees with controlled argv and bounded output.",
-			th.muted, th.reset),
+		fmt.Sprintf("%sExecution:%s %s", th.bold+th.fg, th.reset, trustBadge),
+		"Trust is remembered for this project path until you revoke it.",
+		"Checks validate the current revision and run in copied workspaces.",
 	}
-	return append(lines, th.renderPanelBox("EXECUTION TRUST GOVERNANCE", "SANDBOX POLICY", panelW, body)...)
+	return append(lines, th.renderPanelBox("LOCAL EXECUTION", "", panelW, body)...)
 }
 
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {

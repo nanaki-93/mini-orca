@@ -202,3 +202,10 @@ under the imported project's `.mini-orca/` directory; see
 [README.md](README.md#project-intelligence) for the current paths. These files are
 application metadata, separate from configuration.
 Do not delete Apply receipts or Undo backups as a routine cache reset.
+
+Execution trust decisions are private user settings, outside project metadata.
+They are stored in `mini-orca/execution-trust/` under the OS user configuration
+directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`
+can select another absolute, user-controlled directory. Each decision is bound
+to the canonical project path and command scope; copying `.mini-orca/` to another
+checkout does not transfer consent. Use `:trust` to grant or revoke trust.

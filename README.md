@@ -46,6 +46,11 @@ review progress. `:retry test` reuses implementation, while `:retry review`
 reuses current passing checks. Attempts, stage timings and failure reasons remain
 visible in workflow details.
 
+Project execution trust is remembered for the same canonical project path across
+reopening and reindexing. `:trust` toggles consent and saves revocation too.
+Other checkouts and changed command scopes require their own confirmation.
+Current revision and workspace checks still apply before execution.
+
 ## Merges and worktree recovery
 
 Tasks start from the current branch. The TUI blocks generation when another
@@ -56,8 +61,8 @@ review the new plan. The old worktree remains available in **Worktrees**.
 In **Worktrees**, `Enter` opens integration details. **BEHIND** means the destination
 advanced; overlapping paths are a review hint, not proof of conflict. If a merge
 conflicts, resolve it with your external Git tool and commit the merge. Press `R`
-to update the project index, then `:trust` to grant execution trust for that
-revision. Select the **INTEGRATED** worktree and press `c` to complete linked
+to update the project index. Saved project trust is restored automatically;
+use `:trust` if the project is not yet trusted. Select the **INTEGRATED** worktree and press `c` to complete linked
 findings and remove the clean checkout. Lowercase `r` only refreshes status;
 updating the index stops outdated checks and workflows in the destination checkout.
 The worktree's branch is retained. For unfinished drafts or unmerged commits,

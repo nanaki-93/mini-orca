@@ -15,7 +15,7 @@ func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
-		s.clearExecutionTrust()
+		s.resetExecutionTrust(true)
 		s.refreshAnalysisRunAfterReindex()
 	}
 	return index, err
@@ -42,7 +42,11 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 		return err
 	}
 	s.invalidateJobsForProjectChange()
-	return activate()
+	if err := activate(); err != nil {
+		return err
+	}
+	s.resetExecutionTrust(true)
+	return nil
 }
 
 func (s *Service) invalidateJobsForProjectChange() {

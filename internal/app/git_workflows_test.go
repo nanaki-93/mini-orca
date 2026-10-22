@@ -26,7 +26,7 @@ func trustedGitRequest(t *testing.T, service *Service) GitMutationRequest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+	if _, err := service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	return GitMutationRequest{GitIdentity: repository.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Confirm: true, ConfirmExecution: true}
@@ -174,9 +174,9 @@ func TestGitBranchSwitchRejectsDirtyAndCheckedOutBranches(t *testing.T) {
 	if err != nil || result.State != "switched" || result.Repository.Branch != "other" || result.Index == nil {
 		t.Fatalf("switch: %+v %v", result, err)
 	}
-	trust, trustErr := service.ExecutionTrust(result.Index.ProjectRevision, "")
-	if trustErr != nil || trust.Trusted {
-		t.Fatal("switch retained execution trust")
+	trust, trustErr := service.ExecutionTrust(context.Background(), result.Index.ProjectRevision, "")
+	if trustErr != nil || !trust.Trusted || trust.WorkspaceHash == "" {
+		t.Fatalf("switch failed to rebind remembered project trust: %+v %v", trust, trustErr)
 	}
 	request = trustedGitRequest(t, service)
 	path := createWorkflowWorktree(t, service, request)

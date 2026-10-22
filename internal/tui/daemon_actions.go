@@ -97,6 +97,10 @@ func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) e
 	if s.AcceptProjectResponse(idx.ProjectIdentity) {
 		s.Index = &idx
 	}
+	if s.Project != nil {
+		revQuery, _ := s.resourceQueries()
+		s.syncExecutionTrust(ctx, cl, revQuery)
+	}
 	return nil
 }
 
@@ -366,7 +370,7 @@ func (s *State) dispatchMutationAction(ctx context.Context, cl *Client, reqID st
 	case "dismiss-feature":
 		return s.dispatchDismissFeature(ctx, cl, reqID, act)
 	case "set-trust":
-		return s.dispatchSetTrust(ctx, cl, reqID)
+		return s.dispatchSetTrust(ctx, cl, reqID, act)
 	case "undo":
 		return s.dispatchUndo(ctx, cl, reqID, act)
 	default:
@@ -1202,13 +1206,26 @@ func (s *State) dispatchDismissFeature(ctx context.Context, cl *Client, reqID st
 	return nil
 }
 
-func (s *State) dispatchSetTrust(ctx context.Context, cl *Client, reqID string) error {
+func (s *State) dispatchSetTrust(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if !s.matchesPlanSource(act.Source) {
+		return fmt.Errorf("project changed; choose trust again for the current project")
+	}
 	body := map[string]any{
-		"project_revision": s.projectRevision(),
-		"confirm":          s.WorkspaceTrust,
+		"project_revision": act.Source.ProjectRevision,
+		"confirm":          act.Target == "granted",
 	}
 	var trust ExecutionTrust
-	return cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust)
+	if err := cl.DoJSON(ctx, reqID, http.MethodPost, "/api/projects/current/execution-trust", body, &trust); err != nil {
+		s.WorkspaceTrust = false
+		s.CmdOutput = "Trust settings were not saved; refresh to check project trust."
+		return err
+	}
+	s.WorkspaceTrust = trust.Trusted
+	s.CmdOutput = "Project trust revoked."
+	if trust.Trusted {
+		s.CmdOutput = "Project trust saved for future sessions. Use :trust to revoke it."
+	}
+	return nil
 }
 
 func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
@@ -1704,7 +1721,7 @@ func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeRe
 	}
 	if result.State == "conflicts" {
 		s.Navigate(PageGit)
-		s.CmdOutput = "Resolve and commit with your Git tool, then [R] Update index, :trust, and [c] Clean up the integrated worktree."
+		s.CmdOutput = "Resolve and commit with your Git tool, then [R] Update index and [c] Clean up the integrated worktree."
 	}
 }
 
