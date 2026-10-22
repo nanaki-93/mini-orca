@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -31,6 +32,25 @@ func TestGitRepositoryRequiresCurrentProject(t *testing.T) {
 		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &repository) != nil || repository.Available || repository.ProjectID != index.ProjectID {
 			t.Fatalf("non-Git response: %d %s", response.Code, response.Body)
 		}
+	}
+}
+
+func TestProjectGitStatusEndpointHonorsCancellationAndPathPolicy(t *testing.T) {
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	handler := NewProjectHandler(fixture.manager, fixture.service)
+
+	okResponse := httptest.NewRecorder()
+	handler.GitStatus(okResponse, httptest.NewRequest(http.MethodGet, "/api/projects/current/git?path=main.go", nil))
+	if okResponse.Code != http.StatusOK {
+		t.Fatalf("GitStatus status = %d: %s", okResponse.Code, okResponse.Body.String())
+	}
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledResponse := httptest.NewRecorder()
+	handler.GitStatus(canceledResponse, httptest.NewRequest(http.MethodGet, "/api/projects/current/git?path=main.go", nil).WithContext(canceledCtx))
+	if canceledResponse.Code != http.StatusRequestTimeout {
+		t.Fatalf("canceled GitStatus status = %d, want 408: %s", canceledResponse.Code, canceledResponse.Body.String())
 	}
 }
 

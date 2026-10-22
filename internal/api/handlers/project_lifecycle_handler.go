@@ -152,8 +152,11 @@ func (h *ProjectHandler) Impact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) GitStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := h.manager.GitStatus(r.URL.Query().Get("path"))
+	status, err := h.service.GitStatus(r.Context(), r.URL.Query().Get("path"))
 	if err != nil {
+		if writeContextError(w, "Git status", err) {
+			return
+		}
 		writeProjectError(w, "Git status failed", err)
 		return
 	}

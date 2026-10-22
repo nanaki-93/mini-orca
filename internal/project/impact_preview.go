@@ -1,7 +1,6 @@
 package project
 
 import (
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -39,33 +38,4 @@ func BuildImpactPreview(index *ProjectIndex, targetPath, targetSymbol string) Im
 		}
 	}
 	return preview
-}
-
-type GitStatus struct {
-	Available bool   `json:"available"`
-	Branch    string `json:"branch,omitempty"`
-	FileState string `json:"file_state,omitempty"`
-	DiffState string `json:"diff_state,omitempty"`
-}
-
-// ReadGitStatus runs fixed read-only Git commands only.
-func ReadGitStatus(root, targetPath string) GitStatus {
-	inside, err := runGit(root, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(inside) != "true" {
-		return GitStatus{}
-	}
-	branch, _ := runGit(root, "branch", "--show-current")
-	status, _ := runGit(root, "status", "--porcelain", "--", targetPath)
-	diff, _ := runGit(root, "diff", "--name-only", "--", targetPath)
-	diffState := "clean"
-	if strings.TrimSpace(diff) != "" {
-		diffState = "modified"
-	}
-	return GitStatus{Available: true, Branch: strings.TrimSpace(branch), FileState: strings.TrimSpace(status), DiffState: diffState}
-}
-
-func runGit(root string, args ...string) (string, error) {
-	command := exec.Command("git", append([]string{"-C", root}, args...)...)
-	output, err := command.Output()
-	return string(output), err
 }
