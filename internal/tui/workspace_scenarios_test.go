@@ -98,6 +98,28 @@ func TestLongDialogsKeepActionsAndDiagnosticsReachable(t *testing.T) {
 	}
 }
 
+func TestOverlayFooterAlwaysShowsItsAvailableEscapeAction(t *testing.T) {
+	s := NewState()
+	s.Confirmation = &Confirmation{Title: "Confirm scope", AcceptLabel: strings.Repeat("Long action label ", 10)}
+	for _, width := range []int{52, 60, 80, 120} {
+		frame := s.Render(width, 20)
+		footer := strings.Split(frame, "\n")[18]
+		if !strings.Contains(footer, "[y/Enter]") || !strings.Contains(footer, "[n/Esc]") || !strings.Contains(footer, "Cancel") {
+			t.Fatalf("dialog lost confirm or cancel at width %d", width)
+		}
+	}
+	s.Confirmation = nil
+	s.openCommandInput("project ")
+	for _, menu := range []bool{true, false} {
+		s.CmdActive, s.ShowKeybindsModal = menu, !menu
+		frame := s.Render(52, 20)
+		footer := strings.Split(frame, "\n")[18]
+		if !strings.Contains(footer, "[Esc]") || strings.Contains(footer, "[:] Commands") {
+			t.Fatal("overlay footer advertised an unavailable action or hid Escape")
+		}
+	}
+}
+
 func TestIssueSelectionAndSourceNavigationAtSmallSizes(t *testing.T) {
 	s := workspaceSampleState()
 	for i := 0; i < 80; i++ {

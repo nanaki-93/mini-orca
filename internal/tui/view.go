@@ -263,17 +263,21 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 }
 
 func (s *State) renderActionBar(th ansiTheme, width int) string {
-	items := s.pageActions()
 	if s.Confirmation != nil {
-		items = []keyDesc{{"y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm")}, {"n/Esc", "Cancel"}}
-	} else if s.CmdActive {
-		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}, {"Esc", "Cancel"}}
+		confirm := th.keyPill("y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm"))
+		return alignBar(" "+confirm, th.keyPill("n/Esc", "Cancel")+" ", width)
+	}
+	items := s.pageActions()
+	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
+	if s.CmdActive {
+		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}}
+		right = th.keyPill("Esc", "Cancel") + " "
 	} else if s.Error != "" && !s.ShowKeybindsModal {
 		items = []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}
 	} else if s.ShowKeybindsModal {
-		items = []keyDesc{{"↑/↓", "Scroll help"}, {"Esc", "Close"}}
+		items = []keyDesc{{"↑/↓", "Scroll"}, {"PgUp/PgDn", "Page"}}
+		right = th.keyPill("Esc", "Close") + " "
 	}
-	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
 	available := width - theme.VisibleRuneCount(right) - 3
 	var hints []string
 	for _, item := range items {
