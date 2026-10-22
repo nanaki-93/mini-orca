@@ -60,8 +60,7 @@ func TestWorkspaceStatusAndCommandRemainVisible(t *testing.T) {
 			t.Fatal("incorrect connection state")
 		}
 	}
-	s.CmdActive = true
-	s.CmdInput = "project /" + strings.Repeat("nested/", 30) + "visible-tail"
+	s.openCommandInput("project /" + strings.Repeat("nested/", 30) + "visible-tail")
 	if frame := s.Render(80, 24); !strings.Contains(frame, "visible-tail") {
 		t.Fatal("long command must keep its cursor and tail visible")
 	}

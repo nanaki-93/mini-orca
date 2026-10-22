@@ -262,10 +262,16 @@ func (s *State) execProjectCommand(arg string) bool {
 }
 
 func (s *State) execNavigationCommand(cmd, arg string) bool {
-	if s.execIssueFilterCommand(cmd, arg) || s.execModelCommand(cmd, arg) {
+	if s.execIssueFilterCommand(cmd, arg) || s.execModelCommand(cmd, arg) || s.execViewCommand(cmd) {
 		return true
 	}
 	switch cmd {
+	case "overview", "dashboard":
+		s.Navigate(PageSummary)
+		return true
+	case "studio", "tasks":
+		s.Navigate(PageAgents)
+		return true
 	case "debug", "logs":
 		s.Navigate(PageAgents)
 		s.AgentDetailOpen = true

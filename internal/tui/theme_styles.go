@@ -97,8 +97,8 @@ func (th ansiTheme) keyPill(k, desc string) string {
 	return theme.KeyPill(th.cyan, th.fg, th.reset, k, desc)
 }
 
-func (th ansiTheme) renderCommandInput(value string, width int) string {
-	return theme.RenderCommandInput(th.bold+th.fg, th.reset, value, width)
+func (th ansiTheme) renderCommandInput(value string, cursor, width int) string {
+	return theme.RenderCommandInput(th.bold+th.fg, th.reset, value, cursor, width)
 }
 
 func (th ansiTheme) renderProgressBar(done, total, barWidth int) string {

@@ -12,6 +12,7 @@ type KeyEvent struct {
 	Key   string
 	Shift bool
 	Ctrl  bool
+	Text  string
 }
 
 var paletteOrder = []struct {
@@ -79,28 +80,6 @@ func (s *State) HandleKey(ev KeyEvent) {
 	s.handlePageScopedKey(ev)
 }
 
-func (s *State) handleCommandInputKey(ev KeyEvent) {
-	switch ev.Key {
-	case "Escape":
-		s.CmdActive = false
-		s.CmdInput = ""
-	case "Enter":
-		raw := s.CmdInput
-		s.CmdActive = false
-		s.CmdInput = ""
-		s.ExecuteCommand(raw)
-	case "Backspace":
-		runes := []rune(s.CmdInput)
-		if len(runes) > 0 {
-			s.CmdInput = string(runes[:len(runes)-1])
-		}
-	default:
-		if len([]rune(ev.Key)) == 1 {
-			s.CmdInput += ev.Key
-		}
-	}
-}
-
 func (s *State) handleConfirmationKey(ev KeyEvent) {
 	switch ev.Key {
 	case "y", "Y", "Enter":
@@ -153,8 +132,7 @@ func (s *State) handleIssueDetailKey(ev KeyEvent) {
 		s.ShowKeybindsModal = !s.ShowKeybindsModal
 		s.KeybindsScroll = 0
 	case ":", "/":
-		s.CmdActive = true
-		s.CmdInput = ""
+		s.openCommandInput("")
 	case "p":
 		s.CyclePalette()
 	default:
@@ -195,8 +173,7 @@ func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 		s.KeybindsScroll = 0
 		return true
 	case ":", "/":
-		s.CmdActive = true
-		s.CmdInput = ""
+		s.openCommandInput("")
 		return true
 	case "1", "2", "3", "4", "5":
 		return s.switchHubByKey(ev.Key)
@@ -648,7 +625,7 @@ func (s *State) handleAgentsKey(key string) bool {
 		s.CmdOutput = "Switched to [2] Agent Studio · Issues"
 		return true
 	case "n":
-		s.CmdOutput = "Use :agent <objective> to dispatch a new precision agent mission"
+		s.openCommandInput("agent ")
 		return true
 	case "i", "g":
 		s.toggleAgentDebugInspector()
@@ -958,8 +935,7 @@ func (s *State) handleModelsPageKey(key string) bool {
 		s.SaveModelPreset("")
 		return true
 	case "n":
-		s.CmdActive = true
-		s.CmdInput = "preset-save "
+		s.openCommandInput("preset-save ")
 		s.CmdOutput = "Enter a name for the new model preset and press Enter"
 		return true
 	case "d":
@@ -977,6 +953,10 @@ func (s *State) handleModelsPageKey(key string) bool {
 }
 
 func (s *State) handleOverviewShortcuts(key string) bool {
+	if (s.Page == PageSummary || s.Page == PageRepo) && key == "o" {
+		s.openCommandInput("project ")
+		return true
+	}
 	if s.Page == PageRepo && key == "r" {
 		s.CmdOutput = "Reindexing repository..."
 		s.enqueueAction(ActionRequest{Kind: "reindex"})

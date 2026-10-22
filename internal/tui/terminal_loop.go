@@ -317,6 +317,16 @@ func (m *BubbleModel) View() string {
 
 func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
 	switch msg.Type {
+	case tea.KeyRunes:
+		return KeyEvent{Key: string(msg.Runes), Text: string(msg.Runes)}
+	case tea.KeyHome:
+		return KeyEvent{Key: "Home"}
+	case tea.KeyEnd:
+		return KeyEvent{Key: "End"}
+	case tea.KeyDelete:
+		return KeyEvent{Key: "Delete"}
+	case tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyCtrlU, tea.KeyCtrlP, tea.KeyCtrlN:
+		return KeyEvent{Key: strings.TrimPrefix(msg.String(), "ctrl+"), Ctrl: true}
 	case tea.KeyPgUp:
 		return KeyEvent{Key: "PageUp"}
 	case tea.KeyPgDown:

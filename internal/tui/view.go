@@ -94,11 +94,13 @@ func alignBar(left, right string, width int) string {
 func (s *State) renderWorkspaceContent(th ansiTheme, contentWidth, targetBodyRows int) []string {
 	var body []string
 	body = append(body, "")
-	if s.Error != "" {
+	if s.Error != "" && !s.CmdActive {
 		body = append(body, th.renderErrorBanner(s.Error, contentWidth-4)...)
 		body = append(body, "")
 	}
 	switch {
+	case s.CmdActive:
+		body = append(body, s.renderCommandMenu(th, contentWidth, targetBodyRows-len(body))...)
 	case s.Confirmation != nil:
 		body = append(body, s.renderConfirmationModal(th, contentWidth)...)
 	case s.ShowKeybindsModal:
@@ -260,7 +262,7 @@ func (s *State) renderActionBar(th ansiTheme, width int) string {
 	if s.Confirmation != nil {
 		items = []keyDesc{{"y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm")}, {"n/Esc", "Cancel"}}
 	} else if s.CmdActive {
-		items = []keyDesc{{"Enter", "Run command"}, {"Esc", "Cancel"}}
+		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}, {"Esc", "Cancel"}}
 	} else if s.ShowKeybindsModal {
 		items = []keyDesc{{"↑/↓", "Scroll help"}, {"Esc", "Close"}}
 	}
@@ -302,7 +304,7 @@ func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
 
 func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	if s.CmdActive {
-		return th.renderCommandInput(s.CmdInput, width)
+		return th.renderCommandInput(s.CmdInput, s.commandCursor, width)
 	}
 	if s.Error != "" {
 		return " " + th.red + "Error · " + th.reset + theme.TruncatePlain(s.Error, max(1, width-24)) + th.muted + "  [Esc] Dismiss" + th.reset

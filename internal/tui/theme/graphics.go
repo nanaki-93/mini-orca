@@ -256,12 +256,12 @@ func KeyPill(cyan, fg, reset, k, desc string) string {
 }
 
 // RenderCommandInput renders the colon command bar using Bubbles textinput.Model.
-func RenderCommandInput(boldFg, reset, value string, width int) string {
+func RenderCommandInput(boldFg, reset, value string, cursor, width int) string {
 	ti := textinput.New()
 	ti.Prompt = ":"
 	ti.Width = max(1, width-6)
 	ti.SetValue(value)
-	ti.CursorEnd()
+	ti.SetCursor(cursor)
 	ti.Focus()
 	return fmt.Sprintf(" %s%s%s", boldFg, ti.View(), reset)
 }

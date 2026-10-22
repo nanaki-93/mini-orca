@@ -226,7 +226,7 @@ func (s *State) beginPlanEdit(field, value string) {
 	if s.PlanDraft.Submitted {
 		return
 	}
-	s.CmdActive, s.CmdInput = true, field+" "+value
+	s.openCommandInput(field + " " + value)
 }
 
 func (s *State) renderPlanPage(th ansiTheme, width int) []string {

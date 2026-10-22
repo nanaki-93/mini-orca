@@ -90,48 +90,52 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
-	DetailSection     int
-	PlanDraft         *PlanDraft
-	DetailScroll      int
-	DiffOffset        int
-	DiffSinceReview   bool
-	Page              Page
-	Palette           Palette
-	Connected         bool
-	Version           string
-	Busy              string
-	Error             string
-	Notice            string
-	SelectedIdx       int
-	IssueView         string
-	IssueCategory     string
-	SelectedIssueIDs  []string
-	DocsSection       string
-	RulesSection      string
-	ShowInlineWhy     bool
-	DiffMode          string
-	HunkIdx           int
-	BrowseFiles       bool
-	AgentDetailOpen   bool
-	AgentStage        int
-	ShowKeybindsModal bool
-	KeybindsScroll    int
-	Confirmation      *Confirmation
-	CmdActive         bool
-	CmdInput          string
-	CmdHistory        []string
-	CmdOutput         string
-	GraduatedLessons  []string
-	InstructionDraft  string
-	ExcludedPaths     []string
-	ActivePresetID    string
-	CustomPresets     []ModelPreset
-	ScopeModels       map[string]string
-	AnalysisConfig    AnalysisRunConfig
-	PendingActions    []ActionRequest
-	Quitting          bool
-	viewportBodyRows  int
-	nextPreviewSeq    int
+	DetailSection       int
+	PlanDraft           *PlanDraft
+	DetailScroll        int
+	DiffOffset          int
+	DiffSinceReview     bool
+	Page                Page
+	Palette             Palette
+	Connected           bool
+	Version             string
+	Busy                string
+	Error               string
+	Notice              string
+	SelectedIdx         int
+	IssueView           string
+	IssueCategory       string
+	SelectedIssueIDs    []string
+	DocsSection         string
+	RulesSection        string
+	ShowInlineWhy       bool
+	DiffMode            string
+	HunkIdx             int
+	BrowseFiles         bool
+	AgentDetailOpen     bool
+	AgentStage          int
+	ShowKeybindsModal   bool
+	KeybindsScroll      int
+	Confirmation        *Confirmation
+	CmdActive           bool
+	CmdInput            string
+	CmdHistory          []string
+	CmdOutput           string
+	GraduatedLessons    []string
+	InstructionDraft    string
+	ExcludedPaths       []string
+	ActivePresetID      string
+	CustomPresets       []ModelPreset
+	ScopeModels         map[string]string
+	AnalysisConfig      AnalysisRunConfig
+	PendingActions      []ActionRequest
+	Quitting            bool
+	viewportBodyRows    int
+	nextPreviewSeq      int
+	commandCursor       int
+	commandSelection    int
+	commandHistoryIndex int
+	commandHistoryDraft string
 
 	Project           *Project
 	Index             *ProjectIndex
@@ -225,15 +229,17 @@ func HubTabs() []HubTab {
 // NewState initializes a default TUI workspace state.
 func NewState() *State {
 	return &State{
-		Page:           PageSummary,
-		Palette:        PaletteTokyo,
-		IssueView:      "open",
-		IssueCategory:  "all",
-		DocsSection:    "context",
-		RulesSection:   "trust",
-		ShowInlineWhy:  false,
-		DiffMode:       "hunk",
-		ActivePresetID: "local-default",
+		Page:                PageSummary,
+		commandSelection:    -1,
+		commandHistoryIndex: -1,
+		Palette:             PaletteTokyo,
+		IssueView:           "open",
+		IssueCategory:       "all",
+		DocsSection:         "context",
+		RulesSection:        "trust",
+		ShowInlineWhy:       false,
+		DiffMode:            "hunk",
+		ActivePresetID:      "local-default",
 		ScopeModels: map[string]string{
 			"analyze":  "analyze",
 			"bug":      "bug",
