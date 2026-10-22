@@ -129,9 +129,6 @@ func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID str
 		return err
 	}
 	s.applyMergeWorktreeResponse(act.Worktree.Path, result)
-	if result.Error != "" {
-		return fmt.Errorf("%s", result.Error)
-	}
 	if result.RemovedWorktree == act.Worktree.Path {
 		s.Navigate(PageGit)
 		s.CmdOutput = "Merged worktree removed; linked findings are completed and the Git branch is retained."
@@ -153,20 +150,34 @@ func (s *State) renderWorktreeDetail(th ansiTheme, width int) []string {
 	rows = append(rows, renderDiagnosticRow(th, th.cyan, "Commit:", th.fg, wt.Head, contentW)...)
 	rows = append(rows, renderDiagnosticRow(th, th.amber, "Status:", th.fg, worktreeStatus(*wt), contentW)...)
 	rows = append(rows, renderDiagnosticRow(th, th.red, "Error:", th.fg, wt.Error, contentW)...)
-	if wt.Integration == "merged" {
-		rows = append(rows, "This commit is included in the current branch. [c] verifies and removes the clean worktree, retaining its branch.")
-		rows = append(rows, "After external changes, [R] updates the index and restores saved project trust. Use :trust if consent is still required.")
-	}
-	if wt.Integration == "behind" {
-		rows = append(rows, "The destination advanced since this task branched. Overlapping paths need review; they do not prove a conflict.")
+	rows = append(rows, renderDiagnosticRow(th, th.green, "Next:", th.fg, s.worktreeNextAction(wt), contentW)...)
+	if s.Repository != nil && s.Repository.MergeHead != "" {
+		rows = append(rows, renderDiagnosticBulletRows(th, th.red, "Unresolved files:", th.red, th.fg, s.Repository.Conflicts, contentW)...)
+	} else if wt.Integration == "behind" {
 		rows = append(rows, renderDiagnosticBulletRows(th, th.amber, "Changed on both branches:", th.amber, th.fg, wt.OverlapPaths, contentW)...)
 	}
-	if s.Repository != nil && s.Repository.MergeHead != "" {
-		rows = append(rows, "A merge is in progress in the current checkout. Resolve conflicts with your external Git tool and commit the merge. Then [R] Update index and [c] Cleanup; use :trust if consent is required.")
-		rows = append(rows, renderDiagnosticBulletRows(th, th.red, "Unresolved files:", th.red, th.fg, s.Repository.Conflicts, contentW)...)
-	}
-	rows = append(rows, "[r] only reads status. [R] reindexes local facts and stops outdated checks and workflows in the destination checkout.")
 	return append(lines, th.renderPanelBox("INTEGRATION", "", adaptivePanelWidth(width), rows)...)
+}
+
+func (s *State) worktreeNextAction(wt *GitWorktree) string {
+	switch {
+	case s.Repository != nil && s.Repository.MergeHead != "":
+		return "Resolve conflicts with your external Git tool and commit. Then [R] update the index and [c] clean up."
+	case wt.Current:
+		return "This is the current checkout. Select another worktree to merge or remove."
+	case wt.Dirty:
+		return "Commit or move local changes before cleanup; they are protected from deletion."
+	case wt.Locked || wt.Prunable || wt.Error != "":
+		return "Resolve the worktree's lock or unavailable state in Git, then [r] refresh."
+	case worktreeHasUnfinishedTasks(wt):
+		return "Saved tasks remain. Finish them, or [c] explicitly discard their plans and proposals; the Git branch is retained."
+	case wt.Integration == "merged":
+		return "Integrated. [c] removes the clean checkout and completes linked findings; the Git branch is retained."
+	case wt.Integration == "behind":
+		return "The destination advanced. Review overlapping changes before merging; overlap alone does not prove a conflict."
+	default:
+		return "[m] Merge committed work, or [c] discard the checkout while retaining its Git branch."
+	}
 }
 
 func (s *State) worktreeRecoveryHint() string {

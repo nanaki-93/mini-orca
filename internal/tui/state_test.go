@@ -923,7 +923,7 @@ func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
 
 	// Render PageModels and verify Model Inspector details are visible
 	frame := s.Render(120, 36)
-	for _, token := range []string{"SELECTED SCOPE & MODEL INSPECTOR", "agy:gemini-2.5-pro", "cli://agy", "Agy(ok)"} {
+	for _, token := range []string{"MODEL DETAILS", "agy:gemini-2.5-pro", "cli://agy", "Agy(ok)"} {
 		if !strings.Contains(frame, token) {
 			t.Fatalf("expected PageModels render to contain %q:\n%s", token, frame)
 		}
@@ -1323,9 +1323,14 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 
 	// 5. Render PageModels and verify custom preset row is displayed
 	frame := s.Render(120, 36)
-	if !strings.Contains(frame, "Rust Audit") || !strings.Contains(frame, "Save Preset") {
+	if !strings.Contains(frame, "Rust Audit") {
 		t.Fatalf("expected PageModels frame to display saved custom preset 'Rust Audit':\n%s", frame)
 	}
+	s.HandleKey(KeyEvent{Key: "?"})
+	if !strings.Contains(s.Render(120, 36), "Save new preset") {
+		t.Fatal("preset saving shortcut is missing from model help")
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
 
 	// 6. Delete custom preset via 'd' hotkey
 	s.SelectedIdx = len(domain.CanonicalModelScopes()) + len(domain.DefaultModelPresets())

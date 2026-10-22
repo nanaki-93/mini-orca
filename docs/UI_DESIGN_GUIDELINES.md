@@ -47,6 +47,10 @@ in the sidebar at every supported sidebar height. Detailed routing, settings and
 workspace statistics belong on their own pages. Diff explanations are initially
 collapsed and remain reachable with `e`.
 
+Model lists show assignments and access boundaries; full parameters and preset
+routing belong to the selected item's scrollable details. Worktree details show
+the recovery action for the current state rather than every possible workflow.
+
 Inspecting a failed task never retries it. Starting a second task in an occupied
 write scope requires finishing or discarding the existing task. Worktree refresh
 is passive; cleanup is explicit and must wait for the daemon's removal receipt.

@@ -159,7 +159,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	for _, sec := range []string{"trust", "models", "bootstrap", "lessons"} {
 		s.RulesSection = sec
 		govFrame := s.Render(110, 34)
-		if !strings.Contains(govFrame, "[5] GOVERNANCE & RULES") && !(sec == "trust" && strings.Contains(govFrame, "PROJECT TRUST")) {
+		if !strings.Contains(govFrame, "[5] GOVERNANCE & RULES") && !(sec == "trust" && strings.Contains(govFrame, "PROJECT TRUST")) && !(sec == "models" && strings.Contains(govFrame, "MODEL DETAILS")) {
 			t.Fatalf("expected governance header for section %s", sec)
 		}
 	}

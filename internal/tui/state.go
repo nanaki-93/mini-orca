@@ -200,7 +200,7 @@ func HubTabs() []HubTab {
 		{
 			Key:   "4",
 			Page:  PageDocs,
-			Label: "Handbook & Arch",
+			Label: "Handbook",
 			SubPages: []HubSubPage{
 				{Page: PageDocs, Label: "Context & Deps"},
 				{Page: PageDocsComponents, Label: "Components"},
@@ -211,7 +211,7 @@ func HubTabs() []HubTab {
 		{
 			Key:   "5",
 			Page:  PageInstructions,
-			Label: "Governance & Rules",
+			Label: "Settings",
 			SubPages: []HubSubPage{
 				{Page: PageInstructions, Label: "Trust Policy"},
 				{Page: PageModels, Label: "Model Routing"},

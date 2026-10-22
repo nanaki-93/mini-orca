@@ -284,8 +284,8 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "[5] GOVERNANCE & RULES · MODEL ROUTING", "Per-scope LLM routing, runtime parameters & preset profiles")
-	lines = append(lines, th.renderTableHeader("   SCOPE         ASSIGNED MODEL               ORIGIN                  BOUNDARY   PARAMETERS", width)...)
+	lines := renderPageHeader(th, "MODELS", "[↑/↓] Select · [←/→] Change model · [Enter] Apply preset")
+	lines = append(lines, th.renderTableHeader("   SCOPE         MODEL                        ACCESS", width)...)
 	selected := s.ClampedIdx()
 	scopes := domain.CanonicalModelScopes()
 	for idx, scope := range scopes {
@@ -300,22 +300,15 @@ func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 		if eff.RemoteProvider {
 			boundary = "REMOTE"
 		}
-		ctxStr := "default"
-		if eff.ContextMaxTokens > 0 {
-			ctxStr = fmt.Sprintf("%dk", max(1, eff.ContextMaxTokens/1024))
-		}
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-12s%s  %-26s  %s%-22s%s  %s  %seffort:%s ctx:%s%s",
+			"  %s%s%-12s%s  %-26s  %s",
 			cursor, tStyle, strings.ToUpper(scope), th.reset,
-			theme.TruncatePlain(modelLabel, 26),
-			th.cyan, theme.TruncatePlain(eff.ProviderOrigin, 22), th.reset,
-			th.padBadge(boundary, 9),
-			th.muted, client.FirstNonEmpty(eff.ReasoningEffort, "default"), ctxStr, th.reset,
+			theme.TruncatePlain(modelLabel, 26), th.padBadge(boundary, 9),
 		))
 	}
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader("    PRESET PROFILE                STATE       ANALYZE        BUG            FUNCTION", width)...)
+	lines = append(lines, th.renderTableHeader("    PRESET                        STATE", width)...)
 	for pIdx, p := range s.AllModelPresets() {
 		rowIdx := len(scopes) + pIdx
 		cursor := th.renderCursorPrefix(rowIdx == selected)
@@ -327,8 +320,8 @@ func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 		}
 		tStyle := rowTitleStyle(th, rowIdx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-28s%s %s %s[analyze:%s bug:%s function:%s]%s",
-			cursor, tStyle, theme.TruncatePlain(p.Name, 28), th.reset, active, th.muted, p.Analyze, p.Bug, p.Function, th.reset,
+			"  %s%s%-28s%s %s",
+			cursor, tStyle, theme.TruncatePlain(p.Name, 28), th.reset, active,
 		))
 	}
 	lines = append(lines, "")
@@ -337,6 +330,12 @@ func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string {
+	if idx := s.ClampedIdx() - len(domain.CanonicalModelScopes()); idx >= 0 {
+		presets := s.AllModelPresets()
+		if idx < len(presets) {
+			return renderModelPresetInspector(th, panelW, presets[idx])
+		}
+	}
 	selScope := s.selectedModelScope()
 	eff := s.EffectiveScopeModel(selScope)
 	assigned := s.AssignedScopeModelID(selScope)
@@ -354,26 +353,23 @@ func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string 
 			agyStatus = s.AvailableModels.Agy.Status
 		}
 	}
-	body := []string{
-		fmt.Sprintf("%sScope:%s %s%s%s — %s%s%s",
-			th.muted, th.reset, th.bold+th.fg, strings.ToUpper(selScope), th.reset,
-			th.cyan, domain.ScopeRoleDescription(selScope), th.reset),
-		fmt.Sprintf("%sAssigned:%s %s%s%s · %sModel:%s %s%s%s · %sOrigin:%s %s%s%s %s",
-			th.muted, th.reset, th.bold+th.accent, assigned, th.reset,
-			th.muted, th.reset, th.bold+th.fg, client.FirstNonEmpty(eff.Model, assigned), th.reset,
-			th.muted, th.reset, th.cyan, eff.ProviderOrigin, th.reset,
-			th.statusBadge(boundary)),
-		fmt.Sprintf("%sRuntime Params:%s %s%s%s",
-			th.muted, th.reset, th.fg, domain.FormatModelParams(eff), th.reset),
-		fmt.Sprintf("%sDiscovery:%s Pi(%s) Agy(%s) · %sCatalog (%d):%s %s%s%s",
-			th.muted, th.reset, piStatus, agyStatus,
-			th.muted, len(choices), th.reset,
-			th.muted, theme.TruncatePlain(strings.Join(choices, ", "), max(20, panelW-44)), th.reset),
-		fmt.Sprintf("%sPresets (%d, %d custom):%s %s[s]%s Save Preset · %s[n]%s Save Named (:preset-save <name>) · %s[d]%s Delete Custom",
-			th.muted, len(s.AllModelPresets()), len(s.CustomPresets), th.reset,
-			th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset),
+	contentW := issuePanelContentWidth(panelW)
+	body := renderDiagnosticRow(th, th.cyan, "Role:", th.fg, domain.ScopeRoleDescription(selScope), contentW)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Assignment:", th.fg, assigned, contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Model:", th.fg, client.FirstNonEmpty(eff.Model, assigned), contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Provider:", th.fg, client.FirstNonEmpty(eff.ProviderOrigin, "unavailable"), contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Parameters:", th.fg, domain.FormatModelParams(eff), contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Discovery:", th.fg, fmt.Sprintf("Pi(%s) Agy(%s) · %d choices", piStatus, agyStatus, len(choices)), contentW)...)
+	return th.renderPanelBox("MODEL DETAILS", strings.ToUpper(selScope)+" · "+boundary, panelW, body)
+}
+
+func renderModelPresetInspector(th ansiTheme, panelW int, preset ModelPreset) []string {
+	contentW := issuePanelContentWidth(panelW)
+	body := renderDiagnosticRow(th, th.cyan, "Preset:", th.fg, preset.Name, contentW)
+	for _, role := range []struct{ label, model string }{{"Analyze:", preset.Analyze}, {"Bug:", preset.Bug}, {"Code:", preset.Function}} {
+		body = append(body, renderDiagnosticRow(th, th.cyan, role.label, th.fg, role.model, contentW)...)
 	}
-	return th.renderPanelBox("SELECTED SCOPE & MODEL INSPECTOR", strings.ToUpper(selScope)+" SCOPE", panelW, body)
+	return th.renderPanelBox("PRESET DETAILS", "[Enter] Apply", panelW, body)
 }
 
 func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {

@@ -267,7 +267,7 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":trust", "Toggle trust"}, {":bootstrap", "Bootstrap rules"}},
 	},
 	PageModels: {
-		title:     "[5] GOVERNANCE & RULES · MODEL ROUTING",
+		title:     "[5] SETTINGS · MODELS",
 		primary:   []keyDesc{{"s / n", "Save new preset"}, {"d", "Delete preset"}},
 		secondary: []keyDesc{{"x", "Reset scope"}, {"r", "Refresh models"}},
 		commands:  []keyDesc{{":model <s> <id>", "Set model"}, {":preset <id>", "Apply preset"}},
