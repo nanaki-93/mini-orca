@@ -88,10 +88,8 @@ func runLefthookBootstrapStep(ctx context.Context, root string) BootstrapStep {
 func runBootstrapCmd(ctx context.Context, dir, name string, args ...string) (string, error) {
 	runCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, name, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	text := strings.TrimSpace(string(out))
+	result, err := RunCommandWithStart(runCtx, dir, append([]string{name}, args...), true, nil)
+	text := strings.TrimSpace(result.Output)
 	if len(text) > 2048 {
 		text = text[:2048]
 	}

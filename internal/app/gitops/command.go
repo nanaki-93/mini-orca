@@ -42,6 +42,9 @@ func Command(ctx context.Context, root, index string, input io.Reader, args ...s
 	out, diagnostics := sandbox.NewBoundedOutput(1024*1024), sandbox.NewBoundedOutput(8192)
 	command.Stdout, command.Stderr = out, diagnostics
 	err := command.Run()
+	if cleanupErr := sandbox.StopCommandGroup(command); cleanupErr != nil && err == nil {
+		err = cleanupErr
+	}
 	if timed.Err() != nil {
 		return out.String(), timed.Err()
 	}

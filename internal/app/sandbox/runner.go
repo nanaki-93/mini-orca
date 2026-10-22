@@ -3,6 +3,7 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -62,6 +63,16 @@ func ParseGoSource(path, source string) archgate.CheckResult {
 	return check
 }
 
+func StopCommandGroup(process *exec.Cmd) error {
+	if process == nil || process.Process == nil || process.Cancel == nil {
+		return nil
+	}
+	if err := process.Cancel(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("process-group cleanup failed: %w", err)
+	}
+	return nil
+}
+
 func RunCommand(ctx context.Context, directory string, command []string) (CommandResult, error) {
 	return RunCommandWithStart(ctx, directory, command, false, nil)
 }
@@ -94,6 +105,11 @@ func runCommandWithEnvironment(ctx context.Context, directory string, command []
 		}
 	}
 	err := process.Run()
+	if ownsDescendants {
+		if cleanupErr := StopCommandGroup(process); cleanupErr != nil && err == nil {
+			err = cleanupErr
+		}
+	}
 	result := CommandResult{Output: output.String(), Truncated: output.Truncated()}
 	if exitError, ok := err.(*exec.ExitError); ok {
 		result.ExitCode = exitError.ExitCode()

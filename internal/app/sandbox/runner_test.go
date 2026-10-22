@@ -125,6 +125,25 @@ func TestRunCheckCommandCancellationStopsDescendants(t *testing.T) {
 	}
 }
 
+func TestRunCheckCommandNormalExitStopsDescendants(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "descendant-exit-marker")
+	directory := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result, err := RunCommandWithStart(ctx, directory, checkHelperCommand("descendant-parent-exit", marker), true, nil)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("command result = %+v, err = %v", result, err)
+	}
+	cancel()
+	if err := os.Remove(marker); err != nil {
+		t.Fatalf("expected descendant to have created marker before parent exit: %v", err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("background descendant survived successful check completion and wrote marker: %v", err)
+	}
+}
+
 func TestCheckCommandHelperProcess(t *testing.T) {
 	separator := -1
 	for index, argument := range os.Args {
@@ -174,6 +193,19 @@ func TestCheckCommandHelperProcess(t *testing.T) {
 		for {
 			time.Sleep(time.Millisecond)
 		}
+	case "descendant-parent-exit":
+		child := exec.Command(os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", "descendant-child", argument)
+		if err := child.Start(); err != nil {
+			os.Exit(18)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.ReadFile(argument); err == nil {
+				os.Exit(0)
+			}
+			time.Sleep(time.Millisecond)
+		}
+		os.Exit(19)
 	case "descendant-child":
 		for counter := 0; ; counter++ {
 			_ = os.WriteFile(argument, []byte(fmt.Sprintf("%d", counter)), 0600)
