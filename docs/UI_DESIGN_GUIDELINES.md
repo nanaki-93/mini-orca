@@ -12,6 +12,13 @@ content; keep contextual actions and command access below it. Use short page
 titles, restrained borders and explicit text states. Counts summarize recorded
 data; an empty list does not prove the project is clean.
 
+Give each workspace area a consistent accent and distinguish navigation, content
+and selected rows with readable surfaces. The dashboard presents recorded counts,
+selectable activities and a next-step panel when space permits. In short terminals,
+prioritize its title and all four activity routes before supporting detail. `n`
+opens an editable task prompt on the dashboard and Tasks page; `r` runs or resumes
+analysis on the dashboard, and `:reanalyze` starts fresh analysis.
+
 ## Interaction and accessibility
 
 Keep actions, current state, errors and recovery paths clear. Use consistent
@@ -23,6 +30,8 @@ requests or jobs run and prevent duplicate submission.
 Preserve access to findings, explanations and diagnostics. Long paths and narrow
 terminal viewports must not hide actions or corrupt layout. Model-authored text
 remains inert; source and composed diffs stay read-only in review panes.
+Keep text contrast at least 4.5:1 on the page, panel and selection backgrounds in
+each palette. Nested text styles must restore the surrounding surface when they end.
 
 At 100 columns and 20 rows or above, use the sidebar; below that, keep numbered
 workspace tabs and the active view visible. Fit the real terminal dimensions, including
@@ -30,11 +39,14 @@ when showing a resize prompt below 52 columns or 16 rows. Small diff panes must
 retain visible code, and split diffs must retain both sides. Palettes supply their
 own backgrounds so the Paper palette remains readable in dark terminals too.
 
-The colon menu supports search, completion, editable arguments and session command
-history. Browsing or completing a command is passive. Enter explicitly runs the
+The command menu opens with `:` or `Ctrl+K` and supports search, completion,
+editable arguments and session command history. Keep its input above the results
+and the selected command's explanation visible, including in compact terminals.
+Browsing or completing a command is passive. Enter explicitly runs the
 chosen command; commands requiring arguments stay in the editor until supplied.
 Pasted text is inert outside that editor. Keep existing guards on every command
 route. Opening a project and planning a custom task have visible prompt shortcuts.
+`Ctrl+K` preserves an already-open input draft and cannot bypass a confirmation.
 
 Use Page Up/Down for overflowing pages, diagnostics, help and dialogs; Home/End
 reaches the beginning/end. Keep confirmation actions visible while its message

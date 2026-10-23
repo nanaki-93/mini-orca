@@ -28,6 +28,8 @@ The dashboard shows issues, tasks, analysis coverage and verification status.
 Use `↑/↓` to select an activity and `Enter` to open it. Checks and analysis that
 have not run are labeled separately from successful results. Press `o` on the
 dashboard or Repository page to enter a project path; paths may contain spaces.
+Press `n` on the dashboard or Tasks page to plan a new task. On the dashboard,
+`r` runs or resumes analysis; use `:reanalyze` for a fresh analysis.
 
 | Key | Workspace | Contents |
 | --- | --- | --- |
@@ -42,14 +44,19 @@ select rows, `PgUp/PgDn` to read long pages, and `Esc` to return from details.
 The bottom bar shows actions for the current view. `?` opens the keyboard
 reference, `p` changes the palette, and `Ctrl+C` quits.
 
-Press `:` to search commands by name or type a command directly. `↑/↓` selects a
-suggestion, `Tab` completes it, and `Enter` runs it. Commands needing a path or
-request open an editable prompt first. Use `←/→`, `Home/End` and `Delete` to
-edit; `Ctrl+P/N` recalls session history and `Ctrl+U` clears the input. `Esc`
-cancels without running anything. On the Tasks page, `n` opens a new-task prompt.
+Press `Ctrl+K` or `:` to search commands by name or type a command directly.
+The input sits above the results and the selected command's explanation.
+`↑/↓` selects a suggestion, `Tab` completes it, and `Enter` runs it. Commands
+needing a path or request open an editable prompt first. Use `←/→`, `Home/End`
+and `Delete` to edit; `Ctrl+P/N` recalls session history and `Ctrl+U` clears the input. `Esc`
+cancels without running anything. Confirmation dialogs keep keyboard focus until
+you confirm or cancel them.
 
-Wide terminals use a sidebar with a compact model summary; narrow terminals use
-navigation tabs. Frames fit the actual terminal size, with a resize prompt below
+Workspace areas have distinct accents, with filled panels and selection highlights
+across Tokyo, CRT, Amber and Paper. Wide terminals use a sidebar with a compact
+model summary; narrow terminals use navigation tabs. The dashboard adds count
+cards and a next-step panel when space permits, prioritizing activity navigation
+in smaller terminals. Frames fit the actual terminal size, with a resize prompt below
 52 columns or 16 rows. A larger terminal is recommended for reviewing diffs.
 
 ## Reviewing a task in the TUI
