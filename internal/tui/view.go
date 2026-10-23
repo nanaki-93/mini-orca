@@ -71,7 +71,7 @@ func fitFrame(th ansiTheme, lines []string, width, height int) string {
 func (s *State) renderSmallTerminal(th ansiTheme, width, height int) string {
 	lines := []string{"MINI-ORCA", "", "Enlarge the terminal to 52 × 16.", "Your workspace is preserved.", "", "Ctrl+C: quit"}
 	if s.CmdActive {
-		lines = []string{"MINI-ORCA", s.renderCommandBar(th, width), "Enter: run · Esc: cancel"}
+		lines = []string{"MINI-ORCA", th.renderCommandInput(s.CmdInput, s.commandCursor, width), "Enter: run · Esc: cancel"}
 	}
 	return fitFrame(th, lines, width, height)
 }
@@ -333,14 +333,17 @@ func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
 
 func (s *State) renderCommandBar(th ansiTheme, width int) string {
 	if s.CmdActive {
-		return th.renderCommandInput(s.CmdInput, s.commandCursor, width)
+		return " " + th.muted + theme.TruncatePlain("Type to search · Ctrl+P/N: history · Ctrl+U: clear", width-2) + th.reset
 	}
 	if s.Error != "" {
 		return " " + th.red + "Error · " + th.reset + theme.TruncatePlain(s.Error, max(1, width-24)) + th.muted + "  [Esc] Dismiss" + th.reset
 	}
 	message := client.FirstNonEmpty(s.Busy, s.CmdOutput)
 	if message == "Workspace ready" {
-		message = "1–5: workspace · Tab: view · ↑/↓: select · PgUp/PgDn: scroll"
+		message = "1–5: workspace · Tab: view · Ctrl+K: commands"
+		if width >= 76 {
+			message = "1–5: workspace · Tab: view · ↑/↓: select · Ctrl+K: commands"
+		}
 	}
 	return " " + th.muted + theme.TruncatePlain(message, width-2) + th.reset
 }

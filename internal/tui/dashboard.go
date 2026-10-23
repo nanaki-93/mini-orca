@@ -100,7 +100,7 @@ func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary
 	left = append(left, "  "+th.muted+"↑/↓ Select · Enter Open"+th.reset)
 	right := []string{"  " + th.cyan + "NEXT STEP" + th.reset, ""}
 	right = appendWrappedText(right, s.dashboardNextStep(), rightWidth)
-	right = append(right, "", "  "+th.keyPill("n", "New task"), "  "+th.keyPill("o", "Switch project"), "  "+th.keyPill(":", "Find a command"), "")
+	right = append(right, "", "  "+th.keyPill("n", "New task"), "  "+th.keyPill("o", "Switch project"), "  "+th.keyPill("Ctrl+K", "Commands"), "")
 	var lines []string
 	for i := 0; i < max(len(left), len(right)); i++ {
 		l, r := "", ""

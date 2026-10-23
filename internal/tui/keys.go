@@ -49,6 +49,9 @@ func (s *State) HandleKey(ev KeyEvent) {
 		s.Quitting = true
 		return
 	}
+	if s.handleCommandMenuShortcut(ev) {
+		return
+	}
 	if s.handleOverlayKey(ev) {
 		return
 	}
@@ -73,6 +76,18 @@ func (s *State) HandleKey(ev KeyEvent) {
 		return
 	}
 	s.handlePageScopedKey(ev)
+}
+
+func (s *State) handleCommandMenuShortcut(ev KeyEvent) bool {
+	if !ev.Ctrl || !strings.EqualFold(ev.Key, "k") {
+		return false
+	}
+	// Keep a confirmation in control and preserve text in an already-open editor.
+	if s.Confirmation == nil && !s.CmdActive {
+		s.ShowKeybindsModal, s.KeybindsScroll = false, 0
+		s.openCommandInput("")
+	}
+	return true
 }
 
 func (s *State) handleOverlayKey(ev KeyEvent) bool {

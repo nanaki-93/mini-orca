@@ -120,6 +120,8 @@ func decodeSingleKey(buf []byte) (KeyEvent, int) {
 	switch buf[0] {
 	case 0x03:
 		return KeyEvent{Key: "c", Ctrl: true}, 1
+	case 0x0b:
+		return KeyEvent{Key: "k", Ctrl: true}, 1
 	case '\r', '\n':
 		return KeyEvent{Key: "Enter"}, 1
 	case '\t':
@@ -337,6 +339,7 @@ var teaNavigationKeys = map[tea.KeyType]KeyEvent{
 	tea.KeyCtrlU:     {Key: "u", Ctrl: true},
 	tea.KeyCtrlP:     {Key: "p", Ctrl: true},
 	tea.KeyCtrlN:     {Key: "n", Ctrl: true},
+	tea.KeyCtrlK:     {Key: "k", Ctrl: true},
 }
 
 func keyEventFromTea(msg tea.KeyMsg) KeyEvent {

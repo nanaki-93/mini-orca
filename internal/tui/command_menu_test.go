@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestCommandMenuSearchAndNavigationArePassive(t *testing.T) {
@@ -33,6 +34,91 @@ func TestCommandMenuSearchAndNavigationArePassive(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "Escape"})
 	if s.CmdActive || s.CmdInput != "" || len(s.PendingActions) != 0 {
 		t.Fatal("canceling the menu must be passive")
+	}
+}
+
+func TestCommandShortcutWorksAcrossViewsWithoutDispatch(t *testing.T) {
+	for _, hub := range HubTabs() {
+		for _, page := range hub.SubPages {
+			s := workspaceSampleState()
+			s.Navigate(page.Page)
+			s.HandleKey(keyEventFromTea(tea.KeyMsg{Type: tea.KeyCtrlK}))
+			if !s.CmdActive || s.Page != page.Page || len(s.PendingActions) != 0 || s.Confirmation != nil {
+				t.Fatalf("Ctrl+K did not passively open commands on %s", page.Page)
+			}
+			s.HandleKey(KeyEvent{Key: "Escape"})
+			if s.CmdActive || s.Page != page.Page || len(s.PendingActions) != 0 {
+				t.Fatal("canceling command search must restore its original view")
+			}
+		}
+	}
+	events := DecodeInputBytes([]byte{0x0b})
+	if len(events) != 1 || events[0].Key != "k" || !events[0].Ctrl {
+		t.Fatal("stream and interactive input must agree on Ctrl+K")
+	}
+}
+
+func TestCommandShortcutRespectsOverlaysAndExistingDraft(t *testing.T) {
+	s := NewState()
+	confirmed := false
+	s.Confirmation = &Confirmation{Title: "Approve scope", OnConfirm: func(*State) { confirmed = true }}
+	s.HandleKey(KeyEvent{Key: "k", Ctrl: true})
+	if s.CmdActive || s.Confirmation == nil || confirmed {
+		t.Fatal("command shortcut must not bypass a confirmation")
+	}
+	s.Confirmation = nil
+	s.Error, s.ShowKeybindsModal = "Connection unavailable", true
+	s.HandleKey(KeyEvent{Key: "k", Ctrl: true})
+	if !s.CmdActive || s.ShowKeybindsModal || s.Error == "" {
+		t.Fatal("command access should close help and preserve error recovery")
+	}
+	s.HandleKey(KeyEvent{Text: "project /tmp/my project"})
+	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
+	draft, cursor := s.CmdInput, s.commandCursor
+	s.HandleKey(KeyEvent{Key: "k", Ctrl: true})
+	if s.CmdInput != draft || s.commandCursor != cursor || len(s.PendingActions) != 0 {
+		t.Fatal("Ctrl+K inside the editor must preserve the draft and cursor")
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
+	if s.Error == "" || s.CmdActive {
+		t.Fatal("canceling search must return to the error overlay")
+	}
+}
+
+func TestCommandInputAndSelectedHintStayTogetherAtEverySize(t *testing.T) {
+	for _, dims := range [][2]int{{40, 10}, {52, 16}, {80, 24}, {100, 20}, {120, 34}} {
+		s := NewState()
+		s.openCommandInput("agent draft-cursor")
+		frame := ansi.Strip(s.Render(dims[0], dims[1]))
+		assertFrameSize(t, frame, dims[0], dims[1])
+		lines := strings.Split(frame, "\n")
+		inputRow := -1
+		for i, line := range lines {
+			if strings.Contains(line, "draft-cursor") {
+				if inputRow >= 0 {
+					t.Fatal("command input must be rendered only once")
+				}
+				inputRow = i
+			}
+		}
+		if inputRow < 0 || inputRow >= len(lines)-3 {
+			t.Fatalf("input should be beside its results, not at the bottom, at %v", dims)
+		}
+		if dims[0] < 52 {
+			continue
+		}
+		s.openCommandInput("test")
+		frame = ansi.Strip(s.Render(dims[0], dims[1]))
+		var content []string
+		for _, line := range strings.Split(frame, "\n") {
+			if _, body, sidebar := strings.Cut(line, "│"); sidebar {
+				line = body
+			}
+			content = append(content, strings.Fields(line)...)
+		}
+		if !strings.Contains(strings.Join(content, " "), "Requires project trust.") || !strings.Contains(frame, "[Esc] Cancel") || len(s.PendingActions) != 0 {
+			t.Fatalf("selected command lost its scope hint or cancel at %v:\n%s", dims, frame)
+		}
 	}
 }
 

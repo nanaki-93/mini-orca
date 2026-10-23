@@ -83,7 +83,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 		{"←/→", "Step option"},
 		{"1-5 / Tab", "Switch hub / tab"},
 		{"Enter / Esc", "Activate / back"},
-		{"? / :", "Help / command"},
+		{"? / : / Ctrl+K", "Help / commands"},
 		{"p / Ctrl+C", "Theme / quit"},
 	}
 	var pageItems []keyDesc

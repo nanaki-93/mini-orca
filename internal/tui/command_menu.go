@@ -247,27 +247,32 @@ func (s *State) completeCommand(execute bool) {
 }
 
 func (s *State) renderCommandMenu(th ansiTheme, width, rows int) []string {
-	lines := renderPageHeader(th, "COMMANDS", "Search by name, or type a colon command")
+	lines := renderPageHeader(th, "COMMANDS", "")
+	input := th.renderCommandInput(s.CmdInput, s.commandCursor, width-4)
+	lines[1] = "  " + theme.PaintLine(th.surface, th.fg, input, width-4)
+	if rows >= 12 {
+		lines = append(lines, "")
+	}
 	if item := s.commandArgumentContext(); item != nil {
-		lines = append(lines, "", "  "+th.bold+th.fg+item.title+th.reset)
-		lines = appendWrappedText(lines, item.hint, width)
-		return append(lines, "", "  Enter: submit · Esc: cancel", "  ←/→: cursor · Ctrl+P/N: history · Ctrl+U: clear")
+		lines = append(lines, "  "+th.cyan+item.title+th.reset)
+		return appendWrappedText(lines, item.hint, width)
 	}
 	items := s.commandMatches()
 	if len(items) == 0 {
-		return append(lines, "  Press Enter to run your command.", "", "  Ctrl+P / Ctrl+N: previous / next command", "  ←/→: move cursor · Home/End: jump · Ctrl+U: clear")
+		return append(lines, "  No matching suggestions.", "  Enter runs the command you typed.")
 	}
 	selected := min(max(0, s.commandSelection), len(items)-1)
-	start, end := windowBounds(len(items), selected, max(1, rows-7))
+	hint := theme.WrapVisibleLine(items[selected].hint, width-4)
+	start, end := windowBounds(len(items), selected, max(1, rows-len(lines)-len(hint)-1))
 	commandWidth := min(20, width/3)
 	for i := start; i < end; i++ {
 		item := items[i]
 		line := th.renderCursorPrefix(i == selected) + theme.PadVisibleRight(th.cyan+":"+item.command+th.reset, commandWidth) + " " + rowTitleStyle(th, i == selected) + item.title + th.reset
 		lines = append(lines, "  "+theme.TruncateVisible(line, width-4))
 	}
-	lines = append(lines, "", "  "+th.muted+fmt.Sprintf("%d–%d of %d commands · Ctrl+P/N: history", start+1, end, len(items))+th.reset)
-	for _, line := range theme.WrapVisibleLine(items[selected].hint, width-4) {
-		lines = append(lines, "  "+line)
+	lines = append(lines, "  "+th.muted+fmt.Sprintf("%d–%d of %d commands", start+1, end, len(items))+th.reset)
+	for _, line := range hint {
+		lines = append(lines, "  "+th.cyan+line+th.reset)
 	}
 	return lines
 }
