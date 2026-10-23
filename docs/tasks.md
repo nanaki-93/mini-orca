@@ -279,6 +279,9 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/review_graph_test.go` — **new**.
 - `internal/app/agentruntime/change_graph.go`, `internal/app/change_pipeline.go`, `internal/app/change_pipeline_stages.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_pipeline_test.go`, `internal/app/change_pipeline_timeout_test.go`.
+- `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/repair_graph_test.go`, `internal/app/agent_change_review.go`, `internal/app/agent_change_review_test.go` — **new**, shared durable graph execution, conditional repair orchestration, and host-owned specialist admission/publication.
+- `internal/app/agent_change_host.go`, `internal/app/agent_change_host_test.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_timeout.go`, `internal/app/change_plan_test.go`, `internal/app/change_checks_test.go`, `internal/app/change_checks.go` — propagate immutable review routing, preserve historical workflow compatibility, budget queued reviewers, and require explicit recovery for scope expansion.
+- `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go`, `internal/api/handlers/change_pipeline_handler_test.go`, `internal/tui/client/models.go`, `internal/tui/client/client_test.go`, `docs/api-contract.md`, `docs/openapi.yaml` — version specialist/repair journals and document/test the additive specialist evidence contract.
 
 **Inputs / dependencies**
 - Task 10; shared admission/budgets and immutable proposal snapshots.
@@ -287,6 +290,9 @@ This is an implementation specification, not a claim that the features below alr
 - Route to correctness, architecture, test-quality, security, and performance specialists when applicable. Security requires the existing explicit review intent. Parallel reviewers read the same immutable checked proposal.
 - Join structured verdicts deterministically; missing/failed reviewers remain incomplete, and performance advice remains unmeasured without a benchmark.
 - Retain opt-in repair capped at two attempts. Only actionable failed checks or critic findings can cause repair; cancellation, timeout, unavailable checks, authority errors, and scope expansion require the relevant recovery action.
+- Select correctness and test-quality reviews for checked code changes, architecture for Go or multi-source changes, security only for explicitly confirmed security tasks, and performance only for performance tasks. Freeze this routing at admission. All branches use the selected Review profile and its existing destination consent; they share the root budget and bounded concurrency.
+- Persist source-free specialist node progress before dispatch and publish bounded per-specialist evidence against the same proposal identity. Join in a canonical order; retain incomplete/failed branch states without publishing an aggregate approval. Legacy workflows without specialist fields remain readable.
+- Replace the application's repair loop with a native conditional ADK graph with at most three attempts. The host alone determines repairability, reserves each repair before dispatch, refreshes current identity, and prepares the feedback. Persist each transition; no SDK retries or implicit write-scope expansion.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app && ./scripts/validate.sh && git diff --check`
