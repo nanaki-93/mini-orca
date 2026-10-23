@@ -541,7 +541,9 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 		return cloneAnalysisRun(c.run), err
 	}
 	result := cloneAnalysisRun(c.run)
-	s.launchAnalysisRunLocked(preview, request.Confirmations)
+	if err := s.launchAnalysisRunLocked(preview, request.Confirmations); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -800,14 +802,19 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 		return cloneAnalysisRun(c.run), err
 	}
 	result := cloneAnalysisRun(c.run)
-	s.launchAnalysisRunLocked(preview, *request.Confirmations)
+	if err := s.launchAnalysisRunLocked(preview, *request.Confirmations); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
-func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmations AnalysisRunConfirmations) {
+func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmations AnalysisRunConfirmations) error {
 	c := s.analysisRun
 	c.windowBudget = time.Duration(c.run.Plan.Limits.BudgetSeconds) * time.Second
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel, err := s.analysisAgentContext(context.Background(), preview)
+	if err != nil {
+		return err
+	}
 	c.cancel = cancel
 	c.done = make(chan struct{})
 	c.admission = preview
@@ -816,11 +823,13 @@ func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmat
 	c.elapsedBase = c.run.ElapsedSeconds
 	c.fileStopReason, c.featureStopReason = "", ""
 	go s.runAnalysisWindow(ctx, c.run.Identity, c.done)
+	return nil
 }
 
 func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIdentity, done chan struct{}) {
 	c := s.analysisRun
 	defer s.closeAnalysisWindow(done)
+	defer s.analysisRun.cancel()
 	c.mu.Lock()
 	if c.run == nil || c.run.Identity != identity || c.fault != nil {
 		c.mu.Unlock()

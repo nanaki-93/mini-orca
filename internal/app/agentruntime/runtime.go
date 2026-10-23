@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/plugin"
 	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/session"
 
@@ -28,6 +29,7 @@ type Result struct {
 	Model        string
 	FinishReason string
 	Usage        llm.ChatUsage
+	UsageKnown   bool
 }
 
 // Complete runs exactly one provider attempt through an ADK custom agent.
@@ -35,7 +37,7 @@ type Result struct {
 // The provider transport retains ownership of sampling, schemas and CLI isolation.
 func Complete(ctx context.Context, client CompletionClient, request Request) (Result, error) {
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return Result{}, context.Cause(ctx)
 	}
 	if client == nil {
 		return Result{}, fmt.Errorf("model client is not configured")
@@ -60,7 +62,11 @@ func runCompletion(ctx context.Context, completion agent.Agent, onText func(stri
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion session: %w", err)
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: sessions})
+	policy, err := newPolicyPlugin()
+	if err != nil {
+		return Result{}, fmt.Errorf("create runtime policy: %w", err)
+	}
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: sessions, PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}
@@ -92,7 +98,7 @@ func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return Result{}, context.Cause(ctx)
 	}
 	if !completed {
 		return Result{}, fmt.Errorf("completion runner ended without a result")

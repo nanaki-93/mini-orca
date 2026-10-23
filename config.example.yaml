@@ -40,6 +40,19 @@ model_scopes:
 
 project_path: "."
 
+agent_runtime:
+  roles:
+    creation: bug
+    testing: function
+    review: analyze
+  max_model_calls: 1024
+  max_tool_calls: 4096
+  max_input_tokens: 134217728
+  max_output_tokens: 67108864
+  max_elapsed_seconds: 86400
+  max_concurrent_calls: 4
+  max_repairs: 2 # Zero disables automatic repairs even when requested.
+
 retry:
   max_retries: 3
   backoff_base: 1000 # milliseconds

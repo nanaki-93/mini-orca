@@ -32,6 +32,21 @@ func googleRequest() Request {
 	return Request{Messages: []llm.ChatMessage{{Role: "system", Content: "policy"}, {Role: "user", Content: "request"}}}
 }
 
+func TestGoogleBudgetCountsThinkingAndRejectsOverrunBeforePublication(t *testing.T) {
+	client := googleFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, strings.Replace(googleTextResponse, `"totalTokenCount":8`, `"thoughtsTokenCount":120,"totalTokenCount":128`, 1))
+	})
+	ctx, budget := budgetContext(t, func(l *config.AgentLimits) { l.OutputTokens = 100 })
+	result, err := Complete(ctx, client, googleRequest())
+	if !errors.Is(err, ErrBudgetExceeded) || result != (Result{}) || budget.Snapshot().OutputTokens != 123 {
+		t.Fatalf("thinking overrun: result=%+v usage=%+v error=%v", result, budget.Snapshot(), err)
+	}
+	result, err = Complete(context.Background(), client, googleRequest())
+	if err != nil || !result.UsageKnown || result.Usage.CompletionTokens != 123 {
+		t.Fatalf("thinking metadata lost: %+v %v", result, err)
+	}
+}
+
 func TestGoogleCompletionUsesExplicitEndpointCredentialsAndSampling(t *testing.T) {
 	t.Setenv("GOOGLE_API_KEY", "ambient-key")
 	t.Setenv("GOOGLE_GEMINI_BASE_URL", "http://must-not-connect.invalid")

@@ -1,0 +1,97 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+func TestAgentRetriesConsumeSharedBudget(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := scopedTestConfig(server.URL)
+	cfg.AgentRuntime.MaxModelCalls = 2
+	cfg.Retry.BackoffBase, cfg.Retry.BackoffMax = 1, 1
+	s, err := New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, stop, err := s.agentRunContext(context.Background(), s.runtimes.bug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	_, err = s.retry(ctx, s.runtimes.bug, []llm.ChatMessage{{Role: "user", Content: "request"}})
+	if !errors.Is(err, agentruntime.ErrBudgetExceeded) || calls.Load() != 2 {
+		t.Fatalf("retry error=%v calls=%d", err, calls.Load())
+	}
+	usage := agentruntime.BudgetFromContext(ctx).Snapshot()
+	if usage.ModelCalls != 2 || usage.UnknownUsageCalls != 2 || usage.ActiveCalls != 0 {
+		t.Fatalf("usage=%+v", usage)
+	}
+}
+
+func TestAgentRoleDefaultsAreFrozenAndExplicitSelectionsWin(t *testing.T) {
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.AgentRuntime.Roles = config.AgentRoles{Creation: config.FunctionModelScope, Testing: config.BugModelScope, Review: config.AnalyzeModelScope}
+	s, err := New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.AgentRuntime.Roles.Creation = config.AnalyzeModelScope
+	if got := s.resolveWorkflowModels(ChangeWorkflowModels{}); got != (ChangeWorkflowModels{"function", "bug", "analyze"}) {
+		t.Fatalf("configuration was not frozen: %+v", got)
+	}
+	if got := s.resolveWorkflowModels(ChangeWorkflowModels{Create: "bug", Review: "function"}); got != (ChangeWorkflowModels{"bug", "bug", "function"}) {
+		t.Fatalf("explicit selections lost: %+v", got)
+	}
+}
+
+func TestAnalysisAdmissionGrantsOnlyAvailableCapturedProviders(t *testing.T) {
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(config.Default(), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := &AnalysisRunPreview{Providers: []AnalysisProviderRequirement{{Stages: []AnalysisStage{AnalysisStageSemantic}}}}
+	ctx, cancel, err := s.analysisAgentContext(context.Background(), preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if _, err := agentruntime.WithPolicy(ctx, s.runtimes.analyze.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
+		t.Fatalf("uncaptured destination granted: %v", err)
+	}
+	s.runtimes.bug.client = nil
+	missing, stop, err := s.analysisAgentContext(context.Background(), preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	if _, err := agentruntime.WithPolicy(missing, s.runtimes.function.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
+		t.Fatalf("missing destination acquired a fallback: %v", err)
+	}
+}

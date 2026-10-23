@@ -220,6 +220,48 @@ retain its own conversation records under its normal settings. Application
 retry limits count CLI invocations; upstream retries internal to a CLI or its
 service are outside Mini-Orca's transport accounting.
 
+## Agent roles and run limits
+
+`agent_runtime.roles` supplies Creation, Testing and Review profiles when an API
+request omits a model choice. Defaults are `bug`, `function`, and `analyze`.
+Explicit catalog selections take precedence. Resolved roles are frozen at
+admission, saved with the workflow, and require the same profile-specific remote
+consent as explicit choices. The runtime never silently switches providers.
+
+```yaml
+agent_runtime:
+  roles:
+    creation: bug
+    testing: function
+    review: analyze
+  max_model_calls: 1024
+  max_tool_calls: 4096
+  max_input_tokens: 134217728
+  max_output_tokens: 67108864
+  max_elapsed_seconds: 86400
+  max_concurrent_calls: 4
+  max_repairs: 2
+```
+
+Model calls, tokens, concurrency and elapsed time are shared by child stages and
+provider retries within an admitted workflow or analysis execution window.
+Standalone operations receive their own budget. Existing scope deadlines and
+analysis attempt allowances still apply; the first exhausted limit stops work.
+Limits are positive; omitted or zero values use the displayed defaults, except
+`max_repairs`, where an explicit zero disables repairs. Repairs remain opt-in and
+cannot exceed two. Maximums are 4096 model calls, 16384 tool calls, 2^40 tokens per
+token limit, seven days, and 32 concurrent model calls. Completion agents admit
+no tools; their ADK policy hook rejects tool dispatch.
+
+Before dispatch, the runtime reserves input capacity using encoded request bytes
+plus framing allowance, and output capacity using the configured `max_tokens`
+(4 MiB for an opaque CLI). Reported usage settles reservations; Gemini thinking
+tokens count as output. Missing usage and failed/interrupted calls keep the full
+reservation and are marked unknown. A provider usage overrun stops the run and
+prevents final-result publication. These are local execution limits, not a billing
+guarantee: upstream internal retries and unreported consumption remain unknown.
+No reservation or usage record grants source-write or execution authority.
+
 ## Other settings
 
 ```yaml
@@ -258,7 +300,8 @@ checks, so its model budget is separate from each command's
 
 The overall workflow deadline includes the remaining model budgets, check and
 preparation allowances, and up to two repairs when explicitly enabled. It is at
-least 30 minutes and grows with configured limits. To adjust a slow workflow,
+least 30 minutes and grows with configured limits, subject to the shared
+`agent_runtime.max_elapsed_seconds` cap. To adjust a slow workflow,
 set `workflow_model_seconds`, restart the daemon, and use `:retry test` on the
 saved proposal to reuse Creation. A retry still validates the current source,
 plan, consent and execution trust.

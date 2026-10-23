@@ -166,6 +166,31 @@ func TestChangeWorkflowAdmissionGuardsDispatchNothing(t *testing.T) {
 	}
 }
 
+func TestChangeWorkflowDefaultRolesRequireConsentAndShareBudget(t *testing.T) {
+	var calls atomic.Int32
+	reply := func() string { calls.Add(1); return workflowImplementation }
+	s, _, initial := workflowService(t, [3]func() string{reply, reply, reply})
+	s.agentRuntime.Limits.ModelCalls = 1
+	s.runtimes.bug.effective.RemoteProvider = true
+	req := workflowRequest(initial)
+	req.Models = ChangeWorkflowModels{}
+	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, req); err == nil || calls.Load() != 0 {
+		t.Fatalf("default role bypassed consent: %v", err)
+	}
+	req.ConfirmedProfiles = []string{"bug"}
+	started, err := s.StartChangeWorkflow(context.Background(), initial.ID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.Workflow.Models != (ChangeWorkflowModels{"bug", "function", "analyze"}) {
+		t.Fatalf("resolved models not saved: %+v", started.Workflow.Models)
+	}
+	finished := finishedWorkflow(t, s, initial.ID)
+	if finished.Workflow.Status != "failed" || calls.Load() != 1 || !strings.Contains(finished.Workflow.Reason, "model calls") {
+		t.Fatalf("stage budget refreshed: %+v calls=%d", finished.Workflow, calls.Load())
+	}
+}
+
 func TestChangeWorkflowCancellationAndStalePublication(t *testing.T) {
 	for _, action := range []string{"cancel", "source", "project"} {
 		t.Run(action, func(t *testing.T) {

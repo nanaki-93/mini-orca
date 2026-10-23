@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -32,6 +33,7 @@ func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
 // StartChangeWorkflow captures consent and proposal identity before dispatch.
 // The HTTP request only admits the worker; polling/Cancel use its persisted ID.
 func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request ChangeWorkflowRequest) (*ChangeSession, error) {
+	request.Models = s.resolveWorkflowModels(request.Models)
 	if err := request.Models.validate(); err != nil {
 		return nil, err
 	}
@@ -63,17 +65,23 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := validateResumedModels(session, request.Models, startStage); err != nil {
 		return nil, err
 	}
+	agentCtx, release, err := s.workflowAgentContext(context.Background(), request.Models)
+	if err != nil {
+		return nil, err
+	}
 	expandTargetsFromFailedChecks(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
 	if err := storeChangeSession(root, session); err != nil {
+		release()
 		return nil, err
 	}
 	if startStage != 2 {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
 	budget := s.changeWorkflowTimeout(request.Models, startStage, request.AutoRepair)
-	workCtx, cancel := context.WithTimeoutCause(context.Background(), budget, &workflowTimeoutError{limit: budget})
+	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
+	cancel := func() { cancelTimeout(); release() }
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
@@ -113,8 +121,6 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 	return s.requireProjectExecutionTrust(ctx, session.ProjectRevision)
 }
 
-const maxWorkflowAutoRepairs = 2
-
 func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) {
 	defer job.cancel()
 	defer close(job.done)
@@ -125,6 +131,12 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	}
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
+			if budget := agentruntime.BudgetFromContext(ctx); budget != nil {
+				if repairErr := budget.AdmitRepair(ctx); repairErr != nil {
+					runErr = repairErr
+					break
+				}
+			}
 			nextMsg, ok := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
 			if !ok {
 				break
@@ -140,7 +152,7 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 				break
 			}
 		}
-		if !job.autoRepair || attempt >= maxWorkflowAutoRepairs || !s.shouldAutoRepairWorkflow(ctx, job, runErr) {
+		if !job.autoRepair || attempt >= s.agentRuntime.Limits.Repairs || !s.shouldAutoRepairWorkflow(ctx, job, runErr) {
 			break
 		}
 	}

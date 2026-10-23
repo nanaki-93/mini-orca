@@ -58,7 +58,7 @@ func TestCompletionRunnerPreservesConversationSchemaAndMetadata(t *testing.T) {
 			return fixtureResponse(`{"answer":"done"}`), nil
 		})
 		result, err := Complete(context.Background(), client, Request{Messages: messages, Schema: schema})
-		want := Result{Content: `{"answer":"done"}`, Model: "fixture-model", FinishReason: "stop", Usage: fixtureResponse("").Usage}
+		want := Result{Content: `{"answer":"done"}`, Model: "fixture-model", FinishReason: "stop", Usage: fixtureResponse("").Usage, UsageKnown: true}
 		if err != nil || result != want || calls != 1 {
 			t.Fatalf("result=%+v, error=%v, calls=%d", result, err, calls)
 		}

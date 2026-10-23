@@ -408,6 +408,7 @@ func completionResult(response *model.LLMResponse) Result {
 		}
 	}
 	if response.UsageMetadata != nil {
+		result.UsageKnown = true
 		usage := response.UsageMetadata
 		result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount), TotalTokens: int(usage.TotalTokenCount)}
 	}
@@ -437,6 +438,6 @@ func requestCompletion(ctx context.Context, client CompletionClient, request Req
 	choice := response.Choices[0]
 	return Result{
 		Content: choice.Message.Content, Model: response.Model,
-		FinishReason: choice.FinishReason, Usage: response.Usage,
+		FinishReason: choice.FinishReason, Usage: response.Usage, UsageKnown: response.Usage != (llm.ChatUsage{}),
 	}, nil
 }

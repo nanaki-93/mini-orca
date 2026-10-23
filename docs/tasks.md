@@ -115,7 +115,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 05 — Enforce shared run budgets, routing, and policy
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/config/agent_runtime.go`, `internal/config/agent_runtime_test.go` — **new**, validated limits and role assignments.

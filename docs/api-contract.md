@@ -727,10 +727,14 @@ be applied.
 `POST /api/projects/current/changes/{sessionID}/workflow` starts a bounded agent
 workflow and returns HTTP 202 with the captured session and `workflow.id`.
 The request carries the current `ChangeIdentity`, `message`, and
-`models: {create, test, review}`. Each model value is an opaque catalog ID
+optional `models: {create, test, review}`. Omitted or empty role fields use
+`agent_runtime.roles` (Creation `bug`, Testing `function`, Review `analyze` by
+default). The returned workflow always contains all three resolved choices.
+Each explicit model value is an opaque catalog ID
 (`configured:<hash>`, `pi:<provider>/<model>`, or `agy:<slug>`) or a legacy
 configured profile name (`analyze`, `bug`, or `function`); catalog membership is
-rechecked before admission. `confirmed_profiles` lists the selected remote
+rechecked before admission. Resolved defaults require the same consent as explicit
+choices. `confirmed_profiles` lists the selected remote
 profiles the user approved; local profiles need no remote confirmation. Security
 tasks additionally require `confirm_security: true`. Current project execution
 trust and at least one captured `_test.go` path are required before dispatch.
@@ -745,7 +749,10 @@ There is one active change workflow per conversation. Each model call uses the
 largest of `timeouts.workflow_model_seconds` (900 seconds by default), the
 generation timeout and its selected scope's timeout; retries share that deadline.
 The total deadline is at least 30 minutes and includes remaining model budgets,
-check/preparation allowances and enabled automatic repairs. Failed checks
+check/preparation allowances and enabled automatic repairs. Shared
+`agent_runtime` call, token, concurrency and elapsed limits also apply across
+stages and retries; exhausted budgets stop dispatch without applying source.
+Failed checks
 stop before review. A reviewer returning `changes_requested` blocks human approval
 until a new run produces a passing proposal and approving review.
 

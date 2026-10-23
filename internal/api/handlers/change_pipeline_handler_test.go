@@ -36,7 +36,7 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := app.ChangeWorkflowRequest{ChangeIdentity: app.ChangeIdentity{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Revision: session.Revision, Hash: session.Hash}, Message: "Fix and test.", Models: app.ChangeWorkflowModels{Create: "function", Test: "bug", Review: "analyze"}}
+	request := app.ChangeWorkflowRequest{ChangeIdentity: app.ChangeIdentity{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Revision: session.Revision, Hash: session.Hash}, Message: "Fix and test."}
 	for _, handler := range []http.HandlerFunc{h.StartWorkflow, h.CancelWorkflow} {
 		for _, body := range []string{`{"unknown":true}`, `{}`, `{} {}`} {
 			r := httptest.NewRequest("POST", "/changes/id/workflow", strings.NewReader(body))
@@ -68,6 +68,9 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 	var active app.ChangeSession
 	if err := json.Unmarshal(started.Body.Bytes(), &active); err != nil {
 		t.Fatal(err)
+	}
+	if active.Workflow.Models != (app.ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}) {
+		t.Fatalf("omitted models were not resolved: %+v", active.Workflow.Models)
 	}
 	<-entered
 	query := "/changes/id?project_id=" + index.ProjectID + "&project_revision=" + index.ProjectRevision

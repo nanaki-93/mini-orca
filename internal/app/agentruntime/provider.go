@@ -40,14 +40,14 @@ func (c *ProviderClient) WithOptionalFinalContent() *ProviderClient {
 
 func (c *ProviderClient) Chat(ctx context.Context, messages []llm.ChatMessage) (*llm.ChatResponse, error) {
 	if c.compatible != nil {
-		return c.compatible.Chat(ctx, messages)
+		return c.compatibleChat(ctx, Request{Messages: messages})
 	}
 	return c.chat(ctx, Request{Messages: messages})
 }
 
 func (c *ProviderClient) ChatWithJSONSchema(ctx context.Context, messages []llm.ChatMessage, schema llm.JSONSchema) (*llm.ChatResponse, error) {
 	if c.compatible != nil {
-		return c.compatible.ChatWithJSONSchema(ctx, messages, schema)
+		return c.compatibleChat(ctx, Request{Messages: messages, Schema: &schema})
 	}
 	return c.chat(ctx, Request{Messages: messages, Schema: &schema})
 }
@@ -66,9 +66,71 @@ func (c *ProviderClient) chat(ctx context.Context, request Request) (*llm.ChatRe
 // so their thought signatures survive tool turns without an intermediate wire format.
 func (c *ProviderClient) Generate(ctx context.Context, request llm.GenerationRequest) iter.Seq2[llm.GenerationEvent, error] {
 	if c.compatible != nil {
-		return c.compatible.Generate(ctx, request)
+		return c.generateCompatible(ctx, request)
 	}
 	return func(yield func(llm.GenerationEvent, error) bool) {
 		yield(llm.GenerationEvent{}, fmt.Errorf("%w: Google models require the native ADK protocol", llm.ErrRequestRejected))
 	}
+}
+
+func (c *ProviderClient) compatibleChat(ctx context.Context, request Request) (*llm.ChatResponse, error) {
+	reservation, err := c.reserveDispatch(ctx, struct {
+		Messages []llm.ChatMessage
+		Schema   *llm.JSONSchema
+	}{request.Messages, request.Schema})
+	if err != nil {
+		return nil, err
+	}
+	defer reservation.settle(0, 0, false, false)
+	var response *llm.ChatResponse
+	if request.Schema == nil {
+		response, err = c.compatible.Chat(ctx, request.Messages)
+	} else {
+		response, err = c.compatible.ChatWithJSONSchema(ctx, request.Messages, *request.Schema)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if response == nil {
+		return nil, fmt.Errorf("%w: missing completion", llm.ErrUnusableResponse)
+	}
+	// The legacy import DTO cannot distinguish missing usage from zero usage.
+	known := response.Usage != (llm.ChatUsage{})
+	if err := settleChatUsage(reservation, &response.Usage, known); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *ProviderClient) generateCompatible(ctx context.Context, request llm.GenerationRequest) iter.Seq2[llm.GenerationEvent, error] {
+	return func(yield func(llm.GenerationEvent, error) bool) {
+		reservation, err := c.reserveDispatch(ctx, request)
+		if err != nil {
+			yield(llm.GenerationEvent{}, err)
+			return
+		}
+		defer reservation.settle(0, 0, false, false)
+		for event, err := range c.compatible.Generate(ctx, request) {
+			if err == nil && event.Result != nil {
+				err = settleChatUsage(reservation, event.Result.Usage, event.Result.Usage != nil)
+			}
+			if err != nil {
+				yield(llm.GenerationEvent{}, err)
+				return
+			}
+			if !yield(event, nil) {
+				return
+			}
+		}
+	}
+}
+
+func settleChatUsage(reservation *modelReservation, usage *llm.ChatUsage, known bool) error {
+	if !known {
+		return reservation.settle(0, 0, false, false)
+	}
+	if usage.PromptTokens < 0 || usage.CompletionTokens < 0 || usage.TotalTokens < 0 {
+		return fmt.Errorf("%w: invalid provider usage", llm.ErrUnusableResponse)
+	}
+	return reservation.settle(int64(usage.PromptTokens), max(int64(usage.CompletionTokens), int64(usage.TotalTokens)-int64(usage.PromptTokens)), true, true)
 }

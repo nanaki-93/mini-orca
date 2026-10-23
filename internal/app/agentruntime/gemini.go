@@ -40,6 +40,12 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			yield(nil, err)
 			return
 		}
+		reservation, err := m.client.reserveDispatch(ctx, input)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer reservation.settle(0, 0, false, false)
 		sdk, err := m.createSDK(ctx)
 		if err != nil {
 			yield(nil, fmt.Errorf("%w: cannot initialize the configured Google backend", llm.ErrRequestRejected))
@@ -52,20 +58,16 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 				yield(nil, nativeProviderError(ctx, err, input.Config.ResponseJsonSchema != nil))
 				return
 			}
-			if response == nil || completed {
-				yield(nil, fmt.Errorf("%w: invalid native response sequence", llm.ErrUnusableResponse))
-				return
-			}
-			if err := retainGoogleModelVersion(response, &modelVersion); err != nil {
+			if err := validateGoogleEvent(response, completed, &modelVersion); err != nil {
 				yield(nil, err)
 				return
 			}
 			if !response.Partial {
-				if err := validateGoogleFinal(response); err != nil {
+				response.TurnComplete = true
+				if err := settleGoogleUsage(reservation, response.UsageMetadata); err != nil {
 					yield(nil, err)
 					return
 				}
-				response.TurnComplete = true
 				completed = true
 			}
 			if !yield(response, nil) {
@@ -80,6 +82,19 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			yield(nil, fmt.Errorf("%w: native generation ended without a complete result", llm.ErrUnusableResponse))
 		}
 	}
+}
+
+func validateGoogleEvent(response *model.LLMResponse, completed bool, version *string) error {
+	if response == nil || completed {
+		return fmt.Errorf("%w: invalid native response sequence", llm.ErrUnusableResponse)
+	}
+	if err := retainGoogleModelVersion(response, version); err != nil {
+		return err
+	}
+	if !response.Partial {
+		return validateGoogleFinal(response)
+	}
+	return nil
 }
 
 func validateGoogleFinal(response *model.LLMResponse) error {
@@ -307,14 +322,26 @@ func googleCompletionEvent(ctx agent.InvocationContext, response *model.LLMRespo
 	if !response.Partial {
 		result := Result{Content: text, Model: response.ModelVersion, FinishReason: "stop"}
 		if usage := response.UsageMetadata; usage != nil {
-			if usage.PromptTokenCount < 0 || usage.CandidatesTokenCount < 0 || usage.TotalTokenCount < 0 {
+			if usage.PromptTokenCount < 0 || usage.CandidatesTokenCount < 0 || usage.ThoughtsTokenCount < 0 || usage.TotalTokenCount < 0 {
 				return nil, fmt.Errorf("%w: invalid native usage", llm.ErrUnusableResponse)
 			}
-			result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount), TotalTokens: int(usage.TotalTokenCount)}
+			result.UsageKnown = true
+			result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount) + int(usage.ThoughtsTokenCount), TotalTokens: int(usage.TotalTokenCount)}
 		}
 		event.Output = result
 	}
 	return event, nil
+}
+
+func settleGoogleUsage(reservation *modelReservation, usage *genai.GenerateContentResponseUsageMetadata) error {
+	if usage == nil {
+		return reservation.settle(0, 0, false, false)
+	}
+	if usage.PromptTokenCount < 0 || usage.CandidatesTokenCount < 0 || usage.ThoughtsTokenCount < 0 || usage.TotalTokenCount < 0 {
+		return fmt.Errorf("%w: invalid native usage", llm.ErrUnusableResponse)
+	}
+	output := max(int64(usage.CandidatesTokenCount)+int64(usage.ThoughtsTokenCount), int64(usage.TotalTokenCount)-int64(usage.PromptTokenCount))
+	return reservation.settle(int64(usage.PromptTokenCount), output, true, true)
 }
 
 func googleCompletionText(content *genai.Content) (string, error) {

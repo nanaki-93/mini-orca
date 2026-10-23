@@ -1,0 +1,48 @@
+package config
+
+import (
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
+
+func TestAgentRuntimeDefaultsAndStrictLimits(t *testing.T) {
+	resolved, err := ResolveAgentRuntime(AgentRuntimeConfig{})
+	if err != nil || resolved.Roles != (AgentRoles{BugModelScope, FunctionModelScope, AnalyzeModelScope}) || resolved.Limits.ModelCalls != 1024 || resolved.Limits.Repairs != 2 {
+		t.Fatalf("defaults=%+v error=%v", resolved, err)
+	}
+	for _, mutate := range []func(*AgentRuntimeConfig){
+		func(c *AgentRuntimeConfig) { c.Roles.Creation = "unknown" },
+		func(c *AgentRuntimeConfig) { c.MaxModelCalls = -1 },
+		func(c *AgentRuntimeConfig) { c.MaxToolCalls = 16385 },
+		func(c *AgentRuntimeConfig) { c.MaxInputTokens = -1 },
+		func(c *AgentRuntimeConfig) { c.MaxOutputTokens = 1<<40 + 1 },
+		func(c *AgentRuntimeConfig) { c.MaxElapsedSeconds = 604801 },
+		func(c *AgentRuntimeConfig) { c.MaxConcurrentCalls = 33 },
+		func(c *AgentRuntimeConfig) { value := 3; c.MaxRepairs = &value },
+	} {
+		cfg := Default()
+		mutate(&cfg.AgentRuntime)
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("accepted invalid config: %+v", cfg.AgentRuntime)
+		}
+	}
+}
+
+func TestAgentRuntimeYAMLPreservesDisabledRepairs(t *testing.T) {
+	data := []byte("agent_runtime:\n  roles:\n    creation: function\n  max_model_calls: 7\n  max_repairs: 0\n")
+	if err := rejectUnknownFields(data); err != nil {
+		t.Fatal(err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := ResolveAgentRuntime(cfg.AgentRuntime)
+	if err != nil || runtime.Limits.Repairs != 0 || runtime.Limits.ModelCalls != 7 || runtime.Roles.Creation != FunctionModelScope {
+		t.Fatalf("runtime=%+v error=%v", runtime, err)
+	}
+	if err := rejectUnknownFields([]byte("agent_runtime:\n  roles:\n    cretaion: bug\n")); err == nil {
+		t.Fatal("unknown role key accepted")
+	}
+}

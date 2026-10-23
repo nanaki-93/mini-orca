@@ -51,6 +51,7 @@ type modelOutput = agentruntime.Result
 // Service owns configured model access and the active project's generation path.
 type Service struct {
 	config                          *config.Config
+	agentRuntime                    config.AgentRuntime
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
@@ -89,6 +90,10 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	agentConfig, err := config.ResolveAgentRuntime(cfg.AgentRuntime)
+	if err != nil {
+		return nil, err
+	}
 	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
 	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
 	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
@@ -108,6 +113,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
 		config:            cfg,
+		agentRuntime:      agentConfig,
 		worktrees:         make(map[string]*Service),
 		discoverPiModels:  llm.DiscoverPiModels,
 		discoverAgyModels: llm.DiscoverAgyModels,
@@ -175,6 +181,11 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 
 // AnalyzeProject runs import analysis under its own deadline.
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
+	ctx, release, err := s.agentRunContext(ctx, s.runtimes.analyze)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
 	defer cancel()
 	runtime := s.runtimes.analyze
@@ -276,6 +287,11 @@ func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messag
 // The guard reserves and validates each attempt immediately before transport.
 // Guard failures are never retried or treated as provider failures.
 func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema, beforeAttempt func(context.Context) error) (modelOutput, error) {
+	ctx, release, err := s.agentRunContext(ctx, runtime)
+	if err != nil {
+		return modelOutput{}, err
+	}
+	defer release()
 	var lastErr error
 	for attempt := 0; attempt <= runtime.effective.MaxRetries; attempt++ {
 		if beforeAttempt != nil {
@@ -299,18 +315,18 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return modelOutput{}, ctx.Err()
+			return modelOutput{}, context.Cause(ctx)
 		case <-timer.C:
 		}
 	}
 	if ctx.Err() != nil {
-		return modelOutput{}, ctx.Err()
+		return modelOutput{}, context.Cause(ctx)
 	}
 	return modelOutput{}, lastErr
 }
 
 func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
-	return errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
+	return errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
 		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
 }
 

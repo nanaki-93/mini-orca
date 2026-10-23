@@ -2039,13 +2039,20 @@ components:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
         - type: object
-          required: [message, models]
+          required: [message]
           properties:
             plan_hash: {type: string, description: Required matching plan.hash for planned sessions; explicitly approves captured intent.}
             resume_from: {type: string, enum: [create, test, review], default: create}
             auto_repair: {type: boolean, default: false, description: Opt into up to two automatic repairs within approved scope.}
             message: {type: string, minLength: 1, maxLength: 8192}
-            models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
+            models:
+              type: object
+              additionalProperties: false
+              description: Omitted or empty roles resolve from agent_runtime.roles; defaults are bug, function, analyze. Resolved remote profiles still require confirmed_profiles consent.
+              properties:
+                create: {type: string, description: Catalog selection or configured profile; empty uses the configured Creation role.}
+                test: {type: string, description: Catalog selection or configured profile; empty uses the configured Testing role.}
+                review: {type: string, description: Catalog selection or configured profile; empty uses the configured Review role.}
             confirmed_profiles: {type: array, items: {$ref: '#/components/schemas/ModelSelection'}}
             confirm_security: {type: boolean, description: Required true for security tasks}
     ChangeWorkflowControl:

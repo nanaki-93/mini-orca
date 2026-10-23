@@ -314,6 +314,20 @@ func emptyAnalysisReply(stage AnalysisStage) string {
 	return `{"findings":[]}`
 }
 
+func TestAnalysisRunStagesShareAgentBudget(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	s.agentRuntime.Limits.ModelCalls = 1
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	if calls.Load() != 1 || run.Status == AnalysisRunCompleted || run.Status == AnalysisRunCompletedEmpty || !strings.Contains(run.Reason, "allowance") {
+		t.Fatalf("analysis stages refreshed budget: calls=%d status=%s", calls.Load(), run.Status)
+	}
+}
+
 func TestAnalysisRunCapturesActualInventoryBeyond500AndRejectsChangedPreview(t *testing.T) {
 	server, calls := analysisResponseServer(t, emptyAnalysisReply)
 	s, root := newSemanticAnalysisService(t, server.URL, 0)

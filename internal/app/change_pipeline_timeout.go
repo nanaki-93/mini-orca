@@ -23,7 +23,7 @@ func (e *workflowTimeoutError) Unwrap() error { return context.DeadlineExceeded 
 
 // Preserve a more specific owner deadline when a child returns the context sentinel.
 func workflowDeadlineCause(ctx context.Context, err error) error {
-	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil {
+	if (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) && ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
 	return err
@@ -49,7 +49,7 @@ func (s *Service) changeWorkflowTimeout(models ChangeWorkflowModels, startStage 
 		budget += checks // An existing proposal may need a pre-generation probe.
 	}
 	if autoRepair {
-		budget += maxWorkflowAutoRepairs * (full + checks)
+		budget += time.Duration(s.agentRuntime.Limits.Repairs) * (full + checks)
 	}
 	return max(30*time.Minute, budget)
 }

@@ -13,11 +13,12 @@ import (
 
 // Config is the daemon's single YAML configuration schema.
 type Config struct {
-	ModelScopes ModelScopesConfig `yaml:"model_scopes"`
-	Retry       RetryConfig       `yaml:"retry"`
-	Timeouts    TimeoutConfig     `yaml:"timeouts"`
-	Logging     LoggingConfig     `yaml:"logging"`
-	ProjectPath string            `yaml:"project_path"`
+	AgentRuntime AgentRuntimeConfig `yaml:"agent_runtime"`
+	ModelScopes  ModelScopesConfig  `yaml:"model_scopes"`
+	Retry        RetryConfig        `yaml:"retry"`
+	Timeouts     TimeoutConfig      `yaml:"timeouts"`
+	Logging      LoggingConfig      `yaml:"logging"`
+	ProjectPath  string             `yaml:"project_path"`
 }
 
 // LoggingConfig holds configuration for the logger.
@@ -178,11 +179,19 @@ func (c *Config) Validate() error {
 	if c == nil {
 		return fmt.Errorf("configuration is required")
 	}
-	_, err := ResolveModelProfiles(c)
+	if _, err := ResolveModelProfiles(c); err != nil {
+		return err
+	}
+	_, err := ResolveAgentRuntime(c.AgentRuntime)
 	return err
 }
 
 var configurationFields = fieldSet{
+	"agent_runtime": {
+		"roles":           {"creation": {}, "testing": {}, "review": {}},
+		"max_model_calls": {}, "max_tool_calls": {}, "max_input_tokens": {}, "max_output_tokens": {},
+		"max_elapsed_seconds": {}, "max_concurrent_calls": {}, "max_repairs": {},
+	},
 	"model_scopes": {
 		"analyze":  modelProfileFields,
 		"bug":      modelProfileFields,
