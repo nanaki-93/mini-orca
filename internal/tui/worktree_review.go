@@ -38,10 +38,12 @@ func worktreeStatus(wt GitWorktree) string {
 		return worktreeTaskStatus(wt)
 	case wt.Integration == "merged":
 		return "INTEGRATED"
+	case len(wt.Completed) > 0:
+		return "TO_MERGE"
 	case wt.Integration == "behind":
-		return "BEHIND"
+		return "TO_MERGE"
 	case wt.Mergeable:
-		return "READY"
+		return "TO_MERGE"
 	default:
 		return "WAITING"
 	}
@@ -81,7 +83,15 @@ func (s *State) cleanupSelectedWorktree() {
 		return
 	}
 	s.enqueueAction(ActionRequest{Kind: "cleanup-merged", Worktree: intent})
-	s.CmdOutput = "Verifying integration and cleaning up the worktree; its branch will be retained..."
+	s.CmdOutput = "Verifying integration and removing the worktree and merged branch..."
+}
+
+func (s *State) rejectSelectedWorktree() {
+	if wt := s.selectedWorktree(); wt != nil && wt.Integration == "merged" && !worktreeHasUnfinishedTasks(wt) {
+		s.CmdOutput = "This worktree is already integrated. Use [c] to clean up its checkout and branch."
+		return
+	}
+	s.cleanupSelectedWorktree()
 }
 
 func worktreeHasUnfinishedTasks(wt *GitWorktree) bool {
@@ -96,13 +106,11 @@ func worktreeHasUnfinishedTasks(wt *GitWorktree) bool {
 func (s *State) confirmWorktreeDiscard(wt *GitWorktree, intent *WorktreeIntent) {
 	seed := &ChangeSeed{WorktreePath: wt.Path, Kind: wt.Branch, Message: wt.Head}
 	for _, entry := range wt.Sessions {
-		if entry.State != "applied" {
-			seed.FindingTargets = append(seed.FindingTargets, entry.FindingTargets...)
-		}
+		seed.FindingTargets = append(seed.FindingTargets, entry.FindingTargets...)
 	}
 	s.Confirmation = &Confirmation{
 		Title: "Discard worktree and saved tasks?", Destructive: true, AcceptLabel: "Discard worktree",
-		Message: fmt.Sprintf("Remove %s and its saved plans and proposals? Running tasks will be stopped. Commits remain on branch %s; uncommitted source changes block removal.", wt.Path, wt.Branch),
+		Message: fmt.Sprintf("Reject %s and return its linked issues to TODO? Saved plans and proposals will be removed and running tasks stopped. Commits remain on branch %s; uncommitted changes block removal.", wt.Path, wt.Branch),
 		OnConfirm: func(state *State) {
 			state.enqueueAction(ActionRequest{Kind: "reject-change", Worktree: intent, Seed: seed})
 			state.CmdOutput = "Stopping tasks and discarding the worktree; waiting for removal confirmation..."
@@ -148,17 +156,23 @@ func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID str
 		return err
 	}
 	s.applyMergeWorktreeResponse(act.Worktree.Path, result)
+	if len(result.Warnings) > 0 {
+		return nil
+	}
 	if result.RemovedWorktree == act.Worktree.Path {
 		s.Navigate(PageGit)
-		s.CmdOutput = "Merged worktree removed; linked findings are completed and the Git branch is retained."
-	} else if len(result.Warnings) == 0 {
+		s.CmdOutput = "Merged worktree removed; linked issues are Done."
+		if result.RemovedBranch != "" {
+			s.CmdOutput += " The merged branch was deleted."
+		}
+	} else {
 		return fmt.Errorf("cleanup was not confirmed; refresh Worktrees")
 	}
 	return nil
 }
 
 func (s *State) renderWorktreeDetail(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WORKTREE", "[r] Refresh · [R] Update index · [m] Merge · [c] Cleanup · [Esc] Back")
+	lines := renderPageHeader(th, "WORKTREE", "[r] Refresh · [R] Update index · [m] Merge · [x] Reject · [c] Cleanup · [Esc] Back")
 	wt := s.selectedWorktree()
 	if wt == nil {
 		return append(lines, "  No worktree selected.")
@@ -195,11 +209,11 @@ func (s *State) worktreeNextAction(wt *GitWorktree) string {
 	case worktreeHasUnfinishedTasks(wt):
 		return "Saved tasks are unfinished. Open Work > Tasks to inspect checks and retry, or [c] explicitly discard them; the Git branch is retained."
 	case wt.Integration == "merged":
-		return "Integrated. [c] removes the clean checkout and completes linked findings; the Git branch is retained."
+		return "Integrated. [c] completes linked issues and removes the clean checkout and merged branch."
 	case wt.Integration == "behind":
-		return "The destination advanced. Review overlapping changes before merging; overlap alone does not prove a conflict."
+		return "TO_MERGE. The destination advanced; inspect overlapping changes before [m] Merge, or [x] Reject to return linked issues to TODO."
 	default:
-		return "[m] Merge committed work, or [c] discard the checkout while retaining its Git branch."
+		return "[m] Merge, mark linked issues Done and delete the worktree and branch. [x] Reject returns issues to TODO and retains committed work on its branch."
 	}
 }
 
@@ -211,13 +225,15 @@ func (s *State) worktreeRecoveryHint() string {
 	if wt != nil && wt.Integration == "behind" {
 		return fmt.Sprintf("Destination advanced · %d overlapping paths · [Enter] Inspect before merging", len(wt.OverlapPaths))
 	}
-	return "[Enter] Inspect · [m] Merge · [c] Clean up / discard · [r] Refresh"
+	return "[Enter] Inspect · [m] Merge · [x] Reject · [c] Cleanup · [r] Refresh"
 }
 
 func (s *State) handleWorktreeKey(key string) bool {
 	switch key {
 	case "c":
 		s.cleanupSelectedWorktree()
+	case "x":
+		s.rejectSelectedWorktree()
 	case "r", "R":
 		path := ""
 		if wt := s.selectedWorktree(); wt != nil {

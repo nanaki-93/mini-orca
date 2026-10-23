@@ -222,12 +222,12 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageGit: {
 		title:     "[3] CODE & DIFF · GIT & WORKTREES",
 		primary:   []keyDesc{{"Enter", "Inspect worktree"}, {"m", "Merge worktree"}},
-		secondary: []keyDesc{{"c", "Clean up / discard"}, {"r / R", "Refresh / reindex"}},
-		commands:  []keyDesc{{":merge", "Merge branch"}, {":reindex", "Update index"}},
+		secondary: []keyDesc{{"x / c", "Reject / clean up"}, {"r / R", "Refresh / reindex"}},
+		commands:  []keyDesc{{":merge / :reject", "Decide integration"}, {":reindex", "Update index"}},
 	},
 	PageWorktreeDetail: {
 		title:     "WORKTREE · INTEGRATION",
-		primary:   []keyDesc{{"m", "Merge"}, {"c", "Clean up / discard"}},
+		primary:   []keyDesc{{"m", "Merge"}, {"x / c", "Reject / clean up"}},
 		secondary: []keyDesc{{"r / R", "Refresh / reindex"}, {"Esc", "Back"}},
 		commands:  []keyDesc{{":merge", "Merge worktree"}},
 	},

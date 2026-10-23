@@ -794,14 +794,12 @@ func (s *State) registerCreatedWorktree(wtPath, head, branch string) {
 			if branch != "" {
 				s.GitWorkspace.Worktrees[i].Branch = branch
 			}
-			s.GitWorkspace.Worktrees[i].Mergeable = true
 			return
 		}
 	}
 	s.GitWorkspace.Worktrees = append(s.GitWorkspace.Worktrees, GitWorktree{
 		GitIdentity: GitIdentity{Head: head, Branch: branch},
 		Path:        wtPath,
-		Mergeable:   true,
 	})
 }
 
@@ -953,7 +951,8 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 		return nil
 	}
 	if s.Change.WorktreePath != "" && s.Change.Commit != nil && s.Change.Commit.State == "committed" {
-		return s.mergeAlreadyCommittedChange(ctx, cl, reqID, s.Change)
+		s.queueCommittedWorktree(s.Change)
+		return nil
 	}
 	sessionID := url.PathEscape(s.Change.ID)
 	if err := s.ensureChangeReviewed(ctx, cl, reqID, sessionID); err != nil {
@@ -975,24 +974,11 @@ func (s *State) dispatchApplyCommit(ctx context.Context, cl *Client, reqID strin
 	if err := s.recordApplyReceipt(appliedChange, &receipt, commitMsg, wtPath != "" || hasGitTarget); err != nil {
 		return err
 	}
-	if err := s.autoMergeAppliedWorktree(ctx, cl, reqID, wtPath, receipt.Commit, commitCode); err != nil {
-		appliedChange.State = "reviewed"
-		s.upsertActiveChange(appliedChange)
-		return err
+	if wtPath != "" {
+		s.queueCommittedWorktree(appliedChange)
+	} else {
+		s.finalizeAppliedChange(appliedChange, receipt.Commit, commitCode)
 	}
-	s.finalizeAppliedChange(appliedChange, receipt.Commit, commitCode)
-	return nil
-}
-
-func (s *State) mergeAlreadyCommittedChange(ctx context.Context, cl *Client, reqID string, appliedChange *ChangeSession) error {
-	wtPath := appliedChange.WorktreePath
-	commitCode := domain.ResolveCommitCode(appliedChange.ID, appliedChange.Hash, appliedChange.FindingTargets, appliedChange.Commit)
-	if err := s.autoMergeAppliedWorktree(ctx, cl, reqID, wtPath, appliedChange.Commit, commitCode); err != nil {
-		appliedChange.State = "reviewed"
-		s.upsertActiveChange(appliedChange)
-		return err
-	}
-	s.finalizeAppliedChange(appliedChange, appliedChange.Commit, commitCode)
 	return nil
 }
 
@@ -1024,7 +1010,7 @@ func (s *State) finalizeAppliedChange(appliedChange *ChangeSession, commit *Chan
 	s.syncAppliedInstructions(appliedChange)
 	_, mainBranch := s.mainGitIdentity()
 	s.archiveAndCompleteChange(appliedChange)
-	s.CmdOutput = fmt.Sprintf("Committed & merged proposal %q [%s] into %s", appliedChange.Title, commitCode, client.FirstNonEmpty(mainBranch, "main"))
+	s.CmdOutput = fmt.Sprintf("Committed proposal %q [%s] into %s", appliedChange.Title, commitCode, client.FirstNonEmpty(mainBranch, "main"))
 }
 
 func (s *State) recordApplyReceipt(appliedChange *ChangeSession, receipt *ChangeMutation, commitMsg string, requireCommit bool) error {
@@ -1074,19 +1060,6 @@ func applyReceiptError(receipt *ChangeMutation) error {
 		return fmt.Errorf("commit did not complete (state=%s)", client.FirstNonEmpty(receipt.Commit.State, "unknown"))
 	}
 	return fmt.Errorf("apply mutation did not complete (state=%s)", client.FirstNonEmpty(receipt.State, "unknown"))
-}
-
-func (s *State) autoMergeAppliedWorktree(ctx context.Context, cl *Client, reqID, wtPath string, commit *ChangeCommit, commitCode string) error {
-	if wtPath == "" {
-		return nil
-	}
-	if commit != nil {
-		s.registerCreatedWorktree(wtPath, commit.OID, commit.Branch)
-	}
-	if err := s.dispatchMergeWorktree(ctx, cl, reqID+"-merge", wtPath); err != nil {
-		return fmt.Errorf("committed [%s] in worktree; integration needs attention: %w", commitCode, err)
-	}
-	return nil
 }
 
 func (s *State) syncAppliedInstructions(appliedChange *ChangeSession) {
@@ -1589,14 +1562,7 @@ func (s *State) applyChangeActionResult(res changeActionResult) error {
 	return nil
 }
 
-type mergeWorktreeResponse struct {
-	State           string         `json:"state"`
-	Error           string         `json:"error"`
-	RemovedWorktree string         `json:"removed_worktree"`
-	Warnings        []string       `json:"warnings"`
-	Index           *ProjectIndex  `json:"index"`
-	Repository      *GitRepository `json:"repository"`
-}
+type mergeWorktreeResponse = client.GitMutationResult
 
 func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wtPath string) error {
 	if s.Project == nil || wtPath == "" {
@@ -1607,11 +1573,15 @@ func (s *State) dispatchMergeWorktree(ctx context.Context, cl *Client, reqID, wt
 	if err != nil {
 		return err
 	}
-	if result.State != "" && result.State != "merged" {
+	if result.State != "merged" {
 		return fmt.Errorf("merge did not complete (state=%s)", result.State)
 	}
 	if len(result.Warnings) > 0 {
 		return fmt.Errorf("%s", strings.Join(result.Warnings, "; "))
+	}
+	s.CmdOutput = "Merge completed."
+	if result.RemovedWorktree != "" && result.RemovedBranch != "" {
+		s.CmdOutput = "Merged. Linked issues are Done; the worktree and branch have been removed."
 	}
 	return nil
 }
@@ -1638,9 +1608,16 @@ func (s *State) dispatchRejectChange(ctx context.Context, cl *Client, reqID stri
 			return fmt.Errorf("worktree removal was not confirmed; refresh Worktrees before retrying discard")
 		}
 		s.forgetDiscardedWorktree(wtPath)
+		if len(result.Warnings) > 0 {
+			return fmt.Errorf("%s", strings.Join(result.Warnings, "; "))
+		}
 	}
 	if act.Seed != nil && len(act.Seed.FindingTargets) > 0 {
-		s.reopenRejectedTargets(ctx, cl, reqID, act.Seed.FindingTargets)
+		if act.Seed.WorktreePath != "" {
+			s.reopenFindingTargets(act.Seed.FindingTargets)
+		} else {
+			s.reopenRejectedTargets(ctx, cl, reqID, act.Seed.FindingTargets)
+		}
 	}
 	s.removeActiveSession(act.Target, "")
 	s.removeUnappliedHistoryByID(act.Target)
@@ -1711,14 +1688,29 @@ func (s *State) applyGitMutationSnapshot(result mergeWorktreeResponse) {
 
 func (s *State) applyMergeWorktreeResponse(wtPath string, result mergeWorktreeResponse) {
 	s.applyGitMutationSnapshot(result)
+	for _, completion := range result.Completed {
+		if completion.ProjectID == s.projectID() {
+			completion.CommitCode = s.lookupHistoryCommitCode(completion.FindingTarget, completion.CommitOID)
+			s.mergeFindingCompletion(completion)
+		}
+	}
+	if len(result.Completed) > 0 {
+		s.saveIssueHistoryToDisk()
+	}
 	if result.RemovedWorktree == wtPath && wtPath != "" {
 		s.removeWorktreeByPath(wtPath)
+		s.forgetDiscardedWorktree(wtPath)
 	}
-	if chg := s.findActiveChangeByWorktree(wtPath); result.State == "merged" && len(result.Warnings) == 0 && chg != nil && chg.Commit != nil && chg.Commit.State == "committed" {
-		commitCode := domain.ResolveCommitCode(chg.ID, chg.Hash, chg.FindingTargets, chg.Commit)
-		s.finalizeAppliedChange(chg, chg.Commit, commitCode)
+	if result.RemovedBranch != "" && s.GitWorkspace != nil {
+		kept := s.GitWorkspace.Branches[:0]
+		for _, branch := range s.GitWorkspace.Branches {
+			if branch.Name != result.RemovedBranch {
+				kept = append(kept, branch)
+			}
+		}
+		s.GitWorkspace.Branches = kept
 	}
-	if result.RemovedWorktree == "" && len(result.Warnings) > 0 {
+	if len(result.Warnings) > 0 {
 		s.CmdOutput = strings.Join(result.Warnings, "; ")
 	}
 	if result.State == "conflicts" {

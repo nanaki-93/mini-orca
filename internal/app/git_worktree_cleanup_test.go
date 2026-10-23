@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestGitMergeRemovesUnignoredMetadataAfterStoppingImplementation(t *testing.T) {
+func TestGitDiscardRemovesUnignoredMetadataAfterStoppingImplementation(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	service, root, _ := workflowService(t, [3]func() string{
@@ -49,9 +49,13 @@ func TestGitMergeRemovesUnignoredMetadataAfterStoppingImplementation(t *testing.
 		t.Fatalf("expected unignored private metadata: %s", got)
 	}
 	request.Path, request.SourceHead = path, testGit(t, path, "rev-parse", "HEAD")
-	result, err := service.MergeGitWorktree(context.Background(), request)
-	if err != nil || result.State != "merged" || result.RemovedWorktree != path || len(result.Warnings) != 0 {
-		t.Fatalf("merge and close: %+v, %v", result, err)
+	if _, err := service.MergeGitWorktree(context.Background(), request); err == nil {
+		t.Fatal("merge accepted a running task")
+	}
+	request.SourceBranch = "codex/fix"
+	result, err := service.DiscardGitWorktree(context.Background(), request)
+	if err != nil || result.State != "discarded" || result.RemovedWorktree != path || len(result.Warnings) != 0 {
+		t.Fatalf("discard and close: %+v, %v", result, err)
 	}
 	child.changeWorkflow.mu.Lock()
 	job := child.changeWorkflow.job

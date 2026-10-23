@@ -73,7 +73,7 @@ func TestCleanupMergedHTTPGuardsIdentityAndReturnsRemovalReceipt(t *testing.T) {
 	request.SourceHead = repo.Head
 	response = workflowResponse(t, h.CleanupMergedWorktree, "POST", "/git/cleanup-merged", "", request)
 	var result app.GitMutationResult
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.RemovedWorktree != created.Path {
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || result.RemovedWorktree != created.Path || result.RemovedBranch != "fix" {
 		t.Fatalf("cleanup: %d %s", response.Code, response.Body)
 	}
 }

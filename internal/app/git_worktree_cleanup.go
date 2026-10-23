@@ -34,6 +34,11 @@ func (s *Service) removeGitWorktree(ctx context.Context, root string, source *Gi
 	if err := gitops.ValidateWorktreeRemoval(ctx, root, source, removal); err != nil {
 		return err
 	}
+	if removal == gitops.WorktreeMerged {
+		if err := requireFinishedWorktreeTasks(source.Path); err != nil {
+			return err
+		}
+	}
 	// Private task history can be untracked even though the checkout is clean.
 	// Ignore only that metadata so Git still refuses other uncommitted files.
 	if err := gitops.AddLocalExclude(ctx, root, "/.mini-orca/"); err != nil {
@@ -76,20 +81,29 @@ func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationReq
 	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
 		return nil, fmt.Errorf("worktree branch changed; refresh Git status before discarding: %w", project.ErrRevisionConflict)
 	}
-	targets := collectSessionFindingTargets(source.Path, false)
+	history, err := listChangeSessions(source.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read discarded worktree findings: %w", err)
+	}
+	var targets []project.FindingTarget
+	for _, entry := range history {
+		targets = append(targets, entry.FindingTargets...)
+	}
 	result := &GitMutationResult{State: "discarded", Path: source.Path, Repository: repository, Warnings: []string{}}
 	if err := s.removeGitWorktree(ctx, repository.Root, source, gitops.WorktreeDiscarded); err != nil {
 		result.State, result.Error = "failed", err.Error()
 	} else {
 		result.RemovedWorktree = source.Path
-		s.reopenDiscardedWorktreeFindings(ctx, repository.Root, repository.ProjectID, targets)
+		if err := s.reopenDiscardedWorktreeFindings(ctx, repository.Root, repository.ProjectID, targets); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Worktree discarded, but linked issues could not be reopened: %v. Refresh Issues and retry their status update.", err))
+		}
 	}
 	return result, nil
 }
 
-func (s *Service) reopenDiscardedWorktreeFindings(ctx context.Context, root, projectID string, targets []project.FindingTarget) {
+func (s *Service) reopenDiscardedWorktreeFindings(ctx context.Context, root, projectID string, targets []project.FindingTarget) error {
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 	active := s.inProgressFindingTargets(ctx, root, projectID)
 	stillActive := make(map[string]bool, len(active))
@@ -98,24 +112,27 @@ func (s *Service) reopenDiscardedWorktreeFindings(ctx context.Context, root, pro
 	}
 	discarded := make(map[string]bool, len(targets))
 	for _, t := range targets {
-		if !stillActive[t.ID] {
+		if t.ProjectID == projectID && !stillActive[t.ID] {
 			discarded[t.ID] = true
 		}
 	}
 	if len(discarded) == 0 {
-		return
+		return nil
 	}
 	store, err := project.NewFindingStore(root)
 	if err != nil {
-		return
+		return err
 	}
 	stored, err := store.Load(project.FindingInput{ProjectID: projectID})
 	if err != nil {
-		return
+		return err
 	}
 	for _, f := range stored {
 		if f.Status == project.FindingStatusInProgress && discarded[f.ID] {
-			_ = store.SetStatus(f.ID, project.FindingStatusOpen)
+			if err := store.SetStatus(f.ID, project.FindingStatusOpen); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }

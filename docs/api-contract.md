@@ -78,8 +78,8 @@ untrusted networks.
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
-| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree. |
-| POST | `/api/projects/current/git/cleanup-merged` | Reconcile an external merge and safely remove the integrated worktree, retaining its branch. |
+| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree and branch. |
+| POST | `/api/projects/current/git/cleanup-merged` | Reconcile an external merge and safely remove the integrated worktree and branch. |
 | POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
@@ -869,7 +869,8 @@ bounded to 100 worktrees. Completed entries are applied, committed change histor
 Each worktree has `mergeable`, computed against the current branch: both checkouts
 must be clean local branches without an operation in progress, the source must be
 unlocked and present, and it must have commits not already in the target with a
-shared ancestor. This passive eligibility check does not predict merge conflicts.
+shared ancestor. Saved tasks must all be applied and committed; unfinished or
+failed tasks block merge. This passive eligibility check does not predict conflicts.
 The full list remains available even when no worktree is eligible.
 Passive status/diff reads disable configured clean/process filters, external diff
 commands and text conversion; they do not grant project execution trust.
@@ -913,7 +914,8 @@ the current worktree to the same branch.
 Merge preview and merge take the selected worktree `path` and `source_head`.
 Preview returns source/target identities, incoming commits and a bounded read-only
 diff; it requires no execution trust and never merges. Merge
-rechecks both heads and requires both worktrees clean. Merge conflicts return
+rechecks both heads (and `source_branch` when supplied) and requires both worktrees
+clean and all saved tasks applied and committed. Merge conflicts return
 `state: conflicts`, `repository.merge_head` and `repository.conflicts` instead of
 success. Resolve them using ordinary Git tools, or explicitly abort by sending
 the displayed `merge_head`; abort discards conflict-resolution edits.
@@ -935,13 +937,21 @@ merge after fixing storage saves completion even if Git has already merged the H
 The daemon then stops the source implementation worker,
 rechecks the source identity and clean state, verifies its commit is in the current
 branch, and removes the source checkout with `git worktree remove` without force.
-The source branch is retained. Private `.mini-orca/` task history is locally
-ignored for removal and deleted with the checkout. Checkouts containing another
+After checkout removal, the source branch is deleted only if its captured commit
+is integrated and no registered worktree still uses that branch. Ref deletion
+compares the captured HEAD atomically, preserving concurrently advanced branches.
+Private `.mini-orca/` task history is locally ignored for removal and deleted
+with the checkout. Checkouts containing another
 registered worktree are retained. Conflicted, failed and aborted merges never
 complete findings or remove the source. Successful removal returns `removed_worktree`
 with its absolute path, allowing the client to close the implementation and stop polling it. If
 cleanup fails, the merge remains `state: merged` and `warnings` explains why the
-worktree remains; `removed_worktree` is omitted. No push happens automatically.
+worktree remains; `removed_worktree` is omitted. `removed_branch` independently
+confirms branch deletion. If only branch deletion fails, the worktree removal
+receipt is retained and a warning identifies the branch to inspect in Git.
+`completed` contains the finding completions saved by this operation, including
+when subsequent cleanup fails; clients must not infer completion from a worktree's
+applied history alone. No push happens automatically.
 
 `cleanup-merged` provides the same completion and removal path after an external
 merge commit or an earlier cleanup warning, without running `git merge` again.
@@ -958,7 +968,11 @@ Workspace reads add `integration` (`current`, `merged`, `up_to_date`, `behind`,
 `unrelated`) and `overlap_paths` for paths changed on both sides of a divergent
 branch. These are passive comparisons, without merging or running merge drivers.
 Overlap is advisory, not proof of conflict. `merged` includes equal HEADs; it does
-not claim a task was verified. Unknown integration is omitted with `error`.
+not claim a task was verified. The TUI gives unfinished task states precedence
+over ancestry, so a failed task at the destination's HEAD is shown as `FAILED`.
+Applied, committed work awaiting explicit integration is shown as `TO_MERGE` and
+its linked issues are withheld from the issue lists until merged or rejected.
+Unknown integration is omitted with `error`.
 Refreshing never removes a worktree or completes findings.
 
 Discard takes the selected worktree `path`, `source_head` and `source_branch` plus
@@ -968,3 +982,6 @@ task history without merging or forcing deletion. The source branch and current
 checkout remain unchanged. Locked, stale, dirty and nested checkouts are protected
 by the same removal guards as merge cleanup. Success returns `state: discarded`
 and `removed_worktree`; removal failure returns `state: failed` with `error`.
+Discard reopens linked in-progress findings, including applied but unmerged fixes,
+unless another task still owns the finding. Any status persistence failure is
+reported in `warnings` without hiding the successful removal receipt.

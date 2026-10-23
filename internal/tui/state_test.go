@@ -1784,8 +1784,11 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		mergedWtPath, _ = body["path"].(string)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"state": "merged",
-			"index": ProjectIndex{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r2"}},
+			"state":            "merged",
+			"removed_worktree": createdWtPath,
+			"removed_branch":   createdBranch,
+			"completed":        []FindingCompletion{{FindingTarget: FindingTarget{ProjectID: "p1", Kind: "semantic", ID: "b-race", Path: "internal/app/a.go"}, CommitOID: "commit999"}},
+			"index":            ProjectIndex{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r2"}},
 			"repository": GitRepository{
 				GitIdentity:     GitIdentity{Head: "merged999", Branch: "main"},
 				ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r2"},
@@ -1840,18 +1843,21 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 		t.Fatalf("expected 1 active pipeline item before commit, got %d", len(s.AgentItems()))
 	}
 
-	// 2. Apply & commit -> commits with unique code, merges worktree into main, deletes from pipeline, and clears active proposal
+	// 2. Apply commits only in the worktree and moves the issue into the merge queue.
 	s.applyAndCommitProposal("Fix race condition")
 	s.FlushActions(context.Background(), cli)
 
-	if mergedWtPath != createdWtPath {
-		t.Fatalf("expected worktree %q to be merged, got %q", createdWtPath, mergedWtPath)
+	if mergedWtPath != "" || len(s.CompletedFindings) != 0 || len(s.CollectAllIssues()) != 0 {
+		t.Fatalf("Apply integrated work or exposed a queued issue: merge=%q completed=%+v issues=%+v", mergedWtPath, s.CompletedFindings, s.CollectAllIssues())
+	}
+	if wt := s.selectedWorktree(); wt == nil || worktreeStatus(*wt) != "TO_MERGE" {
+		t.Fatalf("missing pending worktree: %+v", wt)
 	}
 	if !strings.Contains(appliedCommitMsg, "[ORC-") {
 		t.Fatalf("expected commit message to include unique ORC code, got %q", appliedCommitMsg)
 	}
-	if !strings.Contains(s.CmdOutput, "Committed & merged proposal") || !strings.Contains(s.CmdOutput, "into main") {
-		t.Fatalf("expected explicit commit & merge confirmation in CmdOutput, got %q", s.CmdOutput)
+	if !strings.Contains(s.CmdOutput, "TO_MERGE") {
+		t.Fatalf("missing separate merge action: %q", s.CmdOutput)
 	}
 	if s.HasActiveProposal() || s.Change != nil {
 		t.Fatalf("expected active proposal to be cleared after commit and merge, got %+v", s.Change)
@@ -1862,6 +1868,15 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 	frame := s.Render(120, 40)
 	if strings.Contains(frame, "Active Proposal:") {
 		t.Fatalf("expected Active Proposal banner to be gone after commit and merge:\n%s", frame)
+	}
+	// 3. The explicit merge receipt completes issues and removes the worktree and branch.
+	s.HandleKey(KeyEvent{Key: "m"})
+	s.FlushActions(context.Background(), cli)
+	if mergedWtPath != createdWtPath || len(s.GitWorkspace.Worktrees) != 1 || len(s.GitWorkspace.Branches) != 0 {
+		t.Fatalf("merge cleanup missing: path=%q workspace=%+v error=%q", mergedWtPath, s.GitWorkspace, s.Error)
+	}
+	if issues := s.CollectAllIssues(); len(issues) != 1 || issues[0].Status != "done" {
+		t.Fatalf("merged issue not Done: %+v", issues)
 	}
 	if len(s.CompletedFindings) != 1 || s.CompletedFindings[0].CommitCode == "" {
 		t.Fatalf("expected persisted completed finding with commit code, got %+v", s.CompletedFindings)
@@ -2561,17 +2576,19 @@ func TestFailedMutationsDoNotMarkFindingsDone(t *testing.T) {
 		t.Fatalf("expected 0 completed findings on commit failure, got %+v", s.CompletedFindings)
 	}
 
-	// 3. failed merge must NOT mark finding done before merge succeeds
+	// 3. A failed explicit merge keeps the committed fix in Worktrees, without completing it.
 	applyMode = "merge_failed"
 	mergeFail = true
 	s = newProposalState()
 	s.applyAndCommitProposal("")
 	s.FlushActions(context.Background(), cli)
-	if len(s.CompletedFindings) != 0 {
-		t.Fatalf("expected 0 completed findings when worktree merge fails, got %+v", s.CompletedFindings)
+	s.HandleKey(KeyEvent{Key: "m"})
+	s.FlushActions(context.Background(), cli)
+	if len(s.CompletedFindings) != 0 || len(s.AgentItems()) != 0 {
+		t.Fatalf("failed merge completed findings or restored a finished task: %+v", s.CompletedFindings)
 	}
-	if s.Change == nil || s.Change.ID != "chg-1" {
-		t.Fatalf("expected proposal to remain active after failed merge so user can retry, got %+v", s.Change)
+	if len(s.GitWorkspace.Worktrees) != 1 || s.Error == "" || worktreeStatus(s.GitWorkspace.Worktrees[0]) != "TO_MERGE" {
+		t.Fatalf("failed merge lost retry state: worktrees=%+v error=%s", s.GitWorkspace.Worktrees, s.Error)
 	}
 }
 
@@ -2766,8 +2783,8 @@ func TestRejectAgentFixInHumanStageDeletesWorktreeAndReopensIssue(t *testing.T) 
 	if discardedWorktree != wtPath {
 		t.Fatalf("expected discard-worktree to be called with %q, got %q", wtPath, discardedWorktree)
 	}
-	if reopenedID != "bug-1" || reopenedStatus != "open" {
-		t.Fatalf("expected finding bug-1 to be patched to 'open' on daemon, got id=%q status=%q", reopenedID, reopenedStatus)
+	if reopenedID != "" || reopenedStatus != "" {
+		t.Fatalf("worktree discard owns reopening; a second status write could override another task: id=%q status=%q", reopenedID, reopenedStatus)
 	}
 }
 

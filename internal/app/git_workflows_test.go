@@ -232,8 +232,8 @@ func TestGitMergePreviewSuccessAndConflictRecovery(t *testing.T) {
 				if _, err := os.Stat(path); !os.IsNotExist(err) {
 					t.Fatalf("merged worktree still exists: %v", err)
 				}
-				if got := testGit(t, root, "rev-parse", "refs/heads/codex/fix"); got != request.SourceHead {
-					t.Fatal("cleanup lost the source branch")
+				if _, err := gitRead(context.Background(), root, "show-ref", "--verify", "--quiet", "refs/heads/codex/fix"); !gitops.ExitCode(err, 1) || result.RemovedBranch != "codex/fix" {
+					t.Fatalf("cleanup retained the source branch: %v", err)
 				}
 				trees, err := readGitWorktrees(context.Background(), root)
 				if err != nil || len(trees) != 1 || !trees[0].Current {

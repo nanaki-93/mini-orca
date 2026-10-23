@@ -558,6 +558,7 @@ func (s *State) CollectAllIssues() []IssueRow {
 	var rows []IssueRow
 	rows = s.appendSemanticFindings(rows, agentItems)
 	rows = s.appendSectionResults(rows, agentItems)
+	rows = s.withoutPendingWorktreeIssues(rows)
 	deduped := domain.DedupeIssues(rows)
 	domain.SortIssuesBySeverity(deduped)
 	return deduped
@@ -829,6 +830,9 @@ func containsIssueID(rows []IssueRow, id string) bool {
 }
 
 func sameFindingTarget(a, b FindingTarget) bool {
+	if a.ProjectID != "" && b.ProjectID != "" && a.ProjectID != b.ProjectID {
+		return false
+	}
 	if a.Kind != b.Kind || a.ID != b.ID || a.Path != b.Path {
 		return false
 	}
@@ -845,7 +849,7 @@ func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 			return &c
 		}
 	}
-	if s.Change != nil && s.Change.State == "applied" {
+	if s.Change != nil && s.Change.State == "applied" && s.Change.WorktreePath == "" {
 		for _, t := range s.Change.FindingTargets {
 			if sameFindingTarget(t, target) {
 				oid := ""
@@ -857,8 +861,12 @@ func (s *State) findCompletion(target FindingTarget) *FindingCompletion {
 			}
 		}
 	}
+	return s.historyFindingCompletion(target)
+}
+
+func (s *State) historyFindingCompletion(target FindingTarget) *FindingCompletion {
 	for _, entry := range s.ChangeHistory {
-		if entry.State != "applied" {
+		if entry.State != "applied" || entry.WorktreePath != "" {
 			continue
 		}
 		for _, t := range entry.FindingTargets {

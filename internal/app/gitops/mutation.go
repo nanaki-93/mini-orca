@@ -24,13 +24,15 @@ type GitMutationRequest struct {
 }
 
 type GitMutationResult struct {
-	State           string                `json:"state"`
-	Path            string                `json:"path,omitempty"`
-	RemovedWorktree string                `json:"removed_worktree,omitempty"`
-	Repository      *GitRepository        `json:"repository,omitempty"`
-	Index           *project.ProjectIndex `json:"index,omitempty"`
-	Error           string                `json:"error,omitempty"`
-	Warnings        []string              `json:"warnings"`
+	State           string                      `json:"state"`
+	Path            string                      `json:"path,omitempty"`
+	RemovedWorktree string                      `json:"removed_worktree,omitempty"`
+	RemovedBranch   string                      `json:"removed_branch,omitempty"`
+	Completed       []project.FindingCompletion `json:"completed,omitempty"`
+	Repository      *GitRepository              `json:"repository,omitempty"`
+	Index           *project.ProjectIndex       `json:"index,omitempty"`
+	Error           string                      `json:"error,omitempty"`
+	Warnings        []string                    `json:"warnings"`
 }
 
 func ValidateNewBranch(ctx context.Context, root, branch string) error {

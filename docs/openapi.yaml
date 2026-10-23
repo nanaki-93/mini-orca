@@ -250,7 +250,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Merge the reviewed committed worktree head into the current clean branch, mark findings linked to its applied committed fixes Done, then remove the clean source worktree and its local task history without force. The branch is retained. Completion persistence failures retain the worktree and return warnings; cleanup failures preserve completion and the merged state.
+      description: Merge the reviewed committed worktree head into the current clean branch after all saved tasks are applied and committed, mark linked findings Done, then remove the clean source worktree and its local task history without force and delete the captured branch if it is unchanged and unused by another checkout. Completion persistence failures retain the worktree and return warnings; cleanup failures preserve completion and the merged state. Removal receipts independently confirm checkout and branch deletion.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -261,7 +261,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Reconcile a merge completed externally or retry cleanup. Requires current project and target identity, source_head, source_branch, both confirmations and execution trust. Reindex external source changes and grant trust for the updated revision first. Verifies source ancestry in the clean destination, completes linked findings, and removes the clean worktree without forcing deletion or deleting its branch. Retains unfinished task histories until explicit discard. Refreshes project facts after reconciliation. Does not attempt a merge. Squash or cherry-picked copies without ancestry are not eligible.
+      description: Reconcile a merge completed externally or retry cleanup. Requires current project and target identity, source_head, source_branch, both confirmations and execution trust. Reindex external source changes and grant trust for the updated revision first. Verifies source ancestry in the clean destination, completes linked findings, removes the clean worktree without force, and deletes its captured branch if unchanged and unused by another checkout. Retains unfinished task histories until explicit discard. Refreshes project facts after reconciliation. Does not attempt a merge. Squash or cherry-picked copies without ancestry are not eligible.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed integration and cleanup outcome; removed_worktree confirms deletion and warnings describe incomplete steps, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -272,7 +272,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Remove the confirmed clean source worktree and its local task history without merging or forcing deletion. Requires source_head and source_branch; retains the branch and current checkout.
+      description: Remove the confirmed clean source worktree and its local task history without merging or forcing deletion, and reopen linked in-progress findings not owned by another task. Includes applied but unmerged fixes. Requires source_head and source_branch; retains the branch and current checkout. Status persistence failures return warnings alongside the removal receipt.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed removal outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -2347,6 +2347,8 @@ components:
         state: {type: string, enum: [created, switched, merged, discarded, conflicts, aborted, failed]}
         path: {type: string}
         removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard or cleanup-merged completed}
+        removed_branch: {type: string, description: Reviewed source branch returned only after guarded deletion following successful merge or cleanup-merged}
+        completed: {type: array, description: "Finding completions persisted by this merge or cleanup, independent of later cleanup success", items: {$ref: '#/components/schemas/FindingCompletion'}}
         repository: {$ref: '#/components/schemas/GitRepository'}
         index: {$ref: '#/components/schemas/ProjectIndex'}
         error: {type: string}

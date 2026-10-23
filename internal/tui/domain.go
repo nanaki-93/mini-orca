@@ -102,6 +102,7 @@ func (s *State) archiveAndCompleteChange(chg *ChangeSession) {
 	if chg != nil && chg.ID != "" && !isLocalPreviewChangeID(chg.ID) {
 		entry := ChangeHistoryEntry{
 			ProjectIdentity: chg.ProjectIdentity,
+			WorktreePath:    chg.WorktreePath,
 			ID:              chg.ID,
 			Kind:            chg.Kind,
 			Title:           chg.Title,

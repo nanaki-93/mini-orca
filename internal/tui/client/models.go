@@ -534,6 +534,18 @@ type GitWorkspace struct {
 	Worktrees []GitWorktree `json:"worktrees"`
 }
 
+// GitMutationResult reports independently confirmed integration and cleanup steps.
+type GitMutationResult struct {
+	State           string              `json:"state"`
+	Error           string              `json:"error"`
+	RemovedWorktree string              `json:"removed_worktree"`
+	RemovedBranch   string              `json:"removed_branch"`
+	Completed       []FindingCompletion `json:"completed"`
+	Warnings        []string            `json:"warnings"`
+	Index           *ProjectIndex       `json:"index"`
+	Repository      *GitRepository      `json:"repository"`
+}
+
 // DiffLine represents a single line in a unified diff.
 type DiffLine struct {
 	Kind    string `json:"kind"`

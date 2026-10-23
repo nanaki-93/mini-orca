@@ -639,7 +639,7 @@ func (s *State) handleGitOrHistoryKey(key string) bool {
 		}
 	case "x", "X", "Delete":
 		if parentPage(s.Page) == PageGit {
-			s.discardSelectedWorktree()
+			s.rejectSelectedWorktree()
 			return true
 		}
 	case "a", "c":

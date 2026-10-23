@@ -186,9 +186,21 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 			}
 			continue
 		}
+		if got.Code != http.StatusBadRequest || !strings.Contains(got.Body.String(), "unfinished task") {
+			t.Fatalf("unfinished merge accepted: %d %s", got.Code, got.Body.String())
+		}
+		if _, err := os.Stat(created.Path); err != nil {
+			t.Fatalf("rejected merge lost pending task: %v", err)
+		}
+		merge.SourceBranch = "codex/fix"
+		body, err = json.Marshal(merge)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = call("POST", "/api/projects/current/git/discard-worktree", string(body), "")
 		var result app.GitMutationResult
-		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "merged" || result.RemovedWorktree != created.Path || len(result.Warnings) != 0 {
-			t.Fatalf("merge cleanup receipt: %d %s", got.Code, got.Body.String())
+		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "discarded" || result.RemovedWorktree != created.Path || result.RemovedBranch != "" || len(result.Warnings) != 0 {
+			t.Fatalf("explicit discard receipt: %d %s", got.Code, got.Body.String())
 		}
 		if _, err := os.Stat(created.Path); !os.IsNotExist(err) {
 			t.Fatalf("merged worktree still exists: %v", err)

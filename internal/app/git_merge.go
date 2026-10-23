@@ -32,6 +32,9 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	if err != nil {
 		return nil, err
 	}
+	if err := requireFinishedWorktreeTasks(source.Path); err != nil {
+		return nil, err
+	}
 	completed, err := gitops.MergedFindingTargets(ctx, repository, source, listChangeSessions)
 	if err != nil {
 		return nil, err
@@ -46,7 +49,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 }
 
 // CleanupMergedWorktree reconciles a merge completed outside Mini-Orca. It never
-// attempts a merge or deletes a branch; ancestry must prove integration first.
+// attempts a merge; ancestry must prove integration before checkout/branch cleanup.
 func (s *Service) CleanupMergedWorktree(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
@@ -98,11 +101,17 @@ func (s *Service) completeMergedWorktree(ctx context.Context, root string, sourc
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but findings could not be marked Done: %v. Worktree %s and its task history were retained.", err, source.Path))
 		return
 	}
+	result.Completed = completed
 	if err := s.removeGitWorktree(ctx, root, source, gitops.WorktreeMerged); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but worktree %s was not removed: %v. Refresh Worktrees and retry cleanup after resolving the issue.", source.Path, err))
-	} else {
-		result.RemovedWorktree = source.Path
+		return
 	}
+	result.RemovedWorktree = source.Path
+	if err := gitops.DeleteMergedBranch(ctx, root, source.GitIdentity); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Merge and worktree removal completed, but branch %s was retained: %v. Inspect the branch in Git before deleting it.", source.Branch, err))
+		return
+	}
+	result.RemovedBranch = source.Branch
 }
 
 func (s *Service) AbortGitMerge(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {

@@ -361,7 +361,12 @@ func (s *State) mergeSelectedWorktree() {
 		return
 	}
 	wt := s.GitWorkspace.Worktrees[idx]
+	if worktreeHasUnfinishedTasks(&wt) {
+		s.CmdOutput = "Finish verification and Apply the saved task in Work > Tasks before merging."
+		return
+	}
 	if wt.Current || !wt.Mergeable {
+		s.CmdOutput = "This worktree cannot be merged. Press Enter to inspect its status."
 		return
 	}
 	s.CmdOutput = fmt.Sprintf("Merging %s into %s...", wt.Path, client.FirstNonEmpty(s.GitWorkspace.Branch, "main"))
@@ -674,6 +679,10 @@ func (s *State) cancelOrRejectActiveWorkflow() {
 }
 
 func (s *State) rejectSelectedAgentFix() {
+	if parentPage(s.Page) == PageGit {
+		s.rejectSelectedWorktree()
+		return
+	}
 	if s.Page == PageAgents {
 		s.syncSelectedAgentSession()
 	}
@@ -705,31 +714,6 @@ func (s *State) rejectSelectedAgentFix() {
 			Kind:           srcBranch,
 			Message:        srcHead,
 		},
-	})
-}
-
-func (s *State) discardSelectedWorktree() {
-	if s.GitWorkspace == nil {
-		return
-	}
-	idx := s.ClampedIdx()
-	if idx < 0 || idx >= len(s.GitWorkspace.Worktrees) {
-		return
-	}
-	wt := s.GitWorkspace.Worktrees[idx]
-	if wt.Current || wt.Path == "" {
-		return
-	}
-	if chg := s.findActiveChangeByWorktree(wt.Path); chg != nil {
-		cp := *chg
-		s.Change = &cp
-		s.rejectSelectedAgentFix()
-		return
-	}
-	s.CmdOutput = fmt.Sprintf("Discarding worktree %s...", wt.Path)
-	s.enqueueAction(ActionRequest{
-		Kind: "reject-change",
-		Seed: &ChangeSeed{WorktreePath: wt.Path, Kind: wt.Branch, Message: wt.Head},
 	})
 }
 

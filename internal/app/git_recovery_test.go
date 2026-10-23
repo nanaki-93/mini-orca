@@ -62,8 +62,8 @@ func TestExternallyResolvedMergeCanCompleteFindingsAndCleanup(t *testing.T) {
 	if testGit(t, root, "rev-parse", "HEAD") != before {
 		t.Fatal("cleanup changed source history")
 	}
-	if testGit(t, root, "rev-parse", "codex/fix") != head {
-		t.Fatal("cleanup deleted the recovery branch")
+	if _, err := gitRead(context.Background(), root, "show-ref", "--verify", "--quiet", "refs/heads/codex/fix"); err == nil || result.RemovedBranch != "codex/fix" {
+		t.Fatal("cleanup retained the merged branch")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("merged checkout retained")

@@ -36,7 +36,7 @@ func MergeSource(ctx context.Context, repository *GitRepository, request GitMuta
 		if tree.Path != request.Path {
 			continue
 		}
-		if tree.Head != request.SourceHead {
+		if tree.Head != request.SourceHead || request.SourceBranch != "" && tree.Branch != request.SourceBranch {
 			return nil, project.ErrRevisionConflict
 		}
 		source, err := ReadRepository(ctx, tree.Path)
@@ -78,6 +78,11 @@ func RequireMergeTarget(repository *GitRepository) error {
 func WorktreeMergeable(ctx context.Context, target *GitRepository, tree *GitWorktree, source *GitRepository) (bool, error) {
 	if RequireMergeTarget(target) != nil || RequireMergeSource(tree, source) != nil {
 		return false, nil
+	}
+	for _, entry := range tree.Sessions {
+		if entry.State != "applied" || entry.Commit == nil || entry.Commit.State != "committed" {
+			return false, nil
+		}
 	}
 	if _, err := Read(ctx, target.Root, "merge-base", target.Head, source.Head); err != nil {
 		if ExitCode(err, 1) {

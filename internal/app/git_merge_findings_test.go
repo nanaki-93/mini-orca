@@ -69,7 +69,7 @@ func TestGitMergeCompletesLinkedFindingsAfterApplyCommitAndRestart(t *testing.T)
 		t.Fatal("preview completed findings")
 	}
 	result, err := restarted.MergeGitWorktree(context.Background(), request)
-	if err != nil || result.State != "merged" || result.RemovedWorktree != path || len(result.Warnings) != 0 {
+	if err != nil || result.State != "merged" || result.RemovedWorktree != path || result.RemovedBranch != "codex/fix" || len(result.Completed) != len(targets) || len(result.Warnings) != 0 {
 		t.Fatalf("merge: %+v, %v", result, err)
 	}
 	completed, err := restarted.FindingCompletions()
@@ -137,7 +137,15 @@ func TestGitMergeDoesNotCompleteUncommittedUndoneUnmergedOrForeignTargets(t *tes
 			request = trustedGitRequest(t, service)
 			request.Path, request.SourceHead = path, testGit(t, path, "rev-parse", "HEAD")
 			result, err := service.MergeGitWorktree(context.Background(), request)
-			if err != nil || result.State != "merged" || result.RemovedWorktree != path {
+			unfinished := state == "draft" || state == "failed commit" || state == "undone"
+			if unfinished {
+				if err == nil || testGit(t, root, "rev-parse", "HEAD") != request.Head {
+					t.Fatalf("unfinished worktree was merged: %+v %v", result, err)
+				}
+				if _, err := os.Stat(path); err != nil {
+					t.Fatalf("unfinished worktree removed: %v", err)
+				}
+			} else if err != nil || result.State != "merged" || result.RemovedWorktree != path {
 				t.Fatalf("merge: %+v, %v", result, err)
 			}
 			if completed, err := service.FindingCompletions(); err != nil || len(completed) != 0 {

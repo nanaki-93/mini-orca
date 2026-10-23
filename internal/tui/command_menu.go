@@ -48,6 +48,7 @@ func commandCatalog() []commandItem {
 		commandItem{command: "apply", title: "Apply reviewed proposal", hint: "Write the checked proposal after every changed file has been reviewed."},
 		commandItem{command: "undo", title: "Undo last applied change", hint: "Restore the previous source only when the current hashes still match."},
 		commandItem{command: "merge", title: "Merge selected worktree", hint: "Integrate the reviewed task into its destination branch."},
+		commandItem{command: "reject", title: "Reject selected task or worktree", hint: "Discard the fix and return its linked issues to TODO."},
 		commandItem{command: "model", title: "Assign a model", hint: "model <analyze|bug|function> <model id>", argument: true},
 		commandItem{command: "palette", title: "Change color theme", hint: "Cycle Tokyo, CRT, Amber and Paper."},
 		commandItem{command: "keys", title: "Keyboard reference", hint: "Browse shortcuts for the current view and all colon commands."},

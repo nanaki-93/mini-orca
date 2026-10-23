@@ -105,7 +105,7 @@ func (s *State) diffApplyDestination() string {
 		branch = "current checkout"
 	}
 	if s.Change.WorktreePath != "" {
-		return "Apply: commit in " + s.Change.WorktreePath + ", then merge into " + branch
+		return "Apply: commit in " + s.Change.WorktreePath + "; review and merge separately in Worktrees"
 	}
 	return "Apply: write and commit reviewed files in " + branch
 }
