@@ -111,6 +111,15 @@ func TestWorkflowTimeoutCausesDistinguishModelAndOverallBudgets(t *testing.T) {
 	if status != "canceled" {
 		t.Fatalf("cancellation became a timeout: %s", status)
 	}
+	overall := &workflowTimeoutError{limit: time.Hour}
+	expired, stop := context.WithDeadlineCause(context.Background(), time.Now().Add(-time.Second), overall)
+	defer stop()
+	if got := workflowDeadlineCause(expired, context.DeadlineExceeded); got != overall {
+		t.Fatalf("lost total workflow deadline cause: %v", got)
+	}
+	if got := workflowDeadlineCause(expired, project.ErrRevisionConflict); got != project.ErrRevisionConflict {
+		t.Fatalf("deadline hid a source conflict: %v", got)
+	}
 }
 
 func TestTimedOutChecksStopAutomaticRepairAndRetainEvidence(t *testing.T) {
@@ -129,6 +138,9 @@ func TestTimedOutChecksStopAutomaticRepairAndRetainEvidence(t *testing.T) {
 	failed := finishedWorkflow(t, s, initial.ID)
 	if failed.Workflow.Status != "failed" || failed.Workflow.AutoRepairAttempts != 0 || createCalls.Load() != 1 || testCalls.Load() != 1 || reviewCalls.Load() != 0 {
 		t.Fatalf("interrupted checks triggered generation: %+v, calls=%d/%d/%d", failed.Workflow, createCalls.Load(), testCalls.Load(), reviewCalls.Load())
+	}
+	if !strings.Contains(failed.Workflow.Reason, "Required checks did not complete") {
+		t.Fatalf("interruption mislabeled as a code failure: %s", failed.Workflow.Reason)
 	}
 	for _, check := range failed.Checks {
 		if check.Name == "tests" && check.State == CheckCanceled && strings.Contains(check.Output, "timeouts.focused_check_seconds") {

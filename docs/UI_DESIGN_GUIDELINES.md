@@ -66,6 +66,10 @@ Task selection opens an editable plan without generation. Make approach, evidenc
 write/read scope, criteria and non-goals inspectable before explicit approval.
 Automatic repair is opt-in. Failed checks may suggest additional scope, but cannot
 silently expand an approved plan. Stage retries must state which work is reused.
+Stage details show the model budget alongside elapsed time. Testing generates
+test files before verification; missing check results must not imply tests have
+run. Busy stages do not advertise a duplicate retry. Timeout recovery identifies
+the relevant model or check limit, and interrupted checks do not trigger code repair.
 
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.

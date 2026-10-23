@@ -719,7 +719,7 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 			AutoRepairAttempts: 1,
 			Stages: []ChangeWorkflowStage{
 				{Name: "create", Status: "completed", Model: &Model{Model: "qwen2.5-coder:14b"}},
-				{Name: "test", Status: "failed", Model: &Model{Model: "qwen2.5-coder:7b"}},
+				{Name: "test", Status: "failed", Model: &Model{Model: "qwen2.5-coder:7b", Timeout: "15m0s"}},
 			},
 			Review: &ChangeWorkflowReview{
 				Verdict:  "changes_requested",
@@ -742,6 +742,7 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 		"TASK · STAGES",
 		"Selected: 2/4",
 		"qwen2.5-coder:7b",
+		"15m0s for the model and retries",
 		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
 		"nonce_uniqueness",
 		"assertion `left != right` failed",

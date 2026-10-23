@@ -106,7 +106,11 @@ func (s *State) effectiveAgentDetailStage() int {
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	lines := renderPageHeader(th, "TASK · STAGES", "[↑/↓] Stage · [d] Diff · [r] Retry · [x] Cancel/reject · [Esc] Back")
+	actions := "[↑/↓] Stage · [d] Diff · [r] Retry · [x] Cancel/reject · [Esc] Back"
+	if s.hasRunningWorkflow() {
+		actions = "[↑/↓] Stage · [d] Diff · [x] Cancel · [Esc] Back"
+	}
+	lines := renderPageHeader(th, "TASK · STAGES", actions)
 	activeStage := s.activeAgentStageNumber()
 	selectedStage := s.effectiveAgentDetailStage()
 	for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
@@ -132,7 +136,10 @@ func selectedStageMetadata(th ansiTheme, chg *ChangeSession, stage int, width in
 		if entry.Model != nil {
 			model = entry.Model.Model
 		}
-		rows = renderDiagnosticRow(th, th.cyan, "Model:", th.fg, model+" · "+workflowElapsed(entry.StartedAt, entry.FinishedAt), contentW)
+		rows = renderDiagnosticRow(th, th.cyan, "Model:", th.fg, model+" · elapsed "+workflowElapsed(entry.StartedAt, entry.FinishedAt), contentW)
+		if entry.Model != nil && entry.Model.Timeout != "" {
+			rows = append(rows, renderDiagnosticRow(th, th.cyan, "Budget:", th.fg, entry.Model.Timeout+" for the model and retries; check deadlines are separate.", contentW)...)
+		}
 		if entry.Reason != "" {
 			rows = append(rows, renderDiagnosticRow(th, th.amber, "Stage reason:", th.fg, entry.Reason, contentW)...)
 		}
@@ -223,8 +230,14 @@ func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSess
 
 func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	if s.Change == nil || len(s.Change.Checks) == 0 {
-		if s.Change != nil && len(s.Change.Changes) == 0 && !s.hasRunningWorkflow() {
+		if s.hasRunningWorkflow() {
+			return []string{fmt.Sprintf("%sStage 2 generates complete test files, then runs verification. No check results recorded yet.%s", th.muted, th.reset)}
+		}
+		if s.Change != nil && len(s.Change.Changes) == 0 {
 			return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
+		}
+		if s.Change != nil && resumableWorkflowStage(s.Change) == "test" {
+			return []string{fmt.Sprintf("%sNo check results recorded. Press [r] to retry Testing using the saved Creation proposal.%s", th.amber, th.reset)}
 		}
 		return []string{fmt.Sprintf("%sNo deterministic verification checks recorded yet — press [r] to run checks.%s", th.muted, th.reset)}
 	}

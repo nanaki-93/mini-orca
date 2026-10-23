@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -19,6 +20,14 @@ func (e *workflowTimeoutError) Error() string {
 }
 
 func (e *workflowTimeoutError) Unwrap() error { return context.DeadlineExceeded }
+
+// Preserve a more specific owner deadline when a child returns the context sentinel.
+func workflowDeadlineCause(ctx context.Context, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
+	return err
+}
 
 // A run must accommodate every remaining model call, including optional repairs.
 // Provider retries share each model's deadline; they do not multiply this budget.

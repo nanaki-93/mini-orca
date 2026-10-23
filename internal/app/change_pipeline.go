@@ -299,9 +299,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 		if runErr == nil {
 			runErr = s.verifyChangeCurrent(ctx, job.root, session)
 		}
-		if errors.Is(runErr, context.DeadlineExceeded) && ctx.Err() != nil {
-			runErr = context.Cause(ctx)
-		}
+		runErr = workflowDeadlineCause(ctx, runErr)
 		if runErr == nil {
 			w.Stages[2].Status = "completed"
 			w.Status = "changes_requested"
@@ -346,6 +344,9 @@ func workflowFailure(err error, checks []CheckResult) (string, string) {
 		return "stale", "Project source or instructions changed. Start a fresh conversation."
 	case errors.Is(err, errWorkflowChecksFailed):
 		base := "Tests or source checks failed. Inspect the check evidence before running again."
+		if !workflowChecksRepairable(checks) {
+			base = "Required checks did not complete. Inspect the check evidence and retry checks before changing code."
+		}
 		if detail := summarizeFailedChecks(checks); detail != "" {
 			return "failed", base + " (" + detail + ")"
 		}
