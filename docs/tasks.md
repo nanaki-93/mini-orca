@@ -253,6 +253,8 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/change_graph_test.go`, `internal/app/agent_change_host.go`, `internal/app/agent_change_host_test.go` — **new**.
 - `internal/app/change_pipeline.go`, `internal/app/change_pipeline_stages.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_test.go`.
 - `internal/app/change_checks.go`, `internal/app/change_baseline.go`, `internal/app/change_verify.go`.
+- `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go` — share private invocation-session setup, explicitly version graph records, and preserve completion/investigation history compatibility.
+- `docs/api-contract.md` — describe graph execution and the retained domain approval boundary.
 
 **Inputs / dependencies**
 - Task 09; existing proposal parsing, pinned tests, baseline checks, isolated execution, and review contracts.
@@ -261,6 +263,9 @@ This is an implementation specification, not a claim that the features below alr
 - Implement explicit generation, test generation, baseline/verification, critic, and human-review nodes. Use typed node inputs/results and stable IDs; app callbacks retain the only access to domain mutations.
 - Proposal tools may return only validated captured edits. Verification uses trusted controlled argv and the existing sandbox; never run model-authored commands.
 - Preserve test-only generation, reproducibility labels, required checks, cancellation, selected models, and stage retry semantics. Replace the superseded sequential loop rather than running two engines for one request.
+- Run native ADK sequential nodes with stable IDs `create`, `generate_tests`, `verify`, `review`, and `human_review`. The verification node retains the existing baseline/candidate check operation and controlled argv. Preserve the four current public stage summaries until the dynamic TUI task; the test summary spans test generation and verification.
+- Carry typed project, workflow, conversation and proposal identities through every node. Revalidate at the host mutation boundary; read-only nodes cannot change proposal identity, and a model review never grants human approval. Resume skips only explicitly admitted prior stages with current evidence.
+- Store bounded, source-free graph node progress and results in the private ADK journal using a distinct `change-graph-v1` schema and the shared root budget. Persist node start before calling the host, stop on cancellation/error/persistence failure, and never replay domain mutations from restored SDK events. Keep application-owned automatic repair behavior until the following specialist/repair task replaces its orchestration.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app ./internal/app/sandbox && ./scripts/validate.sh && git diff --check`
