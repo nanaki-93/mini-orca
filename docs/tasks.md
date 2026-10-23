@@ -401,6 +401,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agentruntime/private_events.go`, `internal/app/agentruntime/private_events_test.go` — **new**, bounded SDK event projection for explicitly requested tool arguments/results.
 - `internal/app/agent_run_private.go`, `internal/app/agent_run_private_test.go` — **new**, selected-invocation private detail assembly.
 - `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/tui/client/agent_models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md` — extend the existing explicit private-output disclosure with bounded tool records; default history remains source-free.
+- `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_read_test.go` (**new** test) — preserve a valid running snapshot when its known worker finishes between disk load and recovery classification; retain failure and orphan recovery semantics.
 - `internal/tui/sse_events.go`, `internal/tui/daemon_actions.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/detail_view.go`, `internal/tui/state.go`, `internal/tui/workspace_scenarios_test.go`.
 
 **Inputs / dependencies**
