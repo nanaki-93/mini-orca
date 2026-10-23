@@ -146,11 +146,15 @@ Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 
 | Dependency | Scope | Purpose |
 | --- | --- | --- |
-| **Go 1.22+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
+| **Go 1.27.3+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
 | **Model Providers** (`HTTP` / `agy` / `pi`) | AI Transport | Pluggable local or remote LLM execution for `analyze`, `bug`, and `function` scopes. |
 | **Go Quality & Race Gates** | Verification | Deterministic TUI/daemon verification (`make check`) and static/reachability/complexity/clone checks (`make quality`). |
 
 ## Run Locally
+
+Use Go 1.27.3 or newer. Development and container builds pin 1.27.3; CI reads
+the version from `go.mod`. Go can download the required toolchain automatically
+when `GOTOOLCHAIN=auto` is enabled. On macOS, Go 1.27 requires macOS 13 or newer.
 
 Read [CONFIG.md](CONFIG.md) before the first launch.
 

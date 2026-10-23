@@ -1,6 +1,6 @@
 module github.com/nanaki-93/mini-orca/v2
 
-go 1.22
+go 1.27.3
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0

@@ -21,7 +21,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 01 — Migrate the supported toolchain to Go 1.27.3
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `go.mod`, `go.sum` — supported Go version and necessary dependency metadata.

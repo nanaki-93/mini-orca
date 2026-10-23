@@ -1,6 +1,6 @@
 # Pinned language runtimes and static analysis / hook tooling for Mini-Orca
 [tools]
-go = "1.22"
+go = "1.27.3"
 node = "22"
 python = "3.12"
 just = "latest"

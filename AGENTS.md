@@ -19,7 +19,7 @@ guides add local detail; keep shared rules here instead of copying them.
 
 ## Architecture boundaries & ownership
 
-Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a pure Go
+Mini-Orca is a local-first coding assistant: a Go 1.27.3 daemon, a pure Go
 Terminal UI (`cmd/tui`, `internal/tui`) and a loopback HTTP API. It supports
 project-wide analysis and checked chat proposals across up to eight captured
 paths, with diff review, explicit Apply and guarded Undo.

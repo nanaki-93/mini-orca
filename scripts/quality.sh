@@ -2,7 +2,7 @@
 
 set -u
 
-staticcheck_version=v0.8.1
+staticcheck_version=v0.8.2
 tools_version=v0.40.0
 gocyclo_version=v0.6.0
 jscpd_version=4.0.5

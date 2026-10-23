@@ -5,7 +5,7 @@ the backend guide for changes to `cmd/`.
 
 ## Boundaries and contracts
 
-- Target Go 1.22; check `go.mod` before using newer language or library features.
+- Target Go 1.27.3; check `go.mod` before using newer language or library features.
   Keep production Go code in `cmd/` and `internal/`. Entry points wire dependencies;
   handlers decode/validate requests, call workflow owners and map errors.
 - Reuse `internal/api` request decoding and structured errors. Preserve size
