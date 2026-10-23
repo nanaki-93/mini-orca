@@ -66,19 +66,14 @@ func (b *Budget) checkpointLocked(ctx context.Context) error {
 	return nil
 }
 
-type completionSession struct {
+type runtimeSession struct {
 	service     session.Service
 	session     session.Session
 	runID       string
 	persistence *persistence
 }
 
-func createCompletionSession(ctx context.Context, request Request, providerBinding string) (*completionSession, error) {
-	p, _ := ctx.Value(persistenceKey{}).(*persistence)
-	var service session.Service = session.InMemoryService()
-	if p != nil {
-		service = &localSessionService{store: p.store}
-	}
+func createCompletionSession(ctx context.Context, request Request, providerBinding string) (*runtimeSession, error) {
 	initial := map[string]any{"mini_orca.request": request.Messages, "mini_orca.schema": request.Schema}
 	schemaVersion := "completion-v1"
 	if request.Investigation != nil {
@@ -87,17 +82,26 @@ func createCompletionSession(ctx context.Context, request Request, providerBindi
 		initial["mini_orca.context_tokens"] = request.ContextMaxTokens
 		schemaVersion = "investigation-v1"
 	}
-	created, err := service.Create(ctx, &session.CreateRequest{AppName: "mini-orca", UserID: "local", State: initial})
-	if err != nil {
-		return nil, fmt.Errorf("create completion session: %w", err)
-	}
-	result := &completionSession{service: service, session: created.Session, persistence: p}
-	if p == nil {
-		return result, nil
-	}
 	requestHash, schemaHash, err := invocationIdentity(request, initial)
 	if err != nil {
 		return nil, err
+	}
+	return createRuntimeSession(ctx, initial, schemaVersion, requestHash, schemaHash, providerBinding)
+}
+
+func createRuntimeSession(ctx context.Context, initial map[string]any, schemaVersion, requestHash, schemaHash, providerBinding string) (*runtimeSession, error) {
+	p, _ := ctx.Value(persistenceKey{}).(*persistence)
+	var service session.Service = session.InMemoryService()
+	if p != nil {
+		service = &localSessionService{store: p.store}
+	}
+	created, err := service.Create(ctx, &session.CreateRequest{AppName: "mini-orca", UserID: "local", State: initial})
+	if err != nil {
+		return nil, fmt.Errorf("create runtime session: %w", err)
+	}
+	result := &runtimeSession{service: service, session: created.Session, persistence: p}
+	if p == nil {
+		return result, nil
 	}
 	result.runID = rand.Text()
 	now := time.Now().UTC()
@@ -135,7 +139,7 @@ func fingerprint(value any) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (s *completionSession) finish(ctx context.Context, runErr error) error {
+func (s *runtimeSession) finish(ctx context.Context, runErr error) error {
 	if s.persistence == nil {
 		return nil
 	}

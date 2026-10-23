@@ -85,7 +85,7 @@ func validateRun(id string, run Run) error {
 	if run.ProviderBinding != "" && !validHash(run.ProviderBinding) {
 		return ErrCorrupt
 	}
-	if id != run.ID || !validID(id) || run.Session.Validate() != nil || (run.SchemaVersion != "completion-v1" && run.SchemaVersion != "investigation-v1") || !validHash(run.RequestHash) || !validHash(run.SchemaHash) || run.Started.IsZero() || run.Updated.Before(run.Started) {
+	if id != run.ID || !validID(id) || run.Session.Validate() != nil || !validRunSchema(run.SchemaVersion) || !validHash(run.RequestHash) || !validHash(run.SchemaHash) || run.Started.IsZero() || run.Updated.Before(run.Started) {
 		return ErrCorrupt
 	}
 	switch run.Status {
@@ -94,6 +94,10 @@ func validateRun(id string, run Run) error {
 	default:
 		return ErrCorrupt
 	}
+}
+
+func validRunSchema(version string) bool {
+	return version == "completion-v1" || version == "investigation-v1" || version == "change-graph-v1"
 }
 
 func validHash(value string) bool {

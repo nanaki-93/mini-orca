@@ -778,8 +778,18 @@ trust and at least one captured `_test.go` path are required before dispatch.
 The workflow supports features, fixes, performance and security work; instruction
 editing keeps its existing manual proposal flow.
 
-The daemon runs creation, test writing plus fixed `go test ./...` checks, and a
-separate model review. The testing agent may change only captured `_test.go`
+The daemon executes a native ADK workflow graph with stable `create`,
+`generate_tests`, `verify`, `review`, and `human_review` nodes. Generation and
+test writing use the selected models; verification retains the existing baseline
+and candidate checks with controlled commands. The current four public stage
+summaries remain compatible: Testing spans test generation and verification.
+Private graph events contain node state and captured identities; model content
+remains in private completion sessions. Each node start is persisted before its
+host operation, with no SDK-owned node retry. Cancellation, invalid predecessor
+identity or journal failure stops successor nodes. Restored graph events cannot
+authorize or replay source mutations.
+
+The testing agent may change only captured `_test.go`
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
 There is one active change workflow per conversation. Each model call uses the

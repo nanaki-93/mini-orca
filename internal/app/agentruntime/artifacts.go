@@ -25,7 +25,7 @@ type localArtifactService struct {
 
 var _ artifact.Service = (*localArtifactService)(nil)
 
-func completionArtifacts(invocation *completionSession) artifact.Service {
+func completionArtifacts(invocation *runtimeSession) artifact.Service {
 	if invocation.persistence == nil {
 		return artifact.InMemoryService()
 	}

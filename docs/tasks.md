@@ -247,7 +247,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 10 — Migrate checked changes to an ADK graph
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/change_graph_test.go`, `internal/app/agent_change_host.go`, `internal/app/agent_change_host_test.go` — **new**.

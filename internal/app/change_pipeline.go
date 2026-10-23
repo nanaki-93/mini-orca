@@ -147,11 +147,7 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 		if attempt == 0 {
 			startStage = job.startStage
 		}
-		for stage := startStage; stage < 3; stage++ {
-			if runErr = s.executeChangeWorkflowStage(ctx, job, stage, currentMessage); runErr != nil {
-				break
-			}
-		}
+		runErr = s.executeChangeGraph(ctx, job, startStage, currentMessage)
 		if !job.autoRepair || attempt >= s.agentRuntime.Limits.Repairs || !s.shouldAutoRepairWorkflow(ctx, job, runErr) {
 			break
 		}
@@ -250,41 +246,21 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	return retryMsg, true
 }
 
-func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWorkflowJob, stage int, message string) error {
-	session, err := s.beginChangeWorkflowStage(ctx, job, stage)
-	if err != nil {
-		return err
-	}
-	runtime := s.workflowStageRuntime(stage, job.models.selections()[stage])
-	session, err = s.runWorkflowModelStage(ctx, job, session, runtime, stage, message)
-	if err != nil || stage != 1 {
-		return err
-	}
-	session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), CheckOptions: CheckOptions{RunTests: true}})
-	if err == nil && !requiredChecksPassed(session.Checks) {
-		return errWorkflowChecksFailed
-	}
-	return err
-}
-
 var errWorkflowChecksFailed = errors.New("workflow checks failed")
 
 func identityForChange(session *ChangeSession) ChangeIdentity {
 	return ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}
 }
 
-func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkflowJob, stage int) (*ChangeSession, error) {
+func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkflowJob, stage int, identity ChangeIdentity) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
-	session, err := loadChangeSession(job.root, job.sessionID)
+	session, root, err := s.loadChangeForAction(ctx, job.sessionID, identity)
 	if err != nil {
 		return nil, err
 	}
-	if session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models {
+	if root != job.root || session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models {
 		return nil, project.ErrRevisionConflict
-	}
-	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
-		return nil, err
 	}
 	if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
 		return nil, err

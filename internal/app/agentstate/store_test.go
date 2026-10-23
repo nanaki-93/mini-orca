@@ -230,6 +230,48 @@ func TestBudgetCheckpointRejectsStaleOrChangedAccounting(t *testing.T) {
 	}
 }
 
+func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing.T) {
+	s, key := testStore(t)
+	limits, err := config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := BudgetRecord{ID: "budget", Binding: Binding{Project: "project", Revision: "revision", Policy: "policy", Configuration: "config"}, Limits: limits.Limits, Sequence: 1}
+	if err := s.Checkpoint(t.Context(), budget); err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "unknown-v1"} {
+		now := time.Now().UTC()
+		run := Run{ID: version, Session: key, BudgetID: budget.ID, RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: version, Status: "running", Started: now, Updated: now}
+		err := s.BeginRun(t.Context(), run)
+		if version == "unknown-v1" {
+			if err == nil {
+				t.Fatal("unknown graph schema was accepted")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.FinishRun(t.Context(), run.ID, "completed"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened, err := Open(s.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := reopened.load()
+	if err != nil || len(db.Runs) != 3 {
+		t.Fatalf("history schema compatibility lost: %v", err)
+	}
+	for _, run := range db.Runs {
+		if run.Status != "completed" {
+			t.Fatalf("read changed terminal run: %+v", run)
+		}
+	}
+}
+
 func TestJournalChildWriter(t *testing.T) {
 	root := os.Getenv("MINI_ORCA_TEST_JOURNAL")
 	if root == "" {
