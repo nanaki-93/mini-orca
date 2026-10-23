@@ -58,6 +58,7 @@ func (s *Service) prepareWorkflowRun(session *ChangeSession, request ChangeWorkf
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
 	}
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
+	w.Specialists = s.prepareWorkflowSpecialists(session, request.Models.Review)
 	for i := 0; i < startStage; i++ {
 		if session.Workflow != nil && i < len(session.Workflow.Stages) {
 			w.Stages[i] = session.Workflow.Stages[i]

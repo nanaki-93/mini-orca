@@ -73,15 +73,18 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 			t.Fatal(err)
 		}
 		records, err := store.Sessions(context.Background(), "mini-orca", "local")
-		if err != nil || len(records) != 2 {
+		if err != nil || len(records) != 3 {
 			t.Fatalf("worktree journal is not isolated: %d records, %v", len(records), err)
 		}
 		parentStore, err := agentstate.Open(root)
 		if err != nil {
 			t.Fatal(err)
 		}
-		graphs, completions := 0, 0
+		graphs, completions, repairs := 0, 0, 0
 		for _, record := range records {
+			if record.State["mini_orca.repair_graph"] != nil {
+				repairs++
+			}
 			if record.State["mini_orca.change_graph"] != nil {
 				graphs++
 			}
@@ -92,8 +95,8 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 				t.Fatalf("child session leaked into parent: %v", err)
 			}
 		}
-		if graphs != 1 || completions != 1 {
-			t.Fatalf("worktree lost graph/model journal separation: %d graphs, %d completions", graphs, completions)
+		if graphs != 1 || completions != 1 || repairs != 1 {
+			t.Fatalf("worktree lost graph/model journal separation: %d graphs, %d completions, %d repair controllers", graphs, completions, repairs)
 		}
 		polled, err := child.ChangeSession(context.Background(), sessions[i].ID)
 		if err != nil || polled.Freshness != "current" || polled.Workflow == nil || polled.Workflow.Status != "running" {

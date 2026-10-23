@@ -61,6 +61,9 @@ func (b *Budget) checkpointLocked(ctx context.Context) error {
 	usage := b.usage
 	usage.ElapsedMillis = time.Since(b.started).Milliseconds()
 	if err := b.persist(ctx, usage); err != nil {
+		if isPersistenceCancellation(err) {
+			return err
+		}
 		return fmt.Errorf("%w: save shared budget: %w", agentstate.ErrPersistence, err)
 	}
 	return nil
@@ -107,6 +110,9 @@ func createRuntimeSession(ctx context.Context, initial map[string]any, schemaVer
 	now := time.Now().UTC()
 	run := agentstate.Run{ID: result.runID, Session: agentstate.Key{App: "mini-orca", User: "local", ID: created.Session.ID()}, BudgetID: p.budgetID, RequestHash: requestHash, SchemaHash: schemaHash, ProviderBinding: providerBinding, SchemaVersion: schemaVersion, Status: "running", Started: now, Updated: now}
 	if err := p.store.BeginRun(ctx, run); err != nil {
+		if isPersistenceCancellation(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: begin invocation: %w", agentstate.ErrPersistence, err)
 	}
 	return result, nil

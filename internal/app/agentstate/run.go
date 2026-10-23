@@ -97,7 +97,12 @@ func validateRun(id string, run Run) error {
 }
 
 func validRunSchema(version string) bool {
-	return version == "completion-v1" || version == "investigation-v1" || version == "change-graph-v1"
+	switch version {
+	case "completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1":
+		return true
+	default:
+		return false
+	}
 }
 
 func validHash(value string) bool {

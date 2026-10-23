@@ -87,7 +87,7 @@ func TestChangeWorkflowSelectedModelsTestsReviewAndHumanApply(t *testing.T) {
 		t.Fatalf("handoff: %+v", session)
 	}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
-		if calls[i].Load() != 1 || session.Workflow.Stages[i].Model.Model != name || session.Workflow.Stages[i].Status != "completed" {
+		if calls[i].Load() != []int32{1, 1, 3}[i] || session.Workflow.Stages[i].Model.Model != name || session.Workflow.Stages[i].Status != "completed" {
 			t.Fatalf("stage %d: %+v, calls=%d", i, session.Workflow.Stages[i], calls[i].Load())
 		}
 	}
@@ -331,7 +331,7 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	expectedScopes := []string{"bug", "function", "analyze"}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
 		stage := session.Workflow.Stages[i]
-		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "15m0s" {
+		if calls[i].Load() != []int32{1, 1, 3}[i] || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "15m0s" {
 			t.Fatalf("stage %d provenance: %+v", i, stage)
 		}
 	}
@@ -708,7 +708,7 @@ func TestChangeWorkflowAutoRepairStageOneTimeoutPreservesCheckEvidenceAndReconci
 	}
 }
 
-func TestChangeWorkflowExpandsUncapturedFailingTestTargetsAndPassesRetryFeedbackToTestStage(t *testing.T) {
+func TestChangeWorkflowRequiresApprovedScopeForUncapturedFailingTests(t *testing.T) {
 	var testCalls atomic.Int32
 	s, root, _ := workflowService(t, [3]func() string{
 		func() string {
@@ -763,12 +763,24 @@ func TestChangeWorkflowExpandsUncapturedFailingTestTargetsAndPassesRetryFeedback
 	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
 		t.Fatal(err)
 	}
-	healed := finishedWorkflow(t, s, session.ID)
-	if healed.Workflow.Status != "awaiting_human_review" || healed.Workflow.AutoRepairAttempts != 1 {
-		t.Fatalf("expected workflow to auto-expand cmd/add_test.go and heal on attempt 1, got workflow=%+v checks=%+v", healed.Workflow, healed.Checks)
+	blocked := finishedWorkflow(t, s, session.ID)
+	if blocked.Workflow.Status != "failed" || blocked.Workflow.AutoRepairAttempts != 0 || testCalls.Load() != 1 {
+		t.Fatalf("unapproved scope triggered repair: %+v", blocked.Workflow)
 	}
-	if changeTarget(healed, "cmd/add_test.go") == nil {
-		t.Fatalf("expected cmd/add_test.go to be dynamically added to session.Targets, got %+v", healed.Targets)
+	if changeTarget(blocked, "cmd/add_test.go") != nil || len(blocked.ScopeSuggestions) != 1 || blocked.ScopeSuggestions[0] != "cmd/add_test.go" {
+		t.Fatalf("failed check changed scope instead of suggesting it: %+v", blocked.Targets)
+	}
+	// A new conversation explicitly captures the suggested file. The user can
+	// then pass the retained failure evidence to the newly admitted workflow.
+	expanded := openChangeFixture(t, s, "cmd/master.go", "cmd/master_test.go", "cmd/add_test.go")
+	approved := workflowRequest(expanded)
+	approved.Message = workflowRetryMessage(req.Message, blocked.Workflow, blocked.Checks)
+	if _, err := s.StartChangeWorkflow(context.Background(), expanded.ID, approved); err != nil {
+		t.Fatal(err)
+	}
+	healed := finishedWorkflow(t, s, expanded.ID)
+	if healed.Workflow.Status != "awaiting_human_review" || healed.Workflow.AutoRepairAttempts != 0 || testCalls.Load() != 2 {
+		t.Fatalf("explicitly expanded scope did not recover: %+v", healed.Workflow)
 	}
 	var testStageSawFailure bool
 	for _, msg := range healed.Messages {

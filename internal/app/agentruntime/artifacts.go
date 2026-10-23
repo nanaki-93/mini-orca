@@ -45,6 +45,9 @@ func artifactStorageError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if isPersistenceCancellation(err) {
+		return err
+	}
 	if errors.Is(err, agentstate.ErrNotFound) {
 		return fmt.Errorf("%w: %w", fs.ErrNotExist, err)
 	}

@@ -774,7 +774,7 @@ rechecked before admission. Resolved defaults require the same consent as explic
 choices. `confirmed_profiles` lists the selected remote
 profiles the user approved; local profiles need no remote confirmation. Security
 tasks additionally require `confirm_security: true`. Current project execution
-trust and at least one captured `_test.go` path are required before dispatch.
+trust and at least one captured test path are required before dispatch.
 The workflow supports features, fixes, performance and security work; instruction
 editing keeps its existing manual proposal flow.
 
@@ -789,12 +789,25 @@ host operation, with no SDK-owned node retry. Cancellation, invalid predecessor
 identity or journal failure stops successor nodes. Restored graph events cannot
 authorize or replay source mutations.
 
-The testing agent may change only captured `_test.go`
+Review fans out to correctness and test-quality specialists, plus architecture
+for Go or multiple source files. Security tasks add a security specialist only
+after explicit security intent; performance tasks add performance advice labeled
+`unmeasured`. Routing is frozen at admission. Every specialist uses the selected
+Review profile and the same checked proposal, within the shared concurrency and
+call limits. `workflow.specialists` retains each role's state, model provenance,
+evidence label and completed report. Legacy records may omit this field.
+Reports join in canonical role order, deduplicating findings. Each report has at
+most 16 findings; the aggregate has at most 80. A missing, failed or canceled
+reviewer prevents aggregate approval. Parallel cancellation caused by a failed
+reviewer remains a failed run rather than appearing as a user cancellation.
+
+The testing agent may change only captured test
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
 There is one active change workflow per conversation. Each model call uses the
 largest of `timeouts.workflow_model_seconds` (900 seconds by default), the
 generation timeout and its selected scope's timeout; retries share that deadline.
+The review stage allows enough time for reviewers queued by the concurrency limit.
 The total deadline is at least 30 minutes and includes remaining model budgets,
 check/preparation allowances and enabled automatic repairs. Shared
 `agent_runtime` call, token, concurrency and elapsed limits also apply across
@@ -806,7 +819,11 @@ until a new run produces a passing proposal and approving review.
 For planned sessions, workflow admission requires `plan_hash` matching the
 captured plan. Approval does not bypass provider consent, execution trust or stale
 source checks. `auto_repair` defaults to false; opting in permits at most two
-automatic retries. Failed checks can expose `scope_suggestions`, but planned
+automatic repairs through a conditional ADK graph. Each repair reserves the
+shared repair budget and persists its transition before another generation.
+Only actionable failed checks or completed rejecting reviews qualify; authority,
+timeout, cancellation and persistence failures never cause automatic regeneration.
+Failed checks can expose `scope_suggestions`, but checked-change
 workflows never silently add targets and automatic repair stops when expansion
 would be needed. Review the suggested scope in a new plan before generation.
 Interrupted or unavailable required checks stop automatic repair: they do not

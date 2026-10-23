@@ -54,7 +54,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	}
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.CheckOptions
-	expandTargetsFromFailedChecks(root, current)
+	refreshChangeScopeSuggestions(root, current)
 	if current.Workflow != nil {
 		reconcileWorkflowAfterChecks(current, checks, ctx.Value(changeWorkflowContextKey{}) != nil)
 	}
@@ -472,8 +472,11 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	if session.RepairAttempts >= 3 || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) || (s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash && !hasFailedChecks) {
 		return nil, root, fmt.Errorf("repair requires current failed checks and fewer than three attempts")
 	}
+	refreshChangeScopeSuggestions(root, session)
+	if len(session.ScopeSuggestions) > 0 {
+		return nil, root, fmt.Errorf("approve suggested scope before repairing")
+	}
 	session.RepairAttempts++
-	expandTargetsFromFailedChecks(root, session)
 	if session.Workflow != nil {
 		if probeSummary, lessons := probeWorkflowFriction(session.Workflow, session.Checks); probeSummary != "" || len(lessons) > 0 {
 			if probeSummary != "" {
@@ -488,7 +491,7 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	return session, root, nil
 }
 
-func expandTargetsFromFailedChecks(root string, session *ChangeSession) {
+func refreshChangeScopeSuggestions(root string, session *ChangeSession) {
 	if session == nil {
 		return
 	}
@@ -498,14 +501,7 @@ func expandTargetsFromFailedChecks(root string, session *ChangeSession) {
 	}
 	existingPaths := collectSessionTargetPaths(session)
 	failedOutputs := collectFailedCheckOutputs(session.Checks)
-	paths := changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath)
-	if session.Plan != nil {
-		session.ScopeSuggestions = paths
-		return
-	}
-	for _, path := range paths {
-		captureExpandedSessionTarget(root, session, path)
-	}
+	session.ScopeSuggestions = changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath)
 }
 
 func collectSessionTargetPaths(session *ChangeSession) []string {
@@ -524,25 +520,6 @@ func collectFailedCheckOutputs(checks []CheckResult) []string {
 		}
 	}
 	return out
-}
-
-func captureExpandedSessionTarget(root string, session *ChangeSession, path string) {
-	if changeTarget(session, path) != nil {
-		return
-	}
-	target, err := captureChangeTarget(root, path)
-	if err != nil {
-		return
-	}
-	instructions, err := project.ResolveInstructions(root, path)
-	if err != nil {
-		return
-	}
-	if session.Instructions == nil {
-		session.Instructions = map[string]string{}
-	}
-	session.Targets = append(session.Targets, target)
-	session.Instructions[path] = instructions.Fingerprint
 }
 
 func changeCheckEvidence(checks []CheckResult) string {

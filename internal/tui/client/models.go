@@ -619,21 +619,31 @@ type ChangeWorkflowReview struct {
 	Findings     []string `json:"findings"`
 }
 
+type ChangeSpecialistReview struct {
+	ID       string                `json:"id"`
+	Status   string                `json:"status"`
+	Reason   string                `json:"reason,omitempty"`
+	Evidence string                `json:"evidence"`
+	Model    *Model                `json:"model"`
+	Review   *ChangeWorkflowReview `json:"review,omitempty"`
+}
+
 // ChangeWorkflow tracks the 4-stage automated agent pipeline on a ChangeSession.
 type ChangeWorkflow struct {
-	Attempt            int                   `json:"attempt,omitempty"`
-	ResumeFrom         string                `json:"resume_from,omitempty"`
-	ID                 string                `json:"id"`
-	Status             string                `json:"status"`
-	Reason             string                `json:"reason,omitempty"`
-	AutoRepair         bool                  `json:"auto_repair,omitempty"`
-	AutoRepairAttempts int                   `json:"auto_repair_attempts,omitempty"`
-	ProbeSummary       string                `json:"probe_summary,omitempty"`
-	HarnessLessons     []string              `json:"harness_lessons,omitempty"`
-	Stages             []ChangeWorkflowStage `json:"stages"`
-	Review             *ChangeWorkflowReview `json:"review,omitempty"`
-	StartedAt          string                `json:"started_at"`
-	UpdatedAt          string                `json:"updated_at"`
+	Attempt            int                      `json:"attempt,omitempty"`
+	ResumeFrom         string                   `json:"resume_from,omitempty"`
+	ID                 string                   `json:"id"`
+	Status             string                   `json:"status"`
+	Reason             string                   `json:"reason,omitempty"`
+	AutoRepair         bool                     `json:"auto_repair,omitempty"`
+	AutoRepairAttempts int                      `json:"auto_repair_attempts,omitempty"`
+	ProbeSummary       string                   `json:"probe_summary,omitempty"`
+	HarnessLessons     []string                 `json:"harness_lessons,omitempty"`
+	Stages             []ChangeWorkflowStage    `json:"stages"`
+	Review             *ChangeWorkflowReview    `json:"review,omitempty"`
+	Specialists        []ChangeSpecialistReview `json:"specialists,omitempty"`
+	StartedAt          string                   `json:"started_at"`
+	UpdatedAt          string                   `json:"updated_at"`
 }
 
 // ChangeMessage represents a prompt or model response in a change conversation.

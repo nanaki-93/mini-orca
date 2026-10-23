@@ -33,6 +33,24 @@ func TestLocalSessionConformance(t *testing.T) {
 	})
 }
 
+func TestLocalSessionCancellationRetainsItsMeaning(t *testing.T) {
+	store, err := agentstate.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	s := &localSessionService{store: store}
+	_, err = s.Create(ctx, &session.CreateRequest{AppName: "app", UserID: "user", SessionID: "canceled"})
+	if !errors.Is(err, context.Canceled) || errors.Is(err, agentstate.ErrPersistence) {
+		t.Fatalf("canceled session was labeled a storage failure: %v", err)
+	}
+	deadline := fmt.Errorf("%w: lock: %w", agentstate.ErrPersistence, context.DeadlineExceeded)
+	if err := sessionStorageError(deadline); !errors.Is(err, agentstate.ErrPersistence) {
+		t.Fatal("genuine store deadline was hidden")
+	}
+}
+
 func TestLocalSessionConcurrentAppendAndCopyIsolation(t *testing.T) {
 	root := t.TempDir()
 	store, err := agentstate.Open(root)

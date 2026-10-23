@@ -32,6 +32,41 @@ func budgetContext(t *testing.T, alter func(*config.AgentLimits)) (context.Conte
 	return ctx, BudgetFromContext(ctx)
 }
 
+func TestCanceledChildReservationsDoNotCancelSharedRun(t *testing.T) {
+	for _, kind := range []string{"model", "tool", "repair"} {
+		t.Run(kind, func(t *testing.T) {
+			parent, budget, _ := persistedContext(t, t.TempDir())
+			ctx, cancel := context.WithCancel(parent)
+			defer cancel()
+			persist := budget.persist
+			budget.persist = func(ctx context.Context, usage BudgetSnapshot) error {
+				cancel()
+				return persist(ctx, usage)
+			}
+			var err error
+			switch kind {
+			case "model":
+				_, err = budget.reserveModel(ctx, 1, 1)
+			case "tool":
+				err = budget.AdmitTool(ctx)
+			case "repair":
+				err = budget.AdmitRepair(ctx)
+			}
+			budget.persist = persist
+			if !errors.Is(err, context.Canceled) || parent.Err() != nil || budget.Snapshot().ActiveCalls != 0 {
+				t.Fatalf("canceled reservation poisoned the shared run: %v parent=%v", err, parent.Err())
+			}
+			reservation, err := budget.reserveModel(parent, 1, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := reservation.settle(1, 1, true, true); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestProviderDispatchRechecksInvestigationWithoutSDKHooks(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

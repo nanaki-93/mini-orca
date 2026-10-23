@@ -200,6 +200,7 @@ func validJSON(data []byte) bool {
 }
 
 func (s *Store) mutate(ctx context.Context, change func(*database) error) (err error) {
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if ctx.Err() != nil {
@@ -207,7 +208,7 @@ func (s *Store) mutate(ctx context.Context, change func(*database) error) (err e
 	}
 	lock, err := s.lock(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: acquire journal lock: %w", ErrPersistence, err)
+		return persistenceOperationError(parent, "acquire journal lock", err)
 	}
 	defer func() {
 		if closeErr := lock.Close(); closeErr != nil {
@@ -236,9 +237,18 @@ func (s *Store) mutate(ctx context.Context, change func(*database) error) (err e
 		return err
 	}
 	if err := s.write(path, data, 0600, func() error { return context.Cause(ctx) }); err != nil {
-		return fmt.Errorf("%w: %w", ErrPersistence, err)
+		return persistenceOperationError(parent, "save journal", err)
 	}
 	return nil
+}
+
+// Cancellation before an atomic commit is not a failed disk write. Preserve
+// genuine I/O errors and the store's own lock timeout as persistence failures.
+func persistenceOperationError(parent context.Context, operation string, err error) error {
+	if cause := context.Cause(parent); cause != nil && (errors.Is(err, parent.Err()) || errors.Is(err, cause)) {
+		return cause
+	}
+	return fmt.Errorf("%w: %s: %w", ErrPersistence, operation, err)
 }
 
 func (s *Store) lock(ctx context.Context) (*os.File, error) {

@@ -275,7 +275,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 11 — Add specialist review and bounded repair branches
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/review_graph_test.go` — **new**.

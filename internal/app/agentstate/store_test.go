@@ -158,8 +158,41 @@ func TestJournalConcurrentStoresAndCanceledLock(t *testing.T) {
 	defer lock.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
-	if _, err := other.CreateSession(ctx, Key{"app", "user", "blocked"}, nil); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := other.CreateSession(ctx, Key{"app", "user", "blocked"}, nil); !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrPersistence) {
 		t.Fatalf("lock ignored deadline: %v", err)
+	}
+}
+
+func TestJournalCanceledCommitIsNotAnIOFailure(t *testing.T) {
+	for _, artifact := range []bool{false, true} {
+		s, key := testStore(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		s.write = func(_ string, _ []byte, _ os.FileMode, authorize func() error) error {
+			cancel()
+			return authorize()
+		}
+		var err error
+		if artifact {
+			_, err = s.SaveArtifact(ctx, ArtifactWrite{Key: ArtifactKey{Session: key, Name: "result"}, Kind: "text", MIME: "text/plain", Data: []byte("result")})
+		} else {
+			_, err = s.AppendEvent(ctx, key, Event{ID: "canceled", Data: json.RawMessage(`{}`)}, nil)
+		}
+		if !errors.Is(err, context.Canceled) || errors.Is(err, ErrPersistence) {
+			t.Fatalf("canceled commit became a storage failure: %v", err)
+		}
+		if record, err := s.Session(t.Context(), key); err != nil || len(record.Events) != 0 {
+			t.Fatalf("canceled journal append became visible: %+v %v", record, err)
+		}
+	}
+	if err := persistenceOperationError(t.Context(), "lock", context.DeadlineExceeded); !errors.Is(err, ErrPersistence) {
+		t.Fatal("internal lock timeout lost storage-failure classification")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	failure := errors.New("disk failure")
+	if err := persistenceOperationError(ctx, "write", failure); !errors.Is(err, failure) || !errors.Is(err, ErrPersistence) {
+		t.Fatal("cancellation hid an actual disk failure")
 	}
 }
 
@@ -240,7 +273,7 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 	if err := s.Checkpoint(t.Context(), budget); err != nil {
 		t.Fatal(err)
 	}
-	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "unknown-v1"} {
+	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1", "unknown-v1"} {
 		now := time.Now().UTC()
 		run := Run{ID: version, Session: key, BudgetID: budget.ID, RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: version, Status: "running", Started: now, Updated: now}
 		err := s.BeginRun(t.Context(), run)
@@ -262,7 +295,7 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 		t.Fatal(err)
 	}
 	db, err := reopened.load()
-	if err != nil || len(db.Runs) != 3 {
+	if err != nil || len(db.Runs) != 5 {
 		t.Fatalf("history schema compatibility lost: %v", err)
 	}
 	for _, run := range db.Runs {

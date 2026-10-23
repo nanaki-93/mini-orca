@@ -61,23 +61,33 @@ type ChangeWorkflowReview struct {
 	Findings     []string `json:"findings"`
 }
 
+type ChangeSpecialistReview struct {
+	ID       string                `json:"id"`
+	Status   string                `json:"status"`
+	Reason   string                `json:"reason,omitempty"`
+	Evidence string                `json:"evidence"`
+	Model    *EffectiveModel       `json:"model"`
+	Review   *ChangeWorkflowReview `json:"review,omitempty"`
+}
+
 // Workflow reports live in private change history alongside captured source.
 // A model verdict never establishes human approval or measured performance.
 type ChangeWorkflow struct {
-	Attempt            int                   `json:"attempt,omitempty"`
-	ResumeFrom         string                `json:"resume_from,omitempty"`
-	ID                 string                `json:"id"`
-	Status             string                `json:"status"`
-	Reason             string                `json:"reason,omitempty"`
-	Models             ChangeWorkflowModels  `json:"models"`
-	AutoRepair         bool                  `json:"auto_repair,omitempty"`
-	AutoRepairAttempts int                   `json:"auto_repair_attempts,omitempty"`
-	ProbeSummary       string                `json:"probe_summary,omitempty"`
-	HarnessLessons     []string              `json:"harness_lessons,omitempty"`
-	Stages             []ChangeWorkflowStage `json:"stages"`
-	Review             *ChangeWorkflowReview `json:"review,omitempty"`
-	StartedAt          time.Time             `json:"started_at"`
-	UpdatedAt          time.Time             `json:"updated_at"`
+	Attempt            int                      `json:"attempt,omitempty"`
+	ResumeFrom         string                   `json:"resume_from,omitempty"`
+	ID                 string                   `json:"id"`
+	Status             string                   `json:"status"`
+	Reason             string                   `json:"reason,omitempty"`
+	Models             ChangeWorkflowModels     `json:"models"`
+	AutoRepair         bool                     `json:"auto_repair,omitempty"`
+	AutoRepairAttempts int                      `json:"auto_repair_attempts,omitempty"`
+	ProbeSummary       string                   `json:"probe_summary,omitempty"`
+	HarnessLessons     []string                 `json:"harness_lessons,omitempty"`
+	Stages             []ChangeWorkflowStage    `json:"stages"`
+	Review             *ChangeWorkflowReview    `json:"review,omitempty"`
+	Specialists        []ChangeSpecialistReview `json:"specialists,omitempty"`
+	StartedAt          time.Time                `json:"started_at"`
+	UpdatedAt          time.Time                `json:"updated_at"`
 }
 
 type changeWorkflowContextKey struct{}
@@ -86,6 +96,7 @@ type changeWorkflowJob struct {
 	root, sessionID, id string
 	models              ChangeWorkflowModels
 	startStage          int
+	specialists         []string
 	autoRepair          bool
 	cancel              context.CancelFunc
 	done                chan struct{}
@@ -142,7 +153,7 @@ func isChangePipelineActive(workflow *ChangeWorkflow) bool {
 
 func canHumanReviewProposal(session *ChangeSession) bool {
 	w := session.Workflow
-	return w == nil || (w.Status == "awaiting_human_review" && w.Review != nil && w.Review.ProposalHash == session.Hash && w.Review.Verdict == "approve")
+	return w == nil || (w.Status == "awaiting_human_review" && w.Review != nil && w.Review.ProposalHash == session.Hash && w.Review.Verdict == "approve" && specialistsComplete(w, session.Hash))
 }
 
 func invalidateChangeWorkflow(session *ChangeSession, reason string) {
@@ -165,6 +176,7 @@ func stopChangeWorkflowStages(w *ChangeWorkflow) {
 		}
 	}
 	w.Stages[3].Status = "blocked"
+	stopWorkflowSpecialists(w)
 }
 
 func validateStoredWorkflow(w *ChangeWorkflow) error {
@@ -191,6 +203,9 @@ func validateStoredWorkflow(w *ChangeWorkflow) error {
 		if w.Stages[i].Model == nil || w.Stages[i].Model.Profile != profile {
 			return fmt.Errorf("corrupt workflow model provenance")
 		}
+	}
+	if err := validateWorkflowSpecialists(w); err != nil {
+		return err
 	}
 	if w.Review != nil {
 		return validateWorkflowReview(w.Review)

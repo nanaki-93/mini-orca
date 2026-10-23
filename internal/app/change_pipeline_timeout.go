@@ -36,6 +36,9 @@ func (s *Service) changeWorkflowTimeout(models ChangeWorkflowModels, startStage 
 	for stage, profile := range models.selections() {
 		runtime := s.workflowStageRuntime(stage, profile)
 		limit := duration(runtime.effective.Timeout)
+		if stage == 2 {
+			limit *= time.Duration(s.workflowReviewWaves(len(workflowReviewRoles)))
+		}
 		full += limit
 		if stage >= startStage {
 			remaining += limit
@@ -52,4 +55,9 @@ func (s *Service) changeWorkflowTimeout(models ChangeWorkflowModels, startStage 
 		budget += time.Duration(s.agentRuntime.Limits.Repairs) * (full + checks)
 	}
 	return max(30*time.Minute, budget)
+}
+
+func (s *Service) workflowReviewWaves(count int) int {
+	concurrency := max(1, s.agentRuntime.Limits.ConcurrentCalls)
+	return max(1, (count+concurrency-1)/concurrency)
 }

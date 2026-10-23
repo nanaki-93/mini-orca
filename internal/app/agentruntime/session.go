@@ -140,10 +140,17 @@ func sessionStorageError(err error) error {
 	if err == nil {
 		return nil
 	}
+	if isPersistenceCancellation(err) {
+		return err
+	}
 	if errors.Is(err, agentstate.ErrNotFound) {
 		return fmt.Errorf("%w: %w", session.ErrNotFound, err)
 	}
 	return fmt.Errorf("%w: %w", agentstate.ErrPersistence, err)
+}
+
+func isPersistenceCancellation(err error) bool {
+	return !errors.Is(err, agentstate.ErrPersistence) && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded))
 }
 
 func encodeState(values map[string]any) (agentstate.State, error) {

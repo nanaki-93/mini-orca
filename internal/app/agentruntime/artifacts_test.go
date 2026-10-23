@@ -77,6 +77,17 @@ func TestLocalArtifactServiceContract(t *testing.T) {
 	}
 }
 
+func TestLocalArtifactCancellationDoesNotCancelItsParentRun(t *testing.T) {
+	parent, _, store := persistedContext(t, t.TempDir())
+	ctx, cancel := context.WithCancel(parent)
+	cancel()
+	s := &localArtifactService{store: store}
+	_, err := s.Save(ctx, &artifact.SaveRequest{AppName: "app", UserID: "user", SessionID: "session", FileName: "result", Part: &genai.Part{Text: "result"}})
+	if !errors.Is(err, context.Canceled) || errors.Is(err, agentstate.ErrPersistence) || parent.Err() != nil {
+		t.Fatalf("artifact cancellation escalated to storage/root failure: %v", err)
+	}
+}
+
 func TestCompletionArtifactPersistsEventReferenceAndPolicyMetadata(t *testing.T) {
 	ctx, _, store := persistedContext(t, t.TempDir())
 	client := completionFixture(func(context.Context, []llm.ChatMessage, *llm.JSONSchema) (*llm.ChatResponse, error) {

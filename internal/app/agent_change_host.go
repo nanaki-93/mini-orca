@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -89,7 +90,7 @@ func (s *Service) loadChangeGraphSnapshot(ctx context.Context, job *changeWorkfl
 	if err != nil {
 		return nil, err
 	}
-	if root != job.root || session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models {
+	if root != job.root || session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models || !slices.Equal(workflowSpecialistIDs(session.Workflow), job.specialists) {
 		return nil, project.ErrRevisionConflict
 	}
 	if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
@@ -123,7 +124,7 @@ func (s *Service) changeGraphHandoff(ctx context.Context, job *changeWorkflowJob
 		return agentruntime.ChangeNodeResult{}, err
 	}
 	review := session.Workflow.Review
-	if !s.hasLivePassingChecks(session) || review == nil || review.ProposalHash != session.Hash || review.Verdict != input.PriorVerdict {
+	if !s.hasLivePassingChecks(session) || review == nil || review.ProposalHash != session.Hash || review.Verdict != input.PriorVerdict || !specialistsComplete(session.Workflow, session.Hash) {
 		return agentruntime.ChangeNodeResult{}, fmt.Errorf("human review requires current checked proposal and critic evidence")
 	}
 	status := "changes_requested"

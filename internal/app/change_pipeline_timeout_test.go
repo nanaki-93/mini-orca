@@ -83,7 +83,7 @@ func TestTestingTimeoutRetainsCreationAndResumesWithoutRegeneration(t *testing.T
 		t.Fatal(err)
 	}
 	finished := finishedWorkflow(t, s, initial.ID)
-	if finished.Workflow.Status != "awaiting_human_review" || createCalls.Load() != 1 || testCalls.Load() != 2 || reviewCalls.Load() != 1 || !requiredChecksPassed(finished.Checks) {
+	if finished.Workflow.Status != "awaiting_human_review" || createCalls.Load() != 1 || testCalls.Load() != 2 || reviewCalls.Load() != 3 || !requiredChecksPassed(finished.Checks) {
 		t.Fatalf("test retry did not recover: %+v, calls=%d/%d/%d", finished.Workflow, createCalls.Load(), testCalls.Load(), reviewCalls.Load())
 	}
 	if finished.Workflow.Stages[1].Model.Timeout != "15m0s" {

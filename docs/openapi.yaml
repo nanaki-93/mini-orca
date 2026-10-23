@@ -2122,6 +2122,29 @@ components:
         project_id: {type: string}
         project_revision: {type: string}
         workflow_id: {type: string}
+    ChangeWorkflowReview:
+      type: object
+      required: [proposal_hash, verdict, summary, findings]
+      properties:
+        proposal_hash: {type: string}
+        verdict: {type: string, enum: [approve, changes_requested]}
+        summary: {type: string, minLength: 1, maxLength: 4096}
+        findings: {type: array, maxItems: 80, items: {type: string, minLength: 1, maxLength: 1024}}
+    ChangeSpecialistReview:
+      type: object
+      required: [id, status, evidence, model]
+      properties:
+        id: {type: string, enum: [correctness, architecture, test_quality, security, performance]}
+        status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped]}
+        reason: {type: string}
+        evidence: {type: string, enum: [model_advice, unmeasured], description: Performance specialist advice is always unmeasured; other reviews are model advice.}
+        model: {$ref: '#/components/schemas/ScopedModel'}
+        review:
+          allOf:
+            - {$ref: '#/components/schemas/ChangeWorkflowReview'}
+            - type: object
+              properties:
+                findings: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 1024}}
     ChangeWorkflow:
       type: object
       required: [id, status, models, stages, started_at, updated_at]
@@ -2150,13 +2173,12 @@ components:
               status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting]}
               model: {$ref: '#/components/schemas/ScopedModel'}
         review:
-          type: object
-          required: [proposal_hash, verdict, summary, findings]
-          properties:
-            proposal_hash: {type: string}
-            verdict: {type: string, enum: [approve, changes_requested]}
-            summary: {type: string, minLength: 1, maxLength: 4096}
-            findings: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 1024}}
+          $ref: '#/components/schemas/ChangeWorkflowReview'
+        specialists:
+          type: array
+          maxItems: 5
+          description: Admitted reviewers in canonical order, sharing the selected Review profile and exact checked proposal. Missing on legacy workflow records.
+          items: {$ref: '#/components/schemas/ChangeSpecialistReview'}
         started_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ChangeSession:

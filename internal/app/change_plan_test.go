@@ -91,6 +91,7 @@ func TestPlannedWorkflowResumesCriticAndRequiresCurrentFileReview(t *testing.T) 
 		t.Fatal(err)
 	}
 	failed := finishedWorkflow(t, s, session.ID)
+	failedReviewCalls := calls[2].Load()
 	if failed.Workflow.Status != "failed" || !requiredChecksPassed(failed.Checks) {
 		t.Fatalf("unexpected critic failure: %+v", failed.Workflow)
 	}
@@ -100,7 +101,7 @@ func TestPlannedWorkflowResumesCriticAndRequiresCurrentFileReview(t *testing.T) 
 		t.Fatal(err)
 	}
 	ready := finishedWorkflow(t, s, session.ID)
-	if ready.Workflow.Status != "awaiting_human_review" || calls[0].Load() != 1 || calls[1].Load() != 1 || calls[2].Load() != 2 {
+	if ready.Workflow.Status != "awaiting_human_review" || calls[0].Load() != 1 || calls[1].Load() != 1 || calls[2].Load() != failedReviewCalls+3 {
 		t.Fatalf("resume regenerated earlier work: %+v", ready.Workflow)
 	}
 	if !reflect.DeepEqual(failed.Checks, ready.Checks) || ready.Workflow.Attempt != 2 {
@@ -187,7 +188,7 @@ func TestPlannedFailureSuggestsScopeWithoutCapturingIt(t *testing.T) {
 	}
 	before := append([]ChangeTarget(nil), session.Targets...)
 	session.Checks = []CheckResult{{Name: "tests", Required: true, State: CheckFailed, Output: "./outside_test.go:10: undefined: Missing"}}
-	expandTargetsFromFailedChecks(root, session)
+	refreshChangeScopeSuggestions(root, session)
 	if !reflect.DeepEqual(before, session.Targets) || len(session.ScopeSuggestions) == 0 || session.ScopeSuggestions[0] != "outside_test.go" {
 		t.Fatalf("failure silently changed approved scope: %+v", session)
 	}
@@ -195,7 +196,7 @@ func TestPlannedFailureSuggestsScopeWithoutCapturingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	session.Checks = []CheckResult{{Name: "tests", Required: true, State: CheckPassed}}
-	expandTargetsFromFailedChecks(root, session)
+	refreshChangeScopeSuggestions(root, session)
 	if len(session.ScopeSuggestions) != 0 {
 		t.Fatal("passing checks retained stale expansion request")
 	}

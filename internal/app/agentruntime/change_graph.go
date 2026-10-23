@@ -2,19 +2,14 @@ package agentruntime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"iter"
 	"slices"
 	"strings"
 
 	"google.golang.org/adk/v2/agent"
-	"google.golang.org/adk/v2/plugin"
-	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/session"
 	"google.golang.org/adk/v2/workflow"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 )
 
 type ChangeNode string
@@ -68,56 +63,29 @@ var changeNodes = []ChangeNode{ChangeCreate, ChangeTests, ChangeVerify, ChangeRe
 
 // RunChangeGraph executes an admitted, single-attempt graph. Node retries are
 // disabled: provider retries and repair admission belong to their host owners.
-func RunChangeGraph(ctx context.Context, input ChangeGraphInput, host ChangeNodeHost) (result ChangeGraphResult, runErr error) {
+func RunChangeGraph(ctx context.Context, input ChangeGraphInput, host ChangeNodeHost) (ChangeGraphResult, error) {
 	nodes, err := validateChangeGraph(input, host)
 	if err != nil {
-		return result, err
+		return ChangeGraphResult{}, err
 	}
-	if err := context.Cause(ctx); err != nil {
-		return result, err
-	}
-	invocation, err := createChangeGraphSession(ctx, input)
-	if err != nil {
-		CancelRun(ctx, err)
-		return result, err
-	}
-	defer func() {
-		if err := invocation.finish(ctx, runErr); err != nil {
-			runErr = errors.Join(runErr, err)
-		}
-		if errors.Is(runErr, agentstate.ErrPersistence) || errors.Is(runErr, ErrPolicyDenied) {
-			CancelRun(ctx, runErr)
-		}
-		if runErr != nil {
-			result = ChangeGraphResult{}
-		}
-	}()
 	worker, err := newChangeGraphAgent(input, nodes, host)
 	if err != nil {
-		return result, err
+		return ChangeGraphResult{}, err
 	}
-	policy, err := newPolicyPlugin()
-	if err != nil {
-		return result, err
-	}
-	runtime, err := runner.New(runner.Config{AppName: "mini-orca", Agent: worker, SessionService: invocation.service, PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{policy}}})
-	if err != nil {
-		return result, fmt.Errorf("create change graph runner: %w", err)
-	}
-	return collectChangeGraph(ctx, runtime.Run(ctx, "local", invocation.session.ID(), nil, agent.RunConfig{}), nodes)
+	return runGraph(ctx, "change_graph", "change-graph-v1", input, changeNodes, worker, func(ctx context.Context, events iter.Seq2[*session.Event, error]) (ChangeGraphResult, error) {
+		return collectChangeGraph(ctx, events, nodes)
+	})
 }
 
 func validateChangeGraph(input ChangeGraphInput, host ChangeNodeHost) ([]ChangeNode, error) {
-	if host == nil || input.Snapshot.Revision < 0 {
+	if host == nil {
 		return nil, fmt.Errorf("change graph requires an admitted host and proposal identity")
 	}
-	identity := input.Snapshot
-	fields := []string{identity.ProjectID, identity.ProjectRevision, identity.SessionID, identity.WorkflowID, identity.Hash}
-	fields = append(fields, input.Models[:]...)
-	for _, value := range fields {
-		if strings.TrimSpace(value) == "" || len(value) > 512 || strings.ContainsRune(value, 0) {
-			return nil, fmt.Errorf("change graph identity is missing or invalid")
-		}
+	if err := validateChangeSnapshot(input.Snapshot); err != nil {
+		return nil, err
+	}
+	if err := validateGraphLabels(input.Models[:]...); err != nil {
+		return nil, err
 	}
 	if input.Start != ChangeCreate && input.Start != ChangeTests && input.Start != ChangeReview {
 		return nil, fmt.Errorf("change graph must start at creation, testing or review")
@@ -125,16 +93,20 @@ func validateChangeGraph(input ChangeGraphInput, host ChangeNodeHost) ([]ChangeN
 	return slices.Clone(changeNodes[slices.Index(changeNodes, input.Start):]), nil
 }
 
-func createChangeGraphSession(ctx context.Context, input ChangeGraphInput) (*runtimeSession, error) {
-	requestHash, err := fingerprint(input)
-	if err != nil {
-		return nil, err
+func validateChangeSnapshot(identity ChangeSnapshot) error {
+	if identity.Revision < 0 {
+		return fmt.Errorf("change graph requires a non-negative proposal revision")
 	}
-	schemaHash, err := fingerprint([]any{"change-graph-v1", changeNodes})
-	if err != nil {
-		return nil, err
+	return validateGraphLabels(identity.ProjectID, identity.ProjectRevision, identity.SessionID, identity.WorkflowID, identity.Hash)
+}
+
+func validateGraphLabels(values ...string) error {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" || len(value) > 512 || strings.ContainsRune(value, 0) {
+			return fmt.Errorf("change graph identity is missing or invalid")
+		}
 	}
-	return createRuntimeSession(ctx, map[string]any{"mini_orca.change_graph": input}, "change-graph-v1", requestHash, schemaHash, "")
+	return nil
 }
 
 func newChangeGraphAgent(input ChangeGraphInput, nodes []ChangeNode, host ChangeNodeHost) (agent.Agent, error) {
@@ -145,13 +117,7 @@ func newChangeGraphAgent(input ChangeGraphInput, nodes []ChangeNode, host Change
 		edges = append(edges, workflow.Edge{From: previous, To: node})
 		previous = node
 	}
-	graph, err := workflow.New("checked_change", edges, workflow.WithMaxConcurrency(1))
-	if err != nil {
-		return nil, fmt.Errorf("construct change graph: %w", err)
-	}
-	return agent.New(agent.Config{Name: "checked_change", Description: "Execute admitted proposal generation and verification", Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-		return graph.RunNode(agent.NewContext(ctx), ChangeNodeResult{Snapshot: input.Snapshot})
-	}})
+	return graphAgent("checked_change", edges, 1, ChangeNodeResult{Snapshot: input.Snapshot})
 }
 
 func changeNodeBody(id ChangeNode, host ChangeNodeHost) workflow.EmittingFunctionFn[ChangeNodeResult, ChangeNodeResult] {

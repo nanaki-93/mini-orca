@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,34 @@ import (
 	"testing"
 	"time"
 )
+
+func TestClientDecodesSpecialistEvidenceWithoutPromotingAdvice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"change","workflow":{"id":"run","status":"failed","specialists":[{"id":"correctness","status":"failed","reason":"Review unavailable","evidence":"model_advice","model":{"profile":"analyze"}},{"id":"performance","status":"completed","evidence":"unmeasured","model":{"profile":"analyze"},"review":{"proposal_hash":"hash","verdict":"approve","summary":"Advisory review","findings":[]}}]}}`))
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	response, err := client.Request(t.Context(), "review", http.MethodGet, "/api/projects/current/changes/change", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var change ChangeSession
+	if err := json.Unmarshal([]byte(response.Body), &change); err != nil {
+		t.Fatal(err)
+	}
+	if change.Workflow == nil || change.Workflow.Review != nil || len(change.Workflow.Specialists) != 2 {
+		t.Fatalf("incomplete review became approval: %+v", change.Workflow)
+	}
+	reports := change.Workflow.Specialists
+	if reports[0].Review != nil || reports[0].Status != "failed" || reports[1].Evidence != "unmeasured" || reports[1].Review.ProposalHash != "hash" {
+		t.Fatalf("review provenance lost: %+v", reports)
+	}
+}
 
 func TestNewClientValidatesOrigin(t *testing.T) {
 	invalid := []string{

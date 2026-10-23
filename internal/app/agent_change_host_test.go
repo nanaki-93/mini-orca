@@ -24,7 +24,7 @@ func TestCheckedChangeGraphPersistsOnlyIdentityAndRequiresLiveHandoffEvidence(t 
 		t.Fatal(err)
 	}
 	ready := finishedWorkflow(t, s, initial.ID)
-	if ready.Workflow.Status != "awaiting_human_review" || ready.ReviewedHash != "" || calls.Load() != 3 {
+	if ready.Workflow.Status != "awaiting_human_review" || ready.ReviewedHash != "" || calls.Load() != 5 {
 		t.Fatalf("unexpected handoff: %+v", ready.Workflow)
 	}
 	store, _, err := s.agentJournal(root)
@@ -68,7 +68,7 @@ func TestCheckedChangeGraphPersistsOnlyIdentityAndRequiresLiveHandoffEvidence(t 
 	if graphs != 1 {
 		t.Fatalf("expected one graph, got %d", graphs)
 	}
-	job := &changeWorkflowJob{root: root, sessionID: ready.ID, id: ready.Workflow.ID, models: ready.Workflow.Models}
+	job := &changeWorkflowJob{root: root, sessionID: ready.ID, id: ready.Workflow.ID, models: ready.Workflow.Models, specialists: workflowSpecialistIDs(ready.Workflow)}
 	ctx := context.WithValue(t.Context(), changeWorkflowContextKey{}, job.id)
 	input := agentruntime.ChangeNodeInput{Node: agentruntime.ChangeHumanReview, Snapshot: changeGraphSnapshot(ready), PriorVerdict: "approve"}
 	for _, kind := range []string{"workflow", "proposal", "verdict", "authority"} {
@@ -89,7 +89,7 @@ func TestCheckedChangeGraphPersistsOnlyIdentityAndRequiresLiveHandoffEvidence(t 
 			}
 		})
 	}
-	if calls.Load() != 3 {
+	if calls.Load() != 5 {
 		t.Fatal("handoff validation dispatched a provider")
 	}
 	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {

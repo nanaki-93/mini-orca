@@ -69,7 +69,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err != nil {
 		return nil, err
 	}
-	expandTargetsFromFailedChecks(root, session)
+	refreshChangeScopeSuggestions(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
 	if err := storeChangeSession(root, session); err != nil {
@@ -83,7 +83,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := func() { cancelTimeout(); release() }
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
-	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
@@ -124,33 +124,43 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) {
 	defer job.cancel()
 	defer close(job.done)
-	var runErr error
 	currentMessage := message
 	if job.startStage == 0 {
 		currentMessage = s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)
 	}
-	for attempt := 0; ; attempt++ {
-		if attempt > 0 {
-			if budget := agentruntime.BudgetFromContext(ctx); budget != nil {
-				if repairErr := budget.AdmitRepair(ctx); repairErr != nil {
-					runErr = repairErr
-					break
+	limit := 0
+	if job.autoRepair {
+		limit = s.agentRuntime.Limits.Repairs
+	}
+	s.changesMu.Lock()
+	session, runErr := loadChangeSession(job.root, job.sessionID)
+	var input agentruntime.RepairGraphInput
+	if runErr == nil {
+		input = agentruntime.RepairGraphInput{Snapshot: changeGraphSnapshot(session), MaxRepairs: limit}
+	}
+	s.changesMu.Unlock()
+	if runErr == nil {
+		runErr = agentruntime.RunRepairGraph(ctx, input, func(ctx context.Context, attempt int) (bool, error) {
+			if attempt > 0 {
+				nextMsg, err := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
+				if err != nil {
+					return false, err
+				}
+				currentMessage = nextMsg
+			}
+			startStage := 0
+			if attempt == 0 {
+				startStage = job.startStage
+			}
+			attemptErr := s.executeChangeGraph(ctx, job, startStage, currentMessage)
+			if attempt < limit {
+				repair, err := s.shouldAutoRepairWorkflow(ctx, job, attemptErr)
+				if err != nil || repair {
+					return repair, err
 				}
 			}
-			nextMsg, ok := s.prepareWorkflowAutoRepair(ctx, job, message, attempt)
-			if !ok {
-				break
-			}
-			currentMessage = nextMsg
-		}
-		startStage := 0
-		if attempt == 0 {
-			startStage = job.startStage
-		}
-		runErr = s.executeChangeGraph(ctx, job, startStage, currentMessage)
-		if !job.autoRepair || attempt >= s.agentRuntime.Limits.Repairs || !s.shouldAutoRepairWorkflow(ctx, job, runErr) {
-			break
-		}
+			return false, attemptErr
+		})
 	}
 	s.finishChangeWorkflow(ctx, job, runErr)
 }
@@ -177,26 +187,29 @@ func (s *Service) probeUncheckedChangesBeforeWorkflow(ctx context.Context, job *
 	return workflowRetryMessage(message, checked.Workflow, checked.Checks)
 }
 
-func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkflowJob, runErr error) bool {
+func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkflowJob, runErr error) (bool, error) {
 	if ctx.Err() != nil {
-		return false
+		return false, context.Cause(ctx)
 	}
 	if runErr != nil && !errors.Is(runErr, errWorkflowChecksFailed) {
-		return false
+		return false, nil
 	}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	session, err := loadChangeSession(job.root, job.sessionID)
-	if err != nil || session.Workflow == nil || session.Workflow.ID != job.id {
-		return false
+	if err != nil {
+		return false, err
 	}
-	if session.Plan != nil && len(session.ScopeSuggestions) > 0 {
-		return false
+	if session.Workflow == nil || session.Workflow.ID != job.id {
+		return false, project.ErrRevisionConflict
+	}
+	if len(session.ScopeSuggestions) > 0 {
+		return false, nil
 	}
 	if errors.Is(runErr, errWorkflowChecksFailed) {
-		return workflowChecksRepairable(session.Checks)
+		return workflowChecksRepairable(session.Checks), nil
 	}
-	return session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
+	return session.Workflow.Review != nil && session.Workflow.Review.ProposalHash == session.Hash && session.Workflow.Review.Verdict == "changes_requested" && specialistsComplete(session.Workflow, session.Hash), nil
 }
 
 // A missing or interrupted check is not evidence that a model should change code.
@@ -214,17 +227,23 @@ func workflowChecksRepairable(checks []CheckResult) bool {
 	return failed
 }
 
-func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, bool) {
+func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	session, err := loadChangeSession(job.root, job.sessionID)
-	if err != nil || session.Workflow == nil || session.Workflow.ID != job.id {
-		return "", false
+	if err != nil {
+		return "", err
 	}
-	if _, _, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session)); err != nil {
-		return "", false
+	if session.Workflow == nil || session.Workflow.ID != job.id {
+		return "", project.ErrRevisionConflict
 	}
-	expandTargetsFromFailedChecks(job.root, session)
+	if _, err := s.loadChangeGraphSnapshot(ctx, job, changeGraphSnapshot(session)); err != nil {
+		return "", err
+	}
+	refreshChangeScopeSuggestions(job.root, session)
+	if len(session.ScopeSuggestions) > 0 {
+		return "", fmt.Errorf("approve suggested scope before repairing")
+	}
 	probe, lessons := probeWorkflowFriction(session.Workflow, session.Checks)
 	session.Workflow.ProbeSummary = probe
 	session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
@@ -232,6 +251,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	session.Messages = stripWorkflowTestMessages(session.Messages)
 	session.Workflow.AutoRepairAttempts = attempt
 	session.Workflow.Review = nil
+	resetWorkflowSpecialists(session.Workflow)
 	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
 		session.Workflow.Stages[i].Status = "pending"
 		session.Workflow.Stages[i].Reason = ""
@@ -240,10 +260,10 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	session.ReviewedHash = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	if err := storeChangeSession(job.root, session); err != nil {
-		return "", false
+		return "", err
 	}
 	s.notifyEvent("workflow")
-	return retryMsg, true
+	return retryMsg, nil
 }
 
 var errWorkflowChecksFailed = errors.New("workflow checks failed")
@@ -255,14 +275,9 @@ func identityForChange(session *ChangeSession) ChangeIdentity {
 func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkflowJob, stage int, identity ChangeIdentity) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
-	session, root, err := s.loadChangeForAction(ctx, job.sessionID, identity)
+	snapshot := agentruntime.ChangeSnapshot{ProjectID: identity.ProjectID, ProjectRevision: identity.ProjectRevision, SessionID: job.sessionID, WorkflowID: job.id, Revision: identity.Revision, Hash: identity.Hash}
+	session, err := s.loadChangeGraphSnapshot(ctx, job, snapshot)
 	if err != nil {
-		return nil, err
-	}
-	if root != job.root || session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models {
-		return nil, project.ErrRevisionConflict
-	}
-	if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
 		return nil, err
 	}
 	if stage > 0 {

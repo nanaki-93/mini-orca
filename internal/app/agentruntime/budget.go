@@ -199,7 +199,7 @@ func (b *Budget) admitCount(ctx context.Context, name string, counter func() (*i
 	*used = *used + 1
 	err := b.checkpointLocked(ctx)
 	b.mu.Unlock()
-	if err != nil {
+	if err != nil && !isPersistenceCancellation(err) {
 		b.cancel(err)
 	}
 	return err

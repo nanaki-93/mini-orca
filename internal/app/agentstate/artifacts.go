@@ -185,11 +185,12 @@ func (history *artifactHistory) validate() error {
 }
 
 func (s *Store) mutateArtifacts(ctx context.Context, change func(*artifactCatalog) (bool, error)) (err error) {
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	lock, err := s.lock(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: lock artifacts: %w", ErrPersistence, err)
+		return persistenceOperationError(parent, "lock artifacts", err)
 	}
 	defer func() {
 		if closeErr := lock.Close(); closeErr != nil {
@@ -222,7 +223,7 @@ func (s *Store) mutateArtifacts(ctx context.Context, change func(*artifactCatalo
 		return err
 	}
 	if err := s.write(path, data, 0600, func() error { return context.Cause(ctx) }); err != nil {
-		return fmt.Errorf("%w: save artifacts: %w", ErrPersistence, err)
+		return persistenceOperationError(parent, "save artifacts", err)
 	}
 	return nil
 }

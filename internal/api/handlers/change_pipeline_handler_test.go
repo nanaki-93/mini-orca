@@ -72,6 +72,14 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 	if active.Workflow.Models != (app.ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}) {
 		t.Fatalf("omitted models were not resolved: %+v", active.Workflow.Models)
 	}
+	if len(active.Workflow.Specialists) != 4 || active.Workflow.Specialists[3].ID != "security" {
+		t.Fatalf("explicit security intent did not admit its specialist: %+v", active.Workflow.Specialists)
+	}
+	for _, report := range active.Workflow.Specialists {
+		if report.Status != "pending" || report.Review != nil || report.Model.Profile != "analyze" || report.Evidence != "model_advice" {
+			t.Fatalf("admission fabricated review evidence: %+v", report)
+		}
+	}
 	<-entered
 	query := "/changes/id?project_id=" + index.ProjectID + "&project_revision=" + index.ProjectRevision
 	if progress := workflowResponse(t, h.Get, "GET", query, session.ID, nil); progress.Code != 200 || !strings.Contains(progress.Body.String(), `"status":"running"`) {
