@@ -67,7 +67,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 03 — Support typed tool calls and bounded text streaming
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/llm/client.go`, `internal/llm/client_test.go` — preserve completion compatibility.

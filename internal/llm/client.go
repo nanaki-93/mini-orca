@@ -203,19 +203,7 @@ func (c *Client) chat(ctx context.Context, messages []ChatMessage, responseForma
 	if c.profile.IsCLI() {
 		return c.chatCLI(ctx, messages, responseFormat)
 	}
-	requestBody, err := json.Marshal(ChatRequest{
-		Model:           c.profile.Model,
-		Messages:        messages,
-		Temperature:     c.profile.Temperature,
-		MaxTokens:       c.profile.MaxTokens,
-		ReasoningEffort: c.profile.ReasoningEffort,
-		TopP:            c.profile.TopP,
-		TopK:            c.profile.TopK,
-		MinP:            c.profile.MinP,
-		PresencePenalty: c.profile.PresencePenalty,
-		RepeatPenalty:   c.profile.RepeatPenalty,
-		ResponseFormat:  responseFormat,
-	})
+	requestBody, err := json.Marshal(c.chatRequest(messages, responseFormat))
 	if err != nil {
 		return nil, fmt.Errorf("llm client: marshal chat request: %w", err)
 	}
@@ -244,6 +232,22 @@ func (c *Client) chat(ctx context.Context, messages []ChatMessage, responseForma
 		logging.Info("Chat completed", "model", response.Model, "tokens", response.Usage.TotalTokens)
 	}
 	return &response, nil
+}
+
+func (c *Client) chatRequest(messages []ChatMessage, responseFormat *ResponseFormat) ChatRequest {
+	return ChatRequest{
+		Model:           c.profile.Model,
+		Messages:        messages,
+		Temperature:     c.profile.Temperature,
+		MaxTokens:       c.profile.MaxTokens,
+		ReasoningEffort: c.profile.ReasoningEffort,
+		TopP:            c.profile.TopP,
+		TopK:            c.profile.TopK,
+		MinP:            c.profile.MinP,
+		PresencePenalty: c.profile.PresencePenalty,
+		RepeatPenalty:   c.profile.RepeatPenalty,
+		ResponseFormat:  responseFormat,
+	}
 }
 
 func (c *Client) validateFinalResponse(response ChatResponse) error {
@@ -285,33 +289,43 @@ func providerRequestContext(ctx context.Context) (context.Context, context.Cance
 }
 
 func (c *Client) do(request *http.Request) ([]byte, error) {
+	response, cancel, err := c.openResponse(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	defer cancel()
+	return readProviderBody(response.Body)
+}
+
+func (c *Client) openResponse(request *http.Request) (*http.Response, context.CancelFunc, error) {
 	// RoundTrip performs exactly one exchange. http.Client.Do parses Location
 	// before CheckRedirect, which can expose an invalid redirect target in its
 	// error. A one-hop transport path makes every 3xx response safe to classify
 	// by status without inspecting or following its Location header.
 	timed, cancel := providerRequestContext(request.Context())
-	defer cancel()
 	transport := c.transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	response, err := transport.RoundTrip(request.Clone(timed))
+	bound := request.Clone(timed)
+	response, err := transport.RoundTrip(bound)
 	if err != nil {
-		return nil, fmt.Errorf("llm client: request failed: %w", err)
+		cancel()
+		return nil, nil, fmt.Errorf("llm client: request failed: %w", err)
 	}
-	defer response.Body.Close()
-
 	if response.StatusCode >= http.StatusMultipleChoices && response.StatusCode < 400 {
-		return nil, providerRedirectError(response.StatusCode)
+		cancel()
+		response.Body.Close()
+		return nil, nil, providerRedirectError(response.StatusCode)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, providerStatusError(response.StatusCode)
+		cancel()
+		response.Body.Close()
+		return nil, nil, providerStatusError(response.StatusCode)
 	}
-	data, err := readProviderBody(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	response.Request = bound
+	return response, cancel, nil
 }
 
 func joinAPIURL(apiBaseURL, path string) (string, error) {

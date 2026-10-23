@@ -2,16 +2,25 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -169,7 +178,7 @@ func TestCompletionRequiresOneTerminalResultAndDrainsErrors(t *testing.T) {
 				}
 			}
 		}
-		if result, err := collectCompletion(context.Background(), stream); err == nil || result != (Result{}) {
+		if result, err := collectCompletion(context.Background(), stream, nil); err == nil || result != (Result{}) {
 			t.Fatalf("invalid stream accepted: result=%+v error=%v", result, err)
 		}
 	}
@@ -179,7 +188,7 @@ func TestCompletionRequiresOneTerminalResultAndDrainsErrors(t *testing.T) {
 			yield(nil, cause)
 		}
 	})
-	if result, err := collectCompletion(context.Background(), stream); !errors.Is(err, cause) || result != (Result{}) {
+	if result, err := collectCompletion(context.Background(), stream, nil); !errors.Is(err, cause) || result != (Result{}) {
 		t.Fatalf("post-result error lost: result=%+v error=%v", result, err)
 	}
 }
@@ -198,5 +207,190 @@ func TestInvalidOrCanceledCompletionDoesNotDispatch(t *testing.T) {
 	cancel()
 	if _, err := Complete(ctx, client, Request{Messages: []llm.ChatMessage{{Content: "request"}}}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("pre-canceled error=%v", err)
+	}
+}
+
+func nativeFixture(t *testing.T, handler http.HandlerFunc) *llm.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	topK := 17
+	return llm.NewClient(config.ModelProfile{APIBaseURL: server.URL, Model: "fixture-model", MaxTokens: 100, TopK: &topK})
+}
+
+func TestNativeCompletionPreservesConversationAndSchema(t *testing.T) {
+	messages := []llm.ChatMessage{
+		{Role: "system", Content: "policy"}, {Role: "user", Content: "first"},
+		{Role: "assistant", Content: "answer", ReasoningContent: "opaque", Reasoning: "alternate"},
+		{Role: "developer", Content: "additional policy"}, {Role: "user", Content: "next"},
+	}
+	client := nativeFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request llm.ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if !reflect.DeepEqual(request.Messages, messages) || request.TopK == nil || *request.TopK != 17 {
+			t.Errorf("conversation or profile changed: %+v", request)
+		}
+		if request.ResponseFormat == nil || request.ResponseFormat.JSONSchema.Name != "report" || !request.ResponseFormat.JSONSchema.Strict {
+			t.Errorf("schema identity changed: %+v", request.ResponseFormat)
+		}
+		json.NewEncoder(w).Encode(fixtureResponse(`{"answer":"done"}`))
+	})
+	result, err := Complete(context.Background(), client, Request{Messages: messages, Schema: &llm.JSONSchema{Name: "report", Schema: json.RawMessage(`{"type":"object"}`)}})
+	if err != nil || result.Content != `{"answer":"done"}` || result.Model != "fixture-model" || result.Usage.TotalTokens != 38 || result.FinishReason != "stop" {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+}
+
+func nativeToolRequest() *model.LLMRequest {
+	return &model.LLMRequest{
+		Contents: []*genai.Content{genai.NewContentFromText("Inspect main.go", genai.RoleUser)},
+		Config: &genai.GenerateContentConfig{Tools: []*genai.Tool{{FunctionDeclarations: []*genai.FunctionDeclaration{{
+			Name: "read_file", ParametersJsonSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`),
+			ResponseJsonSchema: map[string]any{"type": "object"},
+		}}}}},
+	}
+}
+
+func collectNative(t *testing.T, adapter *compatibleModel, request *model.LLMRequest) *model.LLMResponse {
+	t.Helper()
+	var result *model.LLMResponse
+	for response, err := range adapter.GenerateContent(context.Background(), request, false) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result != nil || response == nil || !response.TurnComplete || response.Partial {
+			t.Fatal("invalid native response sequence")
+		}
+		result = response
+	}
+	if result == nil {
+		t.Fatal("missing native response")
+	}
+	return result
+}
+
+func TestNativeModelRoundTripsTypedToolCalls(t *testing.T) {
+	var calls atomic.Int32
+	client := nativeFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Messages []struct {
+				Role, Content    string
+				ReasoningContent string `json:"reasoning_content"`
+				ToolCallID       string `json:"tool_call_id"`
+			} `json:"messages"`
+			Tools []struct{ Function llm.ToolDefinition } `json:"tools"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if len(request.Tools) != 1 || request.Tools[0].Function.Name != "read_file" {
+			t.Errorf("missing tool declaration: %+v", request.Tools)
+		}
+		if calls.Add(1) == 1 {
+			io.WriteString(w, `{"model":"fixture-model","choices":[{"message":{"role":"assistant","reasoning_content":"opaque tool reasoning","tool_calls":[{"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"main.go\"}"}}]},"finish_reason":"tool_calls"}]}`)
+			return
+		}
+		if len(request.Messages) != 3 || request.Messages[2].Role != "tool" || request.Messages[2].ToolCallID != "call_1" || request.Messages[2].Content != `{"source":"package main"}` {
+			t.Errorf("tool response changed: %+v", request.Messages)
+		}
+		if len(request.Messages) == 3 && request.Messages[1].ReasoningContent != "opaque tool reasoning" {
+			t.Error("opaque reasoning was lost between tool turns")
+		}
+		json.NewEncoder(w).Encode(fixtureResponse("complete"))
+	})
+	adapter := &compatibleModel{client: client}
+	request := nativeToolRequest()
+	first := collectNative(t, adapter, request)
+	call := first.Content.Parts[1].FunctionCall
+	if call == nil || call.ID != "call_1" || call.Name != "read_file" || call.Args["path"] != "main.go" || first.UsageMetadata != nil {
+		t.Fatalf("call=%+v usage=%+v", call, first.UsageMetadata)
+	}
+	request.Contents = append(request.Contents, first.Content, &genai.Content{Role: genai.RoleUser, Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{
+		ID: call.ID, Name: call.Name, Response: map[string]any{"source": "package main"},
+	}}}})
+	second := collectNative(t, adapter, request)
+	if second.Content.Parts[0].Text != "complete" || calls.Load() != 2 {
+		t.Fatalf("result=%+v calls=%d", second, calls.Load())
+	}
+}
+
+func TestNativeModelRejectsUnsupportedRequestsBeforeDispatch(t *testing.T) {
+	client := nativeFixture(t, func(http.ResponseWriter, *http.Request) { t.Error("invalid request dispatched") })
+	for name, mutate := range map[string]func(*model.LLMRequest){
+		"route":        func(r *model.LLMRequest) { r.Model = "another-model" },
+		"sampling":     func(r *model.LLMRequest) { value := float32(0.8); r.Config.Temperature = &value },
+		"media":        func(r *model.LLMRequest) { r.Contents[0].Parts[0].InlineData = &genai.Blob{Data: []byte("image")} },
+		"builtin tool": func(r *model.LLMRequest) { r.Config.Tools[0].GoogleSearch = &genai.GoogleSearch{} },
+		"unknown call": func(r *model.LLMRequest) {
+			r.Contents[0].Parts = []*genai.Part{{FunctionCall: &genai.FunctionCall{ID: "call_1", Name: "shell"}}}
+		},
+		"missing tool result": func(r *model.LLMRequest) {
+			r.Contents[0].Parts = []*genai.Part{{FunctionResponse: &genai.FunctionResponse{ID: "call_1", Name: "read_file"}}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeToolRequest()
+			mutate(request)
+			var failure error
+			for response, err := range (&compatibleModel{client: client}).GenerateContent(context.Background(), request, false) {
+				failure = err
+				if response != nil {
+					t.Fatal("invalid request produced content")
+				}
+			}
+			if !errors.Is(failure, llm.ErrRequestRejected) {
+				t.Fatalf("error=%v", failure)
+			}
+		})
+	}
+}
+
+const partialNativeStream = "data: {\"model\":\"fixture-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"}}]}\n\n"
+const finalNativeStream = "data: {\"model\":\"fixture-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+
+func TestNativeCompletionOnlyPublishesFinishedStreams(t *testing.T) {
+	for _, terminal := range []bool{false, true} {
+		t.Run(fmt.Sprint(terminal), func(t *testing.T) {
+			client := nativeFixture(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				io.WriteString(w, partialNativeStream)
+				if terminal {
+					io.WriteString(w, finalNativeStream)
+				}
+			})
+			var observed strings.Builder
+			result, err := Complete(context.Background(), client, Request{Messages: []llm.ChatMessage{{Role: "user", Content: "request"}}, Stream: true, OnText: func(delta string) error { observed.WriteString(delta); return nil }})
+			if observed.String() != "partial" {
+				t.Fatalf("partial text=%q", observed.String())
+			}
+			if terminal && (err != nil || result.Content != "partial") || !terminal && (err == nil || result != (Result{})) {
+				t.Fatalf("terminal=%v result=%+v error=%v", terminal, result, err)
+			}
+		})
+	}
+}
+
+func TestNativeCompletionCallbackFailureClosesProvider(t *testing.T) {
+	closed := make(chan struct{})
+	client := nativeFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, partialNativeStream)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(closed)
+	})
+	cause := errors.New("consumer stopped")
+	result, err := Complete(context.Background(), client, Request{Messages: []llm.ChatMessage{{Role: "user", Content: "request"}}, Stream: true, OnText: func(string) error { return cause }})
+	if !errors.Is(err, cause) || result != (Result{}) {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider outlived the failed consumer")
 	}
 }
