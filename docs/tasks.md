@@ -370,6 +370,9 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/tui/hub_agents.go`, `internal/tui/workflow_progress.go`, `internal/tui/domain/domain.go`, `internal/tui/domain/remediation.go`, `internal/tui/state.go`, `internal/tui/dashboard.go`, `internal/tui/view.go`, `internal/tui/theme_styles.go`.
 - `internal/tui/domain/agent_runs.go`, `internal/tui/domain/agent_runs_test.go` — **new**.
+- `internal/tui/agent_progress.go`, `internal/tui/agent_progress_test.go` — **new**, guarded native progress reads and stable stage selection.
+- `internal/tui/domain.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go` — connect task rows, inspection and existing job polling to current workflow identity without starting model work.
+- `internal/tui/domain/domain_test.go`, `internal/tui/state_test.go` — update stage/navigation expectations and preserve guarded task behavior.
 - `internal/tui/workflow_progress_test.go`, `internal/tui/view_test.go`, `internal/tui/workspace_view_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
@@ -377,6 +380,8 @@ This is an implementation specification, not a claim that the features below alr
 
 **Implementation rules**
 - Replace hard-coded four-stage positions with stable stage IDs, typed states, and graph-derived progress. Render sequential and parallel work accurately without invented percentages.
+- Resolve native history by exact project, checkout, change-session and workflow identity. Read bounded source-free detail on task inspection and refresh it with the existing active-job poll; private text remains opt-in in Task 15. Preserve truthful legacy summaries when native history is absent, and show unavailable history as unavailable. Ignore late results after scope or workflow replacement.
+- Derive stage selection from stable node IDs, including separate test generation/verification and admitted parallel reviewers. Preserve the selected node and scroll position as progress changes; unknown stages remain inspectable rather than borrowing a positional label. Native invocation completion is execution metadata, never proposal approval.
 - Present compact task rows and one clear next action; replace decorative fleet/mission terminology and repeated panels with plain task, stage, evidence, and recovery labels.
 - Preserve all five workspaces, visible project/Git identity, command access, focus, and scroll state. At small sizes prioritize content and actions; support at least 52x16, 80x24, 100x20, and 160x40 plus the resize prompt.
 
