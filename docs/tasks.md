@@ -254,6 +254,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/change_pipeline.go`, `internal/app/change_pipeline_stages.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_test.go`.
 - `internal/app/change_checks.go`, `internal/app/change_baseline.go`, `internal/app/change_verify.go`.
 - `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go` — share private invocation-session setup, explicitly version graph records, and preserve completion/investigation history compatibility.
+- `internal/app/worktree_service_test.go` — assert graph and nested completion journals remain isolated to the admitted worktree.
 - `docs/api-contract.md` — describe graph execution and the retained domain approval boundary.
 
 **Inputs / dependencies**
