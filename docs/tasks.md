@@ -174,14 +174,17 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agentstate/artifacts.go`, `internal/app/agentstate/artifacts_test.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentruntime/artifacts_test.go`, `internal/app/change_store_test.go` — **new**.
 - `internal/app/agentruntime/runtime.go`, `internal/app/change_store.go`, `internal/app/change_checks.go`.
+- `CONFIG.md` — document artifact privacy, bounds, retention and recovery protection.
 
 **Inputs / dependencies**
 - Task 06; existing proposal/check persistence and [ADK artifact interfaces](https://adk.dev/artifacts/).
 
 **Implementation rules**
 - Persist immutable artifact versions with hashes, MIME type, size, provenance, and session ownership. Attach proposal evidence and bounded check reports through an actual runtime consumer.
+- Use a separate bounded atomic artifact catalog under the checkout's private agent directory and its existing process lock. Store completion artifacts through the ADK runner's artifact service and event references. Save deduplicated proposal/check snapshots before publishing domain history; snapshots remain supporting evidence, never Apply or Undo authority.
 - Artifact writes stay inside private metadata; saving a generated artifact never changes project source. Validate names, symlinks, size limits, ownership, and permissions.
 - Implement retrieval, listing, explicit deletion, retention, and export primitives. Protect artifacts referenced by active runs/recovery; report cleanup failures. No automatic external upload.
+- Export returns verified bytes to an admitted caller; it does not accept a destination filesystem path. Retention is bounded and explicit, with immutable version counters that survive deletion. Recovery-pinned proposal evidence cannot be deleted through the generic SDK artifact service.
 
 **Verification command**
 `go test -race ./internal/app/agentstate ./internal/app/agentruntime ./internal/app && ./scripts/validate.sh && git diff --check`
