@@ -917,7 +917,7 @@ func matchAgentPath(agents []AgentItem, target FindingTarget, name, title string
 
 func isInactiveAgentStatus(status string) bool {
 	switch status {
-	case "applied", "reverted", "canceled", "stale", "failed":
+	case "applied", "reverted", "undone", "canceled", "stale":
 		return true
 	default:
 		return false
