@@ -44,7 +44,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 02 — Put existing model execution behind a native ADK boundary
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `go.mod`, `go.sum` — pin ADK v2.6.0.

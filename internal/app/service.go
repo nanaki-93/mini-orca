@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -44,10 +45,7 @@ type modelRuntime struct {
 	client    *llm.Client
 }
 
-type modelOutput struct {
-	Content string
-	Model   string
-}
+type modelOutput = agentruntime.Result
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
@@ -313,20 +311,7 @@ func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage, s
 	if r.client == nil {
 		return modelOutput{}, fmt.Errorf("model client is not configured")
 	}
-	if len(messages) == 0 || strings.TrimSpace(messages[0].Content) == "" {
-		return modelOutput{}, fmt.Errorf("model request is required")
-	}
-	var response *llm.ChatResponse
-	var err error
-	if schema == nil {
-		response, err = r.client.Chat(ctx, messages)
-	} else {
-		response, err = r.client.ChatWithJSONSchema(ctx, messages, *schema)
-	}
-	if err != nil {
-		return modelOutput{}, fmt.Errorf("model request failed: %w", err)
-	}
-	return modelOutput{Content: response.Choices[0].Message.Content, Model: response.Model}, nil
+	return agentruntime.Complete(ctx, r.client, agentruntime.Request{Messages: messages, Schema: schema})
 }
 
 func providerOrigin(rawURL string) string {

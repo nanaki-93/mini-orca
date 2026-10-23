@@ -115,6 +115,10 @@ var defaultArchitectureImportRules = []architectureImportRule{
 		forbidden:    []string{"internal/api", "internal/tui"},
 	},
 	{
+		sourcePrefix: "internal/app/agentruntime",
+		forbidden:    []string{"internal/project", "internal/storage"},
+	},
+	{
 		sourcePrefix: "internal/app/archgate",
 		forbidden:    []string{"internal/app/sandbox", "internal/app/gitops", "internal/app/features", "internal/app/changes", "internal/llm", "internal/storage"},
 	},
@@ -361,7 +365,7 @@ func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule,
 	if len(imports) == 0 {
 		return nil
 	}
-	var violations []string
+	violations := agentRuntimeImportViolations(slashPath, imports)
 	seen := map[string]bool{}
 	for _, rule := range rules {
 		if !pathMatchesPrefix(slashPath, rule.sourcePrefix) {
@@ -380,6 +384,34 @@ func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule,
 		}
 	}
 	return violations
+}
+
+// SDK types stay behind the runtime boundary. Match the parent package exactly
+// so a runtime adapter can still use the independent agentstate store.
+func agentRuntimeImportViolations(path string, imports []string) []string {
+	if !hasRuntimeBoundary(path) {
+		return nil
+	}
+	isRuntime := pathMatchesPrefix(path, "internal/app/agentruntime")
+	var violations []string
+	for _, imported := range imports {
+		if isRuntime && (imported == "internal/app" || strings.HasSuffix(imported, "/internal/app")) {
+			violations = append(violations, fmt.Sprintf("%s imports %q: agentruntime must not import its app parent", path, imported))
+		}
+		if !isRuntime && (importMatchesForbidden(imported, "google.golang.org/adk") || importMatchesForbidden(imported, "google.golang.org/genai")) {
+			violations = append(violations, fmt.Sprintf("%s imports %q: ADK and GenAI imports belong in internal/app/agentruntime", path, imported))
+		}
+	}
+	return violations
+}
+
+func hasRuntimeBoundary(path string) bool {
+	for _, area := range []string{"internal/app", "internal/api", "internal/project", "internal/tui", "internal/llm", "internal/config", "cmd/daemon", "cmd/tui", "cmd/engineering-insight-eval"} {
+		if pathMatchesPrefix(path, area) {
+			return true
+		}
+	}
+	return false
 }
 
 func pathMatchesPrefix(slashPath, prefix string) bool {

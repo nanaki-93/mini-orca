@@ -19,6 +19,11 @@ the backend guide for changes to `cmd/`.
   `internal/app/gitops`, `internal/app/features`;
   `internal/tui/client`, `internal/tui/theme`, `internal/tui/domain`).
   Subpackages must respect the acyclic import rules enforced by `internal/app/archgate`.
+- Keep ADK imports in `internal/app/agentruntime`; pass admitted host operations
+  into that leaf package. Its parent `app` retains consent, retries, source
+  identity, publication and Apply/Undo authority. Keep SDK types out of wire DTOs
+  and project facts. Completion compatibility uses one provider call per runner
+  invocation, with private session history and no SDK-owned retry loop.
 - For a wire-contract change, update Go request/response types, daemon route
   registrations, TUI wire models (`internal/tui/client`), `docs/openapi.yaml` and
   `docs/api-contract.md` as applicable. Cover both successful and rejected requests

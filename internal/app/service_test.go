@@ -40,6 +40,30 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	}
 }
 
+func TestModelRuntimeRetainsCompletionMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request llm.ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if request.Model != "fixture" || request.Messages[0].Content != "request" || request.Stream {
+			t.Errorf("unexpected transport request: %+v", request)
+		}
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{
+			Model: "reported-model", Usage: llm.ChatUsage{PromptTokens: 30, CompletionTokens: 12, TotalTokens: 42},
+			Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: "answer"}, FinishReason: "stop"}},
+		})
+	}))
+	defer server.Close()
+	runtime := newModelRuntime(config.ModelProfile{APIBaseURL: server.URL, Model: "fixture"}, time.Minute, 3)
+	result, err := runtime.execute(context.Background(), []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
+	if err != nil || result.Content != "answer" || result.Model != "reported-model" || result.Usage.TotalTokens != 42 || result.FinishReason != "stop" {
+		t.Fatalf("result=%+v, error=%v", result, err)
+	}
+}
+
 func TestRetryDoesNotResendPromptAfterProviderRedirectRejection(t *testing.T) {
 	var firstRequests, secondRequests int
 	second := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {

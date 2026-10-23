@@ -122,3 +122,31 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentRuntimeImportBoundary(t *testing.T) {
+	for _, test := range []struct {
+		path, imported string
+		allowed        bool
+	}{
+		{"internal/app/agentruntime/model.go", "google.golang.org/adk/v2/model", true},
+		{"internal/app/agentruntime/model.go", "google.golang.org/genai", true},
+		{"internal/app/agentruntime/session.go", "github.com/nanaki-93/mini-orca/v2/internal/app/agentstate", true},
+		{"internal/app/agentruntime/model.go", "github.com/nanaki-93/mini-orca/v2/internal/app", false},
+		{"internal/app/agentruntime/model.go", "github.com/nanaki-93/mini-orca/v2/internal/project", false},
+		{"internal/app/agentruntime/model.go", "github.com/nanaki-93/mini-orca/v2/internal/storage", false},
+		{"internal/app/service.go", "google.golang.org/adk/v2/runner", false},
+		{"internal/tui/client/models.go", "google.golang.org/genai", false},
+		{"internal/project/project_overview.go", "google.golang.org/adk/v2/model", false},
+		{"cmd/daemon/main.go", "google.golang.org/adk/v2/runner", false},
+		{"main.go", "google.golang.org/adk/v2/runner", true},
+	} {
+		t.Run(test.path+"/"+test.imported, func(t *testing.T) {
+			checks := ChangeArchitectureAndComplexityChecks("", []ChangeEdit{{
+				Path: test.path, Content: "package fixture\nimport _ \"" + test.imported + "\"\n",
+			}})
+			if len(checks) == 0 || (checks[0].State == CheckPassed) != test.allowed {
+				t.Fatalf("allowed=%v, checks=%+v", test.allowed, checks)
+			}
+		})
+	}
+}
