@@ -94,7 +94,9 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/config/config.go`, `internal/config/model_profiles.go`, `internal/config/cli_profiles.go`, `internal/config/config_test.go`, `internal/config/config_example_test.go`.
 - `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/gemini_test.go`, `internal/llm/capabilities.go`, `internal/llm/capabilities_test.go` — **new**.
+- `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini_transport.go` — **new**, immutable provider adapter and a bounded endpoint guard; `internal/app/agentruntime/model.go` selects native execution.
 - `internal/app/model_catalog.go`, `internal/app/analysis_models.go`, `internal/app/model_choices.go`, `internal/app/service.go`.
+- `internal/app/service_test.go` — native-provider admission and import-analysis compatibility.
 - `internal/api/handlers/model_handler_test.go`, `internal/tui/client/models.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
@@ -104,6 +106,7 @@ This is an implementation specification, not a claim that the features below alr
 - Add explicit Gemini Developer API and Vertex backend configuration, endpoint-bound credentials, capability reporting, and validation. Keep existing three-profile YAML valid; unknown keys remain errors.
 - Expose tool, schema, streaming, attachment, grounding, and live-session support only when verified. Model discovery is explicit and bounded; viewing cached metadata sends nothing.
 - Inject guarded HTTP transport into SDK clients; prevent environment credential fallback to a different endpoint, redirect leakage, and SDK-owned retries outside the app budget. Keep local OpenAI-compatible parameter support intact.
+- Use a provider adapter with the existing completion and optional-empty contracts, including import analysis. Preserve native thought signatures inside the SDK boundary. Support explicit Developer API keys, Vertex Express keys, or project/location-bound Vertex access tokens; never discover credentials implicitly.
 
 **Verification command**
 `go test ./internal/config ./internal/llm ./internal/app/agentruntime ./internal/app ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
