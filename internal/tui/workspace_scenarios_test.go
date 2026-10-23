@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func workspaceSampleState() *State {
@@ -43,6 +45,73 @@ func TestDashboardNavigationAndUnknownResults(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "Enter"})
 	if !s.CmdActive || s.CmdInput != "project " || len(s.PendingActions) != 0 {
 		t.Fatal("welcome must open an editable project prompt")
+	}
+}
+
+func TestDashboardKeepsActivitiesVisibleAtCompactSizes(t *testing.T) {
+	for _, dims := range [][2]int{{52, 16}, {60, 20}, {80, 24}, {100, 20}, {120, 30}, {160, 44}} {
+		for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+			s := workspaceSampleState()
+			s.Palette = palette
+			s.Run, s.Scan = nil, nil
+			frame := s.Render(dims[0], dims[1])
+			assertFrameSize(t, frame, dims[0], dims[1])
+			for _, label := range []string{"DASHBOARD", "Issues", "Tasks", "Analysis", "Checks"} {
+				if !strings.Contains(frame, label) {
+					t.Fatalf("%s missing at %v in %s", label, dims, palette)
+				}
+			}
+			if strings.Count(frame, "Not run yet") != 2 {
+				t.Fatalf("unrun states hidden at %v", dims)
+			}
+			for i := range dashboardPages {
+				frame = s.Render(dims[0], dims[1])
+				label := []string{"Issues", "Tasks", "Analysis", "Checks"}[i]
+				if !strings.Contains(ansi.Strip(frame), "▸ "+label) || s.ClampedIdx() != i {
+					t.Fatalf("activity selection lost at %v", dims)
+				}
+				s.HandleKey(KeyEvent{Key: "ArrowDown"})
+			}
+			if len(s.PendingActions) != 0 || s.Confirmation != nil {
+				t.Fatal("dashboard browsing must remain passive")
+			}
+		}
+	}
+}
+
+func TestDashboardKeepsFailureStatesAndFullReason(t *testing.T) {
+	for _, dims := range [][2]int{{52, 16}, {80, 24}, {120, 34}} {
+		s := workspaceSampleState()
+		s.Run.Status, s.Scan.Status = "partial", "failed"
+		s.Run.Reason = strings.Repeat("A provider did not finish this scope. ", 40) + "LAST_REASON"
+		frame := s.Render(dims[0], dims[1])
+		for _, label := range []string{"[PARTIAL]", "[FAILED]"} {
+			if !strings.Contains(frame, label) {
+				t.Fatalf("%s hidden at %v", label, dims)
+			}
+		}
+		s.HandleKey(KeyEvent{Key: "End"})
+		if !strings.Contains(s.Render(dims[0], dims[1]), "LAST_REASON") || len(s.PendingActions) != 0 {
+			t.Fatal("full analysis reason must remain readable without retrying work")
+		}
+	}
+}
+
+func TestDashboardNewTaskOpensEditablePlanWithoutAnalysis(t *testing.T) {
+	s := workspaceSampleState()
+	s.HandleKey(KeyEvent{Key: "n"})
+	if !s.CmdActive || s.CmdInput != "agent " || len(s.PendingActions) != 0 {
+		t.Fatal("dashboard n must open a task prompt without running analysis")
+	}
+	s.HandleKey(KeyEvent{Text: "Improve request errors"})
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if s.Page != PagePlan || s.PlanDraft == nil || s.PlanDraft.Seed.Title != "Improve request errors" || len(s.PendingActions) != 0 {
+		t.Fatal("new task must open an editable plan before any generation")
+	}
+	s.Navigate(PageSummary)
+	s.ExecuteCommand("reanalyze")
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "reanalyze" {
+		t.Fatal("fresh analysis must remain available as an explicit command")
 	}
 }
 

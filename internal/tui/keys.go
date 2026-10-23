@@ -987,6 +987,10 @@ func (s *State) handleModelsPageKey(key string) bool {
 }
 
 func (s *State) handleOverviewShortcuts(key string) bool {
+	if s.Page == PageSummary && key == "n" {
+		s.openCommandInput("agent ")
+		return true
+	}
 	if (s.Page == PageSummary || s.Page == PageRepo) && key == "o" {
 		s.openCommandInput("project ")
 		return true

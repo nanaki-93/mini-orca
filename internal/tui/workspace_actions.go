@@ -6,7 +6,7 @@ func (s *State) pageActions() []keyDesc {
 		if s.Project == nil {
 			return []keyDesc{{"Enter", "Open project"}}
 		}
-		return []keyDesc{{"Enter", "Open"}, {"r", "Analyze"}, {"o", "Switch project"}}
+		return []keyDesc{{"Enter", "Open"}, {"n", "New task"}, {"r", "Analyze"}, {"o", "Switch project"}}
 	case PageRepo:
 		return []keyDesc{{"o", "Switch project"}, {"r", "Reindex"}}
 	case PageProject:

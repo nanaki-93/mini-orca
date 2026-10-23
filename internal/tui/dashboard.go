@@ -23,44 +23,94 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 	if s.Project == nil && s.Run == nil {
 		return s.renderWelcomePage(th, width)
 	}
-	lines := renderPageHeader(th, "DASHBOARD", "Project activity and next steps")
-	if s.Project != nil {
-		lines = append(lines, "  "+th.muted+theme.TruncatePlain(s.Project.Path, width-4)+th.reset)
-	}
 	summary := domain.ComputeIssueSummary(s.CollectAllIssues(), s.Features)
-	cards := [][2]string{
-		{"Open issues", fmt.Sprintf("%s%d%s", th.bold+th.amber, summary.TotalOpen, th.reset)},
-		{"Resolved", fmt.Sprintf("%s%d%s", th.bold+th.green, summary.Done, th.reset)},
-		{"Tasks", fmt.Sprintf("%s%d%s", th.bold+th.fg, len(s.AgentItems()), th.reset)},
-		{"Features", fmt.Sprintf("%s%d%s", th.bold+th.fg, summary.Features, th.reset)},
+	lines := renderPageHeader(th, "DASHBOARD", "↑/↓ Select · Enter Open · n New task")
+	if s.viewportBodyRows >= 16 {
+		if s.Project != nil {
+			lines[1] = "  " + th.muted + theme.TruncatePlain(s.Project.Path, width-4) + th.reset
+		}
+		cards := [][2]string{
+			{"Open issues", fmt.Sprintf("%s%d%s", th.amber, summary.TotalOpen, th.reset)},
+			{"Resolved", fmt.Sprintf("%s%d%s", th.green, summary.Done, th.reset)},
+			{"Tasks", fmt.Sprintf("%s%d%s", th.purple, len(s.AgentItems()), th.reset)},
+			{"Features", fmt.Sprintf("%s%d%s", th.cyan, summary.Features, th.reset)},
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderMetrics(cards, width)...)
+		lines = append(lines, "")
 	}
-	lines = append(lines, "")
-	lines = append(lines, th.renderMetrics(cards, width)...)
-	lines = append(lines, "", "  "+th.muted+"ACTIVITY"+th.reset)
-	activity := [][2]string{
-		{"Issues", fmt.Sprintf("%d open · %d in progress", summary.TotalOpen, summary.InProgress)},
-		{"Tasks", fmt.Sprintf("%d tasks · Plan, verify and review changes", len(s.AgentItems()))},
-		{"Analysis", "Not run yet"},
-		{"Checks", "Not run yet"},
+	if width >= 88 && s.viewportBodyRows >= 22 {
+		lines = append(lines, s.renderDashboardColumns(th, summary, width)...)
+	} else {
+		lines = append(lines, s.renderDashboardActivities(th, summary, width, false)...)
+		lines = append(lines, "", "  "+th.cyan+"NEXT STEP"+th.reset)
+		lines = appendWrappedText(lines, s.dashboardNextStep(), width)
+	}
+	if s.Run != nil && strings.TrimSpace(s.Run.Reason) != "" {
+		lines = append(lines, "")
+		lines = appendWrappedText(lines, th.amber+"Analysis: "+s.Run.Reason+th.reset, width)
+	}
+	return lines
+}
+
+type dashboardActivity struct {
+	label, summary, detail, color string
+}
+
+func (s *State) dashboardActivities(th ansiTheme, summary domain.IssueSummary) []dashboardActivity {
+	activity := []dashboardActivity{
+		{"Issues", fmt.Sprintf("%d open · %d in progress", summary.TotalOpen, summary.InProgress), "Inspect evidence and prepare a fix plan.", th.amber},
+		{"Tasks", fmt.Sprintf("%d tasks", len(s.AgentItems())), "Follow plans, checks and reviews.", th.purple},
+		{"Analysis", "Not run yet", "Inspect coverage and recorded findings.", th.cyan},
+		{"Checks", "Not run yet", "Read verification results and diagnostics.", th.green},
 	}
 	if s.Run != nil {
 		done, total := runAggregateCoverage(s.Run)
-		activity[2][1] = th.statusBadge(s.Run.Status)
+		activity[2].summary = th.statusBadge(s.Run.Status)
 		if total > 0 {
-			activity[2][1] += fmt.Sprintf(" %d/%d files", done, total)
+			activity[2].summary += fmt.Sprintf(" %d/%d files", done, total)
 		}
 	}
 	if s.Scan != nil {
-		activity[3][1] = th.statusBadge(s.Scan.Status) + fmt.Sprintf(" %d checks", len(s.Scan.Phases))
+		activity[3].summary = th.statusBadge(s.Scan.Status) + fmt.Sprintf(" %d checks", len(s.Scan.Phases))
 	}
-	for i, item := range activity {
-		lines = append(lines, "  "+th.renderCursorPrefix(i == s.ClampedIdx())+rowTitleStyle(th, i == s.ClampedIdx())+fmt.Sprintf("%-11s", item[0])+th.reset+item[1])
+	return activity
+}
+
+func (s *State) renderDashboardActivities(th ansiTheme, summary domain.IssueSummary, width int, detailed bool) []string {
+	var lines []string
+	for i, item := range s.dashboardActivities(th, summary) {
+		row := "  " + th.renderCursorPrefix(i == s.ClampedIdx()) + item.color + fmt.Sprintf("%-10s", item.label) + th.reset + item.summary
+		lines = append(lines, wrapWorkspaceLines([]string{row}, width)...)
+		if detailed {
+			for _, line := range theme.WrapVisibleLine(item.detail, width-6) {
+				lines = append(lines, "    "+th.muted+line+th.reset)
+			}
+			lines = append(lines, "")
+		}
 	}
-	lines = append(lines, "", "  "+th.muted+"NEXT STEP"+th.reset)
-	lines = appendWrappedText(lines, th.cyan+s.dashboardNextStep()+th.reset, width)
-	if s.Run != nil && strings.TrimSpace(s.Run.Reason) != "" {
-		lines = append(lines, "")
-		lines = appendWrappedText(lines, th.muted+"Analysis: "+s.Run.Reason+th.reset, width)
+	return lines
+}
+
+func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary, width int) []string {
+	rightWidth := (width - 2) / 3
+	leftWidth := width - rightWidth - 5
+	left := []string{"  " + th.purple + "ACTIVITY" + th.reset, ""}
+	left = append(left, s.renderDashboardActivities(th, summary, leftWidth, true)...)
+	left = append(left, "  "+th.muted+"↑/↓ Select · Enter Open"+th.reset)
+	right := []string{"  " + th.cyan + "NEXT STEP" + th.reset, ""}
+	right = appendWrappedText(right, s.dashboardNextStep(), rightWidth)
+	right = append(right, "", "  "+th.keyPill("n", "New task"), "  "+th.keyPill("o", "Switch project"), "  "+th.keyPill(":", "Find a command"), "")
+	var lines []string
+	for i := 0; i < max(len(left), len(right)); i++ {
+		l, r := "", ""
+		if i < len(left) {
+			l = left[i]
+		}
+		if i < len(right) {
+			r = right[i]
+		}
+		lines = append(lines, theme.PadVisibleRight(l, leftWidth)+"   "+theme.PaintLine(th.surface, th.fg, r, rightWidth))
 	}
 	return lines
 }
@@ -80,22 +130,23 @@ func (s *State) dashboardNextStep() string {
 	case s.Run.Status == "failed":
 		return "Open Analysis to inspect failures; [R] retries failed stages."
 	default:
-		return "[Enter] Open an activity · [o] Switch project · :agent <request> to plan a task."
+		return "Choose an activity to inspect its results, or press [n] to plan a new task."
 	}
 }
 
 func (s *State) renderWelcomePage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WELCOME", "A clear workspace for your next change")
-	lines = append(lines, "", "  "+th.bold+th.fg+"Open a local project"+th.reset)
-	lines = appendWrappedText(lines, "Browse its code, investigate findings and review changes before applying them.", width)
-	lines = append(lines, "", "  "+th.renderCursorPrefix(true)+th.keyPill("Enter / o", "Open project"), "", "  "+th.muted+"HOW IT WORKS"+th.reset)
-	for _, step := range []string{
-		"1  Open       Restore the project and its saved results.",
-		"2  Analyze    Find issues and explore feature ideas.",
-		"3  Plan       Choose scope and approve the approach.",
-		"4  Review     Inspect checked diffs, then Apply or Undo.",
+	lines := renderPageHeader(th, "WELCOME", "Your code. A clearer next step.")
+	lines = append(lines, "", "  "+th.renderCursorPrefix(true)+th.keyPill("Enter / o", "Open a local project"))
+	lines = appendWrappedText(lines, "Browse code, investigate findings and review every change before Apply.", width)
+	lines = append(lines, "", "  "+th.cyan+"FROM IDEA TO REVIEWED CHANGE"+th.reset, "")
+	for i, step := range [][2]string{
+		{"Open", "Restore a project and its saved results."},
+		{"Analyze", "Explore issues and feature ideas."},
+		{"Plan", "Choose scope and approve the approach."},
+		{"Review", "Inspect checked diffs, then Apply or Undo."},
 	} {
-		lines = appendWrappedText(lines, step, width)
+		color := []string{th.accent, th.cyan, th.purple, th.green}[i]
+		lines = appendWrappedText(lines, fmt.Sprintf("%s%02d  %-9s%s %s", color, i+1, step[0], th.reset, step[1]), width)
 	}
 	if !s.Connected {
 		lines = append(lines, "")

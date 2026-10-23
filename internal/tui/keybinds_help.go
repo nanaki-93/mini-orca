@@ -145,10 +145,10 @@ func lookupPageHelpSpec(page Page) pageHelpSpec {
 
 var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageSummary: {
-		title:     "[1] OVERVIEW · EXECUTIVE DASHBOARD",
-		primary:   []keyDesc{{"Enter", "Open selected area"}, {"o", "Switch project"}},
-		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"t", "Run checks/tests"}},
-		commands:  []keyDesc{{":analyze", "Run analysis"}, {":test", "Run checks"}},
+		title:     "[1] PROJECT · DASHBOARD",
+		primary:   []keyDesc{{"Enter", "Open selected area"}, {"n", "New task"}, {"o", "Switch project"}},
+		secondary: []keyDesc{{"r / t", "Analysis / checks"}},
+		commands:  []keyDesc{{":reanalyze", "Fresh analysis"}, {":test", "Run checks"}},
 	},
 	PageRepo: {
 		title:     "[1] OVERVIEW · REPOSITORY & INDEX",

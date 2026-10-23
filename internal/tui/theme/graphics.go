@@ -399,18 +399,28 @@ func RenderErrorBanner(errorBoxStyle lipgloss.Style, critBg, boldRed, reset, err
 	return out
 }
 
-// RenderMetrics shows a compact, evenly spaced strip of workspace counts.
-func RenderMetrics(mutedStyle lipgloss.Style, cards [][2]string, totalWidth int) []string {
+// RenderMetrics shows evenly spaced count cards with explicit surface backgrounds.
+func RenderMetrics(mutedStyle lipgloss.Style, surface, foreground string, cards [][2]string, totalWidth int) []string {
 	if len(cards) == 0 {
 		return nil
 	}
-	column := max(1, (totalWidth-4)/len(cards))
-	var labels, values strings.Builder
-	labels.WriteString("  ")
-	values.WriteString("  ")
-	for _, item := range cards {
-		labels.WriteString(PadVisibleRight(mutedStyle.Render(item[0]), column))
-		values.WriteString(PadVisibleRight(item[1], column))
+	columns := len(cards)
+	if totalWidth < 76 {
+		columns = min(columns, 2)
 	}
-	return []string{values.String(), labels.String()}
+	column := max(1, (totalWidth-4-2*(columns-1))/columns)
+	var lines []string
+	for start := 0; start < len(cards); start += columns {
+		rows := []string{"  ", "  ", "  "}
+		for i, item := range cards[start:min(start+columns, len(cards))] {
+			for row, content := range []string{" " + item[1], " " + mutedStyle.Render(item[0]), ""} {
+				if i > 0 {
+					rows[row] += "  "
+				}
+				rows[row] += PaintLine(surface, foreground, content, column)
+			}
+		}
+		lines = append(lines, rows...)
+	}
+	return lines
 }

@@ -164,7 +164,7 @@ func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
 }
 
 func (th ansiTheme) renderMetrics(cards [][2]string, totalWidth int) []string {
-	return theme.RenderMetrics(th.mutedStyle, cards, totalWidth)
+	return theme.RenderMetrics(th.mutedStyle, th.surface, th.fg, cards, totalWidth)
 }
 
 func (th ansiTheme) renderTableHeader(columns string, width int) []string {
