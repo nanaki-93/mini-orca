@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
@@ -67,6 +68,9 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 	if timed.Err() != nil {
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()
+		if ctx.Err() == nil && timed.Err() == context.DeadlineExceeded {
+			check.Output = fmt.Sprintf("%s timed out after %s. Increase timeouts.focused_check_seconds and retry checks; no code failure was established.", check.Name, s.focusedCheckTimeout)
+		}
 		return check, timed.Err()
 	}
 	return check, err

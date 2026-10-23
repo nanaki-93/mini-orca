@@ -1,6 +1,24 @@
 package app
 
-import "time"
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+type workflowTimeoutError struct {
+	stage string
+	limit time.Duration
+}
+
+func (e *workflowTimeoutError) Error() string {
+	if e.stage == "" {
+		return fmt.Sprintf("Workflow reached its total %s budget. Inspect the saved evidence and retry the unfinished stage. No source was applied.", e.limit)
+	}
+	return fmt.Sprintf("%s model request timed out after %s, including retries. Increase timeouts.workflow_model_seconds or choose a faster model, then retry this stage. No source was applied.", e.stage, e.limit)
+}
+
+func (e *workflowTimeoutError) Unwrap() error { return context.DeadlineExceeded }
 
 // A run must accommodate every remaining model call, including optional repairs.
 // Provider retries share each model's deadline; they do not multiply this budget.

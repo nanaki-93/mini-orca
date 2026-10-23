@@ -1,6 +1,12 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +43,110 @@ func TestWorkflowModelTimeoutHonorsConfigurationWithoutChangingOtherRequests(t *
 		if got := s.workflowStageRuntime(2, "analyze").effective.Timeout; got != "50m0s" {
 			t.Fatalf("longer generation timeout shortened to %s", got)
 		}
+	}
+}
+
+func TestTestingTimeoutRetainsCreationAndResumesWithoutRegeneration(t *testing.T) {
+	var createCalls, testCalls, reviewCalls atomic.Int32
+	release := make(chan struct{})
+	defer close(release)
+	s, root, initial := workflowService(t, [3]func() string{
+		func() string { createCalls.Add(1); return workflowImplementation },
+		func() string {
+			if testCalls.Add(1) == 1 {
+				<-release
+			}
+			return workflowTests
+		},
+		func() string { reviewCalls.Add(1); return workflowApproval },
+	})
+	s.workflowModelTimeout = time.Second
+	s.runtimes.analyze.effective.Timeout = "1s"
+	s.runtimes.function.effective.Timeout = "1s"
+	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, workflowRequest(initial)); err != nil {
+		t.Fatal(err)
+	}
+	failed := finishedWorkflow(t, s, initial.ID)
+	if failed.Workflow.Status != "failed" || failed.Workflow.Stages[0].Status != "completed" || failed.Workflow.Stages[1].Status != "failed" {
+		t.Fatalf("timeout stages = %+v", failed.Workflow)
+	}
+	if !strings.Contains(failed.Workflow.Reason, "Testing model request timed out after 1s") || !strings.Contains(failed.Workflow.Reason, "timeouts.workflow_model_seconds") {
+		t.Fatalf("missing actionable timeout: %s", failed.Workflow.Reason)
+	}
+	if createCalls.Load() != 1 || testCalls.Load() != 1 || reviewCalls.Load() != 0 || len(failed.Checks) != 0 || len(failed.Changes) != 1 {
+		t.Fatalf("timeout dispatched more work or lost creation: calls=%d/%d/%d, checks=%v, changes=%d", createCalls.Load(), testCalls.Load(), reviewCalls.Load(), failed.Checks, len(failed.Changes))
+	}
+	s.workflowModelTimeout = 15 * time.Minute
+	retry := workflowRequest(failed)
+	retry.ResumeFrom = "test"
+	if _, err := s.StartChangeWorkflow(context.Background(), failed.ID, retry); err != nil {
+		t.Fatal(err)
+	}
+	finished := finishedWorkflow(t, s, initial.ID)
+	if finished.Workflow.Status != "awaiting_human_review" || createCalls.Load() != 1 || testCalls.Load() != 2 || reviewCalls.Load() != 1 || !requiredChecksPassed(finished.Checks) {
+		t.Fatalf("test retry did not recover: %+v, calls=%d/%d/%d", finished.Workflow, createCalls.Load(), testCalls.Load(), reviewCalls.Load())
+	}
+	if finished.Workflow.Stages[1].Model.Timeout != "15m0s" {
+		t.Fatalf("retry reused the old timeout: %+v", finished.Workflow.Stages[1].Model)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Fatal("workflow applied source without human review")
+	}
+}
+
+func TestWorkflowTimeoutCausesDistinguishModelAndOverallBudgets(t *testing.T) {
+	for _, test := range []struct{ stage, want string }{
+		{"Creation", "Creation model request"}, {"Testing", "Testing model request"},
+		{"Review", "Review model request"}, {"", "total 15m0s budget"},
+	} {
+		err := &workflowTimeoutError{stage: test.stage, limit: 15 * time.Minute}
+		status, reason := workflowFailure(err, nil)
+		if !errors.Is(err, context.DeadlineExceeded) || status != "failed" || !strings.Contains(reason, test.want) {
+			t.Fatalf("timeout classification: %s, %s", status, reason)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	status, _ := workflowFailure(context.Cause(ctx), nil)
+	if status != "canceled" {
+		t.Fatalf("cancellation became a timeout: %s", status)
+	}
+}
+
+func TestTimedOutChecksStopAutomaticRepairAndRetainEvidence(t *testing.T) {
+	var createCalls, testCalls, reviewCalls atomic.Int32
+	s, _, initial := workflowService(t, [3]func() string{
+		func() string { createCalls.Add(1); return workflowImplementation },
+		func() string { testCalls.Add(1); return workflowTests },
+		func() string { reviewCalls.Add(1); return workflowApproval },
+	})
+	s.focusedCheckTimeout = time.Nanosecond
+	req := workflowRequest(initial)
+	req.AutoRepair = true
+	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, req); err != nil {
+		t.Fatal(err)
+	}
+	failed := finishedWorkflow(t, s, initial.ID)
+	if failed.Workflow.Status != "failed" || failed.Workflow.AutoRepairAttempts != 0 || createCalls.Load() != 1 || testCalls.Load() != 1 || reviewCalls.Load() != 0 {
+		t.Fatalf("interrupted checks triggered generation: %+v, calls=%d/%d/%d", failed.Workflow, createCalls.Load(), testCalls.Load(), reviewCalls.Load())
+	}
+	for _, check := range failed.Checks {
+		if check.Name == "tests" && check.State == CheckCanceled && strings.Contains(check.Output, "timeouts.focused_check_seconds") {
+			return
+		}
+	}
+	t.Fatalf("timed-out check evidence missing: %+v", failed.Checks)
+}
+
+func TestWorkflowRepairsOnlyEstablishedCheckFailures(t *testing.T) {
+	for _, state := range []string{CheckCanceled, CheckUnavailable, CheckNotRun, CheckSkipped, CheckPassed, CheckFailed} {
+		checks := []CheckResult{{Required: true, State: state}, {Required: false, State: CheckUnavailable}}
+		if got := workflowChecksRepairable(checks); got != (state == CheckFailed) {
+			t.Fatalf("repairable %s = %t", state, got)
+		}
+	}
+	if workflowChecksRepairable([]CheckResult{{Required: true, State: CheckFailed}, {Required: true, State: CheckCanceled}}) {
+		t.Fatal("partial check execution triggered repair")
 	}
 }
 

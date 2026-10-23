@@ -72,7 +72,8 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if startStage != 2 {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
-	workCtx, cancel := context.WithTimeout(context.Background(), s.changeWorkflowTimeout(request.Models, startStage, request.AutoRepair))
+	budget := s.changeWorkflowTimeout(request.Models, startStage, request.AutoRepair)
+	workCtx, cancel := context.WithTimeoutCause(context.Background(), budget, &workflowTimeoutError{limit: budget})
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
@@ -184,7 +185,25 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	if session.Plan != nil && len(session.ScopeSuggestions) > 0 {
 		return false
 	}
-	return errors.Is(runErr, errWorkflowChecksFailed) || session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
+	if errors.Is(runErr, errWorkflowChecksFailed) {
+		return workflowChecksRepairable(session.Checks)
+	}
+	return session.Workflow.Review != nil && session.Workflow.Review.Verdict == "changes_requested"
+}
+
+// A missing or interrupted check is not evidence that a model should change code.
+func workflowChecksRepairable(checks []CheckResult) bool {
+	failed := false
+	for _, check := range checks {
+		if !check.Required || check.State == CheckPassed {
+			continue
+		}
+		if check.State != CheckFailed {
+			return false
+		}
+		failed = true
+	}
+	return failed
 }
 
 func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWorkflowJob, baseMessage string, attempt int) (string, bool) {
@@ -225,20 +244,13 @@ func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWor
 		return err
 	}
 	runtime := s.workflowStageRuntime(stage, job.models.selections()[stage])
-	switch stage {
-	case 0:
-		isRepair := (session.Workflow != nil && session.Workflow.AutoRepairAttempts > 0) || strings.Contains(message, "Previous check failures to resolve:")
-		_, err = s.generateChangeWithRuntime(ctx, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message, Repair: isRepair}, runtime)
-	case 1:
-		session, err = s.generateWorkflowTests(ctx, job.root, session, runtime, workflowTestStageMessage(message))
-		if err == nil {
-			session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), CheckOptions: CheckOptions{RunTests: true}})
-		}
-		if err == nil && !requiredChecksPassed(session.Checks) {
-			err = errWorkflowChecksFailed
-		}
-	case 2:
-		err = s.reviewWorkflowProposal(ctx, job.root, session, runtime)
+	session, err = s.runWorkflowModelStage(ctx, job, session, runtime, stage, message)
+	if err != nil || stage != 1 {
+		return err
+	}
+	session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), CheckOptions: CheckOptions{RunTests: true}})
+	if err == nil && !requiredChecksPassed(session.Checks) {
+		return errWorkflowChecksFailed
 	}
 	return err
 }
@@ -287,6 +299,9 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 		if runErr == nil {
 			runErr = s.verifyChangeCurrent(ctx, job.root, session)
 		}
+		if errors.Is(runErr, context.DeadlineExceeded) && ctx.Err() != nil {
+			runErr = context.Cause(ctx)
+		}
 		if runErr == nil {
 			w.Stages[2].Status = "completed"
 			w.Status = "changes_requested"
@@ -319,11 +334,14 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 }
 
 func workflowFailure(err error, checks []CheckResult) (string, string) {
+	var timeout *workflowTimeoutError
 	switch {
 	case errors.Is(err, context.Canceled):
 		return "canceled", "Workflow canceled. No source was applied."
+	case errors.As(err, &timeout):
+		return "failed", timeout.Error()
 	case errors.Is(err, context.DeadlineExceeded):
-		return "failed", "Workflow timed out. Reduce scope or check the selected provider."
+		return "failed", "An operation timed out. Inspect the failed stage and check evidence before retrying."
 	case errors.Is(err, project.ErrRevisionConflict), errors.Is(err, project.ErrExcludedFile):
 		return "stale", "Project source or instructions changed. Start a fresh conversation."
 	case errors.Is(err, errWorkflowChecksFailed):

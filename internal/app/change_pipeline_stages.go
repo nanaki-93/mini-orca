@@ -184,6 +184,26 @@ func workflowTestStageMessage(stageMessage string) string {
 	return workflowTestPrompt
 }
 
+func (s *Service) runWorkflowModelStage(ctx context.Context, job *changeWorkflowJob, session *ChangeSession, runtime modelRuntime, stage int, message string) (*ChangeSession, error) {
+	limit := duration(runtime.effective.Timeout)
+	timed, cancel := context.WithTimeoutCause(ctx, limit, &workflowTimeoutError{stage: []string{"Creation", "Testing", "Review"}[stage], limit: limit})
+	defer cancel()
+	var err error
+	switch stage {
+	case 0:
+		isRepair := session.Workflow.AutoRepairAttempts > 0 || strings.Contains(message, "Previous check failures to resolve:")
+		session, err = s.generateChangeWithRuntime(timed, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message, Repair: isRepair}, runtime)
+	case 1:
+		session, err = s.generateWorkflowTests(timed, job.root, session, runtime, workflowTestStageMessage(message))
+	case 2:
+		err = s.reviewWorkflowProposal(timed, job.root, session, runtime)
+	}
+	if timed.Err() != nil {
+		return nil, context.Cause(timed)
+	}
+	return session, err
+}
+
 func (s *Service) generateWorkflowTests(ctx context.Context, root string, session *ChangeSession, runtime modelRuntime, message string) (*ChangeSession, error) {
 	text, _, err := composeChangePromptContext(root, session)
 	if err != nil {

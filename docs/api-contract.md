@@ -742,6 +742,10 @@ source checks. `auto_repair` defaults to false; opting in permits at most two
 automatic retries. Failed checks can expose `scope_suggestions`, but planned
 workflows never silently add targets and automatic repair stops when expansion
 would be needed. Review the suggested scope in a new plan before generation.
+Interrupted or unavailable required checks stop automatic repair: they do not
+establish a code failure. Their evidence remains available for an explicit retry.
+Timeout reasons distinguish a model-stage deadline, a focused check deadline and
+the total workflow deadline, with the relevant configuration setting where applicable.
 
 `resume_from` accepts `create` (default), `test`, or `review`. Test-stage retry
 reuses the current implementation; critic retry requires live, passing check
