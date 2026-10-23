@@ -122,12 +122,17 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/config/config.go`, `internal/config/default.go`, `internal/config/config_test.go`, `CONFIG.md`, `config.example.yaml`.
 - `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/policy_test.go` — **new**.
 - `internal/app/agentruntime/runtime.go`, `internal/app/service.go`, `internal/app/analysis_models.go`, `internal/app/change_pipeline_timeout.go`, `internal/app/change_pipeline_timeout_test.go`.
+- `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/model.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/runtime_test.go`, `internal/app/agentruntime/gemini_test.go` — enforce policy at actual provider dispatch and preserve known versus estimated usage.
+- `internal/app/agent_limits.go`, `internal/app/agent_limits_test.go` — **new**, application-owned admission for shared run limits.
+- `internal/app/change_pipeline.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_pipeline_test.go`, `internal/app/analysis_run.go`, `internal/app/analysis_run_test.go`, `internal/app/service_test.go` — bind budgets to worker lifetimes and freeze resolved role choices.
+- `internal/api/handlers/change_pipeline_handler_test.go`, `docs/api-contract.md`, `docs/openapi.yaml` — document and test configured defaults for omitted workflow role selections.
 
 **Inputs / dependencies**
 - Task 04; existing profile confirmation and inclusive retry budgets.
 
 **Implementation rules**
 - Add role-to-profile routing with the three current scopes as compatible defaults. Freeze assignments and destination grants at admission; explicit authorized fallback choices cannot cross consent boundaries.
+- Start with the existing Creation, Testing and Review roles. Omitted workflow choices resolve to these configured defaults; explicit catalog choices retain precedence and require the same profile-specific consent. Later graph tasks add roles when their callers exist.
 - Enforce cumulative model calls, tool calls, input/output tokens, elapsed time, concurrent branches, and repair limits across children and retries. Unknown usage is explicit; use reservations to prevent overspending through concurrency.
 - Use ADK plugins for observations and policy hooks, while repeating essential checks at dispatch. Authority/cancellation/persistence failures are terminal. Tool repair cannot retry a mutation or amplify SDK/transport retries.
 
