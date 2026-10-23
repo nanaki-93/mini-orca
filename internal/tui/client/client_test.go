@@ -11,6 +11,36 @@ import (
 	"time"
 )
 
+func TestClientInputRoutePreservesCheckpointIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/projects/current/changes/change/workflow/input" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"workflow":{"input":{"project_id":"project","project_revision":"revision","revision":9007199254740993,"hash":"proposal","request_id":"request","run_id":"run","workflow_id":"workflow","node_id":"human_review","action":"review_proposal","schema":"proposal-review-v1","status":"approved","expires_at":"2026-10-25T00:00:00Z","received_at":"2026-10-24T00:00:00Z","scope":[{"path":"new.go","source_exists":false,"source_hash":"","proposal_hash":"candidate"}]}}}`))
+	}))
+	defer server.Close()
+	client, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	response, err := client.Request(t.Context(), "input", http.MethodPost, "/api/projects/current/changes/change/workflow/input", `{"request_id":"request","decision":"approve"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result ChangeSession
+	if err := json.Unmarshal([]byte(response.Body), &result); err != nil {
+		t.Fatal(err)
+	}
+	input := result.Workflow.Input
+	if input == nil || input.Revision != 9007199254740993 || input.Status != "approved" || input.Action != "review_proposal" || input.Scope[0].SourceExists || input.Scope[0].ProposalHash != "candidate" {
+		t.Fatalf("checkpoint decode: %+v", input)
+	}
+	if _, err := client.Request(t.Context(), "invalid", http.MethodGet, "/api/projects/current/changes/change/workflow/input", ""); err == nil {
+		t.Fatal("read dispatched an input mutation")
+	}
+}
+
 func TestClientDecodesSpecialistEvidenceWithoutPromotingAdvice(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

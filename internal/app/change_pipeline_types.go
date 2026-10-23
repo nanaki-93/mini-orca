@@ -73,6 +73,7 @@ type ChangeSpecialistReview struct {
 // Workflow reports live in private change history alongside captured source.
 // A model verdict never establishes human approval or measured performance.
 type ChangeWorkflow struct {
+	Input              *ChangeInput             `json:"input,omitempty"`
 	Attempt            int                      `json:"attempt,omitempty"`
 	ResumeFrom         string                   `json:"resume_from,omitempty"`
 	ID                 string                   `json:"id"`
@@ -153,7 +154,7 @@ func isChangePipelineActive(workflow *ChangeWorkflow) bool {
 
 func canHumanReviewProposal(session *ChangeSession) bool {
 	w := session.Workflow
-	return w == nil || (w.Status == "awaiting_human_review" && w.Review != nil && w.Review.ProposalHash == session.Hash && w.Review.Verdict == "approve" && specialistsComplete(w, session.Hash))
+	return w == nil || (w.Status == "awaiting_human_review" && inputAllowsReview(w) && w.Review != nil && w.Review.ProposalHash == session.Hash && w.Review.Verdict == "approve" && specialistsComplete(w, session.Hash))
 }
 
 func invalidateChangeWorkflow(session *ChangeSession, reason string) {
@@ -182,6 +183,9 @@ func stopChangeWorkflowStages(w *ChangeWorkflow) {
 func validateStoredWorkflow(w *ChangeWorkflow) error {
 	if w == nil {
 		return nil // Existing schema-1 conversations have no workflow.
+	}
+	if err := validateChangeInput(w.Input); err != nil {
+		return err
 	}
 	if w.ID == "" || len(w.ID) > 100 || len(w.Stages) != 4 {
 		return fmt.Errorf("corrupt change workflow")

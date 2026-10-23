@@ -103,7 +103,7 @@ func reconcileManualCheckStages(wf *ChangeWorkflow, hash string, checks []CheckR
 	if len(wf.Stages) > 1 {
 		wf.Stages[1].Status, wf.Stages[1].Reason = "completed", ""
 	}
-	if wf.Review != nil && wf.Review.ProposalHash == hash && wf.Review.Verdict == "approve" {
+	if inputAllowsReview(wf) && wf.Review != nil && wf.Review.ProposalHash == hash && wf.Review.Verdict == "approve" {
 		wf.Status, wf.Reason = "awaiting_human_review", ""
 	}
 	return true
@@ -423,24 +423,7 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 	if err != nil {
 		return nil, err
 	}
-	if !canHumanReviewProposal(session) || len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) {
-		return nil, fmt.Errorf("complete current proposal checks before review")
-	}
-	if err := requireApprovedChangePlan(session); err != nil {
-		return nil, err
-	}
-	if session.Plan != nil && (!allChangeFilesReviewed(session) || !s.hasLivePassingChecks(session)) {
-		return nil, fmt.Errorf("run current checks and mark each changed file reviewed before Apply")
-	}
-	session.ReviewedHash = session.Hash
-	if session.Workflow != nil {
-		session.Workflow.Stages[3].Status = "completed"
-	}
-	if err := storeChangeSession(root, session); err != nil {
-		return nil, err
-	}
-	s.changeAuthority[session.ProjectID+"/"+id] = "review:" + session.Hash
-	return session, nil
+	return s.reviewChangeLocked(ctx, root, session)
 }
 
 func (s *Service) RepairChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {

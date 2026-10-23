@@ -273,7 +273,7 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 	if err := s.Checkpoint(t.Context(), budget); err != nil {
 		t.Fatal(err)
 	}
-	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1", "unknown-v1"} {
+	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1", "confirmation-v1", "unknown-v1"} {
 		now := time.Now().UTC()
 		run := Run{ID: version, Session: key, BudgetID: budget.ID, RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: version, Status: "running", Started: now, Updated: now}
 		err := s.BeginRun(t.Context(), run)
@@ -295,7 +295,7 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 		t.Fatal(err)
 	}
 	db, err := reopened.load()
-	if err != nil || len(db.Runs) != 5 {
+	if err != nil || len(db.Runs) != 6 {
 		t.Fatalf("history schema compatibility lost: %v", err)
 	}
 	for _, run := range db.Runs {

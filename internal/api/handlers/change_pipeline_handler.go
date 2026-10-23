@@ -28,3 +28,12 @@ func (h *ChangeHandler) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.CancelChangeWorkflow(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+
+func (h *ChangeHandler) RespondInput(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeInputResponse
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.RespondChangeInput(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}

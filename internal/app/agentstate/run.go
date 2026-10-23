@@ -40,16 +40,17 @@ type BudgetRecord struct {
 }
 
 type Run struct {
-	ID              string    `json:"id"`
-	Session         Key       `json:"session"`
-	BudgetID        string    `json:"budget_id"`
-	RequestHash     string    `json:"request_hash"`
-	ProviderBinding string    `json:"provider_binding,omitempty"`
-	SchemaHash      string    `json:"schema_hash"`
-	SchemaVersion   string    `json:"schema_version"`
-	Status          string    `json:"status"`
-	Started         time.Time `json:"started"`
-	Updated         time.Time `json:"updated"`
+	Input           *InputCheckpoint `json:"input,omitempty"`
+	ID              string           `json:"id"`
+	Session         Key              `json:"session"`
+	BudgetID        string           `json:"budget_id"`
+	RequestHash     string           `json:"request_hash"`
+	ProviderBinding string           `json:"provider_binding,omitempty"`
+	SchemaHash      string           `json:"schema_hash"`
+	SchemaVersion   string           `json:"schema_version"`
+	Status          string           `json:"status"`
+	Started         time.Time        `json:"started"`
+	Updated         time.Time        `json:"updated"`
 }
 
 func (b Binding) Validate() error {
@@ -82,6 +83,9 @@ func validateRunRecords(db *database) error {
 }
 
 func validateRun(id string, run Run) error {
+	if err := validateInputCheckpoint(run); err != nil {
+		return err
+	}
 	if run.ProviderBinding != "" && !validHash(run.ProviderBinding) {
 		return ErrCorrupt
 	}
@@ -89,7 +93,7 @@ func validateRun(id string, run Run) error {
 		return ErrCorrupt
 	}
 	switch run.Status {
-	case "running", "completed", "failed", "canceled":
+	case "running", "waiting_input", "completed", "failed", "canceled", "expired":
 		return nil
 	default:
 		return ErrCorrupt
@@ -98,7 +102,7 @@ func validateRun(id string, run Run) error {
 
 func validRunSchema(version string) bool {
 	switch version {
-	case "completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1":
+	case "completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1", "confirmation-v1":
 		return true
 	default:
 		return false
@@ -154,7 +158,7 @@ func (s *Store) FinishRun(ctx context.Context, id, status string) error {
 		if !exists {
 			return ErrNotFound
 		}
-		if run.Status != "running" || status == "running" {
+		if run.Status != "running" || status != "completed" && status != "failed" && status != "canceled" {
 			return fmt.Errorf("agent invocation terminal status cannot be replaced")
 		}
 		run.Status = status
@@ -166,7 +170,7 @@ func (s *Store) FinishRun(ctx context.Context, id, status string) error {
 
 func deleteSessionRuns(db *database, key Key) error {
 	for _, run := range db.Runs {
-		if run.Session == key && run.Status == "running" {
+		if run.Session == key && unfinishedRun(run) {
 			return fmt.Errorf("cannot delete a session with an unfinished invocation")
 		}
 	}

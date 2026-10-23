@@ -30,7 +30,7 @@ func (s *Service) CancelChangeWorkflow(ctx context.Context, id string, request C
 		return nil, project.ErrRevisionConflict
 	}
 	if !isChangePipelineActive(session.Workflow) {
-		return session, nil
+		return s.cancelWaitingInput(ctx, root, session)
 	}
 	s.changeWorkflow.mu.Lock()
 	job := s.changeWorkflow.getJob(id)

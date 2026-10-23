@@ -369,7 +369,7 @@ func (s *Store) artifactRunProtection(key ArtifactKey) error {
 		return err
 	}
 	for _, run := range db.Runs {
-		if run.Status == "running" && artifactVisible(key.scoped(), ArtifactKey{Session: run.Session}) {
+		if unfinishedRun(run) && artifactVisible(key.scoped(), ArtifactKey{Session: run.Session}) {
 			return ErrArtifactInUse
 		}
 	}

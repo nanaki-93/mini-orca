@@ -129,6 +129,9 @@ func (s *Service) changeGraphHandoff(ctx context.Context, job *changeWorkflowJob
 	}
 	status := "changes_requested"
 	if review.Verdict == "approve" {
+		if err := s.requestWorkflowInput(ctx, job.root, session); err != nil {
+			return agentruntime.ChangeNodeResult{}, err
+		}
 		status = "awaiting_human_review"
 	}
 	return agentruntime.ChangeNodeResult{Node: input.Node, Snapshot: changeGraphSnapshot(session), Status: status, Verdict: review.Verdict}, nil

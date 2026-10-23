@@ -628,8 +628,33 @@ type ChangeSpecialistReview struct {
 	Review   *ChangeWorkflowReview `json:"review,omitempty"`
 }
 
-// ChangeWorkflow tracks the 4-stage automated agent pipeline on a ChangeSession.
+type ChangeInputScope struct {
+	Path         string `json:"path"`
+	SourceExists bool   `json:"source_exists"`
+	SourceHash   string `json:"source_hash"`
+	ProposalHash string `json:"proposal_hash"`
+}
+
+type ChangeInput struct {
+	ProjectID       string             `json:"project_id"`
+	ProjectRevision string             `json:"project_revision"`
+	Revision        int64              `json:"revision"`
+	Hash            string             `json:"hash"`
+	RequestID       string             `json:"request_id"`
+	RunID           string             `json:"run_id"`
+	WorkflowID      string             `json:"workflow_id"`
+	NodeID          string             `json:"node_id"`
+	Action          string             `json:"action"`
+	Schema          string             `json:"schema"`
+	Status          string             `json:"status"`
+	Scope           []ChangeInputScope `json:"scope"`
+	ExpiresAt       string             `json:"expires_at"`
+	ReceivedAt      string             `json:"received_at,omitempty"`
+}
+
+// ChangeWorkflow tracks the automated agent pipeline on a ChangeSession.
 type ChangeWorkflow struct {
+	Input              *ChangeInput             `json:"input,omitempty"`
 	Attempt            int                      `json:"attempt,omitempty"`
 	ResumeFrom         string                   `json:"resume_from,omitempty"`
 	ID                 string                   `json:"id"`

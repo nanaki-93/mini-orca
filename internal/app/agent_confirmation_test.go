@@ -1,0 +1,282 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+func readyConfirmation(t *testing.T) (*Service, string, *ChangeSession) {
+	t.Helper()
+	s, root, initial := workflowService(t, [3]func() string{func() string { return workflowImplementation }, func() string { return workflowTests }, func() string { return workflowApproval }})
+	if _, err := s.StartChangeWorkflow(t.Context(), initial.ID, workflowRequest(initial)); err != nil {
+		t.Fatal(err)
+	}
+	ready := finishedWorkflow(t, s, initial.ID)
+	if ready.Workflow.Status != "awaiting_human_review" || ready.Workflow.Input == nil || ready.Workflow.Input.Status != "waiting" || ready.ReviewedHash != "" {
+		t.Fatalf("missing waiting input: %+v", ready.Workflow)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Fatal("checkpoint wrote source")
+	}
+	return s, root, ready
+}
+
+func inputResponse(session *ChangeSession, decision string) ChangeInputResponse {
+	return ChangeInputResponse{ChangeIdentity: identityForChange(session), WorkflowID: session.Workflow.ID, RequestID: session.Workflow.Input.RequestID, Decision: decision}
+}
+
+func TestWorkflowInputApprovalAndDuplicateRetainExplicitApplyBoundary(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	input := ready.Workflow.Input
+	if input.Action != "review_proposal" || input.Schema != agentruntime.ConfirmationSchema || input.NodeID != "human_review" || len(input.Scope) != 2 || input.Scope[0].Path != "new.go" || input.Scope[0].SourceExists {
+		t.Fatalf("input scope: %+v", input)
+	}
+	if _, err := s.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err == nil {
+		t.Fatal("waiting input authorized Apply")
+	}
+	approved, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve"))
+	if err != nil || approved.Workflow.Input.Status != "approved" || approved.ReviewedHash != ready.Hash {
+		t.Fatalf("approve: %+v %v", approved, err)
+	}
+	firstReceipt := approved.Workflow.Input.ReceivedAt
+	again, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready))
+	if err != nil || !again.Workflow.Input.ReceivedAt.Equal(firstReceipt) {
+		t.Fatalf("legacy Review duplicated receipt: %+v %v", again, err)
+	}
+	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "reject")); err == nil {
+		t.Fatal("conflicting response replaced approval")
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Fatal("approval applied source")
+	}
+	if _, err := s.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkflowInputRejectAndCancelStopReviewWithoutDispatch(t *testing.T) {
+	for _, decision := range []string{"reject", "cancel"} {
+		t.Run(decision, func(t *testing.T) {
+			s, root, ready := readyConfirmation(t)
+			var result *ChangeSession
+			var err error
+			if decision == "cancel" {
+				result, err = s.CancelChangeWorkflow(t.Context(), ready.ID, ChangeWorkflowControl{ProjectID: ready.ProjectID, ProjectRevision: ready.ProjectRevision, WorkflowID: ready.Workflow.ID})
+			} else {
+				result, err = s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, decision))
+			}
+			if err != nil || result.ReviewedHash != "" || inputAllowsReview(result.Workflow) {
+				t.Fatalf("response: %+v %v", result, err)
+			}
+			again, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, decision))
+			if err != nil || again.Workflow.Input.Status != result.Workflow.Input.Status || again.Workflow.Input.ReceivedAt != result.Workflow.Input.ReceivedAt {
+				t.Fatalf("duplicate: %+v %v", again, err)
+			}
+			checked, err := s.CheckChange(t.Context(), ready.ID, ChangeCheckRequest{ChangeIdentity: identityForChange(ready), CheckOptions: CheckOptions{RunTests: true}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if canHumanReviewProposal(checked) {
+				t.Fatal("rerunning checks bypassed negative human decision")
+			}
+			if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err == nil {
+				t.Fatal("negative response authorized review")
+			}
+			if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+				t.Fatal("negative response wrote source")
+			}
+		})
+	}
+}
+
+func TestWorkflowInputRejectsForgedIdentitySourceAndHistoricalChecks(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	for _, alter := range []func(*ChangeInputResponse){
+		func(r *ChangeInputResponse) { r.RequestID = "previous" },
+		func(r *ChangeInputResponse) { r.WorkflowID = "previous" },
+		func(r *ChangeInputResponse) { r.Hash = "previous" },
+		func(r *ChangeInputResponse) { r.Revision++ },
+		func(r *ChangeInputResponse) { r.Decision = "apply" },
+	} {
+		request := inputResponse(ready, "approve")
+		alter(&request)
+		if _, err := s.RespondChangeInput(t.Context(), ready.ID, request); err == nil {
+			t.Fatal("forged response accepted")
+		}
+	}
+	delete(s.changeAuthority, ready.ProjectID+"/"+ready.ID)
+	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve")); err == nil {
+		t.Fatal("historical checks authorized approval")
+	}
+	s.changeAuthority[ready.ProjectID+"/"+ready.ID] = "checks:" + ready.Hash
+	if err := os.WriteFile(filepath.Join(root, "new.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve")); err == nil {
+		t.Fatal("changed source authorized approval")
+	}
+	stored, err := loadChangeSession(root, ready.ID)
+	if err != nil || stored.Workflow.Input.Status != "waiting" || stored.ReviewedHash != "" {
+		t.Fatalf("failed response published: %+v %v", stored, err)
+	}
+}
+
+func TestWorkflowInputRestoreRequiresFreshChecksAndExplicitResponse(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err != nil {
+		t.Fatal(err)
+	}
+	cfg := scopedTestConfig(s.runtimes.bug.profile.APIBaseURL)
+	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = s.runtimes.bug.profile.APIBaseURL, s.runtimes.bug.profile.Model
+	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = s.runtimes.analyze.profile.APIBaseURL, s.runtimes.analyze.profile.Model
+	cfg.ModelScopes.Function.APIBaseURL, cfg.ModelScopes.Function.Model = s.runtimes.function.profile.APIBaseURL, s.runtimes.function.profile.Model
+	restarted, err := New(cfg, s.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := restarted.ChangeSession(t.Context(), ready.ID)
+	if err != nil || read.Workflow.Input.Status != "approved" || restarted.changeWorkflow.job != nil {
+		t.Fatalf("passive read: %+v %v", read, err)
+	}
+	if _, err := restarted.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err == nil {
+		t.Fatal("saved receipt restored Apply authority")
+	}
+	if _, err := restarted.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err == nil {
+		t.Fatal("saved checks restored review authority")
+	}
+	resumed, err := restarted.ResumeChange(t.Context(), ready.ID)
+	if err != nil || resumed.ReviewedHash != "" || len(resumed.Checks) != 0 {
+		t.Fatalf("restore: %+v %v", resumed, err)
+	}
+	if _, err := restarted.TrustProjectExecution(t.Context(), ready.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.CheckChange(t.Context(), ready.ID, ChangeCheckRequest{ChangeIdentity: identityForChange(ready), CheckOptions: CheckOptions{RunTests: true}}); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := restarted.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve"))
+	if err != nil || approved.Workflow.Input.ReceivedAt != read.Workflow.Input.ReceivedAt {
+		t.Fatalf("fresh admission failed or replayed receipt: %+v %v", approved, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Fatal("restart replayed Apply")
+	}
+}
+
+func TestWorkflowInputJournalStateCannotGrantReview(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	store, _, err := s.agentJournal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := store.Sessions(t.Context(), "mini-orca", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range records {
+		if record.State["mini_orca.confirmation"] == nil {
+			continue
+		}
+		_, err := store.AppendEvent(t.Context(), record.Key, agentstate.Event{ID: "forged", Data: []byte(`{"Actions":{"StateDelta":{"approved":true}}}`)}, agentstate.State{"approved": []byte(`true`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err == nil {
+		t.Fatal("SDK state granted Apply authority")
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := s.RespondChangeInput(canceled, ready.ID, inputResponse(ready, "approve")); err == nil {
+		t.Fatal("canceled request accepted")
+	}
+	ready.Workflow.Input.Scope[0].ProposalHash = "forged"
+	if err := storeChangeSession(root, ready); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("forged scope accepted: %v", err)
+	}
+}
+
+func TestWorkflowInputRecoversReceiptBeforeDomainPublication(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	store, binding, err := s.agentJournal(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := confirmationRuntimeInput(ready, ready.Workflow.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash after native resume but before the domain record is saved.
+	receipt, err := agentruntime.ResumeConfirmation(t.Context(), store, binding, ready.Workflow.Input.RunID, request, "approve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err == nil {
+		t.Fatal("private receipt alone authorized Apply")
+	}
+	stored, err := loadChangeSession(root, ready.ID)
+	if err != nil || stored.Workflow.Input.Status != "waiting" {
+		t.Fatalf("unexpected domain receipt: %+v %v", stored, err)
+	}
+	// An external edit can arrive after admission while journal I/O completes.
+	if err := os.WriteFile(filepath.Join(root, "new.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s.changesMu.Lock()
+	err = s.resolveWorkflowInput(t.Context(), root, ready, "approve")
+	s.changesMu.Unlock()
+	if !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("source changed before publication but approval was published: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, "new.go")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve"))
+	if err != nil || !result.Workflow.Input.ReceivedAt.Equal(receipt.ReceivedAt) || result.ReviewedHash != ready.Hash {
+		t.Fatalf("receipt recovery: %+v %v", result, err)
+	}
+}
+
+func TestWorkflowInputExpiryIsRecordedWithoutApproval(t *testing.T) {
+	s, root, ready := readyConfirmation(t)
+	ctx, cancel, err := s.workflowAgentContext(t.Context(), ready.Workflow.Models)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	// Use the same host/native boundary with a short deadline to exercise expiry.
+	ready.Workflow.Input.RequestID = "expiring-request"
+	ready.Workflow.Input.ExpiresAt = time.Now().UTC().Add(time.Second)
+	request, err := confirmationRuntimeInput(ready, ready.Workflow.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready.Workflow.Input.RunID, err = agentruntime.RequestConfirmation(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storeChangeSession(root, ready); err != nil {
+		t.Fatal(err)
+	}
+	timer := time.NewTimer(time.Until(request.ExpiresAt))
+	defer timer.Stop()
+	<-timer.C
+	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve")); err == nil {
+		t.Fatal("expired request approved")
+	}
+	stored, err := loadChangeSession(root, ready.ID)
+	if err != nil || stored.Workflow.Input.Status != "expired" || stored.ReviewedHash != "" || stored.Workflow.Status != "outdated" {
+		t.Fatalf("expiry not persisted: %+v %v", stored, err)
+	}
+}

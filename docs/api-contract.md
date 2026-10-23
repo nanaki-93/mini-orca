@@ -101,6 +101,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
 | POST | `/api/projects/current/changes/{sessionID}/workflow` | Start creation, test writing/execution and model review for the captured scope. |
 | POST | `/api/projects/current/changes/{sessionID}/workflow/cancel` | Cancel the identified workflow without applying source. |
+| POST | `/api/projects/current/changes/{sessionID}/workflow/input` | Respond to the exact durable review request with current proposal identity. |
 | POST | `/api/projects/current/changes/{sessionID}/plan` | Save revised task intent and scope before generation. |
 | POST | `/api/projects/current/changes/{sessionID}/review-file` | Record inspection of a changed file for the current hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
@@ -847,17 +848,47 @@ and `findings`. Status distinguishes `running`, `canceling`, `failed`, `canceled
 `awaiting_human_review`. The final human stage waits for explicit diff review;
 model approval never sets `reviewed_hash`. Existing Review/Apply/Undo routes retain
 their identity and hash guards. Changing a proposal invalidates workflow review.
+
+Approving critic results create a native ADK human-input checkpoint, exposed as
+`workflow.input`. It includes a unique `request_id`, private run ID, workflow/node
+identity, the `proposal-review-v1` schema, fixed `review_proposal` action, exact
+`ChangeIdentity`, captured path/source/proposal hashes in `scope`, and `expires_at`
+24 hours after creation. Its `status` is `waiting`, `approved`, `rejected`,
+`canceled`, or `expired`; completed decisions include `received_at`. Waiting
+releases the worker and preserves the checkpoint across restart. Legacy workflows
+may omit `input`.
+
+`POST /api/projects/current/changes/{sessionID}/workflow/input` requires
+`ChangeIdentity`, `workflow_id`, `request_id`, and `decision` (`approve`, `reject`,
+or `cancel`). The daemon revalidates captured source, proposal, scope and current
+project/configuration/policy binding. Approval additionally requires live passing
+checks and the existing plan/file review guards. Existing `/review` records the
+same explicit approval receipt. The receipt is durable before native graph resume;
+responses invoke no providers, checks, source writes or Git operations. Apply
+remains a separate explicit action.
+
+Repeating the same decision retains its original receipt; a conflicting decision
+is rejected. A first response after expiry records `expired`, blocks review, and
+requires a new workflow. Reject and cancel also block later approval of that
+request; rerunning checks cannot override them. Storage failure leaves authority
+ungranted and permits an idempotent retry. SDK session values and forged tool
+responses cannot establish domain approval.
+
 `POST /api/projects/current/changes/{sessionID}/workflow/cancel` takes current
 `project_id`, `project_revision` and `workflow_id`, so stale controls cannot stop
-a replacement run. Project replacement, reindex and daemon shutdown cancel the
+a replacement run. It also records cancellation of a waiting input request.
+Project replacement, reindex and daemon shutdown cancel the
 worker. Background work can continue while the client navigates or disconnects.
 
 Workflow progress and advisory review are private source-bearing conversation
 history. List entries add `workflow_status` without review contents. Schema-1
 history without the optional `workflow` field remains readable. After a daemon
-restart, unfinished runs read as interrupted and do not automatically dispatch.
-Resume clears check/review authority and marks workflow evidence outdated; a new
-explicit run requires fresh admission. Progress persistence failures remain
+restart, unfinished workers read as interrupted and do not automatically dispatch.
+Waiting input stays visible without resuming its graph. Resume clears check/review
+authority and marks workflow evidence outdated. An unchanged approval checkpoint
+can be answered after explicit fresh checks; a new workflow requires fresh
+admission. A saved approval receipt never restores in-memory Apply authority.
+Progress persistence failures remain
 visible and cannot authorize Apply. No provider or project-code execution occurs
 when reading progress, restoring history or configuring the workflow.
 

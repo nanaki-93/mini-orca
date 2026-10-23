@@ -151,6 +151,18 @@ paths:
         '200': {description: Current workflow state, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/workflow/input:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Respond to the exact durable review request. Approve requires live checks and existing file-review guards; a receipt never applies source. Repeated matching decisions are idempotent.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeInputResponse'}}}}
+      responses:
+        '200': {description: Current guarded input result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/plan:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2122,6 +2134,41 @@ components:
         project_id: {type: string}
         project_revision: {type: string}
         workflow_id: {type: string}
+    ChangeInputResponse:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [workflow_id, request_id, decision]
+          properties:
+            workflow_id: {type: string}
+            request_id: {type: string}
+            decision: {type: string, enum: [approve, reject, cancel]}
+    ChangeInput:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [request_id, run_id, workflow_id, node_id, action, schema, status, scope, expires_at]
+          properties:
+            request_id: {type: string}
+            run_id: {type: string}
+            workflow_id: {type: string}
+            node_id: {type: string, enum: [human_review]}
+            action: {type: string, enum: [review_proposal]}
+            schema: {type: string, enum: [proposal-review-v1]}
+            status: {type: string, enum: [waiting, approved, rejected, canceled, expired]}
+            expires_at: {type: string, format: date-time}
+            received_at: {type: string, format: date-time}
+            scope:
+              type: array
+              description: Captured paths and immutable source/proposal hashes; includes unchanged captured targets.
+              items:
+                type: object
+                required: [path, source_exists, source_hash, proposal_hash]
+                properties:
+                  path: {type: string}
+                  source_exists: {type: boolean}
+                  source_hash: {type: string}
+                  proposal_hash: {type: string}
     ChangeWorkflowReview:
       type: object
       required: [proposal_hash, verdict, summary, findings]
@@ -2149,6 +2196,7 @@ components:
       type: object
       required: [id, status, models, stages, started_at, updated_at]
       properties:
+        input: {$ref: '#/components/schemas/ChangeInput'}
         id: {type: string}
         status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
         attempt: {type: integer, minimum: 1}

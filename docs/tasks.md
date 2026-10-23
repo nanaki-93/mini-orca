@@ -305,7 +305,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 12 — Persist human input and guarded checkpoints
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/confirmation.go`, `internal/app/agentruntime/confirmation_test.go`, `internal/app/agent_confirmation.go`, `internal/app/agent_confirmation_test.go` — **new**.
