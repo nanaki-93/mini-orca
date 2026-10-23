@@ -60,6 +60,7 @@ type Service struct {
 	discoverAgyModels               func(context.Context, string) ([]llm.AgyModel, error)
 	importTimeout                   time.Duration
 	analysisTimeout                 time.Duration
+	workflowModelTimeout            time.Duration
 	focusedCheckTimeout             time.Duration
 	retryBase                       time.Duration
 	retryMax                        time.Duration
@@ -120,6 +121,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		},
 		importTimeout:           importTimeout,
 		analysisTimeout:         analysisTimeout,
+		workflowModelTimeout:    configuredDuration(cfg.Timeouts.WorkflowModelSeconds, config.DefaultWorkflowModelSeconds*time.Second),
 		focusedCheckTimeout:     configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
 		retryBase:               time.Duration(backoffBase) * time.Millisecond,
 		retryMax:                time.Duration(backoffMax) * time.Millisecond,

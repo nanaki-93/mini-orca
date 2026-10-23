@@ -728,8 +728,11 @@ The daemon runs creation, test writing plus fixed `go test ./...` checks, and a
 separate model review. The testing agent may change only captured `_test.go`
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
-There is one active change workflow per conversation, a 30-minute total deadline, and
-each model retains its configured request timeout and retry budget. Failed checks
+There is one active change workflow per conversation. Each model call uses the
+largest of `timeouts.workflow_model_seconds` (900 seconds by default), the
+generation timeout and its selected scope's timeout; retries share that deadline.
+The total deadline is at least 30 minutes and includes remaining model budgets,
+check/preparation allowances and enabled automatic repairs. Failed checks
 stop before review. A reviewer returning `changes_requested` blocks human approval
 until a new run produces a passing proposal and approving review.
 

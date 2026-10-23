@@ -306,7 +306,7 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	expectedScopes := []string{"bug", "function", "analyze"}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
 		stage := session.Workflow.Stages[i]
-		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "5m0s" {
+		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "15m0s" {
 			t.Fatalf("stage %d provenance: %+v", i, stage)
 		}
 	}

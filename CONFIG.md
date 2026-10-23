@@ -14,7 +14,7 @@ The daemon configures three model profiles, used by default as follows:
 | `function` | Declaration proposals and explicit repairs |
 
 The Chat agent workflow chooses a model independently for Creation, Testing
-and Review. Defaults are `function`, `bug` and `analyze`, respectively. Choose
+and Review. Their prompt scopes are `bug`, `function` and `analyze`, respectively. Choose
 configured profiles or discovered Agy/Pi catalog models on **Models**. A captured run
 keeps its selected model, timeout and retry budget; remote consent covers every
 selected remote profile. These selections do not change other operations' defaults.
@@ -174,6 +174,7 @@ timeouts:
   import_seconds: 300
   analysis_seconds: 300
   generation_seconds: 300
+  workflow_model_seconds: 900
   focused_check_seconds: 60
 
 logging:
@@ -186,6 +187,21 @@ logging:
 The operation timeouts bound the request contexts; retries only cover explicit
 prompt requests. Restore, navigation, validation, checks, Apply, and Undo do
 not make a model call.
+
+`workflow_model_seconds` gives each Creation, Testing and Review model call at
+least 15 minutes by default, including its provider retries. Longer generation
+or selected-scope timeouts still take precedence. Existing configurations that
+omit this field receive the new default; standalone generation retains its own
+`generation_seconds` limit. Testing generates complete test files before running
+checks, so its model budget is separate from each command's
+`focused_check_seconds` limit.
+
+The overall workflow deadline includes the remaining model budgets, check and
+preparation allowances, and up to two repairs when explicitly enabled. It is at
+least 30 minutes and grows with configured limits. To adjust a slow workflow,
+set `workflow_model_seconds`, restart the daemon, and use `:retry test` on the
+saved proposal to reuse Creation. A retry still validates the current source,
+plan, consent and execution trust.
 
 ## Configuration changes
 

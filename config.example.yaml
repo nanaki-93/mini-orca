@@ -45,6 +45,7 @@ timeouts:
   import_seconds: 300
   analysis_seconds: 300
   generation_seconds: 300
+  workflow_model_seconds: 900 # Each Creation, Testing and Review model call, including retries.
   focused_check_seconds: 60
 
 logging:

@@ -12,8 +12,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-const changeWorkflowBudget = 30 * time.Minute
-
 func workflowStageScope(stage int) config.ModelScope {
 	switch stage {
 	case 0:
@@ -27,9 +25,7 @@ func workflowStageScope(stage int) config.ModelScope {
 
 func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
 	runtime, _ := s.selectedRuntime(workflowStageScope(stage), profile)
-	if genTimeout := duration(s.runtimes.function.effective.Timeout); genTimeout > duration(runtime.effective.Timeout) {
-		runtime.effective.Timeout = genTimeout.String()
-	}
+	runtime.effective.Timeout = max(s.workflowModelTimeout, duration(s.runtimes.function.effective.Timeout), duration(runtime.effective.Timeout)).String()
 	return runtime
 }
 
@@ -76,7 +72,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if startStage != 2 {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
-	workCtx, cancel := context.WithTimeout(context.Background(), changeWorkflowBudget)
+	workCtx, cancel := context.WithTimeout(context.Background(), s.changeWorkflowTimeout(request.Models, startStage, request.AutoRepair))
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()

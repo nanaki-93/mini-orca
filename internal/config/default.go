@@ -15,6 +15,7 @@ func Default() *Config {
 		Retry: RetryConfig{MaxRetries: 3, BackoffBase: 1000, BackoffMax: 30000},
 		Timeouts: TimeoutConfig{
 			ImportSeconds: 300, AnalysisSeconds: 300, GenerationSeconds: 300, FocusedCheckSeconds: 60,
+			WorkflowModelSeconds: DefaultWorkflowModelSeconds,
 		},
 		Logging: LoggingConfig{Level: "info", Format: "json"},
 	}

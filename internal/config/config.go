@@ -64,11 +64,14 @@ type RetryConfig struct {
 // TimeoutConfig sets operation deadlines independently of HTTP server timeouts.
 // Zero values use conservative local-daemon defaults.
 type TimeoutConfig struct {
-	ImportSeconds       int `yaml:"import_seconds"`
-	AnalysisSeconds     int `yaml:"analysis_seconds"`
-	GenerationSeconds   int `yaml:"generation_seconds"`
-	FocusedCheckSeconds int `yaml:"focused_check_seconds"`
+	ImportSeconds        int `yaml:"import_seconds"`
+	AnalysisSeconds      int `yaml:"analysis_seconds"`
+	GenerationSeconds    int `yaml:"generation_seconds"`
+	WorkflowModelSeconds int `yaml:"workflow_model_seconds"`
+	FocusedCheckSeconds  int `yaml:"focused_check_seconds"`
 }
+
+const DefaultWorkflowModelSeconds = 900
 
 func (c *Config) applyDefaults() {
 	if c.Retry.MaxRetries == 0 {
@@ -88,6 +91,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Timeouts.GenerationSeconds == 0 {
 		c.Timeouts.GenerationSeconds = 300
+	}
+	if c.Timeouts.WorkflowModelSeconds == 0 {
+		c.Timeouts.WorkflowModelSeconds = DefaultWorkflowModelSeconds
 	}
 	if c.Timeouts.FocusedCheckSeconds == 0 {
 		c.Timeouts.FocusedCheckSeconds = 60
@@ -183,7 +189,7 @@ var configurationFields = fieldSet{
 		"max_retries": {}, "backoff_base": {}, "backoff_max": {},
 	},
 	"timeouts": {
-		"import_seconds": {}, "analysis_seconds": {}, "generation_seconds": {}, "focused_check_seconds": {},
+		"import_seconds": {}, "analysis_seconds": {}, "generation_seconds": {}, "workflow_model_seconds": {}, "focused_check_seconds": {},
 	},
 	"logging": {
 		"level": {}, "format": {}, "filename": {}, "sensitive_keys": {},

@@ -52,8 +52,30 @@ model_scopes:
 	if profiles.Bug.ContextMaxTokens != 32000 || profiles.Function.ContextMaxTokens != 4000 {
 		t.Fatalf("default context budgets = %+v", profiles)
 	}
-	if cfg.Retry.MaxRetries != 3 || cfg.Timeouts.GenerationSeconds != 300 || cfg.Logging.Level != "info" {
+	if cfg.Retry.MaxRetries != 3 || cfg.Timeouts.GenerationSeconds != 300 || cfg.Timeouts.WorkflowModelSeconds != 900 || cfg.Logging.Level != "info" {
 		t.Fatalf("ordinary defaults were not applied: %+v", cfg)
+	}
+}
+
+func TestWorkflowModelTimeoutDefaultsAndOverride(t *testing.T) {
+	profiles := "model_scopes:\n  analyze: {api_base_url: 'http://localhost:1234/v1', model: a}\n  bug: {api_base_url: 'http://localhost:1234/v1', model: b}\n  function: {api_base_url: 'http://localhost:1234/v1', model: f}\n"
+	for _, test := range []struct {
+		name, settings string
+		want           int
+	}{
+		{"existing configuration", "generation_seconds: 300", 900},
+		{"explicit default", "workflow_model_seconds: 0", 900},
+		{"longer workflow", "workflow_model_seconds: 1800", 1800},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg, err := LoadFromYAML(writeConfig(t, profiles+"timeouts:\n  "+test.settings+"\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Timeouts.WorkflowModelSeconds != test.want || cfg.Timeouts.GenerationSeconds != 300 {
+				t.Fatalf("timeouts = %+v", cfg.Timeouts)
+			}
+		})
 	}
 }
 
