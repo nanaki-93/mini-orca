@@ -24,16 +24,20 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 		return s.renderWelcomePage(th, width)
 	}
 	summary := domain.ComputeIssueSummary(s.CollectAllIssues(), s.Features)
-	lines := renderPageHeader(th, "DASHBOARD", "↑/↓ Select · Enter Open · n New task")
+	lines := renderPageHeader(th, "DASHBOARD · AGENT ORCHESTRATION", "↑/↓ Select · Enter Open · n New task · r Analyze")
 	if s.viewportBodyRows >= 16 {
 		if s.Project != nil {
-			lines[1] = "  " + th.muted + theme.TruncatePlain(s.Project.Path, width-4) + th.reset
+			meta := s.Project.Path
+			if s.Project.FileCount > 0 {
+				meta = fmt.Sprintf("%s  ·  %s  ·  %d files", s.Project.Path, client.FirstNonEmpty(s.Project.Type, "polyglot"), s.Project.FileCount)
+			}
+			lines[1] = "  " + th.muted + theme.TruncatePlain(meta, width-4) + th.reset
 		}
 		cards := [][2]string{
-			{"Open issues", fmt.Sprintf("%s%d%s", th.amber, summary.TotalOpen, th.reset)},
-			{"Resolved", fmt.Sprintf("%s%d%s", th.green, summary.Done, th.reset)},
-			{"Tasks", fmt.Sprintf("%s%d%s", th.purple, len(s.AgentItems()), th.reset)},
-			{"Features", fmt.Sprintf("%s%d%s", th.cyan, summary.Features, th.reset)},
+			{"Open issues", fmt.Sprintf("%s%d%s %s(%d active)%s", th.amber, summary.TotalOpen, th.reset, th.muted, summary.InProgress, th.reset)},
+			{"Resolved", fmt.Sprintf("%s%d%s %sverified%s", th.green, summary.Done, th.reset, th.muted, th.reset)},
+			{"Tasks", fmt.Sprintf("%s%d%s %sagents%s", th.purple, len(s.AgentItems()), th.reset, th.muted, th.reset)},
+			{"Features", fmt.Sprintf("%s%d%s %sideas%s", th.cyan, summary.Features, th.reset, th.muted, th.reset)},
 		}
 		lines = append(lines, "")
 		lines = append(lines, th.renderMetrics(cards, width)...)
@@ -58,11 +62,15 @@ type dashboardActivity struct {
 }
 
 func (s *State) dashboardActivities(th ansiTheme, summary domain.IssueSummary) []dashboardActivity {
+	taskSummary := fmt.Sprintf("%d tasks", len(s.AgentItems()))
+	if items := s.AgentItems(); len(items) > 0 {
+		taskSummary += " · " + th.statusBadge(items[0].Status)
+	}
 	activity := []dashboardActivity{
-		{"Issues", fmt.Sprintf("%d open · %d in progress", summary.TotalOpen, summary.InProgress), "Inspect evidence and prepare a fix plan.", th.amber},
-		{"Tasks", fmt.Sprintf("%d tasks", len(s.AgentItems())), "Follow plans, checks and reviews.", th.purple},
-		{"Analysis", "Not run yet", "Inspect coverage and recorded findings.", th.cyan},
-		{"Checks", "Not run yet", "Read verification results and diagnostics.", th.green},
+		{"Issues", fmt.Sprintf("%d open · %d in progress", summary.TotalOpen, summary.InProgress), "Inspect evidence, select batches and plan fixes.", th.amber},
+		{"Tasks", taskSummary, "Orchestrate 4-stage agent plans and reviews.", th.purple},
+		{"Analysis", "Not run yet", "Semantic, security and performance discovery.", th.cyan},
+		{"Checks", "Not run yet", "Run sandboxed verification checks and logs.", th.green},
 	}
 	if s.Run != nil {
 		done, total := runAggregateCoverage(s.Run)
@@ -93,14 +101,16 @@ func (s *State) renderDashboardActivities(th ansiTheme, summary domain.IssueSumm
 }
 
 func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary, width int) []string {
-	rightWidth := (width - 2) / 3
+	rightWidth := max(30, (width-2)/3)
 	leftWidth := width - rightWidth - 5
-	left := []string{"  " + th.purple + "ACTIVITY" + th.reset, ""}
+	left := []string{"  " + th.bold + th.purple + "◈ ORCHESTRATION WORKSTREAMS" + th.reset, ""}
 	left = append(left, s.renderDashboardActivities(th, summary, leftWidth, true)...)
-	left = append(left, "  "+th.muted+"↑/↓ Select · Enter Open"+th.reset)
-	right := []string{"  " + th.cyan + "NEXT STEP" + th.reset, ""}
-	right = appendWrappedText(right, s.dashboardNextStep(), rightWidth)
-	right = append(right, "", "  "+th.keyPill("n", "New task"), "  "+th.keyPill("o", "Switch project"), "  "+th.keyPill("Ctrl+K", "Commands"), "")
+	if s.viewportBodyRows >= 26 {
+		left = append(left, s.renderDashboardPipelineSection(th, leftWidth)...)
+	} else {
+		left = append(left, "  "+th.muted+"↑/↓ Select · Enter Open"+th.reset)
+	}
+	right := s.renderDashboardRightColumn(th, summary, rightWidth)
 	var lines []string
 	for i := 0; i < max(len(left), len(right)); i++ {
 		l, r := "", ""
@@ -113,6 +123,82 @@ func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary
 		lines = append(lines, theme.PadVisibleRight(l, leftWidth)+"   "+theme.PaintLine(th.surface, th.fg, r, rightWidth))
 	}
 	return lines
+}
+
+func (s *State) renderDashboardPipelineSection(th ansiTheme, width int) []string {
+	stage := 0
+	if items := s.AgentItems(); len(items) > 0 {
+		stage = max(1, items[0].StageNumber)
+	}
+	out := []string{
+		"  " + th.bold + th.cyan + "◈ 4-STAGE AGENT PIPELINE" + th.reset,
+		"  " + theme.TruncateVisible(renderPipelineStepper(th, stage, s.Change), max(20, width-4)),
+	}
+	if items := s.AgentItems(); len(items) > 0 {
+		top := items[0]
+		meta := fmt.Sprintf("  %s %s · %s", th.statusBadge(top.Status), th.bold+th.fg+theme.TruncatePlain(top.Title, max(12, width-28))+th.reset, th.purple+top.Branch+th.reset)
+		out = append(out, theme.TruncateVisible(meta, max(20, width-2)))
+	} else {
+		out = append(out, "  "+th.muted+"Idle · [n] Plan new agent mission · [Enter] Open workstream"+th.reset)
+	}
+	return out
+}
+
+func (s *State) renderDashboardRightColumn(th ansiTheme, summary domain.IssueSummary, rightWidth int) []string {
+	_, running, review, failed, toMerge := s.agentFleetBreakdown()
+	fleetLine := fmt.Sprintf("%s%d running%s · %s%d review%s", th.amber, running, th.reset, th.green, review, th.reset)
+	if failed > 0 {
+		fleetLine += fmt.Sprintf(" · %s%d failed%s", th.red, failed, th.reset)
+	}
+	wtTotal := 0
+	if s.GitWorkspace != nil {
+		wtTotal = len(s.GitWorkspace.Worktrees)
+	}
+	trustBadge := th.statusBadge("UNTRUSTED")
+	if s.WorkspaceTrust {
+		trustBadge = th.statusBadge("TRUSTED")
+	}
+	right := []string{
+		"  " + th.bold + th.cyan + "◈ AGENT FLEET TELEMETRY" + th.reset,
+		fmt.Sprintf("  %sPipeline:%s  %s", th.muted, th.reset, fleetLine),
+		fmt.Sprintf("  %sWorktrees:%s %s%d%s total · %s%d%s to merge", th.muted, th.reset, th.bold+th.fg, wtTotal, th.reset, th.purple, toMerge, th.reset),
+		fmt.Sprintf("  %sFindings:%s  %s%d%s bug · %s%d%s sec · %s%d%s perf", th.muted, th.reset, th.amber, summary.Bugs, th.reset, th.red, summary.Security, th.reset, th.cyan, summary.Performance, th.reset),
+		fmt.Sprintf("  %sSandbox:%s   %s", th.muted, th.reset, trustBadge),
+		"  " + th.border + strings.Repeat("─", max(8, rightWidth-4)) + th.reset,
+		"  " + th.bold + th.cyan + "NEXT STEP" + th.reset,
+	}
+	right = appendWrappedText(right, s.dashboardNextStep(), rightWidth)
+	right = append(right,
+		"",
+		"  "+th.keyPill("n", "New task"),
+		"  "+th.keyPill("r", "Analyze"),
+		"  "+th.keyPill("o", "Switch project"),
+		"  "+th.keyPill("Ctrl+K", "Commands"),
+	)
+	return right
+}
+
+func (s *State) agentFleetBreakdown() (total, running, review, failed, toMerge int) {
+	items := s.AgentItems()
+	total = len(items)
+	for _, item := range items {
+		switch strings.ToLower(strings.TrimSpace(item.Status)) {
+		case "running", "queued", "working", "in_progress", "canceling":
+			running++
+		case "ready", "checked", "reviewed", "awaiting_human_review":
+			review++
+		case "failed", "changes_requested", "interrupted", "stale":
+			failed++
+		}
+	}
+	if s.GitWorkspace != nil {
+		for _, wt := range s.GitWorkspace.Worktrees {
+			if worktreeStatus(wt) == "TO_MERGE" {
+				toMerge++
+			}
+		}
+	}
+	return total, running, review, failed, toMerge
 }
 
 func (s *State) dashboardNextStep() string {
@@ -135,10 +221,10 @@ func (s *State) dashboardNextStep() string {
 }
 
 func (s *State) renderWelcomePage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WELCOME", "Your code. A clearer next step.")
+	lines := renderPageHeader(th, "WELCOME · AGENT ORCHESTRATOR", "Your code. A clearer next step.")
 	lines = append(lines, "", "  "+th.renderCursorPrefix(true)+th.keyPill("Enter / o", "Open a local project"))
 	lines = appendWrappedText(lines, "Browse code, investigate findings and review every change before Apply.", width)
-	lines = append(lines, "", "  "+th.cyan+"FROM IDEA TO REVIEWED CHANGE"+th.reset, "")
+	lines = append(lines, "", "  "+th.bold+th.cyan+"◈ FROM IDEA TO REVIEWED CHANGE"+th.reset, "")
 	for i, step := range [][2]string{
 		{"Open", "Restore a project and its saved results."},
 		{"Analyze", "Explore issues and feature ideas."},

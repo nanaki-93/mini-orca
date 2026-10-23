@@ -108,7 +108,7 @@ func appendWindowFooter(th ansiTheme, lines []string, start, end, total int) []s
 
 func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "REPOSITORY", "Project identity and indexed files")
+	lines := renderPageHeader(th, "REPOSITORY · TOPOLOGY & INDEX", "Project identity and indexed files")
 	if s.Project == nil {
 		return append(lines, "", "  No project loaded. [o] Open project")
 	}
@@ -125,9 +125,10 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 		fmt.Sprintf("%s%-14s%s %s%d%s indexed files · %s%d%s lines",
 			th.muted, "Footprint:", th.reset, th.bold+th.green, s.Project.FileCount, th.reset, th.bold+th.fg, s.Project.TotalLines, th.reset),
 	}
-	lines = append(lines, th.renderPanelBox("", "", panelW, meta)...)
+	lines = append(lines, th.renderPanelBox("REPOSITORY TOPOLOGY & FOOTPRINT", "INDEXED", panelW, meta)...)
 	if s.Index != nil && len(s.Index.Files) > 0 {
 		lines = append(lines, "")
+		lines = append(lines, th.renderTableHeader("   INDEXED FILE PATH                            LANGUAGE & SIZE", width)...)
 		for _, f := range s.Index.Files {
 			lines = append(lines, fmt.Sprintf("  %s•%s %-42s %s%s · %d lines%s",
 				th.accent, th.reset, f.Path, th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
@@ -137,11 +138,12 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderProjectPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "CHECKS", "Verification results and diagnostic output")
+	lines := renderPageHeader(th, "CHECKS · SANDBOX VERIFICATION", "Verification results and diagnostic output")
 	if s.Scan == nil || len(s.Scan.Phases) == 0 {
 		return append(lines, "", "  No verification checks recorded.", "  [t] Run checks · :trust to manage execution permission")
 	}
-	lines = append(lines, "", "  "+th.statusBadge(s.Scan.Status), "")
+	lines = append(lines, "", fmt.Sprintf("  %s◈ Verification Suite:%s %s  %s(%d phases)%s",
+		th.bold+th.cyan, th.reset, th.statusBadge(s.Scan.Status), th.muted, len(s.Scan.Phases), th.reset), "")
 	selected := s.ClampedIdx()
 	start, end := windowBounds(len(s.Scan.Phases), selected, s.adaptiveWindowRows(12, 6))
 	for idx := start; idx < end; idx++ {

@@ -11,7 +11,7 @@ import (
 
 func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	open, active, done := s.IssueStatusCounts()
-	lines := renderPageHeader(th, "ISSUES", "Investigate findings, then prepare a fix plan")
+	lines := renderPageHeader(th, "ISSUES · FINDINGS & AGENT DISPATCH", "Investigate findings, select batches and prepare a fix plan")
 	lines = append(lines, "", "  "+s.renderIssueStatusFilterStrip(th, open, active, done))
 	lines = append(lines, fmt.Sprintf("  %s[t] Category: %s · [s] Status · %d selected%s", th.muted, s.IssueCategory, len(s.SelectedIssueIDs), th.reset), "")
 	filtered := s.FilteredIssues()
@@ -24,14 +24,27 @@ func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 		row := filtered[idx]
 		mark := "[ ]"
 		if domain.ContainsString(s.SelectedIssueIDs, row.ID) {
-			mark = "[x]"
+			mark = th.green + "[x]" + th.reset
 		}
 		prefix := "  " + th.renderCursorPrefix(idx == selected) + th.muted + mark + th.reset + " " + th.severityBadge(row.Severity) + " "
 		nameWidth := max(1, width-theme.VisibleRuneCount(prefix)-2)
 		lines = append(lines, prefix+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(row.Name, nameWidth)+th.reset)
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(filtered))
-	cur := filtered[selected]
+	return s.appendSelectedIssuePreview(th, lines, filtered[selected], width)
+}
+
+func (s *State) appendSelectedIssuePreview(th ansiTheme, lines []string, cur IssueRow, width int) []string {
+	if s.viewportBodyRows >= 28 {
+		body := []string{
+			fmt.Sprintf("%s%s%s  ·  %s%s%s", th.bold+th.fg, cur.Name, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset),
+			fmt.Sprintf("%s · %s · %s", th.statusBadge(cur.Status), strings.ToUpper(cur.Category), formatIssueOrigin(cur)),
+		}
+		if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
+			body = append(body, "Commit: "+formatIssueCommitLink(cur.CommitCode, cur.CommitOID))
+		}
+		return append(append(lines, ""), th.renderPanelBox("SELECTED FINDING", strings.ToUpper(cur.Category), adaptivePanelWidth(width), body)...)
+	}
 	lines = append(lines, "", "  "+th.muted+"SELECTED FINDING"+th.reset)
 	lines = appendWrappedText(lines, th.bold+th.fg+cur.Name+th.reset, width)
 	lines = appendWrappedText(lines, th.cyan+formatIssueLocationSpan(cur)+th.reset, width)
@@ -298,21 +311,30 @@ func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, conte
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "FEATURES", "Model suggestions · Inspect evidence before planning")
+	lines := renderPageHeader(th, "FEATURES · AI DISCOVERY & ROADMAP", "Model suggestions · Inspect evidence before planning")
 	features := s.activeFeatures()
 	if len(features) == 0 {
 		return append(lines, "", "  No feature ideas saved yet.", "  [r] Analyze for ideas · :agent <request> to plan your own")
 	}
 	selected := s.ClampedIdx()
 	lines = append(lines, "")
-	start, end := windowBounds(len(features), selected, s.adaptiveWindowRows(9, 8))
+	start, end := windowBounds(len(features), selected, s.adaptiveWindowRows(11, 8))
 	for idx := start; idx < end; idx++ {
 		f := features[idx]
-		lines = append(lines, "  "+th.renderCursorPrefix(idx == selected)+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(f.Title, width-6)+th.reset)
+		effortBadge := th.padBadge(client.FirstNonEmpty(f.Effort, "IDEA"), 10)
+		lines = append(lines, "  "+th.renderCursorPrefix(idx == selected)+effortBadge+" "+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(f.Title, max(12, width-18))+th.reset)
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(features))
 	feature := features[selected]
-	lines = append(lines, "", "  "+th.muted+"SELECTED IDEA · Effort: "+client.FirstNonEmpty(feature.Effort, "unspecified")+th.reset)
+	effort := client.FirstNonEmpty(feature.Effort, "unspecified")
+	if s.viewportBodyRows <= 0 || s.viewportBodyRows >= 24 {
+		body := []string{
+			fmt.Sprintf("%sGoal:%s    %s%s%s", th.cyan, th.reset, th.bold+th.fg, feature.Title, th.reset),
+			fmt.Sprintf("%sBenefit:%s %s%s%s", th.green, th.reset, th.fg, client.FirstNonEmpty(feature.Benefit, "Inspect details for full scope and evidence."), th.reset),
+		}
+		return append(append(lines, ""), th.renderPanelBox("SELECTED IDEA · EFFORT: "+strings.ToUpper(effort), "[Enter] Inspect · [f] Plan", adaptivePanelWidth(width), body)...)
+	}
+	lines = append(lines, "", "  "+th.muted+"SELECTED IDEA · Effort: "+effort+th.reset)
 	lines = appendWrappedText(lines, th.bold+th.fg+feature.Title+th.reset, width)
 	return appendWrappedText(lines, feature.Benefit, width)
 }

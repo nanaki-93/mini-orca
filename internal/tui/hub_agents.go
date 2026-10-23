@@ -13,23 +13,87 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if s.AgentDetailOpen && s.Change != nil {
 		return s.renderAgentDebugPage(th, width)
 	}
-	lines := renderPageHeader(th, "TASKS", "Plan → Generate → Verify → Review → Integrate")
+	lines := renderPageHeader(th, "TASKS · AGENT ORCHESTRATION STUDIO", "Plan → Generate → Verify → Critic → Review → Integrate")
+	lines = append(lines, s.renderAgentFleetStrip(th))
 	items := s.AgentItems()
 	if len(items) == 0 {
-		return append(lines, "  No active tasks.", "", "  [n] New task · [b] Issues · :features for ideas")
+		lines = append(lines, "", "  No active tasks.", "  [n] New task · [b] Issues · :features for ideas")
+		if s.viewportBodyRows <= 0 || s.viewportBodyRows >= 18 {
+			lines = append(lines, "")
+			lines = append(lines, s.renderEmptyAgentPipelineBox(th, adaptivePanelWidth(width))...)
+		}
+		return lines
 	}
 	selected := s.ClampedIdx()
 	titleW := max(12, width-29)
+	lines = append(lines, "")
 	lines = append(lines, th.renderTableHeader(fmt.Sprintf("  %-12s %-10s %s", "STATUS", "STAGE", "TASK"), width)...)
-	start, end := windowBounds(len(items), selected, s.adaptiveWindowRows(7, 12))
+	start, end := windowBounds(len(items), selected, s.adaptiveWindowRows(13, 10))
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
-		lines = append(lines, fmt.Sprintf("  %s%-12s %-10s %s%s%s", th.renderCursorPrefix(idx == selected),
-			theme.TruncatePlain(pipelineAgentStatusLabel(item.Status), 12), pipelineStageShortLabel(item.StageNumber),
+		stColor := agentStatusTextStyle(th, item.Status)
+		lines = append(lines, fmt.Sprintf("  %s%s%-12s%s %s%-10s%s %s%s%s",
+			th.renderCursorPrefix(idx == selected),
+			stColor, theme.TruncatePlain(pipelineAgentStatusLabel(item.Status), 12), th.reset,
+			th.cyan, pipelineStageShortLabel(item.StageNumber), th.reset,
 			rowTitleStyle(th, idx == selected), theme.TruncatePlain(item.Title, titleW), th.reset))
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(items))
+	if s.viewportBodyRows <= 0 || s.viewportBodyRows >= 20 {
+		lines = append(lines, "")
+		return append(lines, s.renderSelectedAgentOverviewBox(th, adaptivePanelWidth(width), items[selected])...)
+	}
 	return append(lines, "", s.renderAgentNextStepLine(th, items[selected]))
+}
+
+func (s *State) renderAgentFleetStrip(th ansiTheme) string {
+	total, running, review, failed, toMerge := s.agentFleetBreakdown()
+	return fmt.Sprintf("  %s◈ Fleet:%s %s%d active%s · %s%d running%s · %s%d review%s · %s%d attention%s · %s%d to merge%s",
+		th.bold+th.purple, th.reset,
+		th.bold+th.fg, total, th.reset,
+		th.amber, running, th.reset,
+		th.green, review, th.reset,
+		th.red, failed, th.reset,
+		th.cyan, toMerge, th.reset)
+}
+
+func (s *State) renderEmptyAgentPipelineBox(th ansiTheme, panelW int) []string {
+	body := []string{
+		renderPipelineStepper(th, 0, nil),
+		fmt.Sprintf("%s01 Architect:%s Scoped multi-file code proposal in an isolated Git worktree.", th.cyan, th.reset),
+		fmt.Sprintf("%s02 Verify:%s    Synthesize regression tests and run sandboxed verification checks.", th.purple, th.reset),
+		fmt.Sprintf("%s03 Critic:%s    Automated semantic, security and boundary review gate.", th.amber, th.reset),
+		fmt.Sprintf("%s04 Review:%s    Human diff inspection, explicit Apply & guarded worktree merge.", th.green, th.reset),
+	}
+	return th.renderPanelBox("4-STAGE AGENT PIPELINE ARCHITECTURE", "ORCHESTRATOR READY", panelW, body)
+}
+
+func (s *State) renderSelectedAgentOverviewBox(th ansiTheme, panelW int, item AgentItem) []string {
+	scopeBadge := client.FirstNonEmpty(item.ScopeBadge, "PENDING")
+	targetPath := client.FirstNonEmpty(item.Path, "workspace")
+	body := []string{
+		renderPipelineStepper(th, max(1, item.StageNumber), s.Change),
+		fmt.Sprintf("%sBranch:%s %s⎇ %s%s · %sTarget:%s %s%s%s · %sScope:%s %s (%s+%d%s/%s-%d%s) · %sChecks:%s %s%d/%d%s",
+			th.muted, th.reset, th.purple, client.FirstNonEmpty(item.Branch, "main"), th.reset,
+			th.muted, th.reset, th.cyan, targetPath, th.reset,
+			th.muted, th.reset, th.statusBadge(scopeBadge), th.green, item.AddedLines, th.reset, th.red, item.RemovedLines, th.reset,
+			th.muted, th.reset, th.bold+th.fg, item.ChecksPassed, item.ChecksTotal, th.reset),
+		strings.TrimLeft(s.renderAgentNextStepLine(th, item), " "),
+	}
+	return th.renderPanelBox("SELECTED AGENT MISSION · STAGE "+fmt.Sprintf("%d/4", max(1, item.StageNumber)), strings.ToUpper(item.Status), panelW, body)
+}
+
+func agentStatusTextStyle(th ansiTheme, rawStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(rawStatus)) {
+	case "ready", "checked", "done", "applied", "passed", "completed":
+		return th.bold + th.green
+	case "failed", "error", "changes_requested", "rejected", "interrupted":
+		return th.bold + th.red
+	case "running", "queued", "working", "in_progress", "canceling", "stale":
+		return th.bold + th.amber
+	default:
+		return th.fg
+	}
 }
 
 func pipelineStageShortLabel(stageNum int) string {
@@ -435,19 +499,33 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 }
 
 func (s *State) renderGitPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WORKTREES", s.worktreeRecoveryHint())
+	lines := renderPageHeader(th, "WORKTREES · AGENT ISOLATION & MERGE QUEUE", s.worktreeRecoveryHint())
 	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
 		return append(lines, "  No Git worktrees reported.")
 	}
-	lines = append(lines, th.renderTableHeader("    STATUS        BRANCH", width)...)
+	lines = append(lines, th.renderTableHeader("    STATUS            BRANCH                           WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(5, 14))
+	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(11, 10))
 	for idx := start; idx < end; idx++ {
 		wt := s.GitWorkspace.Worktrees[idx]
-		lines = append(lines, fmt.Sprintf("  %s%-13s %s%s%s", th.renderCursorPrefix(idx == selected), worktreeStatus(wt),
-			rowTitleStyle(th, idx == selected), theme.TruncatePlain(wt.Branch, max(10, width-20)), th.reset))
+		stBadge := th.padBadge(worktreeStatus(wt), 16)
+		branchCol := theme.PadVisibleRight(rowTitleStyle(th, idx == selected)+theme.TruncatePlain(wt.Branch, 30)+th.reset, 32)
+		pathCol := th.muted + theme.TruncatePlain(wt.Path, max(10, width-54)) + th.reset
+		lines = append(lines, fmt.Sprintf("  %s%s  %s %s", th.renderCursorPrefix(idx == selected), stBadge, branchCol, pathCol))
 	}
-	return appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
+	lines = appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
+	if wt := s.selectedWorktree(); wt != nil && (s.viewportBodyRows <= 0 || s.viewportBodyRows >= 22) {
+		body := []string{
+			fmt.Sprintf("%sBranch:%s %s⎇ %s%s · %sPath:%s %s%s%s · %sHEAD:%s %s%s%s",
+				th.muted, th.reset, th.bold+th.purple, client.FirstNonEmpty(wt.Branch, "detached"), th.reset,
+				th.muted, th.reset, th.cyan, wt.Path, th.reset,
+				th.muted, th.reset, th.fg, theme.TruncatePlain(client.FirstNonEmpty(wt.Head, "—"), 12), th.reset),
+			fmt.Sprintf("%sNext:%s   %s%s%s", th.muted, th.reset, th.green, s.worktreeNextAction(wt), th.reset),
+		}
+		lines = append(lines, "")
+		lines = append(lines, th.renderPanelBox("SELECTED WORKTREE INTEGRATION", worktreeStatus(*wt), adaptivePanelWidth(width), body)...)
+	}
+	return lines
 }
 
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {

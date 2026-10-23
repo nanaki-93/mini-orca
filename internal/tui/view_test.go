@@ -1055,3 +1055,71 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		t.Fatalf("pipelineAgentStatusLabel(ready) = %q, want READY", got)
 	}
 }
+
+func TestAgentOrchestrationDashboardViews(t *testing.T) {
+	s := NewState()
+	s.Connected = true
+	s.Project = &Project{Name: "mini-orca", Path: "/workspace/mini-orca", Type: "go", FileCount: 64}
+	s.Navigate(PageAgents)
+	emptyAgentsFrame := s.Render(132, 38)
+	if !strings.Contains(emptyAgentsFrame, "4-STAGE AGENT PIPELINE ARCHITECTURE") || !strings.Contains(emptyAgentsFrame, "Fleet:") {
+		t.Fatalf("expected empty Agents page to render pipeline architecture box and fleet telemetry:\n%s", emptyAgentsFrame)
+	}
+
+	s.Change = &ChangeSession{
+		ID:        "chg-orch",
+		Title:     "Orchestrate parallel worktree verification",
+		State:     "checked",
+		Freshness: "current",
+		Changes: []FileChange{
+			{
+				Path: "internal/app/service.go",
+				Diff: FileDiff{Lines: []DiffLine{{Kind: "add", NewLine: 1, Text: "ok"}}},
+			},
+		},
+		Checks: []Check{{Name: "go test", State: "passed"}},
+	}
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: GitRepository{GitIdentity: GitIdentity{Head: "main123", Branch: "main"}},
+		Worktrees: []GitWorktree{
+			{GitIdentity: GitIdentity{Head: "wt123", Branch: "orca/agent-orch"}, Path: "/workspace/mini-orca/.wt/orch", Mergeable: true},
+		},
+	}
+	s.Features = &FeatureReport{
+		Suggestions: []FeatureSuggestion{
+			{ID: "feat-1", Title: "Live fleet telemetry matrix", Benefit: "Improves multi-agent observability.", Effort: "S", Status: "open"},
+		},
+	}
+
+	s.Navigate(PageSummary)
+	dashFrame := s.Render(132, 38)
+	for _, token := range []string{"DASHBOARD · AGENT ORCHESTRATION", "ORCHESTRATION WORKSTREAMS", "AGENT FLEET TELEMETRY", "4-STAGE AGENT PIPELINE", "1 Agent"} {
+		if !strings.Contains(dashFrame, token) {
+			t.Fatalf("expected dashboard to contain %q:\n%s", token, dashFrame)
+		}
+	}
+
+	s.Navigate(PageAgents)
+	agentsFrame := s.Render(132, 38)
+	for _, token := range []string{"TASKS · AGENT ORCHESTRATION STUDIO", "SELECTED AGENT MISSION", "internal/app/service.go"} {
+		if !strings.Contains(agentsFrame, token) {
+			t.Fatalf("expected populated Agents page to contain %q:\n%s", token, agentsFrame)
+		}
+	}
+
+	s.Navigate(PageGit)
+	gitFrame := s.Render(132, 38)
+	for _, token := range []string{"WORKTREES · AGENT ISOLATION & MERGE QUEUE", "SELECTED WORKTREE INTEGRATION", "orca/agent-orch"} {
+		if !strings.Contains(gitFrame, token) {
+			t.Fatalf("expected Worktrees page to contain %q:\n%s", token, gitFrame)
+		}
+	}
+
+	s.Navigate(PageFeatures)
+	featFrame := s.Render(132, 38)
+	for _, token := range []string{"FEATURES · AI DISCOVERY & ROADMAP", "SELECTED IDEA", "Improves multi-agent observability."} {
+		if !strings.Contains(featFrame, token) {
+			t.Fatalf("expected Features page to contain %q:\n%s", token, featFrame)
+		}
+	}
+}

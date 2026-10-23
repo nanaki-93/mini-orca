@@ -409,11 +409,17 @@ func RenderMetrics(mutedStyle lipgloss.Style, surface, foreground string, cards 
 		columns = min(columns, 2)
 	}
 	column := max(1, (totalWidth-4-2*(columns-1))/columns)
+	rule := mutedStyle.Render(strings.Repeat("─", max(1, column-2)))
 	var lines []string
 	for start := 0; start < len(cards); start += columns {
 		rows := []string{"  ", "  ", "  "}
 		for i, item := range cards[start:min(start+columns, len(cards))] {
-			for row, content := range []string{" " + item[1], " " + mutedStyle.Render(item[0]), ""} {
+			cells := []string{
+				" ◈ " + item[1],
+				"   " + mutedStyle.Render(item[0]),
+				" " + rule,
+			}
+			for row, content := range cells {
 				if i > 0 {
 					rows[row] += "  "
 				}

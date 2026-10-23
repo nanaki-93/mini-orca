@@ -81,13 +81,21 @@ func (s *State) renderBrandBar(th ansiTheme, width int) string {
 	if s.Project != nil {
 		name = client.FirstNonEmpty(s.Project.Name, s.Project.Path)
 	}
-	connection := th.amber + "○ Offline" + th.reset
+	right := th.amber + "○ Offline" + th.reset
 	if s.Connected {
-		connection = th.green + "● Connected" + th.reset
+		right = th.green + "● Connected" + th.reset
 	}
-	brand := th.accentBg + " MINI-ORCA " + th.reset
-	left := brand + th.border + " / " + th.reset + th.bold + th.fg + theme.TruncatePlain(name, max(8, width-32)) + th.reset
-	return alignBar(left, connection+" ", width)
+	if count := len(s.AgentItems()); count > 0 && width >= 88 {
+		right = fmt.Sprintf("%s⚡ %d Agent(s)%s  %s", th.purple, count, th.reset, right)
+	}
+	brand := th.accentBg + " ◈ MINI-ORCA " + th.reset
+	nameBudget := max(8, width-theme.VisibleRuneCount(right)-26)
+	left := brand + th.border + " │ " + th.reset + th.bold + th.fg + theme.TruncatePlain(name, nameBudget) + th.reset
+	if width >= 104 {
+		active := s.ActiveHub()
+		left += th.muted + "  ·  " + th.hubColor(active.Key) + "[" + active.Key + "] " + active.Label + th.reset
+	}
+	return alignBar(left, right+" ", width)
 }
 
 func alignBar(left, right string, width int) string {
@@ -130,7 +138,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 	roomy := rows >= len(HubTabs())+len(subPages)+len(models)+5
 	var lines []string
 	if roomy {
-		lines = append(lines, "", "  "+th.cyan+"WORKSPACE"+th.reset, "")
+		lines = append(lines, "", "  "+th.bold+th.cyan+"◈ WORKSPACE"+th.reset, "")
 	}
 	for _, tab := range HubTabs() {
 		style := th.hubColor(tab.Key)
@@ -146,7 +154,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 		}
 	}
 	if rows-len(lines) >= len(models)+2 {
-		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.muted + "MODELS" + th.reset}, models...)
+		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.muted + "◈ MODELS" + th.reset}, models...)
 	}
 	for len(lines) < rows-len(models) {
 		lines = append(lines, "")
@@ -196,30 +204,42 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 		if s.Repository != nil && s.Repository.Available {
 			branch = client.FirstNonEmpty(s.Repository.Branch, "Detached HEAD")
 		}
-		left = " " + th.purple + theme.TruncatePlain(branch, 24) + th.reset
+		left = " " + th.purple + "⎇ " + theme.TruncatePlain(branch, 22) + th.reset
 		if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
 			left += th.amber + " · Modified" + th.reset
 		}
-		trust := th.amber + "Checks need trust"
+		trust := th.amber + "⚠ Checks need trust"
 		if s.WorkspaceTrust {
-			trust = th.green + "Checks trusted"
+			trust = th.green + "✔ Checks trusted"
 		}
 		if width >= 80 {
 			left += th.muted + "  ·  " + trust + th.reset
 		}
 	}
-	activity := ""
+	activity := s.statusBarActivity()
+	maxRight := max(10, min(width/2-2, width-theme.VisibleRuneCount(left)-4))
+	return alignBar(left, th.cyan+theme.TruncatePlain(activity, maxRight)+th.reset+" ", width)
+}
+
+func (s *State) statusBarActivity() string {
+	if s.Busy != "" {
+		return "⟳ Working · " + s.Busy
+	}
 	if s.Run != nil && s.Run.Status != "" {
 		done, total := runAggregateCoverage(s.Run)
-		activity = "Analysis " + s.Run.Status
+		activity := "◈ Analysis " + s.Run.Status
 		if total > 0 {
 			activity += fmt.Sprintf(" · %d/%d", done, total)
 		}
+		return activity
 	}
-	if s.Busy != "" {
-		activity = "Working · " + s.Busy
+	if count := len(s.AgentItems()); count > 0 {
+		return fmt.Sprintf("⚡ %d active task(s)", count)
 	}
-	return alignBar(left, th.cyan+theme.TruncatePlain(activity, max(10, width/2-2))+th.reset+" ", width)
+	if s.Project != nil {
+		return "● Orchestrator ready"
+	}
+	return ""
 }
 
 func (s *State) renderHubBar(th ansiTheme, width int) string {
