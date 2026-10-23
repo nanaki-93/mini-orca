@@ -338,8 +338,13 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/app/agent_runs.go`, `internal/app/agent_runs_test.go`, `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go` — **new**.
+- `internal/app/agent_run_types.go`, `internal/app/agent_events.go`, `internal/app/agent_events_test.go` — **new**, source-free run DTOs, live ownership and bounded private text.
+- `internal/app/agentstate/history.go`, `internal/app/agentstate/history_test.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/events_test.go` — **new**, durable progress cursors, hierarchy and SDK event projection.
 - `internal/app/events.go`, `internal/app/agentstate/store.go`, `internal/app/agentruntime/runtime.go`, `internal/api/handlers/project_lifecycle_handler.go`, `cmd/daemon/main.go`, `cmd/daemon/worktree_router_test.go`.
+- `internal/app/agentstate/run.go`, `internal/app/agentstate/session.go`, `internal/app/agentstate/input.go`, `internal/app/agentstate/store_test.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/session.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/confirmation.go` — persist parent relationships and progress at the same durable boundaries as execution and human input.
+- `internal/app/service.go`, `internal/app/agent_limits.go`, `internal/app/agent_confirmation.go`, `internal/app/change_pipeline.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_test.go` — connect lifecycle observation and cancellation to the owning service, and admit optional streaming without bypassing provider capabilities or consent.
 - `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go` — **new**; `internal/tui/client/client.go`, `internal/tui/models.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/tui/client/agent_events.go` — **new**, bounded SSE decoding with cancellation and cursor validation; `internal/tui/client/models.go` — preserve the captured streaming choice.
 
 **Inputs / dependencies**
 - Task 12; existing loopback policy and project/worktree routing.
@@ -348,6 +353,10 @@ This is an implementation specification, not a claim that the features below alr
 - Add bounded list/detail/control/input routes below `/api/projects/current/agent-runs`. Creation remains through admitted domain actions, never arbitrary caller-supplied graphs.
 - Emit source-free events with project/run/node/attempt IDs, sequence cursors, time, state, usage, and evidence references. Support reconnect, duplicate suppression, stale cursors, gap/snapshot recovery, and backpressure.
 - Preserve existing project update subscribers during migration. Terminal state is durable and recoverable even if live delivery is dropped. Partial model text stays in an explicit private detail channel and is inert.
+- Persist a bounded source-free progress journal with an epoch and monotonic sequence, retaining 2,048 events. Keep native session payloads private. Record native invocation parent IDs so a checked-change root groups its attempts, specialist reviews and waiting input. Older journals without these fields remain readable.
+- Bind list/detail/events requests to the current project and checkout; paginate history and event replay. Expired or foreign cursors trigger an explicit snapshot reset, while duplicate events are suppressed by the client. Bound stream frames and slow writes; cancellation releases subscribers. Preserve the existing project event contract.
+- Only active root invocations advertise cancel; cancel their shared budget through the owning service and let workers finish cleanup. Waiting confirmation inputs route through the existing domain response method with exact request/proposal identity. Historical state cannot restart work; retries still use admitted domain actions.
+- Keep default metadata source-free. An explicit private detail request may read bounded model output and transient partial text with provenance and truncation state. Add opt-in `stream_output` to checked workflows; reject unsupported selected providers before dispatch and preserve the choice in workflow history. Viewing progress never starts streaming or model work.
 
 **Verification command**
 `go test -race ./internal/app ./internal/api/handlers ./cmd/daemon ./internal/tui/client && ./scripts/validate.sh && git diff --check`
