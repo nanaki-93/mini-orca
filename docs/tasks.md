@@ -226,6 +226,8 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/change_plan.go`, `internal/app/change_plan_test.go`, `internal/api/handlers/change_handler.go`, `internal/api/handlers/change_plan_test.go`, `cmd/daemon/main.go`.
 - `internal/tui/client/client.go`, `internal/tui/client/models.go`, `internal/tui/client/change_plan_test.go`, `internal/tui/plan.go`, `internal/tui/plan_actions.go`, `internal/tui/plan_test.go`, `internal/tui/keybinds_help.go`.
 - `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/app/agent_tools.go`, `internal/app/agentruntime/tool_agent.go`, `internal/app/agentruntime/tool_agent_test.go` — reuse admitted repository tools and add structured final responses without SDK-owned output tools or a second retry loop.
+- `internal/tui/plan_investigation.go`, `internal/tui/plan_investigation_test.go` — **new**, asynchronous investigation, cancellation and explicit acceptance; `internal/tui/models.go`, `internal/tui/terminal_loop.go`, `internal/tui/daemon_actions.go`, `internal/tui/focused_pages.go`, `internal/tui/command_menu.go` — connect the existing action loop, plan sections and command menu.
 
 **Inputs / dependencies**
 - Task 08; captured plans and explicit remote-provider confirmation.
@@ -234,6 +236,9 @@ This is an implementation specification, not a claim that the features below alr
 - Add an explicit Investigate action to the editable plan. Produce structured evidence, assumptions, suggested scope, approach, and acceptance criteria; validate cited hashes and locations.
 - The user edits and approves the resulting plan before generation. Investigation does not approve its own write scope or execute project code.
 - Preserve an existing draft on failure/cancellation, discard late results from another project/plan, and invalidate approval when accepted evidence or scope changes. Opening the plan remains passive.
+- Expose a stateless, guarded `POST /api/projects/current/plans/investigate` operation. Bind the editable plan, explicit read/write paths, indexed source hashes, project revision, policy and instructions before dispatch. Missing new files carry explicit absence; changes to either existing or missing paths invalidate the request. Investigation creates only private run evidence, never a change session, worktree, source write or execution-trust grant.
+- Return bounded typed citations, assumptions, suggested paths, approach and criteria. Check every citation against captured source hashes and line ranges before publication. Preserve completion-only CLI profiles and the selected Function profile's remote-consent requirement. Accepted citations and assumptions become optional plan fields included in its approval hash, with existing histories remaining readable.
+- Add explicit Investigate, Cancel and Accept suggestions actions. Keep pending results separate from the editable plan, show them in the existing plan sections, reject late or edited-draft results, and retain draft content on failure. Acceptance updates evidence, approach and criteria; suggested scope remains advisory until the user edits it. Navigation and command-menu browsing remain passive.
 
 **Verification command**
 `go test ./internal/app ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
