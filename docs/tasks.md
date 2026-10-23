@@ -149,6 +149,9 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agentstate/store.go`, `internal/app/agentstate/session.go`, `internal/app/agentstate/store_test.go` — **new**.
 - `internal/app/agentruntime/session.go`, `internal/app/agentruntime/session_test.go` — **new**, ADK session service adapter.
 - `internal/app/agentruntime/runtime.go`, `internal/app/service.go`, `internal/app/project_lifecycle.go`, `internal/app/worktree_service.go`, `internal/app/archgate/archgate.go`, `internal/app/archgate/archgate_test.go`.
+- `internal/app/agentstate/run.go`, `internal/app/agentstate/lock_unix.go`, `internal/app/agentstate/lock_windows.go`, `internal/app/agentstate/lock_other.go`, `internal/app/agentruntime/persistence.go` — **new**, versioned invocation/budget records, cancellable process locks and runtime persistence binding.
+- `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/policy_test.go`, `internal/app/agent_limits.go`, `internal/app/agent_limits_test.go`, `internal/app/service_test.go`, `internal/app/worktree_service_test.go`, `internal/app/analysis_run.go`, `internal/app/analysis_run_test.go` — bind canonical checkout identity, checkpoint reservations before dispatch, propagate persistence failures and verify passive restoration.
+- `CONFIG.md`, `go.mod`, `go.sum` — document private session records and retain required direct dependency declarations.
 
 **Inputs / dependencies**
 - Task 05; [ADK session service obligations](https://github.com/google/adk-go/blob/v2.6.0/session/service.go) and existing atomic storage.
@@ -156,6 +159,7 @@ This is an implementation specification, not a claim that the features below alr
 **Implementation rules**
 - Store versioned records below private `.mini-orca/agents/`, separated by canonical project/worktree, session, and run. Bind revisions, source/policy/config fingerprints, schema identity, and cumulative budgets.
 - Implement session state namespaces, durable event IDs, ordered appends, compaction actions, and copy-safe reads. Reject traversal, oversized/corrupt records, and unknown versions; never turn an I/O error into a missing session.
+- Serialize each checkout's session namespaces, invocation records and cumulative budget checkpoints through a bounded atomic journal with a cancellable process lock. Persist reservations before model dispatch and usage before final publication; failed persistence terminates the run. Completion invocations retain private input state and explicit terminal status. Opening or restoring records does not resume them.
 - Preserve existing change/analysis stores as domain authorities. Restore is passive; no model, tool, or process dispatch on opening a project. Exercise ADK's session conformance suite and concurrent append/write failures.
 
 **Verification command**
