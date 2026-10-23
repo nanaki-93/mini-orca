@@ -29,8 +29,11 @@ const (
 type PaletteColors struct {
 	Name         string
 	BgCode       string
+	SurfaceCode  string
 	AccentCode   string
 	AccentBgCode string
+	OnAccentCode string
+	OnStatusCode string
 	FgCode       string
 	MutedCode    string
 	BorderCode   string
@@ -48,31 +51,31 @@ func ColorsForPalette(p Palette) PaletteColors {
 	switch p {
 	case PaletteCRT:
 		return PaletteColors{
-			Name: "CRT PHOSPHOR", BgCode: "232", AccentCode: "46", AccentBgCode: "28", FgCode: "120", MutedCode: "71",
-			BorderCode: "28", SelBgCode: "22", GreenCode: "46", AmberCode: "226",
-			RedCode: "196", PurpleCode: "83", CyanCode: "50",
+			Name: "CRT PHOSPHOR", BgCode: "232", SurfaceCode: "234", AccentCode: "46", AccentBgCode: "28", OnAccentCode: "231", OnStatusCode: "232", FgCode: "157", MutedCode: "114",
+			BorderCode: "28", SelBgCode: "236", GreenCode: "46", AmberCode: "226",
+			RedCode: "210", PurpleCode: "157", CyanCode: "50",
 			ProgStart: "#00aa00", ProgEnd: "#00ff66",
 		}
 	case PaletteAmber:
 		return PaletteColors{
-			Name: "AMBER TERMINAL", BgCode: "234", AccentCode: "214", AccentBgCode: "130", FgCode: "222", MutedCode: "136",
-			BorderCode: "136", SelBgCode: "236", GreenCode: "142", AmberCode: "214",
-			RedCode: "203", PurpleCode: "179", CyanCode: "215",
+			Name: "AMBER TERMINAL", BgCode: "233", SurfaceCode: "235", AccentCode: "222", AccentBgCode: "130", OnAccentCode: "231", OnStatusCode: "232", FgCode: "223", MutedCode: "180",
+			BorderCode: "136", SelBgCode: "237", GreenCode: "150", AmberCode: "222",
+			RedCode: "210", PurpleCode: "183", CyanCode: "117",
 			ProgStart: "#d78700", ProgEnd: "#ffd75f",
 		}
 	case PalettePaper:
 		return PaletteColors{
-			Name: "PAPER LIGHT", BgCode: "255", AccentCode: "25", AccentBgCode: "25", FgCode: "235", MutedCode: "242",
-			BorderCode: "247", SelBgCode: "252", GreenCode: "28", AmberCode: "130",
-			RedCode: "160", PurpleCode: "91", CyanCode: "31",
+			Name: "PAPER LIGHT", BgCode: "255", SurfaceCode: "254", AccentCode: "25", AccentBgCode: "25", OnAccentCode: "255", OnStatusCode: "255", FgCode: "235", MutedCode: "240",
+			BorderCode: "247", SelBgCode: "253", GreenCode: "22", AmberCode: "58",
+			RedCode: "124", PurpleCode: "91", CyanCode: "24",
 			ProgStart: "#005f87", ProgEnd: "#0087af",
 		}
 	default:
 		return PaletteColors{
-			Name: "TOKYO ENTERPRISE", BgCode: "234", AccentCode: "111", AccentBgCode: "62", FgCode: "253", MutedCode: "246",
-			BorderCode: "240", SelBgCode: "236", GreenCode: "114", AmberCode: "215",
-			RedCode: "203", PurpleCode: "176", CyanCode: "117",
-			ProgStart: "#5f87ff", ProgEnd: "#87d7ff",
+			Name: "TOKYO", BgCode: "233", SurfaceCode: "235", AccentCode: "111", AccentBgCode: "62", OnAccentCode: "231", OnStatusCode: "232", FgCode: "253", MutedCode: "248",
+			BorderCode: "240", SelBgCode: "237", GreenCode: "114", AmberCode: "222",
+			RedCode: "210", PurpleCode: "183", CyanCode: "80",
+			ProgStart: "#87afff", ProgEnd: "#5fd7d7",
 		}
 	}
 }
@@ -169,6 +172,13 @@ func PadVisibleRight(s string, target int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", target-vis)
+}
+
+// PaintLine fills a terminal row and restores its surface after nested styles reset.
+func PaintLine(background, foreground, line string, width int) string {
+	base := background + foreground
+	line = PadVisibleRight(line, width)
+	return base + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+base) + "\x1b[0m"
 }
 
 // TruncateVisible shortens an ANSI-styled string to maxCols visible columns while preserving SGR sequences.

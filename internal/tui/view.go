@@ -21,14 +21,14 @@ func (s *State) Render(width, height int) string {
 	if width < 52 || height < 16 {
 		return s.renderSmallTerminal(th, width, height)
 	}
-	header := []string{s.renderBrandBar(th, width), s.renderStatusBar(th, width)}
+	header := []string{theme.PaintLine(th.surface, th.fg, s.renderBrandBar(th, width), width), s.renderStatusBar(th, width)}
 	sidebar := width >= 100 && height >= 20
 	if !sidebar {
 		header = append(header, s.renderHubBar(th, width), s.renderSubViewBar(th, width))
 	}
 	rule := th.border + strings.Repeat("─", width) + th.reset
 	header = append(header, rule)
-	footer := []string{rule, s.renderActionBar(th, width), s.renderCommandBar(th, width)}
+	footer := []string{rule, theme.PaintLine(th.surface, th.fg, s.renderActionBar(th, width), width), s.renderCommandBar(th, width)}
 	bodyRows := height - len(header) - len(footer)
 	contentWidth := width
 	if sidebar {
@@ -42,7 +42,7 @@ func (s *State) Render(width, height int) string {
 			if i >= len(body) {
 				body = append(body, "")
 			}
-			body[i] = theme.PadVisibleRight(menu[i], sidebarMenuWidth) + th.border + "│" + th.reset + body[i]
+			body[i] = theme.PaintLine(th.surface, th.fg, menu[i], sidebarMenuWidth) + th.border + "│" + th.reset + body[i]
 		}
 	}
 	lines := append([]string(nil), header...)
@@ -63,8 +63,7 @@ func fitFrame(th ansiTheme, lines []string, width, height int) string {
 		if i < len(lines) {
 			row = lines[i]
 		}
-		row = strings.ReplaceAll(row, th.reset, th.reset+th.bg+th.fg)
-		out[i] = th.bg + th.fg + theme.PadVisibleRight(row, width) + th.reset
+		out[i] = theme.PaintLine(th.bg, th.fg, row, width)
 	}
 	return strings.Join(out, "\n")
 }
@@ -86,8 +85,8 @@ func (s *State) renderBrandBar(th ansiTheme, width int) string {
 	if s.Connected {
 		connection = th.green + "● Connected" + th.reset
 	}
-	brand := " " + th.bold + th.fg + "MINI-ORCA" + th.reset
-	left := brand + th.border + "  /  " + th.reset + th.fg + theme.TruncatePlain(name, max(8, width-32)) + th.reset
+	brand := th.accentBg + " MINI-ORCA " + th.reset
+	left := brand + th.border + " / " + th.reset + th.bold + th.fg + theme.TruncatePlain(name, max(8, width-32)) + th.reset
 	return alignBar(left, connection+" ", width)
 }
 
@@ -116,6 +115,11 @@ func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
 		}
 		body = s.scrollDetails(th, body, rows-1)
 	}
+	for i, line := range body {
+		if strings.HasPrefix(line, "  "+th.renderCursorPrefix(true)) {
+			body[i] = theme.PaintLine(th.selection, th.fg, line, width-2)
+		}
+	}
 	return append([]string{""}, body...)
 }
 
@@ -126,12 +130,12 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 	roomy := rows >= len(HubTabs())+len(subPages)+len(models)+5
 	var lines []string
 	if roomy {
-		lines = append(lines, "", "  "+th.muted+"WORKSPACE"+th.reset, "")
+		lines = append(lines, "", "  "+th.cyan+"WORKSPACE"+th.reset, "")
 	}
 	for _, tab := range HubTabs() {
-		style := th.muted
+		style := th.hubColor(tab.Key)
 		if tab.Key == active.Key {
-			style = th.bold + th.fg
+			style += th.bold
 		}
 		lines = append(lines, "  "+style+tab.Key+"  "+tab.Label+th.reset)
 		if tab.Key == active.Key {
@@ -157,7 +161,13 @@ func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
 		if model == "" || model == role.scope {
 			model = "unavailable"
 		}
-		lines = append(lines, fmt.Sprintf("  %s%-7s%s %s", th.muted, role.label, th.reset, theme.TruncatePlain(theme.SanitizeSingleLine(model), max(1, width-10))))
+		color := th.cyan
+		if role.scope == "bug" {
+			color = th.purple
+		} else if role.scope == "function" {
+			color = th.green
+		}
+		lines = append(lines, fmt.Sprintf("  %s%-7s%s %s", color, role.label, th.reset, theme.TruncatePlain(theme.SanitizeSingleLine(model), max(1, width-10))))
 	}
 	return lines
 }
@@ -171,7 +181,7 @@ func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []str
 		}
 		label := theme.TruncatePlain(sp.Label, width-8)
 		if sp.Page == curPage {
-			out = append(out, "    "+th.subActiveStyle.Render(theme.PadVisibleRight("▸ "+label, width-6)))
+			out = append(out, theme.PaintLine(th.selection, th.hubColor(tab.Key), "    ▸ "+label, width))
 		} else {
 			out = append(out, "      "+th.muted+label+th.reset)
 		}
@@ -186,13 +196,13 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 		if s.Repository != nil && s.Repository.Available {
 			branch = client.FirstNonEmpty(s.Repository.Branch, "Detached HEAD")
 		}
-		left = " " + th.muted + theme.TruncatePlain(branch, 24) + th.reset
+		left = " " + th.purple + theme.TruncatePlain(branch, 24) + th.reset
 		if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
 			left += th.amber + " · Modified" + th.reset
 		}
-		trust := "Checks need trust"
+		trust := th.amber + "Checks need trust"
 		if s.WorkspaceTrust {
-			trust = "Checks trusted"
+			trust = th.green + "Checks trusted"
 		}
 		if width >= 80 {
 			left += th.muted + "  ·  " + trust + th.reset
@@ -209,18 +219,18 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	if s.Busy != "" {
 		activity = "Working · " + s.Busy
 	}
-	return alignBar(left, th.muted+theme.TruncatePlain(activity, max(10, width/2-2))+th.reset+" ", width)
+	return alignBar(left, th.cyan+theme.TruncatePlain(activity, max(10, width/2-2))+th.reset+" ", width)
 }
 
 func (s *State) renderHubBar(th ansiTheme, width int) string {
 	active := s.ActiveHub()
 	var parts []string
 	for _, tab := range HubTabs() {
-		label := tab.Key + " " + tab.Label
+		label := " " + tab.Key + " " + tab.Label + " "
 		if tab.Key == active.Key {
-			parts = append(parts, th.activeTabStyle.Render(label))
+			parts = append(parts, theme.PaintLine(th.selection, th.hubColor(tab.Key), label, theme.VisibleRuneCount(label)))
 		} else {
-			parts = append(parts, th.idleTabStyle.Render(label))
+			parts = append(parts, th.hubColor(tab.Key)+label+th.reset)
 		}
 	}
 	return theme.PadVisibleRight(" "+strings.Join(parts, " "), width)
@@ -238,7 +248,7 @@ func (s *State) renderSubViewBar(th ansiTheme, width int) string {
 		label := sp.Label
 		if sp.Page == page {
 			active = len(labels)
-			label = th.bold + th.cyan + "▸ " + label + th.reset
+			label = th.hubColor(hub.Key) + "▸ " + label + th.reset
 		} else {
 			label = th.muted + label + th.reset
 		}
@@ -280,8 +290,11 @@ func (s *State) renderActionBar(th ansiTheme, width int) string {
 	}
 	available := width - theme.VisibleRuneCount(right) - 3
 	var hints []string
-	for _, item := range items {
+	for i, item := range items {
 		hint := th.keyPill(item.key, item.desc)
+		if i == 0 {
+			hint = th.accentBg + "[" + item.key + "]" + th.reset + " " + th.fg + item.desc + th.reset
+		}
 		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "  ")) > available {
 			break
 		}

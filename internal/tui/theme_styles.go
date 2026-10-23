@@ -9,32 +9,30 @@ import (
 )
 
 type ansiTheme struct {
-	accent         string
-	accentBg       string
-	fg             string
-	bg             string
-	muted          string
-	border         string
-	critBg         string
-	warnBg         string
-	okBg           string
-	infoBg         string
-	green          string
-	amber          string
-	red            string
-	purple         string
-	cyan           string
-	bold           string
-	reset          string
-	cardStyle      lipgloss.Style
-	activeTabStyle lipgloss.Style
-	idleTabStyle   lipgloss.Style
-	subActiveStyle lipgloss.Style
-	titleStyle     lipgloss.Style
-	mutedStyle     lipgloss.Style
-	errorBoxStyle  lipgloss.Style
-	progStartHex   string
-	progEndHex     string
+	accent        string
+	accentBg      string
+	fg            string
+	bg            string
+	surface       string
+	selection     string
+	muted         string
+	border        string
+	critBg        string
+	warnBg        string
+	okBg          string
+	green         string
+	amber         string
+	red           string
+	purple        string
+	cyan          string
+	bold          string
+	reset         string
+	cardStyle     lipgloss.Style
+	titleStyle    lipgloss.Style
+	mutedStyle    lipgloss.Style
+	errorBoxStyle lipgloss.Style
+	progStartHex  string
+	progEndHex    string
 }
 
 func themeForPalette(p Palette) ansiTheme {
@@ -42,44 +40,31 @@ func themeForPalette(p Palette) ansiTheme {
 	accentCol := lipgloss.Color(c.AccentCode)
 	mutedCol := lipgloss.Color(c.MutedCode)
 	borderCol := lipgloss.Color(c.BorderCode)
-	selBgCol := lipgloss.Color(c.SelBgCode)
 	redCol := lipgloss.Color(c.RedCode)
 
 	return ansiTheme{
-		accent:   "\033[1;38;5;" + c.AccentCode + "m",
-		accentBg: "\033[1;38;5;255;48;5;" + c.AccentBgCode + "m",
-		fg:       "\033[38;5;" + c.FgCode + "m",
-		bg:       "\033[48;5;" + c.BgCode + "m",
-		muted:    "\033[38;5;" + c.MutedCode + "m",
-		border:   "\033[38;5;" + c.BorderCode + "m",
-		critBg:   "\033[1;38;5;255;48;5;160m",
-		warnBg:   "\033[1;38;5;232;48;5;" + c.AmberCode + "m",
-		okBg:     "\033[1;38;5;232;48;5;" + c.GreenCode + "m",
-		infoBg:   "\033[1;38;5;255;48;5;" + c.AccentBgCode + "m",
-		green:    "\033[1;38;5;" + c.GreenCode + "m",
-		amber:    "\033[1;38;5;" + c.AmberCode + "m",
-		red:      "\033[1;38;5;" + c.RedCode + "m",
-		purple:   "\033[1;38;5;" + c.PurpleCode + "m",
-		cyan:     "\033[1;38;5;" + c.CyanCode + "m",
-		bold:     "\033[1m",
-		reset:    "\033[0m",
+		accent:    "\033[1;38;5;" + c.AccentCode + "m",
+		accentBg:  "\033[1;38;5;" + c.OnAccentCode + ";48;5;" + c.AccentBgCode + "m",
+		fg:        "\033[38;5;" + c.FgCode + "m",
+		bg:        "\033[48;5;" + c.BgCode + "m",
+		surface:   "\033[48;5;" + c.SurfaceCode + "m",
+		selection: "\033[48;5;" + c.SelBgCode + "m",
+		muted:     "\033[38;5;" + c.MutedCode + "m",
+		border:    "\033[38;5;" + c.BorderCode + "m",
+		critBg:    "\033[1;38;5;255;48;5;160m",
+		warnBg:    "\033[1;38;5;" + c.OnStatusCode + ";48;5;" + c.AmberCode + "m",
+		okBg:      "\033[1;38;5;" + c.OnStatusCode + ";48;5;" + c.GreenCode + "m",
+		green:     "\033[1;38;5;" + c.GreenCode + "m",
+		amber:     "\033[1;38;5;" + c.AmberCode + "m",
+		red:       "\033[1;38;5;" + c.RedCode + "m",
+		purple:    "\033[1;38;5;" + c.PurpleCode + "m",
+		cyan:      "\033[1;38;5;" + c.CyanCode + "m",
+		bold:      "\033[1m",
+		reset:     "\033[0m",
 
 		cardStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderCol).
-			Padding(0, 1),
-		activeTabStyle: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("255")).
-			Background(lipgloss.Color(c.AccentBgCode)).
-			Padding(0, 1),
-		idleTabStyle: lipgloss.NewStyle().
-			Foreground(mutedCol).
-			Padding(0, 1),
-		subActiveStyle: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(accentCol).
-			Background(selBgCol).
 			Padding(0, 1),
 		titleStyle: lipgloss.NewStyle().
 			Bold(true).
@@ -92,6 +77,21 @@ func themeForPalette(p Palette) ansiTheme {
 			Padding(0, 1),
 		progStartHex: c.ProgStart,
 		progEndHex:   c.ProgEnd,
+	}
+}
+
+func (th ansiTheme) hubColor(key string) string {
+	switch key {
+	case "2":
+		return th.purple
+	case "3":
+		return th.cyan
+	case "4":
+		return th.green
+	case "5":
+		return th.amber
+	default:
+		return th.accent
 	}
 }
 

@@ -69,12 +69,12 @@ func adaptivePanelWidth(width int) int {
 func renderPageHeader(th ansiTheme, title, subtitle string) []string {
 	if strings.TrimSpace(subtitle) == "" {
 		return []string{
-			fmt.Sprintf("  %s%s%s", th.bold+th.fg, title, th.reset),
+			fmt.Sprintf("  %s◆ %s%s", th.accent, title, th.reset),
 			"",
 		}
 	}
 	return []string{
-		fmt.Sprintf("  %s%s%s", th.bold+th.fg, title, th.reset),
+		fmt.Sprintf("  %s◆ %s%s", th.accent, title, th.reset),
 		fmt.Sprintf("  %s%s%s", th.muted, subtitle, th.reset),
 	}
 }
