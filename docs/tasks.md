@@ -199,6 +199,8 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_tools.go`, `internal/app/agent_tools_test.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/tools_test.go` — **new**.
 - `internal/project/agent_context.go`, `internal/project/agent_context_test.go` — **new**, pure indexed retrieval helpers.
 - `internal/project/context_policy.go`, `internal/project/declaration_context.go`, `internal/app/change_context.go`, `internal/app/declaration_explanation.go`.
+- `internal/app/agentruntime/tool_agent.go`, `internal/app/agentruntime/tool_agent_test.go` — **new**, bounded native ADK LLM-agent tool turns; `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/model.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/policy_test.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentstate/run.go` — explicit tool admission, per-dispatch authority, private tool-schema provenance and replayable events.
+- `internal/app/service.go`, `internal/app/service_test.go`, `internal/app/declaration_explanation_test.go`, `CONFIG.md`, `go.mod`, `go.sum` — reuse the existing retry owner for typed investigation requests, retain direct dependency declarations and document read-only tool bounds.
 
 **Inputs / dependencies**
 - Task 07; context policy, source hashes, symbol/import index, and instruction resolution.
@@ -207,6 +209,8 @@ This is an implementation specification, not a claim that the features below alr
 - Provide typed search, scoped file/snippet read, symbol/import inspection, impact lookup, and current-check-evidence tools. Reuse application/domain validation; the SDK never receives an unrestricted root filesystem tool.
 - Apply exclusion, symlink containment, byte/result/token budgets, and cancellation on each call. Return path/hash/span provenance and mark heuristic relationships explicitly.
 - Wire tools into explicit declaration investigation. Retrieval outside admitted scope produces a scope request; it cannot silently become source sent to a remote provider or a write target.
+- Use the selected Function profile's verified tool protocol through an ADK LLM agent; completion-only CLI profiles retain bounded supplied-context explanations. Do not switch providers or grant a wider scope. A declaration investigation admits its exact source span and indexed metadata; every additional turn rechecks project, policy, instructions and source identity.
+- Validate named tool schemas and results at dispatch, charge each actual tool call once, and cap an investigation at eight model turns with bounded aggregate retrieval. Keep tool-schema/scope identity and tool events in the private session. Proposal check evidence is read-only, source-free and explicitly associated with its checked proposal; unavailable or stale evidence never means tests passed.
 
 **Verification command**
 `go test -race ./internal/project ./internal/app/agentruntime ./internal/app && ./scripts/validate.sh && git diff --check`
