@@ -322,6 +322,23 @@ under the imported project's `.mini-orca/` directory; see
 application metadata, separate from configuration.
 Do not delete Apply receipts or Undo backups as a routine cache reset.
 
+ADK session state, input history, final events, invocation status and shared budget
+checkpoints live in `.mini-orca/agents/<checkout-hash>/journal.json`. The hash binds
+the canonical checkout path; worktrees have separate records. Journals use atomic
+replacement, Unix file/directory modes 0600/0700, and a process lock. Windows
+access follows the checkout's filesystem ACLs. Input and response
+history can contain project source, so keep this directory out of version control
+and public diagnostics. No journal is uploaded automatically.
+
+Budget reservations are saved before provider dispatch; usage and final events
+must be saved before a successful result is published. A persistence failure stops
+the shared run. Session app/user namespaces stay inside that checkout, temporary
+state is not persisted, and partial streaming previews are not durable events.
+Each journal is bounded to 64 MiB, 4096 sessions, 8192 invocations and 2048 budget
+records. Corrupt, oversized or unknown-version data is preserved and rejected.
+Opening a project reads records passively; it never resumes unfinished invocations
+or grants source-write, remote-provider, or execution consent.
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

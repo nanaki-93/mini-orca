@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -325,6 +326,29 @@ func TestAnalysisRunStagesShareAgentBudget(t *testing.T) {
 	run := completedAnalysisRun(t, s)
 	if calls.Load() != 1 || run.Status == AnalysisRunCompleted || run.Status == AnalysisRunCompletedEmpty || !strings.Contains(run.Reason, "allowance") {
 		t.Fatalf("analysis stages refreshed budget: calls=%d status=%s", calls.Load(), run.Status)
+	}
+}
+
+func TestAnalysisJournalAdmissionFailureLeavesInterruptedRun(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if err := os.MkdirAll(filepath.Join(root, ".mini-orca"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".mini-orca", "agents"), []byte("unavailable journal directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
+	if !errors.Is(err, agentstate.ErrPersistence) || run == nil || run.Status != AnalysisRunInterrupted || calls.Load() != 0 {
+		t.Fatalf("run=%+v error=%v calls=%d", run, err, calls.Load())
+	}
+	s.analysisRun.mu.Lock()
+	active := s.analysisRun.done != nil
+	s.analysisRun.mu.Unlock()
+	stored, err := s.currentTestAnalysisRun(context.Background())
+	if err != nil || active || stored.Status != AnalysisRunInterrupted {
+		t.Fatalf("failed admission retained a phantom worker: %+v %v", stored, err)
 	}
 }
 

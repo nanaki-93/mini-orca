@@ -3,6 +3,8 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/session"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -52,25 +55,42 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion agent: %w", err)
 	}
-	return runCompletion(ctx, completion, request.OnText)
+	result, err := runCompletion(ctx, completion, request, completionProviderBinding(client))
+	if errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, ErrPolicyDenied) {
+		CancelRun(ctx, err)
+	}
+	return result, err
 }
 
-func runCompletion(ctx context.Context, completion agent.Agent, onText func(string) error) (Result, error) {
-	const appName, userID = "mini-orca", "local"
-	sessions := session.InMemoryService()
-	created, err := sessions.Create(ctx, &session.CreateRequest{AppName: appName, UserID: userID})
-	if err != nil {
-		return Result{}, fmt.Errorf("create completion session: %w", err)
+func completionProviderBinding(client CompletionClient) string {
+	if provider, ok := client.(*ProviderClient); ok {
+		binding := provider.binding()
+		return hex.EncodeToString(binding[:])
 	}
+	return ""
+}
+
+func runCompletion(ctx context.Context, completion agent.Agent, request Request, providerBinding string) (result Result, runErr error) {
+	const appName, userID = "mini-orca", "local"
+	invocation, err := createCompletionSession(ctx, request, providerBinding)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() {
+		if err := invocation.finish(ctx, runErr); err != nil {
+			result = Result{}
+			runErr = errors.Join(runErr, err)
+		}
+	}()
 	policy, err := newPolicyPlugin()
 	if err != nil {
 		return Result{}, fmt.Errorf("create runtime policy: %w", err)
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: sessions, PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{policy}}})
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}
-	return collectCompletion(ctx, runtime.Run(ctx, userID, created.Session.ID(), nil, agent.RunConfig{}), onText)
+	return collectCompletion(ctx, runtime.Run(ctx, userID, invocation.session.ID(), nil, agent.RunConfig{}), request.OnText)
 }
 
 func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, error], onText func(string) error) (Result, error) {

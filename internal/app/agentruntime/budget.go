@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
@@ -18,26 +19,17 @@ func (e *BudgetError) Error() string { return "agent run reached its " + e.Limit
 func (e *BudgetError) Unwrap() error { return ErrBudgetExceeded }
 
 // BudgetSnapshot contains no prompts, arguments, source, or credentials.
-type BudgetSnapshot struct {
-	ModelCalls           int   `json:"model_calls"`
-	ToolCalls            int   `json:"tool_calls"`
-	Repairs              int   `json:"repairs"`
-	InputTokens          int64 `json:"input_tokens"`
-	OutputTokens         int64 `json:"output_tokens"`
-	UnknownUsageCalls    int   `json:"unknown_usage_calls"`
-	ReservedInputTokens  int64 `json:"reserved_input_tokens"`
-	ReservedOutputTokens int64 `json:"reserved_output_tokens"`
-	ActiveCalls          int   `json:"active_calls"`
-	ElapsedMillis        int64 `json:"elapsed_millis"`
-}
+type BudgetSnapshot = agentstate.BudgetUsage
 
 type Budget struct {
-	mu      sync.Mutex
-	limits  config.AgentLimits
-	usage   BudgetSnapshot
-	started time.Time
-	slots   chan struct{}
-	cancel  context.CancelCauseFunc
+	mu       sync.Mutex
+	limits   config.AgentLimits
+	usage    BudgetSnapshot
+	started  time.Time
+	sequence uint64
+	persist  func(context.Context, BudgetSnapshot) error // called only with mu held
+	slots    chan struct{}
+	cancel   context.CancelCauseFunc
 }
 
 type budgetKey struct{}
@@ -45,6 +37,14 @@ type budgetKey struct{}
 func BudgetFromContext(ctx context.Context) *Budget {
 	budget, _ := ctx.Value(budgetKey{}).(*Budget)
 	return budget
+}
+
+// CancelRun stops siblings and retries when the host loses shared authority or
+// durable state. A context without a shared run has nothing to cancel.
+func CancelRun(ctx context.Context, cause error) {
+	if budget := BudgetFromContext(ctx); budget != nil {
+		budget.cancel(cause)
+	}
 }
 
 // WithBudget inherits an existing run rather than replenishing child/retry limits.
@@ -71,6 +71,7 @@ func (b *Budget) Snapshot() BudgetSnapshot {
 }
 
 type modelReservation struct {
+	ctx           context.Context
 	budget        *Budget
 	input, output int64
 	finished      bool // guarded by budget.mu
@@ -92,16 +93,22 @@ func (b *Budget) reserveModel(ctx context.Context, input, output int64) (*modelR
 		b.usage.ActiveCalls++
 		b.usage.ReservedInputTokens += input
 		b.usage.ReservedOutputTokens += output
+		err = b.checkpointLocked(ctx)
+		if err != nil {
+			b.usage.ActiveCalls--
+			b.usage.ReservedInputTokens -= input
+			b.usage.ReservedOutputTokens -= output
+		}
 	}
 	b.mu.Unlock()
 	if err != nil {
 		<-b.slots
-		if errors.Is(err, ErrBudgetExceeded) {
+		if errors.Is(err, ErrBudgetExceeded) || errors.Is(err, agentstate.ErrPersistence) {
 			b.cancel(err)
 		}
 		return nil, err
 	}
-	return &modelReservation{budget: b, input: input, output: output}, nil
+	return &modelReservation{ctx: ctx, budget: b, input: input, output: output}, nil
 }
 
 func (b *Budget) admitModelLocked(ctx context.Context, input, output int64) error {
@@ -143,6 +150,9 @@ func (r *modelReservation) settle(input, output int64, known, completed bool) er
 		b.usage.UnknownUsageCalls++
 	}
 	err := b.recordUsageLocked(input, output)
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), 5*time.Second)
+	err = errors.Join(err, b.checkpointLocked(cleanup))
+	cancel()
 	b.mu.Unlock()
 	<-b.slots
 	if err != nil {
@@ -187,6 +197,10 @@ func (b *Budget) admitCount(ctx context.Context, name string, counter func() (*i
 		return err
 	}
 	*used = *used + 1
+	err := b.checkpointLocked(ctx)
 	b.mu.Unlock()
-	return nil
+	if err != nil {
+		b.cancel(err)
+	}
+	return err
 }

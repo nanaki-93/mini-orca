@@ -143,7 +143,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 06 — Persist sessions and run state locally
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentstate/store.go`, `internal/app/agentstate/session.go`, `internal/app/agentstate/store_test.go` — **new**.

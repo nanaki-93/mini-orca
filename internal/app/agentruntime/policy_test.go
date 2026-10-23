@@ -164,11 +164,19 @@ func TestProviderPolicyAndBudgetGuardActualDispatch(t *testing.T) {
 	}
 	other := NewProviderClient(config.ModelProfile{Provider: config.OpenAIProvider, APIBaseURL: server.URL, Model: "other", MaxTokens: 10})
 	request := Request{Messages: []llm.ChatMessage{{Role: "user", Content: "request"}}}
+	if _, err := WithPolicy(ctx, other); !errors.Is(err, ErrPolicyDenied) {
+		t.Fatal("child expanded policy")
+	}
 	if _, err := Complete(ctx, other, request); !errors.Is(err, ErrPolicyDenied) {
 		t.Fatalf("unadmitted destination accepted: %v", err)
 	}
-	if _, err := WithPolicy(ctx, other); !errors.Is(err, ErrPolicyDenied) {
-		t.Fatal("child expanded policy")
+	if !errors.Is(context.Cause(ctx), ErrPolicyDenied) || calls.Load() != 0 || budget.Snapshot().ModelCalls != 0 {
+		t.Fatal("policy failure did not stop the run before dispatch")
+	}
+	ctx, budget = budgetContext(t, func(l *config.AgentLimits) { l.ModelCalls = 1 })
+	ctx, err = WithPolicy(ctx, client)
+	if err != nil {
+		t.Fatal(err)
 	}
 	result, err := Complete(ctx, client, request)
 	if err != nil || !result.UsageKnown || calls.Load() != 1 {

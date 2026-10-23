@@ -119,6 +119,10 @@ var defaultArchitectureImportRules = []architectureImportRule{
 		forbidden:    []string{"internal/project", "internal/storage"},
 	},
 	{
+		sourcePrefix: "internal/app/agentstate",
+		forbidden:    []string{"internal/app", "internal/project", "internal/llm"},
+	},
+	{
 		sourcePrefix: "internal/app/archgate",
 		forbidden:    []string{"internal/app/sandbox", "internal/app/gitops", "internal/app/features", "internal/app/changes", "internal/llm", "internal/storage"},
 	},

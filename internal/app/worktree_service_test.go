@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -67,6 +68,21 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 		}
 	}
 	for i, child := range children {
+		store, err := agentstate.Open(child.manager.Root())
+		if err != nil {
+			t.Fatal(err)
+		}
+		records, err := store.Sessions(context.Background(), "mini-orca", "local")
+		if err != nil || len(records) != 1 {
+			t.Fatalf("worktree journal is not isolated: %d records, %v", len(records), err)
+		}
+		parentStore, err := agentstate.Open(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parentStore.Session(context.Background(), records[0].Key); !errors.Is(err, agentstate.ErrNotFound) {
+			t.Fatalf("child session leaked into parent: %v", err)
+		}
 		polled, err := child.ChangeSession(context.Background(), sessions[i].ID)
 		if err != nil || polled.Freshness != "current" || polled.Workflow == nil || polled.Workflow.Status != "running" {
 			t.Fatalf("poll active session %d: %+v, %v", i, polled, err)

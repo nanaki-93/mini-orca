@@ -2,23 +2,85 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 // Admission selects destinations before workers start. Per-attempt source and
 // consent guards still run in their workflow owner immediately before dispatch.
 func (s *Service) agentRunContext(ctx context.Context, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
+	return s.agentRunContextAt(ctx, s.manager.Root(), runtimes...)
+}
+
+func (s *Service) agentRunContextAt(ctx context.Context, root string, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
 	clients := make([]*agentruntime.ProviderClient, 0, len(runtimes))
 	for _, runtime := range runtimes {
 		clients = append(clients, runtime.client)
 	}
 	admitted, err := agentruntime.WithPolicy(ctx, clients...)
 	if err != nil {
+		agentruntime.CancelRun(ctx, err)
 		return nil, nil, fmt.Errorf("admit agent destinations: %w", err)
 	}
-	return agentruntime.WithBudget(admitted, s.agentRuntime.Limits)
+	bounded, cancel, err := agentruntime.WithBudget(admitted, s.agentRuntime.Limits)
+	if err != nil {
+		return nil, nil, err
+	}
+	store, binding, err := s.agentJournal(root)
+	if err == nil {
+		bounded, err = agentruntime.WithPersistence(bounded, store, binding)
+	}
+	if err != nil {
+		agentruntime.CancelRun(ctx, err)
+		cancel()
+		return nil, nil, err
+	}
+	return bounded, cancel, nil
+}
+
+func (s *Service) agentJournal(root string) (*agentstate.Store, agentstate.Binding, error) {
+	canonical, err := project.CanonicalRoot(root)
+	if err != nil {
+		return nil, agentstate.Binding{}, err
+	}
+	store, err := agentstate.Open(canonical)
+	if err != nil {
+		return nil, agentstate.Binding{}, fmt.Errorf("%w: open checkout journal: %w", agentstate.ErrPersistence, err)
+	}
+	policy, err := project.NewContextPolicy(canonical)
+	if err != nil {
+		return nil, agentstate.Binding{}, err
+	}
+	identity := sha256.Sum256([]byte(canonical))
+	binding := agentstate.Binding{Project: hex.EncodeToString(identity[:]), Revision: "unindexed", Policy: policy.Version()}
+	if canonical == s.manager.Root() {
+		index, err := s.manager.Index()
+		if err != nil && !errors.Is(err, project.ErrNoActiveProject) {
+			return nil, binding, err
+		}
+		if index != nil {
+			binding.Project = index.ProjectID
+			binding.Revision = index.ProjectRevision
+		}
+	}
+	data, err := json.Marshal(struct {
+		Profiles [3]config.ModelProfile
+		Runtime  config.AgentRuntime
+	}{[3]config.ModelProfile{s.runtimes.analyze.profile, s.runtimes.bug.profile, s.runtimes.function.profile}, s.agentRuntime})
+	if err != nil {
+		return nil, binding, fmt.Errorf("fingerprint admitted configuration: %w", err)
+	}
+	digest := sha256.Sum256(data)
+	binding.Configuration = hex.EncodeToString(digest[:])
+	return store, binding, nil
 }
 
 func (s *Service) workflowAgentContext(ctx context.Context, models ChangeWorkflowModels) (context.Context, context.CancelFunc, error) {

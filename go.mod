@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.3.2
 	github.com/muesli/termenv v0.15.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	golang.org/x/sys v0.48.0
 	google.golang.org/adk/v2 v2.6.0
 	google.golang.org/genai v1.74.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -51,7 +52,6 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/api v0.300.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect

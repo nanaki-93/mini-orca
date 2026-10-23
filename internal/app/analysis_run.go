@@ -542,7 +542,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 	}
 	result := cloneAnalysisRun(c.run)
 	if err := s.launchAnalysisRunLocked(preview, request.Confirmations); err != nil {
-		return result, err
+		return cloneAnalysisRun(c.run), err
 	}
 	return result, nil
 }
@@ -803,7 +803,7 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 	}
 	result := cloneAnalysisRun(c.run)
 	if err := s.launchAnalysisRunLocked(preview, *request.Confirmations); err != nil {
-		return result, err
+		return cloneAnalysisRun(c.run), err
 	}
 	return result, nil
 }
@@ -813,7 +813,9 @@ func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmat
 	c.windowBudget = time.Duration(c.run.Plan.Limits.BudgetSeconds) * time.Second
 	ctx, cancel, err := s.analysisAgentContext(context.Background(), preview)
 	if err != nil {
-		return err
+		c.run.Status = AnalysisRunInterrupted
+		c.run.Reason = "Analysis stopped before the stage completed; review and resume."
+		return errors.Join(err, s.saveAnalysisRunLocked(false))
 	}
 	c.cancel = cancel
 	c.done = make(chan struct{})

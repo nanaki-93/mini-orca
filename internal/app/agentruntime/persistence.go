@@ -1,0 +1,137 @@
+package agentruntime
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"google.golang.org/adk/v2/session"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+)
+
+type persistenceKey struct{}
+type persistence struct {
+	store    *agentstate.Store
+	binding  agentstate.Binding
+	budgetID string
+}
+
+func WithPersistence(ctx context.Context, store *agentstate.Store, binding agentstate.Binding) (context.Context, error) {
+	if previous, ok := ctx.Value(persistenceKey{}).(*persistence); ok {
+		if previous.binding != binding {
+			return nil, fmt.Errorf("%w: journal binding changed", ErrPolicyDenied)
+		}
+		return ctx, nil
+	}
+	if store == nil || binding.Validate() != nil {
+		return nil, fmt.Errorf("valid agent persistence binding is required")
+	}
+	budget := BudgetFromContext(ctx)
+	if budget == nil {
+		return nil, fmt.Errorf("durable agent run requires a budget")
+	}
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.persist != nil {
+		return nil, fmt.Errorf("agent budget already belongs to another journal")
+	}
+	p := &persistence{store: store, binding: binding, budgetID: rand.Text()}
+	budget.persist = func(ctx context.Context, usage BudgetSnapshot) error {
+		budget.sequence++
+		return store.Checkpoint(ctx, agentstate.BudgetRecord{ID: p.budgetID, Binding: binding, Limits: budget.limits, Sequence: budget.sequence, Usage: usage})
+	}
+	if err := budget.checkpointLocked(ctx); err != nil {
+		budget.cancel(err)
+		return nil, err
+	}
+	return context.WithValue(ctx, persistenceKey{}, p), nil
+}
+
+func (b *Budget) checkpointLocked(ctx context.Context) error {
+	if b.persist == nil {
+		return nil
+	}
+	usage := b.usage
+	usage.ElapsedMillis = time.Since(b.started).Milliseconds()
+	if err := b.persist(ctx, usage); err != nil {
+		return fmt.Errorf("%w: save shared budget: %w", agentstate.ErrPersistence, err)
+	}
+	return nil
+}
+
+type completionSession struct {
+	service     session.Service
+	session     session.Session
+	runID       string
+	persistence *persistence
+}
+
+func createCompletionSession(ctx context.Context, request Request, providerBinding string) (*completionSession, error) {
+	p, _ := ctx.Value(persistenceKey{}).(*persistence)
+	var service session.Service = session.InMemoryService()
+	if p != nil {
+		service = &localSessionService{store: p.store}
+	}
+	initial := map[string]any{"mini_orca.request": request.Messages, "mini_orca.schema": request.Schema}
+	created, err := service.Create(ctx, &session.CreateRequest{AppName: "mini-orca", UserID: "local", State: initial})
+	if err != nil {
+		return nil, fmt.Errorf("create completion session: %w", err)
+	}
+	result := &completionSession{service: service, session: created.Session, persistence: p}
+	if p == nil {
+		return result, nil
+	}
+	requestHash, err := fingerprint(struct {
+		Messages []llm.ChatMessage
+		Schema   *llm.JSONSchema
+	}{request.Messages, request.Schema})
+	if err != nil {
+		return nil, err
+	}
+	schemaHash, err := fingerprint(request.Schema)
+	if err != nil {
+		return nil, err
+	}
+	result.runID = rand.Text()
+	now := time.Now().UTC()
+	run := agentstate.Run{ID: result.runID, Session: agentstate.Key{App: "mini-orca", User: "local", ID: created.Session.ID()}, BudgetID: p.budgetID, RequestHash: requestHash, SchemaHash: schemaHash, ProviderBinding: providerBinding, SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}
+	if err := p.store.BeginRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("%w: begin invocation: %w", agentstate.ErrPersistence, err)
+	}
+	return result, nil
+}
+
+func fingerprint(value any) (string, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("fingerprint agent input: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func (s *completionSession) finish(ctx context.Context, runErr error) error {
+	if s.persistence == nil {
+		return nil
+	}
+	status := "completed"
+	if runErr != nil {
+		status = "failed"
+	}
+	if errors.Is(runErr, context.Canceled) {
+		status = "canceled"
+	}
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.persistence.store.FinishRun(cleanup, s.runID, status); err != nil {
+		return fmt.Errorf("%w: finish invocation: %w", agentstate.ErrPersistence, err)
+	}
+	return nil
+}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -181,7 +182,7 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 
 // AnalyzeProject runs import analysis under its own deadline.
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
-	ctx, release, err := s.agentRunContext(ctx, s.runtimes.analyze)
+	ctx, release, err := s.agentRunContextAt(ctx, root, s.runtimes.analyze)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +191,9 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 	defer cancel()
 	runtime := s.runtimes.analyze
 	analysis, err := project.NewAnalyzerWithProvenance(runtime.client, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Analyze(timed, root)
+	if errors.Is(context.Cause(ctx), agentstate.ErrPersistence) {
+		return nil, context.Cause(ctx)
+	}
 	// Analyzer records a model timeout as a failed report while retaining the
 	// deterministic project inventory. That inventory is still safe to activate.
 	return analysis, err
@@ -198,6 +202,9 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 // RestoreProject reopens a previously imported project from local persisted
 // analysis without making a model request.
 func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
+	if _, err := agentstate.Open(root); err != nil {
+		return nil, fmt.Errorf("inspect saved agent journal: %w", err)
+	}
 	runtime := s.runtimes.analyze
 	return project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Restore(root)
 }
@@ -326,7 +333,7 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 }
 
 func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
-	return errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
+	return errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
 		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
 }
 
