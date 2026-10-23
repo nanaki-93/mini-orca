@@ -1672,12 +1672,16 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 		t.Fatalf("expected Enter on failed workflow to open AgentDetailOpen on PageAgents, got page=%s detail=%v", s.Page, s.AgentDetailOpen)
 	}
 	debugFrame := s.Render(120, 44)
+	if !strings.Contains(debugFrame, "parser_test.go:42: expected nil error, got EOF") {
+		t.Fatalf("verification diagnostics missing: %s", debugFrame)
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowUp"})
+	debugFrame = s.Render(120, 44)
 	for _, want := range []string{
 		"TASK · STAGES",
 		"qwen2.5-coder",
 		"Stage reason:",
 		"go test failed with exit code 1",
-		"parser_test.go:42: expected nil error, got EOF",
 	} {
 		if !strings.Contains(debugFrame, want) {
 			t.Fatalf("expected debug inspector frame to contain %q:\n%s", want, debugFrame)
@@ -2754,7 +2758,7 @@ func TestRejectAgentFixInHumanStageDeletesWorktreeAndReopensIssue(t *testing.T) 
 		t.Fatalf("expected Agent Studio mission control to show '[x] Reject', got:\n%s", view)
 	}
 	s.AgentDetailOpen = true
-	s.AgentStage = 4
+	s.AgentStageID = "human_review"
 	detailView := s.Render(120, 40)
 	if !strings.Contains(detailView, "[x]") || !strings.Contains(detailView, "Reject Fix") {
 		t.Fatalf("expected Agent Detail Stage 4 banner to show '[x] Reject Fix', got:\n%s", detailView)

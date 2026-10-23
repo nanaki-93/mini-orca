@@ -305,14 +305,14 @@ func ComputeIssueSummary(issues []IssueRow, features *client.FeatureReport) Issu
 	return summary
 }
 
-// AgentItem describes an active or completed 4-stage agent session in Agent Studio.
+// AgentItem describes a guarded task and its next recorded stage.
 type AgentItem struct {
 	ID             string
 	Title          string
 	Branch         string
 	Path           string
 	Stage          string
-	StageNumber    int
+	StageID        string
 	Status         string
 	ScopeBadge     string
 	AddedLines     int
@@ -453,7 +453,8 @@ func shouldAppendPrimaryChange(change *client.ChangeSession, count int, seenIDs 
 func buildAgentItemFromSession(change *client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) AgentItem {
 	added, removed, badge := ClassifyDiffScope(change.Changes)
 	passed, total := CountPassedChecks(change.Checks)
-	stageNum, stageName := classifyAgentStage(change, passed, total)
+	stages := WorkflowStages(change, nil)
+	stage := stages[ActiveStage(stages)]
 	branch := resolveSessionBranch(change, gitWS)
 	undo := receipt != nil && receipt.UndoAvailable
 	title := strings.TrimSpace(change.Title)
@@ -465,8 +466,8 @@ func buildAgentItemFromSession(change *client.ChangeSession, receipt *client.Cha
 		Title:          title,
 		Branch:         branch,
 		Path:           firstChangedPath(change),
-		Stage:          stageName,
-		StageNumber:    stageNum,
+		Stage:          StageSummary(stages),
+		StageID:        stage.ID,
 		Status:         effectiveAgentSessionStatus(change),
 		ScopeBadge:     badge,
 		AddedLines:     added,
@@ -533,65 +534,6 @@ func CountPassedChecks(checks []client.Check) (int, int) {
 		}
 	}
 	return passed, total
-}
-
-func classifyAgentStage(change *client.ChangeSession, passed, total int) (int, string) {
-	if change.State == "applied" {
-		return 4, "Applied"
-	}
-	if change.Workflow != nil {
-		switch change.Workflow.Status {
-		case "awaiting_human_review":
-			return 4, "Human Review"
-		case "changes_requested":
-			return 3, "Critic Review"
-		case "running", "queued", "failed":
-			return activeWorkflowStage(change.Workflow.Stages)
-		}
-	}
-	if total > 0 && passed == total {
-		if change.Workflow != nil && change.Workflow.Review != nil {
-			return 4, "Human Review"
-		}
-		return 3, "Critic Review"
-	}
-	if total > 0 {
-		return 2, "Verify & Test"
-	}
-	return 1, "Architect & Code"
-}
-
-func activeWorkflowStage(stages []client.ChangeWorkflowStage) (int, string) {
-	for idx, st := range stages {
-		if st.Status == "running" || st.Status == "failed" {
-			return min(4, idx+1), CanonicalStageLabel(idx, st.Name)
-		}
-	}
-	for idx, st := range stages {
-		if st.Status == "pending" || st.Status == "queued" {
-			return min(4, idx+1), CanonicalStageLabel(idx, st.Name)
-		}
-	}
-	return 1, "Architect & Code"
-}
-
-// CanonicalStageLabel maps daemon stage indices and names (create, test, review, human_review) to display labels.
-func CanonicalStageLabel(idx int, rawName string) string {
-	switch strings.ToLower(strings.TrimSpace(rawName)) {
-	case "create", "architect & code", "architect":
-		return "Architect & Code"
-	case "test", "verify & test", "verify":
-		return "Verify & Test"
-	case "review", "critic review", "critic":
-		return "Critic Review"
-	case "human_review", "human review":
-		return "Human Review"
-	}
-	labels := []string{"Architect & Code", "Verify & Test", "Critic Review", "Human Review"}
-	if idx >= 0 && idx < len(labels) {
-		return labels[idx]
-	}
-	return client.FirstNonEmpty(rawName, "Architect & Code")
 }
 
 func firstChangedPath(change *client.ChangeSession) string {

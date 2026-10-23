@@ -259,7 +259,8 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 	if s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
 		s.AgentStage = 0
-		s.CmdOutput = "Returned to Agents in Progress Dashboard"
+		s.AgentStageID = ""
+		s.CmdOutput = "Returned to tasks."
 		return true
 	}
 	if s.Page == PageEditor && (!s.BrowseFiles && (s.File != nil || s.isViewingDiff())) {
@@ -708,23 +709,21 @@ func (s *State) toggleAgentDebugInspector() {
 	s.syncSelectedAgentSession()
 	s.AgentDetailOpen = !s.AgentDetailOpen
 	if s.AgentDetailOpen {
-		s.AgentStage = s.activeAgentStageNumber()
-		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([i/Esc] to return)"
-		if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
-			s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
-		}
+		s.selectActiveAgentStage()
+		s.CmdOutput = "Task stages opened. Use ↑/↓ to select; Esc returns to tasks."
+		s.enqueueAgentInspection()
 		return
 	}
 	s.AgentStage = 0
-	s.CmdOutput = "Returned to Agents in Progress Dashboard"
+	s.AgentStageID = ""
+	s.CmdOutput = "Returned to tasks."
 }
 
 func (s *State) moveAgentDetailStageSelection(delta int) {
 	cur := s.effectiveAgentDetailStage()
-	next := min(4, max(1, cur+delta))
-	s.AgentStage = next
+	s.selectAgentStage(cur + delta)
 	s.DetailScroll = 0
-	s.CmdOutput = fmt.Sprintf("Selected Stage %d/4: %s", next, domain.CanonicalStageLabel(next-1, ""))
+	s.CmdOutput = s.agentStageSelectionLabel()
 }
 
 func (s *State) handleEditorKey(key string) bool {

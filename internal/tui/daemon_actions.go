@@ -1817,6 +1817,7 @@ func (s *State) dispatchLoadChange(ctx context.Context, cl *Client, reqID, sessi
 		chg.WorktreePath = client.FirstNonEmpty(chg.WorktreePath, wtPath)
 		s.Change = &chg
 		s.upsertActiveChange(&chg)
+		s.refreshAgentProgress(ctx, cl)
 	}
 	return nil
 }

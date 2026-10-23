@@ -720,6 +720,8 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 			Stages: []ChangeWorkflowStage{
 				{Name: "create", Status: "completed", Model: &Model{Model: "qwen2.5-coder:14b"}},
 				{Name: "test", Status: "failed", Model: &Model{Model: "qwen2.5-coder:7b", Timeout: "15m0s"}},
+				{Name: "review", Status: "pending"},
+				{Name: "human_review", Status: "blocked"},
 			},
 			Review: &ChangeWorkflowReview{
 				Verdict:  "changes_requested",
@@ -740,10 +742,8 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 	dbgFrame := s.Render(120, 44)
 	for _, token := range []string{
 		"TASK · STAGES",
-		"Selected: 2/4",
-		"qwen2.5-coder:7b",
-		"15m0s for the model and retries",
-		"VERIFICATION CHECKS & DIAGNOSTIC OUTPUT",
+		"Selected: 3/5",
+		"VERIFICATION CHECKS",
 		"nonce_uniqueness",
 		"assertion `left != right` failed",
 	} {
@@ -751,39 +751,49 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 			t.Fatalf("expected Agent Debug Inspector (Stage 2 selected) to contain %q:\n%s", token, dbgFrame)
 		}
 	}
-	if strings.Contains(dbgFrame, "STAGE 3 · CRITIC REVIEW VERDICT") {
+	if strings.Contains(dbgFrame, "MODEL REVIEW") {
 		t.Fatalf("expected Stage 3 detail to be hidden while Stage 2 is selected:\n%s", dbgFrame)
 	}
 
-	// Moving down selects Stage 3 in 4-Stage Workflow and updates the section below to Stage 3 detail only
+	// The combined legacy testing summary retains its model budget separately.
+	s.HandleKey(KeyEvent{Key: "ArrowUp"})
+	for _, token := range []string{"qwen2.5-coder:7b", "15m0s for the model and retries", "Combined testing summary"} {
+		if frame := s.Render(120, 44); !strings.Contains(frame, token) {
+			t.Fatalf("missing testing metadata %q: %s", token, frame)
+		}
+	}
+	s.HandleKey(KeyEvent{Key: "ArrowDown"})
+	// Moving down from verification selects review without mixing diagnostic panels.
 	s.HandleKey(KeyEvent{Key: "ArrowDown"})
 	stage3Frame := s.Render(120, 44)
 	for _, token := range []string{
-		"STAGE 3 · CRITIC REVIEW VERDICT",
+		"MODEL REVIEW",
 		"src/crypto.rs:42 reuses static slice",
 	} {
 		if !strings.Contains(stage3Frame, token) {
 			t.Fatalf("expected Agent Debug Inspector (Stage 3 selected) to contain %q:\n%s", token, stage3Frame)
 		}
 	}
-	if strings.Contains(stage3Frame, "VERIFICATION CHECKS & DIAGNOSTIC OUTPUT") {
+	if strings.Contains(stage3Frame, "VERIFICATION CHECKS") {
 		t.Fatalf("expected Stage 2 detail to be hidden while Stage 3 is selected:\n%s", stage3Frame)
 	}
 
-	// Moving up twice selects Stage 1 and updates the section below to Stage 1 detail only
+	// Moving up through verification and testing reaches the proposal.
+	s.HandleKey(KeyEvent{Key: "ArrowUp"})
 	s.HandleKey(KeyEvent{Key: "ArrowUp"})
 	s.HandleKey(KeyEvent{Key: "ArrowUp"})
 	stage1Frame := s.Render(120, 44)
-	if !strings.Contains(stage1Frame, "STAGE 1 · ARCHITECT & CODE") || strings.Contains(stage1Frame, "STAGE 3 · CRITIC REVIEW VERDICT") {
+	if !strings.Contains(stage1Frame, "PROPOSAL") || strings.Contains(stage1Frame, "MODEL REVIEW") {
 		t.Fatalf("expected Stage 1 detail only when Stage 1 is selected:\n%s", stage1Frame)
 	}
 
-	// Moving down to Stage 4 updates the section below to Stage 4 detail only
+	// Human review is the fifth recorded stage, after verification and review.
+	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: "j"})
 	s.HandleKey(KeyEvent{Key: "j"})
 	stage4Frame := s.Render(120, 44)
-	if !strings.Contains(stage4Frame, "STAGE 4 · HUMAN REVIEW & APPLY GATE") || strings.Contains(stage4Frame, "STAGE 1 · ARCHITECT & CODE") {
+	if !strings.Contains(stage4Frame, "HUMAN REVIEW & APPLY") || strings.Contains(stage4Frame, "MODEL REVIEW") {
 		t.Fatalf("expected Stage 4 detail only when Stage 4 is selected:\n%s", stage4Frame)
 	}
 
@@ -931,6 +941,7 @@ func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
 	}
 	s.Navigate(PageAgents)
 	s.AgentDetailOpen = true
+	s.AgentStageID = "verify"
 	debugFrame := s.Render(120, 44)
 	if !strings.Contains(debugFrame, "TestFullScreenVerticalSpaceUtilization") || !strings.Contains(debugFrame, "command visibility") {
 		t.Fatalf("expected full check command and output to wrap without truncation in debug view:\n%s", debugFrame)
@@ -1017,7 +1028,7 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 			if strings.Contains(l, "STAGE") && strings.Contains(l, "TASK") {
 				hdrLine = l
 			}
-			if strings.Contains(l, "Fix discarded clipboard copy") && strings.Contains(l, "AI Review") {
+			if strings.Contains(l, "Fix discarded clipboard copy") && strings.Contains(l, "Human review") {
 				rowLine = l
 			}
 		}
@@ -1025,7 +1036,7 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 			t.Fatalf("expected table header and row in renderAgentsPage at width %d, got hdr=%q row=%q", width, hdrLine, rowLine)
 		}
 		pairs := [][2]string{
-			{"STAGE", "AI Review"},
+			{"STAGE", "Human review"},
 			{"STATUS", "CHECKED"},
 			{"TASK", "Fix discarded clipboard copy"},
 		}
@@ -1042,12 +1053,6 @@ func TestAgentStudioTableColumnAlignment(t *testing.T) {
 		}
 	}
 
-	wantLabels := map[int]string{1: "Code", 2: "Test", 3: "AI Review", 4: "Hu review"}
-	for num, want := range wantLabels {
-		if got := pipelineStageShortLabel(num); got != want {
-			t.Fatalf("pipelineStageShortLabel(%d) = %q, want %q", num, got, want)
-		}
-	}
 	if got := pipelineAgentStatusLabel("running"); got != "RUNNING" {
 		t.Fatalf("pipelineAgentStatusLabel(running) = %q, want RUNNING", got)
 	}
@@ -1062,8 +1067,8 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 	s.Project = &Project{Name: "mini-orca", Path: "/workspace/mini-orca", Type: "go", FileCount: 64}
 	s.Navigate(PageAgents)
 	emptyAgentsFrame := s.Render(132, 38)
-	if !strings.Contains(emptyAgentsFrame, "4-STAGE AGENT PIPELINE ARCHITECTURE") || !strings.Contains(emptyAgentsFrame, "Fleet:") {
-		t.Fatalf("expected empty Agents page to render pipeline architecture box and fleet telemetry:\n%s", emptyAgentsFrame)
+	if !strings.Contains(emptyAgentsFrame, "No active tasks") || !strings.Contains(emptyAgentsFrame, "[n] New task") || strings.Contains(emptyAgentsFrame, "4-STAGE") {
+		t.Fatalf("expected empty Tasks page to show an actionable empty state:\n%s", emptyAgentsFrame)
 	}
 
 	s.Change = &ChangeSession{
@@ -1093,7 +1098,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageSummary)
 	dashFrame := s.Render(132, 38)
-	for _, token := range []string{"DASHBOARD · AGENT ORCHESTRATION", "ORCHESTRATION WORKSTREAMS", "AGENT FLEET TELEMETRY", "4-STAGE AGENT PIPELINE", "1 Agent"} {
+	for _, token := range []string{"PROJECT OVERVIEW", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "1 task"} {
 		if !strings.Contains(dashFrame, token) {
 			t.Fatalf("expected dashboard to contain %q:\n%s", token, dashFrame)
 		}
@@ -1101,7 +1106,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageAgents)
 	agentsFrame := s.Render(132, 38)
-	for _, token := range []string{"TASKS · AGENT ORCHESTRATION STUDIO", "SELECTED AGENT MISSION", "internal/app/service.go"} {
+	for _, token := range []string{"TASKS", "SELECTED TASK", "internal/app/service.go"} {
 		if !strings.Contains(agentsFrame, token) {
 			t.Fatalf("expected populated Agents page to contain %q:\n%s", token, agentsFrame)
 		}

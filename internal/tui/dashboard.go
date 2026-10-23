@@ -24,7 +24,7 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 		return s.renderWelcomePage(th, width)
 	}
 	summary := domain.ComputeIssueSummary(s.CollectAllIssues(), s.Features)
-	lines := renderPageHeader(th, "DASHBOARD · AGENT ORCHESTRATION", "↑/↓ Select · Enter Open · n New task · r Analyze")
+	lines := renderPageHeader(th, "DASHBOARD · PROJECT OVERVIEW", "↑/↓ Select · Enter Open · n New task · r Analyze")
 	if s.viewportBodyRows >= 16 {
 		if s.Project != nil {
 			meta := s.Project.Path
@@ -36,7 +36,7 @@ func (s *State) renderSummaryPage(th ansiTheme, width int) []string {
 		cards := [][2]string{
 			{"Open issues", fmt.Sprintf("%s%d%s %s(%d active)%s", th.amber, summary.TotalOpen, th.reset, th.muted, summary.InProgress, th.reset)},
 			{"Resolved", fmt.Sprintf("%s%d%s %sverified%s", th.green, summary.Done, th.reset, th.muted, th.reset)},
-			{"Tasks", fmt.Sprintf("%s%d%s %sagents%s", th.purple, len(s.AgentItems()), th.reset, th.muted, th.reset)},
+			{"Tasks", fmt.Sprintf("%s%d%s %sactive%s", th.purple, len(s.AgentItems()), th.reset, th.muted, th.reset)},
 			{"Features", fmt.Sprintf("%s%d%s %sideas%s", th.cyan, summary.Features, th.reset, th.muted, th.reset)},
 		}
 		lines = append(lines, "")
@@ -68,7 +68,7 @@ func (s *State) dashboardActivities(th ansiTheme, summary domain.IssueSummary) [
 	}
 	activity := []dashboardActivity{
 		{"Issues", fmt.Sprintf("%d open · %d in progress", summary.TotalOpen, summary.InProgress), "Inspect evidence, select batches and plan fixes.", th.amber},
-		{"Tasks", taskSummary, "Orchestrate 4-stage agent plans and reviews.", th.purple},
+		{"Tasks", taskSummary, "Inspect progress, evidence and pending reviews.", th.purple},
 		{"Analysis", "Not run yet", "Semantic, security and performance discovery.", th.cyan},
 		{"Checks", "Not run yet", "Run sandboxed verification checks and logs.", th.green},
 	}
@@ -103,7 +103,7 @@ func (s *State) renderDashboardActivities(th ansiTheme, summary domain.IssueSumm
 func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary, width int) []string {
 	rightWidth := max(30, (width-2)/3)
 	leftWidth := width - rightWidth - 5
-	left := []string{"  " + th.bold + th.purple + "◈ ORCHESTRATION WORKSTREAMS" + th.reset, ""}
+	left := []string{"  " + th.bold + th.purple + "ACTIVITY" + th.reset, ""}
 	left = append(left, s.renderDashboardActivities(th, summary, leftWidth, true)...)
 	if s.viewportBodyRows >= 26 {
 		left = append(left, s.renderDashboardPipelineSection(th, leftWidth)...)
@@ -126,20 +126,13 @@ func (s *State) renderDashboardColumns(th ansiTheme, summary domain.IssueSummary
 }
 
 func (s *State) renderDashboardPipelineSection(th ansiTheme, width int) []string {
-	stage := 0
-	if items := s.AgentItems(); len(items) > 0 {
-		stage = max(1, items[0].StageNumber)
-	}
-	out := []string{
-		"  " + th.bold + th.cyan + "◈ 4-STAGE AGENT PIPELINE" + th.reset,
-		"  " + theme.TruncateVisible(renderPipelineStepper(th, stage, s.Change), max(20, width-4)),
-	}
+	out := []string{"  " + th.bold + th.cyan + "CURRENT TASK" + th.reset}
 	if items := s.AgentItems(); len(items) > 0 {
 		top := items[0]
-		meta := fmt.Sprintf("  %s %s · %s", th.statusBadge(top.Status), th.bold+th.fg+theme.TruncatePlain(top.Title, max(12, width-28))+th.reset, th.purple+top.Branch+th.reset)
+		meta := fmt.Sprintf("  %s %s · %s", th.statusBadge(top.Status), th.bold+th.fg+theme.TruncatePlain(top.Title, max(12, width-28))+th.reset, th.purple+top.Stage+th.reset)
 		out = append(out, theme.TruncateVisible(meta, max(20, width-2)))
 	} else {
-		out = append(out, "  "+th.muted+"Idle · [n] Plan new agent mission · [Enter] Open workstream"+th.reset)
+		out = append(out, "  "+th.muted+"No active tasks · [n] Create a plan"+th.reset)
 	}
 	return out
 }
@@ -159,8 +152,8 @@ func (s *State) renderDashboardRightColumn(th ansiTheme, summary domain.IssueSum
 		trustBadge = th.statusBadge("TRUSTED")
 	}
 	right := []string{
-		"  " + th.bold + th.cyan + "◈ AGENT FLEET TELEMETRY" + th.reset,
-		fmt.Sprintf("  %sPipeline:%s  %s", th.muted, th.reset, fleetLine),
+		"  " + th.bold + th.cyan + "WORKSPACE" + th.reset,
+		fmt.Sprintf("  %sTasks:%s     %s", th.muted, th.reset, fleetLine),
 		fmt.Sprintf("  %sWorktrees:%s %s%d%s total · %s%d%s to merge", th.muted, th.reset, th.bold+th.fg, wtTotal, th.reset, th.purple, toMerge, th.reset),
 		fmt.Sprintf("  %sFindings:%s  %s%d%s bug · %s%d%s sec · %s%d%s perf", th.muted, th.reset, th.amber, summary.Bugs, th.reset, th.red, summary.Security, th.reset, th.cyan, summary.Performance, th.reset),
 		fmt.Sprintf("  %sSandbox:%s   %s", th.muted, th.reset, trustBadge),

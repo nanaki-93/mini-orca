@@ -147,7 +147,7 @@ func TestAgentItemsAndArchitectureDiagram(t *testing.T) {
 		Checks: []client.Check{{Name: "test", State: "passed"}},
 	}
 	items := CollectAllAgentItems(change, nil, &client.ChangeMutation{UndoAvailable: true}, nil)
-	if len(items) != 1 || items[0].StageNumber != 3 || !items[0].UndoAvailable {
+	if len(items) != 1 || items[0].StageID != "human_review" || !items[0].UndoAvailable {
 		t.Fatalf("unexpected agent item: %+v", items)
 	}
 

@@ -54,7 +54,7 @@ func (s *State) activateIssueRow() {
 	if issue.AgentPath != "" {
 		s.Navigate(PageAgents)
 		s.AgentDetailOpen = true
-		s.AgentStage = s.activeAgentStageNumber()
+		s.selectActiveAgentStage()
 		s.CmdOutput = fmt.Sprintf("Opened agent for %s", issue.Name)
 		return
 	}
@@ -112,10 +112,8 @@ func (s *State) activateAgentRow() {
 		return
 	}
 	s.AgentDetailOpen = true
-	s.AgentStage = s.activeAgentStageNumber()
-	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
-		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
-	}
+	s.selectActiveAgentStage()
+	s.enqueueAgentInspection()
 	s.CmdOutput = fmt.Sprintf("Inspecting agent %s (%s)", items[idx].Title, items[idx].Branch)
 }
 
@@ -278,8 +276,9 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 	case "debug", "logs":
 		s.Navigate(PageAgents)
 		s.AgentDetailOpen = true
-		s.AgentStage = s.activeAgentStageNumber()
-		s.CmdOutput = "Opened Agent Workflow Debug & Check Inspector ([i/Esc] to return)."
+		s.selectActiveAgentStage()
+		s.enqueueAgentInspection()
+		s.CmdOutput = "Task stages opened. Use ↑/↓ to select; Esc returns to tasks."
 		return true
 	case "scope", "files":
 		s.Navigate(PageAnalysisFiles)

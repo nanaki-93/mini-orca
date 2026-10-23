@@ -82,6 +82,15 @@ test files before verification; missing check results must not imply tests have
 run. Busy stages do not advertise a duplicate retry. Timeout recovery identifies
 the relevant model or check limit, and interrupted checks do not trigger code repair.
 
+Task stages follow recorded node identities, including separate generation and
+verification and parallel specialist reviews. Selection and scroll remain stable
+as progress arrives. Unknown nodes remain inspectable, and interrupted or missing
+evidence never becomes success. Native execution completion does not approve a
+proposal. Older combined testing summaries are labeled Testing; unavailable native
+history falls back to those summaries with an explicit availability message.
+Inspection reads bounded, source-free progress for the exact project revision,
+checkout and workflow. Private model text requires a separate explicit disclosure.
+
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
 Mark changed files individually, invalidate progress when the proposal changes,

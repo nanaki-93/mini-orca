@@ -13,29 +13,25 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if s.AgentDetailOpen && s.Change != nil {
 		return s.renderAgentDebugPage(th, width)
 	}
-	lines := renderPageHeader(th, "TASKS · AGENT ORCHESTRATION STUDIO", "Plan → Generate → Verify → Critic → Review → Integrate")
+	lines := renderPageHeader(th, "TASKS", "Plans, checked proposals and human review")
 	lines = append(lines, s.renderAgentFleetStrip(th))
 	items := s.AgentItems()
 	if len(items) == 0 {
 		lines = append(lines, "", "  No active tasks.", "  [n] New task · [b] Issues · :features for ideas")
-		if s.viewportBodyRows <= 0 || s.viewportBodyRows >= 18 {
-			lines = append(lines, "")
-			lines = append(lines, s.renderEmptyAgentPipelineBox(th, adaptivePanelWidth(width))...)
-		}
 		return lines
 	}
 	selected := s.ClampedIdx()
-	titleW := max(12, width-29)
+	titleW := max(12, width-33)
 	lines = append(lines, "")
-	lines = append(lines, th.renderTableHeader(fmt.Sprintf("  %-12s %-10s %s", "STATUS", "STAGE", "TASK"), width)...)
+	lines = append(lines, th.renderTableHeader(fmt.Sprintf("  %-12s %-14s %s", "STATUS", "STAGE", "TASK"), width)...)
 	start, end := windowBounds(len(items), selected, s.adaptiveWindowRows(13, 10))
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
 		stColor := agentStatusTextStyle(th, item.Status)
-		lines = append(lines, fmt.Sprintf("  %s%s%-12s%s %s%-10s%s %s%s%s",
+		lines = append(lines, fmt.Sprintf("  %s%s%-12s%s %s%-14s%s %s%s%s",
 			th.renderCursorPrefix(idx == selected),
 			stColor, theme.TruncatePlain(pipelineAgentStatusLabel(item.Status), 12), th.reset,
-			th.cyan, pipelineStageShortLabel(item.StageNumber), th.reset,
+			th.cyan, theme.TruncatePlain(item.Stage, 14), th.reset,
 			rowTitleStyle(th, idx == selected), theme.TruncatePlain(item.Title, titleW), th.reset))
 	}
 	lines = appendWindowFooter(th, lines, start, end, len(items))
@@ -48,7 +44,7 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 
 func (s *State) renderAgentFleetStrip(th ansiTheme) string {
 	total, running, review, failed, toMerge := s.agentFleetBreakdown()
-	return fmt.Sprintf("  %s◈ Fleet:%s %s%d active%s · %s%d running%s · %s%d review%s · %s%d attention%s · %s%d to merge%s",
+	return fmt.Sprintf("  %sTasks:%s %s%d active%s · %s%d running%s · %s%d review%s · %s%d attention%s · %s%d to merge%s",
 		th.bold+th.purple, th.reset,
 		th.bold+th.fg, total, th.reset,
 		th.amber, running, th.reset,
@@ -57,22 +53,11 @@ func (s *State) renderAgentFleetStrip(th ansiTheme) string {
 		th.cyan, toMerge, th.reset)
 }
 
-func (s *State) renderEmptyAgentPipelineBox(th ansiTheme, panelW int) []string {
-	body := []string{
-		renderPipelineStepper(th, 0, nil),
-		fmt.Sprintf("%s01 Architect:%s Scoped multi-file code proposal in an isolated Git worktree.", th.cyan, th.reset),
-		fmt.Sprintf("%s02 Verify:%s    Synthesize regression tests and run sandboxed verification checks.", th.purple, th.reset),
-		fmt.Sprintf("%s03 Critic:%s    Automated semantic, security and boundary review gate.", th.amber, th.reset),
-		fmt.Sprintf("%s04 Review:%s    Human diff inspection, explicit Apply & guarded worktree merge.", th.green, th.reset),
-	}
-	return th.renderPanelBox("4-STAGE AGENT PIPELINE ARCHITECTURE", "ORCHESTRATOR READY", panelW, body)
-}
-
 func (s *State) renderSelectedAgentOverviewBox(th ansiTheme, panelW int, item AgentItem) []string {
 	scopeBadge := client.FirstNonEmpty(item.ScopeBadge, "PENDING")
 	targetPath := client.FirstNonEmpty(item.Path, "workspace")
 	body := []string{
-		renderPipelineStepper(th, max(1, item.StageNumber), s.Change),
+		"Stage: " + item.Stage,
 		fmt.Sprintf("%sBranch:%s %s⎇ %s%s · %sTarget:%s %s%s%s · %sScope:%s %s (%s+%d%s/%s-%d%s) · %sChecks:%s %s%d/%d%s",
 			th.muted, th.reset, th.purple, client.FirstNonEmpty(item.Branch, "main"), th.reset,
 			th.muted, th.reset, th.cyan, targetPath, th.reset,
@@ -80,7 +65,7 @@ func (s *State) renderSelectedAgentOverviewBox(th ansiTheme, panelW int, item Ag
 			th.muted, th.reset, th.bold+th.fg, item.ChecksPassed, item.ChecksTotal, th.reset),
 		strings.TrimLeft(s.renderAgentNextStepLine(th, item), " "),
 	}
-	return th.renderPanelBox("SELECTED AGENT MISSION · STAGE "+fmt.Sprintf("%d/4", max(1, item.StageNumber)), strings.ToUpper(item.Status), panelW, body)
+	return th.renderPanelBox("SELECTED TASK", strings.ToUpper(item.Status), panelW, body)
 }
 
 func agentStatusTextStyle(th ansiTheme, rawStatus string) string {
@@ -93,21 +78,6 @@ func agentStatusTextStyle(th ansiTheme, rawStatus string) string {
 		return th.bold + th.amber
 	default:
 		return th.fg
-	}
-}
-
-func pipelineStageShortLabel(stageNum int) string {
-	switch stageNum {
-	case 1:
-		return "Code"
-	case 2:
-		return "Test"
-	case 3:
-		return "AI Review"
-	case 4:
-		return "Hu review"
-	default:
-		return "Code"
 	}
 }
 
@@ -138,35 +108,6 @@ func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string 
 	return out
 }
 
-func (s *State) activeAgentStageNumber() int {
-	items := s.AgentItems()
-	if len(items) > 0 {
-		idx := s.ClampedIdx()
-		if idx >= 0 && idx < len(items) && items[idx].StageNumber >= 1 && items[idx].StageNumber <= 4 {
-			if items[idx].StageNumber == 1 && s.Change != nil && len(s.Change.Checks) > 0 && !isStageOneFailedOrInterrupted(s.Change.Workflow) {
-				return 2
-			}
-			return items[idx].StageNumber
-		}
-	}
-	return 1
-}
-
-func isStageOneFailedOrInterrupted(wf *ChangeWorkflow) bool {
-	if wf == nil || len(wf.Stages) == 0 {
-		return false
-	}
-	st := wf.Stages[0].Status
-	return st == "failed" || st == "interrupted"
-}
-
-func (s *State) effectiveAgentDetailStage() int {
-	if s.AgentStage >= 1 && s.AgentStage <= 4 {
-		return s.AgentStage
-	}
-	return s.activeAgentStageNumber()
-}
-
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
@@ -175,38 +116,67 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 		actions = "[↑/↓] Stage · [d] Diff · [x] Cancel · [Esc] Back"
 	}
 	lines := renderPageHeader(th, "TASK · STAGES", actions)
-	activeStage := s.activeAgentStageNumber()
 	selectedStage := s.effectiveAgentDetailStage()
-	for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
-		lines = append(lines, "  "+row)
+	stages := s.currentAgentStages()
+	if s.viewportBodyRows > 0 && s.viewportBodyRows < 14 {
+		lines = []string{"  " + th.bold + "TASK · STAGES" + th.reset, "  " + theme.TruncatePlain(chg.Title, max(10, width-4))}
+	} else {
+		for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
+			lines = append(lines, "  "+row)
+		}
+		lines = append(lines, "  "+workflowTimingSummary(chg), "")
 	}
-	lines = append(lines, renderPipelineStepper(th, activeStage, chg))
-	lines = append(lines, "  "+workflowTimingSummary(chg), "")
-	lines = append(lines, fmt.Sprintf("  Selected: %d/4 · %s", selectedStage, resolvePipelineStageStatus(activeStage, chg, selectedStage)))
-	lines = append(lines, selectedStageMetadata(th, chg, selectedStage, width)...)
-	lines = append(lines, s.renderSelectedAgentStageDetailPanel(th, panelW, chg, activeStage, selectedStage)...)
+	lines = append(lines, s.renderRecordedStages(th, width, stages, selectedStage)...)
+	lines = append(lines, "", "  "+s.agentStageSelectionLabel())
+	if len(stages) == 0 {
+		return lines
+	}
+	stage := stages[selectedStage-1]
+	lines = append(lines, selectedStageMetadata(th, chg, stage, width)...)
+	lines = append(lines, s.renderSelectedAgentStageDetailPanel(th, panelW, chg, stage)...)
+	if s.AgentProgress != nil && s.AgentProgress.Status != "current" {
+		message := "Native progress unavailable; showing recorded workflow summaries."
+		if s.AgentProgress.Status == "not_recorded" {
+			message = "No native run in recent history; showing recorded workflow summaries."
+		}
+		lines = appendWrappedText(append(lines, ""), message, width)
+	}
 	return lines
 }
 
-func selectedStageMetadata(th ansiTheme, chg *ChangeSession, stage int, width int) []string {
+func (s *State) renderRecordedStages(th ansiTheme, width int, stages []domain.AgentStage, selected int) []string {
+	rows := min(5, max(1, s.viewportBodyRows-12))
+	if s.viewportBodyRows == 0 {
+		rows = 5
+	}
+	start, end := windowBounds(len(stages), selected-1, rows)
+	var lines []string
+	for i := start; i < end; i++ {
+		stage := stages[i]
+		label := stage.Label
+		if stage.Parallel {
+			label = "↳ " + label + " · parallel"
+		}
+		lines = append(lines, fmt.Sprintf("  %s%s%-12s%s %s", th.renderCursorPrefix(i == selected-1), agentStatusTextStyle(th, string(stage.State)), strings.ToUpper(string(stage.State)), th.reset, theme.TruncatePlain(label, max(12, width-19))))
+	}
+	return appendWindowFooter(th, lines, start, end, len(stages))
+}
+
+func selectedStageMetadata(th ansiTheme, chg *ChangeSession, stage domain.AgentStage, width int) []string {
 	if chg.Workflow == nil {
 		return nil
 	}
 	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
-	var rows []string
-	if stage <= len(chg.Workflow.Stages) {
-		entry := chg.Workflow.Stages[stage-1]
-		model := "Not recorded"
-		if entry.Model != nil {
-			model = entry.Model.Model
-		}
-		rows = renderDiagnosticRow(th, th.cyan, "Model:", th.fg, model+" · elapsed "+workflowElapsed(entry.StartedAt, entry.FinishedAt), contentW)
-		if entry.Model != nil && entry.Model.Timeout != "" {
-			rows = append(rows, renderDiagnosticRow(th, th.cyan, "Budget:", th.fg, entry.Model.Timeout+" for the model and retries; check deadlines are separate.", contentW)...)
-		}
-		if entry.Reason != "" {
-			rows = append(rows, renderDiagnosticRow(th, th.amber, "Stage reason:", th.fg, entry.Reason, contentW)...)
-		}
+	model := "Not recorded"
+	if stage.Model != nil {
+		model = stage.Model.Model
+	}
+	rows := renderDiagnosticRow(th, th.cyan, "Model:", th.fg, model+" · elapsed "+workflowElapsed(stage.StartedAt, stage.FinishedAt), contentW)
+	if stage.Model != nil && stage.Model.Timeout != "" {
+		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Budget:", th.fg, stage.Model.Timeout+" for the model and retries; check deadlines are separate.", contentW)...)
+	}
+	if stage.Reason != "" {
+		rows = append(rows, renderDiagnosticRow(th, th.amber, "Stage reason:", th.fg, stage.Reason, contentW)...)
 	}
 	if chg.Workflow.Reason != "" {
 		rows = append(rows, renderDiagnosticRow(th, th.amber, "Workflow:", th.fg, chg.Workflow.Reason, contentW)...)
@@ -217,23 +187,53 @@ func selectedStageMetadata(th ansiTheme, chg *ChangeSession, stage int, width in
 	return rows
 }
 
-func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, chg *ChangeSession, activeStage, selectedStage int) []string {
+func (s *State) renderSelectedAgentStageDetailPanel(th ansiTheme, panelW int, chg *ChangeSession, stage domain.AgentStage) []string {
 	touched := domain.EffectiveSessionChanges(chg)
-	switch selectedStage {
-	case 1:
-		return th.renderPanelBox("STAGE 1 · ARCHITECT & CODE", fmt.Sprintf("%d FILES", len(touched)), panelW, s.renderStage1CodeDetailLines(th, chg))
-	case 2:
-		return th.renderPanelBox("VERIFICATION CHECKS & DIAGNOSTIC OUTPUT", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))
-	case 3:
-		meta := strings.ToUpper(resolvePipelineStageStatus(activeStage, chg, 3))
+	switch stage.ID {
+	case "create":
+		return th.renderPanelBox("PROPOSAL", fmt.Sprintf("%d FILES", len(touched)), panelW, s.renderStage1CodeDetailLines(th, chg))
+	case "generate_tests":
+		return th.renderPanelBox(strings.ToUpper(stage.Label), strings.ToUpper(string(stage.State)), panelW, []string{"Test generation stays within the captured scope. Inspect Verify for check results.", s.testingRecoveryText(stage)})
+	case "verify":
+		return th.renderPanelBox("VERIFICATION CHECKS", fmt.Sprintf("%d CHECKS", len(chg.Checks)), panelW, s.renderAgentCheckDebugLines(th, panelW))
+	case "review":
+		meta := strings.ToUpper(string(stage.State))
 		if chg.Workflow != nil && chg.Workflow.Review != nil && chg.Workflow.Review.Verdict != "" {
 			meta = strings.ToUpper(chg.Workflow.Review.Verdict)
 		}
-		return th.renderPanelBox("STAGE 3 · CRITIC REVIEW VERDICT", meta, panelW, s.renderStage3CriticDetailLines(th, chg, activeStage))
+		return th.renderPanelBox("MODEL REVIEW", meta, panelW, s.renderStage3CriticDetailLines(th, chg, string(stage.State)))
+	case "human_review":
+		return th.renderPanelBox("HUMAN REVIEW & APPLY", strings.ToUpper(string(stage.State)), panelW, s.renderStage4HumanReviewDetailLines(th, chg, string(stage.State)))
 	default:
-		meta := normalizePipelineStageBadge(4, resolvePipelineStageStatus(activeStage, chg, 4), chg)
-		return th.renderPanelBox("STAGE 4 · HUMAN REVIEW & APPLY GATE", meta, panelW, s.renderStage4HumanReviewDetailLines(th, chg, activeStage))
+		return s.renderSpecialistStage(th, panelW, chg, stage)
 	}
+}
+
+func (s *State) testingRecoveryText(stage domain.AgentStage) string {
+	if stage.State == domain.StageRunning {
+		return "Testing is in progress; no completed verification is implied."
+	}
+	if !s.hasRunningWorkflow() && stage.State == domain.StageFailed {
+		return "Use :retry test to reuse the saved proposal."
+	}
+	return "Generation and verification have separate recorded outcomes."
+}
+
+func (s *State) renderSpecialistStage(th ansiTheme, width int, chg *ChangeSession, stage domain.AgentStage) []string {
+	lines := []string{"No additional evidence recorded."}
+	if chg.Workflow != nil {
+		for _, report := range chg.Workflow.Specialists {
+			if "review_"+report.ID != stage.ID {
+				continue
+			}
+			lines = []string{"Model advice · " + report.Evidence}
+			if report.Review != nil {
+				lines = append(lines, report.Review.Summary)
+				lines = append(lines, report.Review.Findings...)
+			}
+		}
+	}
+	return th.renderPanelBox(strings.ToUpper(stage.Label), strings.ToUpper(string(stage.State)), width, lines)
 }
 
 func (s *State) renderStage1CodeDetailLines(th ansiTheme, chg *ChangeSession) []string {
@@ -242,7 +242,7 @@ func (s *State) renderStage1CodeDetailLines(th ansiTheme, chg *ChangeSession) []
 		if s.hasRunningWorkflow() {
 			return []string{fmt.Sprintf("%sGenerating code proposal for target files...%s", th.amber, th.reset)}
 		}
-		return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
+		return []string{fmt.Sprintf("%sNo proposal changes recorded. Inspect the workflow reason before retrying.%s", th.amber, th.reset)}
 	}
 	added, removed, badge := domain.ClassifyDiffScope(touched)
 	out := []string{
@@ -260,7 +260,7 @@ func (s *State) renderStage1CodeDetailLines(th ansiTheme, chg *ChangeSession) []
 	return out
 }
 
-func (s *State) renderStage3CriticDetailLines(th ansiTheme, chg *ChangeSession, activeStage int) []string {
+func (s *State) renderStage3CriticDetailLines(th ansiTheme, chg *ChangeSession, status string) []string {
 	if chg != nil && chg.Workflow != nil && chg.Workflow.Review != nil {
 		rev := chg.Workflow.Review
 		revLines := []string{
@@ -271,20 +271,18 @@ func (s *State) renderStage3CriticDetailLines(th ansiTheme, chg *ChangeSession, 
 		}
 		return revLines
 	}
-	stStatus := resolvePipelineStageStatus(activeStage, chg, 3)
 	return []string{
 		fmt.Sprintf("%sStatus:%s %s  %sCritic review verdict not recorded yet.%s",
-			th.muted, th.reset, th.statusBadge(stStatus), th.muted, th.reset),
+			th.muted, th.reset, th.statusBadge(status), th.muted, th.reset),
 	}
 }
 
-func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSession, activeStage int) []string {
-	stStatus := normalizePipelineStageBadge(4, resolvePipelineStageStatus(activeStage, chg, 4), chg)
+func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSession, status string) []string {
 	touched := domain.EffectiveSessionChanges(chg)
 	added, removed, badge := domain.ClassifyDiffScope(touched)
 	return []string{
 		fmt.Sprintf("%sGate:%s    %s   %sScope:%s %s   %sDelta:%s %s+%d%s/%s-%d%s (%d files)",
-			th.muted, th.reset, th.statusBadge(stStatus),
+			th.muted, th.reset, th.statusBadge(status),
 			th.muted, th.reset, th.statusBadge(badge),
 			th.muted, th.reset, th.green, added, th.reset, th.red, removed, th.reset, len(touched)),
 		fmt.Sprintf("%sActions:%s %s[d]%s Inspect Diff · %s[a/c]%s Apply & Commit · %s[x]%s Reject Fix · %s[u]%s Guarded Undo",
@@ -295,10 +293,10 @@ func (s *State) renderStage4HumanReviewDetailLines(th ansiTheme, chg *ChangeSess
 func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	if s.Change == nil || len(s.Change.Checks) == 0 {
 		if s.hasRunningWorkflow() {
-			return []string{fmt.Sprintf("%sStage 2 generates complete test files, then runs verification. No check results recorded yet.%s", th.muted, th.reset)}
+			return []string{fmt.Sprintf("%sNo check results recorded yet. Test generation and verification are separate stages.%s", th.muted, th.reset)}
 		}
 		if s.Change != nil && len(s.Change.Changes) == 0 {
-			return []string{fmt.Sprintf("%sStage 1 (Architect & Code) produced no proposal changes — inspect workflow reason above and press [r] to retry.%s", th.amber, th.reset)}
+			return []string{fmt.Sprintf("%sNo proposal changes recorded. Inspect the workflow reason before retrying.%s", th.amber, th.reset)}
 		}
 		if s.Change != nil && resumableWorkflowStage(s.Change) == "test" {
 			return []string{fmt.Sprintf("%sNo check results recorded. Press [r] to retry Testing using the saved Creation proposal.%s", th.amber, th.reset)}
@@ -323,19 +321,6 @@ func (s *State) renderAgentCheckDebugLines(th ansiTheme, _ int) []string {
 	return out
 }
 
-func normalizePipelineStageBadge(stageNum int, rawStatus string, chg *ChangeSession) string {
-	st := strings.ToLower(strings.TrimSpace(rawStatus))
-	if stageNum == 4 && (st == "waiting" || st == "awaiting_human_review") {
-		if chg != nil && (chg.State == "ready" || chg.State == "checked" || (chg.Workflow != nil && chg.Workflow.Status == "awaiting_human_review")) {
-			return "READY"
-		}
-	}
-	if st == "" {
-		return "PENDING"
-	}
-	return strings.ToUpper(st)
-}
-
 func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	next := "[Enter] Inspect task · [d] Review diff"
 	switch strings.ToLower(item.Status) {
@@ -349,102 +334,6 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 		next = "[d] Review changed files before Apply · [x] Reject"
 	}
 	return "  " + th.cyan + next + th.reset
-}
-
-func renderPipelineStepper(th ansiTheme, activeStage int, chg *ChangeSession) string {
-	stages := []struct {
-		num   int
-		label string
-	}{
-		{1, "1. Architect"},
-		{2, "2. Verify"},
-		{3, "3. Critic"},
-		{4, "4. Review"},
-	}
-	var parts []string
-	for _, st := range stages {
-		stStatus := resolvePipelineStageStatus(activeStage, chg, st.num)
-		parts = append(parts, formatPipelineStepperNode(th, st.label, stStatus, st.num == activeStage))
-	}
-	return strings.Join(parts, th.border+" ──▶ "+th.reset)
-}
-
-func resolvePipelineStageStatus(activeStage int, chg *ChangeSession, stageNum int) string {
-	if activeStage <= 0 {
-		return "idle"
-	}
-	if fromWF := stageStatusFromWorkflow(chg, stageNum); fromWF != "" {
-		return fromWF
-	}
-	return stageStatusFallback(activeStage, chg, stageNum)
-}
-
-func stageStatusFromWorkflow(chg *ChangeSession, stageNum int) string {
-	if chg == nil || chg.Workflow == nil || stageNum-1 >= len(chg.Workflow.Stages) {
-		return ""
-	}
-	raw := strings.ToLower(strings.TrimSpace(chg.Workflow.Stages[stageNum-1].Status))
-	if stageNum == 4 && isChangeReadyForReview(chg, raw) {
-		return "ready"
-	}
-	return raw
-}
-
-func stageStatusFallback(activeStage int, chg *ChangeSession, stageNum int) string {
-	if stageNum < activeStage {
-		return "completed"
-	}
-	if stageNum > activeStage {
-		return "pending"
-	}
-	if isChangeFailedOrRejected(chg) {
-		return "failed"
-	}
-	if stageNum == 4 || isChangeReadyForReview(chg, "") {
-		return "ready"
-	}
-	return "running"
-}
-
-func isChangeReadyForReview(chg *ChangeSession, raw string) bool {
-	if raw == "waiting" || raw == "awaiting_human_review" {
-		return true
-	}
-	if chg == nil {
-		return false
-	}
-	if chg.State == "ready" || chg.State == "checked" {
-		return true
-	}
-	return chg.Workflow != nil && chg.Workflow.Status == "awaiting_human_review"
-}
-
-func isChangeFailedOrRejected(chg *ChangeSession) bool {
-	if chg == nil {
-		return false
-	}
-	if chg.State == "failed" {
-		return true
-	}
-	return chg.Workflow != nil && (chg.Workflow.Status == "failed" || chg.Workflow.Status == "changes_requested")
-}
-
-func formatPipelineStepperNode(th ansiTheme, label, stStatus string, isActive bool) string {
-	switch strings.ToLower(strings.TrimSpace(stStatus)) {
-	case "completed", "passed", "approve", "approved", "applied":
-		if isActive {
-			return fmt.Sprintf("%s %s %s", th.okBg, label, th.reset)
-		}
-		return fmt.Sprintf("%s[%s]%s", th.green, label, th.reset)
-	case "ready", "checked", "awaiting_human_review":
-		return fmt.Sprintf("%s %s %s", th.okBg, label, th.reset)
-	case "failed", "error", "changes_requested", "rejected", "stale", "interrupted":
-		return fmt.Sprintf("%s %s %s", th.critBg, label, th.reset)
-	case "running", "working", "in_progress", "waiting", "canceling":
-		return fmt.Sprintf("%s %s %s", th.warnBg, label, th.reset)
-	default:
-		return fmt.Sprintf("%s[%s]%s", th.muted, label, th.reset)
-	}
 }
 
 func (s *State) renderEditorPage(th ansiTheme, width int) []string {

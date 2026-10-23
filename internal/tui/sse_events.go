@@ -342,12 +342,16 @@ func fetchAnalysisSectionResults(ctx context.Context, cl *Client, id RunIdentity
 
 type workflowPollTarget struct {
 	id             string
+	workflowID     string
+	project        ProjectIdentity
 	worktreePath   string
 	query          string
 	findingTargets []FindingTarget
 }
 
 type pollSnapshot struct {
+	parent       ProjectIdentity
+	progress     *agentProgressRequest
 	idQuery      string
 	revQuery     string
 	workflows    []workflowPollTarget
@@ -358,6 +362,9 @@ type pollSnapshot struct {
 }
 
 type pollResult struct {
+	workflows      []workflowPollTarget
+	parent         ProjectIdentity
+	progress       *agentProgressView
 	changes        []ChangeSession
 	changeOK       []bool
 	prevRun        *AnalysisRun
@@ -390,6 +397,8 @@ func (s *State) capturePollSnapshot() (pollSnapshot, bool) {
 	for _, chg := range running {
 		workflows = append(workflows, workflowPollTarget{
 			id:             chg.ID,
+			workflowID:     chg.Workflow.ID,
+			project:        chg.ProjectIdentity,
 			worktreePath:   chg.WorktreePath,
 			query:          client.FirstNonEmpty(s.changeResourceQuery(chg), idQuery),
 			findingTargets: chg.FindingTargets,
@@ -409,6 +418,8 @@ func (s *State) capturePollSnapshot() (pollSnapshot, bool) {
 		return pollSnapshot{}, false
 	}
 	return pollSnapshot{
+		parent:       s.Project.ProjectIdentity,
+		progress:     s.activeAgentProgressRequest(),
 		idQuery:      idQuery,
 		revQuery:     revQuery,
 		workflows:    workflows,
@@ -421,11 +432,17 @@ func (s *State) capturePollSnapshot() (pollSnapshot, bool) {
 
 func executePollSnapshot(ctx context.Context, cl *Client, snap pollSnapshot) pollResult {
 	res := pollResult{
-		changes:  make([]ChangeSession, len(snap.workflows)),
-		changeOK: make([]bool, len(snap.workflows)),
-		prevRun:  snap.prevRun,
+		workflows: snap.workflows,
+		parent:    snap.parent,
+		changes:   make([]ChangeSession, len(snap.workflows)),
+		changeOK:  make([]bool, len(snap.workflows)),
+		prevRun:   snap.prevRun,
 	}
 	var wg sync.WaitGroup
+	if snap.progress != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); res.progress = readAgentProgress(ctx, cl, *snap.progress) }()
+	}
 	for idx, wf := range snap.workflows {
 		wg.Add(1)
 		go func(i int, target workflowPollTarget) {
@@ -504,8 +521,21 @@ func analysisSectionsChanged(prev, next *AnalysisRun, emptyResults bool) bool {
 }
 
 func (s *State) applyPollResult(res pollResult) {
+	if res.parent.ProjectID != "" && (s.Project == nil || s.Project.ProjectIdentity != res.parent) {
+		return
+	}
+	s.applyPolledChanges(res)
+	s.applyPolledAnalysis(res)
+	if res.hasScan {
+		scan := res.scan
+		s.Scan = &scan
+	}
+	s.applyAgentProgress(res.progress)
+}
+
+func (s *State) applyPolledChanges(res pollResult) {
 	for i, chg := range res.changes {
-		if !res.changeOK[i] {
+		if !res.changeOK[i] || !s.matchesPolledWorkflow(res.workflows, i, chg) {
 			continue
 		}
 		cp := chg
@@ -515,6 +545,9 @@ func (s *State) applyPollResult(res pollResult) {
 		}
 		s.announceWorkflowTransition(&cp)
 	}
+}
+
+func (s *State) applyPolledAnalysis(res pollResult) {
 	if res.hasRun && s.canApplyPolledAnalysisRun(res.prevRun, &res.run) {
 		run := res.run
 		s.Run = &run
@@ -537,10 +570,21 @@ func (s *State) applyPollResult(res pollResult) {
 			}
 		}
 	}
-	if res.hasScan {
-		scan := res.scan
-		s.Scan = &scan
+}
+
+func (s *State) matchesPolledWorkflow(targets []workflowPollTarget, index int, chg ChangeSession) bool {
+	if len(targets) == 0 {
+		return true
 	}
+	if index >= len(targets) {
+		return false
+	}
+	target := targets[index]
+	current := s.findTrackedChangeSession(target.id)
+	if current == nil || current.Workflow == nil || chg.Workflow == nil {
+		return false
+	}
+	return current.Workflow.ID == target.workflowID && chg.Workflow.ID == target.workflowID && chg.ID == target.id && current.ProjectIdentity == target.project && chg.ProjectIdentity == target.project && current.WorktreePath == target.worktreePath && chg.WorktreePath == target.worktreePath
 }
 
 func (s *State) canApplyPolledAnalysisRun(prevRun, next *AnalysisRun) bool {

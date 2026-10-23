@@ -86,7 +86,7 @@ func (s *State) renderBrandBar(th ansiTheme, width int) string {
 		right = th.green + "● Connected" + th.reset
 	}
 	if count := len(s.AgentItems()); count > 0 && width >= 88 {
-		right = fmt.Sprintf("%s⚡ %d Agent(s)%s  %s", th.purple, count, th.reset, right)
+		right = fmt.Sprintf("%s%d task(s)%s  %s", th.purple, count, th.reset, right)
 	}
 	brand := th.accentBg + " ◈ MINI-ORCA " + th.reset
 	nameBudget := max(8, width-theme.VisibleRuneCount(right)-26)
@@ -237,7 +237,7 @@ func (s *State) statusBarActivity() string {
 		return fmt.Sprintf("⚡ %d active task(s)", count)
 	}
 	if s.Project != nil {
-		return "● Orchestrator ready"
+		return "● Ready"
 	}
 	return ""
 }

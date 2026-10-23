@@ -365,7 +365,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 14 — Adapt the TUI to dynamic workflows with restrained layout
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/hub_agents.go`, `internal/tui/workflow_progress.go`, `internal/tui/domain/domain.go`, `internal/tui/domain/remediation.go`, `internal/tui/state.go`, `internal/tui/dashboard.go`, `internal/tui/view.go`, `internal/tui/theme_styles.go`.

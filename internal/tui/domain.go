@@ -31,7 +31,14 @@ func (s *State) EffectiveScopeModel(scope string) Model {
 
 // AgentItems returns all Agent Studio rows across active change sessions and git worktrees.
 func (s *State) AgentItems() []AgentItem {
-	return domain.CollectAllAgentItems(s.Change, s.ActiveChanges, s.ChangeReceipt, s.GitWorkspace)
+	items := domain.CollectAllAgentItems(s.Change, s.ActiveChanges, s.ChangeReceipt, s.GitWorkspace)
+	for i := range items {
+		if s.Change != nil && items[i].ID == s.Change.ID {
+			stages := s.currentAgentStages()
+			items[i].Stage, items[i].StageID = domain.StageSummary(stages), stages[domain.ActiveStage(stages)].ID
+		}
+	}
+	return items
 }
 
 func isLocalPreviewChangeID(id string) bool {

@@ -114,6 +114,8 @@ type State struct {
 	BrowseFiles         bool
 	AgentDetailOpen     bool
 	AgentStage          int
+	AgentStageID        string
+	AgentProgress       *agentProgressView
 	ShowKeybindsModal   bool
 	KeybindsScroll      int
 	Confirmation        *Confirmation
@@ -478,6 +480,7 @@ func (s *State) Navigate(page Page) {
 	if page != PageAgents {
 		s.AgentDetailOpen = false
 		s.AgentStage = 0
+		s.AgentStageID = ""
 	}
 	s.Page = page
 	if page == PageAgents {
