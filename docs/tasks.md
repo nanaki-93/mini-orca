@@ -309,8 +309,12 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/app/agentruntime/confirmation.go`, `internal/app/agentruntime/confirmation_test.go`, `internal/app/agent_confirmation.go`, `internal/app/agent_confirmation_test.go` — **new**.
+- `internal/app/agentstate/input.go`, `internal/app/agentstate/input_test.go` — **new**, SDK-independent waiting checkpoints and atomic input receipts.
 - `internal/app/agentstate/session.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_recovery_test.go`.
+- `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go`, `internal/app/agentstate/artifacts.go` — explicitly version confirmation runs and protect waiting checkpoints from deletion.
+- `internal/app/agent_change_host.go`, `internal/app/change_pipeline_types.go`, `internal/app/change_checks.go`, `internal/app/change_session.go`, `internal/app/agent_change_host_test.go`, `internal/app/change_checks_test.go` — create the approval checkpoint at the checked handoff, bind existing Review to its receipt, and preserve passive recovery with fresh checks.
 - `internal/api/handlers/change_pipeline_handler.go`, `internal/api/handlers/change_pipeline_handler_test.go`, `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/models.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/tui/client/client_test.go`, `cmd/daemon/main_test.go` — cover the guarded input route and additive checkpoint wire contract.
 
 **Inputs / dependencies**
 - Task 11; [graph human input](https://adk.dev/graphs/human-input/) and existing Apply/Undo authority.
@@ -319,6 +323,9 @@ This is an implementation specification, not a claim that the features below alr
 - Model pending input explicitly with a request ID, run/node ID, schema, exact action/scope, expiry, and proposal/source identity. Handle approve, reject, cancel, expiry, and duplicate responses idempotently.
 - Resume only after fresh admission; persist the input receipt and checkpoint before further dispatch. A forged tool response or session state value cannot grant authority.
 - Distinguish pausing graph execution from canceling a process. Reconcile interrupted effects before restart; never replay Apply, Git operations, or uncertain external writes automatically.
+- At an approving checked-change handoff, create a native single-node ADK human-input graph with a unique request, a 24-hour deadline, and a `confirmation-v1` journal. Persist its waiting state and release the worker. The checkpoint contains only identity, captured path hashes, and the fixed `review_proposal` action.
+- Resume this pure handoff graph only through the host's current project/configuration/policy binding and exact proposal/scope checks. Persist a decision receipt before native resume; retry after partial storage failure safely. Responses cannot invoke providers, checks, source mutation, or Git operations.
+- Expose `workflow.input` and an explicit `/workflow/input` response route for approve, reject, and cancel. Existing Review records the same approval receipt after its current guards; existing cancellation also cancels waiting input. Preserve legacy workflows without checkpoints. Approval requires live passing checks and existing per-file review requirements; passive restore never reinstates in-memory Apply authority.
 
 **Verification command**
 `go test -race ./internal/app ./internal/app/agentruntime ./internal/app/agentstate ./internal/api/handlers ./cmd/daemon ./internal/tui/client && ./scripts/validate.sh && git diff --check`
