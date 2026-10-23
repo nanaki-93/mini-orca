@@ -40,6 +40,9 @@ func commandCatalog() []commandItem {
 	}
 	return append(items,
 		commandItem{command: "plan", title: "Review task plan", hint: "Inspect the approach, evidence, scope and acceptance criteria."},
+		commandItem{command: "investigate", title: "Investigate task plan", hint: "Read admitted scope and propose evidence, approach and criteria for review."},
+		commandItem{command: "accept-investigation", title: "Accept planning suggestions", hint: "Update the draft; scope suggestions remain advisory and generation requires approval."},
+		commandItem{command: "cancel-investigation", title: "Cancel plan investigation", hint: "Stop the current request and retain the editable draft."},
 		commandItem{command: "pause", title: "Pause analysis", hint: "Stop dispatching new analysis work and retain completed results."},
 		commandItem{command: "reanalyze", title: "Start fresh analysis", hint: "Run a new analysis, preserving work already in progress."},
 		commandItem{command: "retry", title: "Retry a task stage", hint: "retry test or retry review · Reuse implementation or passing checks.", argument: true},

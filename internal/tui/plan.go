@@ -8,22 +8,29 @@ import (
 )
 
 type PlanDraft struct {
-	Source    ProjectIdentity
-	Seed      ChangeSeed
-	Saved     *ChangeSession
-	Submitted bool
-	PreviewID string
+	Source             ProjectIdentity
+	Seed               ChangeSeed
+	Saved              *ChangeSession
+	Submitted          bool
+	PreviewID          string
+	Investigation      *PlanInvestigation
+	InvestigationInput string
+	InvestigationID    string
+	InvestigationState string
 }
 
 func (s *State) openTaskPlan(seed *ChangeSeed) {
 	if seed == nil {
 		return
 	}
+	s.cancelPlanInvestigation()
 	copy := *seed
 	if seed.Plan != nil {
 		input := *seed.Plan
 		input.NonGoals = append([]string(nil), input.NonGoals...)
 		input.ReadPaths = append([]string(nil), input.ReadPaths...)
+		input.Citations = append([]PlanEvidence(nil), input.Citations...)
+		input.Assumptions = append([]string(nil), input.Assumptions...)
 		copy.Plan = &input
 	}
 	copy.Paths = domain.EnsureChangeTestPaths(seed.Paths, nil)
@@ -61,7 +68,7 @@ func (s *State) openCurrentPlan() {
 
 func (s *State) submitTaskPlan(generate bool) {
 	d := s.PlanDraft
-	if d == nil || d.Submitted {
+	if d == nil || d.Submitted || d.InvestigationState == "running" {
 		return
 	}
 	if d.Source.ProjectID != s.projectID() || d.Source.ProjectRevision != s.projectRevision() {
@@ -115,12 +122,16 @@ func validatePlanDraft(d *PlanDraft) error {
 }
 
 func (s *State) execPlanCommand(cmd, arg string) bool {
+	if s.execPlanInvestigationCommand(cmd) {
+		return true
+	}
 	switch cmd {
 	case "replan":
 		if s.PlanDraft != nil && !s.PlanDraft.Submitted {
 			seed := s.PlanDraft.Seed
 			seed.WorktreePath = ""
 			s.openTaskPlan(&seed)
+			s.clearPlanCitations()
 			s.CmdOutput = "New plan based on the current project. Review the evidence, scope and approach before approval. Previous worktree retained in Worktrees."
 		}
 		return true
@@ -178,6 +189,9 @@ func (s *State) editPlanField(field, value string) bool {
 	}
 	s.DetailScroll = 0
 	s.CmdOutput = "Plan updated locally. [g] Approve & generate · [s] Save draft"
+	if s.prunePlanCitations() {
+		s.CmdOutput += " · Removed citations outside the selected scope"
+	}
 	return true
 }
 
@@ -198,6 +212,12 @@ func (s *State) handlePlanKey(ev KeyEvent) {
 		return
 	}
 	switch ev.Key {
+	case "i":
+		s.startPlanInvestigation(false)
+	case "a":
+		s.acceptPlanInvestigation()
+	case "x":
+		s.cancelPlanInvestigation()
 	case "g":
 		s.submitTaskPlan(true)
 	case "s":
@@ -230,11 +250,16 @@ func (s *State) beginPlanEdit(field, value string) {
 }
 
 func (s *State) renderPlanPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "TASK PLAN", "[s] Save draft · [g] Approve & generate · [Esc] Back")
+	lines := renderPageHeader(th, "TASK PLAN", "[i] Investigate · [s] Save · [g] Approve & generate · [Esc] Back")
 	if s.PlanDraft == nil {
 		return append(lines, "  Select an issue or feature, or use :agent <request> to prepare a plan.")
 	}
 	lines = append(lines, s.renderDetailSections(th)...)
+	if s.PlanDraft.InvestigationState == "running" {
+		lines = append(lines, "  Investigating admitted source… [x] Cancel")
+	} else if s.currentPlanInvestigation() != nil && s.PlanDraft.InvestigationState == "ready" {
+		lines = append(lines, "  Suggestions ready for review. [a] Accept into draft")
+	}
 	rows := renderDiagnosticRow(th, th.cyan, "Task:", th.fg, s.PlanDraft.Seed.Title, issuePanelContentWidth(adaptivePanelWidth(width)))
 	rows = append(rows, s.renderPlanSection(th, width)...)
 	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], "REVIEW BEFORE GENERATION", adaptivePanelWidth(width), rows)...)

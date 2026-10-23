@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -223,5 +224,39 @@ func TestCriticRetryCannotReuseHistoricalCheckAuthority(t *testing.T) {
 	request.PlanHash, request.ResumeFrom = ready.Plan.Hash, "review"
 	if _, err := restarted.StartChangeWorkflow(context.Background(), ready.ID, request); err == nil || !strings.Contains(err.Error(), "cannot resume") {
 		t.Fatalf("historical checks authorized critic retry: %v", err)
+	}
+}
+
+func TestPlanEvidenceRetainsLegacyHashAndInvalidatesNewApprovals(t *testing.T) {
+	legacy := &ChangeSession{Kind: "fix", Title: "T", AcceptanceCriteria: []string{"works"}, Plan: &ChangePlan{ChangePlanInput: ChangePlanInput{Problem: "P", Approach: "A"}}}
+	legacyJSON := `{"Kind":"fix","Title":"T","Plan":{"problem":"P","approach":"A"},"ReadTargets":null,"Targets":null,"Criteria":["works"],"Instructions":null,"Project":"","Revision":"","Workspace":"","Policy":""}`
+	legacy.Plan.Hash = contentHash([]byte(legacyJSON))
+	if err := validateStoredPlan(legacy); err != nil {
+		t.Fatalf("legacy plan hash changed: %v", err)
+	}
+	encoded, err := json.Marshal(legacy.Plan.ChangePlanInput)
+	if err != nil || strings.Contains(string(encoded), "citations") || strings.Contains(string(encoded), "assumptions") {
+		t.Fatal("empty evidence changed legacy serialization")
+	}
+	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	session := openChangeFixture(t, s, "main.go", "main_test.go")
+	input := ChangePlanInput{Problem: "Cover Run", Approach: "Add regression tests"}
+	if err := captureChangePlan(root, session, &input); err != nil {
+		t.Fatal(err)
+	}
+	oldHash := session.Plan.Hash
+	session.Plan.ApprovedHash = oldHash
+	target := changeTarget(session, "main.go")
+	input.Citations = []PlanEvidence{{Path: target.Path, Hash: target.Hash, StartLine: 1, EndLine: 1, Quote: "package main", Observation: "The source is in the main package"}}
+	input.Assumptions = []string{"Keep the API stable"}
+	if err := captureChangePlan(root, session, &input); err != nil {
+		t.Fatal(err)
+	}
+	if session.Plan.Hash == oldHash || session.Plan.ApprovedHash != "" {
+		t.Fatal("accepted evidence retained an earlier approval")
+	}
+	input.Citations[0].Quote = "fabricated source"
+	if err := captureChangePlan(root, session, &input); err == nil {
+		t.Fatal("fabricated evidence entered a stored plan")
 	}
 }

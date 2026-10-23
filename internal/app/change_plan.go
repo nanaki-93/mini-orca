@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -57,11 +58,13 @@ func (s *Service) UpdateChangePlan(ctx context.Context, id string, request Chang
 
 // ChangePlanInput is user-editable task intent, separate from proposed source.
 type ChangePlanInput struct {
-	Problem   string   `json:"problem"`
-	Evidence  string   `json:"evidence,omitempty"`
-	Approach  string   `json:"approach"`
-	NonGoals  []string `json:"non_goals,omitempty"`
-	ReadPaths []string `json:"read_paths,omitempty"`
+	Problem     string         `json:"problem"`
+	Evidence    string         `json:"evidence,omitempty"`
+	Approach    string         `json:"approach"`
+	NonGoals    []string       `json:"non_goals,omitempty"`
+	ReadPaths   []string       `json:"read_paths,omitempty"`
+	Citations   []PlanEvidence `json:"citations,omitempty"`
+	Assumptions []string       `json:"assumptions,omitempty"`
 }
 
 type ChangePlan struct {
@@ -71,6 +74,14 @@ type ChangePlan struct {
 	ApprovedHash string         `json:"approved_hash,omitempty"`
 }
 
+func cloneChangePlanInput(input ChangePlanInput) ChangePlanInput {
+	input.NonGoals = slices.Clone(input.NonGoals)
+	input.ReadPaths = slices.Clone(input.ReadPaths)
+	input.Citations = slices.Clone(input.Citations)
+	input.Assumptions = slices.Clone(input.Assumptions)
+	return input
+}
+
 func captureChangePlan(root string, session *ChangeSession, input *ChangePlanInput) error {
 	if input == nil {
 		return nil // The existing direct proposal API and historical conversations remain supported.
@@ -78,7 +89,7 @@ func captureChangePlan(root string, session *ChangeSession, input *ChangePlanInp
 	if err := validateChangePlanInput(*input); err != nil {
 		return err
 	}
-	session.Plan = &ChangePlan{ChangePlanInput: *input}
+	session.Plan = &ChangePlan{ChangePlanInput: cloneChangePlanInput(*input)}
 	seen := map[string]bool{}
 	for _, path := range input.ReadPaths {
 		if seen[path] || changeTarget(session, path) != nil {
@@ -99,6 +110,9 @@ func captureChangePlan(root string, session *ChangeSession, input *ChangePlanInp
 		session.Instructions[path] = instructions.Fingerprint
 		session.Plan.ReadTargets = append(session.Plan.ReadTargets, target)
 	}
+	if err := validateCapturedPlanEvidence(session); err != nil {
+		return err
+	}
 	session.Plan.Hash = changePlanHash(session)
 	return nil
 }
@@ -110,9 +124,33 @@ func validateChangePlanInput(input ChangePlanInput) error {
 	if len(input.NonGoals) > 16 || len(input.ReadPaths) > 8 {
 		return fmt.Errorf("plan allows at most 16 boundaries and 8 read context paths")
 	}
+	if len(input.Citations) > 8 || len(input.Assumptions) > 8 {
+		return fmt.Errorf("plan allows at most eight citations and assumptions")
+	}
+	for _, assumption := range input.Assumptions {
+		if !validInvestigationText(assumption, 512) {
+			return fmt.Errorf("invalid plan assumption")
+		}
+	}
 	for _, value := range append([]string{input.Problem, input.Evidence, input.Approach}, input.NonGoals...) {
 		if len(value) > 8192 || !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
 			return fmt.Errorf("plan text must be UTF-8 without NUL and at most 8192 bytes per field")
+		}
+	}
+	return nil
+}
+
+func validateCapturedPlanEvidence(session *ChangeSession) error {
+	sources := map[string]string{}
+	for _, target := range session.Targets {
+		sources[target.Path] = target.Content
+	}
+	for _, target := range session.Plan.ReadTargets {
+		sources[target.Path] = target.Content
+	}
+	for _, citation := range session.Plan.Citations {
+		if err := validatePlanCitation(citation, sources[citation.Path]); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -163,7 +201,7 @@ func validateStoredPlan(session *ChangeSession) error {
 			return fmt.Errorf("corrupt plan context identity")
 		}
 	}
-	return nil
+	return validateCapturedPlanEvidence(session)
 }
 
 func requireApprovedChangePlan(session *ChangeSession) error {

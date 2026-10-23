@@ -92,10 +92,7 @@ func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	pageItems = append(pageItems, spec.commands...)
 
 	rule := fmt.Sprintf("%s%s%s", th.border, strings.Repeat("─", contentW), th.reset)
-	gapLines := []string{"", ""}
-	if s.viewportBodyRows > 0 && s.viewportBodyRows-3 < 26 {
-		gapLines = []string{""}
-	}
+	gapLines := []string{""}
 
 	body := []string{
 		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.green, spec.title, th.reset),
@@ -170,9 +167,9 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	},
 	PagePlan: {
 		title:     "[2] AGENT STUDIO · TASK PLAN",
-		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}},
-		secondary: []keyDesc{{"e / f / t", "Edit plan fields"}, {"←/→", "Change section"}},
-		commands:  []keyDesc{{":replan", "Use current base"}, {":repairs on|off", "Automatic repair"}},
+		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}, {"i", "Investigate scope"}},
+		secondary: []keyDesc{{"a / x", "Accept / cancel"}, {"e / f / t", "Edit plan fields"}, {"←/→", "Change section"}},
+		commands:  []keyDesc{{":investigate", "Investigate scope"}, {":replan", "Use current base"}, {":repairs on|off", "Automatic repair"}},
 	},
 	PageBugs: {
 		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",

@@ -3,6 +3,11 @@ package tui
 import "github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 
 type (
+	PlanEvidence             = client.PlanEvidence
+	PlanInvestigation        = client.PlanInvestigation
+	PlanInvestigationRequest = client.PlanInvestigationRequest
+	PlanInvestigationSource  = client.PlanInvestigationSource
+
 	ChangePlan              = client.ChangePlan
 	ChangePlanInput         = client.ChangePlanInput
 	ProjectIdentity         = client.ProjectIdentity

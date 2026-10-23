@@ -91,6 +91,7 @@ untrusted networks.
 | POST | `/api/projects/current/files/explanation` | Explicitly explain one exact indexed Go declaration using transient Function-scope context. |
 | POST | `/api/projects/current/security-review` | Explicitly perform one passive, source-free AI Security review for one current eligible file, optionally one exact declaration. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
+| POST | `/api/projects/current/plans/investigate` | Investigate captured read/write scope and return validated citations and model suggestions for explicit acceptance. |
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
 | POST | `/api/projects/current/changes` | Capture a task and one to eight explicit Go/Markdown paths. |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
@@ -650,6 +651,42 @@ and workspace identity. Saving a plan makes no provider request and runs no chec
 recaptures the scope, advances the revision and clears plan approval. Once a proposal
 exists, changing its intent requires a new plan. Missing scope is never filled from
 an arbitrary index entry; oversized scope must be split explicitly by the user.
+Optional plan `citations` (at most eight) contain `path`, captured `hash`, one-based
+`start_line` / `end_line`, exact `quote` (at most 1024 UTF-8 bytes), and model
+`observation` (at most 512 bytes). Citations must match captured read/write source.
+Optional `assumptions` contain at most eight nonempty strings of at most 512 bytes.
+Both fields participate in approval identity; adding or changing them clears
+approval. Empty fields preserve existing plan hashes.
+
+`POST /api/projects/current/plans/investigate` accepts `project_id`,
+`project_revision`, `plan`, one to eight explicit write `paths`, optional initial
+`acceptance_criteria`, `sources`, and `confirm_remote_provider`. Each selected
+read/write path needs exactly one source record: `{path, hash, exists}`. Existing
+files require the current indexed hash; new write paths require `exists: false`
+and an empty hash. Read context must exist and remain distinct from write scope.
+The optional `worktree_path` query selects an existing worktree without creating
+one. Investigation creates private run evidence but no change session, execution
+trust, source mutation or worktree.
+
+The Function profile performs bounded read-only investigation with admitted
+repository tools when supported; completion-only profiles receive captured
+source instead. Remote profiles require explicit confirmation. Source, absence,
+revision, policy and applicable instructions are checked before dispatch and
+again before publication. Changed source returns a conflict. Invalid input or
+unusable model evidence returns an error; neither replaces the editable draft.
+Cancel the HTTP request to stop investigation.
+
+The result contains `version: "v1"`, project identity, `input_hash`,
+`context_manifest`, suggested `approach`, `evidence`, `assumptions`,
+`suggested_scope`, and nonempty `acceptance_criteria`. Evidence quotes and hashes
+are validated against captured source; observations and assumptions remain model
+suggestions. Response limits are 32 KiB, eight citations, eight assumptions, eight
+suggested paths, sixteen criteria (512 bytes each), and a 4096-byte approach.
+Captured source is capped at 256 KiB; the Function profile's context limit also
+applies. Suggested paths never extend admitted scope. Accepting suggestions in
+the TUI updates the draft only; explicit plan approval is still required before
+generation.
+
 Legacy API conversations and schema-1 history without `plan` retain their direct
 message flow. Planned sessions reject generation without current approval.
 

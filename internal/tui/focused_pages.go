@@ -81,12 +81,18 @@ func (s *State) renderDetailSections(th ansiTheme) []string {
 }
 
 func (s *State) renderPlanSection(th ansiTheme, width int) []string {
+	rows := s.renderPlanDraftSection(th, width)
+	return append(rows, s.renderInvestigationSuggestions(th, issuePanelContentWidth(adaptivePanelWidth(width)))...)
+}
+
+func (s *State) renderPlanDraftSection(th ansiTheme, width int) []string {
 	d := s.PlanDraft
 	p := d.Seed.Plan
 	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
 	switch s.DetailSection {
 	case 1:
-		return renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, client.FirstNonEmpty(p.Evidence, "No reproduction evidence recorded. Verify the hypothesis before applying a fix."), contentW)
+		rows := renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, client.FirstNonEmpty(p.Evidence, "No reproduction evidence recorded. Verify the hypothesis before applying a fix."), contentW)
+		return append(rows, renderPlanCitations(th, p.Citations, p.Assumptions, contentW)...)
 	case 2:
 		rows := renderDiagnosticBulletRows(th, th.cyan, "Write scope:", th.cyan, th.fg, d.Seed.Paths, contentW)
 		rows = append(rows, renderDiagnosticBulletRows(th, th.cyan, "Read context:", th.cyan, th.fg, p.ReadPaths, contentW)...)

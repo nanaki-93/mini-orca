@@ -13,6 +13,15 @@ type ChangeHandler struct {
 	manager *project.Manager
 }
 
+func (h *ChangeHandler) InvestigatePlan(w http.ResponseWriter, r *http.Request) {
+	var request app.PlanInvestigationRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.InvestigatePlan(r.Context(), request)
+	respondWorkflow(w, value, err)
+}
+
 func NewChangeHandler(service *app.Service, manager *project.Manager) *ChangeHandler {
 	return &ChangeHandler{service, manager}
 }

@@ -150,6 +150,8 @@ type changeActionResultMsg struct {
 	res changeActionResult
 }
 
+type planInvestigationResultMsg struct{ result planInvestigationResult }
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -203,15 +205,14 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case KeyEvent:
 		m.applyKeyEvent(ev)
 	case startAgentResultMsg:
-		if m.activeAgentStarts > 0 {
-			m.activeAgentStarts--
-		}
+		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		_ = m.state.applyStartAgentResult(ev.res)
 	case changeActionResultMsg:
-		if m.activeAgentStarts > 0 {
-			m.activeAgentStarts--
-		}
+		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		_ = m.state.applyChangeActionResult(ev.res)
+	case planInvestigationResultMsg:
+		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
+		m.state.applyPlanInvestigation(ev.result)
 	case pollTickMsg:
 		m.pollScheduled = false
 		if cmd := m.startAsyncPollCmd(); cmd != nil {
@@ -275,6 +276,15 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
+	case "investigate-plan":
+		task, ok := m.state.preparePlanInvestigationTask(act)
+		if !ok {
+			return nil, true
+		}
+		m.activeAgentStarts++
+		return func() tea.Msg {
+			return planInvestigationResultMsg{result: executePlanInvestigation(m.ctx, m.client, task)}
+		}, true
 	case "start-agent", "save-plan":
 		task, ok := m.state.prepareStartAgentTask(reqID, act)
 		if !ok {

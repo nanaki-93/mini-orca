@@ -7,40 +7,9 @@ import (
 	"iter"
 
 	"google.golang.org/adk/v2/agent"
-	"google.golang.org/adk/v2/agent/llmagent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
-	"google.golang.org/adk/v2/tool"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
-
-func newInvestigationAgent(client CompletionClient, request Request) (agent.Agent, error) {
-	if len(request.Messages) != 1 || request.Messages[0].Role != "user" || request.Stream || request.Schema != nil {
-		return nil, fmt.Errorf("%w: investigation requires one admitted user prompt", llm.ErrRequestRejected)
-	}
-	var adapter model.LLM
-	if provider, ok := client.(*ProviderClient); ok && provider.profile.IsGoogle() {
-		adapter = &googleModel{client: provider}
-	} else if transport, ok := client.(generationClient); ok {
-		adapter = &compatibleModel{client: transport}
-	} else {
-		return nil, fmt.Errorf("%w: selected provider cannot use investigation tools", llm.ErrRequestRejected)
-	}
-	var tools []tool.Tool
-	for _, item := range request.Investigation.tools {
-		tools = append(tools, item)
-	}
-	worker, err := llmagent.New(llmagent.Config{
-		Name: "investigation", Description: "Investigate the explicitly admitted repository scope",
-		Model: &investigationModel{inner: adapter, scope: request.Investigation, contextTokens: request.ContextMaxTokens}, Tools: tools,
-		DisallowTransferToParent: true, DisallowTransferToPeers: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return agent.New(agent.Config{Name: "investigation_runner", Description: "Bounded repository investigation", Run: investigationRun(worker)})
-}
 
 func investigationRun(worker agent.Agent) func(agent.InvocationContext) iter.Seq2[*session.Event, error] {
 	return func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {

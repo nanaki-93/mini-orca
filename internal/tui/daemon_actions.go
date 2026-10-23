@@ -62,6 +62,9 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 
 func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
 	switch act.Kind {
+	case "investigate-plan", "cancel-plan-investigation":
+		s.dispatchPlanInvestigation(ctx, cl, act)
+		return nil
 	case "reconnect":
 		return s.SyncFromDaemon(ctx, cl, "")
 	case "refresh-worktrees":

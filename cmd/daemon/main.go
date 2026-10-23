@@ -183,6 +183,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	})
 
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
+	mux.HandleFunc("POST /api/projects/current/plans/investigate", changeHandler.InvestigatePlan)
 	gitHandler := handlers.NewGitHandler(application)
 	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)
 	mux.HandleFunc("GET /api/projects/current/git/workspace", gitHandler.Workspace)

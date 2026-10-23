@@ -219,7 +219,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 09 — Add an evidence-backed planning agent
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_investigation.go`, `internal/app/agent_investigation_test.go`, `internal/app/agentruntime/investigator.go` — **new**.

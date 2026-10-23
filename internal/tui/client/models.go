@@ -764,11 +764,48 @@ type InstructionPreview struct {
 }
 
 type ChangePlanInput struct {
-	Problem   string   `json:"problem"`
-	Evidence  string   `json:"evidence,omitempty"`
-	Approach  string   `json:"approach"`
-	NonGoals  []string `json:"non_goals,omitempty"`
-	ReadPaths []string `json:"read_paths,omitempty"`
+	Problem     string         `json:"problem"`
+	Evidence    string         `json:"evidence,omitempty"`
+	Approach    string         `json:"approach"`
+	NonGoals    []string       `json:"non_goals,omitempty"`
+	ReadPaths   []string       `json:"read_paths,omitempty"`
+	Citations   []PlanEvidence `json:"citations,omitempty"`
+	Assumptions []string       `json:"assumptions,omitempty"`
+}
+
+type PlanEvidence struct {
+	Path        string `json:"path"`
+	Hash        string `json:"hash"`
+	StartLine   int    `json:"start_line"`
+	EndLine     int    `json:"end_line"`
+	Quote       string `json:"quote"`
+	Observation string `json:"observation"`
+}
+
+type PlanInvestigationSource struct {
+	Path   string `json:"path"`
+	Hash   string `json:"hash"`
+	Exists bool   `json:"exists"`
+}
+
+type PlanInvestigationRequest struct {
+	ProjectIdentity
+	Plan                  ChangePlanInput           `json:"plan"`
+	Paths                 []string                  `json:"paths"`
+	AcceptanceCriteria    []string                  `json:"acceptance_criteria"`
+	Sources               []PlanInvestigationSource `json:"sources"`
+	ConfirmRemoteProvider bool                      `json:"confirm_remote_provider"`
+}
+
+type PlanInvestigation struct {
+	ProjectIdentity
+	Version            string         `json:"version"`
+	InputHash          string         `json:"input_hash"`
+	Approach           string         `json:"approach"`
+	Evidence           []PlanEvidence `json:"evidence"`
+	Assumptions        []string       `json:"assumptions"`
+	SuggestedScope     []string       `json:"suggested_scope"`
+	AcceptanceCriteria []string       `json:"acceptance_criteria"`
 }
 type ChangePlan struct {
 	ChangePlanInput

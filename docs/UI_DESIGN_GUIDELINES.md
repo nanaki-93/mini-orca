@@ -64,6 +64,17 @@ Unknown, unavailable, stale, partial, failed and canceled states retain meaning.
 
 Task selection opens an editable plan without generation. Make approach, evidence,
 write/read scope, criteria and non-goals inspectable before explicit approval.
+Investigation is an explicit action (`i` / `:investigate`) using the Function
+profile, with remote-provider confirmation when required. Keep it asynchronous
+and cancelable (`x` / `:cancel-investigation`), retaining the draft on failure or
+cancellation. Show pending approach, quoted evidence, assumptions, suggested
+scope and criteria in the existing plan sections, labeled as model suggestions.
+Acceptance (`a` / `:accept-investigation`) updates the editable draft and clears
+prior approval; it does not generate code. Suggested paths require explicit scope
+editing. Discard results after project or draft replacement, and keep navigation
+and command-menu browsing passive. Remove accepted citations to paths removed
+from scope; replanning against the current base clears captured citations so
+old source evidence cannot block a fresh investigation.
 Automatic repair is opt-in. Failed checks may suggest additional scope, but cannot
 silently expand an approved plan. Stage retries must state which work is reused.
 Stage details show the model budget alongside elapsed time. Testing generates
