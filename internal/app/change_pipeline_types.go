@@ -29,8 +29,9 @@ func (models ChangeWorkflowModels) validate() error {
 }
 
 type ChangeWorkflowRequest struct {
-	PlanHash   string `json:"plan_hash,omitempty"`
-	ResumeFrom string `json:"resume_from,omitempty"`
+	StreamOutput bool   `json:"stream_output,omitempty"`
+	PlanHash     string `json:"plan_hash,omitempty"`
+	ResumeFrom   string `json:"resume_from,omitempty"`
 	ChangeIdentity
 	Message           string               `json:"message"`
 	Models            ChangeWorkflowModels `json:"models"`
@@ -73,6 +74,7 @@ type ChangeSpecialistReview struct {
 // Workflow reports live in private change history alongside captured source.
 // A model verdict never establishes human approval or measured performance.
 type ChangeWorkflow struct {
+	StreamOutput       bool                     `json:"stream_output,omitempty"`
 	Input              *ChangeInput             `json:"input,omitempty"`
 	Attempt            int                      `json:"attempt,omitempty"`
 	ResumeFrom         string                   `json:"resume_from,omitempty"`

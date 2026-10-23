@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -116,11 +117,16 @@ func TestChangeWorkflowAdmissionGuardsDispatchNothing(t *testing.T) {
 	var calls atomic.Int32
 	reply := func() string { calls.Add(1); return workflowImplementation }
 	s, _, session := workflowService(t, [3]func() string{reply, reply, reply})
-	for _, name := range []string{"untrusted", "profile", "remote", "security", "stale", "canceled", "test_scope"} {
+	for _, name := range []string{"untrusted", "profile", "remote", "security", "stale", "canceled", "test_scope", "streaming"} {
 		t.Run(name, func(t *testing.T) {
 			request := workflowRequest(session)
 			ctx := context.Background()
 			switch name {
+			case "streaming":
+				request.StreamOutput = true
+				previous := s.runtimes.function.profile.Provider
+				s.runtimes.function.profile.Provider = config.PiProvider
+				defer func() { s.runtimes.function.profile.Provider = previous }()
 			case "untrusted":
 				s.clearExecutionTrust()
 				defer s.TrustProjectExecution(context.Background(), session.ProjectRevision, true)

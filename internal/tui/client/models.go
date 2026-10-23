@@ -654,6 +654,7 @@ type ChangeInput struct {
 
 // ChangeWorkflow tracks the automated agent pipeline on a ChangeSession.
 type ChangeWorkflow struct {
+	StreamOutput       bool                     `json:"stream_output,omitempty"`
 	Input              *ChangeInput             `json:"input,omitempty"`
 	Attempt            int                      `json:"attempt,omitempty"`
 	ResumeFrom         string                   `json:"resume_from,omitempty"`

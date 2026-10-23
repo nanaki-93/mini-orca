@@ -43,6 +43,84 @@ paths:
         '200': {description: Bounded model suggestions with validated source citations, content: {application/json: {schema: {$ref: '#/components/schemas/PlanInvestigation'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentProjectID'}
+      - {$ref: '#/components/parameters/ProjectRevision'}
+    get:
+      tags: [Projects]
+      summary: Read source-free root invocation history
+      parameters:
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {in: query, name: cursor, schema: {type: string}, description: Opaque project/revision-bound pagination cursor.}
+      responses:
+        '200': {description: Bounded retained roots, content: {application/json: {schema: {$ref: '#/components/schemas/AgentRunList'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs/events:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentProjectID'}
+      - {$ref: '#/components/parameters/ProjectRevision'}
+    get:
+      tags: [Projects]
+      summary: Replay durable progress or subscribe with SSE
+      description: Retains 2048 source-free events. Missing, expired, foreign or future cursors return a reset snapshot at the current cursor. SSE frames use agent_progress and are bounded to 1 MiB with ten-second write deadlines. No model text is streamed here.
+      parameters:
+        - {in: query, name: cursor, schema: {type: string, maxLength: 180}}
+        - {in: header, name: Last-Event-ID, schema: {type: string, maxLength: 180}, description: Alternative cursor; must match if both are provided.}
+      responses:
+        '200':
+          description: One replay batch or a sequence of agent_progress SSE frames.
+          content:
+            application/json: {schema: {$ref: '#/components/schemas/AgentEventBatch'}}
+            text/event-stream: {schema: {type: string}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs/{runID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentProjectID'}
+      - {$ref: '#/components/parameters/ProjectRevision'}
+      - {$ref: '#/components/parameters/AgentRunID'}
+    get:
+      tags: [Projects]
+      summary: Read invocation hierarchy and retained evidence references
+      parameters:
+        - {in: query, name: include_text, schema: {type: boolean, default: false}, description: Explicitly request private advisory model output.}
+      responses:
+        '200': {description: Bounded private detail with source-free metadata by default, content: {application/json: {schema: {$ref: '#/components/schemas/AgentRunDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs/{runID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentRunID'}
+    post:
+      tags: [Projects]
+      summary: Cancel a current root invocation owned by this daemon
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentRunControl'}}}}
+      responses:
+        '200': {description: Cancellation requested; worker owns cleanup, content: {application/json: {schema: {$ref: '#/components/schemas/AgentRunDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs/{runID}/input:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentRunID'}
+    post:
+      tags: [Projects]
+      summary: Respond to an exact native checkpoint through the proposal owner
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeInputResponse'}}}}
+      responses:
+        '200': {description: Guarded proposal review result; Apply remains explicit, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -924,6 +1002,16 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
 components:
   parameters:
+    AgentProjectID:
+      in: query
+      name: project_id
+      required: true
+      schema: {type: string}
+    AgentRunID:
+      in: path
+      name: runID
+      required: true
+      schema: {type: string}
     WorktreePath:
       in: query
       name: worktree_path
@@ -948,6 +1036,138 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    AgentUsage:
+      type: object
+      description: Shared budget totals across descendants; do not add child totals together.
+      properties:
+        model_calls: {type: integer}
+        tool_calls: {type: integer}
+        repairs: {type: integer}
+        input_tokens: {type: integer, format: int64}
+        output_tokens: {type: integer, format: int64}
+        unknown_usage_calls: {type: integer}
+        reserved_input_tokens: {type: integer, format: int64}
+        reserved_output_tokens: {type: integer, format: int64}
+        active_calls: {type: integer}
+        elapsed_millis: {type: integer, format: int64}
+    AgentLimits:
+      type: object
+      properties:
+        model_calls: {type: integer}
+        tool_calls: {type: integer}
+        repairs: {type: integer}
+        input_tokens: {type: integer, format: int64}
+        output_tokens: {type: integer, format: int64}
+        elapsed_seconds: {type: integer}
+        concurrent_calls: {type: integer}
+    AgentCheckpoint:
+      type: object
+      properties:
+        request_id: {type: string}
+        node_id: {type: string, enum: [human_review]}
+        invocation_id: {type: string}
+        expires_at: {type: string, format: date-time}
+        decision: {type: string, enum: [approve, reject, cancel, expire]}
+        received_at: {type: string, format: date-time}
+    AgentRun:
+      type: object
+      required: [id, root_id, project_id, project_revision, kind, status, active, stale, can_cancel, usage, limits, started_at, updated_at]
+      properties:
+        change_session_id: {type: string}
+        workflow_id: {type: string}
+        id: {type: string}
+        root_id: {type: string}
+        parent_id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        kind: {type: string}
+        status: {type: string, enum: [running, canceling, waiting_input, completed, failed, canceled, expired, interrupted, changes_requested]}
+        active: {type: boolean}
+        stale: {type: boolean}
+        can_cancel: {type: boolean}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+        input: {$ref: '#/components/schemas/AgentCheckpoint'}
+    AgentRunList:
+      type: object
+      required: [project_id, project_revision, runs]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        runs: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/AgentRun'}}
+        next_cursor: {type: string}
+    AgentArtifactReference:
+      type: object
+      required: [session, name, version]
+      properties:
+        session:
+          type: object
+          required: [app, user, id]
+          properties:
+            app: {type: string}
+            user: {type: string}
+            id: {type: string}
+        name: {type: string, enum: [completion.json]}
+        version: {type: integer, format: int64, minimum: 1}
+    AgentRunEvent:
+      type: object
+      required: [sequence, run_id, invocation_id, project_id, project_revision, kind, state, time, usage]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        run_id: {type: string, description: Root invocation identity.}
+        invocation_id: {type: string, description: Native child or root invocation identity.}
+        parent_id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        node_id: {type: string}
+        request_id: {type: string}
+        kind: {type: string, enum: [started, finished, node, input_requested, input_received, input_finished]}
+        state: {type: string}
+        time: {type: string, format: date-time}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+        evidence: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/AgentArtifactReference'}}
+    AgentEventBatch:
+      type: object
+      required: [project_id, project_revision, epoch, cursor, reset, has_more, events]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        epoch: {type: string}
+        cursor: {type: string}
+        reset: {type: boolean, description: Replace local state with the current snapshot at this cursor.}
+        has_more: {type: boolean}
+        events: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/AgentRunEvent'}}
+        snapshot: {$ref: '#/components/schemas/AgentRunList'}
+    AgentRunDetail:
+      type: object
+      required: [run, invocations, has_more, events, events_truncated]
+      properties:
+        run: {$ref: '#/components/schemas/AgentRun'}
+        invocations: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentRun'}}
+        has_more: {type: boolean}
+        events: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentRunEvent'}}
+        events_truncated: {type: boolean}
+        input: {$ref: '#/components/schemas/ChangeInput'}
+        text:
+          type: object
+          description: Present only with explicit include_text; private and inert, bounded to 64 KiB UTF-8. Partial buffers are transient and limited to 64 invocations.
+          required: [available, state, truncated]
+          properties:
+            available: {type: boolean}
+            state: {type: string, enum: [unavailable, partial_model_output, final_model_output]}
+            text: {type: string}
+            truncated: {type: boolean}
+            artifact: {$ref: '#/components/schemas/AgentArtifactReference'}
+    AgentRunControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        action: {type: string, enum: [cancel]}
     Error:
       type: object
       required: [type, message, user_message]
@@ -2112,6 +2332,7 @@ components:
         - type: object
           required: [message]
           properties:
+            stream_output: {type: boolean, default: false, description: Opt into bounded private model streaming; every selected provider must support it.}
             plan_hash: {type: string, description: Required matching plan.hash for planned sessions; explicitly approves captured intent.}
             resume_from: {type: string, enum: [create, test, review], default: create}
             auto_repair: {type: boolean, default: false, description: Opt into up to two automatic repairs within approved scope.}
@@ -2196,6 +2417,7 @@ components:
       type: object
       required: [id, status, models, stages, started_at, updated_at]
       properties:
+        stream_output: {type: boolean, default: false}
         input: {$ref: '#/components/schemas/ChangeInput'}
         id: {type: string}
         status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}

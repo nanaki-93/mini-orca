@@ -183,6 +183,12 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	})
 
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
+	agentHandler := handlers.NewAgentRunHandler(application)
+	mux.HandleFunc("GET /api/projects/current/agent-runs", agentHandler.List)
+	mux.HandleFunc("GET /api/projects/current/agent-runs/events", agentHandler.Events)
+	mux.HandleFunc("GET /api/projects/current/agent-runs/{runID}", agentHandler.Detail)
+	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/control", agentHandler.Control)
+	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/input", agentHandler.Input)
 	mux.HandleFunc("POST /api/projects/current/plans/investigate", changeHandler.InvestigatePlan)
 	gitHandler := handlers.NewGitHandler(application)
 	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)

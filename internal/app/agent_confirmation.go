@@ -162,6 +162,7 @@ func (s *Service) respondChangeInputLocked(ctx context.Context, root string, ses
 // Caller owns changesMu and has checked current proposal/source identity. The
 // receipt and pure native handoff are durable before domain approval is saved.
 func (s *Service) resolveWorkflowInput(ctx context.Context, root string, session *ChangeSession, decision string) error {
+	defer s.notifyEvent("agent_run")
 	input := session.Workflow.Input
 	request, err := confirmationRuntimeInput(session, input)
 	if err != nil {

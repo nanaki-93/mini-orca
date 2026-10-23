@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 
@@ -26,6 +27,17 @@ func TestWorktreeRouterKeepsConcurrentCheckoutResponsesSeparate(t *testing.T) {
 		service, err := app.New(config.Default(), manager)
 		if err != nil {
 			t.Fatal(err)
+		}
+		index, err := manager.Index()
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := url.Values{"project_id": {index.ProjectID}, "project_revision": {index.ProjectRevision}}
+		response := httptest.NewRecorder()
+		router.handler(service, manager).ServeHTTP(response, httptest.NewRequest("GET", "/api/projects/current/agent-runs?"+query.Encode(), nil))
+		var history app.AgentRunList
+		if err := json.Unmarshal(response.Body.Bytes(), &history); err != nil || response.Code != 200 || history.ProjectID != index.ProjectID {
+			t.Fatalf("checkout history crossed scope: %s %v", response.Body.String(), err)
 		}
 		for range 8 {
 			group.Add(1)

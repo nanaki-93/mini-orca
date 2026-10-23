@@ -53,6 +53,7 @@ func (s *Service) prepareWorkflowRun(session *ChangeSession, request ChangeWorkf
 		attempt += session.Workflow.Attempt + session.Workflow.AutoRepairAttempts
 	}
 	w := &ChangeWorkflow{Attempt: attempt, ResumeFrom: request.ResumeFrom, ID: fmt.Sprintf("%s-%d", session.ID, session.Revision), Status: "running", Models: request.Models, AutoRepair: request.AutoRepair, StartedAt: now, UpdatedAt: now}
+	w.StreamOutput = request.StreamOutput
 	for i, profile := range request.Models.selections() {
 		runtime := s.workflowStageRuntime(i, profile)
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})

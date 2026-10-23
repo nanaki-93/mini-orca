@@ -10,6 +10,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -83,6 +84,9 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := func() { cancelTimeout(); release() }
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
+	if request.StreamOutput {
+		workCtx = agentruntime.WithStreaming(workCtx)
+	}
 	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
@@ -114,6 +118,9 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 	}
 	for i, profile := range request.Models.selections() {
 		runtime := s.workflowStageRuntime(i, profile)
+		if request.StreamOutput && !llm.ProviderCapabilities(runtime.profile).Streaming {
+			return fmt.Errorf("selected model %s does not support streaming output", profile)
+		}
 		if err := requireModelRuntimeConfirmation(runtime, slices.Contains(request.ConfirmedProfiles, profile)); err != nil {
 			return err
 		}

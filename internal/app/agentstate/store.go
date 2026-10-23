@@ -34,13 +34,16 @@ type Store struct {
 }
 
 type database struct {
-	Version   int                     `json:"version"`
-	Workspace string                  `json:"workspace"`
-	Sessions  map[string]*Session     `json:"sessions"`
-	AppState  map[string]State        `json:"app_state"`
-	UserState map[string]State        `json:"user_state"`
-	Runs      map[string]Run          `json:"runs"`
-	Budgets   map[string]BudgetRecord `json:"budgets"`
+	ProgressEpoch    string                  `json:"progress_epoch,omitempty"`
+	ProgressSequence uint64                  `json:"progress_sequence,omitempty"`
+	Progress         []ProgressEvent         `json:"progress,omitempty"`
+	Version          int                     `json:"version"`
+	Workspace        string                  `json:"workspace"`
+	Sessions         map[string]*Session     `json:"sessions"`
+	AppState         map[string]State        `json:"app_state"`
+	UserState        map[string]State        `json:"user_state"`
+	Runs             map[string]Run          `json:"runs"`
+	Budgets          map[string]BudgetRecord `json:"budgets"`
 }
 
 // Open validates checkout identity without creating metadata or starting work.
@@ -152,7 +155,10 @@ func (s *Store) validate(db *database) error {
 	if err := validateSessions(db); err != nil {
 		return ErrCorrupt
 	}
-	return validateRunRecords(db)
+	if err := validateRunRecords(db); err != nil {
+		return err
+	}
+	return validateProgress(db)
 }
 
 func validateSessions(db *database) error {

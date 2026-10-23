@@ -334,7 +334,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 13 — Publish structured run history and resumable events
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_runs.go`, `internal/app/agent_runs_test.go`, `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go` — **new**.

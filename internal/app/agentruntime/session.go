@@ -126,13 +126,18 @@ func (s *localSessionService) AppendEvent(ctx context.Context, view session.Sess
 		local.mu.Lock()
 		defer local.mu.Unlock()
 	}
-	record, err := s.store.AppendEvent(ctx, key, agentstate.Event{ID: event.ID, Time: event.Timestamp, Data: data}, delta)
+	var progress *agentstate.NodeProgress
+	if ctx.Value(invocationKey{}) != nil {
+		progress = projectEvent(event, key)
+	}
+	record, err := s.store.AppendEvent(ctx, key, agentstate.Event{ID: event.ID, Time: event.Timestamp, Data: data, Progress: progress}, delta)
 	if err != nil {
 		return sessionStorageError(err)
 	}
 	if local != nil {
 		local.record = record
 	}
+	notifyProgress(ctx)
 	return nil
 }
 

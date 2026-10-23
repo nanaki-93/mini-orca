@@ -21,6 +21,7 @@ func (s *Service) agentRunContext(ctx context.Context, runtimes ...modelRuntime)
 }
 
 func (s *Service) agentRunContextAt(ctx context.Context, root string, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
+	ctx = s.observeAgentRuns(ctx)
 	clients := make([]*agentruntime.ProviderClient, 0, len(runtimes))
 	for _, runtime := range runtimes {
 		clients = append(clients, runtime.client)

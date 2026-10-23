@@ -18,9 +18,10 @@ type Key struct {
 	ID   string `json:"id"`
 }
 type Event struct {
-	ID   string          `json:"id"`
-	Time time.Time       `json:"time"`
-	Data json.RawMessage `json:"data"`
+	Progress *NodeProgress   `json:"-"` // Written to the separate source-free journal.
+	ID       string          `json:"id"`
+	Time     time.Time       `json:"time"`
+	Data     json.RawMessage `json:"data"`
 }
 type Session struct {
 	Key     Key       `json:"key"`
@@ -205,7 +206,7 @@ func (s *Store) AppendEvent(ctx context.Context, key Key, event Event, delta Sta
 		applyState(db, record, delta)
 		record.Updated = time.Now().UTC()
 		result = mergedSession(db, record)
-		return nil
+		return appendNodeProgress(db, key, event.Progress)
 	})
 	return result, err
 }

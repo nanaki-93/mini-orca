@@ -3,6 +3,11 @@ package tui
 import "github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 
 type (
+	AgentRun                 = client.AgentRun
+	AgentRunList             = client.AgentRunList
+	AgentRunDetail           = client.AgentRunDetail
+	AgentEventBatch          = client.AgentEventBatch
+	AgentRunEvent            = client.AgentRunEvent
 	PlanEvidence             = client.PlanEvidence
 	PlanInvestigation        = client.PlanInvestigation
 	PlanInvestigationRequest = client.PlanInvestigationRequest

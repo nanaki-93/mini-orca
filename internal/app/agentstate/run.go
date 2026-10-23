@@ -40,6 +40,9 @@ type BudgetRecord struct {
 }
 
 type Run struct {
+	ChangeSessionID string           `json:"change_session_id,omitempty"`
+	WorkflowID      string           `json:"workflow_id,omitempty"`
+	ParentID        string           `json:"parent_id,omitempty"`
 	Input           *InputCheckpoint `json:"input,omitempty"`
 	ID              string           `json:"id"`
 	Session         Key              `json:"session"`
@@ -78,11 +81,17 @@ func validateRunRecords(db *database) error {
 		if _, ok := db.Sessions[run.Session.key()]; !ok {
 			return ErrCorrupt
 		}
+		if _, err := progressRoot(db, run); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func validateRun(id string, run Run) error {
+	if !validRunOwner(run) {
+		return ErrCorrupt
+	}
 	if err := validateInputCheckpoint(run); err != nil {
 		return err
 	}
@@ -98,6 +107,13 @@ func validateRun(id string, run Run) error {
 	default:
 		return ErrCorrupt
 	}
+}
+
+func validRunOwner(run Run) bool {
+	if run.ChangeSessionID == "" {
+		return run.WorkflowID == ""
+	}
+	return validID(run.ChangeSessionID) && validID(run.WorkflowID)
 }
 
 func validRunSchema(version string) bool {
@@ -147,8 +163,11 @@ func (s *Store) BeginRun(ctx context.Context, run Run) error {
 		if run.Status != "running" {
 			return fmt.Errorf("new agent invocation must be running")
 		}
+		if run.ParentID != "" && db.Runs[run.ParentID].Status != "running" {
+			return fmt.Errorf("child invocation requires its active parent")
+		}
 		db.Runs[run.ID] = run
-		return nil
+		return appendProgress(db, run, "started", nil)
 	})
 }
 
@@ -164,7 +183,7 @@ func (s *Store) FinishRun(ctx context.Context, id, status string) error {
 		run.Status = status
 		run.Updated = time.Now().UTC()
 		db.Runs[id] = run
-		return nil
+		return appendProgress(db, run, "finished", nil)
 	})
 }
 
@@ -172,6 +191,11 @@ func deleteSessionRuns(db *database, key Key) error {
 	for _, run := range db.Runs {
 		if run.Session == key && unfinishedRun(run) {
 			return fmt.Errorf("cannot delete a session with an unfinished invocation")
+		}
+	}
+	for _, run := range db.Runs {
+		if parent, ok := db.Runs[run.ParentID]; ok && parent.Session == key && run.Session != key {
+			return fmt.Errorf("delete descendant invocation sessions before their parent")
 		}
 	}
 	for id, run := range db.Runs {

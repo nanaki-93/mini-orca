@@ -68,6 +68,11 @@ untrusted networks.
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
 | GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, or change workflows transition state. |
+| GET | `/api/projects/current/agent-runs` | Read bounded root invocation history with project/revision guards and pagination. |
+| GET | `/api/projects/current/agent-runs/events` | Replay source-free durable progress or subscribe using SSE and a sequence cursor. |
+| GET | `/api/projects/current/agent-runs/{runID}` | Read invocation hierarchy and retained events; private model text requires `include_text=true`. |
+| POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
+| POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
 | GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
@@ -838,6 +843,12 @@ authority for the exact current proposal and reuses those checks without running
 generation or tests. Keep the model selections for reused stages; changing their
 models requires restarting from that stage. Restored historical checks cannot
 authorize that shortcut.
+
+`stream_output` defaults to false. Explicitly enabling it captures the choice in
+workflow history and requests incremental text from every selected model role.
+All selected providers must support streaming at admission; completion-only CLI
+profiles are rejected before dispatch. Partial output remains advisory, bounded
+private detail and cannot become a proposal until the final response validates.
 Attempts, stage `started_at`/`finished_at`, check duration, failure reason and
 repair mode are exposed to the TUI. Timing is diagnostic, not a benchmark.
 
@@ -879,6 +890,63 @@ responses cannot establish domain approval.
 a replacement run. It also records cancellation of a waiting input request.
 Project replacement, reindex and daemon shutdown cancel the
 worker. Background work can continue while the client navigates or disconnects.
+
+### Agent invocation history and progress
+
+All agent-history reads require the current `project_id` and `project_revision`;
+the existing optional `worktree_path` selects a registered checkout. Unknown or
+duplicate query fields are rejected. Reads are passive and return `no-store`.
+`GET /agent-runs` (under `/api/projects/current`) lists roots newest first, with
+`limit` from 1 to 100 (default 50), an opaque `cursor`, and `next_cursor` when more
+remain. A cursor is bound to its project/revision. Older-revision records are
+marked `stale`; records with no live daemon owner are `interrupted`, never
+advertised as running or cancelable. Native `parent_id`/`root_id` group attempts,
+parallel reviewers, model invocations and human input. Budgets are shared totals,
+so child usage must not be added together.
+Checked workflows also expose `change_session_id` and `workflow_id` for exact
+association with the proposal; legacy or unrelated invocations may omit them.
+
+`GET /agent-runs/{runID}` returns the selected `run`, up to 256 related
+`invocations` (`has_more` identifies truncation), and the last 256 retained
+source-free `events` (`events_truncated` identifies potentially missing history).
+An existing domain checkpoint is returned as `input`; superseded or removed
+proposals have no input control. No raw SDK session, prompt or model response is
+returned by default. Explicit `include_text=true` returns `text` with availability,
+`partial_model_output` or `final_model_output` provenance, at most 64 KiB of UTF-8,
+and `truncated`. Final output references its immutable completion artifact.
+Partial text is transient (at most 64 invocation buffers) and may be unavailable
+after eviction or restart. Text has no approval or execution authority.
+
+`GET /agent-runs/events` returns a JSON replay batch, or SSE when Accept contains
+`text/event-stream`. SSE frames use `event: agent_progress`, `id: <cursor>` and
+the same JSON batch in `data`. The cursor has an opaque journal epoch and a
+monotonic sequence. Pass it as `cursor` or `Last-Event-ID`; conflicting values
+are rejected. Batches contain at most 128 events; `has_more` requests immediate
+replay. With no cursor, a foreign/future cursor, or a cursor older than the 2,048
+retained events, `reset=true` returns a current root snapshot and its new cursor,
+without replaying older transitions over that snapshot. Paginate the snapshot's
+`next_cursor` if needed. Subsequent batches contain only newer events. Consumers
+deduplicate by epoch/sequence and replace state on reset. Detail views expose
+retained earlier node transitions separately.
+
+Events carry root `run_id`, native `invocation_id`, parent/node identity, project
+revision, time, state, shared usage, input request identity and immutable evidence
+references. They contain no source, prompts, arbitrary provider metadata or model
+text. Durable terminal transitions survive missed broker notifications. Frames
+are capped at 1 MiB, slow writes at ten seconds, and idle streams refresh every
+25 seconds to recover dropped notifications. Disconnect/cancel releases the
+subscription; reconnect rechecks project scope. Existing `/events` ready/update
+subscribers retain their original contract.
+
+`POST /agent-runs/{runID}/control` requires `project_id`, `project_revision` and
+`action: cancel`. Only a current active root with `can_cancel=true` is eligible;
+the shared budget is canceled and the worker owns cleanup. History cannot create
+or retry arbitrary graphs. Waiting input is resolved through
+`POST /agent-runs/{runID}/input` with the same `ChangeIdentity`, `workflow_id`,
+`request_id` and `decision` as the workflow input endpoint. It routes to the
+proposal owner, retaining all fresh source, check, scope and explicit Apply guards.
+Missing invocation IDs return 404, stale identities 409, and unreadable journals
+500; none is interpreted as empty successful history.
 
 Workflow progress and advisory review are private source-bearing conversation
 history. List entries add `workflow_status` without review contents. Schema-1

@@ -28,6 +28,7 @@ func runGraph[T any](ctx context.Context, name, version string, input, schema an
 		}
 		return result, err
 	}
+	ctx = invocation.activate(ctx)
 	defer func() {
 		runErr = errors.Join(runErr, invocation.finish(ctx, runErr))
 		if errors.Is(runErr, agentstate.ErrPersistence) || errors.Is(runErr, ErrPolicyDenied) {
@@ -58,7 +59,7 @@ func createGraphSession(ctx context.Context, name, version string, input, schema
 	if err != nil {
 		return nil, err
 	}
-	return createRuntimeSession(ctx, map[string]any{"mini_orca." + name: input}, version, requestHash, schemaHash, "")
+	return createRuntimeSession(withGraphScope(ctx, input), map[string]any{"mini_orca." + name: input}, version, requestHash, schemaHash, "")
 }
 
 func graphAgent(name string, edges []workflow.Edge, concurrency int, input any) (agent.Agent, error) {

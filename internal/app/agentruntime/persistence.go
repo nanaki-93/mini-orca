@@ -70,6 +70,7 @@ func (b *Budget) checkpointLocked(ctx context.Context) error {
 }
 
 type runtimeSession struct {
+	record      agentstate.Run
 	service     session.Service
 	session     session.Session
 	runID       string
@@ -109,12 +110,17 @@ func createRuntimeSession(ctx context.Context, initial map[string]any, schemaVer
 	result.runID = rand.Text()
 	now := time.Now().UTC()
 	run := agentstate.Run{ID: result.runID, Session: agentstate.Key{App: "mini-orca", User: "local", ID: created.Session.ID()}, BudgetID: p.budgetID, RequestHash: requestHash, SchemaHash: schemaHash, ProviderBinding: providerBinding, SchemaVersion: schemaVersion, Status: "running", Started: now, Updated: now}
+	run.ParentID, _ = ctx.Value(invocationKey{}).(string)
+	if scope, ok := ctx.Value(changeScopeKey{}).(changeRunScope); ok {
+		run.ChangeSessionID, run.WorkflowID = scope.SessionID, scope.WorkflowID
+	}
 	if err := p.store.BeginRun(ctx, run); err != nil {
 		if isPersistenceCancellation(err) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w: begin invocation: %w", agentstate.ErrPersistence, err)
 	}
+	result.record = run
 	return result, nil
 }
 
@@ -146,6 +152,7 @@ func fingerprint(value any) (string, error) {
 }
 
 func (s *runtimeSession) finish(ctx context.Context, runErr error) error {
+	defer observeRunEnd(ctx, s.runID)
 	if s.persistence == nil {
 		return nil
 	}

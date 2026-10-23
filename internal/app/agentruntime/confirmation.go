@@ -56,6 +56,7 @@ func RequestConfirmation(ctx context.Context, input ConfirmationInput) (runID st
 	if err != nil {
 		return "", err
 	}
+	ctx = invocation.activate(ctx)
 	defer func() {
 		if runErr != nil {
 			runErr = errors.Join(runErr, invocation.finish(ctx, runErr))
@@ -83,6 +84,7 @@ func RequestConfirmation(ctx context.Context, input ConfirmationInput) (runID st
 	if err := invocation.persistence.store.PauseForInput(ctx, invocation.runID, checkpoint); err != nil {
 		return "", sessionStorageError(err)
 	}
+	observeRunEnd(ctx, invocation.runID)
 	return invocation.runID, nil
 }
 

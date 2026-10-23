@@ -90,6 +90,7 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if err != nil {
 		return Result{}, err
 	}
+	ctx = invocation.activate(ctx)
 	defer func() {
 		if err := invocation.finish(ctx, runErr); err != nil {
 			result = Result{}
@@ -126,7 +127,7 @@ func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, err
 			return Result{}, fmt.Errorf("completion runner returned an invalid event")
 		}
 		if event.Partial {
-			if err := consumePartialText(event, onText); err != nil {
+			if err := consumePartialText(ctx, event, onText); err != nil {
 				return Result{}, err
 			}
 			continue
@@ -151,7 +152,7 @@ func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, err
 	return result, nil
 }
 
-func consumePartialText(event *session.Event, onText func(string) error) error {
+func consumePartialText(ctx context.Context, event *session.Event, onText func(string) error) error {
 	if event.Content == nil || event.TurnComplete || event.Output != nil {
 		return fmt.Errorf("completion runner returned an invalid partial event")
 	}
@@ -164,6 +165,7 @@ func consumePartialText(event *session.Event, onText func(string) error) error {
 				return fmt.Errorf("consume partial completion: %w", err)
 			}
 		}
+		observeText(ctx, part.Text)
 	}
 	return nil
 }

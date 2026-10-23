@@ -53,6 +53,7 @@ type modelOutput = agentruntime.Result
 type Service struct {
 	config                          *config.Config
 	agentRuntime                    config.AgentRuntime
+	agentRuns                       *agentRunController
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
@@ -135,6 +136,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		goScan:                  newGoScanController(),
 		executionTrust:          newExecutionTrustStore(),
 		events:                  newEventBroker(),
+		agentRuns:               newAgentRunController(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}
@@ -301,6 +303,7 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 }
 
 func (s *Service) retryAgentRequest(ctx context.Context, runtime modelRuntime, request agentruntime.Request, beforeAttempt func(context.Context) error) (modelOutput, error) {
+	request.Stream = request.Stream || agentruntime.StreamingRequested(ctx)
 	ctx, release, err := s.agentRunContext(ctx, runtime)
 	if err != nil {
 		return modelOutput{}, err

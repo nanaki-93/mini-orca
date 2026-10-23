@@ -82,7 +82,7 @@ func (s *Store) PauseForInput(ctx context.Context, id string, checkpoint InputCh
 		}
 		run.Input, run.Status, run.Updated = &checkpoint, "waiting_input", time.Now().UTC()
 		db.Runs[id] = run
-		return nil
+		return appendProgress(db, run, "input_requested", nil)
 	})
 }
 
@@ -120,10 +120,14 @@ func (s *Store) ReceiveInput(ctx context.Context, admission InputAdmission, deci
 		if err != nil {
 			return err
 		}
+		alreadyReceived := run.Input.Decision != ""
 		if err := receiveInput(&run, decision, time.Now().UTC()); err != nil {
 			return err
 		}
 		db.Runs[run.ID], result = run, run
+		if !alreadyReceived {
+			return appendProgress(db, run, "input_received", nil)
+		}
 		return nil
 	})
 	return result, err
@@ -159,6 +163,7 @@ func (s *Store) FinishInput(ctx context.Context, admission InputAdmission) error
 		if run.Status == "waiting_input" {
 			run.Status, run.Updated = inputTerminalStatus(run.Input.Decision), time.Now().UTC()
 			db.Runs[run.ID] = run
+			return appendProgress(db, run, "input_finished", nil)
 		}
 		return nil
 	})
