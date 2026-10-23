@@ -24,6 +24,9 @@ type CompletionClient interface {
 }
 
 func newCompletionAgent(client CompletionClient, request Request) (agent.Agent, error) {
+	if provider, ok := client.(*ProviderClient); ok && provider.profile.IsGoogle() {
+		return newGeminiCompletionAgent(provider, request)
+	}
 	if native, ok := client.(generationClient); ok {
 		return agent.New(agent.Config{
 			Name: "completion", Description: "Execute one admitted model completion",

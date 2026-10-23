@@ -19,8 +19,8 @@ configured profiles or discovered Agy/Pi catalog models on **Models**. A capture
 keeps its selected model, timeout and retry budget; remote consent covers every
 selected remote profile. These selections do not change other operations' defaults.
 
-All three scopes are required. Each selects a `provider` (`openai`, `agy`, or
-`pi`) and a `model`. Omitted `provider` retains the OpenAI-compatible HTTP
+All three scopes are required. Each selects a `provider` (`openai`, `gemini`,
+`vertex`, `agy`, or `pi`) and a `model`. Omitted `provider` retains the OpenAI-compatible HTTP
 transport. HTTP profiles have a Chat Completions-compatible
 `api_base_url`; an empty `api_key` is valid for a loopback local
 server. `api_base_url` must be an absolute HTTP or HTTPS URL without user
@@ -52,13 +52,73 @@ The default context budgets are 120000 tokens for `analyze`, 32000 for `bug`,
 and 4000 for `function`. For HTTP profiles, `temperature` must be from 0 through 2;
 `max_tokens` must be 1–65536; `context_max_tokens` must be 1–120000. API keys
 are never returned, logged, or embedded in metadata. Mini-Orca does not perform
-environment interpolation, use a vault or Keychain, call native provider SDKs,
-or provide a settings UI.
+environment interpolation or use a vault or Keychain.
 
-The HTTP provider boundary is one non-streaming OpenAI-compatible Chat Completions
-request. Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
-tool calls, HTTP model enumeration, and vendor SDKs are not supported. Provider
-errors are reduced to a status code so provider bodies cannot leak a key.
+The ADK runtime supports bounded Chat Completions, typed function calls and text
+streaming through the OpenAI-compatible adapter, plus native Gemini through the
+pinned Google SDK. Existing proposal workflows publish only complete results.
+Native Anthropic Messages, OpenAI Responses and HTTP model enumeration are not
+implemented. Provider errors are sanitized; raw provider bodies are never diagnostics.
+
+## Native Google providers
+
+Replace a scope with `provider: gemini` for the Gemini Developer API:
+
+```yaml
+analyze:
+  provider: gemini
+  model: exact-google-model-id
+  api_key: set-in-ignored-config.yaml
+  max_tokens: 16000
+  context_max_tokens: 120000
+  reasoning_effort: high
+```
+
+The default endpoint is `https://generativelanguage.googleapis.com` using
+`v1beta`. Use `provider: vertex` with an explicit `api_key` for Vertex Express,
+or use a project-bound access token:
+
+```yaml
+analyze:
+  provider: vertex
+  model: exact-google-model-id
+  access_token: set-in-ignored-config.yaml
+  vertex_project: your-project-id
+  vertex_location: global
+```
+
+Vertex uses `v1` at `https://aiplatform.googleapis.com` for Express/global, or
+`https://LOCATION-aiplatform.googleapis.com` for a configured region. Tokens
+must be refreshed in the local configuration and the daemon restarted when they
+expire. Do not combine Express keys with a token or project/location. Native
+profiles never authenticate with environment credentials or Application Default
+Credentials. They cannot reuse an Antigravity account implicitly.
+
+An optional `api_base_url` selects an explicit gateway root; the adapter appends
+the API version and model path. Native endpoints require
+HTTPS, except loopback HTTP for local gateways. Credentials are attached only to
+that endpoint. Redirects, SDK retries, and SDK continuation requests are blocked;
+each model attempt permits one HTTP exchange and retains the application's deadline.
+Requests and responses are bounded to 4 MiB. Incomplete, blocked, malformed, or
+tool-bearing completion results cannot become proposals.
+
+Native profiles support `temperature`, `top_p`, `top_k`, `presence_penalty`,
+`max_tokens`, and the existing context budget. `reasoning_effort` accepts `none`
+(zero thinking budget), `minimal`, `low`, `medium`, or `high`; support depends on
+the selected model. `min_p`, `repeat_penalty`, `xhigh`, and `max` are rejected.
+Policy messages must precede the conversation for native Google requests.
+
+Model metadata includes adapter capabilities for completion, JSON Schema,
+typed tools, and streaming. This describes implemented protocols, not account
+entitlements or model availability. Attachments, grounding, and live sessions
+remain unavailable until their guarded workflows are implemented. Reading
+configured metadata is passive; only explicit CLI catalog refresh performs
+discovery. Native models are selected by their configured identifier.
+
+The native provider paths are covered with fake HTTP providers, including Vertex
+authentication, cancellation and tool-signature round trips. No live Google
+account or model has been used for this validation. See the
+[Google ADK model documentation](https://adk.dev/agents/models/google-gemini/).
 
 ## CLI providers
 

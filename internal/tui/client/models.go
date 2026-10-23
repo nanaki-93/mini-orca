@@ -173,17 +173,30 @@ type Overview struct {
 
 // Model describes a configured LLM scope binding and its effective runtime parameters.
 type Model struct {
-	Scope            string   `json:"scope"`
-	Profile          string   `json:"profile"`
-	Model            string   `json:"model"`
-	ProviderOrigin   string   `json:"provider_origin"`
-	RemoteProvider   bool     `json:"remote_provider"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
-	Temperature      *float32 `json:"temperature,omitempty"`
-	MaxTokens        *int     `json:"max_tokens,omitempty"`
-	ContextMaxTokens int      `json:"context_max_tokens,omitempty"`
-	Timeout          string   `json:"timeout"`
-	MaxRetries       int      `json:"max_retries,omitempty"`
+	Scope            string            `json:"scope"`
+	Profile          string            `json:"profile"`
+	Model            string            `json:"model"`
+	ProviderOrigin   string            `json:"provider_origin"`
+	RemoteProvider   bool              `json:"remote_provider"`
+	ReasoningEffort  string            `json:"reasoning_effort,omitempty"`
+	Temperature      *float32          `json:"temperature,omitempty"`
+	MaxTokens        *int              `json:"max_tokens,omitempty"`
+	ContextMaxTokens int               `json:"context_max_tokens,omitempty"`
+	Timeout          string            `json:"timeout"`
+	MaxRetries       int               `json:"max_retries,omitempty"`
+	Capabilities     ModelCapabilities `json:"capabilities,omitzero"`
+}
+
+// ModelCapabilities describes the daemon's implemented adapter protocols.
+// Omitted metadata from older daemons grants no additional features.
+type ModelCapabilities struct {
+	Completion   bool `json:"completion"`
+	JSONSchema   bool `json:"json_schema"`
+	Tools        bool `json:"tools"`
+	Streaming    bool `json:"streaming"`
+	Attachments  bool `json:"attachments"`
+	Grounding    bool `json:"grounding"`
+	LiveSessions bool `json:"live_sessions"`
 }
 
 // ModelCatalog maps model scopes (analyze, bug, function) to configured models.

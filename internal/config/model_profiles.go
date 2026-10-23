@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -26,6 +28,9 @@ type ModelProfile struct {
 	CLIPath          string
 	APIBaseURL       string
 	APIKey           string
+	AccessToken      string `json:",omitempty"`
+	VertexProject    string `json:",omitempty"`
+	VertexLocation   string `json:",omitempty"`
 	Model            string
 	ReasoningEffort  string
 	Temperature      float32
@@ -69,9 +74,19 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 	if configured.Provider == AgyProvider || configured.Provider == PiProvider {
 		return resolveCLIProfile(scope, configured)
 	}
-	if configured.Provider != "" && configured.Provider != OpenAIProvider {
-		return ModelProfile{}, fmt.Errorf("model_scopes.%s.provider must be openai, agy, or pi", scope)
+	if configured.Provider == GeminiProvider || configured.Provider == VertexProvider {
+		return resolveGoogleProfile(scope, configured)
 	}
+	if configured.Provider != "" && configured.Provider != OpenAIProvider {
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s.provider must be openai, gemini, vertex, agy, or pi", scope)
+	}
+	if hasGoogleSettings(configured) {
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s: Google backend settings require a native Google provider", scope)
+	}
+	return resolveHTTPProfile(scope, configured)
+}
+
+func resolveHTTPProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
 	if configured.CLIPath != "" {
 		return ModelProfile{}, fmt.Errorf("model_scopes.%s.cli_path requires an agy or pi provider", scope)
 	}
@@ -100,6 +115,9 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 		MaxTokens:        8192,
 		ContextMaxTokens: defaultContextBudget(scope),
 	}
+	if configured.Provider != "" {
+		profile.Provider = configured.Provider
+	}
 	if configured.Temperature != nil {
 		profile.Temperature = *configured.Temperature
 	}
@@ -118,6 +136,92 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 		return ModelProfile{}, err
 	}
 	return profile, nil
+}
+
+func (p ModelProfile) IsGoogle() bool {
+	return p.Provider == GeminiProvider || p.Provider == VertexProvider
+}
+
+func hasGoogleSettings(configured ModelProfileConfig) bool {
+	return configured.AccessToken != "" || configured.VertexProject != "" || configured.VertexLocation != ""
+}
+
+var googleIdentifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$`)
+var googleLocation = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+
+func resolveGoogleProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
+	if err := validateGoogleAuthentication(scope, configured); err != nil {
+		return ModelProfile{}, err
+	}
+	if err := validateGoogleParameters(scope, configured); err != nil {
+		return ModelProfile{}, err
+	}
+	if configured.APIBaseURL == "" {
+		configured.APIBaseURL = googleBaseURL(configured)
+	}
+	profile, err := resolveHTTPProfile(scope, configured)
+	if err != nil {
+		return ModelProfile{}, err
+	}
+	endpoint, _ := url.Parse(profile.APIBaseURL) // resolveHTTPProfile validated it.
+	address := net.ParseIP(endpoint.Hostname())
+	if endpoint.Scheme != "https" && endpoint.Hostname() != "localhost" && (address == nil || !address.IsLoopback()) {
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s: native Google endpoints require HTTPS or loopback HTTP", scope)
+	}
+	profile.AccessToken, profile.VertexProject, profile.VertexLocation = configured.AccessToken, configured.VertexProject, configured.VertexLocation
+	return profile, nil
+}
+
+func googleBaseURL(configured ModelProfileConfig) string {
+	if configured.Provider == GeminiProvider {
+		return "https://generativelanguage.googleapis.com"
+	}
+	if configured.VertexLocation == "" || configured.VertexLocation == "global" {
+		return "https://aiplatform.googleapis.com"
+	}
+	return "https://" + configured.VertexLocation + "-aiplatform.googleapis.com"
+}
+
+func validateGoogleAuthentication(scope ModelScope, configured ModelProfileConfig) error {
+	for _, credential := range []string{configured.APIKey, configured.AccessToken} {
+		if len(credential) > 8192 || strings.ContainsAny(credential, "\r\n\x00") || strings.TrimSpace(credential) != credential {
+			return fmt.Errorf("model_scopes.%s: invalid Google credential format", scope)
+		}
+	}
+	if configured.Provider == GeminiProvider {
+		if hasGoogleSettings(configured) || configured.APIKey == "" {
+			return fmt.Errorf("model_scopes.%s: gemini requires an explicit api_key and no Vertex settings", scope)
+		}
+		return nil
+	}
+	if configured.APIKey != "" {
+		if hasGoogleSettings(configured) {
+			return fmt.Errorf("model_scopes.%s: Vertex Express api_key cannot be combined with access_token or project/location", scope)
+		}
+		return nil
+	}
+	if configured.AccessToken == "" || !googleIdentifier.MatchString(configured.VertexProject) || !googleLocation.MatchString(configured.VertexLocation) {
+		return fmt.Errorf("model_scopes.%s: Vertex requires an explicit access_token, vertex_project, and vertex_location, or a Vertex Express api_key", scope)
+	}
+	return nil
+}
+
+func validateGoogleParameters(scope ModelScope, configured ModelProfileConfig) error {
+	if !googleIdentifier.MatchString(configured.Model) {
+		return fmt.Errorf("model_scopes.%s.model must be a Google model identifier without a resource path", scope)
+	}
+	if configured.MinP != nil || configured.RepeatPenalty != nil {
+		return fmt.Errorf("model_scopes.%s: native Google providers do not support min_p or repeat_penalty", scope)
+	}
+	if configured.TopK != nil && *configured.TopK > math.MaxInt32 {
+		return fmt.Errorf("model_scopes.%s.top_k exceeds the native provider limit", scope)
+	}
+	switch configured.ReasoningEffort {
+	case "", "none", "minimal", "low", "medium", "high":
+		return nil
+	default:
+		return fmt.Errorf("model_scopes.%s.reasoning_effort is unsupported by the native Google provider", scope)
+	}
 }
 
 func profileConfigHasValues(configured ModelProfileConfig) bool {
@@ -162,8 +266,8 @@ func validateAPIBaseURL(scope ModelScope, rawURL string) (string, error) {
 }
 
 func validateProfileValues(scope ModelScope, profile ModelProfile) error {
-	if profile.Temperature < 0 || profile.Temperature > 2 {
-		return fmt.Errorf("model_scopes.%s.temperature must be between 0 and 2", scope)
+	if err := validateOptionalFloat(scope, "temperature", &profile.Temperature, 0, 2, true); err != nil {
+		return err
 	}
 	if err := validateOptionalFloat(scope, "top_p", profile.TopP, 0, 1, true); err != nil {
 		return err

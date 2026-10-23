@@ -21,17 +21,18 @@ import (
 
 // EffectiveModel is the non-secret metadata for one configured generation scope.
 type EffectiveModel struct {
-	Scope            string   `json:"scope"`
-	Profile          string   `json:"profile"`
-	Model            string   `json:"model"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
-	ProviderOrigin   string   `json:"provider_origin"`
-	RemoteProvider   bool     `json:"remote_provider"`
-	Temperature      *float32 `json:"temperature"`
-	MaxTokens        *int     `json:"max_tokens"`
-	ContextMaxTokens int      `json:"context_max_tokens"`
-	Timeout          string   `json:"timeout"`
-	MaxRetries       int      `json:"max_retries"`
+	Scope            string           `json:"scope"`
+	Profile          string           `json:"profile"`
+	Model            string           `json:"model"`
+	ReasoningEffort  string           `json:"reasoning_effort,omitempty"`
+	ProviderOrigin   string           `json:"provider_origin"`
+	RemoteProvider   bool             `json:"remote_provider"`
+	Temperature      *float32         `json:"temperature"`
+	MaxTokens        *int             `json:"max_tokens"`
+	ContextMaxTokens int              `json:"context_max_tokens"`
+	Timeout          string           `json:"timeout"`
+	MaxRetries       int              `json:"max_retries"`
+	Capabilities     llm.Capabilities `json:"capabilities,omitzero"`
 }
 
 // ModelCatalog exposes the configured model metadata for each fixed scope.
@@ -42,7 +43,7 @@ type ModelCatalog struct {
 type modelRuntime struct {
 	profile   config.ModelProfile
 	effective EffectiveModel
-	client    *llm.Client
+	client    *agentruntime.ProviderClient
 }
 
 type modelOutput = agentruntime.Result
@@ -136,13 +137,14 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetries int) modelRuntime {
 	runtime := modelRuntime{
 		profile: profile,
-		client:  llm.NewClient(profile),
+		client:  agentruntime.NewProviderClient(profile),
 		effective: EffectiveModel{
 			Scope: string(profile.Scope), Profile: string(profile.Scope), Model: profile.Model,
 			ReasoningEffort: profile.ReasoningEffort,
 			ProviderOrigin:  modelProviderOrigin(profile), RemoteProvider: profile.IsCLI() || !isLoopbackURL(profile.APIBaseURL),
 			ContextMaxTokens: profile.ContextMaxTokens,
 			Timeout:          timeout.String(), MaxRetries: maxRetries,
+			Capabilities: llm.ProviderCapabilities(profile),
 		},
 	}
 	if !profile.IsCLI() {
@@ -286,7 +288,7 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 			return result, nil
 		}
 		lastErr = err
-		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || (runtime.profile.IsCLI() && errors.Is(err, llm.ErrRequestRejected)) || errors.Is(err, llm.ErrStructuredRequestRejected) || attempt == runtime.effective.MaxRetries {
+		if ctx.Err() != nil || runtimeRequestTerminal(runtime, err) || attempt == runtime.effective.MaxRetries {
 			break
 		}
 		wait := s.retryBase << attempt
@@ -305,6 +307,11 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 		return modelOutput{}, ctx.Err()
 	}
 	return modelOutput{}, lastErr
+}
+
+func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
+	return errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
+		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
 }
 
 func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {

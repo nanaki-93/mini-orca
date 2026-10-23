@@ -42,6 +42,9 @@ type ModelProfileConfig struct {
 	CLIPath          string        `yaml:"cli_path"`
 	APIBaseURL       string        `yaml:"api_base_url"`
 	APIKey           string        `yaml:"api_key"`
+	AccessToken      string        `yaml:"access_token"`
+	VertexProject    string        `yaml:"vertex_project"`
+	VertexLocation   string        `yaml:"vertex_location"`
 	Model            string        `yaml:"model"`
 	ReasoningEffort  string        `yaml:"reasoning_effort"`
 	Temperature      *float32      `yaml:"temperature"`
@@ -200,6 +203,7 @@ var configurationFields = fieldSet{
 var modelProfileFields = fieldSet{
 	"provider": {}, "cli_path": {},
 	"api_base_url": {}, "api_key": {}, "model": {}, "reasoning_effort": {},
+	"access_token": {}, "vertex_project": {}, "vertex_location": {},
 	"temperature": {}, "top_p": {}, "top_k": {}, "min_p": {}, "presence_penalty": {}, "repeat_penalty": {}, "max_tokens": {}, "context_max_tokens": {},
 }
 

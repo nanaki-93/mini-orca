@@ -89,7 +89,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 04 — Add explicit provider capabilities and native Gemini access
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/config/config.go`, `internal/config/model_profiles.go`, `internal/config/cli_profiles.go`, `internal/config/config_test.go`, `internal/config/config_example_test.go`.

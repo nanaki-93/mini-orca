@@ -185,12 +185,25 @@ guards return `409 Conflict` when their captured base is no longer current.
 
 `model_scopes` is loaded only when the daemon starts, and all fixed scopes are
 required. A changed model, provider, or reasoning effort makes old AI cache
-entries stale. HTTP providers must support OpenAI Chat Completions JSON; native
-Anthropic/Gemini HTTP endpoints, vendor SDKs, API streaming, tool calls, and
-credential-vault features are outside this API. An optional scope
-`reasoning_effort` is safe metadata and is included in a Chat Completions
-request only when configured. Keys belong only in ignored local config and are
-neither logged nor returned.
+entries stale. Providers can use OpenAI-compatible Chat Completions or native
+Google `gemini`/`vertex` adapters. The ADK boundary supports typed function calls
+and bounded text streams; existing HTTP proposal operations still return only
+completed domain results. Native Anthropic Messages, OpenAI Responses, HTTP model
+enumeration and credential-vault features are not exposed. Optional scope
+`reasoning_effort` is safe metadata and maps to the selected provider's supported
+controls. Keys and Vertex access tokens belong only in ignored local config and
+are neither logged nor returned.
+
+Configured model metadata includes `capabilities`: boolean `completion`,
+`json_schema`, `tools`, `streaming`, `attachments`, `grounding`, and `live_sessions`.
+These describe implemented adapter protocols, not an account's model entitlements.
+CLI adapters support completion and locally validated JSON Schema only. HTTP
+adapters also support tools and text streaming. Attachments, grounding and live
+sessions are currently false. Historical metadata may omit the object; clients
+must treat missing capabilities as unavailable. `/api/models/current` remains
+passive and sends no provider request. Native model names are configured explicitly;
+available-model discovery remains the existing explicit Agy/Pi catalog operation.
+See [native Google configuration](../CONFIG.md#native-google-providers).
 
 Scopes can instead select `provider: agy` or `provider: pi` in local configuration.
 These CLI transports feed the same analysis and proposal workflows; they add no

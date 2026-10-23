@@ -38,6 +38,7 @@ type ModelDiscovery struct {
 // IDs describe model configurations, not the job that originally configured them.
 func configuredModelID(profile config.ModelProfile) (string, error) {
 	profile.Scope, profile.APIKey, profile.ContextMaxTokens = "", "", 0
+	profile.AccessToken = ""
 	encoded, err := json.Marshal(profile)
 	if err != nil {
 		return "", fmt.Errorf("encode configured model identity: %w", err)

@@ -13,6 +13,8 @@ const (
 	OpenAIProvider ModelProvider = "openai"
 	AgyProvider    ModelProvider = "agy"
 	PiProvider     ModelProvider = "pi"
+	GeminiProvider ModelProvider = "gemini"
+	VertexProvider ModelProvider = "vertex"
 )
 
 func (p ModelProfile) IsCLI() bool {
@@ -62,6 +64,9 @@ func validateCLIModel(scope ModelScope, provider ModelProvider, model string) er
 }
 
 func validateCLISettings(scope ModelScope, configured ModelProfileConfig) error {
+	if hasGoogleSettings(configured) {
+		return fmt.Errorf("model_scopes.%s: Google backend settings require a native Google provider", scope)
+	}
 	if configured.APIBaseURL != "" || configured.APIKey != "" {
 		return fmt.Errorf("model_scopes.%s: CLI providers use their own authentication; omit api_base_url and api_key", scope)
 	}

@@ -144,3 +144,32 @@ func TestCLIModelCatalogRequiresConsentWithoutLaunchingOrExposingExecutablePaths
 		t.Fatalf("invalid metadata = %s", response.Body.String())
 	}
 }
+
+func TestNativeGoogleCatalogIsPassiveAndSourceFree(t *testing.T) {
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.GeminiProvider, Model: "fixture", APIKey: "private-api-key"}
+	cfg.ModelScopes.Bug = config.ModelProfileConfig{Provider: config.VertexProvider, Model: "fixture", AccessToken: "private-access-token", VertexProject: "private-project", VertexLocation: "global"}
+	service, err := app.New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	NewModelHandler(service).Current(response, httptest.NewRequest(http.MethodGet, "/api/models/current", nil))
+	var catalog app.ModelCatalog
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil {
+		t.Fatalf("catalog=%s", response.Body.String())
+	}
+	for _, scope := range []string{"analyze", "bug"} {
+		model := catalog.Scopes[scope]
+		if !model.RemoteProvider || !model.Capabilities.JSONSchema || !model.Capabilities.Streaming || model.Capabilities.Grounding || model.Capabilities.LiveSessions {
+			t.Fatalf("native metadata=%+v", model)
+		}
+	}
+	if strings.Contains(response.Body.String(), "private-") {
+		t.Fatal("catalog exposed native credentials or project configuration")
+	}
+}

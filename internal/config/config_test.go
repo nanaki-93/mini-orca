@@ -8,6 +8,60 @@ import (
 	"testing"
 )
 
+func TestNativeGoogleProfilesUseExplicitAuthentication(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "must-not-be-used")
+	for name, configured := range map[string]ModelProfileConfig{
+		"developer": {Provider: GeminiProvider, APIKey: "explicit-key", Model: "gemini-fixture"},
+		"express":   {Provider: VertexProvider, APIKey: "express-key", Model: "gemini-fixture"},
+		"vertex":    {Provider: VertexProvider, AccessToken: "explicit-token", VertexProject: "project-id", VertexLocation: "us-central1", Model: "gemini-fixture"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			profile, err := resolveProfile(AnalyzeModelScope, configured)
+			if err != nil || !profile.IsGoogle() || profile.APIKey != configured.APIKey || profile.AccessToken != configured.AccessToken || profile.APIBaseURL != googleBaseURL(configured) || profile.ContextMaxTokens != 120000 {
+				t.Fatalf("profile=%+v error=%v", profile, err)
+			}
+		})
+	}
+	for name, configured := range map[string]ModelProfileConfig{
+		"ambient key":             {Provider: GeminiProvider, Model: "fixture"},
+		"ambient token":           {Provider: VertexProvider, Model: "fixture", VertexProject: "project-id", VertexLocation: "global"},
+		"mixed authentication":    {Provider: VertexProvider, Model: "fixture", APIKey: "key", AccessToken: "token"},
+		"developer vertex fields": {Provider: GeminiProvider, Model: "fixture", APIKey: "key", VertexProject: "project-id"},
+		"unsafe model path":       {Provider: GeminiProvider, Model: "../another", APIKey: "key"},
+		"unsafe location":         {Provider: VertexProvider, Model: "fixture", AccessToken: "token", VertexProject: "project", VertexLocation: "../escape"},
+		"header injection":        {Provider: GeminiProvider, Model: "fixture", APIKey: "key\r\nextra"},
+		"unencrypted remote":      {Provider: GeminiProvider, Model: "fixture", APIKey: "key", APIBaseURL: "http://remote.example"},
+		"unsupported effort":      {Provider: GeminiProvider, Model: "fixture", APIKey: "key", ReasoningEffort: "xhigh"},
+		"compatible fields":       {APIBaseURL: "http://localhost:1234/v1", Model: "fixture", AccessToken: "token"},
+		"CLI fields":              {Provider: PiProvider, Model: "provider/model", AccessToken: "token"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := resolveProfile(AnalyzeModelScope, configured); err == nil {
+				t.Fatal("invalid Google settings accepted")
+			}
+		})
+	}
+}
+
+func TestNativeGoogleYAMLRemainsStrict(t *testing.T) {
+	text := `model_scopes:
+  analyze: {provider: gemini, model: fixture, api_key: explicit-key}
+  bug: {provider: vertex, model: fixture, access_token: explicit-token, vertex_project: project-id, vertex_location: global}
+  function: {api_base_url: "http://localhost:1234/v1", model: local-model}
+`
+	if _, err := LoadFromYAML(writeConfig(t, text)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFromYAML(writeConfig(t, strings.Replace(text, "vertex_location:", "vertex_locaton:", 1))); err == nil {
+		t.Fatal("unknown native setting accepted")
+	}
+	for _, value := range []float32{float32(math.NaN()), float32(math.Inf(1))} {
+		if _, err := resolveProfile(AnalyzeModelScope, ModelProfileConfig{Provider: GeminiProvider, Model: "fixture", APIKey: "explicit-key", Temperature: &value}); err == nil {
+			t.Fatal("non-finite native temperature accepted")
+		}
+	}
+}
+
 func TestLoadFromYAMLAcceptsThreeCompleteScopedProfiles(t *testing.T) {
 	path := writeConfig(t, `
 model_scopes:
