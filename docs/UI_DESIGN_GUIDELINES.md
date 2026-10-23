@@ -58,7 +58,11 @@ silently expand an approved plan. Stage retries must state which work is reused.
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
 Mark changed files individually, invalidate progress when the proposal changes,
-and show Apply's commit/merge destination. Model rationale and criterion references
+and show Apply's commit destination. Worktree Apply commits the reviewed proposal
+and moves it from Tasks to Worktrees as `TO_MERGE`; it never merges automatically.
+Withhold linked issues from the issue lists while awaiting that decision. Explicit
+Merge marks them Done and removes the worktree and its branch. Reject returns
+them to TODO and retains the unmerged branch. Model rationale and criterion references
 are advisory; distinguish reproduced failures, tests already passing, and checks
 that could not execute. Progress timings are diagnostics, not measured speedups.
 
@@ -76,7 +80,9 @@ Model lists show assignments and access boundaries; full parameters and preset
 routing belong to the selected item's scrollable details. Worktree details show
 the recovery action for the current state rather than every possible workflow.
 
-Inspecting a failed task never retries it. Starting a second task in an occupied
+Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
+with their check errors, even when the worktree has no new commits. Equal Git HEADs
+alone must not label such a task integrated. Starting a second task in an occupied
 write scope requires finishing or discarding the existing task. Worktree refresh
 is passive; cleanup is explicit and must wait for the daemon's removal receipt.
 Keep integration, merge conflicts and cleanup warnings distinct. External merge

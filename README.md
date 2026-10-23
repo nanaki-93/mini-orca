@@ -76,7 +76,7 @@ and `h/l` pans long lines (`0` resets the horizontal position).
 
 In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed, `f/F`
 moves between files, `e` shows rationale and criterion references, and `z` compares
-against the last complete review. `P` opens the plan. Apply shows its commit/merge
+against the last complete review. `P` opens the plan. Apply shows its commit
 destination and requires review of every changed file; changed proposals clear
 review progress. `:retry test` reuses implementation, while `:retry review`
 reuses current passing checks. Attempts, stage timings and failure reasons remain
@@ -94,22 +94,32 @@ active task already owns a write path; finish or discard that task first. A save
 plan in an outdated worktree cannot start generation: refresh, use `:replan`, and
 review the new plan. The old worktree remains available in **Worktrees**.
 
-In **Worktrees**, `Enter` opens integration details. **BEHIND** means the destination
-advanced; overlapping paths are a review hint, not proof of conflict. If a merge
+After review, **Apply** commits the fix in its isolated checkout and moves it from
+Tasks to **Worktrees** as **TO_MERGE**. Its linked issues leave the issue lists
+until you decide: `m` merges, marks the issues Done, and deletes the worktree and
+its branch; `x` rejects the fix and returns the issues to TODO, retaining the
+unmerged commits on their branch. Failed tasks remain in Tasks for inspection
+and retry; matching the destination's Git HEAD does not make them integrated.
+
+In **Worktrees**, `Enter` opens integration details. When the destination has
+advanced, overlapping paths are a review hint, not proof of conflict. If a merge
 conflicts, resolve it with your external Git tool and commit the merge. Press `R`
 to update the project index. Saved project trust is restored automatically;
-use `:trust` if the project is not yet trusted. Select the **INTEGRATED** worktree and press `c` to complete linked
-findings and remove the clean checkout. Lowercase `r` only refreshes status;
-updating the index stops outdated checks and workflows in the destination checkout.
-The worktree's branch is retained. For unfinished drafts or unmerged commits,
-`c` offers explicit discard: it stops tasks and removes saved plans/proposals and
-the checkout, retaining committed work on its branch. Cancel keeps everything.
+use `:trust` if the project is not yet trusted. Select the **INTEGRATED** worktree
+and press `c` to complete linked findings and remove the clean checkout and merged
+branch. Lowercase `r` only refreshes status; updating the index stops outdated
+checks and workflows in the destination checkout.
+For unfinished drafts or unmerged commits, `c` also offers explicit discard:
+it stops tasks and removes saved plans/proposals and the checkout, retaining
+committed work on its branch. Cancel keeps everything.
 Local changes, locked worktrees and changed identities still block removal. Squash
 merges and cherry-picks require review before discard because ancestry cannot
 prove that the original task was integrated.
 
 Worktrees stay visible until deletion succeeds. A failed merge shows the actual
-conflict state, and a cleanup warning can be retried through the same action.
+conflict state, and a worktree cleanup warning can be retried through the same
+action. If only branch deletion fails, the warning identifies the retained branch
+to inspect and remove in Git; the merged issues stay Done.
 
 ## Architecture
 
