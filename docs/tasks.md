@@ -169,7 +169,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 07 — Add versioned local artifacts
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentstate/artifacts.go`, `internal/app/agentstate/artifacts_test.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentruntime/artifacts_test.go`, `internal/app/change_store_test.go` — **new**.

@@ -86,7 +86,11 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if err != nil {
 		return Result{}, fmt.Errorf("create runtime policy: %w", err)
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{policy}}})
+	artifacts, err := newArtifactPlugin()
+	if err != nil {
+		return Result{}, fmt.Errorf("create artifact recorder: %w", err)
+	}
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, ArtifactService: completionArtifacts(invocation), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}

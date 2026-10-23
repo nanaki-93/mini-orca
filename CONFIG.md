@@ -339,6 +339,19 @@ records. Corrupt, oversized or unknown-version data is preserved and rejected.
 Opening a project reads records passively; it never resumes unfinished invocations
 or grants source-write, remote-provider, or execution consent.
 
+Versioned completion results and proposal/check evidence use the adjacent private
+`artifacts.json` catalog. Each version records its SHA-256 hash, byte size, media
+type, ownership and provenance. Content is limited to 4 MiB per version, 128
+retained versions per artifact, 4096 artifact identities and 64 MiB per catalog.
+Identical proposal/check snapshots reuse a version. A failed evidence write blocks
+publication; saved artifacts never grant permission to Apply or Undo.
+
+Artifact reads/export return verified bytes without accepting a project filesystem
+destination. Deletion and retention are explicit, preserve version counters, and
+reject evidence retained by an unfinished run or change recovery. Generic ADK
+artifact operations cannot delete recovery-pinned proposal/check snapshots. There
+is no automatic cleanup, source write or external upload.
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

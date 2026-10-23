@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,7 +9,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
@@ -122,7 +125,49 @@ func storeChangeSession(root string, session *ChangeSession) error {
 	if len(data) > 2*1024*1024 {
 		return fmt.Errorf("change history exceeds 2 MiB; start another conversation")
 	}
+	if err := storeChangeArtifacts(root, session); err != nil {
+		return err
+	}
 	return storage.WriteFile(path, data, 0600)
+}
+
+func storeChangeArtifacts(root string, session *ChangeSession) error {
+	if len(session.Changes) == 0 {
+		return nil
+	}
+	store, err := agentstate.Open(root)
+	if err != nil {
+		return fmt.Errorf("%w: open change evidence: %w", agentstate.ErrPersistence, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	provenance := map[string]string{"project": session.ProjectID, "revision": session.ProjectRevision, "proposal": session.Hash, "workspace": session.WorkspaceHash, "policy": session.PolicyFingerprint}
+	if err := saveChangeArtifact(ctx, store, session.ID, "proposal.json", session.Changes, provenance); err != nil {
+		return err
+	}
+	if len(session.Checks) == 0 {
+		return nil
+	}
+	return saveChangeArtifact(ctx, store, session.ID, "checks.json", struct {
+		Options CheckOptions  `json:"options"`
+		Checks  []CheckResult `json:"checks"`
+	}{session.CheckOptions, session.Checks}, provenance)
+}
+
+func saveChangeArtifact(ctx context.Context, store *agentstate.Store, id, name string, value any, provenance map[string]string) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("encode change evidence: %w", err)
+	}
+	_, err = store.SaveArtifact(ctx, agentstate.ArtifactWrite{
+		Key:  agentstate.ArtifactKey{Session: agentstate.Key{App: "mini-orca-changes", User: "local", ID: id}, Name: name},
+		Kind: "inline", MIME: "application/json", Data: data, Provenance: provenance,
+		Protected: true, Deduplicate: true,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: save change evidence: %w", agentstate.ErrPersistence, err)
+	}
+	return nil
 }
 
 func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
