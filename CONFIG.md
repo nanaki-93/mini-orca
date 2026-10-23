@@ -352,6 +352,23 @@ reject evidence retained by an unfinished run or change recovery. Generic ADK
 artifact operations cannot delete recovery-pinned proposal/check snapshots. There
 is no automatic cleanup, source write or external upload.
 
+Explicit declaration explanations use an ADK investigation with the selected
+Function profile when it supports tools. Search, snippet, symbol, import and
+heuristic impact tools admit only the selected declaration's source span and
+indexed metadata. Other paths or line ranges return `scope_required`; they do
+not widen consent. The current-check tool returns source-free, proposal-bound
+check states; absent or stale evidence never implies a pass. It does not execute
+checks. Completion-only CLI profiles continue using the supplied bounded context.
+
+Each investigation retains its tool contracts, scope identity and tool events in
+the private journal. Limits survive provider retries: eight model turns, 24 tool
+calls, 16 KiB per tool payload and 128 KiB of aggregate tool output. Retrieval
+returns at most 20 evidence items and 8 KiB of text, with file/hash/span provenance.
+Source reads are capped at 1 MiB. Model context is capped at 128 KiB and the
+Function profile's context token estimate (four bytes per token), whichever is
+smaller. Source, policy, instructions and project identity are rechecked at
+dispatch and publication; a changed scope stops the investigation.
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

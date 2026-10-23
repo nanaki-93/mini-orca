@@ -80,6 +80,13 @@ func createCompletionSession(ctx context.Context, request Request, providerBindi
 		service = &localSessionService{store: p.store}
 	}
 	initial := map[string]any{"mini_orca.request": request.Messages, "mini_orca.schema": request.Schema}
+	schemaVersion := "completion-v1"
+	if request.Investigation != nil {
+		initial["mini_orca.tools"] = request.Investigation.descriptors()
+		initial["mini_orca.scope"] = request.Investigation.scope
+		initial["mini_orca.context_tokens"] = request.ContextMaxTokens
+		schemaVersion = "investigation-v1"
+	}
 	created, err := service.Create(ctx, &session.CreateRequest{AppName: "mini-orca", UserID: "local", State: initial})
 	if err != nil {
 		return nil, fmt.Errorf("create completion session: %w", err)
@@ -88,24 +95,35 @@ func createCompletionSession(ctx context.Context, request Request, providerBindi
 	if p == nil {
 		return result, nil
 	}
-	requestHash, err := fingerprint(struct {
-		Messages []llm.ChatMessage
-		Schema   *llm.JSONSchema
-	}{request.Messages, request.Schema})
-	if err != nil {
-		return nil, err
-	}
-	schemaHash, err := fingerprint(request.Schema)
+	requestHash, schemaHash, err := invocationIdentity(request, initial)
 	if err != nil {
 		return nil, err
 	}
 	result.runID = rand.Text()
 	now := time.Now().UTC()
-	run := agentstate.Run{ID: result.runID, Session: agentstate.Key{App: "mini-orca", User: "local", ID: created.Session.ID()}, BudgetID: p.budgetID, RequestHash: requestHash, SchemaHash: schemaHash, ProviderBinding: providerBinding, SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}
+	run := agentstate.Run{ID: result.runID, Session: agentstate.Key{App: "mini-orca", User: "local", ID: created.Session.ID()}, BudgetID: p.budgetID, RequestHash: requestHash, SchemaHash: schemaHash, ProviderBinding: providerBinding, SchemaVersion: schemaVersion, Status: "running", Started: now, Updated: now}
 	if err := p.store.BeginRun(ctx, run); err != nil {
 		return nil, fmt.Errorf("%w: begin invocation: %w", agentstate.ErrPersistence, err)
 	}
 	return result, nil
+}
+
+func invocationIdentity(request Request, initial map[string]any) (string, string, error) {
+	var input any = struct {
+		Messages []llm.ChatMessage
+		Schema   *llm.JSONSchema
+	}{request.Messages, request.Schema}
+	var schema any = request.Schema
+	if request.Investigation != nil {
+		input = initial
+		schema = []any{request.Schema, initial["mini_orca.tools"], initial["mini_orca.scope"]}
+	}
+	requestHash, err := fingerprint(input)
+	if err != nil {
+		return "", "", err
+	}
+	schemaHash, err := fingerprint(schema)
+	return requestHash, schemaHash, err
 }
 
 func fingerprint(value any) (string, error) {

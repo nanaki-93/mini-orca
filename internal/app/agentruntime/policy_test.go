@@ -32,6 +32,24 @@ func budgetContext(t *testing.T, alter func(*config.AgentLimits)) (context.Conte
 	return ctx, BudgetFromContext(ctx)
 }
 
+func TestProviderDispatchRechecksInvestigationWithoutSDKHooks(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		json.NewEncoder(w).Encode(fixtureResponse("unexpected"))
+	}))
+	defer server.Close()
+	client := NewProviderClient(config.ModelProfile{Provider: config.OpenAIProvider, APIBaseURL: server.URL, Model: "fixture", MaxTokens: 100})
+	changed := errors.New("source changed")
+	inv := fixtureInvestigation(t, nil, func(context.Context) error { return changed })
+	ctx, _ := budgetContext(t, nil)
+	ctx = context.WithValue(ctx, investigationKey{}, inv)
+	_, err := client.Chat(ctx, []llm.ChatMessage{{Role: "user", Content: "admitted earlier"}})
+	if !errors.Is(err, changed) || !errors.Is(err, ErrPolicyDenied) || calls.Load() != 0 {
+		t.Fatalf("dispatch bypassed authority: calls=%d error=%v", calls.Load(), err)
+	}
+}
+
 func TestBudgetReservationsShareCapacityAndSettleOnce(t *testing.T) {
 	ctx, budget := budgetContext(t, func(l *config.AgentLimits) { l.InputTokens = 100; l.OutputTokens = 100; l.ModelCalls = 2 })
 	first, err := budget.reserveModel(ctx, 60, 70)

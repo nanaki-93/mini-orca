@@ -284,16 +284,23 @@ func isLoopbackURL(rawURL string) bool {
 }
 
 func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage) (modelOutput, error) {
-	return s.retryRequest(ctx, runtime, messages, nil)
+	return s.retryRequestAuthorized(ctx, runtime, messages, nil, nil)
 }
 
 func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
+	if schema == nil {
+		return s.retry(ctx, runtime, messages)
+	}
 	return s.retryRequestAuthorized(ctx, runtime, messages, schema, nil)
 }
 
 // The guard reserves and validates each attempt immediately before transport.
 // Guard failures are never retried or treated as provider failures.
 func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema, beforeAttempt func(context.Context) error) (modelOutput, error) {
+	return s.retryAgentRequest(ctx, runtime, agentruntime.Request{Messages: messages, Schema: schema}, beforeAttempt)
+}
+
+func (s *Service) retryAgentRequest(ctx context.Context, runtime modelRuntime, request agentruntime.Request, beforeAttempt func(context.Context) error) (modelOutput, error) {
 	ctx, release, err := s.agentRunContext(ctx, runtime)
 	if err != nil {
 		return modelOutput{}, err
@@ -306,7 +313,7 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 				return modelOutput{}, err
 			}
 		}
-		result, err := runtime.execute(ctx, messages, schema)
+		result, err := runtime.execute(ctx, request)
 		if err == nil {
 			return result, nil
 		}
@@ -337,11 +344,11 @@ func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
 		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
 }
 
-func (r modelRuntime) execute(ctx context.Context, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
+func (r modelRuntime) execute(ctx context.Context, request agentruntime.Request) (modelOutput, error) {
 	if r.client == nil {
 		return modelOutput{}, fmt.Errorf("model client is not configured")
 	}
-	return agentruntime.Complete(ctx, r.client, agentruntime.Request{Messages: messages, Schema: schema})
+	return agentruntime.Complete(ctx, r.client, request)
 }
 
 func providerOrigin(rawURL string) string {

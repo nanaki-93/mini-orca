@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -81,10 +82,13 @@ type declarationExplanationWireResponse struct {
 }
 
 type preparedDeclarationExplanation struct {
-	file     project.IndexFile
-	symbol   project.SymbolInfo
-	context  string
-	manifest project.ContextManifest
+	file         project.IndexFile
+	symbol       project.SymbolInfo
+	context      string
+	manifest     project.ContextManifest
+	policy       string
+	instructions string
+	root         string
 }
 
 type currentDeclarationExplanationTarget struct {
@@ -92,21 +96,28 @@ type currentDeclarationExplanationTarget struct {
 	symbol project.SymbolInfo
 }
 
-// ExplainDeclaration performs one Function-scope model request without creating
-// a session, draft, check, apply, undo, or persisted analysis record.
+// ExplainDeclaration investigates an admitted declaration without creating a
+// proposal or granting check, Apply or Undo authority.
 func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExplanationRequest) (*DeclarationExplanation, error) {
 	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	runtime := s.runtimes.function
-	prepared, err := s.prepareDeclarationExplanation(request, runtime)
+	prepared, err := s.prepareDeclarationExplanation(ctx, request, runtime)
 	if err != nil {
 		return nil, err
 	}
 	messages := []llm.ChatMessage{{Role: "user", Content: declarationExplanationPrompt(prepared.context)}}
+	input := agentruntime.Request{Messages: messages, ContextMaxTokens: runtime.effective.ContextMaxTokens}
+	if llm.ProviderCapabilities(runtime.profile).Tools {
+		input.Investigation, err = s.declarationInvestigation(request, prepared)
+		if err != nil {
+			return nil, err
+		}
+	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
-	result, err := s.retry(timed, runtime, messages)
+	result, err := s.retryAgentRequest(timed, runtime, input, func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) })
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}
@@ -119,7 +130,7 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 	}
 	// Re-read both policy and index state after provider work so a policy change,
 	// reindex, or source edit cannot publish against a superseded declaration.
-	if err := s.validatePreparedExplanationTarget(request, prepared.file, prepared.symbol); err != nil {
+	if err := s.validateExplanationContext(ctx, request, prepared); err != nil {
 		return nil, err
 	}
 	return &DeclarationExplanation{
@@ -132,8 +143,17 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 	}, nil
 }
 
-func (s *Service) prepareDeclarationExplanation(request DeclarationExplanationRequest, runtime modelRuntime) (preparedDeclarationExplanation, error) {
+func (s *Service) prepareDeclarationExplanation(ctx context.Context, request DeclarationExplanationRequest, runtime modelRuntime) (preparedDeclarationExplanation, error) {
 	target, index, err := s.currentDeclarationExplanationTargetWithIndex(request)
+	if err != nil {
+		return preparedDeclarationExplanation{}, err
+	}
+	root := s.manager.Root()
+	policy, err := project.NewContextPolicy(root)
+	if err != nil {
+		return preparedDeclarationExplanation{}, err
+	}
+	instructions, err := project.ResolveInstructions(root, request.TargetPath)
 	if err != nil {
 		return preparedDeclarationExplanation{}, err
 	}
@@ -141,6 +161,7 @@ func (s *Service) prepareDeclarationExplanation(request DeclarationExplanationRe
 		TargetPath: request.TargetPath, TargetSymbol: request.TargetSymbol,
 		Index:     index,
 		MaxTokens: declarationContextLimit(runtime.effective.ContextMaxTokens),
+		Context:   ctx,
 	})
 	if err != nil {
 		return preparedDeclarationExplanation{}, fmt.Errorf("build declaration explanation context: %w", err)
@@ -148,7 +169,10 @@ func (s *Service) prepareDeclarationExplanation(request DeclarationExplanationRe
 	if err := s.validatePreparedExplanationTarget(request, target.file, target.symbol); err != nil {
 		return preparedDeclarationExplanation{}, err
 	}
-	return preparedDeclarationExplanation{file: target.file, symbol: target.symbol, context: functionContext, manifest: s.contextManifestForRuntime(manifest, runtime)}, nil
+	if err := project.ValidateInstructions(root, request.TargetPath, instructions.Fingerprint); err != nil {
+		return preparedDeclarationExplanation{}, err
+	}
+	return preparedDeclarationExplanation{file: target.file, symbol: target.symbol, context: functionContext, manifest: s.contextManifestForRuntime(manifest, runtime), policy: policy.Version(), instructions: instructions.Fingerprint, root: root}, nil
 }
 
 func (s *Service) validatePreparedExplanationTarget(request DeclarationExplanationRequest, preparedFile project.IndexFile, preparedSymbol project.SymbolInfo) error {

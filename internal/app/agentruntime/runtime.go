@@ -13,6 +13,7 @@ import (
 	"google.golang.org/adk/v2/plugin"
 	"google.golang.org/adk/v2/runner"
 	"google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -20,10 +21,12 @@ import (
 
 // Request is an admitted completion. The caller owns retries and scope checks.
 type Request struct {
-	Messages []llm.ChatMessage
-	Schema   *llm.JSONSchema
-	Stream   bool
-	OnText   func(string) error
+	Messages         []llm.ChatMessage
+	Schema           *llm.JSONSchema
+	Stream           bool
+	OnText           func(string) error
+	Investigation    *Investigation
+	ContextMaxTokens int
 }
 
 // Result retains provider metadata without exposing ADK types to callers.
@@ -35,9 +38,9 @@ type Result struct {
 	UsageKnown   bool
 }
 
-// Complete runs exactly one provider attempt through an ADK custom agent.
-// A private invocation session prevents unrelated requests from sharing history.
-// The provider transport retains ownership of sampling, schemas and CLI isolation.
+// Complete runs an admitted invocation in a private ADK session. Completion
+// requests make one provider attempt; investigations retain bounded tool turns.
+// The transport owns sampling, schemas and CLI isolation; the caller owns retries.
 func Complete(ctx context.Context, client CompletionClient, request Request) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, context.Cause(ctx)
@@ -51,7 +54,18 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 	if _, supported := client.(generationClient); request.Stream && !supported {
 		return Result{}, fmt.Errorf("%w: provider does not support streaming", llm.ErrRequestRejected)
 	}
-	completion, err := newCompletionAgent(client, snapshotRequest(request))
+	request = snapshotRequest(request)
+	var completion agent.Agent
+	var err error
+	if request.Investigation != nil {
+		if parent, ok := ctx.Value(investigationKey{}).(*Investigation); ok && parent != request.Investigation {
+			return Result{}, fmt.Errorf("%w: investigation scope cannot be replaced", ErrPolicyDenied)
+		}
+		ctx = context.WithValue(ctx, investigationKey{}, request.Investigation)
+		completion, err = newInvestigationAgent(client, request)
+	} else {
+		completion, err = newCompletionAgent(client, request)
+	}
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion agent: %w", err)
 	}
@@ -94,7 +108,11 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}
-	return collectCompletion(ctx, runtime.Run(ctx, userID, invocation.session.ID(), nil, agent.RunConfig{}), request.OnText)
+	var input *genai.Content
+	if request.Investigation != nil {
+		input = genai.NewContentFromText(request.Messages[0].Content, genai.RoleUser)
+	}
+	return collectCompletion(ctx, runtime.Run(ctx, userID, invocation.session.ID(), input, agent.RunConfig{}), request.OnText)
 }
 
 func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, error], onText func(string) error) (Result, error) {
@@ -114,6 +132,9 @@ func collectCompletion(ctx context.Context, events iter.Seq2[*session.Event, err
 			continue
 		}
 		if !event.TurnComplete || !event.IsFinalResponse() {
+			if _, investigation := ctx.Value(investigationKey{}).(*Investigation); investigation && event.Content != nil && event.Output == nil {
+				continue
+			}
 			return Result{}, fmt.Errorf("completion runner returned an invalid terminal event")
 		}
 		result, completed = event.Output.(Result)

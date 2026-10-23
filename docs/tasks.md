@@ -193,7 +193,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 08 — Give agents bounded repository investigation tools
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_tools.go`, `internal/app/agent_tools_test.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/tools_test.go` — **new**.

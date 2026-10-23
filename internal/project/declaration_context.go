@@ -1,8 +1,8 @@
 package project
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +15,7 @@ type FunctionContextOptions struct {
 	TargetSymbol string
 	Index        *ProjectIndex
 	MaxTokens    int
+	Context      context.Context
 }
 
 // BuildFunctionWithManifest retains policy and manifest semantics while
@@ -38,20 +39,17 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 		manifest.Excluded = append(manifest.Excluded, decision)
 		return "", manifest, fmt.Errorf("function context target is not eligible: %s", decision.Reason)
 	}
-	fullPath, err := ResolveFile(canonical, path)
-	if err != nil {
-		return "", manifest, err
-	}
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return "", manifest, fmt.Errorf("read function context target: %w", err)
-	}
-	if isBinary(data) {
-		return "", manifest, fmt.Errorf("function context target must be text")
-	}
 	file := functionContextFile(options.Index, path)
 	if file == nil {
 		return "", manifest, fmt.Errorf("function context target is not indexed")
+	}
+	ctx := options.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	data, err := policy.ReadSource(ctx, path, file.ContentHash)
+	if err != nil {
+		return "", manifest, fmt.Errorf("read function context target: %w", err)
 	}
 	declaration, err := functionContextDeclaration(string(data), *file, options.TargetSymbol)
 	if err != nil {

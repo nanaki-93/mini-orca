@@ -54,7 +54,7 @@ func (c *ProviderClient) checkPolicy(ctx context.Context) error {
 			return ErrPolicyDenied
 		}
 	}
-	return nil
+	return authorizeInvestigation(ctx)
 }
 
 func (c *ProviderClient) reserveDispatch(ctx context.Context, request any) (*modelReservation, error) {
@@ -83,15 +83,9 @@ func newPolicyPlugin() (*plugin.Plugin, error) {
 		BeforeModelCallback: func(ctx agent.Context, _ *model.LLMRequest) (*model.LLMResponse, error) {
 			return nil, context.Cause(ctx)
 		},
-		BeforeToolCallback: func(ctx agent.Context, _ tool.Tool, _ map[string]any) (map[string]any, error) {
-			if budget := BudgetFromContext(ctx); budget != nil {
-				if err := budget.AdmitTool(ctx); err != nil {
-					return nil, err
-				}
-			}
-			// Completion runs admit no tools. Investigation will supply host-owned
-			// tool grants, with checks repeated at the actual tool boundary.
-			return nil, ErrPolicyDenied
+		BeforeToolCallback: func(ctx agent.Context, candidate tool.Tool, _ map[string]any) (map[string]any, error) {
+			// Actual dispatch validates again and charges the call exactly once.
+			return nil, checkToolGrant(ctx, candidate)
 		},
 		OnEventCallback: observeBudget,
 	})

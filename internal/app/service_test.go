@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -58,7 +59,7 @@ func TestModelRuntimeRetainsCompletionMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 	runtime := newModelRuntime(config.ModelProfile{APIBaseURL: server.URL, Model: "fixture"}, time.Minute, 3)
-	result, err := runtime.execute(context.Background(), []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
+	result, err := runtime.execute(context.Background(), agentruntime.Request{Messages: []llm.ChatMessage{{Role: "user", Content: "request"}}})
 	if err != nil || result.Content != "answer" || result.Model != "reported-model" || result.Usage.TotalTokens != 42 || result.FinishReason != "stop" {
 		t.Fatalf("result=%+v, error=%v", result, err)
 	}

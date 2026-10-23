@@ -28,7 +28,9 @@ func TestExplainDeclarationReturnsBoundedTransientResultWithoutMutation(t *testi
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		prompt = request.Messages[0].Content
+		for _, message := range request.Messages {
+			prompt += message.Content
+		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validDeclarationExplanation}}}})
 	}))
 	defer server.Close()

@@ -1,15 +1,18 @@
 package project
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
@@ -79,6 +82,77 @@ func NewContextPolicy(root string) (*ContextPolicy, error) {
 }
 
 func (p *ContextPolicy) Version() string { return p.version }
+
+// ReadSource returns bounded, hash-bound source through the same exclusion
+// policy as prompt composition. Rooted opening also contains path replacements.
+func (p *ContextPolicy) ReadSource(ctx context.Context, path, expectedHash string) ([]byte, error) {
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
+	}
+	if decision := p.Decide(path); !decision.Include {
+		return nil, fmt.Errorf("%w: %s", ErrExcludedFile, decision.Reason)
+	}
+	if _, err := ResolveWritePath(p.root, path); err != nil {
+		return nil, fmt.Errorf("resolve source: %w", err)
+	}
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		return nil, fmt.Errorf("open source root: %w", err)
+	}
+	defer root.Close()
+	info, err := root.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect source: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxFileViewBytes {
+		return nil, fmt.Errorf("source must be a regular file of at most %d bytes", maxFileViewBytes)
+	}
+	file, err := root.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open source: %w", err)
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return nil, fmt.Errorf("%w: source identity changed", ErrRevisionConflict)
+	}
+	data, err := readAgentSource(ctx, file)
+	if err != nil {
+		return nil, err
+	}
+	if expectedHash == "" || contentHash(data) != expectedHash {
+		return nil, ErrRevisionConflict
+	}
+	return data, nil
+}
+
+func readAgentSource(ctx context.Context, reader io.Reader) ([]byte, error) {
+	var data []byte
+	buffer := make([]byte, 32<<10)
+	for {
+		if err := context.Cause(ctx); err != nil {
+			return nil, err
+		}
+		n, err := reader.Read(buffer)
+		data = append(data, buffer[:n]...)
+		if len(data) > maxFileViewBytes {
+			return nil, fmt.Errorf("source exceeds %d bytes", maxFileViewBytes)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read source: %w", err)
+		}
+	}
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
+	}
+	if isBinary(data) || !utf8.Valid(data) {
+		return nil, fmt.Errorf("source must be UTF-8 text")
+	}
+	return data, nil
+}
 
 func policyVersion(ignores []ignoreRule, groups ...[]contextRule) string {
 	hash := sha256.New()
