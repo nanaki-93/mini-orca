@@ -396,6 +396,11 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/agent_run_view.go`, `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_test.go` — **new**.
+- `internal/tui/agent_run_stream.go`, `internal/tui/agent_run_stream_test.go` — **new**, owned cursor-based streaming and cancellation/reconnect tests.
+- `internal/tui/terminal_loop.go`, `internal/tui/hub_agents.go`, `internal/tui/agent_progress.go` — connect asynchronous details to the existing event loop and preserve stage selection and scroll.
+- `internal/app/agentruntime/private_events.go`, `internal/app/agentruntime/private_events_test.go` — **new**, bounded SDK event projection for explicitly requested tool arguments/results.
+- `internal/app/agent_run_private.go`, `internal/app/agent_run_private_test.go` — **new**, selected-invocation private detail assembly.
+- `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/tui/client/agent_models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md` — extend the existing explicit private-output disclosure with bounded tool records; default history remains source-free.
 - `internal/tui/sse_events.go`, `internal/tui/daemon_actions.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/detail_view.go`, `internal/tui/state.go`, `internal/tui/workspace_scenarios_test.go`.
 
 **Inputs / dependencies**
@@ -404,6 +409,8 @@ This is an implementation specification, not a claim that the features below alr
 **Implementation rules**
 - Provide Overview, Timeline, Evidence, Usage, and Recovery sections in task detail; expose tool arguments/results through bounded sanitized disclosures. Stream text without moving selection or forcing scroll-to-bottom.
 - Wire pause, resume, cancel, stage retry, and pending-input decisions to their real guarded endpoints. Hide or explain unavailable actions; prevent duplicate submission.
+- Keep pause/resume tied to the admitted analysis owner: native checked-change runs support cancel and guarded stage retry, not arbitrary pause or replay. Explain that limit in task recovery. Subscribe only while inspecting the current run; cancel and join the stream on scope change or TUI exit, reconnect with its last acknowledged cursor, and never dispatch model work from a refresh.
+- Private text and tool records require explicit invocation selection. Keep arguments/results bounded, redact credential-bearing keys, sanitize terminal control characters, and show truncation. Opt-in output streaming applies to new workflows and retries through existing provider capability and consent checks; private text remains separate from source-free progress events.
 - Pending approvals show exact scope and destination; keep per-file diff review and Apply separate. Test reconnects, old events, project switches, long content, terminal escape injection, and passive navigation.
 
 **Verification command**
