@@ -252,7 +252,27 @@ func TestMissionExecutionVersionOneUpgradesWithoutResetOrReadWrites(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := bytes.Replace(data, []byte(`"version":2`), []byte(`"version":1`), 1)
+	var legacyCatalog map[string]json.RawMessage
+	if err := json.Unmarshal(data, &legacyCatalog); err != nil {
+		t.Fatal(err)
+	}
+	var records map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(legacyCatalog["records"], &records); err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range records {
+		delete(record, "current")
+		delete(record, "integrations")
+	}
+	legacyCatalog["records"], err = json.Marshal(records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyCatalog["version"] = json.RawMessage(`1`)
+	legacy, err := json.Marshal(legacyCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, legacy, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +288,7 @@ func TestMissionExecutionVersionOneUpgradesWithoutResetOrReadWrites(t *testing.T
 		t.Fatal(err)
 	}
 	after, err = os.ReadFile(path)
-	if err != nil || !bytes.Contains(after, []byte(`"version":2`)) {
+	if err != nil || !bytes.Contains(after, []byte(`"version":3`)) {
 		t.Fatal("wave did not persist upgraded receipt", err)
 	}
 }

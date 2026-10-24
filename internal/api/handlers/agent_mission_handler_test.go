@@ -218,6 +218,64 @@ func TestMissionExecutionHandlerAdmitsStopControlsAndRejectsForgedGrants(t *test
 	}
 }
 
+func TestMissionIntegrationHandlerRejectsUnownedEffectsAndNestedGrantChanges(t *testing.T) {
+	fixture, saved, prepare := missionExecutionHandlerFixture(t)
+	prepared, err := fixture.service.ControlMissionExecution(t.Context(), saved.Mission.ID, prepare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.service.TrustProjectExecution(t.Context(), prepare.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	h := NewAgentMissionHandler(fixture.service)
+	request := app.MissionExecutionRequest{ProjectID: prepare.ProjectID, ProjectRevision: prepare.ProjectRevision, Action: "integrate", PlanHash: prepare.PlanHash, ExecutionID: prepared.Execution.ID, ExecutionRevision: prepared.Execution.Revision, Base: prepare.Base, Confirm: true, ConfirmExecution: true, Integration: &app.MissionIntegrationRequest{ChildID: "first", SessionID: "proposal", WorkflowID: "workflow", ProposalHash: "sha256:" + strings.Repeat("a", 64), ProposalRevision: 2, Path: filepath.Join(fixture.manager.Root(), ".worktrees", "foreign"), Source: agentstate.MissionBase{Head: strings.Repeat("b", 40), Branch: "codex/foreign"}}}
+	data, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control := func(body []byte) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+		r.SetPathValue("missionID", saved.Mission.ID)
+		w := httptest.NewRecorder()
+		h.ControlExecution(w, r)
+		return w
+	}
+	for _, body := range []string{
+		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":false`, 1),
+		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","child_id":"foreign"`, 1),
+		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","unknown":true`, 1),
+		strings.Replace(string(data), `"workflow_id":"workflow"`, `"workflow_id":""`, 1),
+		strings.Replace(string(data), `"action":"integrate"`, `"action":"cancel"`, 1),
+		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":true,"confirmed_profiles":["function"]`, 1),
+		string(data) + ` {}`,
+	} {
+		if w := control([]byte(body)); w.Code != 400 {
+			t.Fatalf("invalid integration request: %d %s", w.Code, w.Body)
+		}
+	}
+	if w := control(data); w.Code != 409 {
+		t.Fatalf("unreserved child integration: %d %s", w.Code, w.Body)
+	}
+	for _, action := range []string{"reconcile_integration", "cleanup_integration"} {
+		request.Action = action
+		request.Integration.IntegrationID = "missing"
+		data, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w := control(data); w.Code != 409 {
+			t.Fatalf("unknown integration recovery: %d %s", w.Code, w.Body)
+		}
+	}
+	loaded, err := fixture.service.MissionExecution(t.Context(), app.AgentRunQuery{ProjectID: prepare.ProjectID, ProjectRevision: prepare.ProjectRevision}, saved.Mission.ID)
+	if err != nil || loaded.Execution.Revision != prepared.Execution.Revision || loaded.Execution.Current.Base != *prepare.Base || len(loaded.Execution.Integrations) != 0 {
+		t.Fatal("rejected request changed receipt", loaded, err)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.manager.Root(), ".worktrees")); !os.IsNotExist(err) {
+		t.Fatal("rejected integration created worktree", err)
+	}
+}
+
 func missionHandlerMutation(t *testing.T, h *AgentMissionHandler, id string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	data, err := json.Marshal(body)

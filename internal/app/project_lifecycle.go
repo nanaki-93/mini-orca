@@ -11,7 +11,9 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
-	s.cancelMissionJobs()
+	// Synchronous Git effects hold jobLifecycleMu. An integration's own reindex
+	// must preserve its cancellation context through observation and cleanup.
+	s.cancelMissionWaves()
 	s.cancelIntegrations()
 	s.CancelChangeWorkflows()
 	s.cancelGoScan()

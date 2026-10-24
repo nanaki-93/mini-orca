@@ -10,17 +10,18 @@ import (
 )
 
 type MissionExecutionRequest struct {
-	ProjectID         string                  `json:"project_id"`
-	ProjectRevision   string                  `json:"project_revision"`
-	Action            string                  `json:"action"`
-	CatalogRevision   int64                   `json:"catalog_revision"`
-	PlanHash          string                  `json:"plan_hash"`
-	ExecutionID       string                  `json:"execution_id,omitempty"`
-	ExecutionRevision int64                   `json:"execution_revision"`
-	Base              *agentstate.MissionBase `json:"base,omitempty"`
-	Confirm           bool                    `json:"confirm"`
-	ConfirmExecution  bool                    `json:"confirm_execution,omitempty"`
-	ConfirmedProfiles []string                `json:"confirmed_profiles,omitempty"`
+	ProjectID         string                     `json:"project_id"`
+	ProjectRevision   string                     `json:"project_revision"`
+	Action            string                     `json:"action"`
+	CatalogRevision   int64                      `json:"catalog_revision"`
+	PlanHash          string                     `json:"plan_hash"`
+	ExecutionID       string                     `json:"execution_id,omitempty"`
+	ExecutionRevision int64                      `json:"execution_revision"`
+	Base              *agentstate.MissionBase    `json:"base,omitempty"`
+	Confirm           bool                       `json:"confirm"`
+	ConfirmExecution  bool                       `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string                   `json:"confirmed_profiles,omitempty"`
+	Integration       *MissionIntegrationRequest `json:"integration,omitempty"`
 }
 
 func (request *MissionExecutionRequest) UnmarshalJSON(data []byte) error {
@@ -39,6 +40,7 @@ type AgentMissionExecution struct {
 	SourceStatus  string                      `json:"source_status"`
 	ReadyChildren []string                    `json:"ready_children"`
 	OwnerState    string                      `json:"owner_state"`
+	Git           *GitMutationResult          `json:"git,omitempty"`
 }
 
 func validateMissionExecutionRequest(id string, request MissionExecutionRequest) error {
@@ -49,6 +51,9 @@ func validateMissionExecutionRequest(id string, request MissionExecutionRequest)
 }
 
 func validateMissionExecutionAction(request MissionExecutionRequest) error {
+	if request.Integration != nil && request.Action != "integrate" && request.Action != "reconcile_integration" && request.Action != "cleanup_integration" {
+		return fmt.Errorf("only integration controls may carry a committed proposal identity")
+	}
 	switch request.Action {
 	case "prepare":
 		if request.CatalogRevision < 1 || request.ExecutionID != "" || request.ExecutionRevision != 0 || request.Base == nil {
@@ -59,8 +64,10 @@ func validateMissionExecutionAction(request MissionExecutionRequest) error {
 		}
 	case "start", "pause", "cancel", "reconcile":
 		return missionControlShape(request)
+	case "integrate", "reconcile_integration", "cleanup_integration":
+		return missionIntegrationShape(request)
 	default:
-		return fmt.Errorf("choose prepare, start, pause, cancel or reconcile for a mission execution")
+		return fmt.Errorf("choose prepare, start, pause, cancel, reconcile, integrate, reconcile_integration or cleanup_integration")
 	}
 	return nil
 }
@@ -113,6 +120,9 @@ func (s *Service) ControlMissionExecution(ctx context.Context, id string, reques
 	}
 	if request.Action == "reconcile" {
 		return s.reconcileMissionWave(ctx, root, store, id, request)
+	}
+	if request.Integration != nil {
+		return s.controlMissionIntegration(ctx, root, store, id, request)
 	}
 	var record agentstate.MissionExecution
 	if request.Action == "prepare" {
@@ -191,7 +201,8 @@ func (s *Service) inspectMissionExecution(ctx context.Context, root string, quer
 }
 
 func (s *Service) validatePreparedMissionExecution(ctx context.Context, root string, record agentstate.MissionExecution) error {
-	if err := s.validateMissionBinding(ctx, root, record.Mission); err != nil {
+	bound := record.BoundMission()
+	if err := s.validateMissionBinding(ctx, root, bound); err != nil {
 		return err
 	}
 	store, err := agentstate.Open(root)
@@ -209,5 +220,5 @@ func (s *Service) validatePreparedMissionExecution(ctx context.Context, root str
 	if current.PlanHash != record.Mission.PlanHash || !current.Approved {
 		return ErrMissionConflict
 	}
-	return s.validateMissionBase(ctx, record.Mission, record.Base)
+	return s.validateMissionBase(ctx, bound, record.Current.Base)
 }

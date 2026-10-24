@@ -61,7 +61,7 @@ func (h *AgentMissionHandler) Execution(w http.ResponseWriter, r *http.Request) 
 
 func (h *AgentMissionHandler) ControlExecution(w http.ResponseWriter, r *http.Request) {
 	var request app.MissionExecutionRequest
-	if !decodeStrictJSON(w, r, &request, "invalid mission execution request", "Confirm the concrete operation and exact execution revision; starting children also requires project execution and selected provider consent.") {
+	if !decodeStrictJSON(w, r, &request, "invalid mission execution request", "Confirm the concrete operation and exact execution revision; starting children requires selected provider and execution consent, and integration requires the exact committed proposal and Git destination.") {
 		return
 	}
 	value, err := h.service.ControlMissionExecution(r.Context(), r.PathValue("missionID"), request)

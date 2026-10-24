@@ -1029,7 +1029,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 30C1 — Integrate checked mission children with durable Git evidence
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/app/agentstate/mission_integrations.go`, `internal/app/agentstate/mission_integrations_test.go` — **new**.

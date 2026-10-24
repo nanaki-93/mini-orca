@@ -81,6 +81,9 @@ func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationReq
 	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
 		return nil, fmt.Errorf("worktree branch changed; refresh Git status before discarding: %w", project.ErrRevisionConflict)
 	}
+	if err := s.guardMissionWorktree(ctx, repository.Root, source); err != nil {
+		return nil, err
+	}
 	history, err := listChangeSessions(source.Path)
 	if err != nil {
 		return nil, fmt.Errorf("read discarded worktree findings: %w", err)

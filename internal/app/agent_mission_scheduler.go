@@ -16,9 +16,10 @@ import (
 )
 
 type missionController struct {
-	mu    sync.Mutex
-	owner string
-	jobs  map[string]*missionJob
+	mu      sync.Mutex
+	owner   string
+	jobs    map[string]*missionJob
+	effects map[string]*missionEffect
 }
 
 type missionJob struct {
@@ -37,7 +38,7 @@ type missionJob struct {
 }
 
 func newMissionController() *missionController {
-	return &missionController{owner: "owner-" + rand.Text(), jobs: map[string]*missionJob{}}
+	return &missionController{owner: "owner-" + rand.Text(), jobs: map[string]*missionJob{}, effects: map[string]*missionEffect{}}
 }
 
 func missionExecutionIdentityFor(record agentstate.MissionExecution) agentstate.MissionExecutionIdentity {
@@ -108,7 +109,7 @@ func (s *Service) admitMissionWave(ctx context.Context, root string, store *agen
 			return nil, fmt.Errorf("mission child %s requires an explicit test write path for its checked workflow", child.ID)
 		}
 	}
-	trust, err := s.ExecutionTrust(ctx, record.Mission.ProjectRevision, "")
+	trust, err := s.ExecutionTrust(ctx, record.Current.ProjectRevision, "")
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func (s *Service) validateMissionWaveAdmission(ctx context.Context, job *mission
 	if err := s.validatePreparedMissionExecution(ctx, job.root, job.record); err != nil {
 		return err
 	}
-	if err := s.requireWorkspaceExecutionTrust(ctx, job.record.Mission.ProjectRevision, job.workspaceHash); err != nil {
+	if err := s.requireWorkspaceExecutionTrust(ctx, job.record.Current.ProjectRevision, job.workspaceHash); err != nil {
 		return err
 	}
 	return (workspaceIdentity{fingerprint: job.workspaceHash}).verifyCurrent(ctx, job.root)
@@ -197,7 +198,7 @@ func (s *Service) runMissionWave(ctx context.Context, job *missionJob) {
 	ctx = context.WithValue(ctx, agentSettingsKey{}, settings)
 	bounded, release, err := s.workflowAgentContext(ctx, job.models)
 	if err == nil {
-		input := agentruntime.MissionGraphInput{ProjectID: job.record.Mission.ProjectID, ProjectRevision: job.record.Mission.ProjectRevision, ExecutionID: job.record.ID, WaveID: job.record.Wave.ID, PlanHash: job.record.Mission.PlanHash, Children: job.record.Wave.Children, Concurrency: len(job.record.Wave.Children)}
+		input := agentruntime.MissionGraphInput{ProjectID: job.record.Mission.ProjectID, ProjectRevision: job.record.Current.ProjectRevision, ExecutionID: job.record.ID, WaveID: job.record.Wave.ID, PlanHash: job.record.Mission.PlanHash, Children: job.record.Wave.Children, Concurrency: len(job.record.Wave.Children)}
 		_, err = agentruntime.RunMissionGraph(bounded, input, func(ctx context.Context, id string) (agentruntime.MissionNodeResult, error) {
 			return s.runMissionChild(ctx, job, id)
 		})
@@ -228,6 +229,19 @@ func missionWaveFailure(err error) string {
 }
 
 func (s *Service) missionOwnerState(record agentstate.MissionExecution) string {
+	if entry := record.PendingIntegration(); entry != nil {
+		s.missions.mu.Lock()
+		effect := s.missions.effects[record.ID]
+		active := effect != nil && effect.id == entry.ID
+		s.missions.mu.Unlock()
+		if active {
+			return "active"
+		}
+		if entry.Owner == s.missions.owner || !time.Now().Before(entry.Deadline()) {
+			return "recovery_required"
+		}
+		return "waiting_for_owner"
+	}
 	if record.Wave == nil {
 		return "idle"
 	}
@@ -247,7 +261,20 @@ func (s *Service) missionOwnerState(record agentstate.MissionExecution) string {
 func (s *Service) cancelMissionJobs() {
 	s.missions.mu.Lock()
 	defer s.missions.mu.Unlock()
-	for _, job := range s.missions.jobs {
+	s.missions.cancelWavesLocked()
+	for _, effect := range s.missions.effects {
+		effect.cancel()
+	}
+}
+
+func (s *Service) cancelMissionWaves() {
+	s.missions.mu.Lock()
+	defer s.missions.mu.Unlock()
+	s.missions.cancelWavesLocked()
+}
+
+func (controller *missionController) cancelWavesLocked() {
+	for _, job := range controller.jobs {
 		if !job.finished {
 			job.cancel()
 		}
@@ -260,6 +287,9 @@ func (s *Service) cancelMissionExecution(id string) {
 	if job := s.missions.jobs[id]; job != nil && !job.finished {
 		job.cancel()
 	}
+	if effect := s.missions.effects[id]; effect != nil {
+		effect.cancel()
+	}
 }
 
 func (s *Service) waitMissionJobs(ctx context.Context) error {
@@ -267,6 +297,10 @@ func (s *Service) waitMissionJobs(ctx context.Context) error {
 	jobs := make([]*missionJob, 0, len(s.missions.jobs))
 	for _, job := range s.missions.jobs {
 		jobs = append(jobs, job)
+	}
+	effects := make([]*missionEffect, 0, len(s.missions.effects))
+	for _, effect := range s.missions.effects {
+		effects = append(effects, effect)
 	}
 	s.missions.mu.Unlock()
 	var failure error
@@ -279,6 +313,13 @@ func (s *Service) waitMissionJobs(ctx context.Context) error {
 		s.missions.mu.Lock()
 		failure = errors.Join(failure, job.failure)
 		s.missions.mu.Unlock()
+	}
+	for _, effect := range effects {
+		select {
+		case <-effect.done:
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		}
 	}
 	return failure
 }

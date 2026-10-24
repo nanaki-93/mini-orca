@@ -201,6 +201,59 @@ func TestMissionSchedulerWireCarriesConsentOwnershipAndRetainedEvidence(t *testi
 	}
 }
 
+func TestMissionIntegrationWirePreservesCheckpointArchiveAndGitOutcome(t *testing.T) {
+	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "before"}
+	base := GitIdentity{Head: strings.Repeat("a", 40), Branch: "main"}
+	source := GitIdentity{Head: strings.Repeat("b", 40), Branch: "codex/child"}
+	planHash, proposalHash := strings.Repeat("a", 64), "sha256:"+strings.Repeat("c", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/projects/current/missions/mission/execution" || r.URL.Query().Get("worktree_path") != "/selected/root" {
+			t.Error("integration lost selected checkout")
+		}
+		var request app.MissionExecutionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		input := request.Integration
+		if !request.Confirm || !request.ConfirmExecution || request.Action != "integrate" || request.ExecutionID != "execution" || request.ExecutionRevision != 7 || request.PlanHash != planHash || request.Base == nil || request.Base.Head != base.Head || input == nil {
+			t.Error("lost exact integration admission", request)
+			return
+		}
+		if input.ChildID != "child" || input.Path != "/selected/root/.worktrees/child" || input.Source.Head != source.Head || input.Source.Branch != source.Branch || input.ProposalHash != proposalHash || input.ProposalRevision != 3 || input.WorkflowID != "workflow" || input.SessionID != "proposal" || input.IntegrationID != "" {
+			t.Error("lost committed proposal", input)
+		}
+		before := agentstate.MissionCheckpoint{ProjectRevision: "before", Base: agentstate.MissionBase{Head: base.Head, Branch: base.Branch}, Sources: []agentstate.MissionSource{{Path: "new.go"}}, Instructions: map[string]string{"new.go": "instructions"}}
+		after := before
+		after.ProjectRevision, after.Base.Head = "after", source.Head
+		after.Sources = []agentstate.MissionSource{{Path: "new.go", Exists: true, Hash: proposalHash}}
+		evidence := agentstate.MissionProposalEvidence{Key: agentstate.ArtifactKey{Session: agentstate.Key{App: "mini-orca-missions", User: "local", ID: "execution"}, Name: "child-proposal.json"}, Version: 4, Hash: strings.Repeat("d", 64)}
+		entry := agentstate.MissionIntegration{ID: "integration", ChildID: "child", Owner: "owner", State: "merged", Source: input.Source, SessionID: input.SessionID, WorkflowID: input.WorkflowID, ProposalHash: input.ProposalHash, ProposalRevision: input.ProposalRevision, Evidence: evidence, Before: before, After: &after, Cleanup: "worktree_removed", Failure: "Branch retained", StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		response := app.AgentMissionExecution{SourceStatus: "current", OwnerState: "idle", ReadyChildren: []string{}, Execution: agentstate.MissionExecution{ID: "execution", Revision: 10, Base: before.Base, Current: after, Integrations: []agentstate.MissionIntegration{entry}, State: "completed", Children: []agentstate.MissionExecutionChild{{ID: "child", State: "integrated"}}}, Git: &app.GitMutationResult{State: "merged", RemovedWorktree: input.Path, Warnings: []string{"Branch retained"}}}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	cl, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	request := MissionExecutionRequest{ProjectIdentity: identity, Action: "integrate", PlanHash: planHash, ExecutionID: "execution", ExecutionRevision: 7, Base: &base, Confirm: true, ConfirmExecution: true, Integration: &MissionIntegrationRequest{ChildID: "child", SessionID: "proposal", WorkflowID: "workflow", ProposalHash: proposalHash, ProposalRevision: 3, Path: "/selected/root/.worktrees/child", Source: source}}
+	var result AgentMissionExecution
+	if err := cl.DoJSON(t.Context(), "integrate", "POST", "/api/projects/current/missions/mission/execution?worktree_path=%2Fselected%2Froot", request, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Execution.Current.ProjectRevision != "after" || result.Execution.Base != base || result.Execution.Current.Base.Head != source.Head || len(result.Execution.Integrations) != 1 || result.Execution.Children[0].State != "integrated" || result.Git == nil || len(result.Git.Warnings) != 1 {
+		t.Fatal("lost integration checkpoint or partial cleanup", result)
+	}
+	entry := result.Execution.Integrations[0]
+	if entry.State != "merged" || entry.Cleanup != "worktree_removed" || entry.After == nil || entry.After.Sources[0].Hash != proposalHash || entry.Before.Sources[0].Exists || entry.Evidence.Key.Session.ID != "execution" || entry.Evidence.Key.Name != "child-proposal.json" || entry.Evidence.Version != 4 || entry.Evidence.Hash != strings.Repeat("d", 64) || entry.ProposalRevision != 3 || entry.StartedAt == "" || entry.Failure != "Branch retained" {
+		t.Fatal("lost retained integration evidence", entry)
+	}
+}
+
 func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T) {
 	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "revision"}
 	limits := AgentLimits{ModelCalls: 4, ToolCalls: 8, InputTokens: 65536, OutputTokens: 32768, ElapsedSeconds: 60, ConcurrentCalls: 1}

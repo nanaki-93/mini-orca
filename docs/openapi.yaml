@@ -448,7 +448,7 @@ paths:
         '500': {$ref: '#/components/responses/Error'}
     post:
       tags: [Projects]
-      summary: Prepare, start, stop or reconcile a bounded mission execution
+      summary: Prepare, start, stop, integrate or reconcile a bounded mission execution
       description: Preparation freezes the approved plan and clean Git base without dispatch. Start requires fresh execution and selected provider consent and admits one bounded ready wave. Children produce checked proposals requiring separate human Review/Apply and integration. Pause and cancel revoke owned workers. Explicit reconciliation inspects retained worktree/proposal evidence without provider requests. One retained execution per mission prevents allocation reset after failure, cancellation, edits or restart.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MissionExecutionRequest'}}}}
       responses:
@@ -2218,7 +2218,7 @@ components:
       required: [id, state, limits]
       properties:
         id: {type: string}
-        state: {type: string, enum: [pending, reserved, running, awaiting_review, rejected, failed, interrupted]}
+        state: {type: string, enum: [pending, reserved, running, awaiting_review, rejected, failed, interrupted, integrated]}
         limits: {$ref: '#/components/schemas/AgentLimits'}
         wave_id: {type: string}
         directory: {type: string, description: Owned direct child of the checkout's .worktrees directory.}
@@ -2242,17 +2242,83 @@ components:
         children: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string}}
         started_at: {type: string, format: date-time}
         allowance_millis: {type: integer, format: int64, minimum: 1}
+    MissionCheckpoint:
+      type: object
+      additionalProperties: false
+      required: [project_revision, base, sources, instructions]
+      properties:
+        project_revision: {type: string, minLength: 1}
+        base: {$ref: '#/components/schemas/MissionBase'}
+        sources: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/MissionSource'}}
+        instructions: {type: object, additionalProperties: {type: string}}
+    MissionProposalEvidence:
+      type: object
+      additionalProperties: false
+      required: [key, version, hash]
+      properties:
+        key:
+          type: object
+          additionalProperties: false
+          required: [session, name]
+          properties:
+            session:
+              type: object
+              additionalProperties: false
+              required: [app, user, id]
+              properties:
+                app: {type: string, enum: [mini-orca-missions]}
+                user: {type: string, enum: [local]}
+                id: {type: string, description: Exact execution ID.}
+            name: {type: string, description: Child ID followed by -proposal.json.}
+        version: {type: integer, format: int64, minimum: 1}
+        hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+    MissionIntegration:
+      type: object
+      additionalProperties: false
+      required: [id, child_id, owner, state, source, session_id, workflow_id, proposal_hash, proposal_revision, evidence, before, cleanup, started_at, updated_at]
+      properties:
+        id: {type: string}
+        child_id: {type: string}
+        owner: {type: string, description: Opaque owner with a three-minute recovery lease.}
+        state: {type: string, enum: [pending, merged, failed, conflicts, unavailable]}
+        source: {$ref: '#/components/schemas/MissionBase'}
+        session_id: {type: string}
+        workflow_id: {type: string}
+        proposal_hash: {type: string}
+        proposal_revision: {type: integer, format: int64, minimum: 0}
+        evidence: {$ref: '#/components/schemas/MissionProposalEvidence'}
+        before: {$ref: '#/components/schemas/MissionCheckpoint'}
+        after: {$ref: '#/components/schemas/MissionCheckpoint'}
+        failure: {type: string, maxLength: 1024}
+        cleanup: {type: string, enum: [retained, pending, worktree_removed, removed, failed]}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    MissionIntegrationRequest:
+      type: object
+      additionalProperties: false
+      required: [child_id, session_id, workflow_id, proposal_hash, proposal_revision, path, source]
+      properties:
+        child_id: {type: string, minLength: 1}
+        session_id: {type: string, minLength: 1}
+        workflow_id: {type: string, minLength: 1}
+        proposal_hash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        proposal_revision: {type: integer, format: int64, minimum: 0}
+        path: {type: string, minLength: 1, description: Canonical registered child worktree path.}
+        source: {$ref: '#/components/schemas/MissionBase'}
+        integration_id: {type: string, description: Required for reconcile_integration and cleanup_integration; rejected for integrate.}
     MissionExecution:
       type: object
       additionalProperties: false
-      required: [id, execution_revision, catalog_revision, mission, base, state, children, created_at, updated_at]
+      required: [id, execution_revision, catalog_revision, mission, base, current, state, children, created_at, updated_at]
       properties:
         id: {type: string}
         execution_revision: {type: integer, format: int64, minimum: 1}
         catalog_revision: {type: integer, format: int64, minimum: 1}
         mission: {$ref: '#/components/schemas/MissionRecord'}
         base: {$ref: '#/components/schemas/MissionBase'}
-        state: {type: string, enum: [prepared, running, pausing, canceling, paused, canceled, awaiting_review, blocked, interrupted]}
+        current: {$ref: '#/components/schemas/MissionCheckpoint'}
+        integrations: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/MissionIntegration'}}
+        state: {type: string, enum: [prepared, running, pausing, canceling, paused, canceled, awaiting_review, blocked, interrupted, integrating, ready, completed]}
         elapsed_millis: {type: integer, format: int64, minimum: 0, description: Charged active wave time; excludes human review waiting.}
         wave: {$ref: '#/components/schemas/MissionWave'}
         failure: {type: string, maxLength: 1024}
@@ -2269,15 +2335,16 @@ components:
         source_status: {type: string, enum: [current, changed, unavailable]}
         ready_children: {type: array, maxItems: 16, items: {type: string}}
         owner_state: {type: string, enum: [idle, active, waiting_for_owner, recovery_required]}
+        git: {$ref: '#/components/schemas/GitMutationResult'}
     MissionExecutionRequest:
       type: object
       additionalProperties: false
       required: [project_id, project_revision, action, plan_hash, confirm]
-      description: Prepare requires catalog_revision and base, no execution_id, zero execution_revision and no execution/provider grants. Other actions require execution_id and execution_revision, zero catalog_revision and no base. Start additionally requires confirm_execution and selected remote profile confirmation when applicable. Pause/cancel/reconcile reject new grants. The plan hash identifies the frozen approved plan. Unknown and duplicate keys and trailing JSON are rejected.
+      description: Prepare requires catalog_revision and base, no execution_id, zero execution_revision and no execution/provider grants. All other actions require execution_id and execution_revision with zero catalog_revision. Start requires confirm_execution, no base and selected remote profile confirmation when applicable. Pause/cancel/reconcile reject base and new grants. Integrate/reconcile_integration/cleanup_integration require destination base, exact integration object and confirm_execution, without provider grants. Other actions reject integration. The plan hash identifies the immutable approved plan. Unknown and duplicate keys and trailing JSON are rejected.
       properties:
         project_id: {type: string, minLength: 1}
         project_revision: {type: string, minLength: 1}
-        action: {type: string, enum: [prepare, start, pause, cancel, reconcile]}
+        action: {type: string, enum: [prepare, start, pause, cancel, reconcile, integrate, reconcile_integration, cleanup_integration]}
         plan_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
         catalog_revision: {type: integer, format: int64, minimum: 0}
         execution_id: {type: string}
@@ -2286,6 +2353,7 @@ components:
         confirm: {type: boolean, enum: [true]}
         confirm_execution: {type: boolean}
         confirmed_profiles: {type: array, maxItems: 3, uniqueItems: true, items: {type: string}}
+        integration: {$ref: '#/components/schemas/MissionIntegrationRequest'}
     MissionChildOrigin:
       type: object
       additionalProperties: false

@@ -85,6 +85,8 @@ type MissionExecution struct {
 	CatalogRevision int64                   `json:"catalog_revision"`
 	Mission         MissionRecord           `json:"mission"`
 	Base            GitIdentity             `json:"base"`
+	Current         MissionCheckpoint       `json:"current"`
+	Integrations    []MissionIntegration    `json:"integrations,omitempty"`
 	State           string                  `json:"state"`
 	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
 	Wave            *MissionWave            `json:"wave,omitempty"`
@@ -95,24 +97,72 @@ type MissionExecution struct {
 }
 
 type AgentMissionExecution struct {
-	Execution     MissionExecution `json:"execution"`
-	Stale         bool             `json:"stale"`
-	SourceStatus  string           `json:"source_status"`
-	ReadyChildren []string         `json:"ready_children"`
-	OwnerState    string           `json:"owner_state"`
+	Execution     MissionExecution   `json:"execution"`
+	Stale         bool               `json:"stale"`
+	SourceStatus  string             `json:"source_status"`
+	ReadyChildren []string           `json:"ready_children"`
+	OwnerState    string             `json:"owner_state"`
+	Git           *GitMutationResult `json:"git,omitempty"`
 }
 
 type MissionExecutionRequest struct {
 	ProjectIdentity
-	Action            string       `json:"action"`
-	CatalogRevision   int64        `json:"catalog_revision"`
-	PlanHash          string       `json:"plan_hash"`
-	ExecutionID       string       `json:"execution_id,omitempty"`
-	ExecutionRevision int64        `json:"execution_revision"`
-	Base              *GitIdentity `json:"base,omitempty"`
-	Confirm           bool         `json:"confirm"`
-	ConfirmExecution  bool         `json:"confirm_execution,omitempty"`
-	ConfirmedProfiles []string     `json:"confirmed_profiles,omitempty"`
+	Action            string                     `json:"action"`
+	CatalogRevision   int64                      `json:"catalog_revision"`
+	PlanHash          string                     `json:"plan_hash"`
+	ExecutionID       string                     `json:"execution_id,omitempty"`
+	ExecutionRevision int64                      `json:"execution_revision"`
+	Base              *GitIdentity               `json:"base,omitempty"`
+	Confirm           bool                       `json:"confirm"`
+	ConfirmExecution  bool                       `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string                   `json:"confirmed_profiles,omitempty"`
+	Integration       *MissionIntegrationRequest `json:"integration,omitempty"`
+}
+
+type MissionCheckpoint struct {
+	ProjectRevision string            `json:"project_revision"`
+	Base            GitIdentity       `json:"base"`
+	Sources         []MissionSource   `json:"sources"`
+	Instructions    map[string]string `json:"instructions"`
+}
+
+type MissionProposalEvidence struct {
+	Key struct {
+		Session AgentSessionKey `json:"session"`
+		Name    string          `json:"name"`
+	} `json:"key"`
+	Version int64  `json:"version"`
+	Hash    string `json:"hash"`
+}
+
+type MissionIntegration struct {
+	ID               string                  `json:"id"`
+	ChildID          string                  `json:"child_id"`
+	Owner            string                  `json:"owner"`
+	State            string                  `json:"state"`
+	Source           GitIdentity             `json:"source"`
+	SessionID        string                  `json:"session_id"`
+	WorkflowID       string                  `json:"workflow_id"`
+	ProposalHash     string                  `json:"proposal_hash"`
+	ProposalRevision int64                   `json:"proposal_revision"`
+	Evidence         MissionProposalEvidence `json:"evidence"`
+	Before           MissionCheckpoint       `json:"before"`
+	After            *MissionCheckpoint      `json:"after,omitempty"`
+	Failure          string                  `json:"failure,omitempty"`
+	Cleanup          string                  `json:"cleanup"`
+	StartedAt        string                  `json:"started_at"`
+	UpdatedAt        string                  `json:"updated_at"`
+}
+
+type MissionIntegrationRequest struct {
+	ChildID          string      `json:"child_id"`
+	SessionID        string      `json:"session_id"`
+	WorkflowID       string      `json:"workflow_id"`
+	ProposalHash     string      `json:"proposal_hash"`
+	ProposalRevision int64       `json:"proposal_revision"`
+	Path             string      `json:"path"`
+	Source           GitIdentity `json:"source"`
+	IntegrationID    string      `json:"integration_id,omitempty"`
 }
 
 type MissionSummary struct {

@@ -80,7 +80,7 @@ untrusted networks.
 | GET | `/api/projects/current/missions/{missionID}` | Inspect a retained plan, review state and binding freshness. |
 | POST | `/api/projects/current/missions/{missionID}` | Revise, review a child or approve an exact saved mission plan. |
 | GET | `/api/projects/current/missions/{missionID}/execution` | Inspect the frozen execution receipt and current binding freshness. |
-| POST | `/api/projects/current/missions/{missionID}/execution` | Prepare fixed child allocations at an approved Git base, or cancel an exact prepared receipt. |
+| POST | `/api/projects/current/missions/{missionID}/execution` | Prepare, start, stop, integrate or reconcile a bounded mission execution. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
@@ -1828,15 +1828,16 @@ execution storage is not reported as a completed or empty execution.
   settings or the editable catalog plan change. It still requires the current
   project identity and cannot control another checkout's receipt.
 
-Preparation creates a receipt in a version-2 catalog with state `prepared`, an independent
+Preparation creates a receipt in a version-3 catalog with state `prepared`, an independent
 `execution_revision` of 1, the approved `catalog_revision`, a full frozen
 `mission`, the exact Git `base`, and `children` containing each child's ID,
 `pending` state and fixed approved `limits`. The plan already bounds the sum of
 child model calls, tool calls, input/output tokens and repairs. These are future
 allocations, not measured usage. Preparation and inspection grant no provider,
 project-code execution, worktree creation, Apply or merge authority. Existing
-version-1 prepared/canceled receipts remain readable and upgrade on the next
-explicit mutation without resetting allocations.
+version-1 prepared/canceled and version-2 wave receipts remain readable and
+upgrade on the next explicit mutation without resetting allocations. The initial
+`current` checkpoint copies the original revision, base, sources and instructions.
 
 Start freezes the effective settings and runs a native `mission-graph-v1` ADK
 wave. Before worktree creation, it records each child's `wave_id`, deterministic
@@ -1849,14 +1850,15 @@ excluded. A proposal's `mission_origin` binds its mission, execution, child and
 plan hash. Ordinary model retries on that proposal cannot mint a new allocation.
 
 Child states are `pending`, `reserved`, `running`, `awaiting_review`, `rejected`,
-`failed` or `interrupted`. Child receipts retain project/session/workflow and
+`failed`, `interrupted` or `integrated`. Child receipts retain project/session/workflow and
 proposal identities when available, plus a bounded `reason`. A successful child
 produces a checked proposal awaiting separate human diff review and Apply. Start
 never applies source or merges a worktree. Dependent children remain pending
 until an explicit integration operation records their prerequisites.
 
 Execution states are `prepared`, `running`, `pausing`, `canceling`, `paused`,
-`canceled`, `awaiting_review`, `blocked` or `interrupted`. An active `wave`
+`canceled`, `awaiting_review`, `blocked`, `interrupted`, `integrating`, `ready` or
+`completed`. An active `wave`
 contains its opaque owner, selected children, start time and millisecond
 allowance. `elapsed_millis` charges active wave time; waiting for human review
 does not consume it. Failed or canceled attempts retain their full fixed child
@@ -1881,13 +1883,75 @@ Canceling a prepared execution changes its state to `canceled`, increments its
 execution revision, and retains the frozen plan and all child allocations.
 Replaying an old preparation or cancellation returns 409.
 
+### Mission integration and recovery
+
+The execution route also accepts `integrate`, `reconcile_integration` and
+`cleanup_integration`. Each requires the current project identity, frozen
+`plan_hash`, exact `execution_id` and `execution_revision`, zero
+`catalog_revision`, the displayed destination `base`, `confirm: true` and
+`confirm_execution: true`. The destination must have current execution trust.
+Provider grants are rejected. The `integration` object contains `child_id`,
+`session_id`, `workflow_id`, `proposal_hash`, `proposal_revision`, canonical
+registered worktree `path`, and `source` with the exact committed `head` and
+`branch`. Recovery and cleanup additionally require `integration_id`; new
+integration rejects it. Other execution actions reject this object.
+
+Integration requires the next child in the approved integration order, checked
+against `execution.current.base`. The exact proposal must have passed checks,
+per-file human review and explicit Apply/commit. The single child commit must
+have the recorded base as its parent and match the reviewed file contents and
+modes, with no extra paths. A parallel child checked on an older base remains
+blocked for explicit revalidation. Ordinary worktree merge, cleanup and discard
+routes reject mission-owned checkouts, including reservations with no proposal.
+Recorded branch ownership and retained proposal origins also prevent moving or
+renaming a checkout from bypassing mission integration or discarding its evidence.
+
+Before merging, the host saves the complete applied proposal as a protected
+private artifact and records a pending integration intent. The artifact reference
+in `integrations[].evidence` contains `key` (`session` and `name`), exact `version`
+and content `hash`. This preserves checks, review, workflow, source and commit
+provenance after worktree removal. It is source-bearing private evidence and is
+not included in source-free run diagnostics. The merge is fast-forward only.
+
+The original `mission`, plan hash, initial `base` and child allocations remain
+unchanged. A verified merge records a new `current` checkpoint with its observed
+`project_revision`, Git `base`, `sources` and `instructions`. Publication rechecks
+source, catalog approval, settings, policy and Git identity. Only approved child
+paths may change. The child becomes `integrated` and dependent children become
+eligible only after this receipt is saved. Later starts use the new checkpoint
+with the original budgets and fresh execution/provider consent. All children
+integrated yields `completed`; cancellation still prevents subsequent starts.
+
+Integration receipts have `pending`, `merged`, `failed`, `conflicts` or
+`unavailable` state. A bounded owner lease prevents another daemon from recovering
+an active operation. Restart never retries merge. Explicit reconciliation inspects
+the actual clean destination, exact commit parent/tree and protected proposal;
+only the recorded source commit can advance the checkpoint. An unchanged base
+records `failed`; changed, conflicting or unavailable evidence remains blocked.
+A missing worktree alone never proves integration. Resolve or explicitly abort
+conflicts with the ordinary Git recovery controls before reconciliation.
+
+Responses to integration controls may contain `git`, the observed Git mutation
+result including its new index/repository and warnings. A successful Git effect
+with failed receipt publication retains the checkout, blocks dependencies and
+reports the unsaved receipt; it is never presented as a source no-op. Receipt
+publication precedes cleanup. Cancellation after a merge still records the
+observed commit, but defers checkout removal until explicit cleanup. `cleanup`
+is `retained`, `pending`,
+`worktree_removed`, `removed` or `failed`. Untracked edits, changed branches,
+missing artifact evidence and write failures retain recoverable state. Explicit
+`cleanup_integration` verifies ancestry and exact ownership before retrying only
+cleanup. It never merges, invokes providers or resets allocations. Previously
+removed checkouts and branches are reconciled from Git evidence, not assumed.
+
 Preparation rechecks plan/catalog identity, current source hashes, instructions,
 policy, effective settings and Git base at atomic publication. The private
 workspace-bound execution catalog uses mode 0600, is bounded to 8 MiB and 128
 receipts, and preserves corrupt or unsupported schemas. Reads and responses use
 `Cache-Control: no-store`. Invalid action shapes or missing confirmation return
 400, absent receipts 404, stale identities or concurrent controls 409, and
-private storage failures 500. A canceled request cannot publish a receipt.
+private storage failures 500. Canceled preparation cannot publish a new receipt;
+an already attempted integration still records its observed Git outcome.
 
 ### Explicit mission decomposition
 

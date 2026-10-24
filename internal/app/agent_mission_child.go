@@ -283,7 +283,7 @@ func missionChildAt(record agentstate.MissionExecution, id string) (agentstate.M
 
 func (s *Service) prepareMissionChild(ctx context.Context, job *missionJob, child agentstate.MissionExecutionChild, spec agentstate.MissionChild) (*Service, error) {
 	path := filepath.Join(job.root, ".worktrees", child.Directory)
-	request := GitMutationRequest{ProjectID: job.record.Mission.ProjectID, ProjectRevision: job.record.Mission.ProjectRevision, GitIdentity: GitIdentity{Head: child.BaseHead, Branch: job.record.Base.Branch}, Confirm: true, ConfirmExecution: true, TargetBranch: child.Branch, Path: path}
+	request := GitMutationRequest{ProjectID: job.record.Mission.ProjectID, ProjectRevision: job.record.Current.ProjectRevision, GitIdentity: GitIdentity{Head: child.BaseHead, Branch: job.record.Current.Base.Branch}, Confirm: true, ConfirmExecution: true, TargetBranch: child.Branch, Path: path}
 	created, err := s.CreateGitWorktree(ctx, request)
 	if err != nil {
 		return nil, err
@@ -298,7 +298,7 @@ func (s *Service) prepareMissionChild(ctx context.Context, job *missionJob, chil
 	if err != nil {
 		return nil, err
 	}
-	if err := validateMissionChildSources(service.manager.Root(), job.record.Mission, spec); err != nil {
+	if err := validateMissionChildSources(service.manager.Root(), job.record.BoundMission(), spec); err != nil {
 		return nil, err
 	}
 	if err := s.grantMissionChildExecution(ctx, job, service); err != nil {
@@ -367,7 +367,7 @@ func validateMissionChildSources(root string, mission agentstate.MissionRecord, 
 }
 
 func (s *Service) grantMissionChildExecution(ctx context.Context, job *missionJob, child *Service) error {
-	if err := s.requireWorkspaceExecutionTrust(ctx, job.record.Mission.ProjectRevision, job.workspaceHash); err != nil {
+	if err := s.requireWorkspaceExecutionTrust(ctx, job.record.Current.ProjectRevision, job.workspaceHash); err != nil {
 		return err
 	}
 	index, err := child.manager.Index()

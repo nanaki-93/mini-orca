@@ -59,6 +59,8 @@ type MissionExecution struct {
 	CatalogRevision int64                   `json:"catalog_revision"`
 	Mission         MissionRecord           `json:"mission"`
 	Base            MissionBase             `json:"base"`
+	Current         MissionCheckpoint       `json:"current"`
+	Integrations    []MissionIntegration    `json:"integrations,omitempty"`
 	State           string                  `json:"state"`
 	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
 	Wave            *MissionWave            `json:"wave,omitempty"`
@@ -106,6 +108,9 @@ func (record MissionExecution) validate() error {
 	if err := record.validateAllocations(); err != nil {
 		return err
 	}
+	if err := record.validateIntegrations(); err != nil {
+		return err
+	}
 	return record.validateWave()
 }
 
@@ -129,7 +134,7 @@ func (child MissionExecutionChild) validate(executionID string) error {
 		}
 		return nil
 	}
-	if !slices.Contains([]string{"reserved", "running", "awaiting_review", "rejected", "failed", "interrupted"}, child.State) || !validID(child.WaveID) || child.UpdatedAt.IsZero() {
+	if !slices.Contains([]string{"reserved", "running", "awaiting_review", "rejected", "failed", "interrupted", "integrated"}, child.State) || !validID(child.WaveID) || child.UpdatedAt.IsZero() {
 		return ErrCorrupt
 	}
 	if child.Directory != executionID+"-"+child.ID || strings.ContainsAny(child.Directory, "/\\") || child.Branch != "codex/"+child.Directory || !validMissionBase(MissionBase{Head: child.BaseHead, Branch: child.Branch}) {
@@ -146,7 +151,7 @@ func (child MissionExecutionChild) validateProposal() error {
 		if child.ProjectID != "" || child.ProjectRevision != "" || child.WorkflowID != "" || child.ProposalHash != "" || child.ProposalRevision != 0 {
 			return ErrCorrupt
 		}
-		if child.State == "running" || child.State == "awaiting_review" || child.State == "rejected" {
+		if child.State == "running" || child.State == "awaiting_review" || child.State == "rejected" || child.State == "integrated" {
 			return ErrCorrupt
 		}
 		return nil
@@ -163,7 +168,7 @@ func (child MissionExecutionChild) validateProposal() error {
 }
 
 func (record MissionExecution) validateWave() error {
-	if !slices.Contains([]string{"prepared", "running", "pausing", "canceling", "paused", "canceled", "awaiting_review", "blocked", "interrupted"}, record.State) {
+	if !slices.Contains([]string{"prepared", "running", "pausing", "canceling", "paused", "canceled", "awaiting_review", "blocked", "interrupted", "integrating", "ready", "completed"}, record.State) {
 		return ErrCorrupt
 	}
 	active := record.State == "running" || record.State == "pausing" || record.State == "canceling"
@@ -231,7 +236,7 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 	}
 	data, err := readJournalFile(location)
 	if errors.Is(err, os.ErrNotExist) {
-		return &missionExecutions{Version: 2, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
+		return &missionExecutions{Version: 3, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: read mission executions: %w", ErrPersistence, err)
@@ -247,7 +252,7 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 
 func upgradeMissionExecutions(catalog *missionExecutions) error {
 	if catalog.Version != 1 {
-		return nil
+		return upgradeMissionIntegrationBindings(catalog)
 	}
 	for _, record := range catalog.Records {
 		if record.State != "prepared" && record.State != "canceled" || record.Wave != nil || record.ElapsedMillis != 0 || record.Failure != "" {
@@ -260,11 +265,11 @@ func upgradeMissionExecutions(catalog *missionExecutions) error {
 		}
 	}
 	catalog.Version = 2
-	return nil
+	return upgradeMissionIntegrationBindings(catalog)
 }
 
 func (s *Store) validateMissionExecutions(catalog *missionExecutions) error {
-	if catalog.Version != 2 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
+	if catalog.Version != 3 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
 		return ErrCorrupt
 	}
 	seen := map[string]bool{}
@@ -358,6 +363,7 @@ func (s *Store) PrepareMissionExecution(ctx context.Context, request MissionExec
 			return fmt.Errorf("review every child and approve the mission before preparing execution")
 		}
 		result = MissionExecution{ID: "mission-run-" + rand.Text(), Revision: 1, CatalogRevision: catalog.Revision, Mission: mission, Base: request.Base, State: "prepared", CreatedAt: now, UpdatedAt: now}
+		result.Current = initialMissionCheckpoint(result)
 		for _, child := range mission.Plan.Children {
 			result.Children = append(result.Children, MissionExecutionChild{ID: child.ID, State: "pending", Limits: child.Limits})
 		}
@@ -422,7 +428,7 @@ func missionExecutionAt(catalog *missionExecutions, request MissionExecutionIden
 // disjoint even if completion order differs from integration order.
 func (record MissionExecution) ReadyChildren() []string {
 	ready := []string{}
-	if record.Wave != nil || record.State == "canceled" {
+	if record.Wave != nil || record.PendingIntegration() != nil || record.State == "canceled" {
 		return ready
 	}
 	states := map[string]string{}
@@ -451,7 +457,7 @@ func (s *Store) BeginMissionWave(ctx context.Context, request MissionExecutionId
 		if err != nil {
 			return err
 		}
-		if record.Wave != nil || record.State == "canceled" {
+		if record.Wave != nil || record.PendingIntegration() != nil || record.State == "canceled" {
 			return ErrMissionConflict
 		}
 		ready := record.ReadyChildren()
@@ -467,7 +473,7 @@ func (s *Store) BeginMissionWave(ctx context.Context, request MissionExecutionId
 			}
 			child.State, child.WaveID, child.UpdatedAt = "reserved", wave.ID, now
 			child.Directory = record.ID + "-" + child.ID
-			child.Branch, child.BaseHead = "codex/"+child.Directory, record.Base.Head
+			child.Branch, child.BaseHead = "codex/"+child.Directory, record.Current.Base.Head
 			wave.AllowanceMillis = max(wave.AllowanceMillis, int64(child.Limits.ElapsedSeconds)*1000)
 		}
 		wave.AllowanceMillis = min(wave.AllowanceMillis, remaining)

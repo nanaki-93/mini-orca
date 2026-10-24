@@ -81,7 +81,7 @@ func missionSchedulerFixture(t *testing.T, handler http.HandlerFunc, calls int, 
 
 func missionStartRequest(value *AgentMissionExecution) MissionExecutionRequest {
 	record := value.Execution
-	return MissionExecutionRequest{ProjectID: record.Mission.ProjectID, ProjectRevision: record.Mission.ProjectRevision, Action: "start", PlanHash: record.Mission.PlanHash, ExecutionID: record.ID, ExecutionRevision: record.Revision, Confirm: true, ConfirmExecution: true}
+	return MissionExecutionRequest{ProjectID: record.Mission.ProjectID, ProjectRevision: record.Current.ProjectRevision, Action: "start", PlanHash: record.Mission.PlanHash, ExecutionID: record.ID, ExecutionRevision: record.Revision, Confirm: true, ConfirmExecution: true}
 }
 
 func missionFixtureAnswer(t *testing.T, w http.ResponseWriter, r *http.Request) {
