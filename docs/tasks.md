@@ -910,27 +910,73 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: add native agent task and trajectory evaluation`
 
-## Task 29 — Plan larger missions as separately approved tasks
+## Task 29A — Persist bounded mission plans and explicit review
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agent_mission.go`, `internal/app/agent_mission_test.go`, `internal/app/agentstate/missions.go`, `internal/app/agentstate/missions_test.go`, `internal/app/agentruntime/mission_planner.go` — **new**.
+- `internal/app/agent_mission.go`, `internal/app/agent_mission_test.go`, `internal/app/agentstate/missions.go`, `internal/app/agentstate/missions_test.go` — **new**.
 - `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go` — **new**.
-- `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/plan.go`, `internal/tui/plan_actions.go`, `internal/tui/plan_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/tui/client/missions_test.go` — **new**, wire contract tests.
+- `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 28; investigator, approved plans, worktree ownership, and durable task identities.
+- Task 28; captured source/instruction validation, private atomic catalogs, strict scoped handlers, and guarded client routes.
 
 **Implementation rules**
-- Decompose an explicit project goal into a validated acyclic dependency graph of bounded tasks with acceptance criteria, read/write scope, budgets, and integration order.
-- Keep every child within the existing eight-file limit and require review of the concrete mission/child plans. Reject cycles, overlapping simultaneous writers, unreachable dependencies, and unbounded task counts.
-- Mission inspection and editing are passive; planning never launches children. Expose the plan in Work using the existing focused plan/detail patterns.
+- Provide real scoped API operations to create, list, inspect, revise and review a private mission plan. Saving and editing never dispatch providers, execute checks, create worktrees or write project source.
+- Bound missions to 16 children and 64 captured paths. Each child has an approach, acceptance criteria, dependencies, 1–8 write paths, at most eight distinct read paths and explicit limits within a cumulative mission budget. Validate integration order, missing/cyclic dependencies, and concurrent write/read conflicts; an absent read path needs an ancestor that creates it.
+- Capture project/revision, present/absent source identities, context policy and instruction identities. Recheck these at durable mutation boundaries. Reject invalid paths, excluded/symlinked source, stale revisions and changed source. Keep stale historical plans inspectable without making them executable.
+- Bind child review and final mission approval to the exact plan hash and catalog revision. Revising the plan clears review/approval. Approval is planning authority only; no children launch and no Apply/Undo authority is granted.
+- Use bounded, private, versioned atomic storage. Preserve corrupt files, reject unknown schemas, handle concurrent stale edits and surface write failures. Cover API/client success and rejection behavior with fakes.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentstate ./internal/app/agentruntime ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./cmd/daemon ./internal/tui/client && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: add scoped multi-task mission planning`
+**Commit**: `feat: persist scoped mission plans and explicit review`
+
+## Task 29B — Decompose missions through the native ADK planner
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agentruntime/mission_planner.go`, `internal/app/agentruntime/mission_planner_test.go`, `internal/app/agent_mission_planning.go`, `internal/app/agent_mission_planning_test.go` — **new**.
+- `internal/app/agent_mission.go`, `internal/app/agent_mission_test.go`, `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+
+**Inputs / dependencies**
+- Task 29A; bounded native investigation tools, current Function profile, remote consent, shared budgets and captured source/instruction checks.
+
+**Implementation rules**
+- Add an explicit, cancelable planning operation that decomposes the supplied goal only within the captured path inventory and mission budget. Use native ADK execution with read-only repository tools where supported; preserve the existing bounded completion path for completion-only profiles.
+- Keep model suggestions unapproved. Strictly validate the entire returned DAG, scope, dependencies, acceptance criteria and budget before saving a draft; reuse task 29A's domain validator rather than trusting schema-constrained output alone.
+- Revalidate project, sources, instructions and settings at dispatch and publication. Reject late, stale, incomplete or malformed output without publishing a usable mission. Cancellation must stop provider work and retain existing drafts. Never start a child or modify source.
+
+**Verification command**
+`go test -race ./internal/app/agentruntime ./internal/app ./internal/api/handlers ./cmd/daemon ./internal/tui/client && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: decompose bounded missions with the native ADK planner`
+
+## Task 29C — Review and edit missions in the Work workspace
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/mission_actions.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go` — **new**.
+- `internal/tui/plan.go`, `internal/tui/plan_actions.go`, `internal/tui/plan_test.go`, `internal/tui/state.go`, `internal/tui/terminal_loop.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/client.go`, `internal/tui/client/missions_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 29B; existing Work plan/detail views, owned async actions, guarded checkout selection and scrollable confirmation patterns.
+
+**Implementation rules**
+- Add explicit mission commands and a restrained plan/detail view within Work. Show goal, current/stored scope, dependency/integration order, child write/read paths, criteria, budget, review state and next action using existing palettes and scrolling.
+- Opening, browsing and local editing remain passive. Model decomposition is a separate confirmed async action with explicit source/destination disclosure and cancellation. Capture exact draft, checkout and project identities; reject replaced or late results and prevent duplicate submission.
+- Save revisions through the scoped contract, clear approval when content changes, review each concrete child, and confirm the exact mission hash before final approval. This step has no child-execution control; execution arrives in task 30.
+- Keep ordinary single-task planning intact. Verify all four palettes and small terminal sizes, sanitization, keyboard cancellation, stale edits, client request ownership and changed-project cleanup.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: review bounded missions in the Work workspace`
 
 ## Task 30 — Execute mission dependencies with guarded worktree integration
 
@@ -940,9 +986,10 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agentruntime/mission_graph.go`, `internal/app/agentruntime/mission_graph_test.go` — **new**.
 - `internal/app/agent_mission.go`, `internal/app/agentstate/missions.go`, `internal/app/worktree_service.go`, `internal/app/git_worktrees.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
 - `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`.
+- `internal/tui/mission_actions.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
-- Task 29; checked change graph and current guarded worktree lifecycle.
+- Task 29C; checked change graph and current guarded worktree lifecycle.
 
 **Implementation rules**
 - Schedule ready children with cumulative mission budgets and explicit writer ownership. Parallelize only disjoint work; default integration order follows the approved dependency graph.
