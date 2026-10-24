@@ -428,6 +428,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_analysis_host_test.go` — **new**, native history, cancellation, bounded window capture, and admission regression tests.
 - `internal/app/agentruntime/events.go` — project bounded analysis node identities and truthful stage outcomes into source-free progress.
 - `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go` — admit the versioned analysis graph journal while preserving rejection of unknown schemas.
+- `internal/app/agentstate/store.go`, `internal/app/agentstate/journal_read_test.go` (**new** test) — handle atomic journal replacement during reads with bounded retries, retaining private-file, symlink, size, and corruption checks under concurrent graph/feature work.
 - `internal/app/analysis_run.go`, `internal/app/analysis_stage_runner.go`, `internal/app/analysis_run_progress.go`, `internal/app/analysis_run_store.go`, `internal/app/analysis_run_retry.go`, `internal/app/analysis_run_freshness.go`, `internal/app/analysis_run_features.go`.
 - `internal/app/analysis_run_test.go`, `internal/app/analysis_run_recovery_test.go`, `internal/app/analysis_run_retry_test.go`, `internal/app/analysis_freshness_test.go`.
 
