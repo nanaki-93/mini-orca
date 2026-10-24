@@ -150,6 +150,74 @@ func missionHandlerDraft(t *testing.T, fixture *ChangeHandler) app.MissionMutati
 		Children: []agentstate.MissionChild{{ID: "first", Title: "First child", Approach: "PRIVATE_CHILD_APPROACH", AcceptanceCriteria: []string{"Runs correctly"}, WritePaths: []string{"main.go"}, ReadPaths: []string{}, Dependencies: []string{}, Limits: limits}}, IntegrationOrder: []string{"first"}}}
 }
 
+func TestMissionExecutionHandlerAdmitsStopControlsAndRejectsForgedGrants(t *testing.T) {
+	fixture, saved, prepare := missionExecutionHandlerFixture(t)
+	prepared, err := fixture.service.ControlMissionExecution(t.Context(), saved.Mission.ID, prepare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewAgentMissionHandler(fixture.service)
+	control := func(request app.MissionExecutionRequest) *httptest.ResponseRecorder {
+		data, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest("POST", "/", bytes.NewReader(data))
+		r.SetPathValue("missionID", saved.Mission.ID)
+		w := httptest.NewRecorder()
+		h.ControlExecution(w, r)
+		return w
+	}
+	request := app.MissionExecutionRequest{ProjectID: prepare.ProjectID, ProjectRevision: prepare.ProjectRevision, Action: "start", PlanHash: prepare.PlanHash, ExecutionID: prepared.Execution.ID, ExecutionRevision: prepared.Execution.Revision, Confirm: true}
+	if w := control(request); w.Code != 400 {
+		t.Fatal("start accepted missing execution consent", w.Code, w.Body)
+	}
+	for _, action := range []string{"pause", "cancel", "reconcile"} {
+		invalid := request
+		invalid.Action = action
+		invalid.ConfirmedProfiles = []string{"function"}
+		if w := control(invalid); w.Code != 400 {
+			t.Fatal("control accepted provider grant", w.Code, w.Body)
+		}
+	}
+	unchanged, err := fixture.service.MissionExecution(t.Context(), app.AgentRunQuery{ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision}, saved.Mission.ID)
+	if err != nil || unchanged.Execution.Revision != 1 || unchanged.OwnerState != "idle" || len(unchanged.ReadyChildren) != 1 {
+		t.Fatal(unchanged, err)
+	}
+	store, err := agentstate.Open(fixture.manager.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := agentstate.MissionExecutionIdentity{ProjectID: request.ProjectID, MissionID: saved.Mission.ID, ExecutionID: request.ExecutionID, Revision: request.ExecutionRevision, PlanHash: request.PlanHash}
+	wave, err := store.BeginMissionWave(t.Context(), identity, "another-owner", func() error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Action, request.ExecutionRevision = "pause", wave.Revision
+	w := control(request)
+	var paused app.AgentMissionExecution
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &paused) != nil || paused.Execution.State != "pausing" || paused.OwnerState != "waiting_for_owner" || paused.Execution.Wave.ID != wave.Wave.ID {
+		t.Fatal(w.Code, w.Body)
+	}
+	request.Action, request.ExecutionRevision = "cancel", paused.Execution.Revision
+	w = control(request)
+	var canceled app.AgentMissionExecution
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &canceled) != nil || canceled.Execution.State != "canceling" || canceled.Execution.Children[0].WaveID != wave.Wave.ID {
+		t.Fatal(w.Code, w.Body)
+	}
+	if w := control(request); w.Code != 409 {
+		t.Fatal("stale control accepted", w.Code, w.Body)
+	}
+	identity.Revision = canceled.Execution.Revision
+	finished, err := store.FinishMissionWave(t.Context(), identity, wave.Wave.ID, false, "stopped", func() error { return nil })
+	if err != nil || finished.State != "canceled" || finished.Children[0].State != "interrupted" {
+		t.Fatal(finished, err)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.manager.Root(), ".worktrees")); !os.IsNotExist(err) {
+		t.Fatal("stop control created worktree", err)
+	}
+}
+
 func missionHandlerMutation(t *testing.T, h *AgentMissionHandler, id string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	data, err := json.Marshal(body)

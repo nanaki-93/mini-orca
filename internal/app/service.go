@@ -54,6 +54,7 @@ type Service struct {
 	config                          *config.Config
 	agentRuntime                    config.AgentRuntime
 	agentRuns                       *agentRunController
+	missions                        *missionController
 	integrations                    *integrationRegistry
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
@@ -143,6 +144,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		executionTrust:          newExecutionTrustStore(),
 		events:                  newEventBroker(),
 		agentRuns:               newAgentRunController(),
+		missions:                newMissionController(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}

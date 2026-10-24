@@ -451,9 +451,11 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	if err != nil {
 		return nil, root, err
 	}
-	hasFailedChecks := len(session.Checks) > 0 && !requiredChecksPassed(session.Checks) && session.ReviewedHash == ""
-	if session.RepairAttempts >= 3 || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) || (s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash && !hasFailedChecks) {
-		return nil, root, fmt.Errorf("repair requires current failed checks and fewer than three attempts")
+	if err := requireMissionProviderAdmission(ctx, session); err != nil {
+		return nil, root, err
+	}
+	if err := s.requireRepairableChange(session); err != nil {
+		return nil, root, err
 	}
 	refreshChangeScopeSuggestions(root, session)
 	if len(session.ScopeSuggestions) > 0 {
@@ -472,6 +474,14 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 		return nil, root, err
 	}
 	return session, root, nil
+}
+
+func (s *Service) requireRepairableChange(session *ChangeSession) error {
+	hasFailedChecks := len(session.Checks) > 0 && !requiredChecksPassed(session.Checks) && session.ReviewedHash == ""
+	if session.RepairAttempts >= 3 || len(session.Checks) == 0 || requiredChecksPassed(session.Checks) || (s.changeAuthority[session.ProjectID+"/"+session.ID] != "checks:"+session.Hash && !hasFailedChecks) {
+		return fmt.Errorf("repair requires current failed checks and fewer than three attempts")
+	}
+	return nil
 }
 
 func refreshChangeScopeSuggestions(root string, session *ChangeSession) {

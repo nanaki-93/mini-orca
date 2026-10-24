@@ -1003,7 +1003,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 30B — Schedule bounded mission children through native ADK workflows
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_mission_scheduler.go`, `internal/app/agent_mission_scheduler_test.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`, `internal/app/agentruntime/mission_graph.go`, `internal/app/agentruntime/mission_graph_test.go` — **new**.

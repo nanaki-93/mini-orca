@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -20,9 +22,33 @@ type MissionBase struct {
 }
 
 type MissionExecutionChild struct {
-	ID     string        `json:"id"`
-	State  string        `json:"state"`
-	Limits MissionLimits `json:"limits"`
+	ID               string        `json:"id"`
+	State            string        `json:"state"`
+	Limits           MissionLimits `json:"limits"`
+	WaveID           string        `json:"wave_id,omitempty"`
+	Directory        string        `json:"directory,omitempty"`
+	Branch           string        `json:"branch,omitempty"`
+	BaseHead         string        `json:"base_head,omitempty"`
+	ProjectID        string        `json:"project_id,omitempty"`
+	ProjectRevision  string        `json:"project_revision,omitempty"`
+	SessionID        string        `json:"session_id,omitempty"`
+	WorkflowID       string        `json:"workflow_id,omitempty"`
+	ProposalHash     string        `json:"proposal_hash,omitempty"`
+	ProposalRevision int64         `json:"proposal_revision,omitempty"`
+	Reason           string        `json:"reason,omitempty"`
+	UpdatedAt        time.Time     `json:"updated_at,omitzero"`
+}
+
+type MissionWave struct {
+	ID              string    `json:"id"`
+	Owner           string    `json:"owner"`
+	Children        []string  `json:"children"`
+	StartedAt       time.Time `json:"started_at"`
+	AllowanceMillis int64     `json:"allowance_millis"`
+}
+
+func (wave MissionWave) Deadline() time.Time {
+	return wave.StartedAt.Add(time.Duration(wave.AllowanceMillis) * time.Millisecond)
 }
 
 // One execution belongs to one mission. Its frozen plan and fixed allocations
@@ -34,6 +60,9 @@ type MissionExecution struct {
 	Mission         MissionRecord           `json:"mission"`
 	Base            MissionBase             `json:"base"`
 	State           string                  `json:"state"`
+	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
+	Wave            *MissionWave            `json:"wave,omitempty"`
+	Failure         string                  `json:"failure,omitempty"`
 	Children        []MissionExecutionChild `json:"children"`
 	CreatedAt       time.Time               `json:"created_at"`
 	UpdatedAt       time.Time               `json:"updated_at"`
@@ -68,13 +97,16 @@ func (record MissionExecution) validate() error {
 	if record.Mission.validate() != nil || !record.Mission.Approved || record.CreatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) {
 		return ErrCorrupt
 	}
-	if record.State != "prepared" && record.State != "canceled" {
-		return ErrCorrupt
-	}
 	if !validMissionBase(record.Base) {
 		return ErrCorrupt
 	}
-	return record.validateAllocations()
+	if record.Failure != "" && !validMemoryText(record.Failure, 1024, true) {
+		return ErrCorrupt
+	}
+	if err := record.validateAllocations(); err != nil {
+		return err
+	}
+	return record.validateWave()
 }
 
 func (record MissionExecution) validateAllocations() error {
@@ -83,7 +115,101 @@ func (record MissionExecution) validateAllocations() error {
 	}
 	for i, child := range record.Children {
 		approved := record.Mission.Plan.Children[i]
-		if child.ID != approved.ID || child.Limits != approved.Limits || child.State != "pending" {
+		if child.ID != approved.ID || child.Limits != approved.Limits || child.validate(record.ID) != nil {
+			return ErrCorrupt
+		}
+	}
+	return nil
+}
+
+func (child MissionExecutionChild) validate(executionID string) error {
+	if child.State == "pending" {
+		if child != (MissionExecutionChild{ID: child.ID, State: "pending", Limits: child.Limits}) {
+			return ErrCorrupt
+		}
+		return nil
+	}
+	if !slices.Contains([]string{"reserved", "running", "awaiting_review", "rejected", "failed", "interrupted"}, child.State) || !validID(child.WaveID) || child.UpdatedAt.IsZero() {
+		return ErrCorrupt
+	}
+	if child.Directory != executionID+"-"+child.ID || strings.ContainsAny(child.Directory, "/\\") || child.Branch != "codex/"+child.Directory || !validMissionBase(MissionBase{Head: child.BaseHead, Branch: child.Branch}) {
+		return ErrCorrupt
+	}
+	if !validMemoryText(child.Reason, 1024, true) && child.Reason != "" {
+		return ErrCorrupt
+	}
+	return child.validateProposal()
+}
+
+func (child MissionExecutionChild) validateProposal() error {
+	if child.SessionID == "" {
+		if child.ProjectID != "" || child.ProjectRevision != "" || child.WorkflowID != "" || child.ProposalHash != "" || child.ProposalRevision != 0 {
+			return ErrCorrupt
+		}
+		if child.State == "running" || child.State == "awaiting_review" || child.State == "rejected" {
+			return ErrCorrupt
+		}
+		return nil
+	}
+	for _, value := range []string{child.ProjectID, child.ProjectRevision, child.SessionID, child.WorkflowID, child.ProposalHash} {
+		if !validID(value) {
+			return ErrCorrupt
+		}
+	}
+	if child.ProposalRevision < 0 {
+		return ErrCorrupt
+	}
+	return nil
+}
+
+func (record MissionExecution) validateWave() error {
+	if !slices.Contains([]string{"prepared", "running", "pausing", "canceling", "paused", "canceled", "awaiting_review", "blocked", "interrupted"}, record.State) {
+		return ErrCorrupt
+	}
+	active := record.State == "running" || record.State == "pausing" || record.State == "canceling"
+	if active != (record.Wave != nil) || record.ElapsedMillis < 0 || record.ElapsedMillis > int64(record.Mission.Plan.Limits.ElapsedSeconds)*1000 {
+		return ErrCorrupt
+	}
+	if record.Wave == nil {
+		return record.validateInactiveChildren()
+	}
+	wave := record.Wave
+	if !validID(wave.ID) || !validID(wave.Owner) || wave.StartedAt.IsZero() || wave.AllowanceMillis < 1 || wave.AllowanceMillis+record.ElapsedMillis > int64(record.Mission.Plan.Limits.ElapsedSeconds)*1000 {
+		return ErrCorrupt
+	}
+	return record.validateWaveChildren()
+}
+
+func (record MissionExecution) validateInactiveChildren() error {
+	for _, child := range record.Children {
+		if child.State == "running" || child.State == "reserved" || record.State == "prepared" && child.State != "pending" {
+			return ErrCorrupt
+		}
+	}
+	if record.State == "prepared" && (record.ElapsedMillis != 0 || record.Failure != "") {
+		return ErrCorrupt
+	}
+	return nil
+}
+
+func (record MissionExecution) validateWaveChildren() error {
+	if len(record.Wave.Children) == 0 || len(record.Wave.Children) > len(record.Children) {
+		return ErrCorrupt
+	}
+	seen, slots := map[string]bool{}, 0
+	for _, id := range record.Wave.Children {
+		index := slices.IndexFunc(record.Children, func(child MissionExecutionChild) bool { return child.ID == id })
+		if index < 0 || seen[id] || record.Children[index].WaveID != record.Wave.ID {
+			return ErrCorrupt
+		}
+		seen[id] = true
+		slots += record.Children[index].Limits.ConcurrentCalls
+	}
+	if slots > record.Mission.Plan.Limits.ConcurrentCalls {
+		return ErrCorrupt
+	}
+	for _, child := range record.Children {
+		if (child.State == "running" || child.State == "reserved" || child.WaveID == record.Wave.ID) && !seen[child.ID] {
 			return ErrCorrupt
 		}
 	}
@@ -105,7 +231,7 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 	}
 	data, err := readJournalFile(location)
 	if errors.Is(err, os.ErrNotExist) {
-		return &missionExecutions{Version: 1, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
+		return &missionExecutions{Version: 2, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: read mission executions: %w", ErrPersistence, err)
@@ -113,14 +239,32 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 	var catalog missionExecutions
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if len(data) > maxMissionCatalog || !validJSON(data) || decoder.Decode(&catalog) != nil || s.validateMissionExecutions(&catalog) != nil {
+	if len(data) > maxMissionCatalog || !validJSON(data) || decoder.Decode(&catalog) != nil || upgradeMissionExecutions(&catalog) != nil || s.validateMissionExecutions(&catalog) != nil {
 		return nil, ErrCorrupt
 	}
 	return &catalog, nil
 }
 
+func upgradeMissionExecutions(catalog *missionExecutions) error {
+	if catalog.Version != 1 {
+		return nil
+	}
+	for _, record := range catalog.Records {
+		if record.State != "prepared" && record.State != "canceled" || record.Wave != nil || record.ElapsedMillis != 0 || record.Failure != "" {
+			return ErrCorrupt
+		}
+		for _, child := range record.Children {
+			if child.State != "pending" {
+				return ErrCorrupt
+			}
+		}
+	}
+	catalog.Version = 2
+	return nil
+}
+
 func (s *Store) validateMissionExecutions(catalog *missionExecutions) error {
-	if catalog.Version != 1 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
+	if catalog.Version != 2 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
 		return ErrCorrupt
 	}
 	seen := map[string]bool{}
@@ -226,16 +370,31 @@ func (s *Store) PrepareMissionExecution(ctx context.Context, request MissionExec
 	return result, nil
 }
 
-func (s *Store) CancelPreparedMissionExecution(ctx context.Context, request MissionExecutionIdentity, authorize func() error) (result MissionExecution, err error) {
+func (s *Store) CancelMissionExecution(ctx context.Context, request MissionExecutionIdentity, authorize func() error) (MissionExecution, error) {
+	return s.stopMissionExecution(ctx, request, "cancel", authorize)
+}
+
+func (s *Store) PauseMissionExecution(ctx context.Context, request MissionExecutionIdentity, authorize func() error) (MissionExecution, error) {
+	return s.stopMissionExecution(ctx, request, "pause", authorize)
+}
+
+func (s *Store) stopMissionExecution(ctx context.Context, request MissionExecutionIdentity, action string, authorize func() error) (result MissionExecution, err error) {
 	err = s.mutateMissionExecutions(ctx, authorize, func(catalog *missionExecutions, now time.Time) error {
-		record, exists := catalog.Records[request.MissionID]
-		if !exists || record.Mission.ProjectID != request.ProjectID {
-			return ErrNotFound
+		record, err := missionExecutionAt(catalog, request)
+		if err != nil {
+			return err
 		}
-		if record.ID != request.ExecutionID || record.Revision != request.Revision || record.Mission.PlanHash != request.PlanHash || record.State != "prepared" {
+		if record.State == "canceled" || record.State == "canceling" || action == "pause" && record.State != "running" {
 			return ErrMissionConflict
 		}
-		record.State, record.UpdatedAt = "canceled", now
+		record.State = "canceled"
+		if record.Wave != nil {
+			record.State = "canceling"
+			if action == "pause" {
+				record.State = "pausing"
+			}
+		}
+		record.UpdatedAt = now
 		record.Revision++
 		catalog.Records[request.MissionID] = record
 		result = record
@@ -245,4 +404,223 @@ func (s *Store) CancelPreparedMissionExecution(ctx context.Context, request Miss
 		return MissionExecution{}, err
 	}
 	return result, nil
+}
+
+func missionExecutionAt(catalog *missionExecutions, request MissionExecutionIdentity) (MissionExecution, error) {
+	record, exists := catalog.Records[request.MissionID]
+	if !exists || record.Mission.ProjectID != request.ProjectID {
+		return MissionExecution{}, ErrNotFound
+	}
+	if record.ID != request.ExecutionID || record.Revision != request.Revision || record.Mission.PlanHash != request.PlanHash {
+		return MissionExecution{}, ErrMissionConflict
+	}
+	return record, nil
+}
+
+// ReadyChildren reserves whole child concurrency allocations. Since the plan
+// requires dependency edges for overlapping reads/writes, this ready wave is
+// disjoint even if completion order differs from integration order.
+func (record MissionExecution) ReadyChildren() []string {
+	ready := []string{}
+	if record.Wave != nil || record.State == "canceled" {
+		return ready
+	}
+	states := map[string]string{}
+	for _, child := range record.Children {
+		states[child.ID] = child.State
+	}
+	slots := record.Mission.Plan.Limits.ConcurrentCalls
+	for _, id := range record.Mission.Plan.IntegrationOrder {
+		index := slices.IndexFunc(record.Mission.Plan.Children, func(child MissionChild) bool { return child.ID == id })
+		child := record.Mission.Plan.Children[index]
+		if states[id] != "pending" || child.Limits.ConcurrentCalls > slots {
+			continue
+		}
+		if slices.ContainsFunc(child.Dependencies, func(id string) bool { return states[id] != "integrated" }) {
+			continue
+		}
+		ready = append(ready, id)
+		slots -= child.Limits.ConcurrentCalls
+	}
+	return ready
+}
+
+func (s *Store) BeginMissionWave(ctx context.Context, request MissionExecutionIdentity, owner string, authorize func() error) (result MissionExecution, err error) {
+	err = s.mutateMissionExecutions(ctx, authorize, func(catalog *missionExecutions, now time.Time) error {
+		record, err := missionExecutionAt(catalog, request)
+		if err != nil {
+			return err
+		}
+		if record.Wave != nil || record.State == "canceled" {
+			return ErrMissionConflict
+		}
+		ready := record.ReadyChildren()
+		remaining := int64(record.Mission.Plan.Limits.ElapsedSeconds)*1000 - record.ElapsedMillis
+		if len(ready) == 0 || remaining < 1 {
+			return fmt.Errorf("no unreserved ready child or mission execution time remains; inspect dependencies and retained proposals")
+		}
+		wave := &MissionWave{ID: "wave-" + rand.Text(), Owner: owner, Children: ready, StartedAt: now}
+		for i := range record.Children {
+			child := &record.Children[i]
+			if !slices.Contains(ready, child.ID) {
+				continue
+			}
+			child.State, child.WaveID, child.UpdatedAt = "reserved", wave.ID, now
+			child.Directory = record.ID + "-" + child.ID
+			child.Branch, child.BaseHead = "codex/"+child.Directory, record.Base.Head
+			wave.AllowanceMillis = max(wave.AllowanceMillis, int64(child.Limits.ElapsedSeconds)*1000)
+		}
+		wave.AllowanceMillis = min(wave.AllowanceMillis, remaining)
+		record.State, record.Wave, record.UpdatedAt = "running", wave, now
+		record.Failure = ""
+		record.Revision++
+		catalog.Records[request.MissionID], result = record, record
+		return nil
+	})
+	if err != nil {
+		return MissionExecution{}, err
+	}
+	return result, nil
+}
+
+type MissionChildProgress struct {
+	ProjectID, ProjectRevision, SessionID, WorkflowID, ProposalHash string
+	ProposalRevision                                                int64
+	State, Reason                                                   string
+}
+
+// Worker writes use the durable wave lease instead of a human editor revision;
+// siblings may finish concurrently, but can never update a replacement wave.
+func (s *Store) RecordMissionChild(ctx context.Context, identity MissionExecutionIdentity, waveID, childID string, progress MissionChildProgress, authorize func() error) (err error) {
+	return s.mutateMissionExecutions(ctx, authorize, func(catalog *missionExecutions, now time.Time) error {
+		record, err := missionWaveAt(catalog, identity, waveID)
+		if err != nil {
+			return err
+		}
+		if progress.State == "running" && record.State != "running" {
+			return ErrMissionConflict
+		}
+		index := slices.IndexFunc(record.Children, func(child MissionExecutionChild) bool { return child.ID == childID && child.WaveID == waveID })
+		if index < 0 {
+			return ErrMissionConflict
+		}
+		child := &record.Children[index]
+		if err := advanceMissionChild(child, progress); err != nil {
+			return err
+		}
+		child.UpdatedAt, record.UpdatedAt = now, now
+		record.Revision++
+		catalog.Records[identity.MissionID] = record
+		return nil
+	})
+}
+
+func missionWaveAt(catalog *missionExecutions, identity MissionExecutionIdentity, waveID string) (MissionExecution, error) {
+	record, exists := catalog.Records[identity.MissionID]
+	if !exists || record.Mission.ProjectID != identity.ProjectID {
+		return MissionExecution{}, ErrNotFound
+	}
+	if record.ID != identity.ExecutionID || record.Mission.PlanHash != identity.PlanHash || record.Wave == nil || record.Wave.ID != waveID {
+		return MissionExecution{}, ErrMissionConflict
+	}
+	return record, nil
+}
+
+func advanceMissionChild(child *MissionExecutionChild, progress MissionChildProgress) error {
+	if child.State != "reserved" && child.State != "running" {
+		return ErrMissionConflict
+	}
+	if child.State == "running" && progress.State == "running" {
+		return ErrMissionConflict
+	}
+	if !slices.Contains([]string{"running", "awaiting_review", "rejected", "failed", "interrupted"}, progress.State) {
+		return fmt.Errorf("invalid mission child progress")
+	}
+	if progress.SessionID != "" {
+		if child.SessionID != "" && (child.SessionID != progress.SessionID || child.WorkflowID != progress.WorkflowID || child.ProjectID != progress.ProjectID || child.ProjectRevision != progress.ProjectRevision) {
+			return ErrMissionConflict
+		}
+		child.ProjectID, child.ProjectRevision = progress.ProjectID, progress.ProjectRevision
+		child.SessionID, child.WorkflowID = progress.SessionID, progress.WorkflowID
+		child.ProposalHash, child.ProposalRevision = progress.ProposalHash, progress.ProposalRevision
+	}
+	child.State, child.Reason = progress.State, progress.Reason
+	return nil
+}
+
+func (s *Store) FinishMissionWave(ctx context.Context, identity MissionExecutionIdentity, waveID string, recovered bool, failure string, authorize func() error) (result MissionExecution, err error) {
+	return s.finishMissionWave(ctx, identity, waveID, recovered, failure, nil, authorize)
+}
+
+// RecoverMissionWave atomically reconciles observed evidence against the exact
+// receipt revision. Observation never grants another allocation or dispatch.
+func (s *Store) RecoverMissionWave(ctx context.Context, identity MissionExecutionIdentity, waveID string, recovered bool, progress map[string]MissionChildProgress, authorize func() error) (MissionExecution, error) {
+	if identity.Revision < 1 {
+		return MissionExecution{}, ErrMissionConflict
+	}
+	return s.finishMissionWave(ctx, identity, waveID, recovered, "Recovered a stopped wave; uncertain allocations remain reserved and require inspection.", progress, authorize)
+}
+
+func (s *Store) finishMissionWave(ctx context.Context, identity MissionExecutionIdentity, waveID string, recovered bool, failure string, progress map[string]MissionChildProgress, authorize func() error) (result MissionExecution, err error) {
+	err = s.mutateMissionExecutions(ctx, authorize, func(catalog *missionExecutions, now time.Time) error {
+		record, err := missionWaveAt(catalog, identity, waveID)
+		if err != nil {
+			return err
+		}
+		if identity.Revision != 0 && record.Revision != identity.Revision || recovered && now.Before(record.Wave.Deadline()) {
+			return ErrMissionConflict
+		}
+		if err := reconcileMissionChildren(&record, progress, now); err != nil {
+			return err
+		}
+		elapsed := record.Wave.AllowanceMillis
+		if !recovered {
+			elapsed = min(elapsed, max(int64(1), now.Sub(record.Wave.StartedAt).Milliseconds()))
+		}
+		record.ElapsedMillis += elapsed
+		for i := range record.Children {
+			child := &record.Children[i]
+			if child.WaveID == waveID && (child.State == "running" || child.State == "reserved") {
+				child.State, child.UpdatedAt = "interrupted", now
+				child.Reason = "Worker ownership ended before a complete receipt; the allocation remains reserved. Inspect retained worktree and proposal evidence."
+			}
+		}
+		record.State = completedMissionWaveState(record)
+		record.Failure = failure
+		record.Wave, record.UpdatedAt = nil, now
+		record.Revision++
+		catalog.Records[identity.MissionID], result = record, record
+		return nil
+	})
+	if err != nil {
+		return MissionExecution{}, err
+	}
+	return result, nil
+}
+
+func reconcileMissionChildren(record *MissionExecution, progress map[string]MissionChildProgress, now time.Time) error {
+	for id, evidence := range progress {
+		index := slices.IndexFunc(record.Children, func(child MissionExecutionChild) bool { return child.ID == id && child.WaveID == record.Wave.ID })
+		if index < 0 || evidence.State == "running" {
+			return ErrMissionConflict
+		}
+		if err := advanceMissionChild(&record.Children[index], evidence); err != nil {
+			return err
+		}
+		record.Children[index].UpdatedAt = now
+	}
+	return nil
+}
+
+func completedMissionWaveState(record MissionExecution) string {
+	switch record.State {
+	case "pausing":
+		return "paused"
+	case "canceling":
+		return "canceled"
+	}
+	if slices.ContainsFunc(record.Children, func(child MissionExecutionChild) bool { return child.State == "awaiting_review" }) {
+		return "awaiting_review"
+	}
+	return "blocked"
 }

@@ -59,6 +59,9 @@ func loadChangeSession(root, id string) (*ChangeSession, error) {
 }
 
 func validateStoredChange(session ChangeSession) error {
+	if err := validateMissionChildOrigin(session.MissionOrigin); err != nil {
+		return err
+	}
 	if err := validateStoredPlan(&session); err != nil {
 		return err
 	}

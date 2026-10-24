@@ -1797,7 +1797,10 @@ planning decision, never an executed child or a verified implementation.
 `project_id` and `project_revision`, supports the selected `worktree_path`, and
 returns 404 when the mission has no execution receipt. It reads private metadata
 and Git identity without starting work. The response contains `execution`,
-`stale`, and `source_status` (`current`, `changed`, or `unavailable`). Changed
+`stale`, `source_status` (`current`, `changed`, or `unavailable`),
+`ready_children` and `owner_state` (`idle`, `active`, `waiting_for_owner` or
+`recovery_required`). Readiness excludes reserved children and dependencies
+whose proposals have not been explicitly integrated. Changed
 source, project revision, instructions, policy, settings, catalog approval or Git
 base keeps the frozen receipt inspectable with `stale: true`. Missing or corrupt
 execution storage is not reported as a completed or empty execution.
@@ -1810,20 +1813,66 @@ execution storage is not reported as a completed or empty execution.
   empty and `execution_revision` zero. Every child must be reviewed and the
   complete mission separately approved. The checkout must be a clean Git root
   on a committed local branch, without a merge, rebase or other pending operation.
-- `cancel` additionally requires `execution_id` and `execution_revision` from
-  the prepared receipt. `catalog_revision` must be zero and `base` absent.
+- `start` requires the exact `execution_id` and `execution_revision`, zero
+  `catalog_revision`, no `base`, and `confirm_execution: true`. The project
+  check commands and workspace must already be trusted. `confirmed_profiles`
+  contains only the selected role profiles that require remote confirmation;
+  duplicate or unselected grants are rejected. Every child needs an explicit
+  test write path. Start admits one ready wave and returns its durable receipt.
+- `pause`, `cancel` and `reconcile` require `execution_id` and
+  `execution_revision` from the current receipt. `catalog_revision` must be
+  zero and `base` absent. They reject provider or execution grants.
+  Pause stops an active wave and preserves unused pending children. Cancel
+  permanently closes the execution, including while it is pausing.
   Cancellation uses the frozen plan hash and remains available after sources,
   settings or the editable catalog plan change. It still requires the current
   project identity and cannot control another checkout's receipt.
 
-Preparation creates a version-1 receipt with state `prepared`, an independent
+Preparation creates a receipt in a version-2 catalog with state `prepared`, an independent
 `execution_revision` of 1, the approved `catalog_revision`, a full frozen
 `mission`, the exact Git `base`, and `children` containing each child's ID,
 `pending` state and fixed approved `limits`. The plan already bounds the sum of
 child model calls, tool calls, input/output tokens and repairs. These are future
 allocations, not measured usage. Preparation and inspection grant no provider,
-project-code execution, worktree creation, Apply or merge authority. Starting
-children is not an accepted action at this stage of the contract.
+project-code execution, worktree creation, Apply or merge authority. Existing
+version-1 prepared/canceled receipts remain readable and upgrade on the next
+explicit mutation without resetting allocations.
+
+Start freezes the effective settings and runs a native `mission-graph-v1` ADK
+wave. Before worktree creation, it records each child's `wave_id`, deterministic
+`directory`, `branch` and `base_head`. The sum of selected whole-child
+concurrency allocations cannot exceed the mission limit. Each child runs the
+existing checked-change workflow with its own fixed calls/tokens/tools/repairs
+allocation. Context contains only approved write/read targets and applicable
+instructions; implicit sibling declarations and broader cached context are
+excluded. A proposal's `mission_origin` binds its mission, execution, child and
+plan hash. Ordinary model retries on that proposal cannot mint a new allocation.
+
+Child states are `pending`, `reserved`, `running`, `awaiting_review`, `rejected`,
+`failed` or `interrupted`. Child receipts retain project/session/workflow and
+proposal identities when available, plus a bounded `reason`. A successful child
+produces a checked proposal awaiting separate human diff review and Apply. Start
+never applies source or merges a worktree. Dependent children remain pending
+until an explicit integration operation records their prerequisites.
+
+Execution states are `prepared`, `running`, `pausing`, `canceling`, `paused`,
+`canceled`, `awaiting_review`, `blocked` or `interrupted`. An active `wave`
+contains its opaque owner, selected children, start time and millisecond
+allowance. `elapsed_millis` charges active wave time; waiting for human review
+does not consume it. Failed or canceled attempts retain their full fixed child
+allocations. Bounded `failure` text explains an incomplete wave without source
+or provider diagnostics. Owned workers and their child processes are drained on
+pause, cancellation and shutdown.
+
+Restart never resumes provider work. Another owner's wave remains
+`waiting_for_owner` until its bounded deadline expires; a stopped local owner
+or expired lease permits explicit `reconcile`. Reconciliation inspects the
+registered worktree, exact Git identity and matching proposal origin/workflow.
+Complete, current proposal evidence is retained; missing, changed or uncertain
+evidence becomes `interrupted`. Recovery charges the entire expired wave
+allowance, retains all child reservations, and performs no provider requests,
+checks, source writes or cleanup. Control requests always use the latest
+execution revision, including revisions changed by child progress.
 
 There is one retained execution per mission identity. Repeated preparation,
 plan edits, cancellation and daemon restart cannot issue another allocation for

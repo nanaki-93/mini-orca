@@ -19,6 +19,8 @@ type MissionExecutionRequest struct {
 	ExecutionRevision int64                   `json:"execution_revision"`
 	Base              *agentstate.MissionBase `json:"base,omitempty"`
 	Confirm           bool                    `json:"confirm"`
+	ConfirmExecution  bool                    `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string                `json:"confirmed_profiles,omitempty"`
 }
 
 func (request *MissionExecutionRequest) UnmarshalJSON(data []byte) error {
@@ -32,14 +34,16 @@ func (request *MissionExecutionRequest) UnmarshalJSON(data []byte) error {
 }
 
 type AgentMissionExecution struct {
-	Execution    agentstate.MissionExecution `json:"execution"`
-	Stale        bool                        `json:"stale"`
-	SourceStatus string                      `json:"source_status"`
+	Execution     agentstate.MissionExecution `json:"execution"`
+	Stale         bool                        `json:"stale"`
+	SourceStatus  string                      `json:"source_status"`
+	ReadyChildren []string                    `json:"ready_children"`
+	OwnerState    string                      `json:"owner_state"`
 }
 
 func validateMissionExecutionRequest(id string, request MissionExecutionRequest) error {
 	if id == "" || !request.Confirm || request.ProjectID == "" || request.ProjectRevision == "" || len(request.PlanHash) != 64 {
-		return fmt.Errorf("confirm the exact mission plan and current project before preparing or canceling execution")
+		return fmt.Errorf("confirm the exact mission plan and current project before controlling execution")
 	}
 	return validateMissionExecutionAction(request)
 }
@@ -50,12 +54,13 @@ func validateMissionExecutionAction(request MissionExecutionRequest) error {
 		if request.CatalogRevision < 1 || request.ExecutionID != "" || request.ExecutionRevision != 0 || request.Base == nil {
 			return fmt.Errorf("preparation requires the approved catalog revision and Git base, without a previous execution identity")
 		}
-	case "cancel":
-		if request.ExecutionID == "" || request.ExecutionRevision < 1 || request.CatalogRevision != 0 || request.Base != nil {
-			return fmt.Errorf("cancellation requires the exact execution identity and revision, without a new catalog or Git base")
+		if request.ConfirmExecution || len(request.ConfirmedProfiles) != 0 {
+			return fmt.Errorf("preparation cannot carry execution or provider grants")
 		}
+	case "start", "pause", "cancel", "reconcile":
+		return missionControlShape(request)
 	default:
-		return fmt.Errorf("choose prepare or cancel for a mission execution")
+		return fmt.Errorf("choose prepare, start, pause, cancel or reconcile for a mission execution")
 	}
 	return nil
 }
@@ -91,8 +96,8 @@ func (s *Service) MissionExecution(ctx context.Context, query AgentRunQuery, id 
 	return s.inspectMissionExecution(ctx, root, query, record)
 }
 
-// ControlMissionExecution prepares or cancels a private receipt. Neither action
-// grants provider, project execution, worktree, Apply or merge authority.
+// ControlMissionExecution admits only concrete execution operations. Model and
+// project-code authority is captured afresh for each explicit start action.
 func (s *Service) ControlMissionExecution(ctx context.Context, id string, request MissionExecutionRequest) (*AgentMissionExecution, error) {
 	if err := validateMissionExecutionRequest(id, request); err != nil {
 		return nil, err
@@ -103,12 +108,26 @@ func (s *Service) ControlMissionExecution(ctx context.Context, id string, reques
 	if err != nil {
 		return nil, err
 	}
+	if request.Action == "start" {
+		return s.startMissionWave(ctx, root, store, id, request)
+	}
+	if request.Action == "reconcile" {
+		return s.reconcileMissionWave(ctx, root, store, id, request)
+	}
 	var record agentstate.MissionExecution
 	if request.Action == "prepare" {
 		record, err = s.prepareMissionExecution(ctx, root, store, id, request)
 	} else {
 		identity := agentstate.MissionExecutionIdentity{ProjectID: query.ProjectID, MissionID: id, ExecutionID: request.ExecutionID, Revision: request.ExecutionRevision, PlanHash: request.PlanHash}
-		record, err = store.CancelPreparedMissionExecution(ctx, identity, func() error { return s.agentHistoryScope(query, root) })
+		authorize := func() error { return s.agentHistoryScope(query, root) }
+		if request.Action == "pause" {
+			record, err = store.PauseMissionExecution(ctx, identity, authorize)
+		} else {
+			record, err = store.CancelMissionExecution(ctx, identity, authorize)
+		}
+		if err == nil {
+			s.cancelMissionExecution(record.ID)
+		}
 	}
 	if err != nil {
 		return nil, missionExecutionError(err)
@@ -155,7 +174,7 @@ func (s *Service) validateMissionBase(ctx context.Context, mission agentstate.Mi
 }
 
 func (s *Service) inspectMissionExecution(ctx context.Context, root string, query AgentRunQuery, record agentstate.MissionExecution) (*AgentMissionExecution, error) {
-	result := &AgentMissionExecution{Execution: record, SourceStatus: "current"}
+	result := &AgentMissionExecution{Execution: record, SourceStatus: "current", ReadyChildren: []string{}, OwnerState: s.missionOwnerState(record)}
 	if err := s.validatePreparedMissionExecution(ctx, root, record); err != nil {
 		if cause := context.Cause(ctx); cause != nil {
 			return nil, cause
@@ -164,6 +183,9 @@ func (s *Service) inspectMissionExecution(ctx context.Context, root string, quer
 		if memorySourceChanged(err) || errors.Is(err, ErrMissionConflict) {
 			result.SourceStatus = "changed"
 		}
+	}
+	if !result.Stale && record.ElapsedMillis < int64(record.Mission.Plan.Limits.ElapsedSeconds)*1000 {
+		result.ReadyChildren = record.ReadyChildren()
 	}
 	return result, s.agentHistoryScope(query, root)
 }

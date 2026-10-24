@@ -47,9 +47,36 @@ type AgentMission struct {
 }
 
 type MissionExecutionChild struct {
-	ID     string      `json:"id"`
-	State  string      `json:"state"`
-	Limits AgentLimits `json:"limits"`
+	ID               string      `json:"id"`
+	State            string      `json:"state"`
+	Limits           AgentLimits `json:"limits"`
+	WaveID           string      `json:"wave_id,omitempty"`
+	Directory        string      `json:"directory,omitempty"`
+	Branch           string      `json:"branch,omitempty"`
+	BaseHead         string      `json:"base_head,omitempty"`
+	ProjectID        string      `json:"project_id,omitempty"`
+	ProjectRevision  string      `json:"project_revision,omitempty"`
+	SessionID        string      `json:"session_id,omitempty"`
+	WorkflowID       string      `json:"workflow_id,omitempty"`
+	ProposalHash     string      `json:"proposal_hash,omitempty"`
+	ProposalRevision int64       `json:"proposal_revision,omitempty"`
+	Reason           string      `json:"reason,omitempty"`
+	UpdatedAt        string      `json:"updated_at,omitempty"`
+}
+
+type MissionChildOrigin struct {
+	MissionID   string `json:"mission_id"`
+	ExecutionID string `json:"execution_id"`
+	ChildID     string `json:"child_id"`
+	PlanHash    string `json:"plan_hash"`
+}
+
+type MissionWave struct {
+	ID              string   `json:"id"`
+	Owner           string   `json:"owner"`
+	Children        []string `json:"children"`
+	StartedAt       string   `json:"started_at"`
+	AllowanceMillis int64    `json:"allowance_millis"`
 }
 
 type MissionExecution struct {
@@ -59,15 +86,20 @@ type MissionExecution struct {
 	Mission         MissionRecord           `json:"mission"`
 	Base            GitIdentity             `json:"base"`
 	State           string                  `json:"state"`
+	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
+	Wave            *MissionWave            `json:"wave,omitempty"`
+	Failure         string                  `json:"failure,omitempty"`
 	Children        []MissionExecutionChild `json:"children"`
 	CreatedAt       string                  `json:"created_at"`
 	UpdatedAt       string                  `json:"updated_at"`
 }
 
 type AgentMissionExecution struct {
-	Execution    MissionExecution `json:"execution"`
-	Stale        bool             `json:"stale"`
-	SourceStatus string           `json:"source_status"`
+	Execution     MissionExecution `json:"execution"`
+	Stale         bool             `json:"stale"`
+	SourceStatus  string           `json:"source_status"`
+	ReadyChildren []string         `json:"ready_children"`
+	OwnerState    string           `json:"owner_state"`
 }
 
 type MissionExecutionRequest struct {
@@ -79,6 +111,8 @@ type MissionExecutionRequest struct {
 	ExecutionRevision int64        `json:"execution_revision"`
 	Base              *GitIdentity `json:"base,omitempty"`
 	Confirm           bool         `json:"confirm"`
+	ConfirmExecution  bool         `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string     `json:"confirmed_profiles,omitempty"`
 }
 
 type MissionSummary struct {

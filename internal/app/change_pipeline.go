@@ -70,17 +70,14 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := validateResumedModels(session, request.Models, startStage); err != nil {
 		return nil, err
 	}
-	// The job owns its lifetime and grants; carry only the captured settings
-	// across the request boundary, not an inherited request budget or policy.
-	background := context.WithValue(context.Background(), agentSettingsKey{}, ctx.Value(agentSettingsKey{}))
-	agentCtx, release, err := s.workflowAgentContext(background, request.Models)
+	agentCtx, release, err := s.newChangeWorkflowContext(ctx, session, request.Models)
 	if err != nil {
 		return nil, err
 	}
 	refreshChangeScopeSuggestions(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
-	if err := storeChangeSession(root, session); err != nil {
+	if err := saveAdmittedWorkflow(agentCtx, root, session); err != nil {
 		release()
 		return nil, err
 	}
@@ -89,7 +86,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	}
 	budget := s.changeWorkflowTimeout(agentCtx, request.Models, startStage, request.AutoRepair)
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
-	cancel := func() { cancelTimeout(); release() }
+	cancel := linkMissionWorkflowCancellation(agentCtx, func() { cancelTimeout(); release() })
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	if request.StreamOutput {
 		workCtx = agentruntime.WithStreaming(workCtx)
@@ -102,7 +99,33 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	return session, nil
 }
 
+func (s *Service) newChangeWorkflowContext(ctx context.Context, session *ChangeSession, models ChangeWorkflowModels) (context.Context, context.CancelFunc, error) {
+	// Ordinary jobs capture settings, without inheriting a request's budget or
+	// policy. Mission jobs additionally bind their private fixed allocation.
+	background := context.WithValue(context.Background(), agentSettingsKey{}, ctx.Value(agentSettingsKey{}))
+	admitted, release, err := s.workflowAgentContext(background, models)
+	if err != nil {
+		return nil, nil, err
+	}
+	admitted, err = bindMissionWorkflowContext(admitted, ctx, session, models)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return admitted, release, nil
+}
+
+func saveAdmittedWorkflow(ctx context.Context, root string, session *ChangeSession) error {
+	if err := publishMissionWorkflow(ctx, session); err != nil {
+		return err
+	}
+	return storeChangeSession(root, session)
+}
+
 func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSession, request ChangeWorkflowRequest, messageCount int) error {
+	if _, err := admittedMissionChild(ctx, session); err != nil {
+		return err
+	}
 	s.changeWorkflow.mu.Lock()
 	existing := s.changeWorkflow.getJob(session.ID)
 	busy := existing != nil && !existing.finished

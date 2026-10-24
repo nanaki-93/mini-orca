@@ -680,12 +680,13 @@ type ChangeMessage struct {
 
 // ChangeSession holds a guarded multi-file change proposal and its verification state.
 type ChangeSession struct {
-	Plan             *ChangePlan  `json:"plan,omitempty"`
-	ScopeSuggestions []string     `json:"scope_suggestions,omitempty"`
-	ReviewedFiles    []string     `json:"reviewed_files,omitempty"`
-	FileReviewHash   string       `json:"file_review_hash,omitempty"`
-	LastReviewedHash string       `json:"last_reviewed_hash,omitempty"`
-	ReviewDiff       []FileChange `json:"review_diff,omitempty"`
+	MissionOrigin    *MissionChildOrigin `json:"mission_origin,omitempty"`
+	Plan             *ChangePlan         `json:"plan,omitempty"`
+	ScopeSuggestions []string            `json:"scope_suggestions,omitempty"`
+	ReviewedFiles    []string            `json:"reviewed_files,omitempty"`
+	FileReviewHash   string              `json:"file_review_hash,omitempty"`
+	LastReviewedHash string              `json:"last_reviewed_hash,omitempty"`
+	ReviewDiff       []FileChange        `json:"review_diff,omitempty"`
 	ProjectIdentity
 	FindingTargets     []FindingTarget `json:"finding_targets,omitempty"`
 	Git                *GitIdentity    `json:"git,omitempty"`

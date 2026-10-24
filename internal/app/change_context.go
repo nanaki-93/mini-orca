@@ -144,6 +144,9 @@ func summarizeTestTargetDecls(target ChangeTarget) string {
 }
 
 func samePackageGoDecls(root string, session *ChangeSession) string {
+	if session.MissionOrigin != nil {
+		return ""
+	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
 		return ""

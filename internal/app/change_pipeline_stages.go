@@ -276,6 +276,9 @@ func (s *Service) requestWorkflowModel(ctx context.Context, root string, session
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	authorize := func(ctx context.Context) error {
+		if err := requireMissionProviderAdmission(ctx, session); err != nil {
+			return err
+		}
 		s.changesMu.Lock()
 		defer s.changesMu.Unlock()
 		current, currentRoot, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session))

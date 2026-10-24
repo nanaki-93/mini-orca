@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -144,6 +146,58 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	}
 	if _, err := cl.Request(t.Context(), "rejected-execution-nesting", "POST", base+"/"+saved.Mission.ID+"/execution/apply"+query, `{}`); err == nil {
 		t.Fatal("execution route allowed nested mutation")
+	}
+}
+
+func TestMissionSchedulerWireCarriesConsentOwnershipAndRetainedEvidence(t *testing.T) {
+	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "revision"}
+	planHash := strings.Repeat("a", 64)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/projects/current/missions/mission/execution" || r.URL.Query().Get("worktree_path") != "/selected/checkout" {
+			t.Error("lost selected mission checkout")
+		}
+		var request app.MissionExecutionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if request.ProjectID != identity.ProjectID || request.ProjectRevision != identity.ProjectRevision || request.ExecutionID != "execution" || request.ExecutionRevision != 7 || request.PlanHash != planHash || !request.Confirm {
+			t.Error("lost control identity", request)
+		}
+		if request.Action == "start" && (!request.ConfirmExecution || len(request.ConfirmedProfiles) != 1 || request.ConfirmedProfiles[0] != "function") {
+			t.Error("lost start consent")
+		}
+		if request.Action != "start" && (request.ConfirmExecution || len(request.ConfirmedProfiles) != 0) {
+			t.Error("stop control leaked start grants")
+		}
+		response := app.AgentMissionExecution{SourceStatus: "current", OwnerState: "active", ReadyChildren: []string{}, Execution: agentstate.MissionExecution{ID: "execution", Revision: 8, State: "running", ElapsedMillis: 123, Failure: "Retained failure", Wave: &agentstate.MissionWave{ID: "wave", Owner: "owner", Children: []string{"child"}, StartedAt: time.Now().UTC(), AllowanceMillis: 60000}, Children: []agentstate.MissionExecutionChild{{ID: "child", State: "running", WaveID: "wave", Directory: "execution-child", Branch: "codex/execution-child", BaseHead: strings.Repeat("a", 40), ProjectID: "child-project", ProjectRevision: "child-revision", SessionID: "proposal", WorkflowID: "workflow", ProposalHash: "hash", ProposalRevision: 3, Reason: "Retained reason", UpdatedAt: time.Now().UTC()}}}}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	cl, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	for _, action := range []string{"start", "pause", "cancel", "reconcile"} {
+		request := MissionExecutionRequest{ProjectIdentity: identity, Action: action, ExecutionID: "execution", ExecutionRevision: 7, PlanHash: planHash, Confirm: true}
+		if action == "start" {
+			request.ConfirmExecution = true
+			request.ConfirmedProfiles = []string{"function"}
+		}
+		var response AgentMissionExecution
+		if err := cl.DoJSON(t.Context(), action, "POST", "/api/projects/current/missions/mission/execution?worktree_path=%2Fselected%2Fcheckout", request, &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.OwnerState != "active" || response.ReadyChildren == nil || response.Execution.Wave == nil || response.Execution.Wave.ID != "wave" || response.Execution.Wave.AllowanceMillis != 60000 || response.Execution.ElapsedMillis != 123 || response.Execution.Failure != "Retained failure" || len(response.Execution.Children) != 1 {
+			t.Fatal("lost execution receipt", response)
+		}
+		child := response.Execution.Children[0]
+		if child.ProjectID != "child-project" || child.ProjectRevision != "child-revision" || child.SessionID != "proposal" || child.WorkflowID != "workflow" || child.ProposalHash != "hash" || child.ProposalRevision != 3 || child.Directory != "execution-child" || child.State != "running" || child.WaveID != "wave" || child.Reason != "Retained reason" || child.UpdatedAt == "" {
+			t.Fatal("lost child evidence", child)
+		}
 	}
 }
 

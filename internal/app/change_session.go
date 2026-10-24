@@ -39,6 +39,10 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	}
 	now := time.Now().UTC()
 	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChangeMessage{}, Instructions: map[string]string{}, Checks: []CheckResult{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
+	session.MissionOrigin, err = copyMissionChildOrigin(request.missionOrigin)
+	if err != nil {
+		return nil, err
+	}
 	session.FindingTargets = append([]project.FindingTarget(nil), request.FindingTargets...)
 	if err := captureChangeScope(root, session, request.Paths); err != nil {
 		return nil, err
@@ -375,6 +379,9 @@ func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessag
 }
 
 func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {
+	if err := requireMissionProviderAdmission(ctx, session); err != nil {
+		return nil, err
+	}
 	if err := requireApprovedChangePlan(session); err != nil {
 		return nil, err
 	}
@@ -387,7 +394,12 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	}
 	defer prepared.release()
 	schema := changeResponseSchema()
-	authorize := func(ctx context.Context) error { return s.verifyChangeCurrent(ctx, root, session) }
+	authorize := func(ctx context.Context) error {
+		if err := requireMissionProviderAdmission(ctx, session); err != nil {
+			return err
+		}
+		return s.verifyChangeCurrent(ctx, root, session)
+	}
 	timed, err = withProjectMemory(prepared.ctx, root, session.ProjectID, session.ProjectRevision, request.Message, changeMemorySources(session, stageZeroWorkflow), authorize)
 	if err != nil {
 		return nil, err
