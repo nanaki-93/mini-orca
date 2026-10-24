@@ -29,6 +29,9 @@ func renderAgentTrace(trace *client.AgentTraceSummary) []string {
 	if trace.Incomplete {
 		lines = append(lines, "Unfinished spans have no measured end time; interrupted work is not success.")
 	}
+	if trace.Export != nil && trace.Export.Enabled {
+		lines = append(lines, fmt.Sprintf("Export: :run-export · review %d finished spans and the configured destination before sending.", trace.Export.Finished))
+	}
 	return append(lines, "Span completion describes execution; findings, checks and approval retain their own outcomes.")
 }
 

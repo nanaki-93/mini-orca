@@ -42,6 +42,9 @@ func (s *Service) agentTraceSummary(history agentstate.History, run agentstate.R
 		return nil, fmt.Errorf("fingerprint source-free trace: %w", err)
 	}
 	result.Snapshot = agentruntime.TraceIdentity(string(data))
+	// Destination approval has its own identity; changing reporting settings
+	// must not change the identity of the retained source-free content.
+	result.Export = agentTraceExportPreview(result, s.agentRuntime.Telemetry.Export)
 	return result, nil
 }
 

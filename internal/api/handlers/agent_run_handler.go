@@ -77,6 +77,15 @@ func (h *AgentRunHandler) Input(w http.ResponseWriter, r *http.Request) {
 	respondAgentRun(w, value, err)
 }
 
+func (h *AgentRunHandler) Export(w http.ResponseWriter, r *http.Request) {
+	var request app.AgentTraceExportRequest
+	if !decodeStrictJSON(w, r, &request, "invalid trace export", "Confirm the current project, retained snapshot and configured destination.") {
+		return
+	}
+	value, err := h.service.ExportAgentTrace(r.Context(), r.PathValue("runID"), request)
+	respondAgentRun(w, value, err)
+}
+
 func respondAgentRun(w http.ResponseWriter, value any, err error) {
 	if err != nil {
 		if errors.Is(err, app.ErrAgentRunNotFound) {

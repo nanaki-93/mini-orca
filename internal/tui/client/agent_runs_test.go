@@ -181,3 +181,18 @@ func TestAgentTraceAndCostWirePreserveUnknownsAndExactDuration(t *testing.T) {
 		t.Fatal("legacy measurements fabricated", err)
 	}
 }
+
+func TestAgentTraceExportWireKeepsUnknownAcceptanceDistinctFromZero(t *testing.T) {
+	for _, body := range []string{`{"state":"unknown","sent":1}`, `{"state":"partial","sent":1,"accepted":0,"rejected":1}`} {
+		var receipt AgentTraceExportReceipt
+		if err := json.Unmarshal([]byte(body), &receipt); err != nil {
+			t.Fatal(err)
+		}
+		if receipt.State == "unknown" && (receipt.Accepted != nil || receipt.Rejected != nil) {
+			t.Fatal("unknown count became zero")
+		}
+		if receipt.State == "partial" && (receipt.Accepted == nil || *receipt.Accepted != 0 || receipt.Rejected == nil || *receipt.Rejected != 1) {
+			t.Fatal("rejected receipt lost exact counts")
+		}
+	}
+}

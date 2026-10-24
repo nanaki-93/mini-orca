@@ -492,6 +492,19 @@ paths:
         '200': {description: Guarded proposal review result; Apply remains explicit, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-runs/{runID}/export:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {$ref: '#/components/parameters/AgentRunID'}
+    post:
+      tags: [Projects]
+      summary: Export one confirmed source-free trace snapshot
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentTraceExportRequest'}}}}
+      responses:
+        '200': {description: Explicit collector acknowledgement or unknown delivery; never automatically retried, content: {application/json: {schema: {$ref: '#/components/schemas/AgentTraceExportReceipt'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2171,6 +2184,7 @@ components:
       type: object
       required: [version, trace_id, snapshot, legacy, truncated, incomplete, omitted, spans]
       properties:
+        export: {$ref: '#/components/schemas/AgentTraceExportPreview'}
         version: {type: integer, enum: [1]}
         trace_id: {type: string, pattern: '^[a-f0-9]{32}$'}
         snapshot: {type: string, pattern: '^[a-f0-9]{64}$'}
@@ -2179,6 +2193,40 @@ components:
         incomplete: {type: boolean}
         omitted: {type: integer, format: int64, minimum: 0}
         spans: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentTraceSpan'}}
+    AgentTraceExportPreview:
+      type: object
+      required: [enabled, finished, unfinished]
+      properties:
+        enabled: {type: boolean}
+        destination: {type: string, maxLength: 2048}
+        fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        finished: {type: integer, minimum: 0, maximum: 256}
+        unfinished: {type: integer, minimum: 0, maximum: 256}
+        reason: {type: string, enum: [not_configured, no_finished_spans]}
+    AgentTraceExportRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, snapshot, destination_fingerprint, confirm]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        snapshot: {type: string, pattern: '^[a-f0-9]{64}$'}
+        destination_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        confirm: {type: boolean, enum: [true]}
+    AgentTraceExportReceipt:
+      type: object
+      required: [project_id, project_revision, run_id, snapshot, destination_fingerprint, state, sent]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        run_id: {type: string}
+        snapshot: {type: string, pattern: '^[a-f0-9]{64}$'}
+        destination_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        state: {type: string, enum: [exported, partial, warning, unknown]}
+        sent: {type: integer, minimum: 1, maximum: 256, description: Span count in the attempted payload; not proof of delivery}
+        accepted: {type: integer, minimum: 0, maximum: 256, description: Absent when acceptance is unknown.}
+        rejected: {type: integer, minimum: 0, maximum: 256, description: Absent when rejection is unknown.}
+        reason: {type: string, enum: [transport_error, canceled, deadline_exceeded, unexpected_response, invalid_acknowledgement, collector_warning, collector_rejected]}
     AgentTraceSpan:
       type: object
       additionalProperties: false

@@ -284,6 +284,35 @@ budget, including attempts and children. The private journal retains at most
 spans have no measured end time. Browsing reads local data and never exports it;
 ambient `OTEL_*` exporters and resource detection are not enabled.
 
+Optional `agent_runtime.telemetry.export` enables a manual OTLP/HTTP JSON export
+from `:run-export` in task execution. Set `endpoint` to the exact collector URL
+(normally ending in `/v1/traces`). HTTPS is required except for a literal
+loopback HTTP address. Credentials in URLs, query strings, fragments and
+redirects are rejected. An optional `bearer_env` names one explicit environment
+variable containing the bearer token; the token is never included in a preview.
+Leave both fields empty to disable export. No ambient `OTEL_*` destination,
+resource attributes or credentials are used, and no proxy is inferred.
+
+```yaml
+agent_runtime:
+  telemetry:
+    export:
+      endpoint: https://collector.example/v1/traces
+      bearer_env: MINI_ORCA_TRACE_TOKEN
+```
+
+Each export requires confirmation of the checkout/revision, run, configured
+destination fingerprint and exact retained snapshot. Only finished spans with
+recorded end times are sent; the preview discloses unfinished and omitted spans.
+The destination identity is separate from the content snapshot and execution
+preferences. Export uses one bounded request (1 MiB body, 16 KiB response headers,
+64 KiB uncompressed JSON acknowledgement, eight-second transport deadline).
+It never retries automatically or follows redirects. Successful, partially
+accepted and warning acknowledgements retain their distinct counts. Timeout,
+cancellation, invalid replies and HTTP failures leave delivery unknown: the
+collector may already have received the snapshot. Inspect the collector before
+deciding whether to explicitly export the same snapshot again.
+
 Optional `agent_runtime.telemetry.prices` supplies a user-maintained token price
 table. Set `version` to a nonempty identifier, `currency` to three uppercase
 letters, and `rates` to 1–64 unique configured `provider`/`model` pairs. Every rate

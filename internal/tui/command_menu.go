@@ -89,6 +89,7 @@ func commandCatalog() []commandItem {
 		commandItem{command: "run-output", title: "Disclose private invocation output", hint: "run-output <ID> · Read bounded model text and redacted tool records from Timeline.", argument: true},
 		commandItem{command: "hide-output", title: "Hide private invocation output", hint: "Close the private disclosure and stop its refresh."},
 		commandItem{command: "run-cancel", title: "Cancel current native run", hint: "Cancel the active root; the worker owns cleanup."},
+		commandItem{command: "run-export", title: "Export a trace snapshot", hint: "Review the destination and retained source-free snapshot; explicit confirmation sends once."},
 		commandItem{command: "run-input", title: "Respond to pending task input", hint: "run-input approve, reject or cancel · Exact proposal identity is required; Apply remains separate.", argument: true},
 		commandItem{command: "stream-output", title: "Configure task output streaming", hint: "stream-output on or off · Applies to new workflows and retries through provider capability checks.", argument: true},
 		commandItem{command: "plan", title: "Review task plan", hint: "Inspect the approach, evidence, scope and acceptance criteria."},

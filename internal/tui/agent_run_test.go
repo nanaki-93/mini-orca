@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
 
@@ -280,5 +283,165 @@ func TestExecutionTraceAndCostRemainPassiveReadableAndSanitized(t *testing.T) {
 	text := strings.Join(renderAgentCost(&client.AgentCostEstimate{Status: "estimated", PriceVersion: "rates-v2", Currency: "USD", Total: &total}), "\n")
 	if !strings.Contains(text, "Estimated token cost: 0.125000 USD") || !strings.Contains(text, "not an invoice") {
 		t.Fatal("cost provenance missing", text)
+	}
+}
+
+func traceExportState() *State {
+	s, detail := executionState()
+	detail.Trace = &client.AgentTraceSummary{Version: 1, TraceID: strings.Repeat("a", 32), Snapshot: strings.Repeat("b", 64), Incomplete: true, Truncated: true, Omitted: 3, Export: &client.AgentTraceExportPreview{Enabled: true, Destination: "https://collector.example/v1/traces", Fingerprint: strings.Repeat("c", 64), Finished: 1, Unfinished: 2}}
+	s.applyAgentProgress(&agentProgressView{Request: *s.agentProgressRequest(), Detail: &detail, Status: "current"})
+	return s
+}
+
+func TestTraceExportConfirmationDispatchesOnceWithExactSnapshotAndNoSourceMutation(t *testing.T) {
+	for _, state := range []string{"exported", "partial", "warning", "unknown"} {
+		t.Run(state, func(t *testing.T) {
+			s := traceExportState()
+			before := cloneChangeSessionSnapshot(s.Change)
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if r.Method != http.MethodPost || r.URL.Path != "/api/projects/current/agent-runs/run/export" || r.URL.Query().Get("worktree_path") != "/workspace/task" {
+					t.Error("wrong export route", r.URL)
+				}
+				var request client.AgentTraceExportRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+				}
+				if request.ProjectIdentity != s.Change.ProjectIdentity || request.Snapshot != strings.Repeat("b", 64) || request.DestinationFingerprint != strings.Repeat("c", 64) || !request.Confirm {
+					t.Error("lost export admission", request)
+				}
+				accepted, rejected := 1, 0
+				if state == "partial" {
+					accepted, rejected = 0, 1
+				}
+				receipt := client.AgentTraceExportReceipt{ProjectIdentity: request.ProjectIdentity, RunID: "run", Snapshot: request.Snapshot, DestinationFingerprint: request.DestinationFingerprint, State: state, Sent: 1, Accepted: &accepted, Rejected: &rejected}
+				if state == "unknown" {
+					receipt.Accepted, receipt.Rejected = nil, nil
+				}
+				_ = json.NewEncoder(w).Encode(receipt)
+			}))
+			defer server.Close()
+			cl, err := NewClient(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cl.Close()
+			s.ExecuteCommand("run-export")
+			if s.Confirmation == nil || len(s.PendingActions) != 0 {
+				t.Fatal("export bypassed confirmation")
+			}
+			for _, text := range []string{"/workspace/task", "https://collector.example/v1/traces", strings.Repeat("b", 64), strings.Repeat("c", 64), "1 finished spans", "2 unfinished spans", "3 spans", "No automatic retry"} {
+				if !strings.Contains(s.Confirmation.Message, text) {
+					t.Fatal("missing export disclosure", text)
+				}
+			}
+			s.HandleKey(KeyEvent{Key: "Enter"})
+			s.FlushActions(t.Context(), cl)
+			if calls.Load() != 1 || s.Error != "" || s.AgentRunPending != "" || !reflect.DeepEqual(*s.Change, before) {
+				t.Fatal("export changed proposal or lost receipt", s.Error)
+			}
+			if !strings.Contains(s.CmdOutput, state) {
+				t.Fatal("delivery state missing", s.CmdOutput)
+			}
+		})
+	}
+}
+
+func TestTraceExportRejectsChangedConfirmationsAndQueuedSnapshots(t *testing.T) {
+	for _, phase := range []string{"confirmation", "queued"} {
+		for _, change := range []string{"scope", "snapshot", "destination", "run"} {
+			t.Run(phase+"/"+change, func(t *testing.T) {
+				s := traceExportState()
+				s.ExecuteCommand("run-export")
+				if phase == "queued" {
+					s.HandleKey(KeyEvent{Key: "Enter"})
+				}
+				switch change {
+				case "scope":
+					s.Project.ProjectRevision = "changed"
+				case "snapshot":
+					s.AgentProgress.Detail.Trace.Snapshot = "changed"
+				case "destination":
+					s.AgentProgress.Detail.Trace.Export.Fingerprint = "changed"
+				case "run":
+					s.AgentProgress.Detail.Run.ID = "changed"
+				}
+				if phase == "confirmation" {
+					s.HandleKey(KeyEvent{Key: "Enter"})
+					if len(s.PendingActions) != 0 || s.Error == "" {
+						t.Fatal("changed confirmation queued")
+					}
+				} else {
+					if s.acceptsAgentRunAction(s.PendingActions[0].AgentRun) || s.AgentRunPending != "" {
+						t.Fatal("changed queued export dispatched")
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestTraceExportLateAndMismatchedReceiptsCannotBecomeSuccess(t *testing.T) {
+	for _, change := range []string{"superseded", "scope", "snapshot", "counts"} {
+		s := traceExportState()
+		s.ExecuteCommand("run-export")
+		s.HandleKey(KeyEvent{Key: "Enter"})
+		action := *s.PendingActions[0].AgentRun
+		accepted, rejected := 1, 0
+		receipt := client.AgentTraceExportReceipt{ProjectIdentity: action.Export.ProjectIdentity, RunID: action.Invocation, Snapshot: action.Export.Snapshot, DestinationFingerprint: action.Export.DestinationFingerprint, State: "exported", Sent: 1, Accepted: &accepted, Rejected: &rejected}
+		s.CmdOutput = "unchanged"
+		switch change {
+		case "superseded":
+			s.AgentRunPending = "new-request"
+		case "scope":
+			s.Project.ProjectRevision = "changed"
+		case "snapshot":
+			receipt.Snapshot = "foreign"
+		case "counts":
+			accepted = 2
+		}
+		s.applyAgentRunAction(agentRunActionResult{Action: action, Export: receipt})
+		if s.CmdOutput != "unchanged" {
+			t.Fatal("late or mismatched receipt became success", change)
+		}
+		if (change == "snapshot" || change == "counts") && !strings.Contains(s.Error, "delivery is unknown") {
+			t.Fatal("invalid acknowledgement not disclosed")
+		}
+	}
+}
+
+func TestTraceExportConfirmationFitsEveryPaletteAndSmallTerminal(t *testing.T) {
+	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+		for _, size := range [][2]int{{52, 16}, {80, 24}, {120, 36}} {
+			s := traceExportState()
+			s.Palette = palette
+			s.AgentProgress.Detail.Trace.Export.Destination += "\x1b]52;c;PRIVATE\x07"
+			s.ExecuteCommand("run-export")
+			var visited strings.Builder
+			var readable strings.Builder
+			for range 30 {
+				frame := s.Render(size[0], size[1])
+				assertFrameSize(t, frame, size[0], size[1])
+				visited.WriteString(frame)
+				for _, line := range strings.Split(ansi.Strip(frame), "\n") {
+					readable.WriteString(strings.Trim(line, " │┌┐└┘─"))
+					readable.WriteByte(' ')
+				}
+				s.HandleKey(KeyEvent{Key: "PageDown"})
+			}
+			for _, text := range []string{"Checkout:", "Destination:", "Snapshot:", "finished spans", "automatic retry"} {
+				if !strings.Contains(strings.Join(strings.Fields(readable.String()), " "), text) {
+					t.Fatal("unreachable confirmation content", text, size)
+				}
+			}
+			if strings.Contains(visited.String(), "\x1b]52") || len(s.PendingActions) != 0 {
+				t.Fatal("unsafe or active confirmation rendering")
+			}
+			s.HandleKey(KeyEvent{Key: "Escape"})
+			if s.Confirmation != nil || len(s.PendingActions) != 0 {
+				t.Fatal("canceling confirmation dispatched")
+			}
+		}
 	}
 }

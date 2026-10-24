@@ -116,6 +116,16 @@ incomplete, show an unknown total and a separately labeled known subtotal.
 Cost remains an estimate, not an invoice. These panels stay passive and fit the
 minimum terminal size in every palette using the existing detail scroller.
 
+`:run-export` opens a scrollable confirmation for the current retained snapshot.
+Show the checkout and current/stored revisions, invocation, exact destination,
+destination fingerprint and snapshot hash, plus finished, unfinished and omitted
+span counts. Browsing or opening this confirmation sends nothing. Revalidate the
+captured scope, snapshot and destination both on confirmation and before queued
+dispatch. Receipts distinguish accepted, partially rejected, warning and unknown
+delivery; unknown acceptance is never displayed as zero. Ignore late receipts
+for a replaced request or checkout. Exports do not grant proposal approval or
+Apply authority, and no export retries automatically.
+
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
 Mark changed files individually, invalidate progress when the proposal changes,

@@ -868,7 +868,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 27C — Export a confirmed source-free telemetry snapshot
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/telemetry_export.go`, `internal/app/agentruntime/telemetry_export_test.go`, `internal/app/agent_usage_export.go`, `internal/app/agent_usage_export_test.go`, `internal/tui/agent_telemetry_actions.go` — **new**.

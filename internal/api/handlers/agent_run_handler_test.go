@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,7 +54,7 @@ func TestAgentHistoryHandlerGuardsRoutesAndEmptySnapshot(t *testing.T) {
 	if w.Code != 404 {
 		t.Fatalf("missing invocation: %d %s", w.Code, w.Body.String())
 	}
-	for _, handler := range []http.HandlerFunc{h.Control, h.Input} {
+	for _, handler := range []http.HandlerFunc{h.Control, h.Input, h.Export} {
 		for _, body := range []string{`{"unknown":true}`, `{} {}`, `{}`} {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest("POST", "/", strings.NewReader(body))
@@ -181,5 +183,113 @@ func TestAgentDetailTraceAndCostContractRemainsScopedAndSourceFree(t *testing.T)
 	h.Detail(w, r)
 	if w.Code != http.StatusConflict || strings.Contains(w.Body.String(), span.ID) {
 		t.Fatal("foreign trace disclosed", w.Code)
+	}
+}
+
+func traceExportHandlerFixture(t *testing.T, endpoint string) (*AgentRunHandler, string, client.AgentTraceExportRequest) {
+	t.Helper()
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	cfg := scopedHandlerConfig("http://127.0.0.1:1")
+	cfg.AgentRuntime.Telemetry.Export = config.AgentTelemetryExport{Endpoint: endpoint}
+	service, err := app.New(cfg, fixture.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := fixture.manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := agentstate.Open(fixture.manager.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := agentstate.Key{App: "mini-orca", User: "local", ID: "export-run"}
+	if _, err := store.CreateSession(t.Context(), key, agentstate.State{"private": json.RawMessage(`"PRIVATE_PROMPT"`)}); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Checkpoint(t.Context(), agentstate.BudgetRecord{ID: "budget", Binding: agentstate.Binding{Project: index.ProjectID, Revision: index.ProjectRevision, Policy: "policy", Configuration: "config"}, Limits: runtime.Limits, Sequence: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	span := agentstate.TraceSpan{ID: "0123456789abcdef", Kind: "invocation", Status: "running", Started: now}
+	run := agentstate.Run{ID: key.ID, Session: key, BudgetID: "budget", RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}
+	if _, err := store.BeginRun(t.Context(), run, &span); err != nil {
+		t.Fatal(err)
+	}
+	span.Status, span.Ended, span.ElapsedNanos = "completed", now.Add(time.Millisecond), 1e6
+	if err := store.FinishRun(t.Context(), run.ID, "completed", &span); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := service.AgentRunDetail(t.Context(), app.AgentRunQuery{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision}, run.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := client.AgentTraceExportRequest{ProjectIdentity: client.ProjectIdentity{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision}, Snapshot: detail.Trace.Snapshot, DestinationFingerprint: detail.Trace.Export.Fingerprint, Confirm: true}
+	return NewAgentRunHandler(service), run.ID, request
+}
+
+func TestAgentTraceExportHandlerClientContractAndRejections(t *testing.T) {
+	var calls atomic.Int32
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		body, err := io.ReadAll(r.Body)
+		if err != nil || strings.Contains(string(body), "PRIVATE_") {
+			t.Error("unsafe telemetry body", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer collector.Close()
+	h, id, request := traceExportHandlerFixture(t, collector.URL)
+	for _, invalid := range []string{"unknown", "confirmation", "revision", "snapshot", "destination"} {
+		changed := request
+		switch invalid {
+		case "confirmation":
+			changed.Confirm = false
+		case "revision":
+			changed.ProjectRevision = "foreign"
+		case "snapshot":
+			changed.Snapshot = "foreign"
+		case "destination":
+			changed.DestinationFingerprint = "foreign"
+		}
+		body, err := json.Marshal(changed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if invalid == "unknown" {
+			body = append(body[:len(body)-1], []byte(`,"endpoint":"http://127.0.0.1:1"}`)...)
+		}
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+		r.SetPathValue("runID", id)
+		h.Export(w, r)
+		want := http.StatusConflict
+		if invalid == "confirmation" || invalid == "unknown" {
+			want = http.StatusBadRequest
+		}
+		if w.Code != want || calls.Load() != 0 {
+			t.Fatalf("invalid %s: %d %s", invalid, w.Code, w.Body.String())
+		}
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/export", h.Export)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	cl, err := client.NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	var receipt client.AgentTraceExportReceipt
+	if err := cl.DoJSON(t.Context(), "trace-export", http.MethodPost, "/api/projects/current/agent-runs/"+id+"/export", request, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || receipt.State != "exported" || receipt.Accepted == nil || *receipt.Accepted != 1 || receipt.RunID != id || receipt.Snapshot != request.Snapshot || receipt.DestinationFingerprint != request.DestinationFingerprint {
+		t.Fatal(receipt)
 	}
 }

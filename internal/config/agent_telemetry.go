@@ -3,14 +3,45 @@ package config
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 )
 
 type AgentTelemetry struct {
-	Prices AgentPriceTable `yaml:"prices"`
+	Prices AgentPriceTable      `yaml:"prices"`
+	Export AgentTelemetryExport `yaml:"export"`
+}
+
+type AgentTelemetryExport struct {
+	Endpoint  string `yaml:"endpoint"`
+	BearerEnv string `yaml:"bearer_env"`
+}
+
+func (value AgentTelemetryExport) Validate() error {
+	if value.Endpoint == "" && value.BearerEnv == "" {
+		return nil
+	}
+	if err := validateIntegrationEndpoint(value.Endpoint); err != nil {
+		return fmt.Errorf("agent telemetry export: %w", err)
+	}
+	u, err := url.Parse(value.Endpoint)
+	if err != nil || u.ForceQuery || strings.Contains(value.Endpoint, "#") || strings.TrimSpace(value.Endpoint) != value.Endpoint || strings.IndexFunc(value.Endpoint, unicode.IsControl) >= 0 {
+		return fmt.Errorf("agent telemetry export requires a URL without query, fragment or control characters")
+	}
+	if value.BearerEnv != "" && !integrationEnvName.MatchString(value.BearerEnv) {
+		return fmt.Errorf("agent telemetry export bearer_env must name an explicit environment variable")
+	}
+	if u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return fmt.Errorf("agent telemetry export port must be between 1 and 65535")
+		}
+	}
+	return nil
 }
 
 type AgentPriceTable struct {
@@ -32,6 +63,9 @@ var priceVersion = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 var priceCurrency = regexp.MustCompile(`^[A-Z]{3}$`)
 
 func ResolveAgentTelemetry(value AgentTelemetry) (AgentTelemetry, error) {
+	if err := value.Export.Validate(); err != nil {
+		return value, err
+	}
 	table := &value.Prices
 	if table.Version == "" && table.Currency == "" && len(table.Rates) == 0 {
 		return value, nil

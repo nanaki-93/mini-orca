@@ -73,6 +73,7 @@ untrusted networks.
 | GET | `/api/projects/current/agent-runs/{runID}` | Read invocation hierarchy and retained events; private model text requires `include_text=true`. |
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
+| POST | `/api/projects/current/agent-runs/{runID}/export` | Export one explicitly confirmed source-free trace snapshot to the configured collector. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
@@ -1080,8 +1081,40 @@ measured local token consumption; then `total` is present. Otherwise status is
 `price_version`, `currency` and fixed `reasons` identify the basis: missing table,
 legacy usage, missing model rate, incomplete usage or unknown cache split.
 These are token estimates, excluding remote agent consumption, other fees and
-taxes. No endpoint, model name, prompt, diagnostic or tool payload is exposed by
-the trace or cost projection. Rates are configured locally; see `CONFIG.md`.
+taxes. No model name, prompt, diagnostic or tool payload is exposed by the spans
+or cost projection. Rates are configured locally; see `CONFIG.md`.
+
+`trace.export` is a passive preview: `enabled`, configured `destination`, its
+`fingerprint`, `finished` and `unfinished` retained span counts, and an optional
+fixed `reason` (`not_configured` or `no_finished_spans`). Legacy or unfinished-only
+history cannot be exported. Destination/credential-reference changes invalidate
+the destination fingerprint independently of `trace.snapshot`; the credential
+value and environment variable name are never exposed by the preview.
+
+`POST /agent-runs/{runID}/export` requires strict JSON containing `project_id`,
+`project_revision`, `snapshot`, `destination_fingerprint` and `confirm: true`.
+The service rechecks checkout identity, retained content and destination before
+one send. Unconfirmed/invalid requests return 400, a missing run returns 404,
+and changed scope/snapshot/destination returns 409 without sending. As with
+other run routes, `worktree_path` selects its guarded checkout service.
+
+The response is a source-free receipt with the project identity, `run_id`,
+`snapshot`, `destination_fingerprint`, `state`, `sent`, optional `accepted` and
+`rejected` counts, and a fixed optional `reason`. `sent` is the number of spans
+in the attempted payload, not proof of delivery. A valid acknowledgement yields
+`exported`, `partial`, or `warning`; `unknown` omits acceptance/rejection counts
+because the collector may already have received the data. HTTP, cancellation,
+timeout, oversized or malformed replies never become a successful receipt.
+No automatic retry occurs. Reading history or a preview never exports.
+
+Export follows the [OTLP HTTP/JSON envelope](https://opentelemetry.io/docs/specs/otlp/)
+with hexadecimal trace/span IDs, numeric enums, decimal-string timestamps and
+only host-projected attributes: fixed service/scope, snapshot hash, history
+flags, omitted/unfinished span counts, outcome, monotonic duration and optional hashed run/operation
+identities. It excludes source, prompts, tool values, raw errors, model names,
+resource detection and ambient `OTEL_*` settings. Only finished spans with real
+end times are included; incomplete/truncated history remains labeled. Request
+body, response headers/body and duration are bounded as described in `CONFIG.md`.
 
 An existing domain checkpoint is returned as `input`; superseded or removed
 proposals have no input control. No raw SDK session, prompt or model response is

@@ -163,7 +163,7 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		title:     "[2] WORK · TASKS & EXECUTION",
 		primary:   []keyDesc{{"i / Enter", "Agent detail"}, {"d", "Inspect diff"}},
 		secondary: []keyDesc{{"←/→", "Execution section"}, {"a / c", "Apply & commit"}, {"r / x", "Repair / reject"}},
-		commands:  []keyDesc{{":execution", "Run detail"}, {":run-output ID", "Private text"}, {":run-input", "Decision"}},
+		commands:  []keyDesc{{":execution", "Run detail"}, {":run-output ID", "Private text"}, {":run-input", "Decision"}, {":run-export", "Export trace"}},
 	},
 	PagePlan: {
 		title:     "[2] AGENT STUDIO · TASK PLAN",

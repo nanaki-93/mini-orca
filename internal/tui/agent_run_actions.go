@@ -14,6 +14,8 @@ import (
 )
 
 type agentRunAction struct {
+	Export                              client.AgentTraceExportRequest
+	ExportCount                         int
 	ID, Operation, Invocation, Decision string
 	Request                             agentProgressRequest
 	Change                              ChangeSession
@@ -27,6 +29,7 @@ type agentDisclosure struct {
 }
 
 type agentRunActionResult struct {
+	Export client.AgentTraceExportReceipt
 	Action agentRunAction
 	Detail AgentRunDetail
 	Change ChangeSession
@@ -38,6 +41,10 @@ func (s *State) acceptsAgentRunAction(action *agentRunAction) bool {
 		return false
 	}
 	current := s.matchesAgentRequest(action.Request)
+	if current && action.Operation == "export" && !s.matchesTraceExport(*action) {
+		current = false
+		s.Error = "Trace or destination changed. Inspect and confirm the current snapshot again."
+	}
 	if action.Operation == "output" && (s.AgentDisclosure == nil || s.AgentDisclosure.Invocation != action.Invocation) {
 		current = false
 	}
@@ -63,6 +70,8 @@ func (s *State) execAgentRunCommand(command, arg string) bool {
 		s.queueAgentRunAction("cancel", "")
 	case "run-input":
 		s.queueAgentRunAction("input", strings.TrimSpace(arg))
+	case "run-export":
+		s.requestTraceExport(arg)
 	case "retry":
 		if !s.hasRunningWorkflow() {
 			return false
@@ -173,6 +182,8 @@ func executeAgentRunAction(ctx context.Context, cl *Client, action agentRunActio
 	switch action.Operation {
 	case "output":
 		result.Err = cl.DoJSON(ctx, action.ID, http.MethodGet, target+action.Request.Query+"&include_text=true", nil, &result.Detail)
+	case "export":
+		result.Err = cl.DoJSON(ctx, action.ID, http.MethodPost, target+"/export"+changeWorktreeScopeQuery(&action.Change), action.Export, &result.Export)
 	case "cancel":
 		body := map[string]any{"project_id": action.Request.Project.ProjectID, "project_revision": action.Request.Project.ProjectRevision, "action": "cancel"}
 		result.Err = cl.DoJSON(ctx, action.ID, http.MethodPost, target+"/control"+changeWorktreeScopeQuery(&action.Change), body, &result.Detail)
@@ -192,6 +203,10 @@ func executeAgentRunAction(ctx context.Context, cl *Client, action agentRunActio
 
 func (s *State) applyAgentRunAction(result agentRunActionResult) {
 	action := result.Action
+	if action.Operation == "export" {
+		s.applyTraceExportAction(result)
+		return
+	}
 	if s.AgentRunPending == action.ID {
 		s.AgentRunPending = ""
 	}
