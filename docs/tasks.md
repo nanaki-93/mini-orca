@@ -754,6 +754,8 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/agent_external_work.go`, `internal/tui/agent_external_work_test.go`, `internal/tui/agent_external_actions.go`, `internal/tui/agent_external_commands.go`, `internal/tui/browser.go`, `internal/tui/browser_test.go` — **new**, exact external action review, research and delegation actions with explicit report viewing.
+- `internal/tui/agent_external_capture.go`, `internal/tui/agent_external_controls.go` — **new**, immutable source capture and destination consent, separate from exact receipt controls. `internal/tui/client/external_models.go`, `internal/tui/client/external_work.go`, `internal/tui/client/external_work_test.go` — **new**, SDK-free receipt DTOs and guarded local API contracts; keep connection inventory types focused on connections.
+- `internal/tui/client/client.go`, `internal/tui/hub_overview.go`, `internal/tui/state_test.go`, `internal/tui/view_test.go`, `internal/tui/agent_connections_commands.go` — register exact routes and External Work navigation, with compact-layout and keyboard coverage and a visible transition from connection details.
 - `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go`, `internal/tui/agent_connections.go`, `internal/tui/agent_connections_actions.go`, `internal/tui/hub_settings.go`, `internal/tui/state.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/plan_investigation.go`.
 - `docs/UI_DESIGN_GUIDELINES.md`, `CONFIG.md`.
 
@@ -764,6 +766,7 @@ This is an implementation specification, not a claim that the features below alr
 - Review the exact persisted API request and current version/hash before one confirmed dispatch. Preserve unknown external outcomes, require explicit reconciliation, and never offer an automatic retry after uncertain delivery.
 - Start research or A2A analysis/review only from explicit bounded captured input, with destination/source-sharing/provider consent and configured grants. Show advisory output and remote-reported usage distinctly. Expose explicit refresh, reconnect, cancel, input and reconciliation controls only when the current receipt permits them.
 - Browsing local history is passive; external actions own their cancellation and late-result checks. Open a retained research HTML report only on an explicit action, using the guarded loopback report URL so its citations and required suggestions retain their rendered form. Never shell-interpolate model content or claim arbitrary HTML was rendered in the terminal.
+- Capture the current plan's existing source hashes through a local index read before consent, or require an explicit question-only choice. Keep research capability, provider destination and remote card/grant identity bound through confirmation and queued dispatch. Preserve partial history failures and selection by receipt kind/ID; uncertain control outcomes require local refresh before another action.
 
 **Verification command**
 `make tui-test && ./scripts/validate.sh && git diff --check`
