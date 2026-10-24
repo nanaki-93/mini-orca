@@ -1118,6 +1118,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/llm/capabilities.go`, `internal/llm/capabilities_test.go` — advertise only conformed native multimodal models.
 - `internal/app/agentruntime/attachments.go`, `internal/app/agentruntime/attachments_test.go` — **new**, admitted native multimodal completion.
 - `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/persistence.go` — immutable media capture, strict native parts, and request identity without copying binary data into metadata.
+- `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go` — register and validate the explicit `multimodal-v1` journal schema while preserving rejection of unknown schemas.
 - `internal/app/agent_attachments.go`, `internal/app/agent_attachments_test.go`, `internal/app/agent_attachment_advice.go`, `internal/app/agent_attachment_advice_test.go` — **new**, local import, version/hash selection, destination disclosure, and private advisory artifacts.
 - `internal/api/handlers/agent_attachment_handler.go`, `internal/api/handlers/agent_attachment_handler_test.go` — **new**, strict loopback endpoints.
 - `cmd/daemon/main.go`, `internal/tui/client/attachment_models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md` — routes, wire DTOs (**new** client model file), and supported behavior.
@@ -1134,7 +1135,7 @@ This is an implementation specification, not a claim that the features below alr
 - Exercise real ADK/native fake-HTTP requests, binary privacy, unsupported profiles, malformed media, stale ownership, changed settings, cancellation, persistence failures and late results. TUI actions are completed in Task 31C; this commit has functional HTTP callers and no dormant runtime helpers.
 
 **Verification command**
-`go test -race -timeout=15m ./internal/llm ./internal/app/agentruntime ./internal/app ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/llm ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add explicit multimodal attachment advice`
 
