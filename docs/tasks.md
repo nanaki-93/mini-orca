@@ -890,7 +890,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 28 — Add task and tool-trajectory evaluation
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `cmd/agent-eval/main.go`, `cmd/agent-eval/main_test.go`, `internal/agenteval/runner.go`, `internal/agenteval/runner_test.go`, `internal/agenteval/scoring.go`, `internal/agenteval/fixtures_test.go`, `internal/agenteval/testdata/tasks.json` — **new**.

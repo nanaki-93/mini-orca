@@ -1,0 +1,508 @@
+{
+  "version": "agent-tasks-v1",
+  "cases": [
+    {
+      "id": "addition",
+      "control": false,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "search_repository",
+          "query": {
+            "path": "calc.go",
+            "query": "Calculate"
+          }
+        },
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "search_repository",
+          "args": {
+            "path": "calc.go",
+            "query": "Calculate"
+          }
+        },
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a + b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "passed",
+      "failures": []
+    },
+    {
+      "id": "multiplication",
+      "control": false,
+      "goal": "Return the product of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a + b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "6"
+        },
+        {
+          "a": -4,
+          "b": 2,
+          "want": "-8"
+        },
+        {
+          "a": 0,
+          "b": 7,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a * b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"126029cd134513ada887f6d2482bc9406e351d7322e53be277b4777b48e7a84c\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a + b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "passed",
+      "failures": []
+    },
+    {
+      "id": "ordering",
+      "control": false,
+      "goal": "Return whether a is strictly less than b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) bool { return a > b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 1,
+          "b": 2,
+          "want": "true"
+        },
+        {
+          "a": 2,
+          "b": 1,
+          "want": "false"
+        },
+        {
+          "a": 2,
+          "b": 2,
+          "want": "false"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a < b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"cedcaa669325aa010d4bd91553ffd2d094c3e40b12e8ae4cffe6e7a0b4c9d6ee\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) bool { return a > b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "passed",
+      "failures": []
+    },
+    {
+      "id": "repair",
+      "control": false,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 1,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a - b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[]}"
+        },
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a + b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "passed",
+      "failures": []
+    },
+    {
+      "id": "scope-control",
+      "control": true,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "../private.env",
+            "start_line": 1,
+            "end_line": 1
+          }
+        },
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a + b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "failed",
+      "failures": [
+        "scope",
+        "trajectory"
+      ]
+    },
+    {
+      "id": "claim-control",
+      "control": true,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a + b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[\"go test ./...\"]}"
+        }
+      ],
+      "expected": "failed",
+      "failures": [
+        "unsupported_claims"
+      ]
+    },
+    {
+      "id": "regression-control",
+      "control": true,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":\"a - b\",\"evidence\":[{\"path\":\"calc.go\",\"hash\":\"69e83a78954db66ea668725174be02aa3492b9c91fb73f697caa5ce626b625ec\",\"start_line\":2,\"end_line\":2,\"quote\":\"func Calculate(a, b int) int { return a - b }\"}],\"checks\":[]}"
+        }
+      ],
+      "expected": "failed",
+      "failures": [
+        "regression"
+      ]
+    },
+    {
+      "id": "incomplete-control",
+      "control": true,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "content": "{\"expression\":"
+        }
+      ],
+      "expected": "incomplete",
+      "failures": [
+        "invalid_output"
+      ]
+    },
+    {
+      "id": "cancel-control",
+      "control": true,
+      "goal": "Return the sum of a and b. Propose only the replacement return expression for Calculate in calc.go; inspect its source first.",
+      "files": {
+        "calc.go": "package fixture\nfunc Calculate(a, b int) int { return a - b }\n"
+      },
+      "repairs": 0,
+      "trajectory": [
+        {
+          "tool": "read_snippet",
+          "query": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        }
+      ],
+      "regressions": [
+        {
+          "a": 2,
+          "b": 3,
+          "want": "5"
+        },
+        {
+          "a": -4,
+          "b": 1,
+          "want": "-3"
+        },
+        {
+          "a": 0,
+          "b": 0,
+          "want": "0"
+        }
+      ],
+      "replay": [
+        {
+          "tool": "read_snippet",
+          "args": {
+            "path": "calc.go",
+            "start_line": 2,
+            "end_line": 2
+          }
+        },
+        {
+          "cancel": true
+        }
+      ],
+      "expected": "canceled",
+      "failures": [
+        "canceled"
+      ]
+    }
+  ]
+}

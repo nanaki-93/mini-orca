@@ -134,7 +134,7 @@ Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 
 | Layer / Path | Responsibility |
 | --- | --- |
-| `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval` | Daemon startup, terminal UI CLI entry point, and evaluation runner. |
+| `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`, `cmd/agent-eval` | Daemon startup, terminal UI and separate evaluation CLI entry points. |
 | `internal/api` | Loopback HTTP decoding, browser-origin protection, local request policy, and structured error responses. |
 | `internal/app` | Workflow orchestration, analysis runs, 4-stage change/agent sessions, Git worktree isolation, and guarded source mutation. |
 | `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
@@ -173,6 +173,53 @@ The daemon defaults to `127.0.0.1:9090`; the TUI connects to `http://127.0.0.1:9
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`, `project-docs.json`, `file-analysis/`, `findings.json`, `performance/files/`, and unified progress in `analysis/run.json`. Private `changes/` files retain conversations, captured source and proposals, feature goals/ideas, the latest grouped recovery journal, and verification evidence. `.mini-orca/autopilot/` holds isolated Git worktrees for autonomous agent tasks. Restore uses local persisted analysis without triggering model requests. See the [API guide](docs/api-contract.md) and [workflow migration](docs/api-contract.md#retired-workflows) for current contracts and boundaries.
 
 ## Development and documentation
+
+The native Go agent evaluation harness runs a fixed, versioned synthetic corpus
+through the production ADK runner and guarded repository tools:
+
+```sh
+go run ./cmd/agent-eval
+go run ./cmd/agent-eval --case addition
+```
+
+The default replay mode uses an owned loopback fake provider. It reads no
+workspace files and writes no proposals or runtime stores. Four task cases cover
+arithmetic, comparisons and a bounded repair; five negative controls verify
+scope violations, unsupported check claims, wrong proposals, incomplete output
+and cancellation. The harness independently checks proposed Go return expressions
+against held-out inputs using Go's constant evaluator. It never executes generated
+code, arbitrary shell commands or project tests. This small corpus measures these
+specific behaviors; it is not evidence of general coding quality.
+
+JSON receipts on stdout identify corpus version/digest, prompt and scoring
+versions, linked ADK/Go/build identity, hashed model/profile, budgets, tool
+trajectory correctness, scope violations, unsupported claims, regression results,
+repairs, token charges/reported usage and elapsed time. Missing usage stays
+unknown; canceled/incomplete latency is labeled and unrun cases have no invented
+measurements. Replay token usage is simulated and timing measures the local
+harness. A replay campaign passes when task cases pass and negative controls are
+detected; control cases retain their actual failed/incomplete/canceled states.
+Receipts omit source, paths, prompts, model answers, credentials and raw errors.
+Unavailable build metadata remains labeled `unavailable`.
+
+Live mode sends only the embedded synthetic corpus to the configured **function**
+profile and excludes negative controls. It requires an explicit command and
+campaign limits. Omitting `--confirm-live` prints the source/destination disclosure
+without sending a request:
+
+```sh
+go run ./cmd/agent-eval --mode live --config config.yaml --case addition \
+  --requests 8 --input-tokens 65536 --output-tokens 8192 --confirm-live
+```
+
+Live evaluation uses one shared campaign budget, no provider fallback or hidden
+retry, at most two admitted repairs, and a 60-second campaign deadline. It
+supports configured HTTP providers with native tool support; CLI providers are
+unavailable for this harness. The selected profile must allow 1–4096 output
+tokens per call. Exit status is `0` for a passed campaign, `1` for a
+failed/incomplete campaign with a receipt, and `2` for invalid configuration or
+receipt output failure. Ctrl-C stops requests and emits an incomplete receipt.
+No live evaluation is run by tests or CI.
 
 Follow [AGENTS.md](AGENTS.md). TUI contributions follow the [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md). Run focused tests while editing. The full local gate is:
 

@@ -67,6 +67,11 @@ the backend guide for changes to `cmd/`.
 - Keep source, secrets and transcripts out of metadata/logs that are defined as
   source-free. Preserve provenance and freshness instead of presenting advisory
   output as verified evidence.
+- `internal/agenteval` and `cmd/agent-eval` own the synthetic task/trajectory
+  corpus and source-free evaluation receipts. The bounded `app` entry point uses
+  production ADK execution and repository tools without opening a checkout.
+  Keep negative controls replay-only and independent regression inputs out of
+  model prompts. Ordinary validation must never select live evaluation mode.
 
 ## Verification
 

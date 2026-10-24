@@ -66,7 +66,7 @@ class QualityTests(unittest.TestCase):
         calls = self.calls.read_text().splitlines()
         self.assertIn(
             "go run golang.org/x/tools/cmd/deadcode@v0.40.0 "
-            "./cmd/daemon ./cmd/engineering-insight-eval ./cmd/tui",
+            "./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/tui",
             calls,
         )
         self.assertTrue(any("gocyclo@v0.6.0" in call for call in calls))
