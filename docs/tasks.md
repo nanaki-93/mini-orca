@@ -1109,27 +1109,88 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: review and integrate scoped missions in the TUI`
 
-## Task 31 — Support explicit multimodal attachments and live sessions
+## Task 31A — Import explicit attachments and request multimodal advice
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agentruntime/live.go`, `internal/app/agentruntime/live_test.go`, `internal/app/agent_attachments.go`, `internal/app/agent_attachments_test.go` — **new**.
-- `internal/llm/generation.go`, `internal/llm/capabilities.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentstate/artifacts.go`, `internal/app/agent_runs.go`, `internal/config/agent_runtime.go`.
-- `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md`.
+- `internal/llm/attachments.go`, `internal/llm/attachments_test.go` — **new**, bounded media types and content validation.
+- `internal/llm/capabilities.go`, `internal/llm/capabilities_test.go` — advertise only conformed native multimodal models.
+- `internal/app/agentruntime/attachments.go`, `internal/app/agentruntime/attachments_test.go` — **new**, admitted native multimodal completion.
+- `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/persistence.go` — immutable media capture, strict native parts, and request identity without copying binary data into metadata.
+- `internal/app/agent_attachments.go`, `internal/app/agent_attachments_test.go`, `internal/app/agent_attachment_advice.go`, `internal/app/agent_attachment_advice_test.go` — **new**, local import, version/hash selection, destination disclosure, and private advisory artifacts.
+- `internal/api/handlers/agent_attachment_handler.go`, `internal/api/handlers/agent_attachment_handler_test.go` — **new**, strict loopback endpoints.
+- `cmd/daemon/main.go`, `internal/tui/client/attachment_models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md` — routes, wire DTOs (**new** client model file), and supported behavior.
 
 **Inputs / dependencies**
-- Task 30C3; artifact privacy and verified provider capability. Pinned Go SDK includes `agent.LiveSession`; test the actual runner/provider path rather than assuming parity with Python examples.
+- Task 30C3; existing private artifact inventory/export/deletion, Function profile, run admission, and integration lifecycle cancellation.
+- The pinned native SDK accepts inline media parts. [Google artifact documentation](https://adk.dev/artifacts/) and the model capability contract distinguish inline bytes from provider-fetched file URLs.
 
 **Implementation rules**
-- Allow explicitly selected bounded images/documents/audio artifacts for supported models. Validate MIME/content, size, ownership, scope, and destination; reject arbitrary provider fetch URLs and implicit uploads.
-- Implement bounded bidirectional text/media input through an explicit session lifecycle, with interrupt/close/reconnect states and the same tool/consent budget enforcement at dispatch. Live callbacks alone are insufficient as policy gates.
-- The TUI shows attachments, transcript, and connection state; no automatic microphone/camera capture or terminal media playback. Unsupported capabilities fail before network dispatch. External capture/playback clients are a separate product decision, not an inert TUI control.
+- Import explicitly supplied PNG/JPEG images, PDF documents, and WAV/PCM audio into immutable private artifacts. Validate content structure, canonical MIME, display name, size (at most 512 KiB each), project/revision, and explicit local import confirmation. Keep the existing 1 MiB HTTP request bound; do not read arbitrary daemon paths or accept remote URLs.
+- An explicit advisory request selects one to four imported artifact versions by ID/version/hash, at most 1 MiB combined, plus a bounded question. It binds the current settings identity, Function model and destination, and source-sharing/remote consent. Reject foreign, stale, deleted, altered, unsupported or oversized selections before provider work.
+- Run one native ADK completion with captured inline bytes and the existing cumulative budget. No implicit memory, skills, provider caching, compaction, retries, tools, source changes or extra uploads. Retain the source-free media manifest in the private invocation identity, while the artifact store owns payloads.
+- Recheck scope, policy, settings and artifact identity at dispatch and publication; cancel on project replacement/reindex/shutdown. Save the answer as a private advisory artifact with provenance. Existing passive library inspection/export/deletion remains the recovery surface; model advice is never verified project evidence or a change proposal.
+- Exercise real ADK/native fake-HTTP requests, binary privacy, unsupported profiles, malformed media, stale ownership, changed settings, cancellation, persistence failures and late results. TUI actions are completed in Task 31C; this commit has functional HTTP callers and no dormant runtime helpers.
 
 **Verification command**
-`go test -race ./internal/llm ./internal/app ./internal/app/agentruntime ./internal/api/handlers && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/llm ./internal/app/agentruntime ./internal/app ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: add explicit attachments and bounded live agent sessions`
+**Commit**: `feat: add explicit multimodal attachment advice`
+
+## Task 31B — Own bounded ADK live session lifecycles
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agentruntime/live.go`, `internal/app/agentruntime/live_transport.go`, `internal/app/agentruntime/live_events.go`, `internal/app/agentruntime/live_test.go`, `internal/app/agentruntime/live_transport_test.go` — **new**, ADK runner/session bridge and bounded provider transport.
+- `internal/app/agent_live.go`, `internal/app/agent_live_control.go`, `internal/app/agent_live_test.go`, `internal/app/agentstate/live.go`, `internal/app/agentstate/live_test.go` — **new**, durable receipts, owned controller and restart interpretation.
+- `internal/app/service.go`, `internal/app/project_lifecycle.go`, `internal/app/agent_integrations.go`, `internal/app/agent_settings.go`, `internal/config/agent_runtime.go`, `internal/config/agent_runtime_test.go`, `internal/llm/capabilities.go`, `internal/llm/capabilities_test.go`.
+- `internal/api/handlers/agent_live_handler.go`, `internal/api/handlers/agent_live_handler_test.go`, `internal/tui/client/live_models.go` — **new**, strict controls and wire DTOs.
+- `cmd/daemon/main.go`, `go.mod`, `go.sum`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md`, `config.example.yaml`.
+
+**Inputs / dependencies**
+- Task 31A; exact imported media references and shared policy/budget primitives.
+- SDK inspection: ADK v2.6.0 `Runner.RunLive` supports custom `agent.LiveSession` agents. GenAI v1.74.0's default live connector uses a process-global WebSocket dialer, so use an application-owned bounded transport behind the ADK runner rather than replacing global transport state or weakening cancellation.
+- [Gemini 3.8 Live](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live) and the [WebSocket protocol](https://ai.google.dev/gemini-api/docs/live-api/get-started-websocket) define explicit text/image/PCM input, audio output with transcription, and interruption behavior. Account entitlement remains a runtime result.
+
+**Implementation rules**
+- Add an optional configured live model using the Function profile's explicit native destination and credentials; leave it disabled by default and preserve the ordinary Function model. Advertise only tested model/backend combinations; reject unsupported credentials, URLs and features before connecting.
+- Use the actual ADK live runner with private sessions/artifacts. Bind open/send/interrupt/reconnect/close to exact checkout, settings, model/destination, session identity and control revision. Repeat admission at actual connect/send/tool boundaries. Live advisory sessions grant no source mutation or project-code execution; reject ungranted tool requests.
+- Bound lifetime, connections, turns, incoming/outgoing bytes and tokens within the admitted cumulative budget. Charge uncertain consumption conservatively and label reported usage separately. Explicit reconnect retains elapsed/cumulative limits, makes no automatic replay or upload, and requires fresh consent. Provider errors, go-away and dropped transport retain distinct states.
+- Retain bounded private transcripts/audio artifacts and source-free receipts; never log provider frames, credentials, resume handles or transcripts. No microphone/camera capture, terminal playback or provider-fetch URLs. Reject unsupported PDF/WAV-as-realtime input instead of silently converting it.
+- Give every connection and goroutine a controller; cancellation, project replacement, worktree disposal, shutdown, budget exhaustion and persistence failure close and join it. Restart inspection reports interrupted sessions without reconnecting or replenishing budgets. Expose passive list/detail and explicit controls through the loopback API.
+- Test the runner over fake WebSockets, admission at every send, exact headers/route, interruption, partial/malformed output, blocked I/O cancellation, reconnect accounting, restart, stale commands and storage failure. Promote only the already pinned WebSocket dependency from indirect to direct if needed.
+
+**Verification command**
+`go test -race -timeout=15m ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/config ./internal/llm ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: add bounded ADK live sessions with explicit controls`
+
+## Task 31C — Present attachments and live sessions in the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/agent_media.go`, `internal/tui/agent_media_actions.go`, `internal/tui/agent_media_view.go`, `internal/tui/agent_media_test.go`, `internal/tui/agent_media_stream.go`, `internal/tui/agent_media_stream_test.go` — **new**, focused media/session surface and owned passive updates.
+- `internal/tui/client/attachments.go`, `internal/tui/client/attachments_test.go`, `internal/tui/client/live.go`, `internal/tui/client/live_test.go` — **new**, typed controls and receipt validation.
+- `internal/tui/client/client.go`, `internal/tui/client/attachment_models.go`, `internal/tui/client/live_models.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_overview.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands_actions.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/agent_library.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 31B; backend attachment and live contracts pass fake-provider conformance.
+
+**Implementation rules**
+- Keep the five workspaces. Add a focused Work detail surface for selected attachments, advisory answers, live connection state, transcript disclosure, usage and recovery; keep the dashboard restrained and existing library ownership intact.
+- Read a bounded, explicitly selected local attachment only after its path is supplied. Reject symlinks, non-regular files and escapes from the selected checkout. Show exact name/MIME/size/hash before local import, then select immutable imported versions for a separately confirmed provider request.
+- Capture checkout, current settings, provider origin/model, selected artifact versions and question in confirmations. Revalidate before dispatch and reject late results after scope/selection/settings changes. Main and task worktree responses remain isolated.
+- Expose open, send, interrupt, close and explicit reconnect with clear pending/disconnected/failed/interrupted/stale states. Navigation, transcript disclosure and local refresh never connect or send. Leaving the view stops passive watchers without silently closing a separately owned session; make active-session state and explicit close discoverable.
+- Display audio as private artifact metadata/export, with no automatic playback or capture. Unsupported profiles and missing live configuration provide actionable text and no inert action. Preserve drafts and acknowledged progress through transport errors without automatic resend.
+- Verify complete keyboard journeys, compact/wide layouts, all four palettes, ANSI handling, stale confirmations, privacy, cancellation and passive navigation with real client/handler fixtures.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: present explicit attachments and live sessions in the TUI`
 
 ## Task 32 — Add opt-in ambient analysis triggers
 
@@ -1141,7 +1202,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/tui/hub_settings.go`, `internal/tui/dashboard.go`, `internal/tui/agent_run_test.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 31; reusable analysis admission, persisted limits, and lifecycle cancellation.
+- Task 31C; reusable analysis admission, persisted limits, and lifecycle cancellation.
 
 **Implementation rules**
 - Offer explicit per-project file-change/interval triggers with debounce, deduplication, quiet periods, and persisted per-window budgets. Disabled is the default.
@@ -1149,7 +1210,7 @@ This is an implementation specification, not a claim that the features below alr
 - Revocation stops pending work; project replacement and shutdown cleanly stop owned watchers/timers. Restoring settings does not replay missed triggers. Show last run, next eligible time, reason, and disable action without noisy repeated notifications.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentstate ./internal/config ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/config ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add opt-in bounded ambient analysis`
 
@@ -1170,7 +1231,7 @@ This is an implementation specification, not a claim that the features below alr
 - Implement explicit validated export/migration with receipts and recoverable failures; reject unsupported checkpoint/confirmation combinations. Report remote deletion or availability failures honestly and redact diagnostics.
 
 **Verification command**
-`go test -race ./internal/app/agentruntime ./internal/app ./internal/config && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app/agentruntime ./internal/app ./internal/config && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add optional consented cloud agent services`
 
@@ -1213,7 +1274,7 @@ This is an implementation specification, not a claim that the features below alr
 - Exercise corrupt history, failed migrations, downgrade rejection, cancellation during migration, and recovery after partial persistence. Restoring legacy state never dispatches work.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentstate ./internal/app/agentruntime ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/app/agentruntime ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `refactor: complete the ADK runtime migration`
 
