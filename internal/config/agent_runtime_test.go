@@ -1,10 +1,38 @@
 package config
 
 import (
+	"slices"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestAgentSkillsAreExplicitBoundedAndImmutable(t *testing.T) {
+	if resolved, err := ResolveAgentRuntime(AgentRuntimeConfig{}); err != nil || len(resolved.Skills) != 0 {
+		t.Fatalf("skills enabled by default: %+v %v", resolved, err)
+	}
+	data := []byte("agent_runtime:\n  skills:\n    - project-skills/review-code\n")
+	if err := rejectUnknownFields(data); err != nil {
+		t.Fatal(err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := ResolveAgentRuntime(cfg.AgentRuntime)
+	if err != nil || !slices.Equal(resolved.Skills, []string{"project-skills/review-code"}) {
+		t.Fatalf("skills=%v %v", resolved.Skills, err)
+	}
+	cfg.AgentRuntime.Skills[0] = "changed"
+	if resolved.Skills[0] != "project-skills/review-code" {
+		t.Fatal("caller mutated admitted configuration")
+	}
+	for _, paths := range [][]string{{"."}, {".."}, {"/absolute"}, {"a/../b"}, {"a//b"}, {"a\\b"}, {"https://example.com"}, {"a\x1b"}, {"a", "a"}, {"a", "a/b"}, {"a/b", "a"}, {"a", "b", "c", "d", "e", "f", "g", "h", "i"}} {
+		if _, err := ResolveAgentSkills(paths); err == nil {
+			t.Fatalf("unsafe skill directories accepted: %q", paths)
+		}
+	}
+}
 
 func TestAgentRuntimeDefaultsAndStrictLimits(t *testing.T) {
 	resolved, err := ResolveAgentRuntime(AgentRuntimeConfig{})

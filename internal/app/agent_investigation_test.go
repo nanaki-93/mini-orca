@@ -171,12 +171,12 @@ func TestPlanInvestigationCompletionOnlyProfilesReceiveBoundedCapturedSource(t *
 	}
 	runtime := s.runtimes.function
 	runtime.profile.Provider = config.PiProvider
-	input, err := s.planInvestigationInput(p, runtime)
+	input, err := s.planInvestigationInput(t.Context(), p, runtime)
 	if err != nil || input.Investigation != nil || input.Schema == nil || len(input.Messages) != 1 || !strings.Contains(input.Messages[0].Content, "package main") {
 		t.Fatalf("completion fallback lost source or added tools: %+v %v", input, err)
 	}
 	runtime.effective.ContextMaxTokens = 1
-	if _, err := s.planInvestigationInput(p, runtime); err == nil {
+	if _, err := s.planInvestigationInput(t.Context(), p, runtime); err == nil {
 		t.Fatal("completion fallback ignored configured context limit")
 	}
 }

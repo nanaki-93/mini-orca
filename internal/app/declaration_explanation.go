@@ -110,7 +110,7 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 	messages := []llm.ChatMessage{{Role: "user", Content: declarationExplanationPrompt(prepared.context)}}
 	input := agentruntime.Request{Messages: messages, ContextMaxTokens: runtime.effective.ContextMaxTokens}
 	if llm.ProviderCapabilities(runtime.profile).Tools {
-		input.Investigation, err = s.declarationInvestigation(request, prepared)
+		input.Investigation, err = s.declarationInvestigation(ctx, request, prepared)
 		if err != nil {
 			return nil, err
 		}
@@ -144,6 +144,9 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 	// Re-read both policy and index state after provider work so a policy change,
 	// reindex, or source edit cannot publish against a superseded declaration.
 	if err := s.validateExplanationContext(ctx, request, prepared); err != nil {
+		return nil, err
+	}
+	if err := addSkillContext(ctx, &prepared.manifest, input.Investigation); err != nil {
 		return nil, err
 	}
 	return &DeclarationExplanation{

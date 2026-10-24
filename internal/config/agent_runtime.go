@@ -1,6 +1,12 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"io/fs"
+	"slices"
+	"strings"
+	"unicode"
+)
 
 type AgentRoles struct {
 	Creation ModelScope `yaml:"creation"`
@@ -11,6 +17,7 @@ type AgentRoles struct {
 type AgentRuntimeConfig struct {
 	Roles              AgentRoles   `yaml:"roles"`
 	Context            AgentContext `yaml:"context"`
+	Skills             []string     `yaml:"skills"`
 	MaxModelCalls      int          `yaml:"max_model_calls"`
 	MaxToolCalls       int          `yaml:"max_tool_calls"`
 	MaxInputTokens     int64        `yaml:"max_input_tokens"`
@@ -36,6 +43,25 @@ type AgentRuntime struct {
 	Roles   AgentRoles
 	Limits  AgentLimits
 	Context AgentContext
+	Skills  []string
+}
+
+// Skill directories are explicit project-relative grants, never search paths.
+func ResolveAgentSkills(directories []string) ([]string, error) {
+	if len(directories) > 8 {
+		return nil, fmt.Errorf("agent_runtime.skills allows at most eight directories")
+	}
+	for i, directory := range directories {
+		if directory == "." || len(directory) > 192 || !fs.ValidPath(directory) || strings.ContainsAny(directory, "\\:") || strings.IndexFunc(directory, unicode.IsControl) >= 0 {
+			return nil, fmt.Errorf("agent_runtime.skills requires canonical project-relative directories")
+		}
+		for _, previous := range directories[:i] {
+			if directory == previous || strings.HasPrefix(directory, previous+"/") || strings.HasPrefix(previous, directory+"/") {
+				return nil, fmt.Errorf("agent_runtime.skills directories must be distinct and non-overlapping")
+			}
+		}
+	}
+	return slices.Clone(directories), nil
 }
 
 // AgentContext controls optional work beyond a normal completion. Provider
@@ -86,8 +112,7 @@ func ResolveAgentContext(value AgentContext) (AgentContext, error) {
 	return value, nil
 }
 
-func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
-	roles := configured.Roles
+func resolveAgentRoles(roles AgentRoles) (AgentRoles, error) {
 	if roles.Creation == "" {
 		roles.Creation = BugModelScope
 	}
@@ -99,8 +124,16 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	}
 	for _, scope := range []ModelScope{roles.Creation, roles.Testing, roles.Review} {
 		if scope != AnalyzeModelScope && scope != BugModelScope && scope != FunctionModelScope {
-			return AgentRuntime{}, fmt.Errorf("agent_runtime.roles must reference analyze, bug, or function profiles")
+			return AgentRoles{}, fmt.Errorf("agent_runtime.roles must reference analyze, bug, or function profiles")
 		}
+	}
+	return roles, nil
+}
+
+func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
+	roles, err := resolveAgentRoles(configured.Roles)
+	if err != nil {
+		return AgentRuntime{}, err
 	}
 	limits := AgentLimits{ModelCalls: configured.MaxModelCalls, ToolCalls: configured.MaxToolCalls, InputTokens: configured.MaxInputTokens, OutputTokens: configured.MaxOutputTokens, ElapsedSeconds: configured.MaxElapsedSeconds, ConcurrentCalls: configured.MaxConcurrentCalls, Repairs: 2}
 	for _, item := range []struct {
@@ -129,7 +162,11 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	if err != nil {
 		return AgentRuntime{}, err
 	}
-	return AgentRuntime{Roles: roles, Limits: limits, Context: context}, nil
+	skills, err := ResolveAgentSkills(configured.Skills)
+	if err != nil {
+		return AgentRuntime{}, err
+	}
+	return AgentRuntime{Roles: roles, Limits: limits, Context: context, Skills: skills}, nil
 }
 
 func (limits AgentLimits) Validate() error {

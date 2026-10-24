@@ -188,6 +188,7 @@ func (c *Config) Validate() error {
 
 var configurationFields = fieldSet{
 	"agent_runtime": {
+		"skills":          {},
 		"roles":           {"creation": {}, "testing": {}, "review": {}},
 		"context":         {"compaction": {}, "token_threshold": {}, "retain_events": {}, "summary_max_tokens": {}, "local_cache": {}, "cache_ttl_seconds": {}, "provider_cache": {}, "provider_ttl_seconds": {}},
 		"max_model_calls": {}, "max_tool_calls": {}, "max_input_tokens": {}, "max_output_tokens": {},

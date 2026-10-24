@@ -88,7 +88,7 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 	if err != nil {
 		return nil, err
 	}
-	input, err := s.planInvestigationInput(prepared, runtime)
+	input, err := s.planInvestigationInput(timed, prepared, runtime)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +106,9 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 		return nil, err
 	}
 	if err := authorize(timed); err != nil {
+		return nil, err
+	}
+	if err := addSkillContext(timed, &prepared.manifest, input.Investigation); err != nil {
 		return nil, err
 	}
 	return &PlanInvestigation{planInvestigationOutput: result, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, InputHash: prepared.inputHash, ContextManifest: s.contextManifestForRuntime(prepared.manifest, runtime)}, nil
@@ -293,7 +296,7 @@ func (p *preparedPlanInvestigation) validateSource(ctx context.Context, policy *
 	return project.ValidateInstructions(p.root, source.Path, p.instructions[source.Path].Fingerprint)
 }
 
-func (s *Service) planInvestigationInput(p *preparedPlanInvestigation, runtime modelRuntime) (agentruntime.Request, error) {
+func (s *Service) planInvestigationInput(ctx context.Context, p *preparedPlanInvestigation, runtime modelRuntime) (agentruntime.Request, error) {
 	input := agentruntime.Request{Schema: &llm.JSONSchema{Name: "plan_investigation", Schema: json.RawMessage(planInvestigationSchema)}, ContextMaxTokens: declarationContextLimit(runtime.effective.ContextMaxTokens)}
 	tools := llm.ProviderCapabilities(runtime.profile).Tools && len(p.scopes) > 0
 	prompt, err := p.prompt(tools)
@@ -312,7 +315,7 @@ func (s *Service) planInvestigationInput(p *preparedPlanInvestigation, runtime m
 	if err != nil {
 		return input, err
 	}
-	input.Investigation, err = agentruntime.NewInvestigation(p.inputHash, repositoryTools(reader), func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, p) })
+	input.Investigation, err = s.skillInvestigation(ctx, p.root, p.inputHash, repositoryTools(reader), func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, p) })
 	return input, err
 }
 

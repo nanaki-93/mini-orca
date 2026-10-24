@@ -38,7 +38,7 @@ func newInvestigationAgent(client CompletionClient, request Request) (agent.Agen
 	if err != nil {
 		return nil, err
 	}
-	return agent.New(agent.Config{Name: "investigation_runner", Description: "Bounded repository investigation", Run: investigationRun(worker)})
+	return agent.New(agent.Config{Name: "investigation_runner", Description: "Bounded repository investigation", Run: investigationRun(worker, request.Investigation)})
 }
 
 func investigationAdapter(client CompletionClient, schema *llm.JSONSchema) (model.LLM, error) {

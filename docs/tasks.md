@@ -534,7 +534,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 20 — Integrate project skills through ADK
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/skills.go`, `internal/app/agentruntime/skills_test.go`, `internal/app/agent_skills.go`, `internal/app/agent_skills_test.go` — **new**.

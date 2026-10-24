@@ -262,6 +262,51 @@ prevents final-result publication. These are local execution limits, not a billi
 guarantee: upstream internal retries and unreported consumption remain unknown.
 No reservation or usage record grants source-write or execution authority.
 
+### Scoped project skills
+
+`agent_runtime.skills` is an explicit list of project-relative skill directories;
+the default is an empty list. For example:
+
+```yaml
+agent_runtime:
+  skills:
+    - project-skills/review-code
+```
+
+Each directory must contain an indexed `SKILL.md` with valid ADK YAML frontmatter
+and nonempty instructions. Its `name` must match the directory name. Configure
+at most eight distinct, non-overlapping directories. Reindex after adding or
+changing a skill. Excluded files and escaping symlinks cannot become skill context.
+Loading configuration and browsing project state do not run skill tools.
+
+Tool-capable Function profiles use the native ADK `list_skills`, `load_skill`, and
+`load_skill_resource` tools during plan investigation and declaration explanation.
+Only names and descriptions enter the initial prompt. Instructions and indexed
+resources under `references/`, `assets/`, and `scripts/` load on demand. Completion-only
+profiles retain their existing behavior and do not advertise these tools.
+
+Each manifest/resource must be 1–8192 bytes of UTF-8 text; each skill can have up
+to 16 resources, and the combined inventory is limited to 128 KiB. Descriptions
+are at most 512 bytes; serialized metadata is at most 2048 bytes. The existing
+16 KiB tool result, 128 KiB aggregate retrieval, model context, and shared run
+budgets also apply. Oversized encoded results fail explicitly instead of truncating
+instructions silently. Frontmatter `allowed-tools`, when supplied, must name only
+the tools already admitted to that investigation; unsupported tools fail before
+a model call.
+
+Skill text is advisory and cannot override the task, repository instructions, or
+grants. The Go SkillToolset has no script execution tool. Loading a script displays
+its text; it cannot install packages, run commands, or write source. Explicitly
+trusted fixed checks continue through the checked workflow's sandbox.
+
+Manifests and loaded resources are checked against their captured hashes before
+model dispatch and publication. Context manifests identify contributing skill
+files, and private run tool records retain bounded file/hash provenance. Native
+session events also record loaded-file identities. These source-bearing records
+require explicit private-output disclosure and do not enter public progress events.
+Conformance tests exercise native ADK tools with fake compatible and Google providers;
+they do not establish live-provider performance.
+
 ### Optional context compaction and caching
 
 All three optimizations are disabled by default. Configure them under

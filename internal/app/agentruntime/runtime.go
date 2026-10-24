@@ -59,6 +59,7 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 		return Result{}, err
 	}
 	var err error
+	request = prepareSkillRequest(request)
 	ctx, request, err = prepareCompletionMemory(ctx, client, request)
 	if err != nil {
 		return Result{}, err

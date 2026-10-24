@@ -17,7 +17,7 @@ import (
 const repositoryQuerySchema = `{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":512},"query":{"type":"string","maxLength":256},"start_line":{"type":"integer","minimum":1,"maximum":1000000},"end_line":{"type":"integer","minimum":1,"maximum":1000000}},"required":["path"],"additionalProperties":false}`
 const repositoryEvidenceSchema = `{"type":"object","properties":{"status":{"type":"string","enum":["ok","scope_required","unavailable","stale"]},"evidence":{"type":"array","maxItems":20,"items":{"type":"object","properties":{"path":{"type":"string"},"hash":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"kind":{"type":"string"},"text":{"type":"string"},"confidence":{"type":"string"}},"required":["path","hash","start_line","end_line","kind","text","confidence"],"additionalProperties":false}},"requested":{"type":"object"},"truncated":{"type":"boolean"}},"required":["status","evidence","truncated"],"additionalProperties":false}`
 
-func (s *Service) declarationInvestigation(request DeclarationExplanationRequest, prepared preparedDeclarationExplanation) (*agentruntime.Investigation, error) {
+func (s *Service) declarationInvestigation(ctx context.Context, request DeclarationExplanationRequest, prepared preparedDeclarationExplanation) (*agentruntime.Investigation, error) {
 	root := prepared.root
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
@@ -56,7 +56,7 @@ func (s *Service) declarationInvestigation(request DeclarationExplanationRequest
 		}
 		return json.Marshal(result)
 	}})
-	return agentruntime.NewInvestigation(hex.EncodeToString(hash[:]), tools, authorize)
+	return s.skillInvestigation(ctx, root, hex.EncodeToString(hash[:]), tools, authorize)
 }
 
 func (s *Service) validateExplanationContext(ctx context.Context, request DeclarationExplanationRequest, prepared preparedDeclarationExplanation) error {
