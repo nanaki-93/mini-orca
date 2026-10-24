@@ -47,6 +47,8 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderWorktreeDetail(th, width)
 	case PageHistory:
 		return s.renderHistoryPage(th, width)
+	case PageArtifacts:
+		return s.renderLibrary(th, width)
 	case PageDocs:
 		return s.renderDocsPage(th, width)
 	case PageDocsComponents:
@@ -55,7 +57,7 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderDocsDecisionsPage(th, width)
 	case PageDiagrams:
 		return s.renderDiagramsPage(th, width)
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory:
 		return s.renderGovernanceSubPage(th, width)
 	default:
 		return s.renderSummaryPage(th, width)

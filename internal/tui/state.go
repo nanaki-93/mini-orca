@@ -31,6 +31,7 @@ const (
 	PageGit            Page = "git"
 	PageWorktreeDetail Page = "worktree-detail"
 	PageHistory        Page = "history"
+	PageArtifacts      Page = "artifacts"
 	PageDocs           Page = "docs"
 	PageDocsComponents Page = "docs-components"
 	PageDocsDecisions  Page = "docs-decisions"
@@ -43,6 +44,7 @@ const (
 	PageExternalWork   Page = "external-work"
 	PageBootstrap      Page = "bootstrap"
 	PageLessons        Page = "lessons"
+	PageMemory         Page = "memory"
 )
 
 // Palette identifies one of the four terminal color themes.
@@ -80,6 +82,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	AgentLibrary         *agentLibraryAction
 	AgentExternal        *agentExternalAction
 	AgentConnection      *agentConnectionAction
 	Integrations         []client.IntegrationUse
@@ -102,6 +105,7 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentLibrary        *agentLibraryView
 	AgentExternal       *agentExternalView
 	AgentConnections    *agentConnectionsView
 	AgentSettings       *agentSettingsView
@@ -222,6 +226,7 @@ func HubTabs() []HubTab {
 				{Page: PageEditor, Label: "Files & Diff"},
 				{Page: PageGit, Label: "Worktrees"},
 				{Page: PageHistory, Label: "Proposals"},
+				{Page: PageArtifacts, Label: "Artifacts"},
 			},
 		},
 		{
@@ -248,6 +253,7 @@ func HubTabs() []HubTab {
 				{Page: PageExternalWork, Label: "External Work"},
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
+				{Page: PageMemory, Label: "Memory"},
 			},
 		},
 	}
@@ -522,7 +528,7 @@ func (s *State) Navigate(page Page) {
 		s.RulesSection = "trust"
 	case PageModels:
 		s.RulesSection = "models"
-	case PageRoles, PageSkills, PageConnections, PageExternalWork:
+	case PageRoles, PageSkills, PageConnections, PageExternalWork, PageMemory:
 		s.RulesSection = string(page)
 	case PageBootstrap:
 		s.RulesSection = "bootstrap"
@@ -557,6 +563,8 @@ func (s *State) EffectivePage() Page {
 			return PageBootstrap
 		case "lessons":
 			return PageLessons
+		case "memory":
+			return PageMemory
 		}
 	}
 	return s.Page
@@ -1080,9 +1088,11 @@ func (s *State) secondaryListLength() int {
 		return 0
 	case PageHistory:
 		return len(s.ChangeHistory)
+	case PageArtifacts:
+		return len(s.libraryRows())
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		return s.docsListLength()
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory:
 		return s.instructionsListLength()
 	default:
 		return 1
@@ -1148,6 +1158,8 @@ func (s *State) docsListLength() int {
 
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
+	case PageMemory:
+		return len(s.libraryRows())
 	case PageExternalWork:
 		return len(s.externalRows())
 	case PageConnections:

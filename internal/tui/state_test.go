@@ -688,14 +688,25 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	if s.Page != PageLessons || s.RulesSection != "lessons" {
 		t.Fatalf("Section 5 after 'l': page=%s section=%s", s.Page, s.RulesSection)
 	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageMemory || s.RulesSection != "memory" {
+		t.Fatalf("Section 5 memory: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "3"})
+	for _, want := range []Page{PageGit, PageHistory, PageArtifacts, PageEditor} {
+		s.HandleKey(KeyEvent{Key: "Tab"})
+		if s.Page != want {
+			t.Fatalf("Code hub Tab cycle: got %s, want %s", s.Page, want)
+		}
+	}
 
 	// Verify Left/Right/Up/Down arrows never navigate submenus on any page
 	nonSubmenuArrowPages := []Page{
 		PageSummary, PageRepo, PageProject,
 		PageAgents, PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
-		PageEditor, PageGit, PageHistory,
+		PageEditor, PageGit, PageHistory, PageArtifacts,
 		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageBootstrap, PageLessons,
+		PageInstructions, PageModels, PageBootstrap, PageLessons, PageMemory,
 	}
 	for _, p := range nonSubmenuArrowPages {
 		s.Navigate(p)

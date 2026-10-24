@@ -271,6 +271,7 @@ func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, r
 	s.loadAgentSettings(ctx, client)
 	s.loadAgentConnections(ctx, client)
 	s.loadExternalWork(ctx, client)
+	s.loadLibrary(ctx, client)
 	s.loadAnalysisSectionResults(ctx, client)
 }
 

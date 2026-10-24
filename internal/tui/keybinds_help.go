@@ -288,6 +288,18 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"w", "External Work"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":connection-scope", "Select main or task checkout"}, {":connection-use", "Toggle selected plan tool grant"}, {":connections-clear", "Clear plan tool selections"}},
 	},
+	PageArtifacts: {
+		title:     "[3] CODE · ARTIFACTS & EVIDENCE",
+		primary:   []keyDesc{{"Enter", "Preview retained text"}, {"e", "Confirm private export"}, {"d", "Confirm exact version deletion"}},
+		secondary: []keyDesc{{"n / N", "Next / first page"}, {"r", "Refresh metadata"}, {"o", "Select checkout"}, {"w", "Open inspected research report"}, {"x", "Cancel request"}, {"Esc", "Hide private previews"}},
+		commands:  []keyDesc{{":artifact-export", "Create private byte-for-byte copy"}, {":library-scope", "Select main or task checkout"}},
+	},
+	PageMemory: {
+		title:     "[5] SETTINGS · MEMORY",
+		primary:   []keyDesc{{"Enter", "Inspect advice and source freshness"}, {"a", "Confirm candidate acceptance"}},
+		secondary: []keyDesc{{"n / e", "Create / edit advice"}, {"d / f", "Reject candidate / forget accepted"}, {"s", "Read selected source"}, {"t", "Retain proposal lesson or outcome"}, {"r", "Refresh metadata"}, {"o", "Select checkout"}, {"x", "Cancel request"}, {"Esc", "Hide previews"}},
+		commands:  []keyDesc{{":memory-create", "kind days title | text"}, {":memory-retain", "outcome or lesson:number days title"}, {":library-scope", "Select main or task checkout"}},
+	},
 	PageExternalWork: {
 		title:     "[5] SETTINGS · EXTERNAL WORK",
 		primary:   []keyDesc{{"Enter", "Inspect receipt / open research report"}, {"a", "Confirm reviewed API dispatch"}},

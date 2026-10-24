@@ -641,6 +641,8 @@ func (s *State) handleFeaturesKey(key string) bool {
 
 func (s *State) handleAgentsAndEditorKey(ev KeyEvent) bool {
 	switch s.Page {
+	case PageArtifacts:
+		return s.handleLibraryKey(ev.Key)
 	case PageAgents:
 		return s.handleAgentsKey(ev.Key)
 	case PageEditor:
@@ -930,7 +932,7 @@ func (s *State) moveEditorDiffSelection(delta int) {
 }
 
 func isGovernancePage(p Page) bool {
-	return p == PageInstructions || p == PageModels || p == PageRoles || p == PageSkills || p == PageConnections || p == PageExternalWork || p == PageBootstrap || p == PageLessons
+	return p == PageInstructions || p == PageModels || p == PageRoles || p == PageSkills || p == PageConnections || p == PageExternalWork || p == PageBootstrap || p == PageLessons || p == PageMemory
 }
 
 func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
@@ -941,17 +943,19 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 }
 
 func (s *State) handleGovernanceKey(key string) bool {
-	if s.EffectivePage() == PageExternalWork {
+	switch s.EffectivePage() {
+	case PageMemory:
+		return s.handleLibraryKey(key)
+	case PageExternalWork:
 		return s.handleExternalKey(key)
-	}
-	if s.EffectivePage() == PageConnections {
+	case PageConnections:
 		return s.handleConnectionKey(key)
-	}
-	if s.EffectivePage() == PageRoles || s.EffectivePage() == PageSkills {
+	case PageRoles, PageSkills:
 		return s.handleAgentSettingsKey(key)
-	}
-	if s.EffectivePage() == PageModels && s.handleModelsPageKey(key) {
-		return true
+	case PageModels:
+		if s.handleModelsPageKey(key) {
+			return true
+		}
 	}
 	switch key {
 	case "b":

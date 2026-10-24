@@ -126,3 +126,118 @@ type AgentEventBatch struct {
 	Events          []AgentRunEvent `json:"events"`
 	Snapshot        *AgentRunList   `json:"snapshot,omitempty"`
 }
+
+type AgentArtifact struct {
+	ProjectIdentity
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Version        int64             `json:"version"`
+	Hash           string            `json:"hash"`
+	Kind           string            `json:"kind"`
+	MIME           string            `json:"mime"`
+	DisplayName    string            `json:"display_name,omitempty"`
+	Size           int               `json:"size"`
+	Created        string            `json:"created"`
+	Owner          AgentSessionKey   `json:"owner"`
+	Ownership      string            `json:"ownership"`
+	Provenance     map[string]string `json:"provenance"`
+	RevisionStatus string            `json:"revision_status"`
+	SourceStatus   string            `json:"source_status"`
+	Protected      bool              `json:"protected"`
+	InUse          bool              `json:"in_use"`
+	CanDelete      bool              `json:"can_delete"`
+	URI            string            `json:"uri"`
+}
+
+type ArtifactList struct {
+	ProjectIdentity
+	Snapshot   string          `json:"snapshot"`
+	Artifacts  []AgentArtifact `json:"artifacts"`
+	NextCursor string          `json:"next_cursor,omitempty"`
+}
+
+type ArtifactDetail struct {
+	AgentArtifact
+	PreviewKind string `json:"preview_kind"`
+	Text        string `json:"text,omitempty"`
+	Truncated   bool   `json:"truncated"`
+	ReportID    string `json:"report_id,omitempty"`
+}
+
+type ArtifactControl struct {
+	ProjectIdentity
+	Action  string `json:"action"`
+	Version int64  `json:"version"`
+	Hash    string `json:"hash"`
+}
+
+type ArtifactReceipt struct {
+	ProjectIdentity
+	ID      string `json:"id"`
+	Version int64  `json:"version"`
+	Hash    string `json:"hash"`
+	State   string `json:"state"`
+	Path    string `json:"path,omitempty"`
+}
+
+type MemorySource struct {
+	Path      string `json:"path"`
+	Hash      string `json:"hash"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+}
+
+type MemoryProvenance struct {
+	Origin       string `json:"origin"`
+	SessionID    string `json:"session_id,omitempty"`
+	WorkflowID   string `json:"workflow_id,omitempty"`
+	ProposalHash string `json:"proposal_hash,omitempty"`
+}
+
+type AgentMemory struct {
+	ProjectIdentity
+	ID           string           `json:"id"`
+	Version      int64            `json:"version"`
+	Policy       string           `json:"policy"`
+	Kind         string           `json:"kind"`
+	State        string           `json:"state"`
+	Title        string           `json:"title"`
+	Text         string           `json:"text"`
+	Sources      []MemorySource   `json:"sources"`
+	Provenance   MemoryProvenance `json:"provenance"`
+	CreatedAt    string           `json:"created_at"`
+	UpdatedAt    string           `json:"updated_at"`
+	ExpiresAt    string           `json:"expires_at"`
+	Stale        bool             `json:"stale"`
+	Expired      bool             `json:"expired"`
+	SourceStatus string           `json:"source_status"`
+}
+
+type LibraryProposalIdentity struct {
+	ProjectIdentity
+	Revision int64  `json:"revision"`
+	Hash     string `json:"hash"`
+}
+
+type MemoryDraft struct {
+	Kind          string                   `json:"kind"`
+	Title         string                   `json:"title"`
+	Text          string                   `json:"text"`
+	Sources       []MemorySource           `json:"sources"`
+	RetentionDays int                      `json:"retention_days"`
+	SessionID     string                   `json:"session_id,omitempty"`
+	Identity      *LibraryProposalIdentity `json:"identity,omitempty"`
+	LessonIndex   *int                     `json:"lesson_index,omitempty"`
+}
+
+type MemoryMutation struct {
+	ProjectIdentity
+	Action  string       `json:"action"`
+	Version int64        `json:"version"`
+	Draft   *MemoryDraft `json:"draft,omitempty"`
+}
+
+type LibrarySource struct {
+	FileInfo
+	Truncated bool
+}

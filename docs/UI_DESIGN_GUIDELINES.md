@@ -189,6 +189,34 @@ loopback URL and a system browser argument vector, preserving the HTML report's
 citations and original search suggestions. The terminal shows report metadata;
 navigation does not launch a browser or contact a provider.
 
+Artifacts lives in Code; Memory sits beside Lessons in Settings. Both share an
+explicit main-checkout or task-worktree scope. Lists show local metadata, versions,
+ownership, source references, freshness and retention without reading payloads.
+Enter explicitly discloses retained text in the scrollable read-only details;
+binary artifacts remain metadata. Mark bounded previews as truncated. Research
+artifacts link to the cited HTML report and open it only on an explicit action.
+
+Artifact export and deletion each require a confirmation naming the checkout,
+exact version and hash. Show the actual private export path/hash from its receipt.
+Protected recovery evidence and unfinished-run references cannot be deleted.
+Pagination stays bound to a catalog snapshot; changed catalogs require refresh.
+These pages never inherit proposal Apply/Undo shortcuts.
+
+Create/edit advice by capturing current plan, open-file or retained-record source
+hashes before confirmation. Show uncaptured planned files explicitly; retain at
+least one current source. Edits create a candidate again. Accept only inspected,
+current, unexpired candidates; rejecting a candidate and forgetting accepted
+advice are separate confirmed actions. Retained proposal lessons and check outcomes
+must derive their text through the existing proposal authority owner. Display
+accepted memory as advisory context, never permission or current verification.
+Explicit source links verify checkout and content identity and remain read-only.
+
+Library requests own cancellation and reject changed scope or record identity.
+Preserve healthy inventory when another group fails and keep selection by record
+ID. Canceled or failed mutations require refresh before another action; exported
+copies may already exist if transport lost the receipt. Hide private previews on
+request, and never claim an unavailable inventory is empty.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

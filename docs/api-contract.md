@@ -1018,6 +1018,20 @@ persistence. Deletion also checks recovery protection and unfinished runs under
 the journal lock. Missing/foreign versions return 404, changed selections and
 protected deletion 409, invalid requests 400 and storage failures 500.
 
+The TUI exposes these local APIs through Code / Artifacts and Settings / Memory.
+`:library-scope main|task` selects checkout ownership, and `:library-refresh`
+reloads metadata. Enter explicitly inspects the selected record. Artifact actions
+are `:artifact-export`, `:artifact-delete`, `:artifact-next`, `:artifact-first` and
+`:artifact-report`. Memory actions are `:memory-create` or `:memory-edit` followed
+by `decision|lesson <days> <title> | <text>`, and explicit `:memory-accept`,
+`:memory-reject`, or `:memory-forget`. Reject maps only a candidate to guarded
+forget; forget is exposed separately for accepted advice. `:memory-retain`
+accepts `outcome|lesson:<one-based number> <days> <title>` for the selected exact
+proposal; the daemon derives its text. `:memory-source <one-based number>` opens
+at most 64 KiB of current matching source, with scope/hash checks and an explicit
+truncation label. `:library-hide` closes private previews and `:library-cancel`
+stops owned transport without asserting that an already completed write was undone.
+
 `GET /agent-runs` (under `/api/projects/current`) lists roots newest first, with
 `limit` from 1 to 100 (default 50), an opaque `cursor`, and `next_cursor` when more
 remain. A cursor is bound to its project/revision. Older-revision records are

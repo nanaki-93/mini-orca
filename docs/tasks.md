@@ -797,7 +797,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 26B — Add artifact and memory management to the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_library.go`, `internal/tui/agent_library_actions.go`, `internal/tui/agent_library_commands.go`, `internal/tui/agent_library_test.go`, `internal/tui/client/agent_library.go`, `internal/tui/client/agent_library_test.go` — **new**, scoped inventory, private disclosure and explicit library mutations.
