@@ -961,8 +961,8 @@ This is an implementation specification, not a claim that the features below alr
 - [ ] Complete
 
 **Target files**
-- `internal/tui/mission_actions.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go` — **new**.
-- `internal/tui/plan.go`, `internal/tui/plan_actions.go`, `internal/tui/plan_test.go`, `internal/tui/state.go`, `internal/tui/terminal_loop.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/client.go`, `internal/tui/client/missions_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/client/missions.go` — **new**.
+- `internal/tui/plan.go`, `internal/tui/focused_pages.go`, `internal/tui/workspace_actions.go`, `internal/tui/plan_actions.go`, `internal/tui/plan_test.go`, `internal/tui/state.go`, `internal/tui/terminal_loop.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/client.go`, `internal/tui/client/missions_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
 - Task 29B; existing Work plan/detail views, owned async actions, guarded checkout selection and scrollable confirmation patterns.
