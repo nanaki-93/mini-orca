@@ -596,7 +596,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_openapi.go`, `internal/app/agent_openapi_test.go`, `internal/app/agent_api_actions.go`, `internal/app/agent_api_actions_test.go`, `internal/app/agentstate/actions.go`, `internal/app/agentstate/actions_test.go` — **new**, captured API inventories, exact-action review, durable dispatch claims and outcome reconciliation; `internal/app/agentstate/store.go` — journal ownership and validation.
 - `internal/app/agent_research.go`, `internal/app/agent_research_test.go`, `internal/app/agent_research_report.go` — **new**, explicit grounded research and a private report containing inline/aggregate citations and the returned Search suggestions.
 - `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go`, `internal/llm/capabilities.go`, `internal/llm/capabilities_test.go`, `internal/config/config.go` — native search admission, grounded response metadata, persisted invocation identity and supported capability/configuration contracts.
-- `internal/api/handlers/agent_apis_handler.go`, `internal/api/handlers/agent_apis_handler_test.go`, `internal/api/handlers/agent_research_handler.go`, `internal/api/handlers/agent_research_handler_test.go`, `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go` — **new**, passive inventory/report reads, explicit API discovery, approval/reconciliation and research requests; `cmd/daemon/main.go`, `docs/api-contract.md`, `docs/openapi.yaml` — route and wire contracts.
+- `internal/api/handlers/agent_apis_handler.go`, `internal/api/handlers/agent_apis_handler_test.go`, `internal/api/handlers/agent_research_handler.go`, `internal/api/handlers/agent_research_handler_test.go` — **new**, passive inventory/report reads, explicit API discovery, approval/reconciliation and research requests; `cmd/daemon/main.go`, `docs/api-contract.md`, `docs/openapi.yaml` — route and wire contracts. Add TUI client methods with their Settings callers in Task 25.
 
 **Inputs / dependencies**
 - Task 21; approved endpoint/tool inventory and Gemini provider capabilities.
@@ -661,6 +661,7 @@ This is an implementation specification, not a claim that the features below alr
 - [ ] Complete
 
 **Target files**
+- `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go` — **new**, integration, exact-action and research wire contracts with production Settings callers.
 - `internal/api/handlers/agent_settings_handler.go`, `internal/api/handlers/agent_settings_handler_test.go`, `internal/app/agent_settings.go`, `internal/app/agent_settings_test.go` — **new**.
 - `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/hub_settings.go`, `internal/tui/domain/models.go`, `internal/tui/model_details_test.go`, `internal/tui/state.go`, `internal/tui/daemon_actions.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`.
 - `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
