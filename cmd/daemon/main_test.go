@@ -247,7 +247,7 @@ func TestOpenAPIGoScanPhaseIncludesWorkspace(t *testing.T) {
 	t.Fatalf("GoScanPhase names = %v, want workspace", spec.Components.Schemas["GoScanPhase"].Properties["name"].Enum)
 }
 
-func TestMemoryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
+func TestLibraryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
 	root := t.TempDir()
 	manager, err := project.NewManager(root)
 	if err != nil {
@@ -261,13 +261,14 @@ func TestMemoryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := newHTTPMux(service, manager)
-	for _, method := range []string{"GET", "POST"} {
-		for _, path := range []string{"/api/projects/current/memory", "/api/projects/current/memory/example"} {
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, httptest.NewRequest(method, "http://127.0.0.1:9090"+path, nil))
-			if w.Code != 400 {
-				t.Fatalf("unguarded %s %s: %d %s", method, path, w.Code, w.Body.String())
-			}
+	for _, route := range []struct{ method, path string }{
+		{"GET", "/memory"}, {"POST", "/memory"}, {"GET", "/memory/example"}, {"POST", "/memory/example"},
+		{"GET", "/artifacts"}, {"GET", "/artifacts/example"}, {"POST", "/artifacts/example/control"},
+	} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest(route.method, "http://127.0.0.1:9090/api/projects/current"+route.path, nil))
+		if w.Code != 400 {
+			t.Fatalf("unguarded %s %s: %d %s", route.method, route.path, w.Code, w.Body.String())
 		}
 	}
 }

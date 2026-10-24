@@ -775,7 +775,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 26A — Expose a scoped artifact library with guarded export and deletion
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_library.go`, `internal/app/agent_library_test.go`, `internal/api/handlers/agent_library_handler.go`, `internal/api/handlers/agent_library_handler_test.go` — **new**.

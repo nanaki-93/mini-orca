@@ -74,6 +74,9 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
+| GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
+| GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
+| POST | `/api/projects/current/artifacts/{artifactID}/control` | Export a new private metadata file or delete an exact unprotected artifact version. |
 | GET | `/api/projects/current/integrations` | Read passive configured MCP connections and current schema grants. |
 | POST | `/api/projects/current/integrations/{integrationID}/control` | Explicitly discover or revoke an MCP integration. |
 | GET | `/api/projects/current/apis` | Read passive curated API configurations and expiring inventories. |
@@ -979,6 +982,41 @@ permission, or current verification claim. Retrieval consumes a shared tool call
 its context consumes the model input budget. Selected versions and source authority
 are rechecked immediately before each provider dispatch, including later tool turns.
 Editing or forgetting a selected record blocks further dispatch with the old text.
+
+The artifact library uses `/api/projects/current/artifacts` with the same current
+project/revision and optional registered `worktree_path`. GET lists only artifacts
+with host-recorded project ownership, including retained change evidence and
+research. Arbitrary SDK metadata cannot claim project ownership. Responses include
+`project_id`, current `project_revision`, a catalog `snapshot`, `artifacts`, and
+optional `next_cursor`. `limit` is 1–100 (default 50); cursors are tied to the
+project/revision and exact visible metadata snapshot. A changed snapshot returns
+409 and requires restarting pagination. List/detail reads are passive and no-store.
+
+Each version has an opaque `id`, immutable positive `version`, SHA-256 `hash`
+(64 lowercase hexadecimal characters), name, MIME, byte size, creation time,
+session owner, host provenance, URI and protection flags. `revision_status` is
+`current`, `stale`, or `unknown`; `source_status: unchecked` never claims current
+source validation. `protected` recovery evidence and `in_use` unfinished-run
+references set `can_delete: false`. Arbitrary custom metadata and payloads are
+omitted from the inventory. All versions appear independently.
+
+GET `/{artifactID}` discloses `preview_kind: text|binary|research_report`. Valid
+UTF-8 text and JSON previews contain at most 64 KiB, trimmed at a character boundary
+and labelled `truncated` when needed. Binary payloads remain metadata only.
+Research returns its `report_id` without an answer preview; the explicit research
+HTML route preserves the citations and Search suggestions together.
+
+POST `/{artifactID}/control` requires current `project_id`, `project_revision`,
+`action: export|delete`, exact `version` and `hash`. Unknown fields, including any
+caller-supplied destination, are rejected. Export writes a newly named private
+0600 file under `.mini-orca/exports/artifacts/` in the selected checkout and returns
+`state: exported` with its actual `path`, artifact `id`, version and hash. It never
+targets source or overwrites an earlier export. Delete removes only that catalog
+version and returns `state: deleted` without a path; explicit exported copies
+remain separate. Both serialize against catalog mutations and recheck scope at
+persistence. Deletion also checks recovery protection and unfinished runs under
+the journal lock. Missing/foreign versions return 404, changed selections and
+protected deletion 409, invalid requests 400 and storage failures 500.
 
 `GET /agent-runs` (under `/api/projects/current`) lists roots newest first, with
 `limit` from 1 to 100 (default 50), an opaque `cursor`, and `next_cursor` when more

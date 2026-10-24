@@ -112,6 +112,41 @@ func TestArtifactRetentionProtectsRecoveryAndActiveRuns(t *testing.T) {
 	if err := s.DeleteArtifacts(t.Context(), request.Key, ArtifactRetention{}); !errors.Is(err, ErrArtifactInUse) {
 		t.Fatalf("active evidence deleted: %v", err)
 	}
+	active, err := s.ArtifactInventory(t.Context())
+	if err != nil || len(active) != 1 || !active[0].InUse || active[0].Data != nil {
+		t.Fatalf("active metadata=%+v %v", active, err)
+	}
+	if err := s.DeleteArtifactVersion(t.Context(), request.Key, active[0].Version, active[0].Hash, nil); !errors.Is(err, ErrArtifactInUse) {
+		t.Fatalf("exact deletion bypassed active protection: %v", err)
+	}
+	for _, name := range []string{"user:shared", "completion.json"} {
+		reference := artifactFixture(key, name, "referenced evidence")
+		reference.Key.Session.ID = "another-session"
+		record, err := s.SaveArtifact(t.Context(), reference)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name == "completion.json" {
+			err = s.mutate(t.Context(), func(db *database) error {
+				return appendProgress(db, db.Runs["run"], "node", &NodeProgress{NodeID: "evidence", State: "recorded", Evidence: []ArtifactReference{{Session: reference.Key.Session, Name: name, Version: record.Version}}})
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := s.DeleteArtifactVersion(t.Context(), record.Key, record.Version, record.Hash, nil); !errors.Is(err, ErrArtifactInUse) {
+			t.Fatalf("shared or referenced evidence deleted: %s %v", name, err)
+		}
+		inventory, err := s.ArtifactInventory(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range inventory {
+			if item.Key == record.Key && !item.InUse {
+				t.Fatalf("active reference omitted from inventory: %s", name)
+			}
+		}
+	}
 	if err := s.FinishRun(t.Context(), "run", "completed"); err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +164,114 @@ func TestArtifactRetentionProtectsRecoveryAndActiveRuns(t *testing.T) {
 	}
 	if err := s.DeleteArtifacts(t.Context(), request.Key, ArtifactRetention{}); !errors.Is(err, ErrArtifactInUse) {
 		t.Fatalf("recovery evidence deleted: %v", err)
+	}
+	if err := s.DeleteArtifactVersion(t.Context(), request.Key, first.Version, first.Hash, nil); !errors.Is(err, ErrArtifactInUse) {
+		t.Fatalf("exact deletion bypassed recovery protection: %v", err)
+	}
+}
+
+func TestArtifactExactDeletionAndPrivateExports(t *testing.T) {
+	s, key := testStore(t)
+	record, err := s.SaveArtifact(t.Context(), artifactFixture(key, "report.txt", "private payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteArtifactVersion(t.Context(), record.Key, record.Version, strings.Repeat("0", 64), nil); !errors.Is(err, ErrArtifactConflict) {
+		t.Fatalf("wrong hash deleted artifact: %v", err)
+	}
+	paths := map[string]bool{}
+	for range 2 {
+		path, err := s.ExportArtifactFile(t.Context(), record.Key, record.Version, record.Hash, nil)
+		if err != nil || paths[path] || filepath.Dir(path) != filepath.Join(s.root, ".mini-orca", "exports", "artifacts") {
+			t.Fatalf("export path=%q error=%v", path, err)
+		}
+		paths[path] = true
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != "private payload" {
+			t.Fatalf("export content=%q %v", data, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+			t.Fatalf("export permissions=%v %v", info, err)
+		}
+	}
+	if err := s.DeleteArtifactVersion(t.Context(), record.Key, record.Version, record.Hash, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ExportArtifactFile(t.Context(), record.Key, record.Version, record.Hash, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted artifact exported: %v", err)
+	}
+	for path := range paths {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("deletion removed explicit exported copy: %v", err)
+		}
+	}
+}
+
+func TestArtifactMutationsRecheckAuthorizationAtPersistence(t *testing.T) {
+	for _, action := range []string{"export", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			s, key := testStore(t)
+			record, err := s.SaveArtifact(t.Context(), artifactFixture(key, "report", "retained"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			denied := errors.New("authority changed")
+			current, calls := true, 0
+			guard := func() error {
+				calls++
+				if !current {
+					return denied
+				}
+				return nil
+			}
+			write := s.write
+			s.write = func(path string, data []byte, mode os.FileMode, authorize func() error) error {
+				current = false
+				return write(path, data, mode, authorize)
+			}
+			if action == "export" {
+				_, err = s.ExportArtifactFile(t.Context(), record.Key, record.Version, record.Hash, guard)
+			} else {
+				err = s.DeleteArtifactVersion(t.Context(), record.Key, record.Version, record.Hash, guard)
+			}
+			if !errors.Is(err, denied) || calls != 2 {
+				t.Fatalf("final guard=%d %v", calls, err)
+			}
+			if _, err := s.ExportArtifact(t.Context(), record.Key, record.Version); err != nil {
+				t.Fatal("rejected action deleted original")
+			}
+			files, err := filepath.Glob(filepath.Join(s.root, ".mini-orca", "exports", "artifacts", "*"))
+			if err != nil || len(files) != 0 {
+				t.Fatalf("rejected export left files=%v %v", files, err)
+			}
+		})
+	}
+}
+
+func TestArtifactExportRejectsSymlinksCancellationAndDiskFailure(t *testing.T) {
+	s, key := testStore(t)
+	record, err := s.SaveArtifact(t.Context(), artifactFixture(key, "report", "retained"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := s.ExportArtifactFile(ctx, record.Key, record.Version, record.Hash, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled export: %v", err)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(s.root, ".mini-orca", "exports")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ExportArtifactFile(t.Context(), record.Key, record.Version, record.Hash, nil); err == nil {
+		t.Fatal("export followed symlink")
+	}
+	if err := os.Remove(filepath.Join(s.root, ".mini-orca", "exports")); err != nil {
+		t.Fatal(err)
+	}
+	s.write = func(string, []byte, os.FileMode, func() error) error { return errors.New("fixture disk failure") }
+	if _, err := s.ExportArtifactFile(t.Context(), record.Key, record.Version, record.Hash, nil); !errors.Is(err, ErrPersistence) {
+		t.Fatalf("export hid disk failure: %v", err)
 	}
 }
 
