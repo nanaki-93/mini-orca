@@ -379,26 +379,20 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		return nil, err
 	}
 	stageZeroWorkflow := ctx.Value(changeWorkflowContextKey{}) != nil
-	text, manifest, err := composeChangeStagePromptContext(root, session, stageZeroWorkflow)
-	if err != nil {
-		return nil, err
-	}
-	messages, err := changeStageMessages(session, request.Message, text, stageZeroWorkflow)
-	if err != nil {
-		return nil, err
-	}
-	if limit := changeContextByteLimit(runtime); limit > 0 && len(messages[0].Content)+len(messages[1].Content) > limit {
-		return nil, fmt.Errorf("selected context exceeds configured %s token limit", runtime.effective.Profile)
-	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
-	schema := changeResponseSchema()
-	authorize := func(ctx context.Context) error { return s.verifyChangeCurrent(ctx, root, session) }
-	timed, err = withProjectMemory(timed, root, session.ProjectID, session.ProjectRevision, request.Message, changeMemorySources(session, stageZeroWorkflow), authorize)
+	prepared, err := s.prepareChangeContext(timed, root, session, request.Message, runtime, stageZeroWorkflow)
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, authorize)
+	defer prepared.release()
+	schema := changeResponseSchema()
+	authorize := func(ctx context.Context) error { return s.verifyChangeCurrent(ctx, root, session) }
+	timed, err = withProjectMemory(prepared.ctx, root, session.ProjectID, session.ProjectRevision, request.Message, changeMemorySources(session, stageZeroWorkflow), authorize)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.retryRequestAuthorized(timed, runtime, prepared.messages, &schema, authorize)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +420,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
 	}
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
-	session.ContextManifest = s.contextManifestForRuntime(manifest, runtime)
+	session.ContextManifest = s.contextManifestForRuntime(prepared.manifest, runtime)
 	now := time.Now().UTC()
 	session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: request.Message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	session.UpdatedAt = now

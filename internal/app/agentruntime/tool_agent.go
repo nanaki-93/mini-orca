@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"iter"
+	"slices"
 
 	"google.golang.org/adk/v2/agent"
 	"google.golang.org/adk/v2/model"
 	"google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
 )
 
 func investigationRun(worker agent.Agent) func(agent.InvocationContext) iter.Seq2[*session.Event, error] {
@@ -31,11 +33,13 @@ type investigationModel struct {
 	inner         model.LLM
 	scope         *Investigation
 	contextTokens int
+	protected     string
 }
 
 func (m *investigationModel) Name() string { return m.inner.Name() }
 func (m *investigationModel) GenerateContent(ctx context.Context, request *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
 	return func(yield func(*model.LLMResponse, error) bool) {
+		request = m.protectContext(request)
 		if err := m.validateContext(request); err != nil {
 			CancelRun(ctx, err)
 			yield(nil, err)
@@ -55,6 +59,20 @@ func (m *investigationModel) GenerateContent(ctx context.Context, request *model
 			}
 		}
 	}
+}
+
+func (m *investigationModel) protectContext(request *model.LLMRequest) *model.LLMRequest {
+	if request == nil || m.protected == "" {
+		return request
+	}
+	for _, content := range request.Contents {
+		if content != nil && content.Role == genai.RoleUser && len(content.Parts) == 1 && content.Parts[0] != nil && content.Parts[0].Text == m.protected {
+			return request
+		}
+	}
+	copy := *request
+	copy.Contents = append([]*genai.Content{genai.NewContentFromText(m.protected, genai.RoleUser)}, slices.Clone(request.Contents)...)
+	return &copy
 }
 
 func (m *investigationModel) validateContext(request *model.LLMRequest) error {

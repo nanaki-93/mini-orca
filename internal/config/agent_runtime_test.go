@@ -46,3 +46,33 @@ func TestAgentRuntimeYAMLPreservesDisabledRepairs(t *testing.T) {
 		t.Fatal("unknown role key accepted")
 	}
 }
+
+func TestAgentContextRequiresExplicitRetentionAndBoundedCompaction(t *testing.T) {
+	value, err := ResolveAgentContext(AgentContext{})
+	if err != nil || value.Compaction || value.LocalCache || value.ProviderCache || value.TokenThreshold != 8000 || value.RetainEvents != 4 || value.SummaryMaxTokens != 1024 {
+		t.Fatalf("defaults=%+v %v", value, err)
+	}
+	for _, input := range []AgentContext{
+		{TokenThreshold: -1}, {RetainEvents: 1}, {SummaryMaxTokens: 8193}, {CacheTTLSeconds: 59},
+		{ProviderCache: true}, {ProviderTTLSeconds: 3601}, {TokenThreshold: 1024},
+	} {
+		if _, err := ResolveAgentContext(input); err == nil {
+			t.Fatalf("accepted %+v", input)
+		}
+	}
+	data := []byte("agent_runtime:\n  context:\n    compaction: true\n    local_cache: true\n    provider_cache: true\n    provider_ttl_seconds: 600\n")
+	if err := rejectUnknownFields(data); err != nil {
+		t.Fatal(err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := ResolveAgentRuntime(cfg.AgentRuntime)
+	if err != nil || !resolved.Context.Compaction || !resolved.Context.LocalCache || !resolved.Context.ProviderCache || resolved.Context.ProviderTTLSeconds != 600 {
+		t.Fatalf("configuration=%+v %v", resolved, err)
+	}
+	if err := rejectUnknownFields([]byte("agent_runtime:\n  context:\n    ttl: 10\n")); err == nil {
+		t.Fatal("unknown context option accepted")
+	}
+}

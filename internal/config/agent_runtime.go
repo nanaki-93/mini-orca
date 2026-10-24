@@ -9,14 +9,15 @@ type AgentRoles struct {
 }
 
 type AgentRuntimeConfig struct {
-	Roles              AgentRoles `yaml:"roles"`
-	MaxModelCalls      int        `yaml:"max_model_calls"`
-	MaxToolCalls       int        `yaml:"max_tool_calls"`
-	MaxInputTokens     int64      `yaml:"max_input_tokens"`
-	MaxOutputTokens    int64      `yaml:"max_output_tokens"`
-	MaxElapsedSeconds  int        `yaml:"max_elapsed_seconds"`
-	MaxConcurrentCalls int        `yaml:"max_concurrent_calls"`
-	MaxRepairs         *int       `yaml:"max_repairs"`
+	Roles              AgentRoles   `yaml:"roles"`
+	Context            AgentContext `yaml:"context"`
+	MaxModelCalls      int          `yaml:"max_model_calls"`
+	MaxToolCalls       int          `yaml:"max_tool_calls"`
+	MaxInputTokens     int64        `yaml:"max_input_tokens"`
+	MaxOutputTokens    int64        `yaml:"max_output_tokens"`
+	MaxElapsedSeconds  int          `yaml:"max_elapsed_seconds"`
+	MaxConcurrentCalls int          `yaml:"max_concurrent_calls"`
+	MaxRepairs         *int         `yaml:"max_repairs"`
 }
 
 // AgentLimits is immutable after admission. Token budgets use reported usage
@@ -32,8 +33,57 @@ type AgentLimits struct {
 }
 
 type AgentRuntime struct {
-	Roles  AgentRoles
-	Limits AgentLimits
+	Roles   AgentRoles
+	Limits  AgentLimits
+	Context AgentContext
+}
+
+// AgentContext controls optional work beyond a normal completion. Provider
+// caching needs an explicit retention duration; zero never selects remote TTL.
+type AgentContext struct {
+	Compaction         bool `yaml:"compaction"`
+	TokenThreshold     int  `yaml:"token_threshold"`
+	RetainEvents       int  `yaml:"retain_events"`
+	SummaryMaxTokens   int  `yaml:"summary_max_tokens"`
+	LocalCache         bool `yaml:"local_cache"`
+	CacheTTLSeconds    int  `yaml:"cache_ttl_seconds"`
+	ProviderCache      bool `yaml:"provider_cache"`
+	ProviderTTLSeconds int  `yaml:"provider_ttl_seconds"`
+}
+
+func ResolveAgentContext(value AgentContext) (AgentContext, error) {
+	for _, item := range []struct {
+		field    *int
+		fallback int
+	}{
+		{&value.TokenThreshold, 8000}, {&value.RetainEvents, 4},
+		{&value.SummaryMaxTokens, 1024}, {&value.CacheTTLSeconds, 600},
+	} {
+		if *item.field == 0 {
+			*item.field = item.fallback
+		}
+	}
+	for _, item := range []struct {
+		name                    string
+		value, minimum, maximum int
+	}{
+		{"token_threshold", value.TokenThreshold, 512, 128000},
+		{"retain_events", value.RetainEvents, 2, 64},
+		{"summary_max_tokens", value.SummaryMaxTokens, 128, 8192},
+		{"cache_ttl_seconds", value.CacheTTLSeconds, 60, 86400},
+		{"provider_ttl_seconds", value.ProviderTTLSeconds, 0, 3600},
+	} {
+		if item.value < item.minimum || item.value > item.maximum {
+			return value, fmt.Errorf("agent_runtime.context.%s must be between %d and %d", item.name, item.minimum, item.maximum)
+		}
+	}
+	if value.SummaryMaxTokens >= value.TokenThreshold {
+		return value, fmt.Errorf("agent_runtime.context.summary_max_tokens must be less than token_threshold")
+	}
+	if value.ProviderCache && value.ProviderTTLSeconds < 60 {
+		return value, fmt.Errorf("agent_runtime.context.provider_cache requires an explicit provider_ttl_seconds between 60 and 3600")
+	}
+	return value, nil
 }
 
 func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
@@ -75,7 +125,11 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	if err := limits.Validate(); err != nil {
 		return AgentRuntime{}, err
 	}
-	return AgentRuntime{Roles: roles, Limits: limits}, nil
+	context, err := ResolveAgentContext(configured.Context)
+	if err != nil {
+		return AgentRuntime{}, err
+	}
+	return AgentRuntime{Roles: roles, Limits: limits, Context: context}, nil
 }
 
 func (limits AgentLimits) Validate() error {

@@ -506,7 +506,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 19 — Bound context with compaction and safe cache reuse
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/compaction_test.go`, `internal/app/agentstate/context_cache.go`, `internal/app/agentstate/context_cache_test.go` — **new**.

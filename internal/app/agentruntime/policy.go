@@ -57,6 +57,9 @@ func (c *ProviderClient) checkPolicy(ctx context.Context) error {
 	if err := validateMemoryDispatch(ctx); err != nil {
 		return err
 	}
+	if err := validateContextAuthority(ctx); err != nil {
+		return err
+	}
 	return authorizeInvestigation(ctx)
 }
 

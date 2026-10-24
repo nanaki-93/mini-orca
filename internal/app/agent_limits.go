@@ -51,6 +51,11 @@ func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, s
 		cancel()
 		return nil, nil, err
 	}
+	bounded, err = agentruntime.WithContextConfig(bounded, s.agentRuntime.Context)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
 	return bounded, cancel, nil
 }
 

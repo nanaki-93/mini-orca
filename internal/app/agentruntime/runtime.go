@@ -55,6 +55,9 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 		return Result{}, fmt.Errorf("%w: provider does not support streaming", llm.ErrRequestRejected)
 	}
 	request = snapshotRequest(request)
+	if err := validateProviderCacheConfig(ctx, client); err != nil {
+		return Result{}, err
+	}
 	var err error
 	ctx, request, err = prepareCompletionMemory(ctx, client, request)
 	if err != nil {
@@ -73,7 +76,7 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion agent: %w", err)
 	}
-	result, err := runCompletion(ctx, completion, request, completionProviderBinding(client))
+	result, err := runCompletion(ctx, completion, request, client)
 	if errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, ErrPolicyDenied) {
 		CancelRun(ctx, err)
 	}
@@ -88,9 +91,9 @@ func completionProviderBinding(client CompletionClient) string {
 	return ""
 }
 
-func runCompletion(ctx context.Context, completion agent.Agent, request Request, providerBinding string) (result Result, runErr error) {
+func runCompletion(ctx context.Context, completion agent.Agent, request Request, client CompletionClient) (result Result, runErr error) {
 	const appName, userID = "mini-orca", "local"
-	invocation, err := createCompletionSession(ctx, request, providerBinding)
+	invocation, err := createCompletionSession(ctx, request, completionProviderBinding(client))
 	if err != nil {
 		return Result{}, err
 	}
@@ -109,7 +112,15 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if err != nil {
 		return Result{}, fmt.Errorf("create artifact recorder: %w", err)
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, ArtifactService: completionArtifacts(invocation), MemoryService: completionMemory(ctx), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
+	compaction, err := completionCompaction(ctx, client, request)
+	if err != nil {
+		return Result{}, err
+	}
+	service := invocation.service
+	if compaction != nil {
+		service = compactionSessionService{service}
+	}
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: service, Compaction: compaction, ArtifactService: completionArtifacts(invocation), MemoryService: completionMemory(ctx), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}

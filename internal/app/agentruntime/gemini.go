@@ -40,7 +40,15 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			yield(nil, err)
 			return
 		}
-		reservation, err := m.client.reserveDispatch(ctx, input)
+		fullInput := input
+		input, err = m.cachedRequest(ctx, input)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		// Cached tokens still occupy model context and count against the local
+		// run budget. Reserve the complete request, including its cached prefix.
+		reservation, err := m.client.reserveDispatch(ctx, fullInput)
 		if err != nil {
 			yield(nil, err)
 			return
@@ -126,6 +134,14 @@ func nativeRequestContext(ctx context.Context) (context.Context, context.CancelF
 }
 
 func (m *googleModel) createSDK(ctx context.Context) (model.LLM, error) {
+	configuration, err := m.sdkConfig()
+	if err != nil {
+		return nil, err
+	}
+	return gemini.NewModel(ctx, m.client.profile.Model, configuration)
+}
+
+func (m *googleModel) sdkConfig() (*genai.ClientConfig, error) {
 	profile := m.client.profile
 	if profile.APIKey == "" && profile.AccessToken == "" {
 		return nil, fmt.Errorf("explicit native credentials are required")
@@ -140,11 +156,11 @@ func (m *googleModel) createSDK(ctx context.Context) (model.LLM, error) {
 		backend, version = genai.BackendVertexAI, "v1"
 	}
 	attempts := int32(1)
-	return gemini.NewModel(ctx, profile.Model, &genai.ClientConfig{
+	return &genai.ClientConfig{
 		Backend: backend, APIKey: profile.APIKey, Project: profile.VertexProject, Location: profile.VertexLocation,
 		HTTPClient:  &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return llm.ErrRedirectRejected }},
 		HTTPOptions: genai.HTTPOptions{BaseURL: profile.APIBaseURL, APIVersion: version, RetryOptions: &genai.HTTPRetryOptions{Attempts: &attempts}},
-	})
+	}, nil
 }
 
 func (m *googleModel) prepare(request *model.LLMRequest) (*model.LLMRequest, error) {

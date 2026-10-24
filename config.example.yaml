@@ -52,6 +52,15 @@ agent_runtime:
   max_elapsed_seconds: 86400
   max_concurrent_calls: 4
   max_repairs: 2 # Zero disables automatic repairs even when requested.
+  context:
+    compaction: false # Optional paid summarization within the same admitted budget.
+    token_threshold: 8000
+    retain_events: 4
+    summary_max_tokens: 1024
+    local_cache: false # Reuse source-bound composition in private checkout metadata.
+    cache_ttl_seconds: 600
+    provider_cache: false # Explicit remote retention; compatible Google profiles only.
+    provider_ttl_seconds: 0 # Set 60-3600 explicitly before enabling provider_cache.
 
 retry:
   max_retries: 3

@@ -26,7 +26,7 @@ func newInvestigationAgent(client CompletionClient, request Request) (agent.Agen
 	}
 	config := llmagent.Config{
 		Name: "investigation", Description: "Investigate the explicitly admitted repository scope",
-		Model: &investigationModel{inner: adapter, scope: request.Investigation, contextTokens: request.ContextMaxTokens}, Tools: tools,
+		Model: &investigationModel{inner: adapter, scope: request.Investigation, contextTokens: request.ContextMaxTokens, protected: request.Messages[0].Content}, Tools: tools,
 		DisallowTransferToParent: true, DisallowTransferToPeers: true,
 	}
 	if request.Schema != nil {

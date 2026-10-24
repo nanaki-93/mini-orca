@@ -262,6 +262,76 @@ prevents final-result publication. These are local execution limits, not a billi
 guarantee: upstream internal retries and unreported consumption remain unknown.
 No reservation or usage record grants source-write or execution authority.
 
+### Optional context compaction and caching
+
+All three optimizations are disabled by default. Configure them under
+`agent_runtime.context`:
+
+```yaml
+agent_runtime:
+  context:
+    compaction: false
+    token_threshold: 8000
+    retain_events: 4
+    summary_max_tokens: 1024
+    local_cache: false
+    cache_ttl_seconds: 600
+    provider_cache: false
+    provider_ttl_seconds: 0
+```
+
+Compaction uses ADK Go's native summarizer and token-threshold tail retention
+inside investigations. In proposal conversations it summarizes older assistant
+discussion while retaining every original user message and the recent tail.
+Approved plans, acceptance criteria, source, instruction text and proposal
+identity stay outside lossy summaries. The stored conversation remains intact.
+The reconstructed request must still fit the selected context budget; oversized
+mandatory material produces an error before summarization. Summaries are advisory,
+and model suggestions never become verified findings through compaction.
+
+`token_threshold` accepts 512–128000 estimated tokens; `retain_events` accepts
+2–64; `summary_max_tokens` accepts 128–8192 and must be below the threshold.
+Summary calls use the same admitted profile, source authority and shared budget,
+including the investigation's eight-model-turn limit. They have a 30-second
+timeout within the owning operation's deadline. A compaction or persistence
+failure stops dispatch. No retry is hidden inside the summarizer.
+
+`local_cache` reuses deterministic captured source composition for proposals.
+Its TTL accepts 60–86400 seconds. Keys include project/revision, workspace and
+source hashes, instructions, policy, schema and configuration. Current source
+authority is checked again on every hit and model dispatch.
+
+Private cache data and paid-operation receipts live in
+`.mini-orca/agents/<workspace-hash>/context-cache.json` with mode `0600`.
+The catalog permits 1024 records, 1 MiB per value and 32 MiB total. Expired local
+composition is pruned during writes. Completed summaries remain reusable; an
+uncertain summary or remote-cache creation remains pending across restarts and
+cannot silently incur another call. A full or corrupt catalog fails explicitly.
+To intentionally discard receipts, stop the affected workflow and remove that
+checkout's cache file after reviewing the prior run; subsequent requests may pay
+for summarization or cache creation again. Removing local metadata does not
+delete provider-held content.
+
+`provider_cache` enables a Mini-Orca adapter over the GenAI Go cache API; ADK Go
+does not provide `ContextCacheConfig`. It requires an explicit
+`provider_ttl_seconds` of 60–3600 and selected Gemini API or Vertex profiles in the
+Gemini 2.5/3 Flash/Pro families. Unsupported profiles fail locally; model/account
+availability remains subject to the provider. Gemini 4 and Interactions explicit
+caching are unsupported. Existing profile-specific remote consent is still required.
+
+Only a complete initial text turn of at least 16 KiB is eligible, once a request
+also contains a subsequent turn and has captured source authority. Small or
+single-turn requests proceed normally. Cached prefixes include their system/tool
+configuration; resource identity, selected model, destination, expiry and source
+authority are checked before reuse. Cache creation consumes an additional shared
+model-call reservation; cached input still counts toward local context/token
+limits. Failed or uncertain creation is not retried automatically. This does not
+guarantee upstream cost savings or change a provider's implicit caching policy.
+Explicitly cached source and memory may remain remotely retained until the chosen
+expiry even after local edits or forgetting; they cannot be reused under stale
+local authority. Adapter behavior is covered by offline HTTP fixtures, not a live
+provider billing benchmark.
+
 ## Other settings
 
 ```yaml
