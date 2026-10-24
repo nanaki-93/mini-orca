@@ -539,6 +539,9 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agentruntime/skills.go`, `internal/app/agentruntime/skills_test.go`, `internal/app/agent_skills.go`, `internal/app/agent_skills_test.go` — **new**.
 - `internal/config/agent_runtime.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agent_tools.go`, `internal/project/instructions.go`, `CONFIG.md`, `config.example.yaml`.
+- `internal/config/config.go`, `internal/config/agent_runtime_test.go` — strict, immutable configured skill directories.
+- `internal/app/agent_investigation.go`, `internal/app/agent_investigation_test.go`, `internal/app/declaration_explanation.go` — pass the caller context into skill admission and publish validated skill provenance in the existing context manifest.
+- `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/investigator.go`, `internal/app/agentruntime/tool_agent.go`, `internal/app/agentruntime/persistence.go` — adapt native skill tools into the guarded investigation, freeze manifests in private session identity, and retain loaded-file provenance in private run events.
 
 **Inputs / dependencies**
 - Task 19; [Go SkillToolset](https://adk.dev/skills/), context policy, and trusted execution.
@@ -547,6 +550,8 @@ This is an implementation specification, not a claim that the features below alr
 - Load configured skills lazily through validated manifests and scoped filesystem sources. Bound metadata, instructions, resources, paths, and hashes; expose active skill provenance in run events.
 - Preserve repository instruction precedence and explicit task scope. Skills cannot expand grants, install packages, or run scripts automatically.
 - If a skill needs execution, route an explicitly admitted, pinned command through the existing sandbox policy. Reject changed resources, escaping symlinks, invalid manifests, and unavailable tools with useful diagnostics.
+- Use the native Go SkillToolset's `list_skills`, `load_skill`, and `load_skill_resource` through existing tool budgets and schema checks. Advertise metadata only in tool-capable plan/declaration investigations; instructions and resources enter context on demand. Require indexed hashes for configured project-relative manifests and resources, and revalidate loaded content before dispatch and publication.
+- The pinned Go SkillToolset has no script execution tool. Loading `scripts/` text does not execute it or grant shell access. Existing explicitly trusted, fixed workflow checks remain the execution path; reject manifests requiring tools outside the admitted inventory. Do not inherit the SDK's default instruction to follow skill text exactly over repository/task authority.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app ./internal/project ./internal/config && ./scripts/validate.sh && git diff --check`
