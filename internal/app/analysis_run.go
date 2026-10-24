@@ -862,7 +862,7 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 	if c.run == nil || c.run.Identity != identity || c.fault != nil {
 		return
 	}
-	if c.run.Status != AnalysisRunRunning {
+	if c.run.Status != AnalysisRunRunning || ctx.Err() != nil {
 		s.finishAnalysisWindowLocked(ctx)
 		return
 	}
@@ -875,60 +875,6 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 		return
 	}
 	s.finishCompletedAnalysisRunLocked(ctx)
-}
-
-func (s *Service) runAnalysisFiles(ctx context.Context, identity AnalysisRunIdentity) {
-	c := s.analysisRun
-	for {
-		c.mu.Lock()
-		if c.run == nil || c.run.Identity != identity || c.fault != nil {
-			c.mu.Unlock()
-			return
-		}
-		if c.run.Status != AnalysisRunRunning || ctx.Err() != nil {
-			if c.run.Status == AnalysisRunRunning {
-				c.fileStopReason = "The file dispatch allowance ended; preview and resume the remaining work."
-				c.run.Reason = "File analysis reached its time budget. Feature discovery continues independently."
-				_ = s.saveAnalysisRunLocked(false)
-			}
-			c.mu.Unlock()
-			return
-		}
-		keepRunning := s.runAnalysisFileStageLocked(ctx, identity)
-		c.mu.Unlock()
-		if !keepRunning {
-			return
-		}
-	}
-}
-
-func (s *Service) runAnalysisFileStageLocked(ctx context.Context, identity AnalysisRunIdentity) bool {
-	c := s.analysisRun
-	fileIndex, stageIndex, found := nextAnalysisStage(c.run)
-	if !found {
-		return false
-	}
-	if c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles {
-		c.fileStopReason = "The batch limit was reached; resume to continue pending files."
-		c.run.Reason = c.fileStopReason
-		_ = s.saveAnalysisRunLocked(false)
-		return false
-	}
-	stage := &c.run.Files[fileIndex].Stages[stageIndex]
-	if stage.Stage != AnalysisStageSecurityRules && stage.Attempts >= c.run.Plan.Limits.MaxAttemptsPerStage && !c.admission.Files[fileIndex].Stages[stageIndex].Cached {
-		return s.failExhaustedAnalysisStageLocked(fileIndex, stageIndex) == nil
-	}
-	stage.Status = AnalysisStageRunning
-	stage.Reason = ""
-	if err := s.saveAnalysisRunLocked(false); err != nil {
-		return false
-	}
-	request := c.stageRequest(fileIndex, stageIndex)
-	authority := s.analysisRunAuthority(fileIndex, stageIndex)
-	c.mu.Unlock()
-	result, err := s.analyzeFileStage(ctx, request, authority)
-	c.mu.Lock()
-	return s.recordAnalysisStageLocked(ctx, identity, fileIndex, stageIndex, result, err)
 }
 
 func (c *analysisRunController) stageRequest(fileIndex, stageIndex int) analysisFileStageRequest {
@@ -958,9 +904,15 @@ func (s *Service) finishAnalysisWindowLocked(ctx context.Context) bool {
 		if ctx.Err() == nil {
 			return false
 		}
-		c.run.Status = AnalysisRunPaused
-		c.run.Reason = "The dispatch allowance ended; preview and resume the remaining work."
-		interruptAnalysisStages(c.run, AnalysisStageInterrupted)
+		if errors.Is(context.Cause(ctx), context.Canceled) {
+			c.run.Status = AnalysisRunCanceled
+			c.run.Reason = "Analysis canceled by the user."
+			interruptAnalysisStages(c.run, AnalysisStageCanceled)
+		} else {
+			c.run.Status = AnalysisRunPaused
+			c.run.Reason = "The dispatch allowance ended; preview and resume the remaining work."
+			interruptAnalysisStages(c.run, AnalysisStageInterrupted)
+		}
 	default:
 		return true
 	}
@@ -1138,6 +1090,10 @@ func (s *Service) interruptAnalysisStageLocked(ctx context.Context, fileIndex, s
 	current := &c.run.Files[fileIndex].Stages[stageIndex]
 	current.Status = AnalysisStageInterrupted
 	current.Reason = "Analysis stage could not complete."
+	if errors.Is(context.Cause(ctx), context.Canceled) {
+		current.Status = AnalysisStageCanceled
+		current.Reason = "Analysis canceled by the user."
+	}
 	if errors.Is(err, project.ErrRevisionConflict) {
 		s.staleAnalysisRunLocked()
 	} else if c.run.Status == AnalysisRunPausing || ctx.Err() != nil || errors.Is(err, errAnalysisAttemptBudget) {

@@ -421,7 +421,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 16 — Move resumable project analysis onto ADK workflows
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/analysis_graph_test.go`, `internal/app/agent_analysis_host.go` — **new**.

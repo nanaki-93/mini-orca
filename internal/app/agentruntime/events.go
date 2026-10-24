@@ -103,6 +103,9 @@ func projectEvent(event *session.Event, key agentstate.Key) *agentstate.NodeProg
 	case event.Output != nil || event.TurnComplete:
 		progress.State = "completed"
 	}
+	if result, ok := event.Output.(AnalysisNodeResult); ok {
+		progress.State = analysisProgressState(result.Status)
+	}
 	if version := event.Actions.ArtifactDelta["completion.json"]; version > 0 {
 		progress.Evidence = []agentstate.ArtifactReference{{Session: key, Name: "completion.json", Version: version}}
 	}
@@ -122,6 +125,9 @@ func eventNodeID(event *session.Event) string {
 	}
 	if role, ok := event.CustomMetadata["mini_orca.review_node"].(string); ok && slices.Contains(reviewRoles, role) {
 		return "review_" + role
+	}
+	if name, ok := event.CustomMetadata["mini_orca.analysis_node"].(string); ok && knownAnalysisNode(name) {
+		return name
 	}
 	if attempt, ok := event.CustomMetadata["mini_orca.attempt"].(int); ok && attempt >= 0 && attempt <= 2 {
 		return fmt.Sprintf("attempt_%d", attempt)
@@ -154,6 +160,11 @@ func outputNodeID(output any) string {
 		}
 	case Result:
 		return "completion"
+	case AnalysisNodeResult:
+		name := analysisNodeID(output.Work)
+		if knownAnalysisNode(name) {
+			return name
+		}
 	}
 	return ""
 }
@@ -173,5 +184,5 @@ func changeNodeMetadata(value any) string {
 }
 
 func knownProgressNode(name string) bool {
-	return slices.Contains([]string{"create", "generate_tests", "verify", "review", "human_review", "review_correctness", "review_architecture", "review_test_quality", "review_security", "review_performance", "join_reviews", "review_result", "attempt_0", "attempt_1", "attempt_2", "completion", "agent"}, name)
+	return knownAnalysisNode(name) || slices.Contains([]string{"create", "generate_tests", "verify", "review", "human_review", "review_correctness", "review_architecture", "review_test_quality", "review_security", "review_performance", "join_reviews", "review_result", "attempt_0", "attempt_1", "attempt_2", "completion", "agent"}, name)
 }

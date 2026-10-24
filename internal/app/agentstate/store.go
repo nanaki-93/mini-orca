@@ -21,9 +21,10 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("agent record not found")
-	ErrCorrupt     = errors.New("agent journal is invalid; existing data was preserved")
-	ErrPersistence = errors.New("agent state could not be persisted")
+	ErrNotFound        = errors.New("agent record not found")
+	ErrCorrupt         = errors.New("agent journal is invalid; existing data was preserved")
+	ErrPersistence     = errors.New("agent state could not be persisted")
+	errJournalReplaced = errors.New("agent journal changed while opening")
 )
 
 const maxJournalBytes = 64 << 20
@@ -110,6 +111,22 @@ func (s *Store) load() (*database, error) {
 }
 
 func readJournalFile(path string) ([]byte, error) {
+	return readJournalFileOpening(path, os.Open)
+}
+
+func readJournalFileOpening(path string, open func(string) (*os.File, error)) ([]byte, error) {
+	// Readers may overlap an atomic commit. Recheck the new inode instead of
+	// calling that valid replacement corrupt; every attempt repeats all guards.
+	for range 3 {
+		data, err := readJournalFileAttempt(path, open)
+		if !errors.Is(err, errJournalReplaced) {
+			return data, err
+		}
+	}
+	return nil, fmt.Errorf("read stable journal: %w", errJournalReplaced)
+}
+
+func readJournalFileAttempt(path string, open func(string) (*os.File, error)) ([]byte, error) {
 	before, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
@@ -117,7 +134,7 @@ func readJournalFile(path string) ([]byte, error) {
 	if !before.Mode().IsRegular() || !privateJournalMode(before) || before.Size() > maxJournalBytes {
 		return nil, ErrCorrupt
 	}
-	file, err := os.Open(path)
+	file, err := open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +143,11 @@ func readJournalFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !os.SameFile(before, after) || !after.Mode().IsRegular() {
+	if !after.Mode().IsRegular() || !privateJournalMode(after) || after.Size() > maxJournalBytes {
 		return nil, ErrCorrupt
+	}
+	if !os.SameFile(before, after) {
+		return nil, errJournalReplaced
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxJournalBytes+1))
 	if err != nil {
