@@ -18,3 +18,16 @@ func TestProviderCapabilitiesDescribeImplementedProtocols(t *testing.T) {
 		t.Fatal("unknown adapter claimed capabilities")
 	}
 }
+
+func TestGoogleSearchCapabilitiesRequireKnownNativeTextProfiles(t *testing.T) {
+	for _, provider := range []config.ModelProvider{config.GeminiProvider, config.VertexProvider} {
+		if !ProviderCapabilities(config.ModelProfile{Provider: provider, Model: "gemini-2.5-flash"}).Grounding {
+			t.Fatal("native search protocol unavailable")
+		}
+	}
+	for _, profile := range []config.ModelProfile{{Provider: config.OpenAIProvider, Model: "gemini-2.5-flash"}, {Provider: config.GeminiProvider, Model: "unknown"}, {Provider: config.GeminiProvider, Model: "gemini-image"}} {
+		if ProviderCapabilities(profile).Grounding {
+			t.Fatal("unsupported profile advertised search")
+		}
+	}
+}

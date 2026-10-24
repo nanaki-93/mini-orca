@@ -587,7 +587,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 22 — Add curated OpenAPI and grounding tools
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/openapi.go`, `internal/app/agentruntime/openapi_test.go`, `internal/app/agentruntime/grounding.go`, `internal/app/agentruntime/grounding_test.go` — **new**.

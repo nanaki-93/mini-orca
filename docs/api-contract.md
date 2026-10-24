@@ -76,6 +76,13 @@ untrusted networks.
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/integrations` | Read passive configured MCP connections and current schema grants. |
 | POST | `/api/projects/current/integrations/{integrationID}/control` | Explicitly discover or revoke an MCP integration. |
+| GET | `/api/projects/current/apis` | Read passive curated API configurations and expiring inventories. |
+| POST | `/api/projects/current/apis/{integrationID}/control` | Explicitly discover a local API specification or revoke its grant. |
+| GET | `/api/projects/current/api-actions` | Read private exact-action candidates and durable external outcome receipts. |
+| POST | `/api/projects/current/api-actions/{actionID}/control` | Approve one exact external request or record a user-reported reconciliation. |
+| GET | `/api/projects/current/research` | Read Google Search availability and private report metadata without provider work. |
+| POST | `/api/projects/current/research` | Explicitly research a bounded question with admitted sources and search consent. |
+| GET | `/api/projects/current/research/{reportID}/report` | Read a private HTML report preserving citations and Google Search suggestions. |
 | POST | `/api/projects/current/memory` | Create an explicitly retained, source-bound candidate memory. |
 | GET | `/api/projects/current/memory/{memoryID}` | Read private memory text and current source status. |
 | POST | `/api/projects/current/memory/{memoryID}` | Edit, accept or forget a memory using its current version. |
@@ -1287,3 +1294,83 @@ effects are supported; returned text cannot authorize local changes or become
 verified source evidence. Reindex, project replacement, revoke and restart
 invalidate grants. The configuration reference documents transport, schema,
 process and size limits.
+
+### Curated API tools and external action receipts
+
+GET `/api/projects/current/apis` requires `project_id` and `project_revision` and
+returns passive API configurations with configuration fingerprints, `configured`,
+`ready` or `expired` states, and optional inventory/grant/expiry. POST
+`/api/projects/current/apis/{integrationID}/control` uses `IntegrationControl`
+with the same strict identity, discover/revoke and confirmation fields as MCP.
+Discovery reads the configured indexed JSON specification locally; it never
+contacts the API. Inventories contain an exact fingerprint and selected operations
+with ID, method, path, effect, parameters, input schema and successful response
+schemas. Credentials remain environment variable references.
+
+Plan/declaration `integrations` selections also accept API IDs under the same
+combined two-integration limit and per-investigation source-sharing consent.
+GET tools dispatch one bounded external read. Mutating tools return
+`approval_required` and `action_id` after saving a candidate; they do not send the
+write. The configuration guide defines the supported OpenAPI subset.
+
+GET `/api/projects/current/api-actions` requires current project identity and
+returns at most 512 private receipts with `no-store`. Each includes `id`,
+`version`, project/revision, integration/inventory/scope identity, `operation_key`,
+the exact `request` (operation ID/key, method, URL and optional JSON body), original
+`arguments`, `request_hash`, state, timestamps, and current `can_approve`,
+`can_reconcile` and `stale` flags. Response JSON/status/hash and user-reported
+reconciliation fields appear when available. These records may contain source;
+they never include resolved bearer credentials.
+
+POST `/api/projects/current/api-actions/{actionID}/control` strictly accepts
+`project_id`, `project_revision`, `action`, `version`, `request_hash`, `confirm`
+and optional `reported_outcome`/`observation`. `action: approve` requires
+`confirm: true`, the exact current receipt identity, live captured source authority
+and current integration grant. Approval claims durable `pending` state before
+one HTTP attempt. `completed` means a declared successful response was validated;
+`not_sent` means dispatch was prevented; `unknown` means an attempted effect could
+not be established. An HTTP 200 control response contains the receipt and does
+not imply the external effect completed. Restart, cancellation or receipt-save
+failure cannot authorize automatic replay; pending/unknown receipts block new
+writes through the same configured operation.
+
+`action: reconcile` requires `confirm: true`, current version/hash, an unknown
+outcome (or expired pending lease with no live owner), `reported_outcome` of
+`applied`, `not_applied` or `other`, and a nonempty observation up to 2048 bytes.
+The user checks the external service before submitting this account. The resulting
+`reconciled` receipt is explicitly user-reported; it never retries the request.
+Stale/uncertain conflicts return 409, missing receipts 404, malformed requests 400
+and journal failures 500. Existing recovery data is preserved on failures.
+
+### Grounded external research
+
+GET `/api/projects/current/research` requires current project identity and returns
+`state: available|disabled|unsupported_profile`, Function model ID and private
+report metadata. It performs no provider request. POST to the same route accepts
+`project_id`, `project_revision`, `question`, optional `sources: [{path, hash}]`,
+`confirm_search`, `confirm_source_sharing` and `confirm_remote_provider`. Search and
+sharing confirmations must be true; remote confirmation follows the configured
+destination. The question is at most 2048 UTF-8 bytes and sources at most eight
+current indexed files. Source/policy/revision checks run before dispatch and
+publication. Disabled/unsupported search, invalid sources or missing consent fail
+without provider work. Search runs separately through native ADK with no function
+tools, retries or provider caching.
+
+Success returns only `{id, project_id, project_revision, title, state, model,
+created_at, stale}`. States `grounded`, `uncited` and `ungrounded` retain the
+provider's attribution limits; none establishes repository findings. GET
+`/api/projects/current/research/{reportID}/report`, with current project identity,
+returns private HTML containing the answer, inline and aggregate citations,
+reported queries, original Google Search suggestions and explicit unknown
+provider-internal search usage. Model token usage is displayed only when known.
+The report uses `no-store`, `nosniff`, `no-referrer`, a restrictive CSP and a
+script-free sandbox for original suggestions. Unsupported active suggestion HTML
+or invalid citation ranges prevent publication. No external images/resources are
+loaded during preview; links are deliberate user navigation.
+
+Report reads flag changed source/policy or project revisions as stale. The list's
+`stale` field compares revisions only; opening a report also checks its admitted
+sources. Generic run text for `grounding-v1` returns
+`state: research_report_required` without the answer, preserving the citation and
+Search-suggestion display contract. Missing reports return 404. All routes retain
+the normal loopback and optional worktree scope policy.

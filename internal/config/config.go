@@ -191,7 +191,7 @@ func (c *Config) Validate() error {
 }
 
 var configurationFields = fieldSet{
-	"integrations": {"mcp": {}},
+	"integrations": {"mcp": {}, "openapi": {}, "google_search": {}},
 	"agent_runtime": {
 		"skills":          {},
 		"roles":           {"creation": {}, "testing": {}, "review": {}},

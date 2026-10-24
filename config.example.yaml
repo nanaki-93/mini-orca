@@ -52,6 +52,14 @@ integrations:
   # Stdio alternative: transport: stdio, command: /absolute/installed/docs-mcp,
   # args: [--stdio], environment: {DOCS_TOKEN: PRIVATE_DOCS_TOKEN}.
   # Arguments must not contain secrets; environment values name credential variables.
+  openapi: []
+  # - id: tickets
+  #   spec_path: integrations/tickets.json # Indexed project-local OpenAPI 3.0 JSON.
+  #   endpoint: https://tickets.example/api
+  #   bearer_token_env: TICKETS_TOKEN
+  #   timeout_seconds: 30
+  #   operations: [{name: getTicket, effect: read_external}, {name: updateTicket, effect: mutate_external}]
+  google_search: false # Requires a supported native Google Function profile and explicit per-request consent.
 
 agent_runtime:
   # Explicit project-relative directories containing indexed SKILL.md files.

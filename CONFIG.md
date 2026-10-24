@@ -528,6 +528,57 @@ only trusted installed MCP servers and correctly classify their allowed tools.
 External answers remain advisory and cannot supply verified repository citations,
 checks, source writes, Apply or Undo authority.
 
+`integrations.openapi` configures at most eight curated HTTP APIs, with IDs unique
+across MCP and API entries. Each supplies an indexed project-relative `spec_path`,
+a fixed HTTPS `endpoint` (literal loopback HTTP is permitted), an optional
+`bearer_token_env`, `timeout_seconds` (1–60; default 30), and one to four exact
+`operations: [{name: operationId, effect: read_external}]`. GET operations require
+`read_external`; POST, PUT, PATCH and DELETE require `mutate_external`. Configuration
+owns the destination and credentials; document `servers` and `security` fields
+do not select endpoints or acquire authentication.
+
+API discovery reads the local specification without sending HTTP. It creates a
+15-minute grant using the same explicit discovery/source-sharing controls as MCP.
+The supported subset is OpenAPI 3.0.0–3.0.4 JSON, at most 64 KiB, with inline
+schemas, scalar path/query parameters, optional or required JSON object bodies,
+and one to eight explicit successful JSON object responses or empty 204 responses.
+Path placeholders occupy whole segments. Parameters use `simple` path or `form`
+query serialization; headers, cookies, callbacks, references, polymorphic schemas,
+nullable values, formats, multipart bodies and arbitrary schema extensions are
+rejected for selected operations. Inline schemas support type, object properties,
+required fields, boolean additional-properties policy, array items, enums, patterns
+and numeric/string/collection bounds, with depth 12 and 64 properties per object.
+Schema numeric bounds must be below 2^53 in magnitude; argument JSON preserves
+integer precision. Arguments and results use the shared 16 KiB tool limit.
+
+Mutating tools only save a private candidate containing the exact method, URL and
+body. Explicit approval of its current version/hash claims a durable pending
+receipt before one HTTP attempt. Reads and writes disable redirects, proxies,
+cookies, retries and connection reuse. An uncertain write is recorded as `unknown`;
+pending/unknown receipts block more writes through that operation. Reconciliation
+records the user's externally checked outcome without replaying the request.
+Restart, expiry, changed sources or revocation invalidate candidate authority;
+existing receipts remain readable. Review is bounded to 128 live candidates and
+512 retained receipts per checkout. Receipt and report data is private and may
+contain admitted source text; credentials are excluded.
+
+`integrations.google_search: true` enables a separate explicit research action
+using the Function profile. It requires native Gemini or Vertex and a supported
+text model: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
+`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`,
+`gemini-3.1-pro-preview` or `gemini-3-flash-preview`. Unknown models remain
+unavailable until their capability is verified. Each request separately confirms
+search, source sharing and any remote-provider destination. A question is limited
+to 2048 UTF-8 bytes, with up to eight explicit path/hash selections and a combined
+64 KiB context within the configured Function token estimate. Search never joins
+planning JSON or function tools and does not use provider caching or retries.
+The private report displays validated inline/aggregate citations and the original
+Google Search suggestions in a sandboxed, script-free frame. Search metadata is
+advisory; provider-internal search usage is unknown. One admitted search invocation
+consumes one model-call and one tool-call allowance, independently of unknown
+provider-internal searches. Configuration, report listing and report reads do not
+dispatch provider requests. See the [API contract](docs/api-contract.md).
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

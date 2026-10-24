@@ -80,6 +80,10 @@ type runtimeSession struct {
 func createCompletionSession(ctx context.Context, request Request, providerBinding string) (*runtimeSession, error) {
 	initial := map[string]any{"mini_orca.request": request.Messages, "mini_orca.schema": request.Schema}
 	schemaVersion := "completion-v1"
+	if request.grounding {
+		initial["mini_orca.grounding"] = "google_search"
+		schemaVersion = "grounding-v1"
+	}
 	if request.Investigation != nil {
 		initial["mini_orca.tools"] = request.Investigation.descriptors()
 		initial["mini_orca.scope"] = request.Investigation.scope
@@ -133,6 +137,9 @@ func invocationIdentity(request Request, initial map[string]any) (string, string
 		Schema   *llm.JSONSchema
 	}{request.Messages, request.Schema}
 	var schema any = request.Schema
+	if request.grounding {
+		input, schema = initial, "google-search-report-v1"
+	}
 	if request.Investigation != nil {
 		input = initial
 		schema = []any{request.Schema, initial["mini_orca.tools"], initial["mini_orca.scope"]}

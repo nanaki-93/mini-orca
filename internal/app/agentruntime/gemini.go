@@ -21,7 +21,10 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
-type googleModel struct{ client *ProviderClient }
+type googleModel struct {
+	client    *ProviderClient
+	grounding bool
+}
 
 var _ model.LLM = (*googleModel)(nil)
 
@@ -41,7 +44,9 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			return
 		}
 		fullInput := input
-		input, err = m.cachedRequest(ctx, input)
+		if !m.grounding {
+			input, err = m.cachedRequest(ctx, input)
+		}
 		if err != nil {
 			yield(nil, err)
 			return
@@ -168,6 +173,9 @@ func (m *googleModel) prepare(request *model.LLMRequest) (*model.LLMRequest, err
 		return nil, fmt.Errorf("%w: native routing must use the admitted profile", llm.ErrRequestRejected)
 	}
 	input := *request
+	if googleSearchConfigured(request.Config) != m.grounding {
+		return nil, fmt.Errorf("%w: Google Search requires the explicit research entry point", llm.ErrRequestRejected)
+	}
 	if err := validateGoogleContent(request.Contents); err != nil {
 		return nil, err
 	}
@@ -197,7 +205,7 @@ func googleGenerationConfig(profile config.ModelProfile, configured *genai.Gener
 	if configuration.ResponseMIMEType != "" && (configuration.ResponseMIMEType != "application/json" || configuration.ResponseJsonSchema == nil) {
 		return nil, fmt.Errorf("%w: native structured output requires a JSON schema", llm.ErrRequestRejected)
 	}
-	if _, err := generationTools(configuration.Tools); err != nil {
+	if err := validateGoogleTools(profile, configuration); err != nil {
 		return nil, err
 	}
 	if configuration.SystemInstruction != nil {

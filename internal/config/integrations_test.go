@@ -76,3 +76,35 @@ func TestMCPConfigurationRejectsUnknownNestedFields(t *testing.T) {
 		t.Fatalf("unknown field: %v", err)
 	}
 }
+
+func TestOpenAPIConfigurationPinsScopeAndEffect(t *testing.T) {
+	base := OpenAPIService{ID: "items", SpecPath: "docs/api.json", Endpoint: "https://api.example/v1", BearerTokenEnv: "API_TOKEN", Operations: []IntegrationTool{{Name: "lookup", Effect: "read_external"}, {Name: "update", Effect: "mutate_external"}}}
+	resolved, err := ResolveIntegrations(IntegrationsConfig{OpenAPI: []OpenAPIService{base}, GoogleSearch: true})
+	if err != nil || !resolved.GoogleSearch || resolved.OpenAPI[0].TimeoutSeconds != 30 {
+		t.Fatalf("configuration: %+v %v", resolved, err)
+	}
+	resolved.OpenAPI[0].Operations[0].Name = "changed"
+	if base.Operations[0].Name != "lookup" {
+		t.Fatal("configuration alias")
+	}
+	for name, change := range map[string]func(*OpenAPIService){
+		"outside":  func(s *OpenAPIService) { s.SpecPath = "../api.json" },
+		"absolute": func(s *OpenAPIService) { s.SpecPath = "/tmp/api.json" },
+		"insecure": func(s *OpenAPIService) { s.Endpoint = "http://example.com" },
+		"auth":     func(s *OpenAPIService) { s.Endpoint = "https://user:secret@example.com" },
+		"escape":   func(s *OpenAPIService) { s.Endpoint = "https://api.example/%2e%2e/private" },
+		"effect":   func(s *OpenAPIService) { s.Operations = []IntegrationTool{{Name: "update", Effect: "execute"}} },
+		"timeout":  func(s *OpenAPIService) { s.TimeoutSeconds = 61 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			copy := base
+			change(&copy)
+			if _, err := ResolveIntegrations(IntegrationsConfig{OpenAPI: []OpenAPIService{copy}}); err == nil {
+				t.Fatal("invalid API configuration accepted")
+			}
+		})
+	}
+	if _, err := ResolveIntegrations(IntegrationsConfig{MCP: []MCPServer{{ID: "items", Transport: "streamable_http", Endpoint: "https://api.example/mcp", Tools: []IntegrationTool{{Name: "lookup", Effect: "read_external"}}}}, OpenAPI: []OpenAPIService{base}}); err == nil {
+		t.Fatal("ambiguous integration ID accepted")
+	}
+}

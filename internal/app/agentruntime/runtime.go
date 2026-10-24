@@ -21,6 +21,7 @@ import (
 
 // Request is an admitted completion. The caller owns retries and scope checks.
 type Request struct {
+	grounding        bool // Only the explicit search-only entry point may set this.
 	Messages         []llm.ChatMessage
 	Schema           *llm.JSONSchema
 	Stream           bool
@@ -31,6 +32,7 @@ type Request struct {
 
 // Result retains provider metadata without exposing ADK types to callers.
 type Result struct {
+	Grounding    *GroundingInfo
 	Content      string
 	Model        string
 	FinishReason string

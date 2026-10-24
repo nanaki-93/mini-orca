@@ -223,6 +223,9 @@ func (s *Service) AgentRunDetail(ctx context.Context, query AgentRunQuery, id st
 }
 
 func (s *Service) readAgentText(ctx context.Context, store *agentstate.Store, run agentstate.RunSnapshot) (*AgentPrivateText, error) {
+	if run.SchemaVersion == "grounding-v1" {
+		return &AgentPrivateText{State: "research_report_required"}, nil
+	}
 	value := s.agentRuns.privateText(run.ID)
 	artifact, err := store.ExportArtifact(ctx, agentstate.ArtifactKey{Session: run.Session, Name: "completion.json"}, 0)
 	if errors.Is(err, agentstate.ErrNotFound) {

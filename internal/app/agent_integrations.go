@@ -59,10 +59,13 @@ type integrationOperation struct {
 }
 
 type integrationRegistry struct {
-	mu      sync.Mutex
-	config  config.IntegrationsConfig
-	records map[string]integrationRecord
-	active  map[*integrationOperation]bool
+	mu           sync.Mutex
+	config       config.IntegrationsConfig
+	records      map[string]integrationRecord
+	active       map[*integrationOperation]bool
+	apiRecords   map[string]apiIntegrationRecord
+	apiActions   map[string]apiActionAuthority
+	apiExecuting map[string]bool
 }
 
 func newIntegrationRegistry(input config.IntegrationsConfig) (*integrationRegistry, error) {
@@ -70,7 +73,7 @@ func newIntegrationRegistry(input config.IntegrationsConfig) (*integrationRegist
 	if err != nil {
 		return nil, err
 	}
-	return &integrationRegistry{config: resolved, records: map[string]integrationRecord{}, active: map[*integrationOperation]bool{}}, nil
+	return &integrationRegistry{config: resolved, records: map[string]integrationRecord{}, active: map[*integrationOperation]bool{}, apiRecords: map[string]apiIntegrationRecord{}, apiActions: map[string]apiActionAuthority{}, apiExecuting: map[string]bool{}}, nil
 }
 
 func integrationConfigView(server config.MCPServer) AgentIntegration {
@@ -226,14 +229,18 @@ func (s *Service) revokeIntegration(id, grant string) ([]<-chan struct{}, error)
 		return nil, ErrIntegrationConflict
 	}
 	delete(s.integrations.records, id)
+	return s.integrations.cancelIDLocked(id), nil
+}
+
+func (r *integrationRegistry) cancelIDLocked(id string) []<-chan struct{} {
 	var done []<-chan struct{}
-	for op := range s.integrations.active {
+	for op := range r.active {
 		if op.id == id {
 			op.cancel(ErrIntegrationConflict)
 			done = append(done, op.done)
 		}
 	}
-	return done, nil
+	return done
 }
 
 func (s *Service) cancelIntegrations() []<-chan struct{} {
@@ -243,6 +250,8 @@ func (s *Service) cancelIntegrations() []<-chan struct{} {
 	s.integrations.mu.Lock()
 	defer s.integrations.mu.Unlock()
 	clear(s.integrations.records)
+	clear(s.integrations.apiRecords)
+	clear(s.integrations.apiActions)
 	var done []<-chan struct{}
 	for op := range s.integrations.active {
 		op.cancel(ErrIntegrationConflict)
@@ -277,7 +286,7 @@ func (s *Service) integrationInvestigation(ctx context.Context, root, scope stri
 			return nil, fmt.Errorf("each selected integration requires explicit source-sharing approval")
 		}
 		seen[use.ID] = true
-		tools, check, err := s.admitIntegration(ctx, root, use, authorize)
+		tools, check, err := s.admitSelectedIntegration(ctx, root, scope, use, authorize)
 		if err != nil {
 			return nil, err
 		}
@@ -297,6 +306,13 @@ func (s *Service) integrationInvestigation(ctx context.Context, root, scope stri
 		scope = hex.EncodeToString(hash[:])
 	}
 	return s.skillInvestigation(ctx, root, scope, specs, combined)
+}
+
+func (s *Service) admitSelectedIntegration(ctx context.Context, root, scope string, use IntegrationUse, authorize func(context.Context) error) ([]agentruntime.ToolSpec, func(context.Context) error, error) {
+	if _, exists := s.apiConfig(use.ID); exists {
+		return s.admitAPI(ctx, root, scope, use, authorize)
+	}
+	return s.admitIntegration(ctx, root, use, authorize)
 }
 
 func (s *Service) admitIntegration(ctx context.Context, root string, use IntegrationUse, source func(context.Context) error) ([]agentruntime.ToolSpec, func(context.Context) error, error) {

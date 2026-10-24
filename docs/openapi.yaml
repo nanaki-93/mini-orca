@@ -69,6 +69,102 @@ paths:
         '200': {description: Ready inventory or revoked configuration; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentIntegration'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/apis:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read passive curated API configurations and inventories
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Private configurations and optional expiring grants; no-store, content: {application/json: {schema: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/AgentAPI'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/apis/{integrationID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: integrationID, required: true, schema: {type: string}}
+    post:
+      tags: [Projects]
+      summary: Explicitly discover a local OpenAPI specification or revoke its grant
+      description: Discovery requires confirm_connect and current configuration identity. Reads indexed local JSON only; it never contacts the API. Revoke requires any current grant and cancels admitted operations.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/IntegrationControl'}}}}
+      responses:
+        '200': {description: Current inventory or revoked configuration; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentAPI'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/api-actions:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read private exact-action candidates and durable external outcome receipts
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Source-bearing review and recovery records; no-store, content: {application/json: {schema: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/AgentAPIAction'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/api-actions/{actionID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: actionID, required: true, schema: {type: string}}
+    post:
+      tags: [Projects]
+      summary: Approve one exact external request or record a user-reported reconciliation
+      description: Claims a durable pending receipt before one HTTP attempt. Pending or unknown outcomes block new writes through the operation. Reconciliation requires an externally checked observation and never retries. A 200 response does not imply the external effect completed; inspect state.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/APIActionControl'}}}}
+      responses:
+        '200': {description: Current outcome receipt; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentAPIAction'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/research:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read search availability and private report metadata without provider work
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Passive availability and reports; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/ResearchOverview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly research a bounded question through native Google Search
+      description: Requires configured search, a supported Function profile, source/search consent and applicable remote-provider confirmation. Source hashes and policy are checked before dispatch and publication. One search-only ADK invocation; no retries, function tools or caching.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ResearchRequest'}}}}
+      responses:
+        '200': {description: Private report reference without answer text; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/ResearchReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/research/{reportID}/report:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: reportID, required: true, schema: {type: string, pattern: '^[A-Za-z0-9_-]{20,64}$'}}
+    get:
+      tags: [Projects]
+      summary: Read a private report with citations and original Search suggestions
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Isolated script-free HTML with no-store, nosniff, no-referrer and restrictive CSP; opening rechecks source freshness without provider work, content: {text/html: {schema: {type: string}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/memory:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -1115,6 +1211,153 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    AgentAPI:
+      type: object
+      required: [config, configuration, state]
+      properties:
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        state: {type: string, enum: [configured, ready, expired]}
+        grant: {type: string}
+        expires_at: {type: string, format: date-time}
+        config:
+          type: object
+          required: [id, spec_path, endpoint, operations, timeout_seconds]
+          properties:
+            id: {type: string}
+            spec_path: {type: string, description: Indexed project-relative OpenAPI 3.0 JSON specification.}
+            endpoint: {type: string, format: uri}
+            bearer_token_env: {type: string, description: Credential environment reference only.}
+            timeout_seconds: {type: integer, minimum: 1, maximum: 60}
+            operations:
+              type: array
+              minItems: 1
+              maxItems: 4
+              items:
+                type: object
+                required: [name, effect]
+                properties:
+                  name: {type: string}
+                  effect: {type: string, enum: [read_external, mutate_external]}
+        inventory:
+          type: object
+          required: [fingerprint, operations]
+          properties:
+            fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+            operations: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/APIOperation'}}
+    APIOperation:
+      type: object
+      required: [id, method, path, effect, description, parameters, input_schema, responses]
+      properties:
+        id: {type: string}
+        method: {type: string, enum: [GET, POST, PUT, PATCH, DELETE]}
+        path: {type: string}
+        effect: {type: string, enum: [read_external, mutate_external]}
+        description: {type: string, maxLength: 512}
+        input_schema: {type: object, additionalProperties: true}
+        responses: {type: object, additionalProperties: {type: object, nullable: true, additionalProperties: true}, description: Exact successful HTTP status keys; null denotes empty 204.}
+        parameters:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required: [name, in, required, schema]
+            properties:
+              name: {type: string}
+              in: {type: string, enum: [path, query]}
+              required: {type: boolean}
+              schema: {type: object, additionalProperties: true}
+              style: {type: string, enum: [simple, form]}
+              explode: {type: boolean}
+              description: {type: string}
+    APIActionControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action, version, request_hash, confirm]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        action: {type: string, enum: [approve, reconcile]}
+        version: {type: integer, format: int64, minimum: 1}
+        request_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        confirm: {type: boolean, enum: [true]}
+        reported_outcome: {type: string, enum: [applied, not_applied, other], description: Required only for reconciliation.}
+        observation: {type: string, description: Required nonempty user account up to 2048 bytes for reconciliation; forbidden for approval.}
+    AgentAPIAction:
+      type: object
+      required: [id, version, project_id, project_revision, integration_id, inventory, scope, operation_key, request, arguments, request_hash, state, created_at, updated_at, expires_at, can_approve, can_reconcile, stale]
+      properties:
+        id: {type: string}
+        version: {type: integer, format: int64, minimum: 1}
+        project_id: {type: string}
+        project_revision: {type: string}
+        integration_id: {type: string}
+        inventory: {type: string}
+        scope: {type: string}
+        operation_key: {type: string}
+        request_hash: {type: string}
+        arguments: {type: object, additionalProperties: true}
+        request:
+          type: object
+          required: [operation_id, operation_key, method, url]
+          properties:
+            operation_id: {type: string}
+            operation_key: {type: string}
+            method: {type: string}
+            url: {type: string, format: uri}
+            body: {type: object, additionalProperties: true}
+        state: {type: string, enum: [candidate, pending, completed, not_sent, unknown, reconciled]}
+        http_status: {type: integer}
+        response: {type: object, additionalProperties: true}
+        response_hash: {type: string}
+        reported_outcome: {type: string, enum: [applied, not_applied, other]}
+        observation: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        pending_until: {type: string, format: date-time}
+        can_approve: {type: boolean}
+        can_reconcile: {type: boolean}
+        stale: {type: boolean}
+    ResearchRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, question, confirm_search, confirm_source_sharing]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        question: {type: string, description: Nonempty question up to 2048 UTF-8 bytes.}
+        sources:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, hash]
+            properties:
+              path: {type: string}
+              hash: {type: string}
+        confirm_search: {type: boolean, enum: [true]}
+        confirm_source_sharing: {type: boolean, enum: [true]}
+        confirm_remote_provider: {type: boolean, default: false}
+    ResearchReport:
+      type: object
+      required: [id, project_id, project_revision, title, state, model, created_at, stale]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        title: {type: string}
+        state: {type: string, enum: [grounded, uncited, ungrounded]}
+        model: {type: string}
+        created_at: {type: string, format: date-time}
+        stale: {type: boolean, description: Revision comparison in list metadata; report rendering additionally checks admitted sources and policy.}
+    ResearchOverview:
+      type: object
+      required: [state, model, reports]
+      properties:
+        state: {type: string, enum: [available, disabled, unsupported_profile]}
+        model: {type: string}
+        reports: {type: array, items: {$ref: '#/components/schemas/ResearchReport'}}
     IntegrationUse:
       type: object
       additionalProperties: false
@@ -1359,7 +1602,7 @@ components:
         input: {$ref: '#/components/schemas/ChangeInput'}
         text:
           type: object
-          description: Present only with explicit include_text. Private model text is bounded to 64 KiB UTF-8; transient partial buffers cover at most 64 invocations. Tool disclosures contain at most 16 records from the selected invocation's last 128 events.
+          description: Present only with explicit include_text. Private model text is bounded to 64 KiB UTF-8; transient partial buffers cover at most 64 invocations. Tool disclosures contain at most 16 records from the selected invocation's last 128 events. Grounded research returns research_report_required without text so citations and Search suggestions remain together in its report.
           required: [available, state, truncated]
           properties:
             available: {type: boolean}

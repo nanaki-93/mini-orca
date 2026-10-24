@@ -14,7 +14,18 @@ import (
 // IntegrationsConfig is passive configuration. It does not grant connection,
 // process execution, or permission to disclose project context.
 type IntegrationsConfig struct {
-	MCP []MCPServer `yaml:"mcp"`
+	MCP          []MCPServer      `yaml:"mcp"`
+	OpenAPI      []OpenAPIService `yaml:"openapi"`
+	GoogleSearch bool             `yaml:"google_search"`
+}
+
+type OpenAPIService struct {
+	ID             string            `yaml:"id" json:"id"`
+	SpecPath       string            `yaml:"spec_path" json:"spec_path"`
+	Endpoint       string            `yaml:"endpoint" json:"endpoint"`
+	BearerTokenEnv string            `yaml:"bearer_token_env" json:"bearer_token_env,omitempty"`
+	Operations     []IntegrationTool `yaml:"operations" json:"operations"`
+	TimeoutSeconds int               `yaml:"timeout_seconds" json:"timeout_seconds"`
 }
 
 type MCPServer struct {
@@ -39,7 +50,7 @@ var integrationToolName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$`)
 var integrationEnvName = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 func ResolveIntegrations(input IntegrationsConfig) (IntegrationsConfig, error) {
-	result := IntegrationsConfig{MCP: slices.Clone(input.MCP)}
+	result := IntegrationsConfig{MCP: slices.Clone(input.MCP), GoogleSearch: input.GoogleSearch}
 	if len(result.MCP) > 8 {
 		return result, fmt.Errorf("integrations.mcp permits at most eight servers")
 	}
@@ -61,7 +72,68 @@ func ResolveIntegrations(input IntegrationsConfig) (IntegrationsConfig, error) {
 		server.Args, server.Tools, server.Environment = slices.Clone(server.Args), slices.Clone(server.Tools), maps.Clone(server.Environment)
 		result.MCP[i] = server
 	}
+	var err error
+	result.OpenAPI, err = resolveOpenAPIServices(input.OpenAPI, seen)
+	return result, err
+}
+
+func resolveOpenAPIServices(input []OpenAPIService, seen map[string]bool) ([]OpenAPIService, error) {
+	result := slices.Clone(input)
+	if len(result) > 8 {
+		return nil, fmt.Errorf("integrations.openapi permits at most eight services")
+	}
+	for i, service := range result {
+		if !integrationID.MatchString(service.ID) || seen[service.ID] {
+			return nil, fmt.Errorf("integration IDs must be unique lowercase identifiers of at most 24 characters")
+		}
+		seen[service.ID] = true
+		if service.TimeoutSeconds == 0 {
+			service.TimeoutSeconds = 30
+		}
+		if err := validateOpenAPIService(service); err != nil {
+			return nil, fmt.Errorf("OpenAPI service %s: %w", service.ID, err)
+		}
+		service.Operations = slices.Clone(service.Operations)
+		result[i] = service
+	}
 	return result, nil
+}
+
+func validateOpenAPIService(service OpenAPIService) error {
+	if service.TimeoutSeconds < 1 || service.TimeoutSeconds > 60 {
+		return fmt.Errorf("OpenAPI timeout must be 1–60 seconds")
+	}
+	if !filepath.IsLocal(service.SpecPath) || filepath.ToSlash(filepath.Clean(service.SpecPath)) != service.SpecPath || len(service.SpecPath) > 512 || strings.ContainsAny(service.SpecPath, "\\\x00\r\n") {
+		return fmt.Errorf("spec_path must be a canonical project-relative file")
+	}
+	if service.BearerTokenEnv != "" && !integrationEnvName.MatchString(service.BearerTokenEnv) {
+		return fmt.Errorf("bearer_token_env must name an environment variable")
+	}
+	if err := validateIntegrationEndpoint(service.Endpoint); err != nil {
+		return err
+	}
+	u, _ := url.Parse(service.Endpoint)
+	if u.RawPath != "" || strings.ContainsAny(u.Path, "{}\\") || strings.Contains(u.Path, "..") {
+		return fmt.Errorf("endpoint must have a fixed, unescaped base path")
+	}
+	return validateAPIOperations(service.Operations)
+}
+
+func validateAPIOperations(operations []IntegrationTool) error {
+	if len(operations) < 1 || len(operations) > 4 {
+		return fmt.Errorf("configure one to four explicitly classified operations")
+	}
+	seen := map[string]bool{}
+	for _, operation := range operations {
+		if !integrationToolName.MatchString(operation.Name) || seen[operation.Name] {
+			return fmt.Errorf("operation IDs must be bounded unique identifiers")
+		}
+		seen[operation.Name] = true
+		if operation.Effect != "read_external" && operation.Effect != "mutate_external" {
+			return fmt.Errorf("classify operations as read_external or mutate_external")
+		}
+	}
+	return nil
 }
 
 func validateMCPServer(server MCPServer) error {
