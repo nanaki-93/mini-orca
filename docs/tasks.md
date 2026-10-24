@@ -459,6 +459,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/project/project_overview.go`, `internal/project/architecture_overview_report.go`, `internal/project/architecture_overview_report_test.go`, `internal/project/handbook/handbook.go`, `internal/project/handbook/handbook_test.go`.
 - `internal/app/feature_suggestions_test.go`, `internal/app/declaration_explanation_test.go`, `internal/app/project_analysis_contract_test.go`.
 - `internal/project/project_test.go`, `internal/project/ignore_rules_test.go`, `internal/project/reindex_metrics_test.go`, `internal/app/analysis_freshness_test.go` — migrate fixtures to explicit factual capture and remove the superseded combined analyzer entry point.
+- `internal/api/handlers/project_handler_test.go` — migrate the handler's imported-project fixture to the same explicit scan/interpretation boundary.
 - `docs/openapi.yaml`, `docs/api-contract.md` — document the evidence-preserving handbook composition version and knowledge run behavior.
 
 **Inputs / dependencies**
