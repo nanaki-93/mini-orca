@@ -801,7 +801,7 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/agent_library.go`, `internal/tui/agent_library_actions.go`, `internal/tui/agent_library_commands.go`, `internal/tui/agent_library_test.go`, `internal/tui/client/agent_library.go`, `internal/tui/client/agent_library_test.go` — **new**, scoped inventory, private disclosure and explicit library mutations.
-- `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/hub_code.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/view_test.go`, `docs/UI_DESIGN_GUIDELINES.md`, `docs/api-contract.md`.
+- `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/hub_agents.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/view_test.go`, `docs/UI_DESIGN_GUIDELINES.md`, `docs/api-contract.md`.
 
 **Inputs / dependencies**
 - Task 26A; guarded artifact library and existing curated memory/lesson stores.
