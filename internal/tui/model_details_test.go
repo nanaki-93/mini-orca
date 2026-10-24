@@ -10,7 +10,7 @@ import (
 
 func TestModelAndPresetDetailsRemainReachableWithoutDispatch(t *testing.T) {
 	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
-		for _, size := range [][2]int{{80, 24}, {96, 24}, {120, 36}} {
+		for _, size := range [][2]int{{52, 16}, {80, 24}, {96, 24}, {120, 36}} {
 			s := NewState()
 			s.Palette = palette
 			s.Models = &ModelCatalog{Scopes: map[string]Model{"analyze": {
@@ -24,14 +24,14 @@ func TestModelAndPresetDetailsRemainReachableWithoutDispatch(t *testing.T) {
 				index  int
 				tokens []string
 			}{
-				{0, []string{"MODEL DETAILS", "inspect-model", "cli://inspect-provider", "timeout:7m0s", "retries:3"}},
+				{0, []string{"MODEL DETAILS", "inspect-model", "cli://inspect-provider", "timeout:7m0s", "retries:3", "Capabilities:", "Unavailable"}},
 				{len(domain.CanonicalModelScopes()) + len(domain.DefaultModelPresets()), []string{"PRESET DETAILS", "analyze-choice", "bug-choice", "code-choice"}},
 			} {
 				for s.SelectedIdx < selection.index {
 					s.HandleKey(KeyEvent{Key: "ArrowDown"})
 				}
 				var rendered strings.Builder
-				for range 8 {
+				for range 24 {
 					frame := s.Render(size[0], size[1])
 					rendered.WriteString(frame)
 					for _, row := range strings.Split(frame, "\n") {
@@ -46,7 +46,7 @@ func TestModelAndPresetDetailsRemainReachableWithoutDispatch(t *testing.T) {
 						t.Fatalf("detail %q inaccessible at %v (selection %d)", token, size, selection.index)
 					}
 				}
-				for range 8 {
+				for range 24 {
 					s.HandleKey(KeyEvent{Key: "PageUp"})
 				}
 				if s.DetailScroll != 0 || s.SelectedIdx != selection.index || s.ActivePresetID != originalPreset || s.AssignedScopeModelID("analyze") != "analyze" || len(s.PendingActions) != 0 {

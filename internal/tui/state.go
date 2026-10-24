@@ -37,6 +37,8 @@ const (
 	PageDiagrams       Page = "diagrams"
 	PageInstructions   Page = "instructions"
 	PageModels         Page = "models"
+	PageRoles          Page = "roles"
+	PageSkills         Page = "skills"
 	PageBootstrap      Page = "bootstrap"
 	PageLessons        Page = "lessons"
 )
@@ -76,6 +78,8 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	AgentSettings  *agentSettingsAction
+	WorkflowChoice *workflowChoice
 	AgentRun       *agentRunAction
 	Worktree       *WorktreeIntent
 	Source         ProjectIdentity
@@ -91,6 +95,7 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentSettings       *agentSettingsView
 	AgentRunSection     int
 	AgentRunPending     string
 	AgentDisclosure     *agentDisclosure
@@ -228,6 +233,8 @@ func HubTabs() []HubTab {
 			SubPages: []HubSubPage{
 				{Page: PageInstructions, Label: "Trust"},
 				{Page: PageModels, Label: "Models"},
+				{Page: PageRoles, Label: "Roles & Budgets"},
+				{Page: PageSkills, Label: "Skills"},
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
 			},
@@ -504,6 +511,8 @@ func (s *State) Navigate(page Page) {
 		s.RulesSection = "trust"
 	case PageModels:
 		s.RulesSection = "models"
+	case PageRoles, PageSkills:
+		s.RulesSection = string(page)
 	case PageBootstrap:
 		s.RulesSection = "bootstrap"
 	case PageLessons:
@@ -525,6 +534,10 @@ func (s *State) EffectivePage() Page {
 		switch s.RulesSection {
 		case "models":
 			return PageModels
+		case "roles":
+			return PageRoles
+		case "skills":
+			return PageSkills
 		case "bootstrap":
 			return PageBootstrap
 		case "lessons":
@@ -1054,7 +1067,7 @@ func (s *State) secondaryListLength() int {
 		return len(s.ChangeHistory)
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		return s.docsListLength()
-	case PageInstructions, PageModels, PageBootstrap, PageLessons:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageBootstrap, PageLessons:
 		return s.instructionsListLength()
 	default:
 		return 1
@@ -1120,6 +1133,8 @@ func (s *State) docsListLength() int {
 
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
+	case PageRoles, PageSkills:
+		return len(s.settingsRows())
 	case PageModels:
 		return len(domain.CanonicalModelScopes()) + len(s.AllModelPresets())
 	case PageBootstrap:

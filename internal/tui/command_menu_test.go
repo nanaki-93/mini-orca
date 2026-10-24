@@ -37,6 +37,17 @@ func TestCommandMenuSearchAndNavigationArePassive(t *testing.T) {
 	}
 }
 
+func TestCommandQuitAliasDoesNotSelectSettingsRequest(t *testing.T) {
+	for _, alias := range []string{"q", "exit", "quit"} {
+		s := NewState()
+		s.openCommandInput(alias)
+		s.HandleKey(KeyEvent{Key: "Enter"})
+		if !s.Quitting || len(s.PendingActions) != 0 {
+			t.Fatalf("%s selected an unrelated fuzzy match", alias)
+		}
+	}
+}
+
 func TestCommandShortcutWorksAcrossViewsWithoutDispatch(t *testing.T) {
 	for _, hub := range HubTabs() {
 		for _, page := range hub.SubPages {

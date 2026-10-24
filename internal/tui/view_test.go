@@ -70,7 +70,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
 		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageBootstrap, PageLessons,
+		PageInstructions, PageModels, PageRoles, PageSkills, PageBootstrap, PageLessons,
 	}
 	for _, p := range pages {
 		s.Navigate(p)

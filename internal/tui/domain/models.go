@@ -95,11 +95,11 @@ func CanonicalModelScopes() []string {
 func ScopeRoleDescription(scope string) string {
 	switch scope {
 	case "analyze":
-		return "Architecture, Security AI & Stage 3 Critic Review"
+		return "Architecture and Security AI; workflow roles are assigned in Roles & Budgets"
 	case "bug":
-		return "Semantic Bug Detection & Stage 1 Code Generation"
+		return "Semantic bug detection; workflow roles are assigned in Roles & Budgets"
 	case "function":
-		return "Fast Scoped Tasks & Stage 2 Test Generation"
+		return "Scoped tasks and investigation; workflow roles are assigned in Roles & Budgets"
 	default:
 		return "Scoped LLM Runtime"
 	}

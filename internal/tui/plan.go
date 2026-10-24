@@ -24,7 +24,18 @@ func (s *State) openTaskPlan(seed *ChangeSeed) {
 		return
 	}
 	s.cancelPlanInvestigation()
-	copy := *seed
+	copy := copyTaskPlanSeed(*seed)
+	copy.Paths = domain.EnsureChangeTestPaths(seed.Paths, nil)
+	if copy.Plan == nil {
+		copy.Plan = &ChangePlanInput{Problem: copy.Title, Approach: copy.Message}
+	}
+	s.PlanDraft = &PlanDraft{Source: ProjectIdentity{ProjectID: s.projectID(), ProjectRevision: s.projectRevision()}, Seed: copy}
+	s.Navigate(PagePlan)
+	s.CmdOutput = "Review the approach, scope and criteria. [e] Edit approach · [f] Files · [t] Criteria · [g] Approve & generate · [s] Save draft"
+}
+
+func copyTaskPlanSeed(seed ChangeSeed) ChangeSeed {
+	copy := seed
 	if seed.Plan != nil {
 		input := *seed.Plan
 		input.NonGoals = append([]string(nil), input.NonGoals...)
@@ -33,14 +44,10 @@ func (s *State) openTaskPlan(seed *ChangeSeed) {
 		input.Assumptions = append([]string(nil), input.Assumptions...)
 		copy.Plan = &input
 	}
-	copy.Paths = domain.EnsureChangeTestPaths(seed.Paths, nil)
+	copy.Paths = append([]string(nil), seed.Paths...)
 	copy.AcceptanceCriteria = append([]string(nil), seed.AcceptanceCriteria...)
-	if copy.Plan == nil {
-		copy.Plan = &ChangePlanInput{Problem: copy.Title, Approach: copy.Message}
-	}
-	s.PlanDraft = &PlanDraft{Source: ProjectIdentity{ProjectID: s.projectID(), ProjectRevision: s.projectRevision()}, Seed: copy}
-	s.Navigate(PagePlan)
-	s.CmdOutput = "Review the approach, scope and criteria. [e] Edit approach · [f] Files · [t] Criteria · [g] Approve & generate · [s] Save draft"
+	copy.FindingTargets = append([]FindingTarget(nil), seed.FindingTargets...)
+	return copy
 }
 
 func (s *State) openCurrentPlan() {
@@ -67,6 +74,10 @@ func (s *State) openCurrentPlan() {
 }
 
 func (s *State) submitTaskPlan(generate bool) {
+	s.submitTaskPlanChoice(generate, nil)
+}
+
+func (s *State) submitTaskPlanChoice(generate bool, approved *workflowChoice) {
 	d := s.PlanDraft
 	if d == nil || d.Submitted || d.InvestigationState == "running" {
 		return
@@ -89,8 +100,16 @@ func (s *State) submitTaskPlan(generate bool) {
 			return
 		}
 	}
-	seed := d.Seed
+	seed := copyTaskPlanSeed(d.Seed)
 	seed.Message = seed.Plan.Problem + "\nApproved approach: " + seed.Plan.Approach
+	var choice *workflowChoice
+	if generate {
+		var ok bool
+		choice, ok = s.approveWorkflowChoice(&seed, d.Saved, approved, func(state *State, choice *workflowChoice) { state.submitTaskPlanChoice(true, choice) })
+		if !ok {
+			return
+		}
+	}
 	previewID := s.startLocalAgentPreview(&seed)
 	d.Submitted, d.PreviewID = true, previewID
 	kind := "save-plan"
@@ -101,7 +120,7 @@ func (s *State) submitTaskPlan(generate bool) {
 		s.Change.Workflow = nil
 		s.Change.State = "draft"
 	}
-	s.enqueueAction(ActionRequest{Kind: kind, PreviewID: previewID, Seed: &seed, Source: d.Source, ExistingChange: d.Saved})
+	s.enqueueAction(ActionRequest{Kind: kind, PreviewID: previewID, Seed: &seed, Source: d.Source, ExistingChange: d.Saved, WorkflowChoice: choice})
 	s.CmdOutput = "Saving the captured plan..."
 	if generate {
 		s.CmdOutput = "Approved approach; preparing code generation and verification..."
@@ -114,6 +133,9 @@ func validatePlanDraft(d *PlanDraft) error {
 	}
 	if len(d.Seed.Paths) == 0 || len(d.Seed.Paths) > 8 {
 		return fmt.Errorf("choose 1–8 write paths, including tests, with :scope path; path. Split larger tasks explicitly")
+	}
+	if len(d.Seed.Plan.ReadPaths) > 8 {
+		return fmt.Errorf("choose at most 8 read-only context paths")
 	}
 	if len(d.Seed.AcceptanceCriteria) == 0 {
 		return fmt.Errorf("describe success with :criteria expected behavior; boundary case")

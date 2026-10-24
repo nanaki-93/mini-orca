@@ -665,6 +665,14 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 after Tab: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageRoles || s.RulesSection != "roles" {
+		t.Fatalf("Section 5 role settings: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageSkills || s.RulesSection != "skills" {
+		t.Fatalf("Section 5 skill settings: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageBootstrap || s.RulesSection != "bootstrap" {
 		t.Fatalf("Section 5 after second Tab: page=%s section=%s", s.Page, s.RulesSection)
 	}
@@ -916,7 +924,7 @@ func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
 	}
 
 	// Verify workflowModelsPayload passes discovered catalog model ID to daemon
-	wfModels, confirmed := s.workflowModelsPayload()
+	wfModels, confirmed := s.workflowModelsPayload("")
 	if wfModels["create"] != "agy:gemini-2.5-pro" || !domain.ContainsString(confirmed, "agy:gemini-2.5-pro") {
 		t.Fatalf("expected workflowModelsPayload to include agy:gemini-2.5-pro, got models=%v confirmed=%v", wfModels, confirmed)
 	}
@@ -1036,14 +1044,15 @@ func TestStaleSessionSkippingErrorClearingAndPausedAnalysisResume(t *testing.T) 
 		t.Fatalf("expected Navigate to clear stale s.Error, got %q", s.Error)
 	}
 
-	// 3. A stale plan fails once and requires fresh user review.
+	// 3. A stale checkout cannot reuse loaded settings or dispatch a proposal.
 	s.Project.ProjectRevision = "rev-stale-local"
 	s.HandleKey(KeyEvent{Key: "Enter"})
-	approveTaskPlanForTest(t, s)
+	s.ExecuteCommand(":generate")
 	s.FlushActions(context.Background(), cli)
-	if openChangeAttempts != 1 || s.Change != nil || s.Error == "" {
+	if openChangeAttempts != 0 || s.Change != nil || s.Error == "" {
 		t.Fatalf("stale approval was retried: attempts=%d change=%+v err=%q", openChangeAttempts, s.Change, s.Error)
 	}
+	s.Project = nil
 	if err := s.SyncFromDaemon(context.Background(), cli, ""); err != nil {
 		t.Fatal(err)
 	}

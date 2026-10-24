@@ -61,6 +61,9 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 }
 
 func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if s.dispatchSettingsAction(ctx, cl, act) {
+		return nil
+	}
 	if act.Kind == "agent-run" {
 		if s.acceptsAgentRunAction(act.AgentRun) {
 			s.applyAgentRunAction(executeAgentRunAction(ctx, cl, *act.AgentRun))
@@ -477,24 +480,6 @@ func (s *State) dispatchCancelWorkflow(ctx context.Context, cl *Client, reqID, s
 	return nil
 }
 
-func (s *State) workflowModelsPayload() (map[string]string, []string) {
-	createSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("bug"), "bug")
-	testSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("function"), "function")
-	reviewSel := s.resolveDaemonModelSelection(s.AssignedScopeModelID("analyze"), "analyze")
-	models := map[string]string{
-		"create": createSel,
-		"test":   testSel,
-		"review": reviewSel,
-	}
-	confirmed := []string{"analyze", "bug", "function"}
-	for _, sel := range []string{createSel, testSel, reviewSel} {
-		if !domain.ContainsString(confirmed, sel) {
-			confirmed = append(confirmed, sel)
-		}
-	}
-	return models, confirmed
-}
-
 func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) string {
 	switch candidate {
 	case "analyze", "bug", "function":
@@ -563,7 +548,11 @@ func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAge
 		s.rejectPlanSubmission(act, "Review a scope of 1–8 files including tests before generation.")
 		return startAgentTask{}, false
 	}
-	modelsMap, confirmedProfiles := s.workflowModelsPayload()
+	modelsMap, confirmedProfiles, err := s.startWorkflowModels(act)
+	if err != nil {
+		s.rejectPlanSubmission(act, err.Error())
+		return startAgentTask{}, false
+	}
 	root := s.Project.Path
 	if root == "" && s.Repository != nil {
 		root = s.Repository.Root
@@ -1311,7 +1300,16 @@ func (s *State) prepareChangeActionTask(reqID string, act ActionRequest) (change
 	}
 	prev := cloneChangeSessionSnapshot(s.Change)
 	projID, projRev := s.changeProjectIdentity(s.Change)
-	modelsMap, confirmedProfiles := s.workflowModelsPayload()
+	modelsMap, _ := s.workflowModelsPayload(s.Change.WorktreePath)
+	var confirmedProfiles []string
+	if act.Kind == "repair-change" {
+		var err error
+		modelsMap, confirmedProfiles, err = s.queuedWorkflowModels(act, s.Change)
+		if err != nil {
+			s.Error = err.Error()
+			return changeActionTask{}, false
+		}
+	}
 	seed := s.buildSeedFromCurrentChange()
 	msg := resolveRepairWorkflowMessage(act.Message, seed, s.Change)
 	fallback, hasFallback := s.prepareFallbackStartTask(reqID+"-refresh", s.Change.ID, seed, modelsMap, confirmedProfiles)

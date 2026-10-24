@@ -133,6 +133,19 @@ Model lists show assignments and access boundaries; full parameters and preset
 routing belong to the selected item's scrollable details. Worktree details show
 the recovery action for the current state rather than every possible workflow.
 
+Keep Models, Roles & Budgets, and Skills as separate Settings lists. Show the
+selected checkout path, settings version and configured/overridden/stale state.
+The main checkout and selected task worktree have separate overrides. Navigation
+and selection remain passive; explicit refresh reads only local settings.
+Budget and role edits and skill enablement require a scoped confirmation, affect
+future runs, and preserve active runs' captured settings. Skill validation reports
+captured metadata and hashes without execution or tool grants. Required tools
+are declarations; availability is checked for each invocation. Preserve the
+selected skill by directory across refreshes. Canceling a save leaves its outcome
+unknown until refresh. Display stale and unavailable states without inventing
+defaults. Provider confirmation identifies selected workflow models, destinations
+and captured paths; changed routing, settings or task input invalidates consent.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

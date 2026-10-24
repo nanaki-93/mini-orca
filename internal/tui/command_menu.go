@@ -39,6 +39,14 @@ func commandCatalog() []commandItem {
 		}
 	}
 	return append(items,
+		commandItem{command: "agent-settings", title: "Select settings checkout", hint: "agent-settings main or task · Load local settings for the main checkout or selected task worktree.", argument: true},
+		commandItem{command: "settings-refresh", title: "Refresh agent settings", hint: "Read local saved settings; no provider discovery."},
+		commandItem{command: "settings-cancel", title: "Cancel settings request", hint: "Refresh afterward to confirm whether a save completed."},
+		commandItem{command: "settings-reset", title: "Restore configured agent defaults", hint: "Confirm reset for future runs in the selected checkout."},
+		commandItem{command: "agent-role", title: "Assign a workflow role", hint: "agent-role creation|testing|review analyze|bug|function · Confirm future-run scope assignment.", argument: true},
+		commandItem{command: "agent-budget", title: "Edit an agent budget", hint: "agent-budget <name> <integer> · Must fit the configured ceiling.", argument: true},
+		commandItem{command: "skill-validate", title: "Validate selected skill", hint: "Read captured package metadata and hashes; grants no tools or execution."},
+		commandItem{command: "skill-toggle", title: "Enable or disable selected skill", hint: "Confirm a future-run change in the selected checkout."},
 		commandItem{command: "execution", title: "Inspect task execution", hint: "Open recorded stages and execution detail. No model work starts."},
 		commandItem{command: "run-output", title: "Disclose private invocation output", hint: "run-output <ID> · Read bounded model text and redacted tool records from Timeline.", argument: true},
 		commandItem{command: "hide-output", title: "Hide private invocation output", hint: "Close the private disclosure and stop its refresh."},
@@ -70,6 +78,12 @@ func (s *State) commandMatches() []commandItem {
 		return nil
 	}
 	query := strings.ToLower(strings.TrimSpace(s.CmdInput))
+	switch query {
+	case "q", "exit":
+		query = "quit"
+	case "help":
+		query = "keys"
+	}
 	var items []commandItem
 	for _, item := range commandCatalog() {
 		text := strings.ToLower(item.command + " " + item.title)

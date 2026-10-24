@@ -270,6 +270,18 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"x", "Reset scope"}, {"r", "Refresh models"}},
 		commands:  []keyDesc{{":model <s> <id>", "Set model"}, {":preset <id>", "Apply preset"}},
 	},
+	PageRoles: {
+		title:     "[5] SETTINGS · ROLES & BUDGETS",
+		primary:   []keyDesc{{"Enter / e", "Edit selected setting"}, {"r", "Refresh local settings"}},
+		secondary: []keyDesc{{"o", "Select checkout"}, {"x", "Cancel request; refresh outcome"}},
+		commands:  []keyDesc{{":agent-role", "Assign model scope"}, {":agent-budget", "Reduce a budget"}, {":settings-reset", "Confirm restore defaults"}},
+	},
+	PageSkills: {
+		title:     "[5] SETTINGS · SKILLS",
+		primary:   []keyDesc{{"Enter / v", "Validate selected skill"}, {"e", "Confirm enable or disable"}},
+		secondary: []keyDesc{{"r", "Refresh local settings"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
+		commands:  []keyDesc{{":skill-validate", "Validate captured files"}, {":skill-toggle", "Enable or disable"}, {":agent-settings", "Select main or task checkout"}},
+	},
 	PageBootstrap: {
 		title:     "PROJECT SETUP",
 		primary:   []keyDesc{{"Enter / b", "Bootstrap pillar"}, {"t", "Toggle trust"}},

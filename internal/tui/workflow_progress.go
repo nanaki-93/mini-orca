@@ -67,6 +67,5 @@ func (s *State) execRetryCommand(arg string) {
 		s.Error = "Use :retry create, :retry test or :retry review."
 		return
 	}
-	s.enqueueAction(ActionRequest{Kind: "repair-change", Target: s.Change.ID, ResumeFrom: from})
-	s.CmdOutput = "Retrying from " + from + " with the captured plan and current evidence."
+	s.queueWorkflowRetry(ActionRequest{Kind: "repair-change", Target: s.Change.ID, ResumeFrom: from}, nil)
 }

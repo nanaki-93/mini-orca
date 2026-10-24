@@ -395,8 +395,7 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	}
 	passed, total := domain.CountPassedChecks(s.Change.Checks)
 	if (total > 0 && passed < total) || s.isWorkflowFailedOrInterrupted() {
-		s.CmdOutput = "Triggering agent self-repair..."
-		s.enqueueAction(ActionRequest{Kind: "repair-change", Target: s.Change.ID})
+		s.queueWorkflowRetry(ActionRequest{Kind: "repair-change", Target: s.Change.ID}, nil)
 		return
 	}
 	if s.Change.Workflow != nil && s.Change.Workflow.Status == "changes_requested" {

@@ -701,7 +701,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 25B — Add professional role, budget and skill settings views
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/client/agent_settings.go`, `internal/tui/client/agent_settings_test.go`, `internal/tui/agent_settings.go`, `internal/tui/agent_settings_test.go`, `internal/tui/agent_settings_commands.go`, `internal/tui/agent_settings_actions.go` — **new**, wire contracts, compact lists, selected-item details and explicit controls.

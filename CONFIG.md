@@ -272,6 +272,25 @@ Explicit request model choices and TUI model presets remain authoritative.
 Changing operator configuration makes saved overrides stale and requires an
 explicit reset before new work; reset follows current configuration defaults.
 
+In the TUI, Settings has separate Models, Roles & Budgets, and Skills views.
+Use `:agent-settings main` or `:agent-settings task` to explicitly load the main
+checkout or selected task worktree. Opening the views is passive; settings refresh
+reads local metadata without provider discovery. `:agent-role creation function`
+assigns a workflow role; `:agent-budget model_calls 12` reduces a budget within its
+configured ceiling. Both require confirmation before saving. Select a skill and
+press Enter to validate its captured metadata and resource hashes, or `e` to
+confirm enablement/disablement. Validation grants no tools or execution authority.
+Use `:settings-reset` to confirm restoration of configured defaults.
+
+Each checkout has its own settings. New task worktrees use configured budgets and
+skills until explicitly edited. For new tasks, the TUI turns the main checkout's
+role assignments and current model presets into explicit workflow model choices.
+For an existing task worktree, load that task's settings before generating or
+retrying. Remote workflow confirmation lists the selected role destinations and
+captured paths; changing either invalidates that confirmation. Unknown model
+metadata supplies no remote consent. Canceling a settings request may race a
+completed save: refresh to establish the stored outcome.
+
 ### Scoped project skills
 
 `agent_runtime.skills` is an explicit list of project-relative skill directories;

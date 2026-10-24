@@ -268,6 +268,7 @@ func (s *State) loadAuxResources(ctx context.Context, client *Client, idQuery, r
 		s.Scan = &scan
 	}
 	_ = s.RefreshModels(ctx, client)
+	s.loadAgentSettings(ctx, client)
 	s.loadAnalysisSectionResults(ctx, client)
 }
 

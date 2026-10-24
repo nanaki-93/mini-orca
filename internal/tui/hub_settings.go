@@ -246,6 +246,9 @@ func (s *State) renderSelectedFileStageInspector(th ansiTheme, panelW int, path 
 }
 
 func (s *State) renderGovernanceSubPage(th ansiTheme, width int) []string {
+	if s.EffectivePage() == PageRoles || s.EffectivePage() == PageSkills {
+		return s.renderAgentSettings(th, width)
+	}
 	section := s.RulesSection
 	switch s.Page {
 	case PageModels:
@@ -284,27 +287,24 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
+	modelWidth := max(8, min(26, width-32))
 	lines := renderPageHeader(th, "MODELS", "[↑/↓] Select · [←/→] Change model · [Enter] Apply preset")
-	lines = append(lines, th.renderTableHeader("   SCOPE         MODEL                        ACCESS", width)...)
+	lines = append(lines, th.renderTableHeader(fmt.Sprintf("   %-12s  %-*s  ACCESS", "SCOPE", modelWidth, "MODEL"), width)...)
 	selected := s.ClampedIdx()
 	scopes := domain.CanonicalModelScopes()
 	for idx, scope := range scopes {
 		cursor := th.renderCursorPrefix(idx == selected)
-		eff := s.EffectiveScopeModel(scope)
+		eff, boundary := s.settingsModelDisplay(scope)
 		assigned := s.AssignedScopeModelID(scope)
 		modelLabel := client.FirstNonEmpty(eff.Model, assigned)
 		if assigned != scope && assigned != eff.Model {
 			modelLabel = fmt.Sprintf("%s (%s)", assigned, eff.Model)
 		}
-		boundary := "LOCAL"
-		if eff.RemoteProvider {
-			boundary = "REMOTE"
-		}
 		tStyle := rowTitleStyle(th, idx == selected)
 		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-12s%s  %-26s  %s",
+			"  %s%s%-12s%s  %-*s  %s",
 			cursor, tStyle, strings.ToUpper(scope), th.reset,
-			theme.TruncatePlain(modelLabel, 26), th.padBadge(boundary, 9),
+			modelWidth, theme.TruncatePlain(settingsText(modelLabel), modelWidth), th.padBadge(boundary, 9),
 		))
 	}
 	lines = append(lines, "")
@@ -337,12 +337,8 @@ func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string 
 		}
 	}
 	selScope := s.selectedModelScope()
-	eff := s.EffectiveScopeModel(selScope)
+	eff, boundary := s.settingsModelDisplay(selScope)
 	assigned := s.AssignedScopeModelID(selScope)
-	boundary := "LOCAL"
-	if eff.RemoteProvider {
-		boundary = "REMOTE"
-	}
 	choices := s.AvailableModelIDs()
 	piStatus, agyStatus := "idle", "idle"
 	if s.AvailableModels != nil {
@@ -354,11 +350,16 @@ func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string 
 		}
 	}
 	contentW := issuePanelContentWidth(panelW)
+	parameters := "unavailable"
+	if boundary != "UNAVAILABLE" {
+		parameters = domain.FormatModelParams(eff)
+	}
 	body := renderDiagnosticRow(th, th.cyan, "Role:", th.fg, domain.ScopeRoleDescription(selScope), contentW)
 	body = append(body, renderDiagnosticRow(th, th.cyan, "Assignment:", th.fg, assigned, contentW)...)
 	body = append(body, renderDiagnosticRow(th, th.cyan, "Model:", th.fg, client.FirstNonEmpty(eff.Model, assigned), contentW)...)
 	body = append(body, renderDiagnosticRow(th, th.cyan, "Provider:", th.fg, client.FirstNonEmpty(eff.ProviderOrigin, "unavailable"), contentW)...)
-	body = append(body, renderDiagnosticRow(th, th.cyan, "Parameters:", th.fg, domain.FormatModelParams(eff), contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Parameters:", th.fg, parameters, contentW)...)
+	body = append(body, renderDiagnosticRow(th, th.cyan, "Capabilities:", th.fg, modelCapabilitySummary(eff.Capabilities), contentW)...)
 	body = append(body, renderDiagnosticRow(th, th.cyan, "Discovery:", th.fg, fmt.Sprintf("Pi(%s) Agy(%s) · %d choices", piStatus, agyStatus, len(choices)), contentW)...)
 	return th.renderPanelBox("MODEL DETAILS", strings.ToUpper(selScope)+" · "+boundary, panelW, body)
 }

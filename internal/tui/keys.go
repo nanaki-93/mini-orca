@@ -930,7 +930,7 @@ func (s *State) moveEditorDiffSelection(delta int) {
 }
 
 func isGovernancePage(p Page) bool {
-	return p == PageInstructions || p == PageModels || p == PageBootstrap || p == PageLessons
+	return p == PageInstructions || p == PageModels || p == PageRoles || p == PageSkills || p == PageBootstrap || p == PageLessons
 }
 
 func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
@@ -941,6 +941,9 @@ func (s *State) handleRulesAndOverviewKey(ev KeyEvent) bool {
 }
 
 func (s *State) handleGovernanceKey(key string) bool {
+	if s.EffectivePage() == PageRoles || s.EffectivePage() == PageSkills {
+		return s.handleAgentSettingsKey(key)
+	}
 	if s.EffectivePage() == PageModels && s.handleModelsPageKey(key) {
 		return true
 	}
