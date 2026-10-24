@@ -1034,7 +1034,7 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/app/agentstate/mission_integrations.go`, `internal/app/agentstate/mission_integrations_test.go` — **new**.
 - `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agent_mission_scheduler.go`, `internal/app/agent_mission_scheduler_test.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`, `internal/app/agent_mission.go`.
-- `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
+- `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/project_lifecycle.go`, `internal/app/agent_runs.go`.
 - `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
@@ -1045,6 +1045,7 @@ This is an implementation specification, not a claim that the features below alr
 - Persist merge intent before Git effects. Archive the complete checked proposal and provenance as protected private evidence before cleanup, and retain its exact artifact reference in the execution receipt. Ordinary Git routes must not bypass mission integration admission or erase owned evidence.
 - Preserve the original approved mission and initial base. Record a separate current integration checkpoint with the resulting base, project revision, source hashes and instruction bindings. Only the approved child changes may advance that checkpoint; subsequent children use those observed bindings without changing their fixed allocations or the original plan hash.
 - Publish the verified resulting checkpoint before releasing dependencies or removing worktrees. Reconcile interrupted merges and cleanup from exact commit ancestry, tree/source evidence and retained intent; missing worktrees alone never prove success. Report conflicts, unavailable evidence, partial persistence and cleanup failures honestly. Never retry uncertain Git effects automatically.
+- Keep cleanup cancelable across the integration's own post-merge reindex. Persist an already observed merge after cancellation, retain its checkout for explicit later cleanup, and preserve normal cancellation of mission waves on project reindex.
 - Version the execution schema deliberately and retain older prepared, active and completed child records. Cover serial dependency execution through explicit integration, out-of-order/foreign/stale requests, mutation races, persistence failures, restart and retained evidence after cleanup.
 
 **Verification command**
