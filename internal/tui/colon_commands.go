@@ -130,7 +130,7 @@ func (s *State) activateSecondaryRow() {
 			s.Navigate(PageEditor)
 			s.enqueueAction(ActionRequest{Kind: "load-change", Target: entry.ID})
 		}
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageBootstrap, PageLessons:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageBootstrap, PageLessons:
 		s.activateInstructionsRow()
 	}
 }
@@ -156,6 +156,8 @@ func (s *State) activateAnalysisRunRow() {
 
 func (s *State) activateInstructionsRow() {
 	switch s.EffectivePage() {
+	case PageConnections:
+		s.confirmConnectionControl("discover")
 	case PageRoles, PageSkills:
 		s.activateAgentSettingsRow()
 	case PageModels:
@@ -206,7 +208,7 @@ func (s *State) ExecuteCommand(raw string) {
 	cmd := strings.ToLower(fields[0])
 	arg := strings.TrimSpace(strings.TrimPrefix(trimmed, fields[0]))
 
-	if s.execAgentSettingsCommand(cmd, arg) || s.execAgentRunCommand(cmd, arg) || s.execPlanCommand(cmd, arg) || s.execSystemCommand(cmd, arg) || s.execAnalysisCommand(cmd, arg) || s.execMutationCommand(cmd, arg) || s.execNavigationCommand(cmd, arg) {
+	if s.execConnectionCommand(cmd, arg) || s.execAgentSettingsCommand(cmd, arg) || s.execAgentRunCommand(cmd, arg) || s.execPlanCommand(cmd, arg) || s.execSystemCommand(cmd, arg) || s.execAnalysisCommand(cmd, arg) || s.execMutationCommand(cmd, arg) || s.execNavigationCommand(cmd, arg) {
 		return
 	}
 	s.CmdOutput = fmt.Sprintf("Unknown command %q. Type \":keys\" or \"help\" for available commands.", trimmed)

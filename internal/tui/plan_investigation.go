@@ -18,9 +18,10 @@ func planDraftFingerprint(d *PlanDraft) string {
 		return ""
 	}
 	data, _ := json.Marshal(struct {
-		Source ProjectIdentity
-		Seed   ChangeSeed
-	}{d.Source, d.Seed})
+		Source      ProjectIdentity
+		Seed        ChangeSeed
+		Connections []planConnectionIdentity
+	}{d.Source, d.Seed, planConnectionIdentities(d)})
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
@@ -67,35 +68,25 @@ func (s *State) startPlanInvestigation(confirmed bool) {
 		return
 	}
 	fingerprint := planDraftFingerprint(d)
-	if model.RemoteProvider && !confirmed {
-		s.Confirmation = &Confirmation{Title: "Investigate with remote provider", AcceptLabel: "Investigate", Message: fmt.Sprintf("Send this plan, its selected read/write sources and applicable AGENTS.md guides to %s at %s. The result is a suggestion for review. Source remains read-only.", model.Model, model.ProviderOrigin), OnConfirm: func(state *State) {
-			if planDraftFingerprint(state.PlanDraft) != fingerprint {
-				state.Error = "Plan changed. Review the current scope before investigation."
-				return
-			}
-			state.startPlanInvestigation(true)
-		}}
+	consentFingerprint, approved := s.approvePlanInvestigation(d, model, confirmed)
+	if !approved {
 		return
 	}
-	data, err := json.Marshal(d.Seed)
+	uses, scope, err := s.planConnectionUses(d)
 	if err != nil {
 		s.Error = err.Error()
 		return
 	}
-	var seed ChangeSeed
-	if err := json.Unmarshal(data, &seed); err != nil {
-		s.Error = err.Error()
-		return
-	}
+	seed := copyTaskPlanSeed(d.Seed)
 	d.InvestigationID = nextTUIReqID("investigation")
 	d.InvestigationInput = fingerprint
 	d.InvestigationState = "running"
 	d.Investigation = nil
 	consent := "local"
-	if confirmed {
+	if confirmed && model.RemoteProvider {
 		consent = "remote-confirmed"
 	}
-	s.enqueueAction(ActionRequest{Kind: "investigate-plan", PreviewID: d.InvestigationID, Source: d.Source, Seed: &seed, Target: consent})
+	s.enqueueAction(ActionRequest{Kind: "investigate-plan", PreviewID: d.InvestigationID, Source: d.Source, Seed: &seed, Target: consent, Integrations: uses, IntegrationScope: scope, InvestigationConsent: consentFingerprint})
 	s.CmdOutput = "Investigating selected source. Draft retained; [x] cancels the request."
 }
 
@@ -188,6 +179,10 @@ func (s *State) preparePlanInvestigationTask(action ActionRequest) (planInvestig
 		return planInvestigationTask{}, false
 	}
 	task := planInvestigationTask{action: action, fingerprint: d.InvestigationInput}
+	if err := s.investigationActionCurrent(action); err != nil {
+		d.InvestigationState, s.Error = "stale", err.Error()
+		return task, false
+	}
 	if action.Seed.WorktreePath == "" {
 		if s.Index == nil || s.Index.ProjectIdentity != action.Source {
 			d.InvestigationState = "failed"
@@ -212,7 +207,11 @@ func executePlanInvestigation(ctx context.Context, cl *Client, task planInvestig
 		}
 	}
 	seed := task.action.Seed
-	request := PlanInvestigationRequest{ProjectIdentity: index.ProjectIdentity, Plan: *seed.Plan, Paths: slices.Clone(seed.Paths), AcceptanceCriteria: slices.Clone(seed.AcceptanceCriteria), ConfirmRemoteProvider: task.action.Target == "remote-confirmed"}
+	if connectionScope := task.action.IntegrationScope; connectionScope != nil && (connectionScope.ProjectIdentity != index.ProjectIdentity || connectionScope.WorktreePath != seed.WorktreePath) {
+		result.err = fmt.Errorf("investigation index no longer matches the approved connection checkout")
+		return result
+	}
+	request := PlanInvestigationRequest{ProjectIdentity: index.ProjectIdentity, Plan: *seed.Plan, Paths: slices.Clone(seed.Paths), AcceptanceCriteria: slices.Clone(seed.AcceptanceCriteria), ConfirmRemoteProvider: task.action.Target == "remote-confirmed", Integrations: slices.Clone(task.action.Integrations)}
 	for _, path := range append(slices.Clone(seed.Paths), seed.Plan.ReadPaths...) {
 		source := PlanInvestigationSource{Path: path}
 		for _, file := range index.Files {
@@ -256,14 +255,18 @@ func (s *State) applyPlanInvestigation(result planInvestigationResult) {
 }
 
 func (s *State) renderInvestigationSuggestions(th ansiTheme, width int) []string {
+	var rows []string
+	if summary := planConnectionSummary(s.PlanDraft); summary != "" {
+		rows = append(rows, "", th.muted+settingsText(summary)+th.reset)
+	}
 	result := s.currentPlanInvestigation()
 	if result == nil {
-		return nil
+		return rows
 	}
 	if s.PlanDraft.InvestigationState == "accepted" && s.DetailSection != 2 {
-		return nil
+		return rows
 	}
-	rows := []string{"", th.muted + "Investigation · model suggestions" + th.reset}
+	rows = append(rows, "", th.muted+"Investigation · model suggestions"+th.reset)
 	switch s.DetailSection {
 	case 1:
 		return append(rows, renderPlanCitations(th, result.Evidence, result.Assumptions, width)...)

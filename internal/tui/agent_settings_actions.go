@@ -51,13 +51,17 @@ func (s *State) dispatchSettingsAction(ctx context.Context, cl *Client, action A
 }
 
 func (s *State) settingsScopeCurrent(view *agentSettingsView) bool {
-	if view == nil || s.Project == nil || view.Parent != s.Project.ProjectIdentity {
+	return view != nil && s.checkoutScopeCurrent(view.Parent, view.Scope, view.Path)
+}
+
+func (s *State) checkoutScopeCurrent(parent ProjectIdentity, scope client.AgentSettingsScope, path string) bool {
+	if s.Project == nil || parent != s.Project.ProjectIdentity {
 		return false
 	}
-	if view.Scope.WorktreePath == "" {
-		return view.Scope.ProjectIdentity == s.Project.ProjectIdentity && view.Path == s.Project.Path
+	if scope.WorktreePath == "" {
+		return scope.ProjectIdentity == s.Project.ProjectIdentity && path == s.Project.Path
 	}
-	return s.Change != nil && s.Change.WorktreePath == view.Scope.WorktreePath && s.Change.ProjectIdentity == view.Scope.ProjectIdentity
+	return s.Change != nil && s.Change.WorktreePath == scope.WorktreePath && s.Change.ProjectIdentity == scope.ProjectIdentity
 }
 
 func (s *State) acceptsSettingsAction(action *agentSettingsAction) bool {

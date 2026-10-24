@@ -133,8 +133,8 @@ func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 	active := s.ActiveHub()
-	subPages := s.renderSidebarSubPages(th, active, width)
 	models := s.renderSidebarModels(th, width)
+	subPages := s.renderSidebarSubPages(th, active, width, rows-len(HubTabs())-len(models))
 	roomy := rows >= len(HubTabs())+len(subPages)+len(models)+5
 	var lines []string
 	if roomy {
@@ -180,19 +180,36 @@ func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
 	return lines
 }
 
-func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width int) []string {
+func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width, availableRows int) []string {
 	curPage := parentPage(s.EffectivePage())
-	var out []string
+	var pages []HubSubPage
+	selected := 0
 	for _, sp := range tab.SubPages {
 		if sp.Page == PageIssueDetail {
 			continue
 		}
+		if sp.Page == curPage {
+			selected = len(pages)
+		}
+		pages = append(pages, sp)
+	}
+	limit := max(1, availableRows)
+	more := len(pages) > limit && limit > 1
+	if more {
+		limit--
+	}
+	start, end := windowBounds(len(pages), selected, limit)
+	var out []string
+	for _, sp := range pages[start:end] {
 		label := theme.TruncatePlain(sp.Label, width-8)
 		if sp.Page == curPage {
 			out = append(out, theme.PaintLine(th.selection, th.hubColor(tab.Key), "    ▸ "+label, width))
 		} else {
 			out = append(out, "      "+th.muted+label+th.reset)
 		}
+	}
+	if more {
+		out = append(out, "    "+th.muted+"Tab · more views"+th.reset)
 	}
 	return out
 }

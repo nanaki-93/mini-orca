@@ -725,7 +725,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 25C — Connect scoped integrations through explicit TUI controls
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go`, `internal/tui/agent_connections.go`, `internal/tui/agent_connections_test.go`, `internal/tui/agent_connections_actions.go`, `internal/tui/agent_connections_commands.go` — **new**, MCP/OpenAPI/outbound A2A/inbound principal inventory and guarded controls.

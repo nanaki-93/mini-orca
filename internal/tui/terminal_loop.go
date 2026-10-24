@@ -156,6 +156,8 @@ type agentRunActionResultMsg struct{ result agentRunActionResult }
 
 type agentSettingsResultMsg struct{ result agentSettingsResult }
 
+type agentConnectionResultMsg struct{ result agentConnectionResult }
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -220,7 +222,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg:
+	case agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -244,6 +246,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case agentConnectionResultMsg:
+		m.state.applyConnectionResult(ev.result)
 	case agentSettingsResultMsg:
 		m.state.applyAgentSettings(ev.result)
 	case agentRunActionResultMsg:
@@ -301,6 +305,14 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
+	case "agent-connection":
+		if !m.state.acceptsConnectionAction(act.AgentConnection) {
+			return nil, true
+		}
+		action := *act.AgentConnection
+		return func() tea.Msg {
+			return agentConnectionResultMsg{result: executeConnectionAction(m.ctx, m.client, action)}
+		}, true
 	case "agent-settings":
 		if !m.state.acceptsSettingsAction(act.AgentSettings) {
 			return nil, true

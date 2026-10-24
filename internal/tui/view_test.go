@@ -70,7 +70,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
 		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
 		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageRoles, PageSkills, PageBootstrap, PageLessons,
+		PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageBootstrap, PageLessons,
 	}
 	for _, p := range pages {
 		s.Navigate(p)
@@ -915,6 +915,24 @@ func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 	s.ScopeModels["function"] = "chosen-model"
 	if frame := s.Render(120, 24); !strings.Contains(frame, "chosen-model") || !strings.Contains(frame, "unavailable") {
 		t.Fatal("sidebar lost assigned model or missing-model state")
+	}
+}
+
+func TestLongSettingsSidebarFollowsSelectedView(t *testing.T) {
+	s := NewState()
+	for _, view := range HubTabs()[4].SubPages {
+		s.Navigate(view.Page)
+		frame := s.Render(120, 20)
+		var sidebar strings.Builder
+		for _, row := range strings.Split(frame, "\n")[3:17] {
+			sidebar.WriteString(theme.TruncateVisible(row, sidebarMenuWidth))
+		}
+		if !strings.Contains(sidebar.String(), "▸ "+view.Label) || !strings.Contains(sidebar.String(), "Tab · more views") {
+			t.Fatalf("sidebar hid selected settings view %s", view.Page)
+		}
+		if len(s.PendingActions) != 0 {
+			t.Fatal("sidebar selection dispatched work")
+		}
 	}
 }
 

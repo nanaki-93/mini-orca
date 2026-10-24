@@ -282,6 +282,12 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"r", "Refresh local settings"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":skill-validate", "Validate captured files"}, {":skill-toggle", "Enable or disable"}, {":agent-settings", "Select main or task checkout"}},
 	},
+	PageConnections: {
+		title:     "[5] SETTINGS · CONNECTIONS",
+		primary:   []keyDesc{{"Enter / c", "Confirm discovery or incoming grant"}, {"d", "Confirm revoke"}},
+		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
+		commands:  []keyDesc{{":connection-scope", "Select main or task checkout"}, {":connection-use", "Toggle selected plan tool grant"}, {":connections-clear", "Clear plan tool selections"}},
+	},
 	PageBootstrap: {
 		title:     "PROJECT SETUP",
 		primary:   []keyDesc{{"Enter / b", "Bootstrap pillar"}, {"t", "Toggle trust"}},

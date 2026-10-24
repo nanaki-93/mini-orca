@@ -1666,6 +1666,7 @@ components:
         reports: {type: array, items: {$ref: '#/components/schemas/ResearchReport'}}
     IntegrationUse:
       type: object
+      description: Ephemeral consent for one admitted investigation or explanation. A saved plan, discovered inventory, incoming principal grant or remote-agent connection does not inherit this source-sharing authority.
       additionalProperties: false
       required: [id, grant, schema_fingerprint, confirm_source_sharing]
       properties:

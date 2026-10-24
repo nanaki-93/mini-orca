@@ -1306,6 +1306,21 @@ verified source evidence. Reindex, project replacement, revoke and restart
 invalidate grants. The configuration reference documents transport, schema,
 process and size limits.
 
+The TUI's Settings / Connections view loads these inventories locally and keeps
+main-checkout and selected-task-worktree grants separate. Discovery, incoming
+access grants and revocation require explicit confirmation; browsing and refresh
+do not contact external destinations or launch processes. A partial inventory
+failure preserves the other connection kinds. Canceled or failed control requests
+require local refresh to establish the actual grant outcome before reuse.
+
+An editable task plan may select at most two ready MCP/API connections. These
+selections are ephemeral and are not saved in proposals or inherited by new
+worktrees. Investigation separately confirms provider destinations, connection
+destinations and the captured source paths. Changed routing, inventory, grant,
+checkout or plan input invalidates consent before dispatch. Expired grants and
+adapters without advertised tool support are rejected; incoming access and remote
+agent discovery never become investigation tool permissions.
+
 ### Curated API tools and external action receipts
 
 GET `/api/projects/current/apis` requires `project_id` and `project_revision` and

@@ -146,6 +146,24 @@ unknown until refresh. Display stale and unavailable states without inventing
 defaults. Provider confirmation identifies selected workflow models, destinations
 and captured paths; changed routing, settings or task input invalidates consent.
 
+Connections uses one compact list with explicit MCP, OpenAPI, A2A outbound and
+A2A inbound labels. Selected details show the checkout, destination, credential
+references, permissions and expiry without displaying grant tokens. Keep failed
+requests and unavailable inventories distinct from empty configuration, expired
+grants and confirmed disconnection. Refresh reads local metadata. Discovery and
+incoming access require scoped confirmation; cancellation leaves the outcome
+unavailable until refresh. OpenAPI schema readiness does not imply endpoint
+availability. Preserve selection by kind and ID, including partial refreshes.
+When Settings exceeds the sidebar height, window its subviews around the active
+view and retain all hub shortcuts and all three model summaries.
+
+Selecting up to two MCP/API connections for a draft does not start an
+investigation or share source. Before dispatch, separately confirm provider and
+tool destinations with the captured plan scope, and invalidate changed grants,
+inventories, routing or draft input. Show the selected connections on the plan.
+Incoming access and outbound remote agents remain separate capabilities; neither
+grants local Apply, merge or project execution permission.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

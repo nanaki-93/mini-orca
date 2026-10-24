@@ -39,6 +39,13 @@ func commandCatalog() []commandItem {
 		}
 	}
 	return append(items,
+		commandItem{command: "connection-scope", title: "Select connections checkout", hint: "connection-scope main or task · Read local inventory for this checkout.", argument: true},
+		commandItem{command: "connections-refresh", title: "Refresh local connection inventory", hint: "Read configured destinations and grant receipts; does not discover or connect."},
+		commandItem{command: "connection-discover", title: "Discover selected connection", hint: "Confirm discovery or incoming access for the selected destination and checkout."},
+		commandItem{command: "connection-revoke", title: "Revoke selected connection grant", hint: "Confirm revocation and cancellation of operations owned by this grant."},
+		commandItem{command: "connection-cancel", title: "Cancel connection request", hint: "Stop the request; refresh local inventory before reusing its grant."},
+		commandItem{command: "connection-use", title: "Select connection for plan investigation", hint: "Select at most two granted MCP/API connections; source sharing is confirmed when investigating."},
+		commandItem{command: "connections-clear", title: "Remove plan connection selections", hint: "Clear ephemeral tool choices from the current draft without revoking existing grants."},
 		commandItem{command: "agent-settings", title: "Select settings checkout", hint: "agent-settings main or task · Load local settings for the main checkout or selected task worktree.", argument: true},
 		commandItem{command: "settings-refresh", title: "Refresh agent settings", hint: "Read local saved settings; no provider discovery."},
 		commandItem{command: "settings-cancel", title: "Cancel settings request", hint: "Refresh afterward to confirm whether a save completed."},

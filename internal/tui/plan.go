@@ -8,6 +8,7 @@ import (
 )
 
 type PlanDraft struct {
+	Connections        []investigationConnection
 	Source             ProjectIdentity
 	Seed               ChangeSeed
 	Saved              *ChangeSession

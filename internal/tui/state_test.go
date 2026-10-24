@@ -673,6 +673,10 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 skill settings: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageConnections || s.RulesSection != "connections" {
+		t.Fatalf("Section 5 connections: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
 	if s.Page != PageBootstrap || s.RulesSection != "bootstrap" {
 		t.Fatalf("Section 5 after second Tab: page=%s section=%s", s.Page, s.RulesSection)
 	}

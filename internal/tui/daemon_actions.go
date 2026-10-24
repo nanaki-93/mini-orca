@@ -61,7 +61,7 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 }
 
 func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
-	if s.dispatchSettingsAction(ctx, cl, act) {
+	if s.dispatchSettingsAction(ctx, cl, act) || s.dispatchConnectionAction(ctx, cl, act) {
 		return nil
 	}
 	if act.Kind == "agent-run" {

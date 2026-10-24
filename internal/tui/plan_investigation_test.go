@@ -10,7 +10,178 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
+
+func connectionInvestigationState(t *testing.T) *State {
+	t.Helper()
+	s := connectionsTestState()
+	model := s.Models.Scopes["function"]
+	model.Capabilities.Tools = true
+	s.Models.Scopes["function"] = model
+	s.Index = &ProjectIndex{ProjectIdentity: s.Project.ProjectIdentity, Files: []IndexedFile{{Path: "main.go", ContentHash: "captured-source"}}}
+	s.openTaskPlan(&ChangeSeed{Title: "Review Run", Paths: []string{"main.go", "main_test.go"}, AcceptanceCriteria: []string{"Preserve behavior"}, Plan: &ChangePlanInput{Problem: "Missing coverage", Approach: "Inspect Run"}})
+	s.Navigate(PageConnections)
+	s.togglePlanConnection()
+	if len(s.PlanDraft.Connections) != 1 || len(s.PendingActions) != 0 || s.Confirmation != nil {
+		t.Fatal("connection selection dispatched work or failed", s.Error)
+	}
+	return s
+}
+
+func TestPlanConnectionConsentCapturesOnlySelectedGrantsAndSources(t *testing.T) {
+	s := connectionInvestigationState(t)
+	s.SelectedIdx = 1
+	s.togglePlanConnection()
+	s.Navigate(PagePlan)
+	s.startPlanInvestigation(false)
+	if s.Confirmation == nil || len(s.PendingActions) != 0 {
+		t.Fatal("local provider implicitly approved external source sharing")
+	}
+	for _, token := range []string{"https://mcp.example", "https://api.example", "main.go", "main_test.go", "admitted project context"} {
+		if !strings.Contains(s.Confirmation.Message, token) {
+			t.Fatal("source-sharing confirmation omitted destination or scope", token)
+		}
+	}
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Target != "local" {
+		t.Fatal("tool sharing fabricated remote-provider consent")
+	}
+	task, ok := s.preparePlanInvestigationTask(s.PendingActions[0])
+	if !ok {
+		t.Fatal(s.Error)
+	}
+	cl := investigationClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/current/plans/investigate" {
+			t.Errorf("unexpected external dispatch: %s", r.URL)
+		}
+		var request PlanInvestigationRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+		if len(request.Integrations) != 2 || request.Integrations[0] != (client.IntegrationUse{ID: "docs", Grant: "grant-mcp", SchemaFingerprint: "schema-mcp", ConfirmSourceSharing: true}) || request.Integrations[1].ID != "catalog" || request.ConfirmRemoteProvider || request.Sources[0].Hash != "captured-source" {
+			t.Errorf("lost per-investigation authority: %+v", request)
+		}
+		value := investigationResult()
+		value.ProjectIdentity = request.ProjectIdentity
+		_ = json.NewEncoder(w).Encode(value)
+	})
+	result := executePlanInvestigation(t.Context(), cl, task)
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	s.applyPlanInvestigation(result)
+	if s.PlanDraft.InvestigationState != "ready" {
+		t.Fatal("admitted investigation did not complete")
+	}
+	seed := copyTaskPlanSeed(s.PlanDraft.Seed)
+	s.openTaskPlan(&seed)
+	if len(s.PlanDraft.Connections) != 0 {
+		t.Fatal("new task inherited an earlier source-sharing selection")
+	}
+}
+
+func TestPlanConnectionsRejectChangedGrantExpiryProviderAndCheckout(t *testing.T) {
+	for _, mutate := range []func(*State){
+		func(s *State) { s.AgentConnections.Records[client.ConnectionMCP][0].Grant = "changed" },
+		func(s *State) {
+			expired := time.Unix(0, 0)
+			s.AgentConnections.Records[client.ConnectionMCP][0].ExpiresAt = &expired
+		},
+		func(s *State) {
+			model := s.Models.Scopes["function"]
+			model.ProviderOrigin = "https://different.example"
+			s.Models.Scopes["function"] = model
+		},
+		func(s *State) { s.PlanDraft.Seed.WorktreePath = "/repo/other" },
+		func(s *State) { s.PlanDraft.Seed.Plan.Approach = "A different plan" },
+	} {
+		s := connectionInvestigationState(t)
+		s.startPlanInvestigation(false)
+		confirmation := s.Confirmation
+		mutate(s)
+		confirmation.OnConfirm(s)
+		if len(s.PendingActions) != 0 || s.Error == "" {
+			t.Fatal("changed authority reused old source-sharing consent")
+		}
+	}
+	s := connectionInvestigationState(t)
+	s.startPlanInvestigation(false)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	model := s.Models.Scopes["function"]
+	model.Model = "changed-after-approval"
+	s.Models.Scopes["function"] = model
+	if _, ok := s.preparePlanInvestigationTask(s.PendingActions[0]); ok {
+		t.Fatal("queued investigation retargeted after approval")
+	}
+}
+
+func TestPlanConnectionsLimitAndIncomingAccessCannotBecomeTools(t *testing.T) {
+	s := connectionInvestigationState(t)
+	s.SelectedIdx = 1
+	s.togglePlanConnection()
+	third := s.AgentConnections.Records[client.ConnectionMCP][0]
+	third.Config.ID = "third"
+	s.AgentConnections.Records[client.ConnectionMCP] = append(s.AgentConnections.Records[client.ConnectionMCP], third)
+	s.SelectedIdx = 1
+	s.togglePlanConnection()
+	if len(s.PlanDraft.Connections) != 2 || !strings.Contains(s.Error, "at most two") {
+		t.Fatal("combined connection limit ignored")
+	}
+	s.PlanDraft.Connections = nil
+	for index, row := range s.connectionRows() {
+		if row.Key.Kind == client.ConnectionRemote || row.Key.Kind == client.ConnectionAccess {
+			s.SelectedIdx = index
+			s.togglePlanConnection()
+			if len(s.PlanDraft.Connections) != 0 || !strings.Contains(s.Error, "only MCP and OpenAPI") {
+				t.Fatal("remote or inbound access was treated as tool authority")
+			}
+		}
+	}
+}
+
+func TestInvestigationConnectionGrantCannotFollowChangedWorktreeIndex(t *testing.T) {
+	s := connectionInvestigationState(t)
+	child := ProjectIdentity{ProjectID: "child", ProjectRevision: "child-rev"}
+	path := "/repo/task"
+	s.Change = &ChangeSession{ID: "task", ProjectIdentity: child, WorktreePath: path}
+	s.PlanDraft.Seed.WorktreePath = path
+	s.PlanDraft.Connections = nil
+	s.AgentConnections.Scope = client.AgentSettingsScope{ProjectIdentity: child, WorktreePath: path}
+	s.AgentConnections.Path = path
+	s.togglePlanConnection()
+	s.startPlanInvestigation(false)
+	s.HandleKey(KeyEvent{Key: "Enter"})
+	task, ok := s.preparePlanInvestigationTask(s.PendingActions[0])
+	if !ok {
+		t.Fatal(s.Error)
+	}
+	calls := 0
+	cl := investigationClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/api/projects/current/index" || r.URL.Query().Get("worktree_path") != path {
+			t.Errorf("changed scope reached provider admission: %s", r.URL)
+		}
+		_ = json.NewEncoder(w).Encode(ProjectIndex{ProjectIdentity: ProjectIdentity{ProjectID: "other", ProjectRevision: "other-revision"}})
+	})
+	result := executePlanInvestigation(t.Context(), cl, task)
+	if result.err == nil || calls != 1 {
+		t.Fatal("old connection grant followed a new indexed checkout")
+	}
+}
+
+func TestInvestigationConnectionsRequireAdvertisedToolCapability(t *testing.T) {
+	s := connectionInvestigationState(t)
+	model := s.Models.Scopes["function"]
+	model.Capabilities.Tools = false
+	s.Models.Scopes["function"] = model
+	s.startPlanInvestigation(false)
+	if s.Confirmation != nil || len(s.PendingActions) != 0 || !strings.Contains(s.Error, "tool support") {
+		t.Fatal("unknown adapter capability admitted integration tools")
+	}
+}
 
 func investigationState(t *testing.T) *State {
 	t.Helper()
@@ -106,7 +277,7 @@ func TestPlanInvestigationRemoteConfirmationBindsCurrentDraft(t *testing.T) {
 		}
 		s.Confirmation.OnConfirm(s)
 		if edited {
-			if len(s.PendingActions) != 0 || !strings.Contains(s.Error, "Plan changed") {
+			if len(s.PendingActions) != 0 || !strings.Contains(s.Error, "changed") {
 				t.Fatal("confirmation admitted a different scope")
 			}
 		} else if len(s.PendingActions) != 1 || s.PendingActions[0].Target != "remote-confirmed" {

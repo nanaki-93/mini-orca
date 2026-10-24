@@ -39,6 +39,7 @@ const (
 	PageModels         Page = "models"
 	PageRoles          Page = "roles"
 	PageSkills         Page = "skills"
+	PageConnections    Page = "connections"
 	PageBootstrap      Page = "bootstrap"
 	PageLessons        Page = "lessons"
 )
@@ -78,23 +79,28 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
-	AgentSettings  *agentSettingsAction
-	WorkflowChoice *workflowChoice
-	AgentRun       *agentRunAction
-	Worktree       *WorktreeIntent
-	Source         ProjectIdentity
-	ExistingChange *ChangeSession
-	ResumeFrom     string
-	Kind           string
-	Target         string
-	Message        string
-	PreviewID      string
-	Seed           *ChangeSeed
-	Issue          *FindingTarget
+	AgentConnection      *agentConnectionAction
+	Integrations         []client.IntegrationUse
+	IntegrationScope     *client.AgentSettingsScope
+	InvestigationConsent string
+	AgentSettings        *agentSettingsAction
+	WorkflowChoice       *workflowChoice
+	AgentRun             *agentRunAction
+	Worktree             *WorktreeIntent
+	Source               ProjectIdentity
+	ExistingChange       *ChangeSession
+	ResumeFrom           string
+	Kind                 string
+	Target               string
+	Message              string
+	PreviewID            string
+	Seed                 *ChangeSeed
+	Issue                *FindingTarget
 }
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentConnections    *agentConnectionsView
 	AgentSettings       *agentSettingsView
 	AgentRunSection     int
 	AgentRunPending     string
@@ -235,6 +241,7 @@ func HubTabs() []HubTab {
 				{Page: PageModels, Label: "Models"},
 				{Page: PageRoles, Label: "Roles & Budgets"},
 				{Page: PageSkills, Label: "Skills"},
+				{Page: PageConnections, Label: "Connections"},
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
 			},
@@ -511,7 +518,7 @@ func (s *State) Navigate(page Page) {
 		s.RulesSection = "trust"
 	case PageModels:
 		s.RulesSection = "models"
-	case PageRoles, PageSkills:
+	case PageRoles, PageSkills, PageConnections:
 		s.RulesSection = string(page)
 	case PageBootstrap:
 		s.RulesSection = "bootstrap"
@@ -538,6 +545,8 @@ func (s *State) EffectivePage() Page {
 			return PageRoles
 		case "skills":
 			return PageSkills
+		case "connections":
+			return PageConnections
 		case "bootstrap":
 			return PageBootstrap
 		case "lessons":
@@ -1067,7 +1076,7 @@ func (s *State) secondaryListLength() int {
 		return len(s.ChangeHistory)
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		return s.docsListLength()
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageBootstrap, PageLessons:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageBootstrap, PageLessons:
 		return s.instructionsListLength()
 	default:
 		return 1
@@ -1133,6 +1142,8 @@ func (s *State) docsListLength() int {
 
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
+	case PageConnections:
+		return len(s.connectionRows())
 	case PageRoles, PageSkills:
 		return len(s.settingsRows())
 	case PageModels:
