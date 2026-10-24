@@ -565,6 +565,8 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/config/integrations.go`, `internal/config/integrations_test.go`, `internal/app/agent_integrations.go`, `internal/app/agent_integrations_test.go`, `internal/app/agentruntime/mcp.go`, `internal/app/agentruntime/mcp_test.go` — **new**.
 - `internal/config/config.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/tools.go`, `internal/app/service.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`.
+- `internal/app/agentruntime/mcp_transport.go`, `internal/app/agentruntime/mcp_protocol.go`, `internal/api/handlers/agent_integrations_handler.go`, `internal/api/handlers/agent_integrations_handler_test.go` — **new**, bounded native transports/protocol policy and explicit discovery/revocation routes.
+- `internal/app/agent_tools.go`, `internal/app/agent_investigation.go`, `internal/app/declaration_explanation.go`, `internal/tui/client/models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `go.mod`, `go.sum` — per-investigation integration grants, production callers and wire/dependency contracts.
 
 **Inputs / dependencies**
 - Task 20; [ADK MCP toolsets](https://adk.dev/tools-custom/mcp-tools/), shared policy, and process ownership.
@@ -573,6 +575,7 @@ This is an implementation specification, not a claim that the features below alr
 - Support explicitly configured stdio and Streamable HTTP servers with tool allowlists, endpoint-bound authentication, bounded discovery, timeouts, and owned connection/process cleanup.
 - Inspecting configuration stays passive. Connection/discovery and tool execution require appropriate grants; metadata cannot self-declare a mutating tool safe. Pin discovered tool schemas for a run and invalidate approval on changes.
 - Validate every call and result through Mini-Orca budgets, source policy, and effect classification. Cancellation closes sessions and owned children. Never auto-install an MCP server or expose arbitrary filesystem/shell capabilities.
+- Use short-lived connections for explicit discovery and each admitted call; retain only expiring schema inventories between requests. Reconnect for a call only under that run's explicit grant, re-discover the selected schema, and close the connection before returning. Prevent SDK reconnect/retry from dispatching a second call. Allow only operator-classified external read tools in this step; reject mutating/execution classifications instead of trusting server annotations. The following task supplies exact-action approval and receipts for curated HTTP mutations.
 
 **Verification command**
 `go test -race ./internal/config ./internal/app/agentruntime ./internal/app ./cmd/daemon && ./scripts/validate.sh && git diff --check`
