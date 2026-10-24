@@ -46,6 +46,41 @@ type AgentMission struct {
 	SourceStatus    string        `json:"source_status"`
 }
 
+type MissionExecutionChild struct {
+	ID     string      `json:"id"`
+	State  string      `json:"state"`
+	Limits AgentLimits `json:"limits"`
+}
+
+type MissionExecution struct {
+	ID              string                  `json:"id"`
+	Revision        int64                   `json:"execution_revision"`
+	CatalogRevision int64                   `json:"catalog_revision"`
+	Mission         MissionRecord           `json:"mission"`
+	Base            GitIdentity             `json:"base"`
+	State           string                  `json:"state"`
+	Children        []MissionExecutionChild `json:"children"`
+	CreatedAt       string                  `json:"created_at"`
+	UpdatedAt       string                  `json:"updated_at"`
+}
+
+type AgentMissionExecution struct {
+	Execution    MissionExecution `json:"execution"`
+	Stale        bool             `json:"stale"`
+	SourceStatus string           `json:"source_status"`
+}
+
+type MissionExecutionRequest struct {
+	ProjectIdentity
+	Action            string       `json:"action"`
+	CatalogRevision   int64        `json:"catalog_revision"`
+	PlanHash          string       `json:"plan_hash"`
+	ExecutionID       string       `json:"execution_id,omitempty"`
+	ExecutionRevision int64        `json:"execution_revision"`
+	Base              *GitIdentity `json:"base,omitempty"`
+	Confirm           bool         `json:"confirm"`
+}
+
 type MissionSummary struct {
 	ID              string `json:"id"`
 	ProjectRevision string `json:"project_revision"`

@@ -430,6 +430,34 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/missions/{missionID}/execution:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: missionID, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: Inspect a frozen mission execution without starting work
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Private receipt and binding freshness; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMissionExecution'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Prepare fixed mission allocations or cancel a prepared receipt
+      description: Preparation freezes the fully reviewed and approved plan at its exact clean Git base. It creates no worktrees, provider calls or execution authority. One retained execution per mission prevents budget reset after retries, cancellation, plan edits or restart. Cancellation requires the frozen execution identity and revision and remains available after source or settings changes.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MissionExecutionRequest'}}}}
+      responses:
+        '200': {description: Saved receipt and binding freshness; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMissionExecution'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/memory:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2177,6 +2205,58 @@ components:
         mission: {$ref: '#/components/schemas/MissionRecord'}
         stale: {type: boolean}
         source_status: {type: string, enum: [current, changed, unavailable]}
+    MissionBase:
+      type: object
+      additionalProperties: false
+      required: [head, branch]
+      properties:
+        head: {type: string, pattern: '^([a-f0-9]{40}|[a-f0-9]{64})$'}
+        branch: {type: string, minLength: 1, maxLength: 240}
+    MissionExecutionChild:
+      type: object
+      additionalProperties: false
+      required: [id, state, limits]
+      properties:
+        id: {type: string}
+        state: {type: string, enum: [pending]}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+    MissionExecution:
+      type: object
+      additionalProperties: false
+      required: [id, execution_revision, catalog_revision, mission, base, state, children, created_at, updated_at]
+      properties:
+        id: {type: string}
+        execution_revision: {type: integer, format: int64, minimum: 1}
+        catalog_revision: {type: integer, format: int64, minimum: 1}
+        mission: {$ref: '#/components/schemas/MissionRecord'}
+        base: {$ref: '#/components/schemas/MissionBase'}
+        state: {type: string, enum: [prepared, canceled]}
+        children: {type: array, minItems: 1, maxItems: 16, items: {$ref: '#/components/schemas/MissionExecutionChild'}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AgentMissionExecution:
+      type: object
+      additionalProperties: false
+      required: [execution, stale, source_status]
+      properties:
+        execution: {$ref: '#/components/schemas/MissionExecution'}
+        stale: {type: boolean}
+        source_status: {type: string, enum: [current, changed, unavailable]}
+    MissionExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action, plan_hash, confirm]
+      description: Prepare requires catalog_revision and base, with no execution_id and zero execution_revision. Cancel requires execution_id and execution_revision, zero catalog_revision and no base. The plan hash always identifies the frozen approved plan. Unknown and duplicate keys and trailing JSON are rejected.
+      properties:
+        project_id: {type: string, minLength: 1}
+        project_revision: {type: string, minLength: 1}
+        action: {type: string, enum: [prepare, cancel]}
+        plan_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        catalog_revision: {type: integer, format: int64, minimum: 0}
+        execution_id: {type: string}
+        execution_revision: {type: integer, format: int64, minimum: 0}
+        base: {$ref: '#/components/schemas/MissionBase'}
+        confirm: {type: boolean, enum: [true]}
     MissionList:
       type: object
       required: [project_id, project_revision, catalog_revision, missions]

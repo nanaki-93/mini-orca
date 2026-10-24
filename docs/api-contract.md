@@ -79,6 +79,8 @@ untrusted networks.
 | POST | `/api/projects/current/missions/plan` | Explicitly decompose a bounded mission with native ADK and save an unapproved draft. |
 | GET | `/api/projects/current/missions/{missionID}` | Inspect a retained plan, review state and binding freshness. |
 | POST | `/api/projects/current/missions/{missionID}` | Revise, review a child or approve an exact saved mission plan. |
+| GET | `/api/projects/current/missions/{missionID}/execution` | Inspect the frozen execution receipt and current binding freshness. |
+| POST | `/api/projects/current/missions/{missionID}/execution` | Prepare fixed child allocations at an approved Git base, or cancel an exact prepared receipt. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
@@ -1788,6 +1790,55 @@ returns 403, missing missions 404, changed project/source or catalog/hash
 identities 409, and private-catalog read/write failures 500. A canceled request
 cannot publish a new plan or review. A successful response reports the saved
 planning decision, never an executed child or a verified implementation.
+
+### Mission execution preparation
+
+`GET /api/projects/current/missions/{missionID}/execution` requires the current
+`project_id` and `project_revision`, supports the selected `worktree_path`, and
+returns 404 when the mission has no execution receipt. It reads private metadata
+and Git identity without starting work. The response contains `execution`,
+`stale`, and `source_status` (`current`, `changed`, or `unavailable`). Changed
+source, project revision, instructions, policy, settings, catalog approval or Git
+base keeps the frozen receipt inspectable with `stale: true`. Missing or corrupt
+execution storage is not reported as a completed or empty execution.
+
+`POST` at the same route accepts a strict object with `project_id`,
+`project_revision`, `action`, `plan_hash`, and `confirm: true`:
+
+- `prepare` additionally requires the approved `catalog_revision` and `base`
+  containing the exact Git `head` and `branch`. `execution_id` must be absent or
+  empty and `execution_revision` zero. Every child must be reviewed and the
+  complete mission separately approved. The checkout must be a clean Git root
+  on a committed local branch, without a merge, rebase or other pending operation.
+- `cancel` additionally requires `execution_id` and `execution_revision` from
+  the prepared receipt. `catalog_revision` must be zero and `base` absent.
+  Cancellation uses the frozen plan hash and remains available after sources,
+  settings or the editable catalog plan change. It still requires the current
+  project identity and cannot control another checkout's receipt.
+
+Preparation creates a version-1 receipt with state `prepared`, an independent
+`execution_revision` of 1, the approved `catalog_revision`, a full frozen
+`mission`, the exact Git `base`, and `children` containing each child's ID,
+`pending` state and fixed approved `limits`. The plan already bounds the sum of
+child model calls, tool calls, input/output tokens and repairs. These are future
+allocations, not measured usage. Preparation and inspection grant no provider,
+project-code execution, worktree creation, Apply or merge authority. Starting
+children is not an accepted action at this stage of the contract.
+
+There is one retained execution per mission identity. Repeated preparation,
+plan edits, cancellation and daemon restart cannot issue another allocation for
+that mission. A different attempt requires a new mission with fresh review.
+Canceling a prepared execution changes its state to `canceled`, increments its
+execution revision, and retains the frozen plan and all child allocations.
+Replaying an old preparation or cancellation returns 409.
+
+Preparation rechecks plan/catalog identity, current source hashes, instructions,
+policy, effective settings and Git base at atomic publication. The private
+workspace-bound execution catalog uses mode 0600, is bounded to 8 MiB and 128
+receipts, and preserves corrupt or unsupported schemas. Reads and responses use
+`Cache-Control: no-store`. Invalid action shapes or missing confirmation return
+400, absent receipts 404, stale identities or concurrent controls 409, and
+private storage failures 500. A canceled request cannot publish a receipt.
 
 ### Explicit mission decomposition
 

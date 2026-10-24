@@ -980,7 +980,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 30A — Prepare durable mission execution records and fixed allocations
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go` — **new**.

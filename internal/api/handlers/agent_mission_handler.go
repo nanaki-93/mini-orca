@@ -50,6 +50,24 @@ func (h *AgentMissionHandler) Plan(w http.ResponseWriter, r *http.Request) {
 	respondMission(w, value, err)
 }
 
+func (h *AgentMissionHandler) Execution(w http.ResponseWriter, r *http.Request) {
+	query, ok := agentRunQuery(w, r)
+	if !ok {
+		return
+	}
+	value, err := h.service.MissionExecution(r.Context(), query, r.PathValue("missionID"))
+	respondMission(w, value, err)
+}
+
+func (h *AgentMissionHandler) ControlExecution(w http.ResponseWriter, r *http.Request) {
+	var request app.MissionExecutionRequest
+	if !decodeStrictJSON(w, r, &request, "invalid mission execution request", "Confirm preparation of the approved plan at its Git base, or cancellation of an exact execution revision.") {
+		return
+	}
+	value, err := h.service.ControlMissionExecution(r.Context(), r.PathValue("missionID"), request)
+	respondMission(w, value, err)
+}
+
 func respondMission(w http.ResponseWriter, value any, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	switch {

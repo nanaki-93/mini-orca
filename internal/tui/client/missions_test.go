@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,6 +21,15 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
 		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-b", "main"}, {"add", "."}, {"commit", "-m", "Initial fixture"}} {
+		flags := []string{"-C", root, "-c", "core.hooksPath=" + os.DevNull, "-c", "commit.gpgSign=false", "-c", "user.name=Test", "-c", "user.email=test@example.invalid"}
+		if out, err := exec.CommandContext(t.Context(), "git", append(flags, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git fixture: %v %s", err, out)
+		}
 	}
 	manager, err := project.NewManager(root)
 	if err != nil {
@@ -46,6 +56,8 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	mux.HandleFunc("POST /api/projects/current/missions", h.Mutate)
 	mux.HandleFunc("GET /api/projects/current/missions/{missionID}", h.Detail)
 	mux.HandleFunc("POST /api/projects/current/missions/{missionID}", h.Mutate)
+	mux.HandleFunc("GET /api/projects/current/missions/{missionID}/execution", h.Execution)
+	mux.HandleFunc("POST /api/projects/current/missions/{missionID}/execution", h.ControlExecution)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		if query.Get("worktree_path") != root {
@@ -101,6 +113,37 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 		if _, err := cl.Request(t.Context(), "rejected", "POST", target, `{}`); err == nil {
 			t.Fatal("unimplemented mutation route allowed", target)
 		}
+	}
+	control.CatalogRevision, control.ChildID, control.Action = saved.CatalogRevision, "", "approve"
+	approved, err := cl.MutateMission(t.Context(), "approve", guardedScope, saved.Mission.ID, control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo, err := service.GitRepository(t.Context(), identity.ProjectID, identity.ProjectRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepare := MissionExecutionRequest{ProjectIdentity: identity, Action: "prepare", CatalogRevision: approved.CatalogRevision, PlanHash: approved.Mission.PlanHash, Base: &GitIdentity{Head: repo.Head, Branch: repo.Branch}, Confirm: true}
+	target := base + "/" + saved.Mission.ID + "/execution" + query
+	var execution AgentMissionExecution
+	if err := cl.DoJSON(t.Context(), "prepare", "POST", target, prepare, &execution); err != nil || execution.Stale || execution.Execution.Mission.ProjectIdentity != identity || execution.Execution.Mission.PlanHash != approved.Mission.PlanHash || execution.Execution.CatalogRevision != approved.CatalogRevision || execution.Execution.Revision != 1 || execution.Execution.State != "prepared" || execution.Execution.Base != *prepare.Base || len(execution.Execution.Children) != 1 || execution.Execution.Children[0].Limits != limits {
+		t.Fatal("execution wire contract", execution, err)
+	}
+	if err := cl.DoJSON(t.Context(), "read-execution", "GET", target, nil, &execution); err != nil || execution.Execution.State != "prepared" {
+		t.Fatal(execution, err)
+	}
+	prepare.Action, prepare.Base, prepare.CatalogRevision = "cancel", nil, 0
+	prepare.ExecutionID, prepare.ExecutionRevision = execution.Execution.ID, execution.Execution.Revision
+	if err := cl.DoJSON(t.Context(), "cancel-execution", "POST", target, prepare, &execution); err != nil || execution.Execution.State != "canceled" || execution.Execution.Revision != 2 {
+		t.Fatal(execution, err)
+	}
+	for _, method := range []string{"DELETE", "PUT", "PATCH"} {
+		if _, err := cl.Request(t.Context(), "rejected-execution-method", method, target, `{}`); err == nil {
+			t.Fatal("unimplemented execution method allowed", method)
+		}
+	}
+	if _, err := cl.Request(t.Context(), "rejected-execution-nesting", "POST", base+"/"+saved.Mission.ID+"/execution/apply"+query, `{}`); err == nil {
+		t.Fatal("execution route allowed nested mutation")
 	}
 }
 

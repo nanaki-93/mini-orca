@@ -241,6 +241,8 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/missions/plan", missionHandler.Plan)
 	mux.HandleFunc("GET /api/projects/current/missions/{missionID}", missionHandler.Detail)
 	mux.HandleFunc("POST /api/projects/current/missions/{missionID}", missionHandler.Mutate)
+	mux.HandleFunc("GET /api/projects/current/missions/{missionID}/execution", missionHandler.Execution)
+	mux.HandleFunc("POST /api/projects/current/missions/{missionID}/execution", missionHandler.ControlExecution)
 	gitHandler := handlers.NewGitHandler(application)
 	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)
 	mux.HandleFunc("GET /api/projects/current/git/workspace", gitHandler.Workspace)

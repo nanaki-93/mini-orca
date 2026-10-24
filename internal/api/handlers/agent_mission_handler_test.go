@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,122 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
+
+func missionExecutionHandlerFixture(t *testing.T) (*ChangeHandler, *app.AgentMission, app.MissionExecutionRequest) {
+	t.Helper()
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	root := fixture.manager.Root()
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-b", "main"}, {"add", "."}, {"commit", "-m", "Initial fixture"}} {
+		flags := []string{"-C", root, "-c", "core.hooksPath=" + os.DevNull, "-c", "commit.gpgSign=false", "-c", "user.name=Test", "-c", "user.email=test@example.invalid"}
+		if out, err := exec.CommandContext(t.Context(), "git", append(flags, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git fixture: %v %s", err, out)
+		}
+	}
+	if _, err := fixture.service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := fixture.service.MutateMission(t.Context(), "", missionHandlerDraft(t, fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, child := range []string{"first", ""} {
+		request := app.MissionMutation{ProjectID: saved.Mission.ProjectID, ProjectRevision: saved.Mission.ProjectRevision, CatalogRevision: saved.CatalogRevision, PlanHash: saved.Mission.PlanHash, ChildID: child, Action: "review", Confirm: true}
+		if child == "" {
+			request.Action = "approve"
+		}
+		saved, err = fixture.service.MutateMission(t.Context(), saved.Mission.ID, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo, err := fixture.service.GitRepository(t.Context(), saved.Mission.ProjectID, saved.Mission.ProjectRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fixture, saved, app.MissionExecutionRequest{ProjectID: saved.Mission.ProjectID, ProjectRevision: saved.Mission.ProjectRevision, CatalogRevision: saved.CatalogRevision, PlanHash: saved.Mission.PlanHash, Action: "prepare", Base: &agentstate.MissionBase{Head: repo.Head, Branch: repo.Branch}, Confirm: true}
+}
+
+func TestMissionExecutionHandlerExactLifecycleAndStrictRequests(t *testing.T) {
+	fixture, saved, request := missionExecutionHandlerFixture(t)
+	h := NewAgentMissionHandler(fixture.service)
+	control := func(data []byte) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/missions/"+saved.Mission.ID+"/execution", bytes.NewReader(data))
+		r.SetPathValue("missionID", saved.Mission.ID)
+		w := httptest.NewRecorder()
+		h.ControlExecution(w, r)
+		return w
+	}
+	data, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []string{
+		string(data) + ` {}`, `null`, `[]`, strings.Replace(string(data), `"action":"prepare"`, `"action":"prepare","action":"prepare"`, 1),
+		strings.Replace(string(data), `"confirm":true`, `"confirm":true,"confirm_execution":true`, 1),
+		strings.Replace(string(data), `"confirm":true`, `"confirm":false`, 1),
+		strings.Replace(string(data), `"action":"prepare"`, `"action":"start"`, 1),
+		strings.Replace(string(data), `"head":`, `"extra":false,"head":`, 1),
+	} {
+		if w := control([]byte(invalid)); w.Code != 400 {
+			t.Fatalf("strict boundary: %d %s", w.Code, w.Body)
+		}
+	}
+	query := url.Values{"project_id": {request.ProjectID}, "project_revision": {request.ProjectRevision}}
+	read := func(values url.Values) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/missions/"+saved.Mission.ID+"/execution?"+values.Encode(), nil)
+		r.SetPathValue("missionID", saved.Mission.ID)
+		w := httptest.NewRecorder()
+		h.Execution(w, r)
+		return w
+	}
+	if w := read(query); w.Code != 404 {
+		t.Fatalf("missing receipt: %d %s", w.Code, w.Body)
+	}
+	w := control(data)
+	var prepared app.AgentMissionExecution
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &prepared) != nil || prepared.Stale || prepared.Execution.State != "prepared" || prepared.Execution.Revision != 1 || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("prepare: %d %s", w.Code, w.Body)
+	}
+	if w := control(data); w.Code != 409 {
+		t.Fatalf("replay: %d %s", w.Code, w.Body)
+	}
+	if w := read(query); w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("inspect: %d %s", w.Code, w.Body)
+	}
+	if w := read(url.Values{"project_id": {"foreign"}, "project_revision": {request.ProjectRevision}}); w.Code != 409 || strings.Contains(w.Body.String(), "PRIVATE_CHILD_APPROACH") {
+		t.Fatalf("scope: %d %s", w.Code, w.Body)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.manager.Root(), "main.go"), []byte("package main\n// changed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	request.Action, request.CatalogRevision, request.Base = "cancel", 0, nil
+	request.ExecutionID, request.ExecutionRevision = prepared.Execution.ID, prepared.Execution.Revision
+	data, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = control(data)
+	var canceled app.AgentMissionExecution
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &canceled) != nil || !canceled.Stale || canceled.SourceStatus != "changed" || canceled.Execution.State != "canceled" || canceled.Execution.Revision != 2 {
+		t.Fatalf("cancel changed scope: %d %s", w.Code, w.Body)
+	}
+	if w := control(data); w.Code != 409 {
+		t.Fatalf("cancel replay: %d %s", w.Code, w.Body)
+	}
+	files, err := filepath.Glob(filepath.Join(fixture.manager.Root(), ".mini-orca", "agents", "*", "mission-executions.json"))
+	if err != nil || len(files) != 1 {
+		t.Fatal(files, err)
+	}
+	if err := os.WriteFile(files[0], []byte(`{"version":99}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if w := read(query); w.Code != 500 || strings.Contains(w.Body.String(), "PRIVATE_CHILD_APPROACH") {
+		t.Fatalf("corruption: %d %s", w.Code, w.Body)
+	}
+}
 
 func missionHandlerDraft(t *testing.T, fixture *ChangeHandler) app.MissionMutation {
 	t.Helper()
