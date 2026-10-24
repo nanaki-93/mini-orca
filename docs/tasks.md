@@ -1088,7 +1088,9 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/mission_execution.go`, `internal/tui/mission_execution_test.go` — **new**.
-- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`, `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/terminal_loop.go`, `internal/tui/sse_events.go`, `internal/tui/keybinds_help.go`, `internal/tui/command_menu.go`.
+- `internal/tui/mission_execution_actions.go`, `internal/tui/mission_execution_view.go`, `internal/tui/mission_execution_stream.go`, `internal/tui/mission_execution_stream_test.go` — **new**, transport admission, detail rendering and owned passive progress.
+- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`, `internal/tui/colon_commands_actions.go`, `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/terminal_loop.go`, `internal/tui/sse_events.go`, `internal/tui/keybinds_help.go`, `internal/tui/command_menu.go`.
+- `internal/tui/client/mission_executions.go`, `internal/tui/client/mission_executions_test.go` — **new**, typed execution controls and checkpoint/candidate receipt validation.
 - `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
@@ -1097,6 +1099,8 @@ This is an implementation specification, not a claim that the features below alr
 **Implementation rules**
 - Expose preparation, start/advance, pause/cancel, per-child progress, current-base revalidation and explicit integration in the existing mission detail surface. Show concrete scope, allocations, destinations and confirmations. Keep navigation and detail reads passive; reject late results after scope, plan, execution, candidate or provider identity changes.
 - Open an exact owned child proposal through ordinary diff review and explicit Apply/commit. Route its merge through mission integration admission in the approved order. Preserve the mission selection across resulting project revisions without carrying stale consent or approval.
+- Preserve the captured owner when opening its nested child. Apply an integration index only to that owner; a task-scoped receipt must never replace the top-level project. After canceled transport, explicit refresh may recover the same owner's current revision through passive reads before inspecting the durable execution.
+- Disclose the actual configured creation, testing and review profiles and check commands. Recheck settings, source and execution identities immediately before dispatch. Show allocated model/tool/token ceilings separately from measured usage; never fabricate remaining usage.
 - Show pending effects, failed/rejected/interrupted children, retained proposal artifacts, conflicts and cleanup failures with the applicable recovery action. Provider retries cannot reset mission allocations. Refresh progress from local events without dispatching work or replacing local edits.
 - Verify complete keyboard journeys, selected worktree ownership, cancellation and restart recovery at compact/wide dimensions and all palettes. Keep dependencies, remaining allocations, current base and recovery actions readable without increasing dashboard density.
 
