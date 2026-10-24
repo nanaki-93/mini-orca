@@ -361,6 +361,59 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/missions:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read private mission summaries without dispatch
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Bounded catalog summaries; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/MissionList'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Save a private mission draft without provider work or source mutation
+      description: Requires create, the current catalog revision, an empty hash and a complete plan. Captures and rechecks source, instructions, policy and effective settings. Does not reserve or spend execution budgets.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MissionMutation'}}}}
+      responses:
+        '200': {description: Saved draft; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMission'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/missions/{missionID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: missionID, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: Inspect a retained mission and binding freshness without starting work
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Private plan; changed or unavailable bindings remain inspectable with stale true; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMission'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Revise a mission, review one child or approve the exact reviewed plan
+      description: Requires an exact plan hash and current checkout-wide catalog revision. Review requires a child ID and confirmation. Approve requires all children reviewed and separate confirmation. Revise clears all review and approval. These actions cannot launch work or grant Apply authority.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MissionMutation'}}}}
+      responses:
+        '200': {description: Saved decision with incremented catalog revision; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMission'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/memory:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2052,6 +2105,99 @@ components:
             required_tools: {type: array, items: {type: string, maxLength: 64}}
             manifest: {$ref: '#/components/schemas/AgentSkillFile'}
             resources: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/AgentSkillFile'}}
+    MissionSource:
+      type: object
+      additionalProperties: false
+      required: [path, hash, exists]
+      properties:
+        path: {type: string, minLength: 1, maxLength: 512, description: Canonical relative file path; no symlinks, exclusions or overlapping file/parent paths.}
+        hash: {type: string, description: sha256-prefixed source hash when present; empty when absent.}
+        exists: {type: boolean}
+    MissionChild:
+      type: object
+      additionalProperties: false
+      required: [id, title, approach, acceptance_criteria, write_paths, limits]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}
+        title: {type: string, minLength: 1, maxLength: 120}
+        approach: {type: string, minLength: 1, maxLength: 4096}
+        acceptance_criteria: {type: array, minItems: 1, maxItems: 16, items: {type: string, minLength: 1, maxLength: 512}}
+        dependencies: {type: array, nullable: true, maxItems: 15, uniqueItems: true, items: {type: string}}
+        write_paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
+        read_paths: {type: array, nullable: true, maxItems: 8, uniqueItems: true, items: {type: string}, description: Distinct from writes; absent paths require an ancestor writer.}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+    MissionPlan:
+      type: object
+      additionalProperties: false
+      required: [goal, sources, limits, children, integration_order]
+      properties:
+        goal: {type: string, minLength: 1, maxLength: 4096}
+        sources: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/MissionSource'}}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+        children: {type: array, minItems: 1, maxItems: 16, items: {$ref: '#/components/schemas/MissionChild'}}
+        integration_order: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string}, description: Complete topological order; shared write/read access requires explicit dependency reachability.}
+      description: Text bounds are UTF-8 bytes. Child calls, tools, tokens and repairs sum within the mission budget; elapsed time and concurrency are ceilings. Every budget field is explicit, including zero repairs. Captured source is at most 256 KiB total.
+    MissionRecord:
+      type: object
+      required: [id, project_id, project_revision, policy, configuration, instructions, plan, plan_hash, reviewed, approved, created_at, updated_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        policy: {type: string}
+        configuration: {type: string}
+        instructions: {type: object, additionalProperties: {type: string}, description: Captured effective instruction fingerprints keyed by source path.}
+        plan: {$ref: '#/components/schemas/MissionPlan'}
+        plan_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        reviewed: {type: array, maxItems: 16, uniqueItems: true, items: {type: string}}
+        approved: {type: boolean, description: Planning review only; no execution or Apply authority.}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AgentMission:
+      type: object
+      required: [catalog_revision, mission, stale, source_status]
+      properties:
+        catalog_revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740992}
+        mission: {$ref: '#/components/schemas/MissionRecord'}
+        stale: {type: boolean}
+        source_status: {type: string, enum: [current, changed, unavailable]}
+    MissionList:
+      type: object
+      required: [project_id, project_revision, catalog_revision, missions]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        catalog_revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740992}
+        missions:
+          type: array
+          maxItems: 128
+          items:
+            type: object
+            required: [id, project_revision, goal, plan_hash, child_count, reviewed_count, approved, stale, source_status, updated_at]
+            properties:
+              id: {type: string}
+              project_revision: {type: string}
+              goal: {type: string, maxLength: 4096}
+              plan_hash: {type: string}
+              child_count: {type: integer, minimum: 1, maximum: 16}
+              reviewed_count: {type: integer, minimum: 0, maximum: 16}
+              approved: {type: boolean}
+              stale: {type: boolean, description: Stored revision differs; source freshness remains unchecked in lists.}
+              source_status: {type: string, enum: [unchecked]}
+              updated_at: {type: string, format: date-time}
+    MissionMutation:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, catalog_revision, action]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        catalog_revision: {type: integer, format: int64, minimum: 0, maximum: 9007199254740991}
+        plan_hash: {type: string, description: Empty for create; exact saved hash for all other actions.}
+        action: {type: string, enum: [create, revise, review, approve]}
+        child_id: {type: string, description: Required only for review.}
+        confirm: {type: boolean, description: Must be true for review and approve.}
+        plan: {$ref: '#/components/schemas/MissionPlan'}
     AgentLimits:
       type: object
       additionalProperties: false

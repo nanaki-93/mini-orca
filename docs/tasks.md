@@ -912,7 +912,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 29A — Persist bounded mission plans and explicit review
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_mission.go`, `internal/app/agent_mission_test.go`, `internal/app/agentstate/missions.go`, `internal/app/agentstate/missions_test.go` — **new**.

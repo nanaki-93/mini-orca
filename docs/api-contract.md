@@ -74,6 +74,10 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
 | POST | `/api/projects/current/agent-runs/{runID}/export` | Export one explicitly confirmed source-free trace snapshot to the configured collector. |
+| GET | `/api/projects/current/missions` | Read bounded private mission summaries with current project guards. |
+| POST | `/api/projects/current/missions` | Save a scoped mission draft without dispatch or source mutation. |
+| GET | `/api/projects/current/missions/{missionID}` | Inspect a retained plan, review state and binding freshness. |
+| POST | `/api/projects/current/missions/{missionID}` | Revise, review a child or approve an exact saved mission plan. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
@@ -1697,3 +1701,86 @@ sources. Generic run text for `grounding-v1` returns
 `state: research_report_required` without the answer, preserving the citation and
 Search-suggestion display contract. Missing reports return 404. All routes retain
 the normal loopback and optional worktree scope policy.
+
+## Mission plans and explicit review
+
+Mission plans are private planning documents under
+`/api/projects/current/missions`. These operations do not call providers, execute
+project checks, create worktrees, launch children or change project source.
+Approval records review of a plan; it does not grant Apply or Undo authority.
+
+GET list and detail require current `project_id` and `project_revision` query
+parameters. The shared router consumes optional `worktree_path` before invoking
+the selected checkout's handler. Every successful response uses `no-store`.
+List returns the current identity, `catalog_revision` and at most 128 `missions`
+summaries: ID, stored revision, goal, plan hash, child/review counts, approval and
+update time. It omits child approaches and criteria. Its `source_status` is
+`unchecked`; `stale` on a summary only compares stored and current revisions.
+
+Detail returns `catalog_revision`, the private `mission`, `stale` and
+`source_status`. The mission contains project/revision, context-policy and
+effective-configuration fingerprints, instruction fingerprints for each path,
+the complete `plan`, `plan_hash`, reviewed child IDs, approval and timestamps.
+Detail rechecks its bindings: `current` means those checks passed, `changed`
+means a captured identity no longer matches, and `unavailable` means a binding
+could not be checked. Changed and unavailable details remain readable with
+`stale: true`; they cannot be reviewed, revised or approved. After source or
+settings changes, create a new plan using fresh captures.
+
+A plan contains a nonempty `goal` of at most 4096 UTF-8 bytes, 1–64 distinct
+`sources`, explicit `limits`, 1–16 `children`, and `integration_order`. Each
+source contains a canonical relative `path`, `exists`, and a `sha256:` content
+`hash` when present (empty when absent). Existing source must match the project
+index and current disk content. Capture is bounded to 256 KiB total source;
+source text is not stored in the mission catalog. Context exclusions, unsafe
+paths and symlinks are rejected. Effective `AGENTS.md` identities are captured
+for present and absent paths.
+
+Each child contains an ASCII letter/digit/underscore/hyphen `id` of 1–64 bytes,
+a `title` of at most 120 bytes, an `approach` of at most 4096 bytes, 1–16
+`acceptance_criteria` of at most 512 bytes each, `dependencies`, `write_paths`,
+`read_paths` and explicit `limits`. Each child has 1–8 writes and at most eight
+reads, all distinct within that child and included in the captured inventory.
+`integration_order` includes every child exactly once in topological order.
+Unknown, repeated, cyclic and self dependencies are rejected. Children sharing
+write/write or write/read access require a dependency path between them;
+integration order alone does not authorize shared access. Reading an absent
+path requires an ancestor that writes it. Disjoint children may be independent.
+
+Limits require every field from `AgentLimits`, including an explicit zero when
+repairs are disabled. Each child must fit the mission budget, and the sum of
+child model calls, tool calls, input/output tokens and repairs must fit it.
+Elapsed time and concurrency are ceilings, not summed across children. The
+mission budget must fit the effective operator/project limits. Saving a plan
+does not reserve or consume an execution budget.
+
+POST uses strict JSON with `project_id`, `project_revision`,
+`catalog_revision`, `plan_hash`, `action`, optional `plan` and `child_id`, and
+`confirm` for review/approval. Actions are:
+
+- `create` at the collection route: empty hash and a complete plan; use the
+  current catalog revision (zero for an empty catalog). The server creates the
+  mission ID and captures policy, instructions and settings.
+- `revise` at the selected mission: exact saved hash, current catalog revision
+  and a complete replacement plan. Every revision clears all reviews and
+  approval, including a replacement with identical content.
+- `review`: exact saved hash and current catalog revision, one `child_id` and
+  `confirm: true`. A child can be reviewed only once per plan revision.
+- `approve`: exact saved hash and current catalog revision, no child ID and
+  `confirm: true`. Every child must already be reviewed. Approval is separate
+  from the last child review.
+
+All durable mutations recheck project, present/absent sources, context policy,
+instructions and effective settings at publication. Successful mutations return
+the same detail shape and increment the checkout-wide catalog revision, so a
+concurrent change to any mission rejects an older editor. The plan hash covers
+the complete plan and captured bindings, excluding timestamps and review state.
+The private version-1 catalog is workspace-bound, stored atomically with mode
+0600, and bounded to 8 MiB; each submitted mission is bounded to 256 KiB.
+Corrupt or unknown-schema catalogs are preserved and reported as unavailable.
+
+Invalid plans, action shapes or missing confirmation return 400. Excluded source
+returns 403, missing missions 404, changed project/source or catalog/hash
+identities 409, and private-catalog read/write failures 500. A canceled request
+cannot publish a new plan or review. A successful response reports the saved
+planning decision, never an executed child or a verified implementation.

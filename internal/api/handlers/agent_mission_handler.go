@@ -1,0 +1,60 @@
+package handlers
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
+)
+
+type AgentMissionHandler struct{ service *app.Service }
+
+func NewAgentMissionHandler(service *app.Service) *AgentMissionHandler {
+	return &AgentMissionHandler{service: service}
+}
+
+func (h *AgentMissionHandler) List(w http.ResponseWriter, r *http.Request) {
+	query, ok := agentRunQuery(w, r)
+	if !ok {
+		return
+	}
+	value, err := h.service.ListMissions(r.Context(), query)
+	respondMission(w, value, err)
+}
+
+func (h *AgentMissionHandler) Detail(w http.ResponseWriter, r *http.Request) {
+	query, ok := agentRunQuery(w, r)
+	if !ok {
+		return
+	}
+	value, err := h.service.MissionDetail(r.Context(), query, r.PathValue("missionID"))
+	respondMission(w, value, err)
+}
+
+func (h *AgentMissionHandler) Mutate(w http.ResponseWriter, r *http.Request) {
+	var request app.MissionMutation
+	if !decodeStrictJSON(w, r, &request, "invalid mission action", "Provide the current project identity, catalog revision, plan hash and explicit action.") {
+		return
+	}
+	value, err := h.service.MutateMission(r.Context(), r.PathValue("missionID"), request)
+	respondMission(w, value, err)
+}
+
+func respondMission(w http.ResponseWriter, value any, err error) {
+	w.Header().Set("Cache-Control", "no-store")
+	switch {
+	case errors.Is(err, app.ErrMissionNotFound):
+		api.WriteAppError(w, api.NotFound("mission unavailable", "Select a retained mission in this checkout.", err))
+	case errors.Is(err, app.ErrMissionConflict):
+		api.WriteAppError(w, api.Conflict("mission changed", "Reload the catalog and review the current plan before editing or approving.", err))
+	case errors.Is(err, app.ErrMissionUnavailable):
+		api.WriteAppError(w, api.Internal("mission unavailable", "The private mission catalog could not be read or written.", err))
+	case err != nil:
+		if !writeContextError(w, "mission request", err) {
+			writeProjectError(w, "mission request failed", err)
+		}
+	default:
+		api.WriteJSON(w, http.StatusOK, value)
+	}
+}

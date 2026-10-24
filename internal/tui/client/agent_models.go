@@ -1,5 +1,80 @@
 package client
 
+type MissionSource struct {
+	Path   string `json:"path"`
+	Hash   string `json:"hash"`
+	Exists bool   `json:"exists"`
+}
+
+type MissionChild struct {
+	ID                 string      `json:"id"`
+	Title              string      `json:"title"`
+	Approach           string      `json:"approach"`
+	AcceptanceCriteria []string    `json:"acceptance_criteria"`
+	Dependencies       []string    `json:"dependencies"`
+	WritePaths         []string    `json:"write_paths"`
+	ReadPaths          []string    `json:"read_paths"`
+	Limits             AgentLimits `json:"limits"`
+}
+
+type MissionPlan struct {
+	Goal             string          `json:"goal"`
+	Sources          []MissionSource `json:"sources"`
+	Limits           AgentLimits     `json:"limits"`
+	Children         []MissionChild  `json:"children"`
+	IntegrationOrder []string        `json:"integration_order"`
+}
+
+type MissionRecord struct {
+	ProjectIdentity
+	ID            string            `json:"id"`
+	Policy        string            `json:"policy"`
+	Configuration string            `json:"configuration"`
+	Instructions  map[string]string `json:"instructions"`
+	Plan          MissionPlan       `json:"plan"`
+	PlanHash      string            `json:"plan_hash"`
+	Reviewed      []string          `json:"reviewed"`
+	Approved      bool              `json:"approved"`
+	CreatedAt     string            `json:"created_at"`
+	UpdatedAt     string            `json:"updated_at"`
+}
+
+type AgentMission struct {
+	CatalogRevision int64         `json:"catalog_revision"`
+	Mission         MissionRecord `json:"mission"`
+	Stale           bool          `json:"stale"`
+	SourceStatus    string        `json:"source_status"`
+}
+
+type MissionSummary struct {
+	ID              string `json:"id"`
+	ProjectRevision string `json:"project_revision"`
+	Goal            string `json:"goal"`
+	PlanHash        string `json:"plan_hash"`
+	ChildCount      int    `json:"child_count"`
+	ReviewedCount   int    `json:"reviewed_count"`
+	Approved        bool   `json:"approved"`
+	Stale           bool   `json:"stale"`
+	SourceStatus    string `json:"source_status"`
+	UpdatedAt       string `json:"updated_at"`
+}
+
+type MissionList struct {
+	ProjectIdentity
+	CatalogRevision int64            `json:"catalog_revision"`
+	Missions        []MissionSummary `json:"missions"`
+}
+
+type MissionMutation struct {
+	ProjectIdentity
+	CatalogRevision int64        `json:"catalog_revision"`
+	PlanHash        string       `json:"plan_hash"`
+	Action          string       `json:"action"`
+	ChildID         string       `json:"child_id,omitempty"`
+	Confirm         bool         `json:"confirm"`
+	Plan            *MissionPlan `json:"plan,omitempty"`
+}
+
 type AgentUsage struct {
 	Accounting           *AgentUsageAccounting `json:"accounting,omitempty"`
 	ModelCalls           int                   `json:"model_calls"`
