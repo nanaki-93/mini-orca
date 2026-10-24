@@ -483,7 +483,10 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/app/agentstate/memory.go`, `internal/app/agentstate/memory_test.go`, `internal/app/agentruntime/memory.go`, `internal/app/agentruntime/memory_test.go`, `internal/app/agent_memory.go`, `internal/app/agent_memory_test.go` — **new**.
+- `internal/app/agent_memory_context.go`, `internal/app/agent_memory_context_test.go`, `internal/api/handlers/agent_memory_handler.go`, `internal/api/handlers/agent_memory_handler_test.go` — **new**, admitted context retrieval and explicit local curation routes.
 - `internal/app/change_pipeline_stages.go`, `internal/app/agentruntime/investigator.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/runtime.go`.
+- `internal/app/agentruntime/policy.go`, `internal/app/agent_knowledge.go`, `internal/app/agent_investigation.go`, `internal/app/change_session.go`, `internal/app/feature_suggestions.go`, `internal/app/declaration_explanation.go`, `internal/app/semantic_review.go`, `internal/app/security_review.go`, `internal/app/performance_review.go` — attach bounded, captured memory scopes at actual model owners and revalidate retrieval before transport dispatch.
+- `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `docs/api-contract.md`, `docs/openapi.yaml` — register and document guarded memory list/detail/create/edit/accept/forget operations; TUI management follows in Task 26.
 
 **Inputs / dependencies**
 - Task 17; existing harness lessons and instruction graduation workflow.
@@ -492,6 +495,8 @@ This is an implementation specification, not a claim that the features below alr
 - Store accepted decisions, verified outcomes, and explicitly retained lessons with provenance, source revisions, scope, timestamps, and invalidation rules. Use a bounded local search implementation behind ADK's memory interface.
 - Separate candidate memories from accepted memory; model text cannot grant itself authority or override AGENTS.md. A stale memory is advisory and visibly stale.
 - Retrieve only admitted relevant records; support update, forget, retention, and project isolation. Avoid automatically retaining entire conversations or secrets; deletion removes retrieval eligibility immediately.
+- Use the pinned [Go memory service interface](https://adk.dev/sessions/memory/) with bounded local search. Reject automatic session ingestion. Limit records, text, result counts and retention; keep private atomic storage and compare-and-swap versions. Editing accepted content makes it a candidate again; acceptance and forgetting require an explicit guarded user action.
+- Scope memories to captured file hashes and optional declaration spans. Excluded, expired, changed-source or out-of-scope records cannot enter model context. Revision-only historical advice remains explicitly stale. Revalidate selected record versions and scope at the transport boundary, and charge retrieval/context to the same run budget. Verified-outcome text must come from current proposal check receipts, never an arbitrary claim supplied by a model.
 
 **Verification command**
 `go test -race ./internal/app/agentstate ./internal/app/agentruntime ./internal/app && ./scripts/validate.sh && git diff --check`
