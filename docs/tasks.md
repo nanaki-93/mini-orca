@@ -452,9 +452,13 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/knowledge_graph_test.go` — **new**.
+- `internal/app/agent_knowledge.go`, `internal/app/agent_knowledge_test.go` — **new**, host integration and native-history/publication regressions.
+- `internal/app/agent_limits.go`, `internal/app/agentruntime/events.go`, `internal/app/agentstate/run.go`, `internal/app/agentstate/store_test.go` — bind import runs to the scanned checkout and register versioned, source-free knowledge progress.
+- `internal/llm/generation.go`, `internal/llm/generation_test.go` — preserve typed refusal/incomplete-response diagnostics across the native adapter without exposing provider text.
 - `internal/app/feature_suggestions.go`, `internal/app/declaration_explanation.go`, `internal/app/semantic_review.go`, `internal/app/performance_review.go`, `internal/app/security_review.go`, `internal/app/service.go`.
 - `internal/project/project_overview.go`, `internal/project/architecture_overview_report.go`, `internal/project/architecture_overview_report_test.go`, `internal/project/handbook/handbook.go`, `internal/project/handbook/handbook_test.go`.
 - `internal/app/feature_suggestions_test.go`, `internal/app/declaration_explanation_test.go`, `internal/app/project_analysis_contract_test.go`.
+- `docs/openapi.yaml`, `docs/api-contract.md` — document the evidence-preserving handbook composition version and knowledge run behavior.
 
 **Inputs / dependencies**
 - Task 16; current report schemas, provenance, goals, and deterministic handbook facts. `internal/project/project_overview.go` owns the current analyzer; inject a provider-neutral adapter there.
@@ -463,6 +467,8 @@ This is an implementation specification, not a claim that the features below alr
 - Route all remaining model-backed knowledge operations through the shared runtime, tools, budget, and event infrastructure. Keep project facts and handbook composition independent of ADK.
 - Publish only validated domain reports with anchored evidence and compatible history. Distinguish repository facts, suggestions, and unverified explanations; do not synthesize benchmark claims.
 - Preserve explicit user actions and current provider scopes. Existing report readers and the Docs/Features TUI remain usable throughout migration.
+- Capture import identity from a deterministic scan before native admission, recheck source/policy before publication, and preserve inventory with honest failed reports on provider timeout/refusal. Journal/policy failures remain errors. Keep host retries and failed feature-history semantics intact; do not add nested dispatchers to stages already owned by the analysis graph.
+- Remove fabricated handbook dependencies, scenario steps, guards and decisions. Anchor component paths to the admitted inventory and label interpretations as advisory. Version the changed composition; rebuild old derived handbooks passively from retained reports/indexes without modifying historical model reports or sending a provider request.
 
 **Verification command**
 `go test ./internal/app ./internal/app/agentruntime ./internal/project/... && ./scripts/validate.sh && git diff --check`
