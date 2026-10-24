@@ -773,25 +773,46 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: review external actions and remote agent work in the TUI`
 
-## Task 26 — Add artifact and memory management to the TUI
+## Task 26A — Expose a scoped artifact library with guarded export and deletion
 
 - [ ] Complete
 
 **Target files**
 - `internal/app/agent_library.go`, `internal/app/agent_library_test.go`, `internal/api/handlers/agent_library_handler.go`, `internal/api/handlers/agent_library_handler_test.go` — **new**.
-- `internal/tui/agent_library.go`, `internal/tui/agent_library_test.go` — **new**.
-- `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/hub_settings.go`, `internal/tui/keys.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/app/agentstate/artifacts.go`, `internal/app/agentstate/artifacts_test.go` — metadata catalog access and exact version/hash deletion with authorization rechecked under the journal lock and at persistence.
+- `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
 - Task 25D; local artifact and curated memory stores.
 
 **Implementation rules**
-- Add artifact/evidence navigation within Code and memory/lessons management within Settings. Show versions, source links, freshness, ownership, size, retention, and whether a record is candidate or accepted.
-- Implement preview, accept/reject memory, forget, and explicit artifact export/delete with accurate receipts. Reuse source/diff viewers for text; render binary metadata without pretending the terminal can display arbitrary media.
-- Preserve active recovery references, reject stale mutations, sanitize terminal text, and keep browsing passive. Export never writes project source through the artifact API.
+- List only artifacts with host-recorded project ownership, with bounded pagination tied to the catalog snapshot. Return metadata, versions, provenance/source ownership, revision freshness, size and protection; payload disclosure is a separate passive detail read.
+- Provide bounded text previews and binary metadata, explicit export and exact version/hash deletion. Export writes only a new private file in the checkout's guarded `.mini-orca/exports/artifacts` directory and returns its actual path/hash; it cannot target project source or arbitrary caller-supplied paths.
+- Preserve protected evidence and artifacts referenced by unfinished runs. Recheck project/revision and exact content identity for mutations, including under persistence guards. Report failed storage and changed catalogs instead of silently returning empty data. Reuse the existing curated memory API in the subsequent TUI step.
 
 **Verification command**
-`go test ./internal/app ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test ./internal/app/agentstate ./internal/app ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: expose guarded artifact library operations`
+
+## Task 26B — Add artifact and memory management to the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/agent_library.go`, `internal/tui/agent_library_actions.go`, `internal/tui/agent_library_commands.go`, `internal/tui/agent_library_test.go`, `internal/tui/client/agent_library.go`, `internal/tui/client/agent_library_test.go` — **new**, scoped inventory, private disclosure and explicit library mutations.
+- `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/hub_code.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/view_test.go`, `docs/UI_DESIGN_GUIDELINES.md`, `docs/api-contract.md`.
+
+**Inputs / dependencies**
+- Task 26A; guarded artifact library and existing curated memory/lesson stores.
+
+**Implementation rules**
+- Add artifact/evidence navigation within Code and memory management beside Lessons within Settings. Show versions, source links, freshness, ownership, size, retention, and candidate/accepted state. Keep metadata reads and selection passive; disclose retained text explicitly and use the existing scrollable read-only text layout, with binary metadata instead of unsupported media rendering.
+- Implement explicit artifact preview/export/delete and memory create/edit/accept/reject/forget using current checkout, record version/hash and complete confirmations. Rejecting a candidate removes it through guarded forget; accepted advice remains a separate explicit forget action. Creation/editing capture selected current source hashes; retaining proposal lessons/check outcomes must use their existing provenance guards.
+- Preserve protected/active recovery references, reject changed scope or stale confirmations, sanitize terminal text, and keep cancellation/partial reads/late replies honest. Export displays the daemon's private-file receipt and never grants source Apply. Maintain stable selection and compact keyboard navigation.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add artifact and memory library views`
 
@@ -804,7 +825,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agentruntime/runtime.go`, `internal/app/agentstate/store.go`, `internal/config/agent_runtime.go`, `internal/tui/agent_run_view.go`, `internal/tui/client/agent_models.go`, `CONFIG.md`, `config.example.yaml`.
 
 **Inputs / dependencies**
-- Task 26; [ADK Go tracing](https://adk.dev/observability/traces/) and durable event/usage records.
+- Task 26B; [ADK Go tracing](https://adk.dev/observability/traces/) and durable event/usage records.
 
 **Implementation rules**
 - Correlate run, node, tool, provider, retry, and check spans. Aggregate reported input/output/cache tokens, call counts, elapsed time, and failures without losing failed-attempt consumption.
