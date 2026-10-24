@@ -511,6 +511,10 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/compaction_test.go`, `internal/app/agentstate/context_cache.go`, `internal/app/agentstate/context_cache_test.go` — **new**.
 - `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/session.go`, `internal/app/agentruntime/budget.go`, `internal/app/change_context.go`, `internal/config/agent_runtime.go`, `CONFIG.md`, `config.example.yaml`.
+- `internal/app/agentruntime/context.go`, `internal/app/agentruntime/context_test.go`, `internal/app/agent_context.go`, `internal/app/agent_context_test.go` — **new**, scoped context configuration, local composition reuse, and lossless user constraints around compacted advisory history.
+- `internal/app/agent_limits.go`, `internal/app/change_session.go`, `internal/app/service.go`, `internal/config/agent_runtime_test.go` — wire configuration and captured change authority into actual dispatch; preserve existing analysis attempt reservations.
+- `internal/app/agentruntime/investigator.go`, `internal/app/agentruntime/tool_agent.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/persistence.go` — protect the original admitted prompt, charge summaries to the same investigation/run, and persist native compaction events with source guards.
+- `internal/app/agentruntime/provider_cache.go`, `internal/app/agentruntime/provider_cache_test.go` — **new**, a guarded GenAI cache adapter; `internal/app/agentruntime/gemini.go` — reuse validated cached prefixes in native generation.
 
 **Inputs / dependencies**
 - Task 18; [Go compaction support](https://adk.dev/context/compaction/) and durable session events.
@@ -519,6 +523,9 @@ This is an implementation specification, not a claim that the features below alr
 - Configure bounded history/tail retention and persist compaction records so restart cannot repeatedly summarize/bill the same events. Charge summarization to the same run and authorized model scope.
 - Keep approved plans, hard constraints, grants, IDs, and source fingerprints outside lossy summaries. Revalidate reconstructed context; fail clearly if mandatory context exceeds budget.
 - Cache deterministic retrieval/context by project, source, policy, instructions, schema, and configuration fingerprints. Provider-side prompt caching is capability-gated and opt-in with explicit remote retention/TTL; it never makes stale evidence current.
+- Use native ADK token-threshold tail retention and its summarizer interface. Keep original investigation instructions/source and every user conversation message outside lossy summaries. Native compaction failures must stop dispatch, including failures that the SDK otherwise treats as optional bookkeeping.
+- Persist a claim before a paid summary or cache creation, release file locks before model I/O, and retain completed receipts. An uncertain claim cannot silently trigger another paid request after restart. Revalidate authority before cache use and publication; reject corrupt/oversized state without overwriting it.
+- ADK Go does not provide `ContextCacheConfig`. Implement explicit provider caching through the pinned GenAI Go client only for tested compatible `generateContent` model families. Default it off, require a bounded explicit TTL, pin resource identity to the configured destination/model, and reject unsupported configurations without a provider call. Do not assume Gemini 4/Interactions support explicit caches; [current provider documentation](https://ai.google.dev/gemini-api/docs/caching) excludes them.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/config && ./scripts/validate.sh && git diff --check`
