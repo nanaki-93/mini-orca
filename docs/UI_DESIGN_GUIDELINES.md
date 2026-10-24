@@ -164,6 +164,31 @@ inventories, routing or draft input. Show the selected connections on the plan.
 Incoming access and outbound remote agents remain separate capabilities; neither
 grants local Apply, merge or project execution permission.
 
+External Work keeps API actions, retained research reports and remote advisory
+tasks in one scoped history. Local refresh and private receipt inspection are
+passive. API dispatch requires inspection of the complete persisted request and
+a separate confirmation bound to its current version and hash. Uncertain delivery
+never offers retry; reconciliation records an externally checked user observation.
+Cancellation or failed control transport requires local history refresh before
+another action. Preserve selection by receipt kind/ID and healthy history groups
+when another group is unavailable.
+
+Research and delegation capture the current plan's indexed source hashes before
+confirmation. List every shared path/hash and explicitly identify planned paths
+without indexed content as unshared. An entirely unavailable source selection
+requires correction or an explicit `--question-only` choice. Confirm the provider
+or remote destination, search/delegation intent and source sharing; changed plans,
+models, grants, cards or checkout invalidate pending consent. Keep remote usage
+labeled as remotely reported and output as advisory, including partial artifacts.
+Offer task refresh, stream reconnection, input, cancellation and reconciliation
+only when the current receipt and connection permit them. A remote status refresh
+is a separate confirmed network action from refreshing local history.
+
+Open a retained research report only on Enter or `:report-open`. Use its guarded
+loopback URL and a system browser argument vector, preserving the HTML report's
+citations and original search suggestions. The terminal shows report metadata;
+navigation does not launch a browser or contact a provider.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

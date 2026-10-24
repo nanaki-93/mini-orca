@@ -750,7 +750,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 25D — Review external actions and remote work from the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_external_work.go`, `internal/tui/agent_external_work_test.go`, `internal/tui/agent_external_actions.go`, `internal/tui/agent_external_commands.go`, `internal/tui/browser.go`, `internal/tui/browser_test.go` — **new**, exact external action review, research and delegation actions with explicit report viewing.

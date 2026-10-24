@@ -608,6 +608,20 @@ consumes one model-call and one tool-call allowance, independently of unknown
 provider-internal searches. Configuration, report listing and report reads do not
 dispatch provider requests. See the [API contract](docs/api-contract.md).
 
+In the TUI, **Settings / External Work** displays local API action, research and
+delegation history. `:external-scope main` or `:external-scope task` selects the
+checkout; `[r]` refreshes its local receipts. Inspect an API action with Enter,
+then use `:api-approve` to confirm the exact retained request/version/hash once.
+An uncertain outcome requires `:api-reconcile applied|not_applied|other
+<observation>` after checking the external service; it never replays the request.
+
+`:research <question>` captures indexed sources from the current plan (at most
+eight selected read/write paths) and then requests provider/search/source-sharing
+consent. Planned paths with no indexed source are named as unshared in the
+confirmation. Use `:research --question-only <question>` explicitly to send no
+project files. Enter on a retained report, or `:report-open`, opens its guarded
+loopback HTML report in the system browser; listing reports never opens it.
+
 `integrations.a2a` configures up to eight remote agents. Each entry supplies an
 `id`, exact same-origin `card_url` and `endpoint`, optional `bearer_token_env`,
 one to four allowlisted `skills`, and `timeout_seconds` (1–60; default 30).
@@ -641,6 +655,18 @@ artifacts and 64 KiB combined. Streams are bounded to 512 KiB and 128 events.
 Partial artifacts, input/auth requests, failure, cancellation and uncertainty
 retain separate states. Remote output cannot grant local permissions, execute
 project code or change source. See the [API contract](docs/api-contract.md).
+
+After discovering a remote connection in the same checkout, use
+`:delegate <remote-id> <analysis|review> <skill> [--question-only] <question>`.
+The TUI captures the selected plan sources before separate destination and sharing
+consent and uses streaming when the reviewed card advertises it. Enter on a remote
+receipt reads its local private detail. Its available controls are
+`:remote-refresh`, `:remote-reconnect`, `:remote-cancel`, `:remote-input <reply>`
+and `:remote-reconcile <observation>`; each requires current receipt review and
+confirmation. Input shares only the explicitly confirmed reply. Reconciliation
+records a user observation locally without requiring a live connection grant.
+`:external-cancel` stops the current local request; refresh history before acting
+again, since a remote task or external effect may still exist.
 
 `integrations.a2a_server` optionally exposes Mini-Orca's native ADK A2A service.
 It is disabled by default. `bind` defaults to `127.0.0.1:9091` and must use a

@@ -285,8 +285,14 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageConnections: {
 		title:     "[5] SETTINGS · CONNECTIONS",
 		primary:   []keyDesc{{"Enter / c", "Confirm discovery or incoming grant"}, {"d", "Confirm revoke"}},
-		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
+		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"w", "External Work"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":connection-scope", "Select main or task checkout"}, {":connection-use", "Toggle selected plan tool grant"}, {":connections-clear", "Clear plan tool selections"}},
+	},
+	PageExternalWork: {
+		title:     "[5] SETTINGS · EXTERNAL WORK",
+		primary:   []keyDesc{{"Enter", "Inspect receipt / open research report"}, {"a", "Confirm reviewed API dispatch"}},
+		secondary: []keyDesc{{"r", "Refresh local history"}, {"n", "Research question"}, {"d", "Delegate advisory work"}, {"i", "Reply when input is required"}, {"u", "Reconcile uncertain outcome"}, {"x", "Stop local request"}, {"o", "Select checkout"}},
+		commands:  []keyDesc{{":remote-refresh", "Confirm remote task status request"}, {":remote-reconnect", "Confirm retained stream connection"}, {":remote-cancel", "Confirm remote cancellation"}, {":api-reconcile", "Record externally checked outcome"}},
 	},
 	PageBootstrap: {
 		title:     "PROJECT SETUP",

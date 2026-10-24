@@ -158,6 +158,8 @@ type agentSettingsResultMsg struct{ result agentSettingsResult }
 
 type agentConnectionResultMsg struct{ result agentConnectionResult }
 
+type agentExternalResultMsg struct{ result agentExternalResult }
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -222,7 +224,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg:
+	case agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -246,6 +248,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case agentExternalResultMsg:
+		m.state.applyExternalResult(ev.result)
 	case agentConnectionResultMsg:
 		m.state.applyConnectionResult(ev.result)
 	case agentSettingsResultMsg:
@@ -305,6 +309,8 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
+	case "agent-external":
+		return m.prepareExternalCmd(act.AgentExternal), true
 	case "agent-connection":
 		if !m.state.acceptsConnectionAction(act.AgentConnection) {
 			return nil, true

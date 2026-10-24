@@ -39,6 +39,8 @@ func (s *State) execConnectionCommand(command, arg string) bool {
 
 func (s *State) handleConnectionKey(key string) bool {
 	switch key {
+	case "w":
+		s.Navigate(PageExternalWork)
 	case "c":
 		s.confirmConnectionControl("discover")
 	case "d":

@@ -246,6 +246,9 @@ func (s *State) renderSelectedFileStageInspector(th ansiTheme, panelW int, path 
 }
 
 func (s *State) renderGovernanceSubPage(th ansiTheme, width int) []string {
+	if s.EffectivePage() == PageExternalWork {
+		return s.renderExternalWork(th, width)
+	}
 	if s.EffectivePage() == PageConnections {
 		return s.renderConnections(th, width)
 	}
