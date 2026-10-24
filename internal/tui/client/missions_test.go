@@ -127,6 +127,9 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	}
 	prepare := MissionExecutionRequest{ProjectIdentity: identity, Action: "prepare", CatalogRevision: approved.CatalogRevision, PlanHash: approved.Mission.PlanHash, Base: &GitIdentity{Head: repo.Head, Branch: repo.Branch}, Confirm: true}
 	target := base + "/" + saved.Mission.ID + "/execution" + query
+	if absent, err := cl.MissionExecution(t.Context(), "unprepared", guardedScope, saved.Mission.ID); err != nil || absent != nil {
+		t.Fatal("unprepared execution", absent, err)
+	}
 	var execution AgentMissionExecution
 	if err := cl.DoJSON(t.Context(), "prepare", "POST", target, prepare, &execution); err != nil || execution.Stale || execution.Execution.Mission.ProjectIdentity != identity || execution.Execution.Mission.PlanHash != approved.Mission.PlanHash || execution.Execution.CatalogRevision != approved.CatalogRevision || execution.Execution.Revision != 1 || execution.Execution.State != "prepared" || execution.Execution.Base != *prepare.Base || len(execution.Execution.Children) != 1 || execution.Execution.Children[0].Limits != limits {
 		t.Fatal("execution wire contract", execution, err)
@@ -134,10 +137,14 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	if err := cl.DoJSON(t.Context(), "read-execution", "GET", target, nil, &execution); err != nil || execution.Execution.State != "prepared" {
 		t.Fatal(execution, err)
 	}
+	if typed, err := cl.MissionExecution(t.Context(), "typed-execution", guardedScope, saved.Mission.ID); err != nil || typed.Execution.ID != execution.Execution.ID {
+		t.Fatal("typed execution", typed, err)
+	}
 	prepare.Action, prepare.Base, prepare.CatalogRevision = "cancel", nil, 0
 	prepare.ExecutionID, prepare.ExecutionRevision = execution.Execution.ID, execution.Execution.Revision
-	if err := cl.DoJSON(t.Context(), "cancel-execution", "POST", target, prepare, &execution); err != nil || execution.Execution.State != "canceled" || execution.Execution.Revision != 2 {
-		t.Fatal(execution, err)
+	canceled, err := cl.ControlMissionExecution(t.Context(), "cancel-execution", guardedScope, saved.Mission.ID, prepare)
+	if err != nil || canceled.Execution.State != "canceled" || canceled.Execution.Revision != 2 {
+		t.Fatal(canceled, err)
 	}
 	for _, method := range []string{"DELETE", "PUT", "PATCH"} {
 		if _, err := cl.Request(t.Context(), "rejected-execution-method", method, target, `{}`); err == nil {

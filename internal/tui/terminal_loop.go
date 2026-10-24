@@ -173,6 +173,7 @@ func pollTickCmd() tea.Cmd {
 // BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
 type BubbleModel struct {
 	agentStream       *agentRunStream
+	missionStream     *missionExecutionStream
 	nativeStreams     bool
 	ctx               context.Context
 	state             *State
@@ -199,11 +200,13 @@ func NewBubbleModel(ctx context.Context, state *State, client *Client, width, he
 
 // Init implements tea.Model.
 func (m *BubbleModel) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	m.syncMissionExecutionStream(&cmds)
 	if m.client != nil && m.state.hasActiveBackgroundJob() {
 		m.pollScheduled = true
-		return pollTickCmd()
+		cmds = append(cmds, pollTickCmd())
 	}
-	return nil
+	return batchTeaCmds(cmds)
 }
 
 // Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, KeyEvent, and poll ticks.
@@ -228,7 +231,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case missionResultMsg, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
+	case missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -245,9 +248,11 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.state.Quitting {
 		m.state.cancelMissionRequest()
 		m.stopAgentStream()
+		m.stopMissionExecutionStream()
 		return m, tea.Quit
 	}
 	m.syncAgentStream(&cmds)
+	m.syncMissionExecutionStream(&cmds)
 	m.maybeSchedulePollTick(&cmds)
 	return m, batchTeaCmds(cmds)
 }
@@ -256,6 +261,8 @@ func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
 	case missionResultMsg:
 		m.state.applyMissionResult(ev.result)
+	case missionExecutionUpdate:
+		return m.applyMissionExecutionUpdate(ev)
 	case agentLibraryResultMsg:
 		m.state.applyLibraryResult(ev.result)
 	case agentExternalResultMsg:

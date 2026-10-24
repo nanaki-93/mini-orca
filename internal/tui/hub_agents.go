@@ -118,6 +118,9 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	if s.hasRunningWorkflow() {
 		actions = "[←/→] Overview · [↑/↓] Stage · [d] Diff · [x] Cancel"
 	}
+	if chg.MissionOrigin != nil {
+		actions = "[←/→] Execution detail · [d] Diff · :mission-execution for owner controls"
+	}
 	lines := renderPageHeader(th, "TASK · STAGES", actions)
 	selectedStage := s.effectiveAgentDetailStage()
 	stages := s.currentAgentStages()

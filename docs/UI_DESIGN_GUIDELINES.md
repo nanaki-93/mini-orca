@@ -111,6 +111,9 @@ refresh local provider metadata before transport. Prevent duplicate submission.
 cancellation require local history refresh before retrying, because saving may
 have completed before the receipt was lost. Reject late/replaced results, and
 clear private mission state when its project or task checkout changes.
+An inspected execution retains its owner when opening an exactly owned nested
+child. An owner revision change invalidates action consent and requires explicit
+refresh; it does not discard the retained mission or adopt unrelated source changes.
 
 Review (`r` / `:mission-review`) shows the selected concrete child's approach,
 criteria, paths, dependencies and budget in a scrollable confirmation bound to
@@ -121,6 +124,48 @@ authority. History, section navigation, command completion and local editing
 never invoke providers or checks. Mission controls replace ordinary task
 generation shortcuts while the mission view is active; `:mission-draft` returns
 from history to the retained draft.
+
+Enter on an approved plan or `:mission-execution` inspects execution in the same
+four sections. `:mission-draft` returns to the retained plan. Keep navigation and
+refresh passive, preserve local edits, selected child and scroll as progress arrives,
+and show unavailable progress without replacing the last receipt. Local event
+subscriptions reconnect with their acknowledged cursor, use bounded passive reads
+for lease/effect changes, and stop on navigation, pending mutations or scope change.
+
+Preparation (`p` / `:mission-prepare`) confirms the approved plan and clean Git
+base without executing models or checks. Starting (`g` / `:mission-start`) confirms
+the actual configured Creation, Testing and Review profiles, provider destinations,
+shared context, check commands and fixed allocations for ready children. Check
+trust (`t` / `:mission-trust`) is a separate confirmation for the exact owner;
+recording it runs no commands. Pause (`P` / `:mission-pause`) interrupts the active
+wave; Stop (`X` / `:mission-stop`) permanently cancels the mission. Neither control
+resets consumed child allocations. Show unstarted allocations separately from
+measured model usage, and recorded elapsed charges separately from active reservations.
+
+Enter or `:mission-proposal` opens the selected owned child in the ordinary diff
+inspector. Every changed file still needs `w` review and explicit Apply/commit.
+Committing returns to the mission for `a` / `:mission-integrate`, bound to its
+approved order, exact proposal, commit and current destination. A task-scoped
+integration updates that task's owner and never replaces the top-level project.
+Invalidate check trust and require current command/settings inspection after a
+base advance. An older-base proposal uses `v` / `:mission-revalidate` to create a
+fresh candidate and run consented checks without model calls or inherited approval.
+
+Show failed/interrupted children, candidate generations, protected proposal
+references, Git conflicts and cleanup states in the child detail. `:mission-candidate
+0|1|2|3` inspects retained generations; `0` is the original proposal.
+`:mission-model-history` opens the original child's execution as historical
+evidence. Neither action promotes that generation into the selected candidate.
+Independent model retries cannot reset a mission child's fixed allocation.
+
+Recovery (`c`) selects the applicable explicit control: `:mission-reconcile` for
+an abandoned wave, `:mission-recover-integration` for a pending Git outcome, or
+`:mission-recover-revalidation` for an interrupted candidate check. Active owner
+leases remain visible and cannot be stolen. Recovery never repeats model calls,
+checks or merges. `:mission-cleanup` retries only a proven integrated child's
+checkout/branch cleanup. After transport cancellation, `r` / `:mission-execution`
+reads the same owner's current revision before inspecting retained receipts;
+uncertain outcomes never become success or trigger automatic replay.
 
 Task stages follow recorded node identities, including separate generation and
 verification and parallel specialist reviews. Selection and scroll remain stable

@@ -347,6 +347,9 @@ func (s *State) mergeSelectedWorktree() {
 				s.applyAndCommitProposal("")
 				return
 			}
+			if s.routeMissionWorktree(s.Change.WorktreePath) {
+				return
+			}
 			_, mainBranch := s.mainGitIdentity()
 			s.CmdOutput = fmt.Sprintf("Merging %s into %s...", s.Change.WorktreePath, client.FirstNonEmpty(mainBranch, "main"))
 			s.enqueueAction(ActionRequest{Kind: "merge-worktree", Target: s.Change.WorktreePath})
@@ -361,6 +364,9 @@ func (s *State) mergeSelectedWorktree() {
 		return
 	}
 	wt := s.GitWorkspace.Worktrees[idx]
+	if s.routeMissionWorktree(wt.Path) {
+		return
+	}
 	if worktreeHasUnfinishedTasks(&wt) {
 		s.CmdOutput = "Finish verification and Apply the saved task in Work > Tasks before merging."
 		return
@@ -383,6 +389,10 @@ func (s *State) triggerAgentRecheckOrRepair() {
 	if s.hasRunningWorkflow() {
 		s.CmdOutput = "Refreshing active agent workflow status..."
 		s.enqueueAction(ActionRequest{Kind: "load-change", Target: s.Change.ID})
+		return
+	}
+	if s.Change.MissionOrigin != nil {
+		s.CmdOutput = "Mission allocations remain fixed. Inspect :mission-execution for revalidation or recovery; ordinary retries cannot reset them."
 		return
 	}
 	if s.Change.Plan != nil && len(s.Change.ScopeSuggestions) > 0 {

@@ -57,6 +57,9 @@ func (s *State) missionStateText() string {
 	if v.Saved == nil {
 		return "LOCAL DRAFT · unapproved"
 	}
+	if v.Execution != nil {
+		return "FROZEN PLAN · execution " + v.Execution.Execution.State
+	}
 	if v.Saved.Stale {
 		return "STALE · source " + v.Saved.SourceStatus
 	}
@@ -78,6 +81,9 @@ func (s *State) renderMissionPage(th ansiTheme, width int) []string {
 	title := "MISSIONS"
 	if v.Draft != nil && !v.History {
 		title = "MISSION PLAN"
+		if v.ExecutionOpen {
+			title = "MISSION EXECUTION"
+		}
 	}
 	var hints []string
 	for _, action := range s.missionHelpSpec().primary {
@@ -99,7 +105,11 @@ func (s *State) renderMissionPage(th ansiTheme, width int) []string {
 	for _, field := range s.missionDetailFields() {
 		rows = append(rows, renderDiagnosticRow(th, th.cyan, field[0], th.fg, externalSafeText(field[1]), issuePanelContentWidth(adaptivePanelWidth(width)))...)
 	}
-	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], "REVIEW BEFORE APPROVAL", adaptivePanelWidth(width), rows)...)
+	meta := "REVIEW BEFORE APPROVAL"
+	if v.ExecutionOpen {
+		meta = "EXECUTION RECEIPTS"
+	}
+	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], meta, adaptivePanelWidth(width), rows)...)
 }
 
 func (s *State) renderMissionHistory(th ansiTheme, width int, lines []string) []string {
@@ -133,6 +143,9 @@ func (s *State) renderMissionHistory(th ansiTheme, width int, lines []string) []
 
 func (s *State) missionDetailFields() [][2]string {
 	v := s.Mission
+	if v.ExecutionOpen {
+		return s.missionExecutionFields()
+	}
 	fields := [][2]string{{"State:", s.missionStateText()}}
 	switch s.DetailSection {
 	case 1:
@@ -197,7 +210,17 @@ func (s *State) handleMissionKey(ev KeyEvent) {
 		s.handleMissionHistoryKey(ev)
 		return
 	}
+	if s.Mission.ExecutionOpen {
+		s.handleMissionExecutionKey(ev)
+		return
+	}
+	s.handleMissionDraftKey(ev)
+}
+
+func (s *State) handleMissionDraftKey(ev KeyEvent) {
 	switch ev.Key {
+	case "Enter":
+		s.refreshMissionExecution()
 	case "n":
 		s.openCommandInput("mission-new " + s.Mission.Draft.Goal)
 	case "g":

@@ -29,6 +29,15 @@ type missionView struct {
 	Pending         *missionAction
 	Cancel          context.CancelFunc
 	Failure         string
+	Execution       *client.AgentMissionExecution
+	ExecutionOpen   bool
+	ExecutionLoaded bool
+	Repository      *GitRepository
+	Trust           *ExecutionTrust
+	Candidate       *ChangeSession
+	CandidateGit    *GitRepository
+	ProgressFailure string
+	OwnerChange     *ChangeSession
 }
 
 type missionAction struct {
@@ -37,16 +46,27 @@ type missionAction struct {
 	Scope                                            client.AgentSettingsScope
 	Mutation                                         client.MissionMutation
 	Planning                                         client.MissionPlanningRequest
+	Execution                                        client.MissionExecutionRequest
+	Captured                                         *client.AgentMissionExecution
+	Candidate                                        *client.MissionExecutionChild
+	Path, TrustHash                                  string
+	Sources                                          []client.MissionSource
 }
 
 type missionResult struct {
-	Action   missionAction
-	Catalog  *client.MissionList
-	Index    *ProjectIndex
-	Settings *client.AgentSettings
-	Detail   *client.AgentMission
-	Planning *client.MissionPlanningResult
-	Err      error
+	Action       missionAction
+	Catalog      *client.MissionList
+	Index        *ProjectIndex
+	Settings     *client.AgentSettings
+	Detail       *client.AgentMission
+	Planning     *client.MissionPlanningResult
+	Execution    *client.AgentMissionExecution
+	Owner        *Project
+	Repository   *GitRepository
+	Trust        *ExecutionTrust
+	Candidate    *ChangeSession
+	CandidateGit *GitRepository
+	Err          error
 }
 
 func missionDigest(value any) string {
@@ -72,7 +92,7 @@ func cloneMissionPlan(plan client.MissionPlan) client.MissionPlan {
 
 func (s *State) missionCurrent() bool {
 	v := s.Mission
-	return v != nil && s.checkoutScopeCurrent(v.Parent, v.Scope, v.Path)
+	return v != nil && (s.checkoutScopeCurrent(v.Parent, v.Scope, v.Path) || s.missionOwnedSelection())
 }
 
 func (s *State) missionFingerprint() string {
@@ -84,7 +104,7 @@ func (s *State) missionFingerprint() string {
 	if v.Catalog != nil {
 		revision = v.Catalog.CatalogRevision
 	}
-	return missionDigest([]any{v.Parent, v.Scope, v.Path, v.Epoch, revision, v.Draft, v.Saved, v.PlanningLimits, v.Settings, s.Models})
+	return missionDigest([]any{v.Parent, v.Scope, v.Path, v.Epoch, revision, v.Draft, v.Saved, v.PlanningLimits, v.Settings, s.Models, v.Execution, v.Repository, v.Trust, v.Candidate, v.CandidateGit})
 }
 
 func (s *State) missionReady() error {
@@ -120,6 +140,10 @@ func (s *State) selectMissionScope(selection string) {
 	}
 	s.cancelMissionRequest()
 	s.Mission = &missionView{Parent: s.Project.ProjectIdentity, Scope: scope, Path: path, Epoch: nextTUIReqID("mission-view"), History: true}
+	if selection == "task" {
+		owner := *s.Change
+		s.Mission.OwnerChange = &owner
+	}
 	s.PlanView = "mission"
 	s.Navigate(PagePlan)
 	s.queueMissionAction(missionAction{Operation: "read"})
@@ -132,17 +156,23 @@ func (s *State) queueMissionAction(action missionAction) {
 	}
 	v := s.Mission
 	action.ID, action.Parent, action.Scope = nextTUIReqID("mission"), v.Parent, v.Scope
+	action.Path, action.TrustHash = v.Path, missionDigest(v.Trust)
+	action.Captured = v.Execution
 	action.Expected, action.SettingsHash = s.missionFingerprint(), missionDigest(v.Settings)
 	v.Pending = &action
 	s.enqueueAction(ActionRequest{Kind: "mission", Mission: &action})
 }
 
 func (s *State) acceptsMissionAction(action *missionAction) bool {
-	return action != nil && s.missionCurrent() && s.Mission.Pending != nil && s.Mission.Pending.ID == action.ID && s.Mission.Scope == action.Scope && s.Mission.Parent == action.Parent && s.missionFingerprint() == action.Expected
+	return action != nil && s.missionCurrent() && s.Mission.Pending != nil && s.Mission.Pending.ID == action.ID && s.Mission.Scope == action.Scope && s.Mission.Parent == action.Parent && s.missionActionParentCurrent(action) && s.missionFingerprint() == action.Expected
+}
+
+func (s *State) missionActionParentCurrent(action *missionAction) bool {
+	return s.Project != nil && (s.Project.ProjectIdentity == action.Parent || action.Operation == "execution-read" || action.Execution.Integration != nil)
 }
 
 func (s *State) prepareMissionAction(action *missionAction) bool {
-	if s.acceptsMissionAction(action) {
+	if s.acceptsMissionAction(action) && (action.Operation == "execution-read" || action.Parent == s.Project.ProjectIdentity) {
 		return true
 	}
 	if action != nil && s.Mission != nil && s.Mission.Pending != nil && s.Mission.Pending.ID == action.ID {
@@ -175,11 +205,14 @@ func (s *State) cancelMissionRequest() {
 		v.Cancel = nil
 	}
 	v.Pending = nil
-	v.Failure = "Request canceled. Draft retained; refresh local history to establish whether a save completed."
+	v.Failure = "Request canceled. Draft and receipts retained; refresh to establish whether the action completed."
 	s.CmdOutput = v.Failure
 }
 
 func (s *State) reconcileMissionScope() {
+	if s.retainMissionRevisionChange() {
+		return
+	}
 	if s.Mission != nil && !s.missionCurrent() {
 		s.cancelMissionRequest()
 		s.Mission = nil
@@ -214,7 +247,7 @@ func executeMissionAction(ctx context.Context, cl *Client, action missionAction)
 	case "mutate":
 		r.Detail, r.Err = cl.MutateMission(ctx, action.ID, action.Scope, action.MissionID, action.Mutation)
 	default:
-		r.Err = fmt.Errorf("unknown mission operation")
+		return executeMissionExecutionAction(ctx, cl, action)
 	}
 	return r
 }
@@ -259,6 +292,9 @@ func (s *State) applyMissionResult(result missionResult) {
 		return
 	}
 	v.Failure = ""
+	if s.applyMissionExecutionResult(result) {
+		return
+	}
 	if result.Action.Operation == "read" {
 		s.applyMissionCatalog(result)
 		return
@@ -268,6 +304,8 @@ func (s *State) applyMissionResult(result missionResult) {
 		return
 	}
 	v.Saved, v.PlanningReceipt = result.Detail, result.Planning
+	v.Execution, v.Candidate, v.CandidateGit = nil, nil, nil
+	v.ExecutionOpen, v.ExecutionLoaded = false, false
 	plan := cloneMissionPlan(result.Detail.Mission.Plan)
 	v.Draft = &plan
 	v.Epoch = nextTUIReqID("mission-draft")

@@ -1084,7 +1084,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 30C3 — Review and integrate mission executions in the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/mission_execution.go`, `internal/tui/mission_execution_test.go` — **new**.

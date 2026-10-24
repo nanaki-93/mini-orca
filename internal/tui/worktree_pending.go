@@ -22,6 +22,9 @@ func (s *State) queueCommittedWorktree(chg *ChangeSession) {
 			}
 		}
 	}
+	if s.returnCommittedMission(chg) {
+		return
+	}
 	s.Navigate(PageGit)
 	for i, wt := range s.GitWorkspace.Worktrees {
 		if wt.Path == chg.WorktreePath {

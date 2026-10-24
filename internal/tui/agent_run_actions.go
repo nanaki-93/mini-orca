@@ -55,6 +55,9 @@ func (s *State) acceptsAgentRunAction(action *agentRunAction) bool {
 }
 
 func (s *State) execAgentRunCommand(command, arg string) bool {
+	if s.blockMissionChildRetry(command) {
+		return true
+	}
 	switch command {
 	case "execution":
 		s.Navigate(PageAgents)
@@ -73,10 +76,7 @@ func (s *State) execAgentRunCommand(command, arg string) bool {
 	case "run-export":
 		s.requestTraceExport(arg)
 	case "retry":
-		if !s.hasRunningWorkflow() {
-			return false
-		}
-		s.CmdOutput = "The workflow is running. Cancel it before requesting a stage retry."
+		return s.handleAgentRetryCommand()
 	case "stream-output":
 		if arg != "on" && arg != "off" {
 			s.Error = "Use :stream-output on or :stream-output off."
@@ -270,4 +270,12 @@ func (s *State) applyAgentInputResult(result agentRunActionResult) {
 	s.Change = &change
 	s.upsertActiveChange(&change)
 	s.CmdOutput = "Input decision recorded. Apply remains a separate guarded action."
+}
+
+func (s *State) handleAgentRetryCommand() bool {
+	if !s.hasRunningWorkflow() {
+		return false
+	}
+	s.CmdOutput = "The workflow is running. Cancel it before requesting a stage retry."
+	return true
 }

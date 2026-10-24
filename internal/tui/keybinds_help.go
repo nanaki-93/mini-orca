@@ -147,6 +147,10 @@ func (s *State) missionHelpSpec() pageHelpSpec {
 	spec := pageHelpSpec{title: "[2] WORK · MISSIONS", primary: []keyDesc{{"Enter", "Open plan"}, {"n", "New draft"}, {"r", "Refresh"}}, secondary: []keyDesc{{"←/→", "Section"}, {"PgUp/PgDn", "Details"}, {"Esc", "History / back"}}, commands: []keyDesc{{":mission-scope main|task", "Select checkout"}, {":mission-child ID", "Select / add child"}, {":mission-edit", "Edit local fields"}, {":mission-budget", "Edit explicit limits"}, {":mission-draft", "Return to draft"}, {":plan", "Ordinary task plan"}}}
 	if s.Mission != nil && s.Mission.Draft != nil && !s.Mission.History {
 		spec.primary = s.missionDraftActions()
+		if s.Mission.ExecutionOpen {
+			spec.primary = s.missionExecutionKeys()
+			spec.commands = []keyDesc{{":mission-execution", "Refresh execution"}, {":mission-trust", "Confirm check commands"}, {":mission-start", "Start ready allocations"}, {":mission-proposal", "Inspect selected candidate"}, {":mission-revalidate", "Fresh current-base checks"}, {":mission-integrate", "Confirm integration"}, {":mission-stop", "Stop mission"}, {":mission-cleanup", "Retry proven cleanup"}}
+		}
 	}
 	if s.Mission != nil && s.Mission.Pending != nil {
 		spec.primary = []keyDesc{{"x", "Cancel request"}, {"←/→", "Section"}, {"PgUp/PgDn", "Details"}}
@@ -156,6 +160,9 @@ func (s *State) missionHelpSpec() pageHelpSpec {
 
 func (s *State) missionDraftActions() []keyDesc {
 	v := s.Mission
+	if v.Saved != nil && v.Saved.Mission.Approved && missionDigest(v.Draft) == missionDigest(v.Saved.Mission.Plan) {
+		return []keyDesc{{"Enter", "Execution"}, {"n", "New draft"}, {"Esc", "History"}}
+	}
 	if v.Saved != nil && v.Saved.Stale {
 		return []keyDesc{{"n", "New draft"}, {"Esc", "History"}}
 	}

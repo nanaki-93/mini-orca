@@ -35,20 +35,28 @@ func (s *State) execMissionCommand(command, argument string) bool {
 		}
 	case "mission-draft":
 		if s.Mission != nil {
-			s.Mission.History = false
+			s.Mission.History, s.Mission.ExecutionOpen = false, false
 		}
 		s.PlanView = "mission"
 		s.Navigate(PagePlan)
 	case "mission-scope":
 		s.selectMissionScope(argument)
 	case "mission-refresh":
-		s.queueMissionAction(missionAction{Operation: "read"})
+		if s.Mission != nil && s.Mission.ExecutionOpen {
+			s.refreshMissionExecution()
+		} else {
+			s.queueMissionAction(missionAction{Operation: "read"})
+		}
 	case "mission-open":
 		s.openMission(argument)
 	case "mission-cancel":
 		s.cancelMissionRequest()
 	case "mission-new":
 		s.newMission(argument)
+	case "mission-candidate":
+		s.inspectMissionCandidate(argument, false)
+	case "mission-model-history":
+		s.inspectMissionCandidate("0", true)
 	default:
 		return s.execMissionDraftCommand(command, argument)
 	}
@@ -73,7 +81,7 @@ func (s *State) execMissionDraftCommand(command, argument string) bool {
 	case "mission-review", "mission-approve":
 		s.confirmMissionReview(command == "mission-approve")
 	default:
-		return false
+		return s.execMissionExecutionCommand(command)
 	}
 	return true
 }
@@ -105,6 +113,8 @@ func (s *State) newMission(goal string) {
 	v := s.Mission
 	v.Draft = &client.MissionPlan{Goal: goal, Limits: v.Settings.Limits, Sources: []client.MissionSource{}, Children: []client.MissionChild{}, IntegrationOrder: []string{}}
 	v.Saved, v.PlanningReceipt = nil, nil
+	v.Execution, v.Candidate, v.CandidateGit = nil, nil, nil
+	v.ExecutionOpen, v.ExecutionLoaded, v.ProgressFailure = false, false, ""
 	v.PlanningLimits = defaultMissionPlanningLimits(v.Settings.Limits)
 	v.Epoch, v.ChildID = nextTUIReqID("mission-draft"), ""
 	v.History = false
@@ -125,6 +135,10 @@ func (s *State) editableMission() *client.MissionPlan {
 	}
 	if s.Mission.Saved != nil && s.Mission.Saved.Stale {
 		s.Error = "Stored bindings changed. Create a new mission with current source captures."
+		return nil
+	}
+	if s.Mission.Execution != nil {
+		s.Error = "An execution freezes its plan. Create a new mission to change scope or allocations."
 		return nil
 	}
 	return s.Mission.Draft
@@ -221,6 +235,15 @@ func (s *State) editMissionChildField(field, value string) bool {
 }
 
 func (s *State) selectMissionChild(id string) {
+	if s.Mission != nil && s.Mission.Execution != nil {
+		if slices.ContainsFunc(s.Mission.Execution.Execution.Children, func(child client.MissionExecutionChild) bool { return child.ID == id }) {
+			s.Mission.ChildID = id
+			s.DetailScroll = 0
+		} else {
+			s.Error = "Select a child from the frozen execution."
+		}
+		return
+	}
 	plan := s.editableMission()
 	if plan == nil {
 		return
@@ -397,7 +420,7 @@ func (s *State) confirmMissionAction(title, message string, action missionAction
 	fingerprint := s.missionFingerprint()
 	childID := s.Mission.ChildID
 	s.Confirmation = &Confirmation{Title: title, Message: externalSafeText(message), AcceptLabel: "Confirm", OnConfirm: func(state *State) {
-		if !state.missionCurrent() || state.missionFingerprint() != fingerprint || state.Mission.ChildID != childID || state.Mission.Pending != nil {
+		if !state.missionCurrent() || state.Mission.Parent != state.Project.ProjectIdentity || state.missionFingerprint() != fingerprint || state.Mission.ChildID != childID || state.Mission.Pending != nil {
 			state.Error = "Mission, checkout or settings changed. Review and confirm the current selection."
 			return
 		}
