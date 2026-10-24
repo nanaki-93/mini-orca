@@ -978,28 +978,76 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: review bounded missions in the Work workspace`
 
-## Task 30 — Execute mission dependencies with guarded worktree integration
+## Task 30A — Prepare durable mission execution records and fixed allocations
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agentruntime/mission_graph.go`, `internal/app/agentruntime/mission_graph_test.go` — **new**.
-- `internal/app/agent_mission.go`, `internal/app/agentstate/missions.go`, `internal/app/worktree_service.go`, `internal/app/git_worktrees.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
-- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`.
-- `internal/tui/mission_actions.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go` — **new**.
+- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `cmd/daemon/main.go`.
+- `internal/tui/client/agent_models.go`, `internal/tui/client/client.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 29C; checked change graph and current guarded worktree lifecycle.
+- Task 29C; approved mission plans, guarded Git identity reads and private atomic storage.
 
 **Implementation rules**
-- Schedule ready children with cumulative mission budgets and explicit writer ownership. Parallelize only disjoint work; default integration order follows the approved dependency graph.
-- Each child produces a checked proposal for human review. Apply commits only that reviewed child; merge remains an explicit action. Rebase/changed base requires fresh checks and review where identity changes.
-- Pause/cancel cascades deterministically; restart reconciles owned worktrees and pending effects. Surface blocked dependencies, conflicts, rejected children, and cleanup failures without losing completed evidence.
+- Add explicit prepare, read and cancel operations for a mission execution receipt. Preparation freezes the fully reviewed plan, exact clean Git base and each child's approved budget allocation. It performs no provider dispatch, project-code execution, worktree creation or source mutation.
+- Keep one durable execution per mission identity so retries, plan edits, cancellation and restart cannot reset allocations. Preserve the frozen plan and canceled evidence. Later execution uses this receipt, never a mutable plan from the catalog.
+- Recheck current project, plan/catalog identity, source hashes, instructions, policy, settings and Git base at preparation publication. Use an independent execution revision for exact control requests. Read-only inspection reports changed or unavailable bindings; cancellation remains possible after source/settings changes.
+- Reject corrupt, foreign, oversized or unknown-schema records without replacing evidence. Cover concurrent preparations, replay, cancellation at publication, storage failure, stale base and passive reads in store/app/HTTP/client tests.
+
+**Verification command**
+`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: prepare durable mission execution allocations`
+
+## Task 30B — Schedule bounded mission children through native ADK workflows
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agent_mission_scheduler.go`, `internal/app/agent_mission_scheduler_test.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`, `internal/app/agentruntime/mission_graph.go`, `internal/app/agentruntime/mission_graph_test.go` — **new**.
+- `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agent_mission.go`, `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`.
+- `internal/app/service.go`, `internal/app/project_lifecycle.go`, `internal/app/worktree_service.go`, `internal/app/git_worktrees.go`, `internal/app/git_mutation.go`, `internal/app/change_pipeline.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_types.go`, `internal/app/agent_limits.go`, `internal/app/agent_settings_runtime.go`, `internal/app/agent_runs.go`.
+- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+
+**Inputs / dependencies**
+- Task 30A; existing checked-change graph, workflow ownership and guarded worktree creation.
+
+**Implementation rules**
+- Admit an explicit start/advance against the execution receipt with fresh provider and project execution consent. Use native ADK to run a bounded ready wave; parallelize only disjoint children whose dependencies are explicitly integrated. Record writer ownership and pending worktree effects before dispatch.
+- Give each child a private workflow admission constrained to its fixed allocation, approved write/read scope and captured settings. The sum of allocations bounds mission calls, tokens, tools and repairs; reserve an allocation once and never silently recycle it after failure, cancellation or restart. Bound aggregate active execution time and concurrent calls across waves; human review waiting does not consume execution time.
+- Each child creates a scoped worktree and checked proposal through existing workflow owners. Return awaiting human review without Apply or merge authority. Changed sources/settings/base fail before the affected dispatch; editing a catalog plan never retargets an active job.
+- Pause/cancel cascades to owned children and processes. Restart reconciles recorded worktrees and completed evidence without automatic provider requests; uncertain attempts remain interrupted and conservatively charged. Surface blocked, failed and rejected children honestly.
+
+**Verification command**
+`go test -race ./internal/app ./internal/app/agentruntime ./internal/app/agentstate ./internal/api/handlers && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: schedule bounded mission children with native ADK`
+
+## Task 30C — Review and integrate mission children in the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/tui/mission_execution.go`, `internal/tui/mission_execution_test.go` — **new**.
+- `internal/app/agent_mission_run.go`, `internal/app/agent_mission_scheduler.go`, `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
+- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`, `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/terminal_loop.go`, `internal/tui/sse_events.go`, `internal/tui/keybinds_help.go`, `internal/tui/command_menu.go`.
+- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 30B; checked child proposals and existing explicit Apply, commit and guarded merge paths.
+
+**Implementation rules**
+- Expose preparation, start/advance, pause/cancel and per-child progress with concrete scope, budgets and confirmations. Keep navigation and detail reads passive; discard late responses after scope, plan, execution or provider identity changes.
+- Each child uses ordinary diff review and explicit Apply/commit. Merge remains a separate confirmed action in the approved integration order. Verify the exact child worktree, proposal, commit and base before integration; record the resulting source/base identity before releasing dependencies.
+- A changed base or rebased child requires fresh checks and review wherever identity changes. Reconcile interrupted merge/cleanup effects from actual Git evidence, retaining completed proposals, conflicts, rejected children and cleanup failures; never infer success from missing worktrees.
+- Verify keyboard journeys, selected worktree ownership, cancellation and restart recovery at compact/wide dimensions and all palettes. Keep dependencies, remaining allocations and recovery actions readable without expanding dashboard density.
 
 **Verification command**
 `go test -race ./internal/app ./internal/app/agentruntime ./internal/app/agentstate && make tui-test && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: execute scoped missions with guarded worktree integration`
+**Commit**: `feat: review and integrate scoped mission executions`
 
 ## Task 31 — Support explicit multimodal attachments and live sessions
 
@@ -1011,7 +1059,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md`.
 
 **Inputs / dependencies**
-- Task 30; artifact privacy and verified provider capability. Pinned Go SDK includes `agent.LiveSession`; test the actual runner/provider path rather than assuming parity with Python examples.
+- Task 30C; artifact privacy and verified provider capability. Pinned Go SDK includes `agent.LiveSession`; test the actual runner/provider path rather than assuming parity with Python examples.
 
 **Implementation rules**
 - Allow explicitly selected bounded images/documents/audio artifacts for supported models. Validate MIME/content, size, ownership, scope, and destination; reject arbitrary provider fetch URLs and implicit uploads.
