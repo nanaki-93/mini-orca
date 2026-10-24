@@ -184,21 +184,7 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 
 // AnalyzeProject runs import analysis under its own deadline.
 func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
-	ctx, release, err := s.agentRunContextAt(ctx, root, s.runtimes.analyze)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
-	defer cancel()
-	runtime := s.runtimes.analyze
-	analysis, err := project.NewAnalyzerWithProvenance(runtime.client, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Analyze(timed, root)
-	if errors.Is(context.Cause(ctx), agentstate.ErrPersistence) {
-		return nil, context.Cause(ctx)
-	}
-	// Analyzer records a model timeout as a failed report while retaining the
-	// deterministic project inventory. That inventory is still safe to activate.
-	return analysis, err
+	return s.analyzeProjectKnowledge(ctx, root)
 }
 
 // RestoreProject reopens a previously imported project from local persisted

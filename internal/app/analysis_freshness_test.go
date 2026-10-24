@@ -461,7 +461,7 @@ func newAnalysisFreshnessService(t *testing.T, baseURL string, includeHelper boo
 	// Persist the imported summary so restoration exercises the same two service
 	// entry points as POST /api/projects/restore, including a fresh disk scan.
 	runtime := s.runtimes.analyze
-	if _, err := project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, runtime.effective.Profile, runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Analyze(context.Background(), root); err != nil {
+	if err := project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, runtime.effective.Profile, runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).StoreLocalInventory(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}
 	return s, root

@@ -21,7 +21,7 @@ import (
 func TestProjectRestoreActivatesStoredAnalysisWithoutModelAccess(t *testing.T) {
 	root := t.TempDir()
 	writeProjectHandlerFixture(t, root, "main.go", "package main\nfunc Run() {}\n")
-	if _, err := project.NewAnalyzerWithProvenance(nil, "", "analysis", "", "").Analyze(context.Background(), root); err != nil {
+	if err := project.NewAnalyzerWithProvenance(nil, "", "analysis", "", "").StoreLocalInventory(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}
 	manager, err := project.NewManager(root)

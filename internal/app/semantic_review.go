@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -197,7 +198,13 @@ func (s *Service) AnalyzeFile(ctx context.Context, targetFile string, refresh, c
 	if !refresh && reusableFileAnalysis(cached) {
 		return s.syncCachedFileAnalysis(prepared.input, cached)
 	}
-	return s.generateFileAnalysis(ctx, prepared)
+	return runKnowledge(ctx, s, prepared.runtime, agentruntime.KnowledgeSemantic, func(ctx context.Context) (*project.FileAnalysis, string, error) {
+		result, err := s.generateFileAnalysis(ctx, prepared)
+		if result == nil {
+			return nil, "failed", err
+		}
+		return result, knowledgeReportStatus(result.Status), err
+	})
 }
 
 func (s *Service) prepareFileAnalysis(targetFile string) (preparedFileAnalysis, error) {
@@ -242,15 +249,21 @@ func (s *Service) syncCachedFileAnalysis(input project.FileAnalysisInput, cached
 }
 
 func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFileAnalysis) (*project.FileAnalysis, error) {
-	fresh, err := s.requestFileAnalysis(ctx, prepared, nil)
+	dispatch := &analysisModelDispatch{maxAttempts: prepared.runtime.effective.MaxRetries + 1, beforeAttempt: func(ctx context.Context) error {
+		return s.validateFileAnalysisSnapshot(ctx, prepared)
+	}}
+	fresh, err := s.requestFileAnalysis(ctx, prepared, dispatch)
 	if err != nil {
+		if errors.Is(err, agentruntime.ErrBudgetExceeded) {
+			return nil, err
+		}
 		var modelErr *analysisModelError
 		if errors.As(err, &modelErr) {
-			return s.storeAnalysisFailure(prepared, err)
+			return s.storeAnalysisFailure(ctx, prepared, err)
 		}
 		return nil, err
 	}
-	if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
+	if err := s.validateFileAnalysisSnapshot(ctx, prepared); err != nil {
 		return nil, err
 	}
 	if err := prepared.cache.Store(*fresh); err != nil {
@@ -260,6 +273,27 @@ func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFil
 		return nil, err
 	}
 	return fresh, nil
+}
+
+func (s *Service) validateFileAnalysisSnapshot(ctx context.Context, prepared preparedFileAnalysis) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+	if s.manager.Root() != prepared.root {
+		return project.ErrRevisionConflict
+	}
+	input := prepared.input
+	if err := s.manager.ValidateMutableRequest(input.ProjectID, input.ProjectRevision, input.Path, input.ContentHash); err != nil {
+		return err
+	}
+	policy, err := project.NewContextPolicy(prepared.root)
+	if err != nil {
+		return err
+	}
+	if policy.Version() != input.ContextPolicyVersion {
+		return project.ErrRevisionConflict
+	}
+	return project.ValidateInstructions(prepared.root, input.Path, prepared.instructions.Fingerprint)
 }
 
 // Request and validation are separate from publication so a project run can
@@ -389,11 +423,11 @@ func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status
 	return s.manager.UpdateFileAnalysisStatus(input.ProjectID, input.ProjectRevision, input.Path, status)
 }
 
-func (s *Service) storeAnalysisFailure(prepared preparedFileAnalysis, cause error) (*project.FileAnalysis, error) {
-	if strings.Contains(cause.Error(), "context canceled") || strings.Contains(cause.Error(), "deadline exceeded") {
+func (s *Service) storeAnalysisFailure(ctx context.Context, prepared preparedFileAnalysis, cause error) (*project.FileAnalysis, error) {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 		return nil, cause
 	}
-	if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
+	if err := s.validateFileAnalysisSnapshot(ctx, prepared); err != nil {
 		return nil, err
 	}
 	input := prepared.input

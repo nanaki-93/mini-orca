@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/features"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
@@ -204,6 +205,14 @@ func (s *Service) generateFeatures(ctx context.Context, request FeatureRequest, 
 	if err != nil {
 		return nil, err
 	}
+	return runKnowledge(ctx, s, runtime, agentruntime.KnowledgeFeatures, func(ctx context.Context) (*FeatureReport, string, error) {
+		report, err := s.executeFeatureGeneration(ctx, generation, excluded, authority)
+		return report, "completed", err
+	})
+}
+
+func (s *Service) executeFeatureGeneration(ctx context.Context, generation *featureGeneration, excluded []string, authority featureGenerationAuthority) (*FeatureReport, error) {
+	runtime, request := generation.runtime, generation.request
 	timed, cancel := context.WithTimeout(ctx, featureGenerationTimeout(runtime))
 	defer cancel()
 	schema := features.ResponseSchema()
@@ -223,7 +232,7 @@ func (s *Service) generateFeatures(ctx context.Context, request FeatureRequest, 
 		}
 	}
 	var published *FeatureReport
-	err = authority.Publish(func() error {
+	err := authority.Publish(func() error {
 		var err error
 		published, err = s.publishFeatureGeneration(timed, generation, suggestions, generationErr)
 		return err

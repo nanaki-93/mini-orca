@@ -12,8 +12,7 @@ func TestReindexRefreshesInventoryAndBuildFactsWithoutReplacingInterpretation(t 
 	root := t.TempDir()
 	writeIndexFixture(t, root, "go.mod", "module example\ngo 1.22\n")
 	writeIndexFixture(t, root, "main.go", "package main\nfunc main() {}\n")
-	analyzer := &Analyzer{}
-	analysis, err := analyzer.scan(context.Background(), root)
+	analysis, err := ScanProject(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}

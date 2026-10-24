@@ -67,7 +67,7 @@ func TestAnalyzerWritesCanonicalReportAndContextIncludesInventory(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	analysis, err := NewAnalyzerWithProvenance(mockChatClient{}, "", "analysis", "", "").Analyze(context.Background(), root)
+	analysis, err := analyzeProjectForTest(context.Background(), NewAnalyzerWithProvenance(mockChatClient{}, "", "analysis", "", ""), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestContextPolicyExcludesSecretsIgnoredAndGeneratedFiles(t *testing.T) {
 	}
 
 	client := &recordingChatClient{}
-	if _, err := NewAnalyzerWithProvenance(client, "", "analysis", "", "").Analyze(context.Background(), root); err != nil {
+	if _, err := analyzeProjectForTest(context.Background(), NewAnalyzerWithProvenance(client, "", "analysis", "", ""), root); err != nil {
 		t.Fatal(err)
 	}
 	var prompt strings.Builder

@@ -448,7 +448,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 17 — Integrate documentation, features, and explanations
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/knowledge_graph_test.go` — **new**.

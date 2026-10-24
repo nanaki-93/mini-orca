@@ -893,6 +893,21 @@ worker. Background work can continue while the client navigates or disconnects.
 
 ### Agent invocation history and progress
 
+Explicit project import, feature generation, declaration explanation, standalone
+semantic analysis and security review have native knowledge runs. Provider
+attempts appear as children and share the host budget; host retries, source
+checks and publication authority are unchanged. Import binds its run to the
+newly scanned checkout. A provider timeout/refusal retains a failed report and
+rechecked factual inventory; journal or policy failures remain errors. Cached
+reads, restore and handbook composition make no provider request.
+
+Derived project handbooks use composition schema `2`. Component paths must exist
+in the inventory; dependencies come from indexed imports. Model explanations,
+diagrams and risks are advisory, and absent scenario steps, guards or decisions
+are not invented. Older schema `1` handbooks are rebuilt in memory from retained
+reports and indexes on read, without rewriting the saved history. Historical
+project-analysis report schemas remain readable.
+
 All agent-history reads require the current `project_id` and `project_revision`;
 the existing optional `worktree_path` selects a registered checkout. Unknown or
 duplicate query fields are rejected. Reads are passive and return `no-store`.

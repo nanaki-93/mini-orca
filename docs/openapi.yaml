@@ -1325,9 +1325,10 @@ components:
         finding_counts: {$ref: '#/components/schemas/FindingCounts'}
     ProjectDocsReport:
       type: object
+      description: "Derived handbook composition. Version 2 anchors component paths and imports to inventory and labels model interpretations as advisory; missing scenario steps or guarantees are not synthesized. Legacy derived handbooks are rebuilt passively from retained reports and indexes."
       required: [schema_version, project_id, project_revision, status, context, components, scenarios, decisions, runbook, glossary]
       properties:
-        schema_version: {type: string}
+        schema_version: {type: string, enum: ['2']}
         project_id: {type: string}
         project_revision: {type: string}
         status: {type: string}

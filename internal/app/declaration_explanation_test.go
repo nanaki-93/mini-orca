@@ -59,6 +59,7 @@ func TestExplainDeclarationReturnsBoundedTransientResultWithoutMutation(t *testi
 	if string(after) != string(before) || len(service.changeAuthority) != 0 {
 		t.Fatalf("read-only explanation mutated workflow or source")
 	}
+	assertKnowledgeHistory(t, service, root, "explanation", index.ProjectID, index.ProjectRevision)
 }
 
 func TestExplainDeclarationRequiresConsentAndRejectsIneligibleOrStaleTargetsWithoutProviderCall(t *testing.T) {

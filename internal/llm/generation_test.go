@@ -21,6 +21,23 @@ func generationInput() GenerationRequest {
 	}
 }
 
+func TestGenerationPreservesSafeFailureCategories(t *testing.T) {
+	client := NewClient(config.ModelProfile{})
+	for _, test := range []struct {
+		refusal, finish string
+		want            error
+	}{
+		{refusal: "PRIVATE_PROVIDER_REASON", finish: "stop", want: ErrGenerationRefused},
+		{finish: "tool_calls", want: ErrGenerationIncomplete},
+	} {
+		wire := generationWireMessage{ChatMessage: ChatMessage{Role: "assistant", Content: "PRIVATE_OUTPUT", Refusal: test.refusal}}
+		result, err := client.validateGenerationResult(wire, "model", test.finish, nil, nil, false)
+		if result != nil || !errors.Is(err, test.want) || !errors.Is(err, ErrUnusableResponse) || strings.Contains(err.Error(), "PRIVATE_") {
+			t.Fatalf("unsafe or lost failure category: result=%+v error=%v", result, err)
+		}
+	}
+}
+
 func collectGeneration(client *Client, ctx context.Context, input GenerationRequest) (*GenerationResult, []string, error) {
 	var result *GenerationResult
 	var deltas []string

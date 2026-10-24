@@ -1,6 +1,10 @@
 package handbook
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,7 +82,7 @@ func TestBuildAndPersistProjectDocsSynthesizesC4Arc42AndADRSpec(t *testing.T) {
 	}
 
 	docs := BuildProjectDocs(analysis, index)
-	if docs.Status != ProjectAnalysisStatusFresh || docs.Context.Purpose != analysis.Report.Purpose {
+	if docs.SchemaVersion != "2" || docs.Status != ProjectAnalysisStatusFresh || docs.Context.Purpose != "Model interpretation: "+analysis.Report.Purpose {
 		t.Fatalf("unexpected docs context: %+v", docs.Context)
 	}
 	if docs.Context.ArchitectureDiagram == "" || len(docs.Context.Stack) < 2 || len(docs.Context.GoalPursuit) < 2 {
@@ -87,10 +91,10 @@ func TestBuildAndPersistProjectDocsSynthesizesC4Arc42AndADRSpec(t *testing.T) {
 	if len(docs.Dependencies) < 2 {
 		t.Fatalf("expected dependencies from stack/components, got %+v", docs.Dependencies)
 	}
-	if len(docs.Components) < 3 {
-		t.Fatalf("expected components from report and index, got %+v", docs.Components)
+	if len(docs.Components) != 2 {
+		t.Fatalf("expected only inventory-anchored components, got %+v", docs.Components)
 	}
-	if len(docs.Scenarios) != 1 || len(docs.Scenarios[0].Steps) != 3 || docs.Scenarios[0].Diagram == "" {
+	if len(docs.Scenarios) != 1 || len(docs.Scenarios[0].Steps) != 0 || docs.Scenarios[0].Diagram != analysis.Report.Flows[0] || docs.Scenarios[0].Invariant != "Unverified model interpretation" {
 		t.Fatalf("unexpected scenarios: %+v", docs.Scenarios)
 	}
 	if len(docs.Decisions) < 2 || len(docs.Runbook) < 2 || len(docs.Glossary) < 2 {
@@ -107,5 +111,56 @@ func TestBuildAndPersistProjectDocsSynthesizesC4Arc42AndADRSpec(t *testing.T) {
 	stale, err := LoadProjectDocsReport(root, "proj-1", "rev-2")
 	if err != nil || stale == nil || stale.Status != ProjectAnalysisStatusStale {
 		t.Fatalf("expected stale docs on revision change, got %+v, err = %v", stale, err)
+	}
+}
+
+func TestHandbookKeepsMissingEvidenceAbsentAndUsesActualImports(t *testing.T) {
+	analysis := Analysis{ProjectID: "p", ProjectRevision: "r", Files: []string{"internal/a/a.go", "internal/b/b.go"}}
+	index := &ProjectIndex{Files: []IndexFile{
+		{Path: "internal/a/a.go", Language: "Go", Imports: []string{"fmt"}},
+		{Path: "internal/b/b.go", Language: "Go"},
+	}}
+	analysis.Report.Components = []string{"../escape (Escape): outside", "invented/file.go (Fake): nonexistent", "internal/a (A): Suggested responsibility"}
+	docs := BuildProjectDocs(analysis, index)
+	if len(docs.Scenarios) != 0 || len(docs.Decisions) != 0 || len(docs.Components) != 2 || docs.Status != ProjectAnalysisStatusUnavailable {
+		t.Fatalf("invented evidence: %+v", docs)
+	}
+	if len(docs.Components[0].Dependencies) != 1 || docs.Components[0].Dependencies[0] != "fmt" || len(docs.Components[1].Dependencies) != 0 {
+		t.Fatalf("fabricated component links: %+v", docs.Components)
+	}
+	for _, component := range docs.Components {
+		if len(component.Contracts) != 0 {
+			t.Fatalf("fabricated boundary contract: %+v", component)
+		}
+	}
+	data, err := json.Marshal(docs)
+	if err != nil || strings.Contains(string(data), "validates inputs") || strings.Contains(string(data), "verified state") || strings.Contains(string(data), "Modular Subsystem Separation") {
+		t.Fatalf("unsupported guarantees: %s %v", data, err)
+	}
+}
+
+func TestLegacyHandbookIsRebuiltWithoutRewritingStoredHistory(t *testing.T) {
+	root := t.TempDir()
+	legacy := ProjectDocsReport{SchemaVersion: "1", ProjectID: "p", ProjectRevision: "r", Status: ProjectAnalysisStatusFresh,
+		Scenarios: []ProjectDocsScenario{{Invariant: "fabricated guard"}}}
+	if err := StoreProjectDocsReport(root, legacy); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, projectDocsReportPath)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadProjectDocsReport(root, "p", "r")
+	if err != nil || loaded != nil {
+		t.Fatalf("legacy derived claims remained current: %+v %v", loaded, err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("passive read rewrote historical data: %v", err)
+	}
+	current := BuildProjectDocs(Analysis{ProjectID: "p", ProjectRevision: "r"}, nil)
+	if current.SchemaVersion != "2" || len(current.Scenarios) != 0 || len(current.Decisions) != 0 {
+		t.Fatalf("rebuild fabricated evidence: %+v", current)
 	}
 }

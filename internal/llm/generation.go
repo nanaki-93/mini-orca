@@ -24,6 +24,13 @@ const (
 
 var toolNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// These diagnostics retain refusal/finish meaning without retaining provider
+// explanation text. Both are also unusable responses for existing callers.
+var (
+	ErrGenerationRefused    = fmt.Errorf("%w: provider declined generation", ErrUnusableResponse)
+	ErrGenerationIncomplete = fmt.Errorf("%w: generation did not finish normally", ErrUnusableResponse)
+)
+
 // ToolDefinition declares the complete function schema admitted for a request.
 type ToolDefinition struct {
 	Name        string          `json:"name"`
@@ -262,14 +269,14 @@ func (c *Client) readGeneration(body io.Reader, schemas map[string]*jsonschema.S
 func (c *Client) validateGenerationResult(wire generationWireMessage, model, finish string, usage *ChatUsage, schemas map[string]*jsonschema.Schema, streaming bool) (*GenerationResult, error) {
 	result := &GenerationResult{Message: GenerationMessage{ChatMessage: wire.ChatMessage}, Model: model, FinishReason: finish, Usage: usage}
 	if wire.Refusal != "" {
-		return nil, fmt.Errorf("%w: provider refused the generation", ErrUnusableResponse)
+		return nil, ErrGenerationRefused
 	}
 	if err := validateGenerationUsage(usage); err != nil {
 		return nil, err
 	}
 	if len(wire.ToolCalls) == 0 {
 		if streaming && finish != "stop" || finish == "tool_calls" {
-			return nil, fmt.Errorf("%w: generation did not finish normally", ErrUnusableResponse)
+			return nil, ErrGenerationIncomplete
 		}
 		err := c.validateFinalResponse(ChatResponse{Choices: []ChatChoice{{Message: wire.ChatMessage, FinishReason: finish}}})
 		if err != nil {

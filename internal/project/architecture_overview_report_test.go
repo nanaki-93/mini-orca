@@ -18,6 +18,14 @@ type projectAnalysisFixtureClient struct {
 	beforeResponse func()
 }
 
+func analyzeProjectForTest(ctx context.Context, analyzer *Analyzer, root string) (*Analysis, error) {
+	snapshot, err := ScanProject(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	return analyzer.AnalyzeSnapshot(ctx, snapshot)
+}
+
 func (c *projectAnalysisFixtureClient) ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error) {
 	c.calls++
 	if c.beforeResponse != nil {
@@ -122,7 +130,7 @@ func TestAnalyzerFailureKeepsInventoryAndWritesCanonicalReport(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := NewAnalyzerWithProvenance(&projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis", "", "").Analyze(context.Background(), root)
+	analysis, err := analyzeProjectForTest(context.Background(), NewAnalyzerWithProvenance(&projectAnalysisFixtureClient{output: "not JSON"}, "fixture-model", "analysis", "", ""), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +153,7 @@ func TestAnalyzerRestoreLoadsStoredReportWithoutContactingModel(t *testing.T) {
 	}
 	client := &projectAnalysisFixtureClient{output: `{"purpose":"Restored project.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`}
 	analyzer := NewAnalyzerWithProvenance(client, "fixture-model", "analysis", "", "")
-	imported, err := analyzer.Analyze(context.Background(), root)
+	imported, err := analyzeProjectForTest(context.Background(), analyzer, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +181,7 @@ func TestAnalyzerDoesNotPublishSuccessfulReportAfterCancellation(t *testing.T) {
 		beforeResponse: cancel,
 	}
 	analyzer := NewAnalyzerWithProvenance(client, "fixture-model", "analyze", "", "")
-	analysis, err := analyzer.Analyze(ctx, root)
+	analysis, err := analyzeProjectForTest(ctx, analyzer, root)
 	if err != nil {
 		t.Fatal(err)
 	}

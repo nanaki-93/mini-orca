@@ -21,6 +21,10 @@ func (s *Service) agentRunContext(ctx context.Context, runtimes ...modelRuntime)
 }
 
 func (s *Service) agentRunContextAt(ctx context.Context, root string, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
+	return s.agentRunContextForSnapshot(ctx, root, nil, runtimes...)
+}
+
+func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, snapshot *project.Analysis, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
 	ctx = s.observeAgentRuns(ctx)
 	clients := make([]*agentruntime.ProviderClient, 0, len(runtimes))
 	for _, runtime := range runtimes {
@@ -37,6 +41,9 @@ func (s *Service) agentRunContextAt(ctx context.Context, root string, runtimes .
 	}
 	store, binding, err := s.agentJournal(root)
 	if err == nil {
+		if snapshot != nil {
+			binding.Project, binding.Revision = snapshot.ProjectID, snapshot.ProjectRevision
+		}
 		bounded, err = agentruntime.WithPersistence(bounded, store, binding)
 	}
 	if err != nil {

@@ -28,6 +28,10 @@ var ignoredProjectDirectories = map[string]bool{
 	"target": true, "out": true, ".next": true, ".cache": true,
 }
 
+// ErrAnalysisPublicationBlocked lets an admitted client preserve a fatal host
+// failure instead of converting it to the defined model-failure inventory view.
+var ErrAnalysisPublicationBlocked = errors.New("project interpretation publication blocked")
+
 type projectAnalysisClient interface {
 	ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error)
 }
@@ -71,8 +75,13 @@ func NewAnalyzerWithProvenance(client projectAnalysisClient, model, scope, provi
 	return &Analyzer{llm: client, model: model, profile: profile, scope: scope, providerOrigin: providerOrigin, reasoningEffort: reasoningEffort}
 }
 
-func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) {
-	analysis, err := a.scan(ctx, root)
+// AnalyzeSnapshot enriches a captured inventory. Callers can admit model work
+// against its exact identity without making project facts depend on a runtime.
+func (a *Analyzer) AnalyzeSnapshot(ctx context.Context, analysis *Analysis) (*Analysis, error) {
+	if err := validateAnalysisSnapshot(analysis); err != nil {
+		return nil, err
+	}
+	policy, err := NewContextPolicy(analysis.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +96,9 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 		report.Failure = "AI analysis is unavailable because no LLM client is configured."
 	} else {
 		response, chatErr := a.llm.ChatWithJSONSchema(ctx, projectAnalysisMessages(contextText), projectAnalysisResponseSchema())
+		if errors.Is(chatErr, ErrAnalysisPublicationBlocked) {
+			return nil, chatErr
+		}
 		if failure := projectAnalysisResponseFailure(ctx, response, chatErr); failure != "" {
 			report.Status = ProjectAnalysisStatusFailed
 			report.Failure = failure + " The factual project inventory below is still valid."
@@ -114,6 +126,16 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 	analysis.AIStatus = report.Status
 	analysis.Summary = projectAnalysisSummary(report)
 
+	if err := validateAnalysisSnapshot(analysis); err != nil {
+		return nil, err
+	}
+	currentPolicy, err := NewContextPolicy(analysis.Path)
+	if err != nil {
+		return nil, err
+	}
+	if currentPolicy.Version() != policy.Version() {
+		return nil, ErrRevisionConflict
+	}
 	if err := StoreProjectAnalysisReport(analysis.Path, report); err != nil {
 		return nil, err
 	}
@@ -128,6 +150,10 @@ func projectAnalysisResponseFailure(ctx context.Context, response *llm.ChatRespo
 		return "AI analysis was canceled before completing the report."
 	case errors.Is(err, llm.ErrStructuredRequestRejected):
 		return "AI analysis provider rejected the structured report request. Check the Analyze model and provider settings."
+	case errors.Is(err, llm.ErrGenerationRefused):
+		return "AI analysis provider declined to return a project report."
+	case errors.Is(err, llm.ErrGenerationIncomplete):
+		return "AI analysis did not finish normally. Retry the project description."
 	case err != nil || response == nil || len(response.Choices) == 0:
 		return "AI analysis could not be completed."
 	}
@@ -149,7 +175,7 @@ func projectAnalysisResponseFailure(ctx context.Context, response *llm.ChatRespo
 // StoreLocalInventory makes a newly created workspace reopenable without an
 // import-time provider request. The absent interpretation stays unavailable.
 func (a *Analyzer) StoreLocalInventory(ctx context.Context, root string) error {
-	analysis, err := a.scan(ctx, root)
+	analysis, err := ScanProject(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -162,7 +188,7 @@ func (a *Analyzer) StoreLocalInventory(ctx context.Context, root string) error {
 // Restore reloads deterministic facts and the persisted project interpretation
 // without contacting a model or rewriting project artifacts.
 func (a *Analyzer) Restore(root string) (*Analysis, error) {
-	analysis, err := a.scan(context.Background(), root)
+	analysis, err := ScanProject(context.Background(), root)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +218,8 @@ func (a *Analyzer) Restore(root string) (*Analysis, error) {
 	return analysis, nil
 }
 
-func (a *Analyzer) scan(ctx context.Context, root string) (*Analysis, error) {
+// ScanProject captures deterministic facts and source identity without a model.
+func ScanProject(ctx context.Context, root string) (*Analysis, error) {
 	canonical, err := CanonicalRoot(root)
 	if err != nil {
 		return nil, err
@@ -211,6 +238,20 @@ func (a *Analyzer) scan(ctx context.Context, root string) (*Analysis, error) {
 		return nil, err
 	}
 	return analysis, nil
+}
+
+func validateAnalysisSnapshot(analysis *Analysis) error {
+	if analysis == nil || analysis.ProjectID != projectID(analysis.Path) {
+		return ErrRevisionConflict
+	}
+	revision, err := projectRevision(analysis.Path)
+	if err != nil {
+		return err
+	}
+	if revision != analysis.ProjectRevision {
+		return ErrRevisionConflict
+	}
+	return nil
 }
 
 func scanWithPolicy(ctx context.Context, root string, policy *ContextPolicy) (*Analysis, error) {

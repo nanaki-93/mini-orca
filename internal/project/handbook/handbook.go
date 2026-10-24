@@ -79,7 +79,7 @@ type Analysis struct {
 }
 
 const (
-	projectDocsSchemaVersion = "1"
+	projectDocsSchemaVersion = "2"
 	projectDocsReportPath    = ".mini-orca/project-docs.json"
 )
 
@@ -186,8 +186,8 @@ func BuildProjectDocs(analysis Analysis, index *ProjectIndex) ProjectDocsReport 
 	components := buildDocsComponents(analysis, index)
 	contextSpec := buildDocsContext(analysis, components)
 	dependencies := buildDocsDependencies(analysis, index, components)
-	scenarios := buildDocsScenarios(analysis, components)
-	decisions := buildDocsDecisions(analysis, components)
+	scenarios := buildDocsScenarios(analysis)
+	decisions := buildDocsDecisions(analysis)
 	runbook := buildDocsRunbook(analysis, index)
 	glossary := buildDocsGlossary(analysis, components)
 	updatedAt := analysis.Report.GeneratedAt
@@ -236,7 +236,8 @@ func StoreProjectDocsReport(root string, report ProjectDocsReport) error {
 }
 
 // LoadProjectDocsReport reads a stored engineering specification and marks it
-// stale when the project revision has changed.
+// stale when the project revision has changed. Version 1 included synthesized
+// relationships; callers rebuild that derived view from retained facts/reports.
 func LoadProjectDocsReport(root, projectID, projectRevision string) (*ProjectDocsReport, error) {
 	path, err := storage.MetadataPath(root, projectDocsReportPath)
 	if err != nil {
@@ -270,6 +271,8 @@ func buildDocsContext(analysis Analysis, components []ProjectDocsComponent) Proj
 			name = "workspace"
 		}
 		purpose = fmt.Sprintf("%s software system (%d source files across %d indexed files).", name, analysis.SourceFileCount, analysis.FileCount)
+	} else {
+		purpose = "Model interpretation: " + purpose
 	}
 	arch := strings.TrimSpace(analysis.Report.Architecture)
 	diagram := ""
@@ -279,6 +282,8 @@ func buildDocsContext(analysis Analysis, components []ProjectDocsComponent) Proj
 		topology = summarizeLayerTopology(components)
 	} else if topology == "" {
 		topology = summarizeLayerTopology(components)
+	} else {
+		topology = "Model interpretation (unverified): " + topology
 	}
 	stack := buildDocsStack(analysis)
 	goalPursuit := buildDocsGoalPursuit(analysis, components, topology)
@@ -296,13 +301,13 @@ func buildDocsGoalPursuit(analysis Analysis, components []ProjectDocsComponent, 
 	if insight := analysis.Report.EngineeringInsight; insight != nil && strings.TrimSpace(insight.Mechanism) != "" {
 		why := strings.TrimSpace(insight.WhyItMattersHere)
 		if why != "" {
-			steps = append(steps, fmt.Sprintf("%s — %s", strings.TrimSpace(insight.Mechanism), why))
+			steps = append(steps, fmt.Sprintf("Model interpretation: %s — %s", strings.TrimSpace(insight.Mechanism), why))
 		} else {
-			steps = append(steps, strings.TrimSpace(insight.Mechanism))
+			steps = append(steps, "Model interpretation: "+strings.TrimSpace(insight.Mechanism))
 		}
 	}
 	if len(analysis.Report.EntryPoints) > 0 {
-		steps = append(steps, fmt.Sprintf("Entry & Admission: Starts from %s and validates inputs before domain execution.", strings.Join(analysis.Report.EntryPoints, ", ")))
+		steps = append(steps, "Model-reported entry points (unverified): "+strings.Join(analysis.Report.EntryPoints, ", "))
 	}
 	for _, comp := range components {
 		if len(steps) >= 4 {
@@ -367,7 +372,7 @@ func buildDocsDependencies(analysis Analysis, index *ProjectIndex, components []
 		for _, d := range comp.Dependencies {
 			add(ProjectDocsDependency{
 				Name:    d,
-				Kind:    "Module Dependency",
+				Kind:    "Indexed Import",
 				Source:  comp.Path,
 				Summary: fmt.Sprintf("Imported by %s (%s).", comp.Name, comp.Layer),
 			})
@@ -483,7 +488,7 @@ func isMermaidDiagram(text string) bool {
 
 func summarizeLayerTopology(components []ProjectDocsComponent) string {
 	if len(components) == 0 {
-		return "Single-tier repository structure with direct source execution."
+		return "Architecture relationships are unavailable."
 	}
 	layers := make([]string, 0, 4)
 	seen := make(map[string]bool)
@@ -493,7 +498,7 @@ func summarizeLayerTopology(components []ProjectDocsComponent) string {
 			layers = append(layers, comp.Layer)
 		}
 	}
-	return fmt.Sprintf("Layered architecture spanning %d bounded subsystems across %s.", len(components), strings.Join(layers, ", "))
+	return fmt.Sprintf("Path-based grouping of %d source components: %s. Runtime boundaries and model diagrams are unverified.", len(components), strings.Join(layers, ", "))
 }
 
 func buildDocsStack(analysis Analysis) []ProjectDocsStackEntry {
@@ -535,7 +540,7 @@ func buildDocsComponents(analysis Analysis, index *ProjectIndex) []ProjectDocsCo
 	order := make([]string, 0, 12)
 	for _, raw := range analysis.Report.Components {
 		comp := parseReportComponent(raw)
-		if comp.Path == "" {
+		if !componentPathInInventory(comp.Path, analysis.Files, index) {
 			continue
 		}
 		if _, exists := byPath[comp.Path]; !exists {
@@ -546,21 +551,29 @@ func buildDocsComponents(analysis Analysis, index *ProjectIndex) []ProjectDocsCo
 	}
 	enrichComponentsFromIndex(index, byPath, &order)
 	result := make([]ProjectDocsComponent, 0, len(order))
-	allNames := make([]string, 0, len(order))
 	for _, p := range order {
-		allNames = append(allNames, byPath[p].Name)
-	}
-	for i, p := range order {
-		comp := byPath[p]
-		if len(comp.Dependencies) == 0 && len(allNames) > 1 {
-			next := allNames[(i+1)%len(allNames)]
-			if next != comp.Name {
-				comp.Dependencies = []string{next}
-			}
-		}
-		result = append(result, *comp)
+		result = append(result, *byPath[p])
 	}
 	return result
+}
+
+func componentPathInInventory(path string, files []string, index *ProjectIndex) bool {
+	if path == "" || filepath.IsAbs(path) || filepath.ToSlash(filepath.Clean(path)) != path || path == "." || strings.HasPrefix(path, "../") {
+		return false
+	}
+	for _, file := range files {
+		if file == path || strings.HasPrefix(file, path+"/") {
+			return true
+		}
+	}
+	if index != nil {
+		for _, file := range index.Files {
+			if file.Path == path || strings.HasPrefix(file.Path, path+"/") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func parseReportComponent(raw string) ProjectDocsComponent {
@@ -573,22 +586,17 @@ func parseReportComponent(raw string) ProjectDocsComponent {
 	layer := classifyComponentLayer(cleanPath, name)
 	summary := rest
 	if summary == "" {
-		summary = fmt.Sprintf("Owns %s responsibilities within %s.", name, layer)
+		summary = "No responsibility explanation was supplied."
 	}
+	summary = "Model interpretation: " + summary
 	return ProjectDocsComponent{
 		Name:             name,
 		Layer:            layer,
 		Path:             cleanPath,
 		Summary:          summary,
 		Responsibilities: []string{summary},
-		Contracts: []ProjectDocsContract{
-			{
-				Name:    name + " Boundary Contract",
-				Kind:    contractKindForLayer(layer),
-				Summary: summary,
-			},
-		},
-		Dependencies: []string{},
+		Contracts:        []ProjectDocsContract{},
+		Dependencies:     []string{},
 	}
 }
 
@@ -656,21 +664,6 @@ func containsAnyToken(haystack string, tokens ...string) bool {
 	return false
 }
 
-func contractKindForLayer(layer string) string {
-	switch layer {
-	case "Presentation Layer":
-		return "UI State & View Contract"
-	case "API / Transport Boundary":
-		return "Transport & Schema Boundary"
-	case "Application / Orchestration":
-		return "Transactional Workflow Contract"
-	case "Tooling & Verification":
-		return "Verification Gate Contract"
-	default:
-		return "Domain & Storage Invariant"
-	}
-}
-
 func enrichComponentsFromIndex(index *ProjectIndex, byPath map[string]*ProjectDocsComponent, order *[]string) {
 	if index == nil {
 		return
@@ -693,7 +686,7 @@ func enrichComponentsFromIndex(index *ProjectIndex, byPath map[string]*ProjectDo
 		if !exists && len(*order) < 12 {
 			name := humanizeComponentName(dir)
 			layer := classifyComponentLayer(dir, name)
-			summary := fmt.Sprintf("Subsystem at %s (%d files) governing %s operations.", dir, len(files), strings.ToLower(layer))
+			summary := fmt.Sprintf("Indexed source group at %s (%d files). Layer classification is inferred from paths.", dir, len(files))
 			created := ProjectDocsComponent{
 				Name:             name,
 				Layer:            layer,
@@ -727,7 +720,7 @@ func subsystemDir(relPath string) string {
 func appendIndexContracts(comp *ProjectDocsComponent, files []IndexFile) {
 	for _, f := range files {
 		if len(comp.Responsibilities) < 4 {
-			role := fmt.Sprintf("Maintains %s (%s, %d lines)", filepath.Base(f.Path), f.Language, f.LineCount)
+			role := fmt.Sprintf("Indexed %s (%s, %d lines)", filepath.Base(f.Path), f.Language, f.LineCount)
 			comp.Responsibilities = appendUniqueString(comp.Responsibilities, role)
 		}
 		for _, sym := range f.Symbols {
@@ -736,17 +729,16 @@ func appendIndexContracts(comp *ProjectDocsComponent, files []IndexFile) {
 			}
 			comp.Contracts = append(comp.Contracts, ProjectDocsContract{
 				Name:    sym.Name,
-				Kind:    contractKindForLayer(comp.Layer),
-				Summary: fmt.Sprintf("Exposed %s contract in %s (lines %d-%d).", sym.Kind, f.Path, sym.StartLine, sym.EndLine),
+				Kind:    "Indexed declaration",
+				Summary: fmt.Sprintf("Indexed %s in %s (lines %d-%d). Runtime behavior is unverified.", sym.Kind, f.Path, sym.StartLine, sym.EndLine),
 			})
 		}
-	}
-	if len(comp.Contracts) == 0 {
-		comp.Contracts = append(comp.Contracts, ProjectDocsContract{
-			Name:    comp.Name + " Module Boundary",
-			Kind:    contractKindForLayer(comp.Layer),
-			Summary: comp.Summary,
-		})
+		for _, dependency := range f.Imports {
+			if len(comp.Dependencies) >= 16 {
+				break
+			}
+			comp.Dependencies = appendUniqueString(comp.Dependencies, dependency)
+		}
 	}
 }
 
@@ -759,30 +751,21 @@ func appendUniqueString(slice []string, item string) []string {
 	return append(slice, item)
 }
 
-func buildDocsScenarios(analysis Analysis, components []ProjectDocsComponent) []ProjectDocsScenario {
+func buildDocsScenarios(analysis Analysis) []ProjectDocsScenario {
 	scenarios := make([]ProjectDocsScenario, 0, 4)
 	for i, flow := range analysis.Report.Flows {
 		if len(scenarios) >= 6 {
 			break
 		}
-		scenarios = append(scenarios, scenarioFromFlow(i, flow, analysis.Report.EntryPoints, components))
-	}
-	if len(scenarios) == 0 {
-		scenarios = append(scenarios, defaultScenarioForComponents(analysis, components))
+		scenarios = append(scenarios, scenarioFromFlow(i, flow))
 	}
 	return scenarios
 }
 
-func scenarioFromFlow(index int, flow string, entryPoints []string, components []ProjectDocsComponent) ProjectDocsScenario {
-	trigger := "System Entry Trigger"
-	if index < len(entryPoints) && strings.TrimSpace(entryPoints[index]) != "" {
-		trigger = strings.TrimSpace(entryPoints[index])
-	} else if len(entryPoints) > 0 {
-		trigger = strings.TrimSpace(entryPoints[0])
-	}
+func scenarioFromFlow(index int, flow string) ProjectDocsScenario {
 	diagram := ""
 	summary := strings.TrimSpace(flow)
-	title := fmt.Sprintf("Runtime Execution Scenario %d", index+1)
+	title := fmt.Sprintf("Suggested flow %d", index+1)
 	if isMermaidDiagram(flow) {
 		diagram = flow
 		summary = extractMermaidSummary(flow)
@@ -793,11 +776,11 @@ func scenarioFromFlow(index int, flow string, entryPoints []string, components [
 	}
 	return ProjectDocsScenario{
 		Title:     title,
-		Trigger:   trigger,
-		Invariant: "Boundary Validation & State Consistency",
-		Summary:   summary,
+		Trigger:   "Not established by indexed evidence",
+		Invariant: "Unverified model interpretation",
+		Summary:   "Model interpretation: " + summary,
 		Diagram:   diagram,
-		Steps:     buildScenarioSteps(components, trigger, summary),
+		Steps:     []ProjectDocsScenarioStep{},
 	}
 }
 
@@ -815,73 +798,17 @@ func extractMermaidSummary(diagram string) string {
 		}
 	}
 	if len(nodes) == 0 {
-		return "End-to-end execution path across system boundaries."
+		return "No execution steps were supplied."
 	}
 	return "Execution path: " + strings.Join(nodes, " · ")
 }
 
-func buildScenarioSteps(components []ProjectDocsComponent, trigger, summary string) []ProjectDocsScenarioStep {
-	firstPath, firstLayer := "", "API / Transport Boundary"
-	midPath, midLayer := "", "Application / Orchestration"
-	lastPath, lastLayer := "", "Domain & Persistence"
-	if len(components) > 0 {
-		firstPath, firstLayer = components[0].Path, components[0].Layer
-		mid := components[len(components)/2]
-		midPath, midLayer = mid.Path, mid.Layer
-		last := components[len(components)-1]
-		lastPath, lastLayer = last.Path, last.Layer
-	}
-	return []ProjectDocsScenarioStep{
-		{
-			Phase:  "Admission",
-			Layer:  firstLayer,
-			Title:  "Boundary Admission & Input Validation",
-			Detail: fmt.Sprintf("Receives trigger (%s) and validates request preconditions before dispatch.", trigger),
-			Path:   firstPath,
-		},
-		{
-			Phase:  "Execution",
-			Layer:  midLayer,
-			Title:  "Core Workflow Orchestration",
-			Detail: summary,
-			Path:   midPath,
-		},
-		{
-			Phase:  "Publication",
-			Layer:  lastLayer,
-			Title:  "State Publication & Side-Effect Guard",
-			Detail: "Commits verified state transitions and returns structured output to the caller.",
-			Path:   lastPath,
-		},
-	}
-}
-
-func defaultScenarioForComponents(analysis Analysis, components []ProjectDocsComponent) ProjectDocsScenario {
-	trigger := "Primary Entry Point"
-	if len(analysis.Report.EntryPoints) > 0 {
-		trigger = analysis.Report.EntryPoints[0]
-	} else if analysis.BuildFile != "" {
-		trigger = analysis.BuildFile
-	}
-	summary := "Primary request admission, domain processing, and state publication across project subsystems."
-	if analysis.Report.Purpose != "" {
-		summary = analysis.Report.Purpose
-	}
-	return ProjectDocsScenario{
-		Title:     "Primary System Execution Flow",
-		Trigger:   trigger,
-		Invariant: "Explicit Boundary & State Guard",
-		Summary:   summary,
-		Steps:     buildScenarioSteps(components, trigger, summary),
-	}
-}
-
-func buildDocsDecisions(analysis Analysis, components []ProjectDocsComponent) []ProjectDocsDecision {
+func buildDocsDecisions(analysis Analysis) []ProjectDocsDecision {
 	decisions := make([]ProjectDocsDecision, 0, 4)
 	if insight := analysis.Report.EngineeringInsight; insight != nil {
 		decisions = append(decisions, ProjectDocsDecision{
-			Title:    "Core Architectural Mechanism",
-			Category: "System Architecture",
+			Title:    "Suggested architectural mechanism",
+			Category: "Model interpretation",
 			Decision: insight.Mechanism + " — " + insight.WhyItMattersHere,
 			Tradeoff: insight.TradeoffOrFailureMode,
 		})
@@ -892,27 +819,19 @@ func buildDocsDecisions(analysis Analysis, components []ProjectDocsComponent) []
 		}
 		if risk.EngineeringInsight != nil {
 			decisions = append(decisions, ProjectDocsDecision{
-				Title:    fmt.Sprintf("Boundary Safeguard (%s priority)", strings.ToUpper(risk.Severity)),
-				Category: "Resilience & Safety",
+				Title:    fmt.Sprintf("Suggested risk (%s priority)", strings.ToUpper(risk.Severity)),
+				Category: "Model interpretation",
 				Decision: risk.EngineeringInsight.Mechanism,
 				Tradeoff: risk.EngineeringInsight.TradeoffOrFailureMode,
 			})
 		} else if risk.Summary != "" {
 			decisions = append(decisions, ProjectDocsDecision{
-				Title:    fmt.Sprintf("Operational Risk Guard (%s)", strings.ToUpper(risk.Severity)),
-				Category: "Quality & Verification",
+				Title:    fmt.Sprintf("Suggested risk (%s)", strings.ToUpper(risk.Severity)),
+				Category: "Model interpretation",
 				Decision: risk.Summary,
-				Tradeoff: "Requires explicit test coverage and boundary validation during changes.",
+				Tradeoff: "No tradeoff evidence was supplied.",
 			})
 		}
-	}
-	if len(decisions) == 0 {
-		decisions = append(decisions, ProjectDocsDecision{
-			Title:    "Modular Subsystem Separation",
-			Category: "Architecture Boundary",
-			Decision: fmt.Sprintf("Partitions the codebase into %d explicit subsystems with distinct layer responsibilities.", max(1, len(components))),
-			Tradeoff: "Cross-cutting changes must coordinate contracts across layer boundaries.",
-		})
 	}
 	return decisions
 }
@@ -938,14 +857,7 @@ func buildDocsRunbook(analysis Analysis, index *ProjectIndex) []ProjectDocsRunbo
 		items = append(items, ProjectDocsRunbookItem{
 			Label:       "Full Validation Gate",
 			Command:     "./scripts/validate.sh",
-			Description: "Runs formatting, static analysis, unit/race tests, and quality checks.",
-		})
-	}
-	if hasFile("Makefile") {
-		items = append(items, ProjectDocsRunbookItem{
-			Label:       "Standard Check Suite",
-			Command:     "make check",
-			Description: "Executes configured repository build and test verification targets.",
+			Description: "Repository script found in the inventory; inspect its commands before running.",
 		})
 	}
 	switch analysis.Type {
@@ -953,19 +865,19 @@ func buildDocsRunbook(analysis Analysis, index *ProjectIndex) []ProjectDocsRunbo
 		items = append(items, ProjectDocsRunbookItem{
 			Label:       "Go Package Tests",
 			Command:     "go test ./...",
-			Description: "Runs deterministic unit and integration tests across all Go packages.",
+			Description: "Suggested Go test command; this report does not execute or verify it.",
 		})
 	case "node", "typescript", "javascript":
 		items = append(items, ProjectDocsRunbookItem{
 			Label:       "Frontend / Node Test Suite",
 			Command:     "npm test",
-			Description: "Executes the package.json test runner.",
+			Description: "Suggested command; confirm that package.json defines a test script.",
 		})
 	case "python":
 		items = append(items, ProjectDocsRunbookItem{
 			Label:       "Python Unit Test Discovery",
 			Command:     "python3 -m unittest discover",
-			Description: "Discovers and executes Python unit test suites.",
+			Description: "Suggested unittest discovery command; confirm the repository's test layout.",
 		})
 	default:
 		if len(items) == 0 {
@@ -992,7 +904,7 @@ func buildDocsGlossary(analysis Analysis, components []ProjectDocsComponent) []P
 	}
 	if len(analysis.Report.NextSteps) > 0 {
 		glossary = append(glossary, ProjectDocsGlossaryItem{
-			Term:       "Verification Priority",
+			Term:       "Suggested next step",
 			Definition: analysis.Report.NextSteps[0],
 		})
 	}

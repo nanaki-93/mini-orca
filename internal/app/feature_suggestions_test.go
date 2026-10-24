@@ -63,7 +63,7 @@ func featureRequestFor(t *testing.T, service *Service, goals string) FeatureRequ
 func TestFeatureGenerationGoalsAndSavedStatus(t *testing.T) {
 	var calls atomic.Int32
 	server := changeProvider(t, func() string { calls.Add(1); return validFeatureResponse })
-	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	request := featureRequestFor(t, service, "Improve cancellation.")
 	goals, err := service.SaveFeatureGoals(context.Background(), request)
 	if err != nil || goals.Goals != request.Goals || calls.Load() != 0 {
@@ -74,6 +74,7 @@ func TestFeatureGenerationGoalsAndSavedStatus(t *testing.T) {
 	if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 {
 		t.Fatalf("generated features: %+v, %v", report, err)
 	}
+	assertKnowledgeHistory(t, service, root, "features", request.ProjectID, request.ProjectRevision)
 	request.ExpectedHash = report.Hash
 	saved, err := service.UpdateFeatureStatus(context.Background(), report.Suggestions[0].ID, FeatureStatusRequest{FeatureRequest: request, Status: "saved"})
 	if err != nil || saved.Suggestions[0].Status != "saved" {

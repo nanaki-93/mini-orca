@@ -20,7 +20,7 @@ func TestIgnoredSourceNeverEntersContext(t *testing.T) {
 			writeIndexFixture(t, root, test.ignore, test.pattern)
 			writeIndexFixture(t, root, test.target, "package sample\n// PRIVATE_REVIEW_MARKER\n")
 			client := &recordingChatClient{}
-			if _, err := NewAnalyzerWithProvenance(client, "", "analysis", "", "").Analyze(context.Background(), root); err != nil {
+			if _, err := analyzeProjectForTest(context.Background(), NewAnalyzerWithProvenance(client, "", "analysis", "", ""), root); err != nil {
 				t.Fatal(err)
 			}
 			for _, message := range client.messages {

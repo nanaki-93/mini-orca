@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -49,11 +50,14 @@ func (s *Service) runSecurityReview(ctx context.Context, request SecurityReviewR
 	if err != nil {
 		return nil, err
 	}
-	result, findings, err := s.executeSecurityReview(ctx, snapshot, nil)
-	if err != nil {
-		return nil, err
-	}
-	return s.publishSecurityReview(ctx, snapshot, result, findings, nil)
+	return runKnowledge(ctx, s, snapshot.runtime, agentruntime.KnowledgeSecurity, func(ctx context.Context) (*project.SecurityFileReport, string, error) {
+		result, findings, err := s.executeSecurityReview(ctx, snapshot, nil)
+		if err != nil {
+			return nil, "failed", err
+		}
+		report, err := s.publishSecurityReview(ctx, snapshot, result, findings, nil)
+		return report, "completed", err
+	})
 }
 
 func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, []project.SecurityFinding, error) {
@@ -86,6 +90,11 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	runtime := snapshot.runtime
 	if runtime.client != nil {
 		runtime.client = runtime.client.WithOptionalFinalContent()
+	}
+	if dispatch == nil {
+		dispatch = &analysisModelDispatch{maxAttempts: runtime.effective.MaxRetries + 1, beforeAttempt: func(ctx context.Context) error {
+			return s.validateSecurityReviewSnapshot(ctx, snapshot)
+		}}
 	}
 	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {

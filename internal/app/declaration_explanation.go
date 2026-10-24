@@ -115,6 +115,13 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 			return nil, err
 		}
 	}
+	return runKnowledge(ctx, s, runtime, agentruntime.KnowledgeExplanation, func(ctx context.Context) (*DeclarationExplanation, string, error) {
+		explanation, err := s.explainDeclarationInRun(ctx, request, prepared, runtime, input)
+		return explanation, "completed", err
+	})
+}
+
+func (s *Service) explainDeclarationInRun(ctx context.Context, request DeclarationExplanationRequest, prepared preparedDeclarationExplanation, runtime modelRuntime, input agentruntime.Request) (*DeclarationExplanation, error) {
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	result, err := s.retryAgentRequest(timed, runtime, input, func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) })
