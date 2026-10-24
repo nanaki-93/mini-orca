@@ -61,6 +61,12 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 }
 
 func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
+	if act.Kind == "agent-run" {
+		if s.acceptsAgentRunAction(act.AgentRun) {
+			s.applyAgentRunAction(executeAgentRunAction(ctx, cl, *act.AgentRun))
+		}
+		return nil
+	}
 	switch act.Kind {
 	case "investigate-plan", "cancel-plan-investigation":
 		s.dispatchPlanInvestigation(ctx, cl, act)
@@ -505,6 +511,7 @@ func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) str
 }
 
 type startAgentTask struct {
+	streamOutput      bool
 	reqID             string
 	act               ActionRequest
 	projectID         string
@@ -571,6 +578,7 @@ func (s *State) prepareStartAgentTask(reqID string, act ActionRequest) (startAge
 		s.registerCreatedWorktree(reservedPath, head, targetBranch)
 	}
 	return startAgentTask{
+		streamOutput:      s.StreamAgentOutput,
 		reqID:             reqID,
 		act:               act,
 		projectID:         s.Project.ProjectID,
@@ -897,6 +905,7 @@ func startAgentWorkflowTask(ctx context.Context, cl *Client, task *startAgentTas
 		"confirmed_profiles": task.confirmedProfiles,
 		"confirm_security":   true,
 		"auto_repair":        task.act.Seed.AutoRepair,
+		"stream_output":      task.streamOutput,
 		"plan_hash":          planHash(session),
 	}
 	target := "/api/projects/current/changes/" + url.PathEscape(session.ID) + "/workflow" + changeWorktreeScopeQuery(session)
@@ -1253,6 +1262,7 @@ func (s *State) dispatchUndo(ctx context.Context, cl *Client, reqID string, act 
 }
 
 type changeActionTask struct {
+	streamOutput      bool
 	resumeFrom        string
 	reqID             string
 	isRepair          bool
@@ -1310,6 +1320,7 @@ func (s *State) prepareChangeActionTask(reqID string, act ActionRequest) (change
 		s.markChangeWorkflowRunningOptimistic()
 	}
 	return changeActionTask{
+		streamOutput:      s.StreamAgentOutput,
 		resumeFrom:        client.FirstNonEmpty(act.ResumeFrom, resumableWorkflowStage(&prev)),
 		reqID:             reqID,
 		isRepair:          isRepair,
@@ -1477,6 +1488,7 @@ func postRepairWorkflowAttempt(ctx context.Context, cl *Client, reqID string, ta
 		"confirmed_profiles": task.confirmedProfiles,
 		"confirm_security":   true,
 		"auto_repair":        task.session.Workflow != nil && task.session.Workflow.AutoRepair,
+		"stream_output":      task.streamOutput,
 		"plan_hash":          planHash(&task.session),
 		"resume_from":        task.resumeFrom,
 	}

@@ -109,11 +109,14 @@ func formatCheckOutputLines(th ansiTheme, output string, maxLines int) []string 
 }
 
 func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
+	if s.AgentRunSection > 0 && s.AgentRunSection < len(agentRunSections) {
+		return s.renderAgentRunPage(th, width)
+	}
 	panelW := adaptivePanelWidth(width)
 	chg := s.Change
-	actions := "[↑/↓] Stage · [d] Diff · [r] Retry · [x] Cancel/reject · [Esc] Back"
+	actions := "[←/→] Overview · [↑/↓] Stage · [d] Diff · [r] Retry · [x] Cancel/reject"
 	if s.hasRunningWorkflow() {
-		actions = "[↑/↓] Stage · [d] Diff · [x] Cancel · [Esc] Back"
+		actions = "[←/→] Overview · [↑/↓] Stage · [d] Diff · [x] Cancel"
 	}
 	lines := renderPageHeader(th, "TASK · STAGES", actions)
 	selectedStage := s.effectiveAgentDetailStage()

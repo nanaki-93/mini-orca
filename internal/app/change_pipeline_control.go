@@ -149,15 +149,18 @@ func (s *Service) restoreChangeWorkflow(session *ChangeSession) {
 	}
 	s.changeWorkflow.mu.Lock()
 	job := s.changeWorkflow.getJob(session.ID)
-	active := job != nil && job.id == w.ID && job.root == s.manager.Root() && !job.finished
+	// The snapshot can precede a worker's final atomic save. A known finished
+	// worker is not an orphan: preserve this observation until the next read.
+	// Save failures still override it, and a restarted service has no owner.
+	owned := job != nil && job.id == w.ID && job.root == s.manager.Root()
 	failure := ""
-	if job != nil && job.id == w.ID {
+	if owned {
 		failure = job.failure
 	}
 	s.changeWorkflow.mu.Unlock()
 	if failure != "" {
 		w.Status, w.Reason = "failed", failure
-	} else if isChangePipelineActive(w) && !active {
+	} else if isChangePipelineActive(w) && !owned {
 		w.Status, w.Reason = "interrupted", "The workflow stopped before completion. Restore the conversation to run again."
 	}
 	if session.Freshness == "stale" {

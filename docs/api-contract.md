@@ -917,6 +917,16 @@ and `truncated`. Final output references its immutable completion artifact.
 Partial text is transient (at most 64 invocation buffers) and may be unavailable
 after eviction or restart. Text has no approval or execution authority.
 
+The same explicit disclosure includes up to 16 `tool_records` from the selected
+invocation's last 128 private events. Each record identifies its event, call,
+tool name and kind (`arguments` or `result`); `value` is JSON text bounded to
+2,048 UTF-8 bytes, with `truncated` identifying omitted text or nested values.
+Names and call IDs are bounded to 128 bytes, and nesting to 24 levels.
+`tools_truncated` identifies omitted history. Credential-bearing fields such as
+authorization, API keys, passwords, tokens and private keys are redacted;
+arbitrary prose may still contain private source and must remain an explicit,
+local disclosure. Tool records are absent from default details and progress SSE.
+
 `GET /agent-runs/events` returns a JSON replay batch, or SSE when Accept contains
 `text/event-stream`. SSE frames use `event: agent_progress`, `id: <cursor>` and
 the same JSON batch in `data`. The cursor has an opaque journal epoch and a

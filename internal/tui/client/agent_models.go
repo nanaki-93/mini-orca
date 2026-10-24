@@ -72,11 +72,22 @@ type AgentArtifactReference struct {
 }
 
 type AgentPrivateText struct {
-	Available bool                    `json:"available"`
-	State     string                  `json:"state"`
-	Text      string                  `json:"text,omitempty"`
-	Truncated bool                    `json:"truncated"`
-	Artifact  *AgentArtifactReference `json:"artifact,omitempty"`
+	ToolRecords    []AgentToolRecord       `json:"tool_records,omitempty"`
+	ToolsTruncated bool                    `json:"tools_truncated,omitempty"`
+	Available      bool                    `json:"available"`
+	State          string                  `json:"state"`
+	Text           string                  `json:"text,omitempty"`
+	Truncated      bool                    `json:"truncated"`
+	Artifact       *AgentArtifactReference `json:"artifact,omitempty"`
+}
+
+type AgentToolRecord struct {
+	EventID   string `json:"event_id"`
+	CallID    string `json:"call_id,omitempty"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Value     string `json:"value"`
+	Truncated bool   `json:"truncated"`
 }
 
 type AgentRunEvent struct {

@@ -1152,7 +1152,7 @@ components:
         input: {$ref: '#/components/schemas/ChangeInput'}
         text:
           type: object
-          description: Present only with explicit include_text; private and inert, bounded to 64 KiB UTF-8. Partial buffers are transient and limited to 64 invocations.
+          description: Present only with explicit include_text. Private model text is bounded to 64 KiB UTF-8; transient partial buffers cover at most 64 invocations. Tool disclosures contain at most 16 records from the selected invocation's last 128 events.
           required: [available, state, truncated]
           properties:
             available: {type: boolean}
@@ -1160,6 +1160,20 @@ components:
             text: {type: string}
             truncated: {type: boolean}
             artifact: {$ref: '#/components/schemas/AgentArtifactReference'}
+            tools_truncated: {type: boolean}
+            tool_records:
+              type: array
+              maxItems: 16
+              items:
+                type: object
+                required: [event_id, name, kind, value, truncated]
+                properties:
+                  event_id: {type: string}
+                  call_id: {type: string, maxLength: 128}
+                  name: {type: string, maxLength: 128}
+                  kind: {type: string, enum: [arguments, result]}
+                  value: {type: string, description: JSON text bounded to 2048 UTF-8 bytes; credential-bearing keys are redacted and nested values are limited to 24 levels. Truncated text need not be valid JSON.}
+                  truncated: {type: boolean}
     AgentRunControl:
       type: object
       additionalProperties: false

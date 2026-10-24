@@ -152,6 +152,8 @@ type changeActionResultMsg struct {
 
 type planInvestigationResultMsg struct{ result planInvestigationResult }
 
+type agentRunActionResultMsg struct{ result agentRunActionResult }
+
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
 		return pollTickMsg(t)
@@ -160,6 +162,8 @@ func pollTickCmd() tea.Cmd {
 
 // BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
 type BubbleModel struct {
+	agentStream       *agentRunStream
+	nativeStreams     bool
 	ctx               context.Context
 	state             *State
 	client            *Client
@@ -174,11 +178,12 @@ type BubbleModel struct {
 func NewBubbleModel(ctx context.Context, state *State, client *Client, width, height int) *BubbleModel {
 	w, h := DetectTerminalSize(width, height)
 	return &BubbleModel{
-		ctx:    ctx,
-		state:  state,
-		client: client,
-		width:  w,
-		height: h,
+		nativeStreams: true,
+		ctx:           ctx,
+		state:         state,
+		client:        client,
+		width:         w,
+		height:        h,
 	}
 }
 
@@ -213,6 +218,10 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
+	case agentRunActionResultMsg, agentStreamUpdate:
+		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case pollTickMsg:
 		m.pollScheduled = false
 		if cmd := m.startAsyncPollCmd(); cmd != nil {
@@ -223,10 +232,22 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state.applyPollResult(ev.res)
 	}
 	if m.state.Quitting {
+		m.stopAgentStream()
 		return m, tea.Quit
 	}
+	m.syncAgentStream(&cmds)
 	m.maybeSchedulePollTick(&cmds)
 	return m, batchTeaCmds(cmds)
+}
+
+func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
+	switch ev := msg.(type) {
+	case agentRunActionResultMsg:
+		m.state.applyAgentRunAction(ev.result)
+	case agentStreamUpdate:
+		return m.applyAgentStreamUpdate(ev)
+	}
+	return nil
 }
 
 func (m *BubbleModel) maybeSchedulePollTick(cmds *[]tea.Cmd) {
@@ -276,6 +297,12 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
+	case "agent-run":
+		if !m.state.acceptsAgentRunAction(act.AgentRun) {
+			return nil, true
+		}
+		action := *act.AgentRun
+		return func() tea.Msg { return agentRunActionResultMsg{result: executeAgentRunAction(m.ctx, m.client, action)} }, true
 	case "investigate-plan":
 		task, ok := m.state.preparePlanInvestigationTask(act)
 		if !ok {
@@ -364,12 +391,16 @@ func keyEventFromTea(msg tea.KeyMsg) KeyEvent {
 
 // RunSession runs an interactive terminal session using Bubble Tea on TTYs or deterministic model updates on streams.
 func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, out io.Writer, width, height int) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	model := NewBubbleModel(ctx, s, client, width, height)
+	defer model.stopAgentStream()
 	if _, isTTY := isCharDevice(in); isTTY {
 		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
 		_, err := prog.Run()
 		return err
 	}
+	model.nativeStreams = false
 	if _, err := fmt.Fprintf(out, "\033[2J\033[H%s\n", model.View()); err != nil {
 		return fmt.Errorf("render initial frame: %w", err)
 	}

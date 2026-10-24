@@ -392,7 +392,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 15 — Add execution, evidence, and approval detail views
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_run_view.go`, `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_test.go` — **new**.

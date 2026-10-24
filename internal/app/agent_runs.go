@@ -214,7 +214,7 @@ func (s *Service) AgentRunDetail(ctx context.Context, query AgentRunQuery, id st
 		result.Input, _, err = s.agentRunInput(ctx, store, run, root)
 	}
 	if err == nil && includeText {
-		result.Text, err = s.readAgentText(ctx, store, run)
+		result.Text, err = s.readAgentPrivate(ctx, store, run)
 	}
 	if err == nil {
 		err = s.agentHistoryScope(query, root)

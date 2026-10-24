@@ -76,6 +76,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	AgentRun       *agentRunAction
 	Worktree       *WorktreeIntent
 	Source         ProjectIdentity
 	ExistingChange *ChangeSession
@@ -90,6 +91,11 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentRunSection     int
+	AgentRunPending     string
+	AgentDisclosure     *agentDisclosure
+	StreamAgentOutput   bool
+	AgentStreamStatus   string
 	DetailSection       int
 	PlanDraft           *PlanDraft
 	DetailScroll        int
@@ -479,6 +485,7 @@ func (s *State) Navigate(page Page) {
 	}
 	if page != PageAgents {
 		s.AgentDetailOpen = false
+		s.AgentDisclosure = nil
 		s.AgentStage = 0
 		s.AgentStageID = ""
 	}

@@ -258,6 +258,7 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 	}
 	if s.Page == PageAgents && s.AgentDetailOpen {
 		s.AgentDetailOpen = false
+		s.AgentDisclosure = nil
 		s.AgentStage = 0
 		s.AgentStageID = ""
 		s.CmdOutput = "Returned to tasks."
@@ -274,6 +275,10 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 }
 
 func (s *State) handleHorizontalStepKey(ev KeyEvent) bool {
+	if s.Page == PageAgents && s.AgentDetailOpen && (ev.Key == "ArrowLeft" || ev.Key == "ArrowRight" || ev.Key == "h" || ev.Key == "l") {
+		s.stepAgentRunSection(ev.Key == "ArrowRight" || ev.Key == "l")
+		return true
+	}
 	if ev.Key == "ArrowLeft" || ev.Key == "ArrowRight" {
 		return s.handleArrowOptionKey(ev.Key == "ArrowRight", ev.Shift)
 	}
@@ -716,6 +721,7 @@ func (s *State) toggleAgentDebugInspector() {
 	}
 	s.AgentStage = 0
 	s.AgentStageID = ""
+	s.AgentDisclosure = nil
 	s.CmdOutput = "Returned to tasks."
 }
 

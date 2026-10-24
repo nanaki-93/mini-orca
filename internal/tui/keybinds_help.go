@@ -160,10 +160,10 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 		commands:  []keyDesc{{":test", "Run checks"}, {":analyze", "Run analysis"}},
 	},
 	PageAgents: {
-		title:     "[2] AGENT STUDIO · PIPELINE & WORKTREES",
+		title:     "[2] WORK · TASKS & EXECUTION",
 		primary:   []keyDesc{{"i / Enter", "Agent detail"}, {"d", "Inspect diff"}},
-		secondary: []keyDesc{{"a / c", "Apply & commit"}, {"r / x", "Repair / reject"}},
-		commands:  []keyDesc{{":plan", "Review approach"}, {":retry <stage>", "Resume stage"}},
+		secondary: []keyDesc{{"←/→", "Execution section"}, {"a / c", "Apply & commit"}, {"r / x", "Repair / reject"}},
+		commands:  []keyDesc{{":execution", "Run detail"}, {":run-output ID", "Private text"}, {":run-input", "Decision"}},
 	},
 	PagePlan: {
 		title:     "[2] AGENT STUDIO · TASK PLAN",

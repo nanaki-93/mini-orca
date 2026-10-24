@@ -91,6 +91,23 @@ history falls back to those summaries with an explicit availability message.
 Inspection reads bounded, source-free progress for the exact project revision,
 checkout and workflow. Private model text requires a separate explicit disclosure.
 
+Use Left/Right in task detail for Overview, Timeline, Evidence, Usage and Recovery;
+Tab continues to change workspace views. Timeline lists invocation IDs. Explicit
+`:run-output <ID>` opens bounded private output and tool argument/result records
+in Evidence; `:hide-output` closes it. Sanitize terminal control bytes and label
+truncation. Updates preserve selected stages and scroll instead of following text.
+Progress reconnects with the last acknowledged cursor and stops when inspection
+ends or its project, checkout or workflow changes. A private disclosure refreshes
+only while open. `:stream-output on|off` controls streaming for new workflows and
+retries through the existing provider capability and consent checks.
+
+Recovery shows the exact pending proposal scope, hashes and destination.
+`:run-input approve|reject|cancel` records a guarded decision; per-file diff review
+and Apply remain separate. `:run-cancel` cancels an active native root. Task pause
+and resume are unavailable; use cancellation and a guarded stage retry. Analysis
+retains its own pause/resume controls. Usage displays the shared run budget once,
+with unavailable token measurements explicitly identified.
+
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
 Mark changed files individually, invalidate progress when the proposal changes,
