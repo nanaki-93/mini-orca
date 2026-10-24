@@ -60,6 +60,13 @@ integrations:
   #   timeout_seconds: 30
   #   operations: [{name: getTicket, effect: read_external}, {name: updateTicket, effect: mutate_external}]
   google_search: false # Requires a supported native Google Function profile and explicit per-request consent.
+  a2a: []
+  # - id: reviewer
+  #   card_url: https://review.example/.well-known/agent-card.json
+  #   endpoint: https://review.example/rpc # Exact same origin as the card.
+  #   bearer_token_env: REVIEW_AGENT_TOKEN
+  #   skills: [code_review] # One to four explicitly allowed advertised skills.
+  #   timeout_seconds: 30 # A2A 1.0 JSON-RPC; plain-text advisory results only.
 
 agent_runtime:
   # Explicit project-relative directories containing indexed SKILL.md files.

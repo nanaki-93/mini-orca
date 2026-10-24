@@ -59,13 +59,15 @@ type integrationOperation struct {
 }
 
 type integrationRegistry struct {
-	mu           sync.Mutex
-	config       config.IntegrationsConfig
-	records      map[string]integrationRecord
-	active       map[*integrationOperation]bool
-	apiRecords   map[string]apiIntegrationRecord
-	apiActions   map[string]apiActionAuthority
-	apiExecuting map[string]bool
+	mu              sync.Mutex
+	config          config.IntegrationsConfig
+	records         map[string]integrationRecord
+	active          map[*integrationOperation]bool
+	apiRecords      map[string]apiIntegrationRecord
+	apiActions      map[string]apiActionAuthority
+	apiExecuting    map[string]bool
+	remoteRecords   map[string]remoteConnectionRecord
+	remoteExecuting map[string]bool
 }
 
 func newIntegrationRegistry(input config.IntegrationsConfig) (*integrationRegistry, error) {
@@ -73,7 +75,7 @@ func newIntegrationRegistry(input config.IntegrationsConfig) (*integrationRegist
 	if err != nil {
 		return nil, err
 	}
-	return &integrationRegistry{config: resolved, records: map[string]integrationRecord{}, active: map[*integrationOperation]bool{}, apiRecords: map[string]apiIntegrationRecord{}, apiActions: map[string]apiActionAuthority{}, apiExecuting: map[string]bool{}}, nil
+	return &integrationRegistry{config: resolved, records: map[string]integrationRecord{}, active: map[*integrationOperation]bool{}, apiRecords: map[string]apiIntegrationRecord{}, apiActions: map[string]apiActionAuthority{}, apiExecuting: map[string]bool{}, remoteRecords: map[string]remoteConnectionRecord{}, remoteExecuting: map[string]bool{}}, nil
 }
 
 func integrationConfigView(server config.MCPServer) AgentIntegration {
@@ -252,6 +254,7 @@ func (s *Service) cancelIntegrations() []<-chan struct{} {
 	clear(s.integrations.records)
 	clear(s.integrations.apiRecords)
 	clear(s.integrations.apiActions)
+	clear(s.integrations.remoteRecords)
 	var done []<-chan struct{}
 	for op := range s.integrations.active {
 		op.cancel(ErrIntegrationConflict)

@@ -617,7 +617,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 23 — Consume remote agents through A2A
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/a2a_client.go`, `internal/app/agentruntime/a2a_client_test.go`, `internal/app/agent_delegation.go`, `internal/app/agent_delegation_test.go` — **new**.

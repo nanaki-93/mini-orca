@@ -15,13 +15,9 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-type ResearchSource struct {
-	Path string `json:"path"`
-	Hash string `json:"hash"`
-}
+type ResearchSource = ExternalSource
 
 type ResearchRequest struct {
 	ProjectID             string           `json:"project_id"`
@@ -63,8 +59,8 @@ type researchDocument struct {
 }
 
 type preparedResearch struct {
-	root, policy, prompt string
-	request              ResearchRequest
+	externalContext
+	request ResearchRequest
 }
 
 var researchID = regexp.MustCompile(`^[A-Za-z0-9_-]{20,64}$`)
@@ -143,76 +139,16 @@ func (s *Service) RunResearch(ctx context.Context, request ResearchRequest) (*Re
 }
 
 func (s *Service) prepareResearch(ctx context.Context, request ResearchRequest) (preparedResearch, error) {
-	prepared := preparedResearch{root: s.manager.Root(), request: request}
+	prepared := preparedResearch{request: request}
 	prepared.request.Sources = slices.Clone(request.Sources)
 	query := AgentRunQuery{ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision}
-	if err := s.integrationScope(ctx, query, prepared.root); err != nil {
-		return prepared, err
-	}
-	if err := validateResearchRequest(request); err != nil {
-		return prepared, err
-	}
-	policy, err := project.NewContextPolicy(prepared.root)
-	if err != nil {
-		return prepared, err
-	}
-	prepared.policy = policy.Version()
-	var prompt strings.Builder
-	prompt.WriteString(request.Question)
-	seen := map[string]bool{}
-	for _, source := range request.Sources {
-		if seen[source.Path] || source.Hash == "" {
-			return prepared, fmt.Errorf("research sources require distinct paths and captured hashes")
-		}
-		seen[source.Path] = true
-		file, err := s.manager.IndexedFile(source.Path)
-		if err != nil {
-			return prepared, err
-		}
-		if file.ContentHash != source.Hash {
-			return prepared, project.ErrRevisionConflict
-		}
-		data, err := policy.ReadSource(ctx, source.Path, source.Hash)
-		if err != nil {
-			return prepared, err
-		}
-		fmt.Fprintf(&prompt, "\n\nUntrusted admitted source: %s (%s)\n%s", source.Path, source.Hash, data)
-		if prompt.Len() > 64<<10 {
-			return prepared, fmt.Errorf("research context exceeds 64 KiB")
-		}
-	}
-	prepared.prompt = prompt.String()
-	if (len(prepared.prompt)+3)/4+128 > declarationContextLimit(s.runtimes.function.effective.ContextMaxTokens) {
-		return prepared, fmt.Errorf("research context exceeds the configured Function context limit")
-	}
-	return prepared, s.validateResearch(ctx, prepared)
-}
-
-func validateResearchRequest(request ResearchRequest) error {
-	if strings.TrimSpace(request.Question) == "" || len(request.Question) > 2048 || !utf8.ValidString(request.Question) || strings.ContainsRune(request.Question, 0) || len(request.Sources) > 8 {
-		return fmt.Errorf("provide a question up to 2048 bytes and at most eight explicit source files")
-	}
-	return nil
+	var err error
+	prepared.externalContext, err = s.prepareExternalContext(ctx, query, request.Question, request.Sources, s.runtimes.function.effective.ContextMaxTokens)
+	return prepared, err
 }
 
 func (s *Service) validateResearch(ctx context.Context, prepared preparedResearch) error {
-	query := AgentRunQuery{ProjectID: prepared.request.ProjectID, ProjectRevision: prepared.request.ProjectRevision}
-	if err := s.integrationScope(ctx, query, prepared.root); err != nil {
-		return err
-	}
-	policy, err := project.NewContextPolicy(prepared.root)
-	if err != nil {
-		return err
-	}
-	if policy.Version() != prepared.policy {
-		return project.ErrRevisionConflict
-	}
-	for _, source := range prepared.request.Sources {
-		if _, err := policy.ReadSource(ctx, source.Path, source.Hash); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.validateExternalContext(ctx, prepared.externalContext)
 }
 
 func (s *Service) saveResearch(ctx context.Context, prepared preparedResearch, result agentruntime.Result) (*ResearchReport, error) {
@@ -272,8 +208,8 @@ func (s *Service) ResearchReportHTML(ctx context.Context, query AgentRunQuery, i
 	}
 	document.Report.Stale = document.Report.ProjectRevision != query.ProjectRevision
 	if !document.Report.Stale {
-		prepared := preparedResearch{root: root, policy: document.Policy, request: ResearchRequest{ProjectID: query.ProjectID, ProjectRevision: query.ProjectRevision, Sources: document.Sources}}
-		if err := s.validateResearch(ctx, prepared); err != nil {
+		captured := externalContext{root: root, policy: document.Policy, query: query, sources: document.Sources}
+		if err := s.validateExternalContext(ctx, captured); err != nil {
 			if !memorySourceChanged(err) {
 				return nil, err
 			}

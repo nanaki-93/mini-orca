@@ -35,6 +35,7 @@ type Store struct {
 }
 
 type database struct {
+	Delegations      map[string]Delegation     `json:"delegations,omitempty"`
 	Actions          map[string]ExternalAction `json:"actions,omitempty"`
 	ProgressEpoch    string                    `json:"progress_epoch,omitempty"`
 	ProgressSequence uint64                    `json:"progress_sequence,omitempty"`
@@ -180,6 +181,9 @@ func (s *Store) validate(db *database) error {
 		return err
 	}
 	if err := validateActions(db); err != nil {
+		return err
+	}
+	if err := validateDelegations(db); err != nil {
 		return err
 	}
 	return validateProgress(db)

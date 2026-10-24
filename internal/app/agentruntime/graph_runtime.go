@@ -17,7 +17,7 @@ import (
 
 // Graph inputs and outputs contain identity/progress only. Host-owned proposal
 // stores and nested model sessions retain source-bearing evidence separately.
-func runGraph[T any](ctx context.Context, name, version string, input, schema any, worker agent.Agent, collect func(context.Context, iter.Seq2[*session.Event, error]) (T, error)) (result T, runErr error) {
+func runGraph[T any](ctx context.Context, name, version string, input, schema any, worker agent.Agent, collect func(context.Context, iter.Seq2[*session.Event, error]) (T, error), configs ...agent.RunConfig) (result T, runErr error) {
 	if err := context.Cause(ctx); err != nil {
 		return result, err
 	}
@@ -47,7 +47,11 @@ func runGraph[T any](ctx context.Context, name, version string, input, schema an
 	if err != nil {
 		return result, fmt.Errorf("create %s runner: %w", name, err)
 	}
-	return collect(ctx, runtime.Run(ctx, "local", invocation.session.ID(), nil, agent.RunConfig{}))
+	config := agent.RunConfig{}
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	return collect(ctx, runtime.Run(ctx, "local", invocation.session.ID(), nil, config))
 }
 
 func createGraphSession(ctx context.Context, name, version string, input, schema any) (*runtimeSession, error) {

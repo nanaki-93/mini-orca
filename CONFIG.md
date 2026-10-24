@@ -529,7 +529,7 @@ External answers remain advisory and cannot supply verified repository citations
 checks, source writes, Apply or Undo authority.
 
 `integrations.openapi` configures at most eight curated HTTP APIs, with IDs unique
-across MCP and API entries. Each supplies an indexed project-relative `spec_path`,
+across MCP, API and A2A entries. Each supplies an indexed project-relative `spec_path`,
 a fixed HTTPS `endpoint` (literal loopback HTTP is permitted), an optional
 `bearer_token_env`, `timeout_seconds` (1–60; default 30), and one to four exact
 `operations: [{name: operationId, effect: read_external}]`. GET operations require
@@ -578,6 +578,40 @@ advisory; provider-internal search usage is unknown. One admitted search invocat
 consumes one model-call and one tool-call allowance, independently of unknown
 provider-internal searches. Configuration, report listing and report reads do not
 dispatch provider requests. See the [API contract](docs/api-contract.md).
+
+`integrations.a2a` configures up to eight remote agents. Each entry supplies an
+`id`, exact same-origin `card_url` and `endpoint`, optional `bearer_token_env`,
+one to four allowlisted `skills`, and `timeout_seconds` (1–60; default 30).
+URLs require HTTPS or literal loopback HTTP, without query strings, redirects or
+escaped paths. Explicit discovery fetches a bounded card and grants its exact
+fingerprint for 15 minutes. The supported interface is A2A 1.0 JSON-RPC, including
+SSE when advertised. Cards must advertise exactly the configured interface and
+text/plain for selected skills; required extensions are rejected. Icons,
+documentation, extended cards and artifact URLs are never fetched. Credentials
+come only from the configured environment reference. Replacing or revoking a
+grant cancels and joins admitted operations; restart retains no connection grant.
+
+Delegation requires explicit analysis/review intent, a selected advertised skill,
+a question up to 2048 UTF-8 bytes, source-sharing confirmation and up to eight
+current path/hash selections. The combined prompt is bounded by 64 KiB and the
+Function context estimate. Ambient memory, skills and history are excluded.
+Each card/RPC request consumes a tool-call allowance; the total operation uses
+the configured timeout. Remote model/search call counts remain unknown. Optional
+valid ADK token metadata is labelled `remote_reported`, never measured locally.
+
+The private journal saves a message ID and exclusive pending lease before each
+send. Initial sends and input replies are attempted once. A retained task can be
+explicitly refreshed, subscribed to again, or canceled; these never resend a
+message. Input requires unchanged source/card authority and fresh reply consent.
+Cancellation closes local transport and attempts bounded remote cleanup.
+Unknown outcomes and expired pending receipts require explicit recovery; an
+operator can record a user-reported reconciliation without network activity.
+One unfinished delegation per endpoint blocks additional sends, and a checkout
+retains at most 128 receipts. Responses are advisory plain text, at most four
+artifacts and 64 KiB combined. Streams are bounded to 512 KiB and 128 events.
+Partial artifacts, input/auth requests, failure, cancellation and uncertainty
+retain separate states. Remote output cannot grant local permissions, execute
+project code or change source. See the [API contract](docs/api-contract.md).
 
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration

@@ -83,6 +83,12 @@ untrusted networks.
 | GET | `/api/projects/current/research` | Read Google Search availability and private report metadata without provider work. |
 | POST | `/api/projects/current/research` | Explicitly research a bounded question with admitted sources and search consent. |
 | GET | `/api/projects/current/research/{reportID}/report` | Read a private HTML report preserving citations and Google Search suggestions. |
+| GET | `/api/projects/current/remote-agents` | Read passive A2A configuration and current card grants. |
+| POST | `/api/projects/current/remote-agents/{integrationID}/control` | Explicitly discover a configured remote card or revoke its grant. |
+| GET | `/api/projects/current/delegations` | List durable delegation metadata without private advisory text. |
+| POST | `/api/projects/current/delegations` | Send one explicitly admitted advisory analysis or review task. |
+| GET | `/api/projects/current/delegations/{delegationID}` | Read a private advisory receipt and current source freshness. |
+| POST | `/api/projects/current/delegations/{delegationID}/control` | Explicitly refresh, reconnect, provide input, cancel or reconcile a retained delegation. |
 | POST | `/api/projects/current/memory` | Create an explicitly retained, source-bound candidate memory. |
 | GET | `/api/projects/current/memory/{memoryID}` | Read private memory text and current source status. |
 | POST | `/api/projects/current/memory/{memoryID}` | Edit, accept or forget a memory using its current version. |
@@ -1341,6 +1347,69 @@ The user checks the external service before submitting this account. The resulti
 `reconciled` receipt is explicitly user-reported; it never retries the request.
 Stale/uncertain conflicts return 409, missing receipts 404, malformed requests 400
 and journal failures 500. Existing recovery data is preserved on failures.
+
+### Remote advisory delegation
+
+GET `/api/projects/current/remote-agents` uses current project identity and lists
+configured A2A connections without discovery. POST
+`/api/projects/current/remote-agents/{integrationID}/control` uses the existing
+`IntegrationControl` fields: `discover` requires `confirm_connect` and current
+`configuration`; `revoke` requires any current `grant`. Discovery pins a bounded
+A2A 1.0 JSON-RPC card and its exact configured endpoint for 15 minutes. Only
+allowlisted text skills are available; required extensions are unsupported.
+
+POST `/api/projects/current/delegations` requires `project_id`,
+`project_revision`, `remote: {id, grant, schema_fingerprint,
+confirm_source_sharing: true}`, `kind: analysis|review`, an advertised `skill`,
+`question` (up to 2048 UTF-8 bytes) and `confirm_delegate: true`. Optional `sources`
+contains up to eight explicit `{path, hash}` selections; optional `stream` requests
+advertised SSE. The combined prompt is bounded by 64 KiB and the Function context
+estimate. It contains only this admitted question/source context. Each operation
+revalidates the card; it never obtains ambient credentials, history or memory.
+
+A durable private receipt records message/attempt identity before a single send
+and captures validated remote task/context IDs as they arrive. The response is
+an advisory receipt, including explicit `not_sent`, `unknown`, `input_required`,
+`auth_required`, `submitted`, `working`, `completed`, `failed`, `rejected` or
+`canceled` state. A 200 receipt response does not imply remote completion.
+Only bounded plain text is retained: at most four artifacts and 64 KiB combined,
+with `complete` flags set by final artifact chunks or a completed task status;
+interrupted streams retain incomplete flags. SSE has 512 KiB and 128-event limits. Remote internal model
+and search call counts remain unknown. Optional valid token metadata is labelled
+`remote_reported` and retains the latest supplied report, while absent metadata
+is `unknown`. These reports do not establish independently measured cumulative
+usage. Each card/RPC exchange
+consumes a host tool allowance. Remote output cannot supply local tool actions,
+permissions, verified findings, source Apply or Undo authority.
+
+GET `/api/projects/current/delegations` returns project-scoped metadata, with
+question, observation, text and artifact bodies omitted or empty. GET
+`/api/projects/current/delegations/{delegationID}` explicitly discloses private
+advisory text and locally rechecks source freshness. Both require current project
+identity and send `Cache-Control: no-store`; neither contacts the remote service.
+The list's `stale` flag checks the project revision; detail also checks actual
+source hashes. `active` describes this daemon's current operation owner.
+
+POST `/api/projects/current/delegations/{delegationID}/control` requires current
+project identity, receipt `version`, `action` and `confirm: true`. Network actions
+also require a live `remote` grant for the exact saved endpoint/card:
+
+- `refresh` uses GetTask and `reconnect` uses SubscribeToTask; neither resends a
+  message. `cancel` targets the retained remote task even if captured sources
+  have since changed. These actions contain no reply, observation or stream flag.
+- `input` is allowed only for `input_required` and unchanged source authority.
+  It sends one new message with a nonempty `reply` up to 2048 bytes and fresh
+  `remote.confirm_source_sharing`; optional `stream` requires advertised support.
+- `reconcile` records a nonempty user-reported `observation` up to 2048 bytes for
+  `unknown`, `auth_required`, or expired `pending` work. It makes no network call,
+  cannot race a local owner, and preserves prior remote IDs and advisory data.
+
+Canceling a request closes local transport and attempts bounded remote cleanup.
+Unconfirmed outcomes remain unknown. One unfinished receipt per endpoint blocks
+new sends; up to 128 receipts are retained per checkout. Restart never resumes or
+replays pending work. Conflicts return 409; private persistence failures return
+500 with existing recovery records preserved. See [configuration](../CONFIG.md)
+for the supported protocol and credential subset.
 
 ### Grounded external research
 
