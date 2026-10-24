@@ -566,6 +566,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/config/integrations.go`, `internal/config/integrations_test.go`, `internal/app/agent_integrations.go`, `internal/app/agent_integrations_test.go`, `internal/app/agentruntime/mcp.go`, `internal/app/agentruntime/mcp_test.go` — **new**.
 - `internal/config/config.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/tools.go`, `internal/app/service.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`.
 - `internal/app/agentruntime/mcp_transport.go`, `internal/app/agentruntime/mcp_protocol.go`, `internal/api/handlers/agent_integrations_handler.go`, `internal/api/handlers/agent_integrations_handler_test.go` — **new**, bounded native transports/protocol policy and explicit discovery/revocation routes.
+- `internal/app/agent_integrations_process.go` — **new**, host-owned process groups, private working directories and credential references; `internal/app/project_lifecycle.go`, `internal/app/change_pipeline_control.go` — cancel and join in-flight integration operations during replacement, reindex and shutdown.
 - `internal/app/agent_tools.go`, `internal/app/agent_investigation.go`, `internal/app/declaration_explanation.go`, `internal/tui/client/models.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `go.mod`, `go.sum` — per-investigation integration grants, production callers and wire/dependency contracts.
 
 **Inputs / dependencies**
