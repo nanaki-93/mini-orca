@@ -41,6 +41,17 @@ type Investigation struct {
 
 type investigationKey struct{}
 
+// Validate is the publication boundary for the host's captured investigation.
+func (i *Investigation) Validate(ctx context.Context) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+	if i == nil {
+		return nil
+	}
+	return i.authorize(ctx)
+}
+
 var toolNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 func NewInvestigation(scope string, specs []ToolSpec, authorize func(context.Context) error) (*Investigation, error) {

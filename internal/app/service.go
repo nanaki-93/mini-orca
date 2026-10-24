@@ -54,6 +54,7 @@ type Service struct {
 	config                          *config.Config
 	agentRuntime                    config.AgentRuntime
 	agentRuns                       *agentRunController
+	integrations                    *integrationRegistry
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
@@ -96,6 +97,10 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	integrations, err := newIntegrationRegistry(cfg.Integrations)
+	if err != nil {
+		return nil, err
+	}
 	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
 	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
 	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
@@ -115,6 +120,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
 		config:            cfg,
+		integrations:      integrations,
 		agentRuntime:      agentConfig,
 		worktrees:         make(map[string]*Service),
 		discoverPiModels:  llm.DiscoverPiModels,

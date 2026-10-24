@@ -40,6 +40,19 @@ model_scopes:
 
 project_path: "."
 
+# Passive configuration. Discovery and each investigation require explicit grants.
+integrations:
+  mcp: []
+  # - id: docs
+  #   transport: streamable_http
+  #   endpoint: https://docs.example/mcp
+  #   bearer_token_env: DOCS_MCP_TOKEN
+  #   timeout_seconds: 30
+  #   tools: [{name: search, effect: read_external}]
+  # Stdio alternative: transport: stdio, command: /absolute/installed/docs-mcp,
+  # args: [--stdio], environment: {DOCS_TOKEN: PRIVATE_DOCS_TOKEN}.
+  # Arguments must not contain secrets; environment values name credential variables.
+
 agent_runtime:
   # Explicit project-relative directories containing indexed SKILL.md files.
   # Example: [project-skills/review-code]. Resources load only during admitted investigations.

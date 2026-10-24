@@ -560,7 +560,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 21 — Add managed MCP connections and tools
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/config/integrations.go`, `internal/config/integrations_test.go`, `internal/app/agent_integrations.go`, `internal/app/agent_integrations_test.go`, `internal/app/agentruntime/mcp.go`, `internal/app/agentruntime/mcp_test.go` — **new**.

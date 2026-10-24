@@ -74,6 +74,8 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
+| GET | `/api/projects/current/integrations` | Read passive configured MCP connections and current schema grants. |
+| POST | `/api/projects/current/integrations/{integrationID}/control` | Explicitly discover or revoke an MCP integration. |
 | POST | `/api/projects/current/memory` | Create an explicitly retained, source-bound candidate memory. |
 | GET | `/api/projects/current/memory/{memoryID}` | Read private memory text and current source status. |
 | POST | `/api/projects/current/memory/{memoryID}` | Edit, accept or forget a memory using its current version. |
@@ -1249,3 +1251,39 @@ and `removed_worktree`; removal failure returns `state: failed` with `error`.
 Discard reopens linked in-progress findings, including applied but unmerged fixes,
 unless another task still owns the finding. Any status persistence failure is
 reported in `warnings` without hiding the successful removal receipt.
+
+### Managed MCP integrations
+
+GET `/api/projects/current/integrations` requires `project_id` and
+`project_revision`. It is passive and returns configured connection details,
+configuration fingerprints and optional current inventories, with `no-store`.
+States are `configured`, `ready` or `expired`; `ready` means a reviewed inventory
+is retained, not a background connection. Credential fields contain environment
+variable references only. Tool descriptions are untrusted external metadata.
+
+POST `/api/projects/current/integrations/{integrationID}/control` strictly accepts
+`project_id`, `project_revision`, `configuration`, `action`, optional `grant` and
+`confirm_connect`. `action: discover` requires `confirm_connect: true`, approving
+the displayed endpoint or installed process. Discovery opens and closes a bounded
+native MCP session and returns a random grant, `expires_at` (15 minutes) and an
+allowlisted inventory with its `fingerprint`, remote names, local aliases, input
+schemas and wrapped output schemas. It sends no repository source.
+`action: revoke` requires the current grant if one exists, cancels active
+operations and returns the passive configured state. Stale configuration/grant
+returns 409; missing credentials and rejected protocol requests return errors
+without raw server diagnostics. Cancellation joins owned process/network work.
+
+Plan investigations and declaration explanations accept an optional `integrations`
+array of at most two unique `{id, grant, schema_fingerprint,
+confirm_source_sharing: true}` selections. This explicit per-request consent is
+separate from provider confirmation and covers the admitted prompt, source,
+skill and memory context that tool arguments may disclose to each selected
+server. Grant tokens and credentials are excluded from model prompts. CLI
+completion-only profiles reject integration selections. Tool calls recheck scope,
+credentials and the discovered inventory, consume shared tool budgets, dispatch
+at most once per call, and close their connection before returning. Changed
+schemas require fresh discovery and consent. Only configured `read_external`
+effects are supported; returned text cannot authorize local changes or become
+verified source evidence. Reindex, project replacement, revoke and restart
+invalidate grants. The configuration reference documents transport, schema,
+process and size limits.

@@ -74,6 +74,9 @@ func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 		}
 	}
 	s.invalidateJobsForProjectChange()
+	if err := s.waitIntegrations(ctx); err != nil {
+		return err
+	}
 	if err := s.waitChangeWorkflowDone(ctx); err != nil {
 		return err
 	}

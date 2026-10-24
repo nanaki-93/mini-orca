@@ -24,12 +24,13 @@ const (
 // DeclarationExplanationRequest pins one read-only request to the exact active
 // project, source file, and indexed Go declaration.
 type DeclarationExplanationRequest struct {
-	ProjectID             string `json:"project_id"`
-	ProjectRevision       string `json:"project_revision"`
-	BaseFileHash          string `json:"base_file_hash"`
-	TargetPath            string `json:"target_path"`
-	TargetSymbol          string `json:"target_symbol"`
-	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
+	Integrations          []IntegrationUse `json:"integrations,omitempty"`
+	ProjectID             string           `json:"project_id"`
+	ProjectRevision       string           `json:"project_revision"`
+	BaseFileHash          string           `json:"base_file_hash"`
+	TargetPath            string           `json:"target_path"`
+	TargetSymbol          string           `json:"target_symbol"`
+	ConfirmRemoteProvider bool             `json:"confirm_remote_provider,omitempty"`
 }
 
 // SourceAnchor identifies the bounded source range that the explanation covers.
@@ -103,6 +104,9 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 		return nil, err
 	}
 	runtime := s.runtimes.function
+	if len(request.Integrations) > 0 && !llm.ProviderCapabilities(runtime.profile).Tools {
+		return nil, fmt.Errorf("selected integrations require a tool-capable profile")
+	}
 	prepared, err := s.prepareDeclarationExplanation(ctx, request, runtime)
 	if err != nil {
 		return nil, err
@@ -147,6 +151,9 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 		return nil, err
 	}
 	if err := addSkillContext(ctx, &prepared.manifest, input.Investigation); err != nil {
+		return nil, err
+	}
+	if err := input.Investigation.Validate(ctx); err != nil {
 		return nil, err
 	}
 	return &DeclarationExplanation{

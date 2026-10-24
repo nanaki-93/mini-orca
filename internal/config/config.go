@@ -13,6 +13,7 @@ import (
 
 // Config is the daemon's single YAML configuration schema.
 type Config struct {
+	Integrations IntegrationsConfig `yaml:"integrations"`
 	AgentRuntime AgentRuntimeConfig `yaml:"agent_runtime"`
 	ModelScopes  ModelScopesConfig  `yaml:"model_scopes"`
 	Retry        RetryConfig        `yaml:"retry"`
@@ -182,11 +183,15 @@ func (c *Config) Validate() error {
 	if _, err := ResolveModelProfiles(c); err != nil {
 		return err
 	}
-	_, err := ResolveAgentRuntime(c.AgentRuntime)
+	if _, err := ResolveAgentRuntime(c.AgentRuntime); err != nil {
+		return err
+	}
+	_, err := ResolveIntegrations(c.Integrations)
 	return err
 }
 
 var configurationFields = fieldSet{
+	"integrations": {"mcp": {}},
 	"agent_runtime": {
 		"skills":          {},
 		"roles":           {"creation": {}, "testing": {}, "review": {}},

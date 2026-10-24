@@ -39,6 +39,9 @@ func TestPlanInvestigationRouteAndEvidenceContract(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Sources[0].Hash != "hash" || !request.Sources[0].Exists || request.Sources[1].Exists || request.Plan.Citations[0].Quote != "package main" {
 			t.Errorf("lost captured identity/evidence: %+v %v", request, err)
 		}
+		if len(request.Integrations) != 1 || request.Integrations[0] != (IntegrationUse{ID: "docs", Grant: "grant", SchemaFingerprint: "schema", ConfirmSourceSharing: true}) {
+			t.Errorf("lost explicit integration grant: %+v", request.Integrations)
+		}
 		_ = json.NewEncoder(w).Encode(PlanInvestigation{ProjectIdentity: request.ProjectIdentity, Version: "v1", InputHash: "input", Evidence: request.Plan.Citations, Assumptions: request.Plan.Assumptions})
 	}))
 	defer server.Close()
@@ -50,6 +53,7 @@ func TestPlanInvestigationRouteAndEvidenceContract(t *testing.T) {
 	path := "/api/projects/current/plans/investigate"
 	request := PlanInvestigationRequest{ProjectIdentity: ProjectIdentity{ProjectID: "p", ProjectRevision: "r"}, Paths: []string{"main.go", "main_test.go"}, Sources: []PlanInvestigationSource{{Path: "main.go", Hash: "hash", Exists: true}, {Path: "main_test.go"}}, Plan: ChangePlanInput{Problem: "Coverage", Approach: "Inspect Run", Citations: []PlanEvidence{{Path: "main.go", Hash: "hash", StartLine: 1, EndLine: 1, Quote: "package main", Observation: "Package"}}, Assumptions: []string{"Preserve API"}}}
 	var result PlanInvestigation
+	request.Integrations = []IntegrationUse{{ID: "docs", Grant: "grant", SchemaFingerprint: "schema", ConfirmSourceSharing: true}}
 	if err := cl.DoJSON(t.Context(), "investigate", http.MethodPost, path, request, &result); err != nil || len(result.Evidence) != 1 || len(result.Assumptions) != 1 {
 		t.Fatalf("investigation round trip: %+v %v", result, err)
 	}

@@ -144,6 +144,54 @@ func TestRunCheckCommandNormalExitStopsDescendants(t *testing.T) {
 	}
 }
 
+func TestVerifyCommandGroupStoppedRequiresReapingAndAbsence(t *testing.T) {
+	if err := VerifyCommandGroupStopped(nil); err == nil {
+		t.Fatal("missing process accepted as stopped")
+	}
+	arguments := checkHelperCommand("wait-stdin")
+	command := exec.CommandContext(t.Context(), arguments[0], arguments[1:]...)
+	if err := ConfigureCommand(command); err != nil {
+		t.Skip(err)
+	}
+	input, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopCommandGroup(command); _ = input.Close() })
+	if err := VerifyCommandGroupStopped(command); err == nil {
+		t.Fatal("unreaped live process accepted as stopped")
+	}
+	if err := input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyCommandGroupStopped(command); err != nil {
+		t.Fatalf("reaped empty group: %v", err)
+	}
+
+	marker := filepath.Join(t.TempDir(), "remaining-descendant")
+	arguments = checkHelperCommand("descendant-parent-exit", marker)
+	parent := exec.CommandContext(t.Context(), arguments[0], arguments[1:]...)
+	if err := ConfigureCommand(parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := parent.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopCommandGroup(parent) })
+	if err := parent.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyCommandGroupStopped(parent); err == nil {
+		t.Fatal("remaining descendant accepted as stopped after leader exit")
+	}
+}
+
 func TestCheckCommandHelperProcess(t *testing.T) {
 	separator := -1
 	for index, argument := range os.Args {
@@ -161,6 +209,8 @@ func TestCheckCommandHelperProcess(t *testing.T) {
 		argument = os.Args[separator+2]
 	}
 	switch mode {
+	case "wait-stdin":
+		_, _ = io.Copy(io.Discard, os.Stdin)
 	case "environment":
 		if os.Getenv("PATH") == "" {
 			fmt.Fprint(os.Stdout, "path-missing")

@@ -43,6 +43,32 @@ paths:
         '200': {description: Bounded model suggestions with validated source citations, content: {application/json: {schema: {$ref: '#/components/schemas/PlanInvestigation'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/integrations:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read passive MCP configuration and expiring inventory grants
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: No connection or process startup; no-store, content: {application/json: {schema: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/AgentIntegration'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/integrations/{integrationID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: integrationID, required: true, schema: {type: string}}
+    post:
+      tags: [Projects]
+      summary: Explicitly discover or revoke a configured MCP integration
+      description: Discovery requires confirm_connect and the current configuration fingerprint. It opens and closes a bounded connection, returning a 15-minute schema grant. Revocation cancels in-flight operations and requires the current grant when one exists. Neither action grants source sharing.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/IntegrationControl'}}}}
+      responses:
+        '200': {description: Ready inventory or revoked configuration; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentIntegration'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/memory:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -1089,6 +1115,71 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    IntegrationUse:
+      type: object
+      additionalProperties: false
+      required: [id, grant, schema_fingerprint, confirm_source_sharing]
+      properties:
+        id: {type: string, maxLength: 24}
+        grant: {type: string, description: Current in-memory discovery grant; invalidated by revoke, reindex, replacement or restart.}
+        schema_fingerprint: {type: string, pattern: '^[a-f0-9]{64}$'}
+        confirm_source_sharing: {type: boolean, enum: [true], description: Approve this investigation's admitted prompt, source, skill and memory context reaching this server.}
+    IntegrationControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action, configuration]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        action: {type: string, enum: [discover, revoke]}
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        grant: {type: string, description: Required to revoke an existing inventory.}
+        confirm_connect: {type: boolean, default: false, description: Required true for discovery; explicitly approves endpoint access or launching the configured installed process.}
+    AgentIntegration:
+      type: object
+      required: [config, configuration, state]
+      properties:
+        config:
+          type: object
+          required: [id, transport, tools, timeout_seconds]
+          properties:
+            id: {type: string}
+            transport: {type: string, enum: [stdio, streamable_http]}
+            endpoint: {type: string}
+            bearer_token_env: {type: string, description: Environment variable reference only; never its value.}
+            command: {type: string, description: Absolute installed executable.}
+            args: {type: array, maxItems: 16, items: {type: string}}
+            environment: {type: object, additionalProperties: {type: string}, description: Child variable to explicit credential variable reference.}
+            timeout_seconds: {type: integer, minimum: 1, maximum: 60}
+            tools:
+              type: array
+              maxItems: 4
+              items:
+                type: object
+                properties:
+                  name: {type: string}
+                  effect: {type: string, enum: [read_external]}
+        configuration: {type: string}
+        state: {type: string, enum: [configured, ready, expired]}
+        grant: {type: string}
+        expires_at: {type: string, format: date-time}
+        inventory:
+          type: object
+          required: [fingerprint, tools]
+          properties:
+            fingerprint: {type: string}
+            tools:
+              type: array
+              maxItems: 4
+              items:
+                type: object
+                required: [remote_name, name, description, input_schema, output_schema]
+                properties:
+                  remote_name: {type: string}
+                  name: {type: string, description: Stable local alias used by the investigation.}
+                  description: {type: string, maxLength: 1024}
+                  input_schema: {type: object, additionalProperties: true}
+                  output_schema: {type: object, additionalProperties: true}
     MemorySource:
       type: object
       additionalProperties: false
@@ -1895,6 +1986,7 @@ components:
       required: [project_id, project_revision, base_file_hash, target_path, target_symbol, confirm_remote_provider]
       additionalProperties: false
       properties:
+        integrations: {type: array, maxItems: 2, items: {$ref: '#/components/schemas/IntegrationUse'}}
         project_id: {type: string}
         project_revision: {type: string}
         base_file_hash: {type: string}
@@ -2317,6 +2409,7 @@ components:
       additionalProperties: false
       required: [project_id, project_revision, plan, paths, sources]
       properties:
+        integrations: {type: array, maxItems: 2, items: {$ref: '#/components/schemas/IntegrationUse'}}
         project_id: {type: string, minLength: 1}
         project_revision: {type: string, minLength: 1}
         plan: {$ref: '#/components/schemas/ChangePlanInput'}

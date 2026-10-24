@@ -484,6 +484,50 @@ Function profile's context token estimate (four bytes per token), whichever is
 smaller. Source, policy, instructions and project identity are rechecked at
 dispatch and publication; a changed scope stops the investigation.
 
+`integrations.mcp` configures at most eight named MCP servers. Each entry selects
+`streamable_http` with an HTTPS `endpoint` (literal loopback HTTP is permitted),
+or `stdio` with an absolute installed `command` and fixed `args`. HTTP bearer
+authentication uses `bearer_token_env`; stdio `environment` maps child variable
+names to explicit credential variable names. Missing credentials are unavailable,
+never discovered implicitly. Arguments must not contain secrets. Configure one
+to four exact tool names with the operator-owned `effect: read_external`.
+Mutations, filesystem tools and arbitrary command execution are not admitted;
+server annotations cannot change this classification.
+
+Configuration and list views are passive. Explicit discovery approves the exact
+configured endpoint or process and returns an in-memory inventory valid for 15
+minutes. Each plan/declaration investigation separately supplies the current grant,
+schema fingerprint and `confirm_source_sharing: true`. This consent covers that
+investigation's admitted prompt, source, skill and memory context reaching the
+selected server through tool arguments. Provider confirmation is independent.
+At most two integrations can be selected per investigation, within the combined
+16-tool limit for repository, skill and integration tools. Revoke, reindex,
+project replacement and shutdown cancel in-flight connections and discard grants;
+grants are not restored on daemon restart. See the [API contract](docs/api-contract.md)
+for discovery and revocation.
+
+Each discovery/call owns a short-lived native ADK MCP connection, closes it before
+returning, and rechecks the selected inventory before dispatch. Automatic reconnect,
+tool retry, OAuth prompts, roots, sampling and elicitation are disabled. Credential
+changes invalidate grants. Discovery permits four pages, 64 total tools and 64 KiB;
+protocol frames and HTTP responses are capped at 64 KiB. Tool arguments/results use
+the investigation's 16 KiB bounds and shared budgets. Schemas must be inline JSON
+objects without references; results support text or structured objects, not media
+or resource downloads. Incoming schema/result integers must have absolute values
+below 2^53 because the MCP SDK decodes JSON numbers as floating point; represent
+larger identifiers as strings. Validated outbound argument JSON retains its
+original numeric precision. `timeout_seconds` defaults to 30 and accepts 1–60; at most
+16 integration operations may be active in a service.
+
+Stdio runs only the configured installed executable, with no shell interpolation
+or automatic installation. Its private temporary working directory is also HOME
+and TMPDIR; PATH is `/usr/bin:/bin`, and only configured credential references are
+added. Cleanup terminates the owned process group, joins the process and removes
+the directory. This is process ownership, not OS filesystem confinement: approve
+only trusted installed MCP servers and correctly classify their allowed tools.
+External answers remain advisory and cannot supply verified repository citations,
+checks, source writes, Apply or Undo authority.
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

@@ -4,6 +4,7 @@ package sandbox
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -22,4 +23,20 @@ func ConfigureCommand(process *exec.Cmd) error {
 		return err
 	}
 	return nil
+}
+
+// VerifyCommandGroupStopped proves absence after the owner has reaped its
+// leader. A failed signal alone never establishes successful cleanup.
+func VerifyCommandGroupStopped(process *exec.Cmd) error {
+	if process == nil || process.Process == nil || process.ProcessState == nil || process.SysProcAttr == nil || !process.SysProcAttr.Setpgid {
+		return fmt.Errorf("owned process group has not been reaped")
+	}
+	err := syscall.Kill(-process.Process.Pid, 0)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("verify process group cleanup: %w", err)
+	}
+	return fmt.Errorf("owned process group still exists")
 }

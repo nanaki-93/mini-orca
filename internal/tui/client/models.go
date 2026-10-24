@@ -826,11 +826,19 @@ type PlanInvestigationSource struct {
 
 type PlanInvestigationRequest struct {
 	ProjectIdentity
+	Integrations          []IntegrationUse          `json:"integrations,omitempty"`
 	Plan                  ChangePlanInput           `json:"plan"`
 	Paths                 []string                  `json:"paths"`
 	AcceptanceCriteria    []string                  `json:"acceptance_criteria"`
 	Sources               []PlanInvestigationSource `json:"sources"`
 	ConfirmRemoteProvider bool                      `json:"confirm_remote_provider"`
+}
+
+type IntegrationUse struct {
+	ID                   string `json:"id"`
+	Grant                string `json:"grant"`
+	SchemaFingerprint    string `json:"schema_fingerprint"`
+	ConfirmSourceSharing bool   `json:"confirm_source_sharing"`
 }
 
 type PlanInvestigation struct {
