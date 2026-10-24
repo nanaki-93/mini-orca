@@ -487,6 +487,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/change_pipeline_stages.go`, `internal/app/agentruntime/investigator.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/runtime.go`.
 - `internal/app/agentruntime/policy.go`, `internal/app/agent_knowledge.go`, `internal/app/agent_investigation.go`, `internal/app/change_session.go`, `internal/app/feature_suggestions.go`, `internal/app/declaration_explanation.go`, `internal/app/semantic_review.go`, `internal/app/security_review.go`, `internal/app/performance_review.go` — attach bounded, captured memory scopes at actual model owners and revalidate retrieval before transport dispatch.
 - `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `docs/api-contract.md`, `docs/openapi.yaml` — register and document guarded memory list/detail/create/edit/accept/forget operations; TUI management follows in Task 26.
+- `internal/app/analysis_run_test.go` — wait on the analysis worker's completion using its admitted window deadline, and cancel/join it on a failed wait. A generic three-second signal timeout is not the budget for a durable multi-stage workflow; preserve all completion, coverage, call-count and recovery assertions.
 
 **Inputs / dependencies**
 - Task 17; existing harness lessons and instruction graduation workflow.
