@@ -1027,29 +1027,78 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: schedule bounded mission children with native ADK`
 
-## Task 30C — Review and integrate mission children in the TUI
+## Task 30C1 — Integrate checked mission children with durable Git evidence
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/tui/mission_execution.go`, `internal/tui/mission_execution_test.go` — **new**.
-- `internal/app/agent_mission_run.go`, `internal/app/agent_mission_scheduler.go`, `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
-- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`, `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/terminal_loop.go`, `internal/tui/sse_events.go`, `internal/tui/keybinds_help.go`, `internal/tui/command_menu.go`.
-- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/app/agentstate/mission_integrations.go`, `internal/app/agentstate/mission_integrations_test.go` — **new**.
+- `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agent_mission_scheduler.go`, `internal/app/agent_mission_scheduler_test.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`, `internal/app/agent_mission.go`.
+- `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/agent_runs.go`.
+- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 30B; checked child proposals and existing explicit Apply, commit and guarded merge paths.
+- Task 30B; existing guarded Apply/commit/merge, registered worktree identity checks, and protected private artifact storage.
 
 **Implementation rules**
-- Expose preparation, start/advance, pause/cancel and per-child progress with concrete scope, budgets and confirmations. Keep navigation and detail reads passive; discard late responses after scope, plan, execution or provider identity changes.
-- Each child uses ordinary diff review and explicit Apply/commit. Merge remains a separate confirmed action in the approved integration order. Verify the exact child worktree, proposal, commit and base before integration; record the resulting source/base identity before releasing dependencies.
-- A changed base or rebased child requires fresh checks and review wherever identity changes. Reconcile interrupted merge/cleanup effects from actual Git evidence, retaining completed proposals, conflicts, rejected children and cleanup failures; never infer success from missing worktrees.
-- Verify keyboard journeys, selected worktree ownership, cancellation and restart recovery at compact/wide dimensions and all palettes. Keep dependencies, remaining allocations and recovery actions readable without expanding dashboard density.
+- Add explicit confirmed integration and reconciliation against the exact execution revision, child, proposal, committed worktree and destination Git identity. Preserve ordinary human diff Review and Apply/commit. Require the approved integration order, completed dependencies and the current recorded base; a child checked against an older base stays blocked for explicit revalidation.
+- Persist merge intent before Git effects. Archive the complete checked proposal and provenance as protected private evidence before cleanup, and retain its exact artifact reference in the execution receipt. Ordinary Git routes must not bypass mission integration admission or erase owned evidence.
+- Preserve the original approved mission and initial base. Record a separate current integration checkpoint with the resulting base, project revision, source hashes and instruction bindings. Only the approved child changes may advance that checkpoint; subsequent children use those observed bindings without changing their fixed allocations or the original plan hash.
+- Publish the verified resulting checkpoint before releasing dependencies or removing worktrees. Reconcile interrupted merges and cleanup from exact commit ancestry, tree/source evidence and retained intent; missing worktrees alone never prove success. Report conflicts, unavailable evidence, partial persistence and cleanup failures honestly. Never retry uncertain Git effects automatically.
+- Version the execution schema deliberately and retain older prepared, active and completed child records. Cover serial dependency execution through explicit integration, out-of-order/foreign/stale requests, mutation races, persistence failures, restart and retained evidence after cleanup.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentruntime ./internal/app/agentstate && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: review and integrate scoped mission executions`
+**Commit**: `feat: integrate mission children with durable Git receipts`
+
+## Task 30C2 — Revalidate retained mission proposals against the current base
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agent_mission_revalidation.go`, `internal/app/agent_mission_revalidation_test.go` — **new**.
+- `internal/app/agent_mission_integration.go`, `internal/app/agent_mission_integration_test.go`, `internal/app/agent_mission_run.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`.
+- `internal/app/agentstate/mission_integrations.go`, `internal/app/agentstate/mission_integrations_test.go`, `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`.
+- `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+
+**Inputs / dependencies**
+- Task 30C1; parallel children may retain useful proposals checked against an earlier recorded mission base.
+
+**Implementation rules**
+- Provide explicit bounded revalidation of an owned retained proposal against the current verified mission checkpoint. Capture the previous proposal/commit and new base before worktree effects; preserve old branches and protected proposal evidence.
+- Create a fresh owned review candidate through existing change-session and worktree owners, limited to the approved child write/read paths. Carry forward only proposal content and provenance. Invalidate prior checks, model-review claims and human approval wherever the base or proposal identity changes; run fresh checks only with scoped execution consent.
+- Revalidation never invokes a provider or resets the child's fixed model/tool/token/repair allocation. The candidate retains its mission origin and requires fresh per-file human review and explicit Apply/commit before integration. Show original model history as historical evidence, not current verification.
+- Bound candidate generations and persist their lineage and effect ownership. Cancellation, failed checks, missing worktrees or restart retain recoverable state without automatic recreation, execution or cleanup. Unrelated external changes to the integration checkpoint require a new reviewed mission instead of silent adoption.
+- Cover two disjoint children generated in parallel and integrated sequentially after current-base revalidation, stale/replayed candidate requests, failed checks, cancellation and recovery without provider dispatch or source Apply.
+
+**Verification command**
+`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: revalidate mission proposals against the current base`
+
+## Task 30C3 — Review and integrate mission executions in the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/mission_execution.go`, `internal/tui/mission_execution_test.go` — **new**.
+- `internal/tui/hub_agents.go`, `internal/tui/agent_run_actions.go`, `internal/tui/worktree_pending.go`, `internal/tui/worktree_lifecycle_test.go`, `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/terminal_loop.go`, `internal/tui/sse_events.go`, `internal/tui/keybinds_help.go`, `internal/tui/command_menu.go`.
+- `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 30C2; all execution, revalidation, integration and recovery controls have verified backend behavior.
+
+**Implementation rules**
+- Expose preparation, start/advance, pause/cancel, per-child progress, current-base revalidation and explicit integration in the existing mission detail surface. Show concrete scope, allocations, destinations and confirmations. Keep navigation and detail reads passive; reject late results after scope, plan, execution, candidate or provider identity changes.
+- Open an exact owned child proposal through ordinary diff review and explicit Apply/commit. Route its merge through mission integration admission in the approved order. Preserve the mission selection across resulting project revisions without carrying stale consent or approval.
+- Show pending effects, failed/rejected/interrupted children, retained proposal artifacts, conflicts and cleanup failures with the applicable recovery action. Provider retries cannot reset mission allocations. Refresh progress from local events without dispatching work or replacing local edits.
+- Verify complete keyboard journeys, selected worktree ownership, cancellation and restart recovery at compact/wide dimensions and all palettes. Keep dependencies, remaining allocations, current base and recovery actions readable without increasing dashboard density.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: review and integrate scoped missions in the TUI`
 
 ## Task 31 — Support explicit multimodal attachments and live sessions
 
@@ -1061,7 +1110,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md`.
 
 **Inputs / dependencies**
-- Task 30C; artifact privacy and verified provider capability. Pinned Go SDK includes `agent.LiveSession`; test the actual runner/provider path rather than assuming parity with Python examples.
+- Task 30C3; artifact privacy and verified provider capability. Pinned Go SDK includes `agent.LiveSession`; test the actual runner/provider path rather than assuming parity with Python examples.
 
 **Implementation rules**
 - Allow explicitly selected bounded images/documents/audio artifacts for supported models. Validate MIME/content, size, ownership, scope, and destination; reject arbitrary provider fetch URLs and implicit uploads.
