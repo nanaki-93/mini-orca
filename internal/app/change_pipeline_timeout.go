@@ -31,13 +31,13 @@ func workflowDeadlineCause(ctx context.Context, err error) error {
 
 // A run must accommodate every remaining model call, including optional repairs.
 // Provider retries share each model's deadline; they do not multiply this budget.
-func (s *Service) changeWorkflowTimeout(models ChangeWorkflowModels, startStage int, autoRepair bool) time.Duration {
+func (s *Service) changeWorkflowTimeout(ctx context.Context, models ChangeWorkflowModels, startStage int, autoRepair bool) time.Duration {
 	var full, remaining time.Duration
 	for stage, profile := range models.selections() {
 		runtime := s.workflowStageRuntime(stage, profile)
 		limit := duration(runtime.effective.Timeout)
 		if stage == 2 {
-			limit *= time.Duration(s.workflowReviewWaves(len(workflowReviewRoles)))
+			limit *= time.Duration(s.workflowReviewWaves(ctx, len(workflowReviewRoles)))
 		}
 		full += limit
 		if stage >= startStage {
@@ -52,12 +52,12 @@ func (s *Service) changeWorkflowTimeout(models ChangeWorkflowModels, startStage 
 		budget += checks // An existing proposal may need a pre-generation probe.
 	}
 	if autoRepair {
-		budget += time.Duration(s.agentRuntime.Limits.Repairs) * (full + checks)
+		budget += time.Duration(s.admittedRuntime(ctx).Limits.Repairs) * (full + checks)
 	}
 	return max(30*time.Minute, budget)
 }
 
-func (s *Service) workflowReviewWaves(count int) int {
-	concurrency := max(1, s.agentRuntime.Limits.ConcurrentCalls)
+func (s *Service) workflowReviewWaves(ctx context.Context, count int) int {
+	concurrency := max(1, s.admittedRuntime(ctx).Limits.ConcurrentCalls)
 	return max(1, (count+concurrency-1)/concurrency)
 }

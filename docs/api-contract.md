@@ -85,6 +85,9 @@ untrusted networks.
 | GET | `/api/projects/current/research/{reportID}/report` | Read a private HTML report preserving citations and Google Search suggestions. |
 | GET | `/api/projects/current/remote-agents` | Read passive A2A configuration and current card grants. |
 | GET | `/api/projects/current/agent-access` | List configured inbound principals and temporary access grants for this project. |
+| GET | `/api/projects/current/agent-settings` | Read configured or overridden role, budget and skill settings without dispatch. |
+| POST | `/api/projects/current/agent-settings/control` | Confirm a versioned replacement or reset for future admissions. |
+| POST | `/api/projects/current/agent-settings/skills/validate` | Explicitly validate a configured skill's captured local text without executing resources. |
 | POST | `/api/projects/current/agent-access/{principalID}/control` | Explicitly grant or revoke bounded inbound analysis/proposal access. |
 | POST | `/api/projects/current/remote-agents/{integrationID}/control` | Explicitly discover a configured remote card or revoke its grant. |
 | GET | `/api/projects/current/delegations` | List durable delegation metadata without private advisory text. |
@@ -1349,6 +1352,45 @@ The user checks the external service before submitting this account. The resulti
 `reconciled` receipt is explicitly user-reported; it never retries the request.
 Stale/uncertain conflicts return 409, missing receipts 404, malformed requests 400
 and journal failures 500. Existing recovery data is preserved on failures.
+
+### Agent settings and skill validation
+
+GET `/api/projects/current/agent-settings` requires current `project_id` and
+`project_revision`. Its no-store response contains the configuration fingerprint,
+settings `version` (zero before the first edit), `state` (`configured`, `overridden`
+or `stale`), effective `roles`, `limits`, operator-configured `ceilings`, configured
+skill directories with `enabled` flags, and non-secret configured model metadata.
+This local read creates no journal, connection, process or provider request.
+
+POST `/api/projects/current/agent-settings/control` requires the same project
+identity, `configuration`, `version`, `confirm: true` and `action: replace` or
+`reset`. Replacement requires complete `values`: `roles` with `creation`, `testing`
+and `review` selected from `analyze`, `bug` and `function`; all seven `limits`
+fields; and an explicit `disabled_skills` array drawn only from configured skill
+directories. Positive limits must remain within the configured ceilings; `repairs`
+may be zero. No provider, credential, tool, skill directory or retention permission
+can be added. Reset omits `values` and follows current operator defaults while
+advancing the version, so old editors cannot overwrite a reset.
+
+Settings are private to the canonical checkout and survive restart. Mutation
+requires current project/configuration/version identity. Operator configuration
+changes mark retained overrides stale; new work then requires an explicit reset,
+while retained data remains readable. Malformed requests return 400, stale scope
+or version returns 409, and corrupt or failed persistence returns 500 without
+replacing retained data. Existing runs keep their admitted roles, budget, skill
+selection, context policy and configuration fingerprint. Explicit per-request
+model choices still take precedence. A pending pure human-review handoff keeps
+its captured settings but rechecks operator, project, policy and proposal identity.
+
+POST `/api/projects/current/agent-settings/skills/validate` requires current
+project/configuration/version identity and a configured `directory`. It reads the
+indexed manifest and resources through current source/policy guards, uses the
+native ADK parser, and returns `state: valid` with bounded metadata, required tool
+names and resource hashes/sizes. It returns neither instructions nor resource
+bodies, writes no validation grant and executes no scripts. Validation does not
+enable a skill or grant its required tools; actual investigations revalidate
+source and check tool availability in their own admitted scope. Changed, excluded,
+malformed, oversized or unindexed resources remain explicit errors.
 
 ### Inbound agent access and optional A2A listener
 

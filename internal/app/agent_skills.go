@@ -11,7 +11,8 @@ import (
 )
 
 func (s *Service) skillInvestigation(ctx context.Context, root, scope string, specs []agentruntime.ToolSpec, authorize func(context.Context) error) (*agentruntime.Investigation, error) {
-	if len(s.agentRuntime.Skills) == 0 {
+	settings := s.admittedRuntime(ctx)
+	if len(settings.Skills) == 0 {
 		return agentruntime.NewInvestigation(scope, specs, authorize)
 	}
 	if err := authorize(ctx); err != nil {
@@ -26,7 +27,7 @@ func (s *Service) skillInvestigation(ctx context.Context, root, scope string, sp
 		return nil, err
 	}
 	var packages []agentruntime.SkillPackage
-	for _, directory := range s.agentRuntime.Skills {
+	for _, directory := range settings.Skills {
 		input, err := captureSkillPackage(index, directory, policy)
 		if err != nil {
 			return nil, err

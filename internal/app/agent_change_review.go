@@ -145,7 +145,7 @@ func (s *Service) reviewWorkflowProposal(ctx context.Context, job *changeWorkflo
 	if err != nil {
 		return err
 	}
-	input := agentruntime.ReviewGraphInput{Snapshot: changeGraphSnapshot(session), Specialists: job.specialists, Concurrency: s.agentRuntime.Limits.ConcurrentCalls}
+	input := agentruntime.ReviewGraphInput{Snapshot: changeGraphSnapshot(session), Specialists: job.specialists, Concurrency: s.admittedRuntime(ctx).Limits.ConcurrentCalls}
 	joined, err := agentruntime.RunReviewGraph(ctx, input, func(ctx context.Context, role string, snapshot agentruntime.ChangeSnapshot) (agentruntime.ReviewNodeResult, error) {
 		return s.runWorkflowSpecialist(ctx, job, session, runtime, messages, role, snapshot)
 	})

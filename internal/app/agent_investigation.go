@@ -82,6 +82,10 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
+	ctx, err := s.freezeAgentSettings(ctx, s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
 	runtime := s.runtimes.function
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()

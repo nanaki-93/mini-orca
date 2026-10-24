@@ -59,10 +59,10 @@ func TestAgentRoleDefaultsAreFrozenAndExplicitSelectionsWin(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.AgentRuntime.Roles.Creation = config.AnalyzeModelScope
-	if got := s.resolveWorkflowModels(ChangeWorkflowModels{}); got != (ChangeWorkflowModels{"function", "bug", "analyze"}) {
+	if got := s.resolveWorkflowModels(t.Context(), ChangeWorkflowModels{}); got != (ChangeWorkflowModels{"function", "bug", "analyze"}) {
 		t.Fatalf("configuration was not frozen: %+v", got)
 	}
-	if got := s.resolveWorkflowModels(ChangeWorkflowModels{Create: "bug", Review: "function"}); got != (ChangeWorkflowModels{"bug", "bug", "function"}) {
+	if got := s.resolveWorkflowModels(t.Context(), ChangeWorkflowModels{Create: "bug", Review: "function"}); got != (ChangeWorkflowModels{"bug", "bug", "function"}) {
 		t.Fatalf("explicit selections lost: %+v", got)
 	}
 }

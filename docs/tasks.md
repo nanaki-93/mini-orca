@@ -676,7 +676,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 25A — Persist guarded settings and freeze admitted configuration
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/api/handlers/agent_settings_handler.go`, `internal/api/handlers/agent_settings_handler_test.go`, `internal/app/agent_settings.go`, `internal/app/agent_settings_test.go` — **new**.

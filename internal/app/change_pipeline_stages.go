@@ -187,7 +187,7 @@ func workflowTestStageMessage(stageMessage string) string {
 func (s *Service) runWorkflowModelStage(ctx context.Context, job *changeWorkflowJob, session *ChangeSession, runtime modelRuntime, stage int, message string) (*ChangeSession, error) {
 	limit := duration(runtime.effective.Timeout)
 	if stage == 2 {
-		limit *= time.Duration(s.workflowReviewWaves(len(job.specialists)))
+		limit *= time.Duration(s.workflowReviewWaves(ctx, len(job.specialists)))
 	}
 	timed, cancel := context.WithTimeoutCause(ctx, limit, &workflowTimeoutError{stage: []string{"Creation", "Testing", "Review"}[stage], limit: limit})
 	defer cancel()

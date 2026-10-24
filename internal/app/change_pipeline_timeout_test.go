@@ -166,21 +166,21 @@ func TestWorkflowTotalDeadlineAccommodatesStagesChecksAndRepairs(t *testing.T) {
 	s := &Service{workflowModelTimeout: 15 * time.Minute, focusedCheckTimeout: time.Minute}
 	s.agentRuntime, _ = config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
 	models := ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}
-	full := s.changeWorkflowTimeout(models, 0, false)
-	resumed := s.changeWorkflowTimeout(models, 1, false)
+	full := s.changeWorkflowTimeout(t.Context(), models, 0, false)
+	resumed := s.changeWorkflowTimeout(t.Context(), models, 1, false)
 	if full <= 45*time.Minute || resumed <= 30*time.Minute || resumed >= full {
 		t.Fatalf("remaining models/checks do not fit: full=%s, test retry=%s", full, resumed)
 	}
-	withRepairs := s.changeWorkflowTimeout(models, 1, true)
+	withRepairs := s.changeWorkflowTimeout(t.Context(), models, 1, true)
 	if withRepairs < resumed+2*(45*time.Minute+5*s.focusedCheckTimeout) {
 		t.Fatalf("repair attempts would be cut short: %s", withRepairs)
 	}
 	s.agentRuntime.Limits.Repairs = 0
-	if got := s.changeWorkflowTimeout(models, 1, true); got != resumed {
+	if got := s.changeWorkflowTimeout(t.Context(), models, 1, true); got != resumed {
 		t.Fatalf("disabled repairs retained time allowance: %s", got)
 	}
 	s.focusedCheckTimeout = 10 * time.Minute
-	if got := s.changeWorkflowTimeout(models, 0, false); got < 45*time.Minute+10*s.focusedCheckTimeout {
+	if got := s.changeWorkflowTimeout(t.Context(), models, 0, false); got < 45*time.Minute+10*s.focusedCheckTimeout {
 		t.Fatalf("probe and candidate checks would be cut short: %s", got)
 	}
 }

@@ -34,7 +34,11 @@ func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
 // StartChangeWorkflow captures consent and proposal identity before dispatch.
 // The HTTP request only admits the worker; polling/Cancel use its persisted ID.
 func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request ChangeWorkflowRequest) (*ChangeSession, error) {
-	request.Models = s.resolveWorkflowModels(request.Models)
+	ctx, err := s.freezeAgentSettings(ctx, s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
+	request.Models = s.resolveWorkflowModels(ctx, request.Models)
 	if err := request.Models.validate(); err != nil {
 		return nil, err
 	}
@@ -66,7 +70,10 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := validateResumedModels(session, request.Models, startStage); err != nil {
 		return nil, err
 	}
-	agentCtx, release, err := s.workflowAgentContext(context.Background(), request.Models)
+	// The job owns its lifetime and grants; carry only the captured settings
+	// across the request boundary, not an inherited request budget or policy.
+	background := context.WithValue(context.Background(), agentSettingsKey{}, ctx.Value(agentSettingsKey{}))
+	agentCtx, release, err := s.workflowAgentContext(background, request.Models)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +87,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if startStage != 2 {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
-	budget := s.changeWorkflowTimeout(request.Models, startStage, request.AutoRepair)
+	budget := s.changeWorkflowTimeout(agentCtx, request.Models, startStage, request.AutoRepair)
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := func() { cancelTimeout(); release() }
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
@@ -137,7 +144,7 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	}
 	limit := 0
 	if job.autoRepair {
-		limit = s.agentRuntime.Limits.Repairs
+		limit = s.admittedRuntime(ctx).Limits.Repairs
 	}
 	s.changesMu.Lock()
 	session, runErr := loadChangeSession(job.root, job.sessionID)

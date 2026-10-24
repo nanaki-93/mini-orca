@@ -168,7 +168,7 @@ func (s *Service) resolveWorkflowInput(ctx context.Context, root string, session
 	if err != nil {
 		return err
 	}
-	store, binding, err := s.agentJournal(root)
+	store, binding, err := s.confirmationJournal(ctx, root, input.RunID)
 	if err != nil {
 		return err
 	}

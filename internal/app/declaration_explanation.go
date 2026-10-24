@@ -103,6 +103,10 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
+	ctx, err := s.freezeAgentSettings(ctx, s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
 	runtime := s.runtimes.function
 	if len(request.Integrations) > 0 && !llm.ProviderCapabilities(runtime.profile).Tools {
 		return nil, fmt.Errorf("selected integrations require a tool-capable profile")

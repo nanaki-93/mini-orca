@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,59 @@ func readyConfirmation(t *testing.T) (*Service, string, *ChangeSession) {
 
 func inputResponse(session *ChangeSession, decision string) ChangeInputResponse {
 	return ChangeInputResponse{ChangeIdentity: identityForChange(session), WorkflowID: session.Workflow.ID, RequestID: session.Workflow.Input.RequestID, Decision: decision}
+}
+
+func TestWorkflowSettingsStayFrozenThroughWorkAndHumanReview(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s, root, initial := workflowService(t, [3]func() string{
+		func() string { close(started); <-release; return workflowImplementation },
+		func() string { return workflowTests },
+		func() string { return workflowApproval },
+	})
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	control := settingsControl(t, s)
+	control.Values.Roles = agentstate.RoleSettings{Creation: "bug", Testing: "analyze", Review: "function"}
+	control.Values.Limits.ConcurrentCalls = 1
+	if _, err := s.ControlAgentSettings(t.Context(), control); err != nil {
+		t.Fatal(err)
+	}
+	request := workflowRequest(initial)
+	request.Models = ChangeWorkflowModels{}
+	if _, err := s.StartChangeWorkflow(t.Context(), initial.ID, request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("workflow did not reach its captured Creation role")
+	}
+	control = settingsControl(t, s)
+	control.Values.Limits.ModelCalls = 1
+	control.Values.Roles.Creation = "function"
+	if _, err := s.ControlAgentSettings(t.Context(), control); err != nil {
+		t.Fatal(err)
+	}
+	once.Do(func() { close(release) })
+	ready := finishedWorkflow(t, s, initial.ID)
+	if ready.Workflow.Status != "awaiting_human_review" || ready.Workflow.Models != (ChangeWorkflowModels{Create: "bug", Test: "analyze", Review: "function"}) {
+		t.Fatal("future settings changed active workflow", ready.Workflow)
+	}
+	approved, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve"))
+	if err != nil || approved.Workflow.Input.Status != "approved" {
+		t.Fatal("settings edit invalidated captured pure human handoff", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Fatal("settings or review wrote project source", err)
+	}
+}
+
+func TestWorkflowInputStillRejectsChangedOperatorConfiguration(t *testing.T) {
+	s, _, ready := readyConfirmation(t)
+	s.runtimes.function.profile.Model = "changed-by-operator"
+	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve")); err == nil {
+		t.Fatal("changed operator configuration resumed old handoff")
+	}
 }
 
 func TestWorkflowInputApprovalAndDuplicateRetainExplicitApplyBoundary(t *testing.T) {

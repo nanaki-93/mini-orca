@@ -4,13 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -25,6 +23,11 @@ func (s *Service) agentRunContextAt(ctx context.Context, root string, runtimes .
 }
 
 func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, snapshot *project.Analysis, runtimes ...modelRuntime) (context.Context, context.CancelFunc, error) {
+	ctx, err := s.freezeAgentSettings(ctx, root)
+	if err != nil {
+		return nil, nil, err
+	}
+	settings := ctx.Value(agentSettingsKey{}).(admittedAgentSettings)
 	ctx = s.observeAgentRuns(ctx)
 	clients := make([]*agentruntime.ProviderClient, 0, len(runtimes))
 	for _, runtime := range runtimes {
@@ -35,12 +38,13 @@ func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, s
 		agentruntime.CancelRun(ctx, err)
 		return nil, nil, fmt.Errorf("admit agent destinations: %w", err)
 	}
-	bounded, cancel, err := agentruntime.WithBudget(admitted, s.agentRuntime.Limits)
+	bounded, cancel, err := agentruntime.WithBudget(admitted, settings.runtime.Limits)
 	if err != nil {
 		return nil, nil, err
 	}
 	store, binding, err := s.agentJournal(root)
 	if err == nil {
+		binding.Configuration = settings.configuration
 		if snapshot != nil {
 			binding.Project, binding.Revision = snapshot.ProjectID, snapshot.ProjectRevision
 		}
@@ -51,7 +55,7 @@ func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, s
 		cancel()
 		return nil, nil, err
 	}
-	bounded, err = agentruntime.WithContextConfig(bounded, s.agentRuntime.Context)
+	bounded, err = agentruntime.WithContextConfig(bounded, settings.runtime.Context)
 	if err != nil {
 		cancel()
 		return nil, nil, err
@@ -84,16 +88,8 @@ func (s *Service) agentJournal(root string) (*agentstate.Store, agentstate.Bindi
 			binding.Revision = index.ProjectRevision
 		}
 	}
-	data, err := json.Marshal(struct {
-		Profiles [3]config.ModelProfile
-		Runtime  config.AgentRuntime
-	}{[3]config.ModelProfile{s.runtimes.analyze.profile, s.runtimes.bug.profile, s.runtimes.function.profile}, s.agentRuntime})
-	if err != nil {
-		return nil, binding, fmt.Errorf("fingerprint admitted configuration: %w", err)
-	}
-	digest := sha256.Sum256(data)
-	binding.Configuration = hex.EncodeToString(digest[:])
-	return store, binding, nil
+	binding.Configuration, err = s.agentConfiguration(s.agentRuntime)
+	return store, binding, err
 }
 
 func (s *Service) workflowAgentContext(ctx context.Context, models ChangeWorkflowModels) (context.Context, context.CancelFunc, error) {
@@ -119,8 +115,8 @@ func (s *Service) analysisAgentContext(ctx context.Context, preview *AnalysisRun
 	return s.agentRunContext(ctx, runtimes...)
 }
 
-func (s *Service) resolveWorkflowModels(models ChangeWorkflowModels) ChangeWorkflowModels {
-	roles := s.agentRuntime.Roles
+func (s *Service) resolveWorkflowModels(ctx context.Context, models ChangeWorkflowModels) ChangeWorkflowModels {
+	roles := s.admittedRuntime(ctx).Roles
 	if models.Create == "" {
 		models.Create = string(roles.Creation)
 	}

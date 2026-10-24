@@ -193,6 +193,10 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)
+	settingsHandler := handlers.NewAgentSettingsHandler(application)
+	mux.HandleFunc("GET /api/projects/current/agent-settings", settingsHandler.Get)
+	mux.HandleFunc("POST /api/projects/current/agent-settings/control", settingsHandler.Control)
+	mux.HandleFunc("POST /api/projects/current/agent-settings/skills/validate", settingsHandler.ValidateSkill)
 	memoryHandler := handlers.NewAgentMemoryHandler(application)
 	integrationHandler := handlers.NewAgentIntegrationsHandler(application)
 	mux.HandleFunc("GET /api/projects/current/integrations", integrationHandler.List)

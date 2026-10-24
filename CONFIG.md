@@ -262,6 +262,16 @@ prevents final-result publication. These are local execution limits, not a billi
 guarantee: upstream internal retries and unreported consumption remain unknown.
 No reservation or usage record grants source-write or execution authority.
 
+Project-specific role, budget and skill preferences are available through the
+guarded [agent settings API](docs/api-contract.md#agent-settings-and-skill-validation).
+They are saved privately in the canonical checkout's agent journal and apply to
+future admissions. Budgets can be reduced up to the configured ceilings; role
+choices reference the existing scopes, and skill controls can only disable or
+reenable configured directories. Active runs retain their captured configuration.
+Explicit request model choices and TUI model presets remain authoritative.
+Changing operator configuration makes saved overrides stale and requires an
+explicit reset before new work; reset follows current configuration defaults.
+
 ### Scoped project skills
 
 `agent_runtime.skills` is an explicit list of project-relative skill directories;

@@ -23,13 +23,17 @@ type changeContextComposition struct {
 }
 
 func (s *Service) prepareChangeContext(ctx context.Context, root string, session *ChangeSession, message string, runtime modelRuntime, stageZero bool) (prepared preparedChangeContext, err error) {
+	ctx, err = s.freezeAgentSettings(ctx, root)
+	if err != nil {
+		return prepared, err
+	}
 	prepared.ctx, prepared.release = ctx, func() {}
 	defer func() {
 		if err != nil && prepared.release != nil {
 			prepared.release()
 		}
 	}()
-	settings := s.agentRuntime.Context
+	settings := s.admittedRuntime(ctx).Context
 	if settings.Compaction || settings.LocalCache || settings.ProviderCache {
 		prepared.ctx, prepared.release, err = s.agentRunContext(ctx, runtime)
 		if err != nil {

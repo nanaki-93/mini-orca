@@ -1,0 +1,59 @@
+package handlers
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+)
+
+type AgentSettingsHandler struct{ service *app.Service }
+
+func NewAgentSettingsHandler(service *app.Service) *AgentSettingsHandler {
+	return &AgentSettingsHandler{service: service}
+}
+
+func (h *AgentSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	query, ok := agentRunQuery(w, r)
+	if !ok {
+		return
+	}
+	value, err := h.service.AgentSettings(r.Context(), query)
+	respondAgentSettings(w, value, err)
+}
+
+func (h *AgentSettingsHandler) Control(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var request app.AgentSettingsControl
+	if !decodeStrictJSON(w, r, &request, "invalid agent settings", "Provide the current project, configuration, version and a confirmed replace or reset action.") {
+		return
+	}
+	value, err := h.service.ControlAgentSettings(r.Context(), request)
+	respondAgentSettings(w, value, err)
+}
+
+func (h *AgentSettingsHandler) ValidateSkill(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var request app.AgentSkillValidationRequest
+	if !decodeStrictJSON(w, r, &request, "invalid skill validation", "Provide the current project, configuration, settings version and configured skill directory.") {
+		return
+	}
+	value, err := h.service.ValidateAgentSkill(r.Context(), request)
+	respondAgentSettings(w, value, err)
+}
+
+func respondAgentSettings(w http.ResponseWriter, value any, err error) {
+	switch {
+	case errors.Is(err, agentstate.ErrCorrupt), errors.Is(err, agentstate.ErrPersistence):
+		api.WriteAppError(w, api.Internal("agent settings unavailable", "Existing private data was preserved. Repair the storage error before editing settings or admitting new work.", err))
+	case err != nil:
+		if !writeContextError(w, "agent settings", err) {
+			writeProjectError(w, "agent settings request failed", err)
+		}
+	default:
+		api.WriteJSON(w, http.StatusOK, value)
+	}
+}
