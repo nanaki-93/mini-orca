@@ -393,7 +393,12 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	schema := changeResponseSchema()
-	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, func(ctx context.Context) error { return s.verifyChangeCurrent(ctx, root, session) })
+	authorize := func(ctx context.Context) error { return s.verifyChangeCurrent(ctx, root, session) }
+	timed, err = withProjectMemory(timed, root, session.ProjectID, session.ProjectRevision, request.Message, changeMemorySources(session, stageZeroWorkflow), authorize)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, authorize)
 	if err != nil {
 		return nil, err
 	}

@@ -75,6 +75,11 @@ func (s *Service) requestPerformanceReview(ctx context.Context, snapshot perform
 	}
 	timed, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	sources := []project.AgentScope{{Path: snapshot.file.Path, Hash: snapshot.file.ContentHash}}
+	timed, err = withProjectMemory(timed, snapshot.root, snapshot.analysis.ProjectID, snapshot.analysis.ProjectRevision, snapshot.file.Path+" performance review lessons", sources, func(ctx context.Context) error { return s.validatePerformanceReviewSnapshot(ctx, snapshot) })
+	if err != nil {
+		return modelOutput{}, err
+	}
 	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
 		return modelOutput{}, timed.Err()

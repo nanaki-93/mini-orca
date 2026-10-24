@@ -55,8 +55,12 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 		return Result{}, fmt.Errorf("%w: provider does not support streaming", llm.ErrRequestRejected)
 	}
 	request = snapshotRequest(request)
-	var completion agent.Agent
 	var err error
+	ctx, request, err = prepareCompletionMemory(ctx, client, request)
+	if err != nil {
+		return Result{}, err
+	}
+	var completion agent.Agent
 	if request.Investigation != nil {
 		if parent, ok := ctx.Value(investigationKey{}).(*Investigation); ok && parent != request.Investigation {
 			return Result{}, fmt.Errorf("%w: investigation scope cannot be replaced", ErrPolicyDenied)
@@ -105,7 +109,7 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if err != nil {
 		return Result{}, fmt.Errorf("create artifact recorder: %w", err)
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, ArtifactService: completionArtifacts(invocation), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: invocation.service, ArtifactService: completionArtifacts(invocation), MemoryService: completionMemory(ctx), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}

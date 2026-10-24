@@ -184,6 +184,11 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)
+	memoryHandler := handlers.NewAgentMemoryHandler(application)
+	mux.HandleFunc("GET /api/projects/current/memory", memoryHandler.List)
+	mux.HandleFunc("POST /api/projects/current/memory", memoryHandler.Mutate)
+	mux.HandleFunc("GET /api/projects/current/memory/{memoryID}", memoryHandler.Detail)
+	mux.HandleFunc("POST /api/projects/current/memory/{memoryID}", memoryHandler.Mutate)
 	mux.HandleFunc("GET /api/projects/current/agent-runs", agentHandler.List)
 	mux.HandleFunc("GET /api/projects/current/agent-runs/events", agentHandler.Events)
 	mux.HandleFunc("GET /api/projects/current/agent-runs/{runID}", agentHandler.Detail)

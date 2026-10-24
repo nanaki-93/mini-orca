@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -291,11 +293,43 @@ func waitAnalysisWindow(t *testing.T, s *Service) {
 	t.Helper()
 	c := s.analysisRun
 	c.mu.Lock()
-	done := c.done
+	done, cancel := c.done, c.cancel
+	deadline := c.windowStart.Add(c.windowBudget + 5*time.Second)
 	c.mu.Unlock()
-	if done != nil {
-		waitForTestSignal(t, done, "analysis window completion")
+	if done == nil {
+		return
 	}
+	// Durable stages can legitimately outlast the generic single-signal helper.
+	// Keep the domain deadline and allow bounded journal cleanup, then join the
+	// canceled worker before TempDir cleanup can race its final writes.
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+	case <-t.Context().Done():
+	}
+	if cancel != nil {
+		cancel()
+	}
+	cleanup := time.NewTimer(5 * time.Second)
+	defer cleanup.Stop()
+	select {
+	case <-done:
+	case <-cleanup.C:
+		t.Fatal("analysis worker did not join after cancellation")
+	}
+	t.Fatal("analysis window exceeded its admitted deadline and journal cleanup allowance")
+}
+
+func TestAnalysisWindowWaitUsesAdmittedDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		done := make(chan struct{})
+		s := &Service{analysisRun: &analysisRunController{done: done, windowStart: time.Now(), windowBudget: 10 * time.Second}}
+		go func() { time.Sleep(4 * time.Second); close(done) }()
+		waitAnalysisWindow(t, s)
+	})
 }
 
 func completedAnalysisRun(t *testing.T, s *Service) *AnalysisRun {

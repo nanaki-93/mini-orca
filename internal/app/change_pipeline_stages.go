@@ -275,7 +275,7 @@ func (s *Service) requestWorkflowModel(ctx context.Context, root string, session
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
-	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, func(ctx context.Context) error {
+	authorize := func(ctx context.Context) error {
 		s.changesMu.Lock()
 		defer s.changesMu.Unlock()
 		current, currentRoot, err := s.loadChangeForAction(ctx, session.ID, identityForChange(session))
@@ -286,7 +286,12 @@ func (s *Service) requestWorkflowModel(ctx context.Context, root string, session
 			return fmt.Errorf("workflow identity changed before model dispatch")
 		}
 		return s.requireProjectExecutionTrust(ctx, session.ProjectRevision)
-	})
+	}
+	timed, err := withProjectMemory(timed, root, session.ProjectID, session.ProjectRevision, "proposal tests review lessons", changeMemorySources(session, false), authorize)
+	if err != nil {
+		return modelOutput{}, err
+	}
+	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, authorize)
 	if err == nil {
 		err = timed.Err()
 	}

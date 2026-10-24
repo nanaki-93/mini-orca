@@ -247,6 +247,31 @@ func TestOpenAPIGoScanPhaseIncludesWorkspace(t *testing.T) {
 	t.Fatalf("GoScanPhase names = %v, want workspace", spec.Components.Schemas["GoScanPhase"].Properties["name"].Enum)
 }
 
+func TestMemoryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
+	root := t.TempDir()
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "memory fixture", Path: root}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := app.New(config.Default(), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := newHTTPMux(service, manager)
+	for _, method := range []string{"GET", "POST"} {
+		for _, path := range []string{"/api/projects/current/memory", "/api/projects/current/memory/example"} {
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, httptest.NewRequest(method, "http://127.0.0.1:9090"+path, nil))
+			if w.Code != 400 {
+				t.Fatalf("unguarded %s %s: %d %s", method, path, w.Code, w.Body.String())
+			}
+		}
+	}
+}
+
 func requestPathForDocumentedRoute(path string) string {
 	switch path {
 	case "/api/projects/current/files/info", "/api/projects/current/files/symbols", "/api/projects/current/files/analysis", "/api/projects/current/context":

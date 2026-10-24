@@ -73,6 +73,10 @@ untrusted networks.
 | GET | `/api/projects/current/agent-runs/{runID}` | Read invocation hierarchy and retained events; private model text requires `include_text=true`. |
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
+| GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
+| POST | `/api/projects/current/memory` | Create an explicitly retained, source-bound candidate memory. |
+| GET | `/api/projects/current/memory/{memoryID}` | Read private memory text and current source status. |
+| POST | `/api/projects/current/memory/{memoryID}` | Edit, accept or forget a memory using its current version. |
 | GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
@@ -911,6 +915,51 @@ project-analysis report schemas remain readable.
 All agent-history reads require the current `project_id` and `project_revision`;
 the existing optional `worktree_path` selects a registered checkout. Unknown or
 duplicate query fields are rejected. Reads are passive and return `no-store`.
+Curated memory uses `/api/projects/current/memory`. GET list/detail require
+`project_id` and `project_revision`; duplicate or unknown query fields are rejected.
+List returns at most 512 records, newest first, with empty `text` and
+`source_status: unchecked`. Detail returns private text and rechecks source hashes
+and context policy (`source_status: current|changed`). `stale` includes revision
+differences and, on detail, changed sources; `expired` remains distinct. These reads
+are passive, use `Cache-Control: no-store`, and never accept or refresh a record.
+
+POST collection requires `action: create`, current project identity, `version: 0`
+and a `draft`. POST detail supports `edit`, `accept`, and `forget`, with the current
+positive `version`. Create/edit require a draft; accept/forget reject a draft.
+A draft contains `kind` (`decision`, `lesson`, `verified_outcome`), `title` (120 UTF-8
+bytes), `text` (2048 UTF-8 bytes), `sources` (1–64 captured path/hash scopes), and
+optional `retention_days` (1–365; default 30). Each scope uses a relative `path`,
+`sha256:` content `hash`, and `start_line`/`end_line` (both zero for the whole file,
+otherwise an inclusive valid range). Excluded paths and changed identities fail.
+Create/edit return a candidate, even when the prior version was accepted. Explicit
+acceptance rechecks current source and provenance and increments the version;
+forget removes the catalog record and returns JSON `null`. Conflicting versions
+return 409, missing/foreign records 404, and unavailable storage 500.
+
+Manual decisions/lessons have `provenance.origin: user`. A retained harness lesson
+instead supplies `session_id`, exact proposal `identity`, and zero-based
+`lesson_index`, with empty text. A verified outcome supplies `session_id` and
+`identity` with empty text and no lesson index; it requires current passing proposal
+check authority. The host derives its text from those check receipts. These records
+retain session/workflow/proposal provenance and must cite captured proposal source.
+Curation never runs checks, sends prompts, changes source, or approves a proposal.
+
+Private atomic storage is limited to 512 records and 8 MiB per checkout. Expired
+records become ineligible immediately and are pruned on a subsequent explicit
+curation write for that project. Forget deletes the catalog entry immediately;
+already produced invocation history and previously sent provider requests are
+separate records. Automatic conversation ingestion is rejected.
+
+ADK memory retrieval returns at most eight relevant accepted records, within the
+workflow's captured file hashes and declaration spans. Partial/inventory-only
+context never grants whole-file advice. Changed source/policy, expired, candidate,
+or out-of-scope records are excluded. Revision-only historical advice is labelled
+stale in model context. Memory is untrusted advisory data, never an instruction,
+permission, or current verification claim. Retrieval consumes a shared tool call;
+its context consumes the model input budget. Selected versions and source authority
+are rechecked immediately before each provider dispatch, including later tool turns.
+Editing or forgetting a selected record blocks further dispatch with the old text.
+
 `GET /agent-runs` (under `/api/projects/current`) lists roots newest first, with
 `limit` from 1 to 100 (default 50), an opaque `cursor`, and `next_cursor` when more
 remain. A cursor is bound to its project/revision. Older-revision records are

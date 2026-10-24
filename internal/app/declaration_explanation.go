@@ -124,7 +124,13 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 func (s *Service) explainDeclarationInRun(ctx context.Context, request DeclarationExplanationRequest, prepared preparedDeclarationExplanation, runtime modelRuntime, input agentruntime.Request) (*DeclarationExplanation, error) {
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
-	result, err := s.retryAgentRequest(timed, runtime, input, func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) })
+	authorize := func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) }
+	sources := []project.AgentScope{{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: prepared.symbol.StartLine, EndLine: prepared.symbol.EndLine}}
+	timed, err := withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, prepared.symbol.Name+" "+prepared.symbol.Signature, sources, authorize)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.retryAgentRequest(timed, runtime, input, authorize)
 	if timed.Err() != nil {
 		return nil, timed.Err()
 	}

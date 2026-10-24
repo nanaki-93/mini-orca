@@ -479,7 +479,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 18 — Add curated persistent project memory
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentstate/memory.go`, `internal/app/agentstate/memory_test.go`, `internal/app/agentruntime/memory.go`, `internal/app/agentruntime/memory_test.go`, `internal/app/agent_memory.go`, `internal/app/agent_memory_test.go` — **new**.

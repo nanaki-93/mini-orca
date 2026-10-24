@@ -93,6 +93,10 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 		return nil, err
 	}
 	authorize := func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, prepared) }
+	timed, err = withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, request.Plan.Problem, manifestMemorySources(prepared.manifest), authorize)
+	if err != nil {
+		return nil, err
+	}
 	output, err := s.retryAgentRequest(timed, runtime, input, authorize)
 	if err != nil {
 		return nil, err

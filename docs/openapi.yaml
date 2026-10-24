@@ -43,6 +43,59 @@ paths:
         '200': {description: Bounded model suggestions with validated source citations, content: {application/json: {schema: {$ref: '#/components/schemas/PlanInvestigation'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/memory:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read private curated memory metadata without dispatching or changing state
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: At most 512 records with empty text and unchecked source status; no-store, content: {application/json: {schema: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/AgentMemory'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly retain a candidate memory
+      description: Requires action create, version zero and a draft. Captured source identity and policy are validated; no model, source mutation or check execution occurs.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MemoryMutation'}}}}
+      responses:
+        '200': {description: New candidate with private text; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMemory'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/memory/{memoryID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: memoryID, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: Read private retained text and current source status
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Private record with source and revision freshness; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentMemory'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly edit, accept or forget a retained memory
+      description: Requires a positive current version. Edit requires a draft and resets acceptance. Accept rechecks source/provenance. Forget deletes the record immediately. No checks, provider work or source mutation occurs.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MemoryMutation'}}}}
+      responses:
+        '200': {description: Updated record, or JSON null after forget; no-store, content: {application/json: {schema: {allOf: [{$ref: '#/components/schemas/AgentMemory'}], nullable: true}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/agent-runs:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -1036,6 +1089,69 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    MemorySource:
+      type: object
+      additionalProperties: false
+      required: [path, hash]
+      properties:
+        path: {type: string, description: Bounded relative source path; no traversal or excluded files.}
+        hash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        start_line: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+        end_line: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+      description: Both lines zero means whole file; otherwise an inclusive valid span. Hash must match current source.
+    MemoryDraft:
+      type: object
+      additionalProperties: false
+      required: [kind, title, sources]
+      properties:
+        kind: {type: string, enum: [decision, lesson, verified_outcome]}
+        title: {type: string, description: Nonempty title up to 120 UTF-8 bytes without control characters.}
+        text: {type: string, description: Nonempty manual advice up to 2048 UTF-8 bytes; must be empty when deriving a proposal receipt or retained harness lesson.}
+        sources: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/MemorySource'}}
+        retention_days: {type: integer, minimum: 1, maximum: 365, default: 30}
+        session_id: {type: string}
+        identity: {$ref: '#/components/schemas/ChangeIdentity'}
+        lesson_index: {type: integer, minimum: 0}
+      description: Verified outcomes require session_id and exact identity with live passing check receipts. Retained harness lessons also select lesson_index. Manual decisions/lessons omit these fields. Editing always resets acceptance.
+    MemoryMutation:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action, version]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        action: {type: string, enum: [create, edit, accept, forget]}
+        version: {type: integer, format: int64, minimum: 0, maximum: 9007199254740992}
+        draft: {$ref: '#/components/schemas/MemoryDraft'}
+      description: Create uses the collection route and version zero. Other actions use the detail route and current positive version. Create/edit require draft; accept/forget reject it.
+    AgentMemory:
+      type: object
+      required: [id, version, project_id, project_revision, policy, kind, state, title, text, sources, provenance, created_at, updated_at, expires_at, stale, expired, source_status]
+      properties:
+        id: {type: string}
+        version: {type: integer, format: int64}
+        project_id: {type: string}
+        project_revision: {type: string}
+        policy: {type: string}
+        kind: {type: string, enum: [decision, lesson, verified_outcome]}
+        state: {type: string, enum: [candidate, accepted]}
+        title: {type: string}
+        text: {type: string, description: Empty on list; private advisory text on detail and mutation responses.}
+        sources: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/MemorySource'}}
+        provenance:
+          type: object
+          required: [origin]
+          properties:
+            origin: {type: string, enum: [user, proposal_checks, harness_lesson]}
+            session_id: {type: string}
+            workflow_id: {type: string}
+            proposal_hash: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        stale: {type: boolean, description: Revision differs; detail also includes changed source/policy. Revision-only stale advice may remain eligible.}
+        expired: {type: boolean}
+        source_status: {type: string, enum: [unchecked, current, changed], description: List does not read source; detail checks source and policy. Acceptance alone does not guarantee retrieval eligibility.}
     AgentUsage:
       type: object
       description: Shared budget totals across descendants; do not add child totals together.
