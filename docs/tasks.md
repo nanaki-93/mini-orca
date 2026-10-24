@@ -729,6 +729,7 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go`, `internal/tui/agent_connections.go`, `internal/tui/agent_connections_test.go`, `internal/tui/agent_connections_actions.go`, `internal/tui/agent_connections_commands.go` — **new**, MCP/OpenAPI/outbound A2A/inbound principal inventory and guarded controls.
+- `internal/tui/agent_connections_plan.go` — **new**, draft-scoped tool selection and destination-bound source-sharing confirmation. `internal/tui/plan.go`, `internal/tui/agent_settings_actions.go` — carry ephemeral investigation selections and reuse checkout identity checks without copying grants into saved plans or new worktrees. `internal/tui/view_test.go`, `internal/tui/command_menu_test.go` — cover the new navigation and action affordances.
 - `internal/tui/client/client.go`, `internal/tui/client/models.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/plan_investigation.go`, `internal/tui/plan_investigation_test.go`, `internal/tui/client/change_plan_test.go`.
 - `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
 
@@ -739,6 +740,7 @@ This is an implementation specification, not a claim that the features below alr
 - Add a compact Connections list with destination, configured permissions, credential references and grant expiry in selected details. Preserve distinct configured, disconnected, unavailable, expired and failed states; distinguish inbound principals from outbound remotes.
 - Connect/discover and revoke/disconnect require explicit user actions and relevant confirmations. External I/O is asynchronous and cancellable, stale results cannot replace a new project/revision or selection, and browsing/local refresh cannot initiate external network or process work.
 - Select at most two currently granted MCP/API connections for an explicit plan investigation. Capture tool grants and source-sharing consent with the same project, revision, source hashes and plan input. Never attach connections to unrelated requests or treat inbound authorization as source Apply permission.
+- Label main/task checkout scope explicitly, keep their connection grants separate, and preserve selection by connection kind and ID on refresh. Partial inventory failures and canceled discovery/grant outcomes require local refresh before reuse. Bind investigation confirmation to both provider destinations and selected connection inventories; changed selections, grants, routing or draft input require fresh consent. OpenAPI schema discovery does not establish endpoint availability.
 
 **Verification command**
 `make tui-test && ./scripts/validate.sh && git diff --check`
