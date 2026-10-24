@@ -705,6 +705,7 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/client/agent_settings.go`, `internal/tui/client/agent_settings_test.go`, `internal/tui/agent_settings.go`, `internal/tui/agent_settings_test.go`, `internal/tui/agent_settings_commands.go`, `internal/tui/agent_settings_actions.go` — **new**, wire contracts, compact lists, selected-item details and explicit controls.
+- `internal/tui/agent_settings_workflow.go` — **new**, role-aware workflow model selection and destination-bound remote confirmation. `internal/tui/plan.go`, `internal/tui/plan_test.go`, `internal/tui/workflow_progress.go`, `internal/tui/workflow_progress_test.go` — preserve plan/retry identity while confirming the selected workflow destinations.
 - `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/domain/models.go`, `internal/tui/model_details_test.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/colon_commands_actions.go`, `internal/tui/command_menu.go`, `internal/tui/command_menu_test.go`, `internal/tui/keybinds_help.go`, `internal/tui/view_test.go`.
 - `docs/UI_DESIGN_GUIDELINES.md`, `CONFIG.md`.
 
@@ -715,6 +716,7 @@ This is an implementation specification, not a claim that the features below alr
 - Keep Models, Roles/Budgets and Skills as compact Settings lists with selected-item details, bounded sanitized text and stable selection. Present configured, overridden, stale, enabled, disabled, valid and unavailable states accurately.
 - Wire role assignment, individual budget editing, skill validation/enable/disable and explicit reset to guarded backend controls. Show the future-run effect before mutation, preserve model presets/scope assignments and use role defaults when constructing workflow model selections and corresponding provider confirmations.
 - Opening or selecting entries is passive. Handle unavailable daemon data, stale results, narrow terminals, all palettes and keyboard help without introducing inert controls.
+- Label the canonical checkout being edited and allow explicit selection of the main checkout or selected task worktree. Their private overrides remain separate. Load local settings without provider discovery, bind asynchronous results and mutations to the selected checkout/project/version, and make cancellation preserve an honest unknown-save outcome until refresh. Remote workflow confirmation discloses the selected role models/destinations and captured source scope; changing the task or model selection invalidates the confirmation.
 
 **Verification command**
 `make tui-test && ./scripts/validate.sh && git diff --check`
