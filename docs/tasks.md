@@ -1036,6 +1036,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_mission_run.go`, `internal/app/agent_mission_run_test.go`, `internal/app/agent_mission_scheduler.go`, `internal/app/agent_mission_scheduler_test.go`, `internal/app/agent_mission_child.go`, `internal/app/agent_mission_child_test.go`, `internal/app/agent_mission.go`.
 - `internal/app/agentstate/mission_executions.go`, `internal/app/agentstate/mission_executions_test.go`, `internal/app/git_merge.go`, `internal/app/git_worktree_cleanup.go`, `internal/app/project_lifecycle.go`, `internal/app/agent_runs.go`.
 - `internal/api/handlers/agent_mission_handler.go`, `internal/api/handlers/agent_mission_handler_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/missions.go`, `internal/tui/client/missions_test.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `Makefile` — bound the expanded application race suite at fifteen minutes; retain every existing check and operation deadline.
 
 **Inputs / dependencies**
 - Task 30B; existing guarded Apply/commit/merge, registered worktree identity checks, and protected private artifact storage.
@@ -1049,7 +1050,7 @@ This is an implementation specification, not a claim that the features below alr
 - Version the execution schema deliberately and retain older prepared, active and completed child records. Cover serial dependency execution through explicit integration, out-of-order/foreign/stale requests, mutation races, persistence failures, restart and retained evidence after cleanup.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: integrate mission children with durable Git receipts`
 
@@ -1074,7 +1075,7 @@ This is an implementation specification, not a claim that the features below alr
 - Cover two disjoint children generated in parallel and integrated sequentially after current-base revalidation, stale/replayed candidate requests, failed checks, cancellation and recovery without provider dispatch or source Apply.
 
 **Verification command**
-`go test -race ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/api/handlers ./internal/tui/client && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: revalidate mission proposals against the current base`
 
