@@ -425,6 +425,8 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/analysis_graph_test.go`, `internal/app/agent_analysis_host.go` — **new**.
+- `internal/app/agent_analysis_host_test.go` — **new**, native history, cancellation, bounded window capture, and admission regression tests.
+- `internal/app/agentruntime/events.go` — project bounded analysis node identities and truthful stage outcomes into source-free progress.
 - `internal/app/analysis_run.go`, `internal/app/analysis_stage_runner.go`, `internal/app/analysis_run_progress.go`, `internal/app/analysis_run_store.go`, `internal/app/analysis_run_retry.go`, `internal/app/analysis_run_freshness.go`, `internal/app/analysis_run_features.go`.
 - `internal/app/analysis_run_test.go`, `internal/app/analysis_run_recovery_test.go`, `internal/app/analysis_run_retry_test.go`, `internal/app/analysis_freshness_test.go`.
 
@@ -435,6 +437,7 @@ This is an implementation specification, not a claim that the features below alr
 - Express per-file/stage analysis as bounded graph work with deterministic aggregation. Preserve deterministic security rules as distinct evidence and retain semantic/performance/security model scopes.
 - Reuse only fresh matching results. Count every actual provider attempt across resume/retry, and preserve partial coverage and failed/canceled/unavailable distinctions.
 - Keep selection, preview, filters, restore, and inspection passive. Project replacement/reindex cancels owned work and blocks stale publication. Retire the superseded dispatcher logic in the changed owner files.
+- Capture at most 500 unfinished files and 2,000 ordered stage nodes per admitted window. Persist each native start before host dispatch; retain cumulative host attempt reservations and report publication. Native cancellation must settle the domain run as canceled; time/budget exhaustion remains resumable. Completed graph windows do not imply complete project coverage or successful findings.
 
 **Verification command**
 `go test -race ./internal/app ./internal/app/agentruntime ./internal/project && ./scripts/validate.sh && git diff --check`
