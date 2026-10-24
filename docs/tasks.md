@@ -801,6 +801,7 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/agent_library.go`, `internal/tui/agent_library_actions.go`, `internal/tui/agent_library_commands.go`, `internal/tui/agent_library_test.go`, `internal/tui/client/agent_library.go`, `internal/tui/client/agent_library_test.go` — **new**, scoped inventory, private disclosure and explicit library mutations.
+- `internal/tui/agent_library_capture.go`, `internal/tui/agent_library_controls.go` — **new**, captured source/proposal provenance and exact version confirmations, separate from transport and navigation.
 - `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/hub_agents.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/view_test.go`, `docs/UI_DESIGN_GUIDELINES.md`, `docs/api-contract.md`.
 
 **Inputs / dependencies**
@@ -810,6 +811,7 @@ This is an implementation specification, not a claim that the features below alr
 - Add artifact/evidence navigation within Code and memory management beside Lessons within Settings. Show versions, source links, freshness, ownership, size, retention, and candidate/accepted state. Keep metadata reads and selection passive; disclose retained text explicitly and use the existing scrollable read-only text layout, with binary metadata instead of unsupported media rendering.
 - Implement explicit artifact preview/export/delete and memory create/edit/accept/reject/forget using current checkout, record version/hash and complete confirmations. Rejecting a candidate removes it through guarded forget; accepted advice remains a separate explicit forget action. Creation/editing capture selected current source hashes; retaining proposal lessons/check outcomes must use their existing provenance guards.
 - Preserve protected/active recovery references, reject changed scope or stale confirmations, sanitize terminal text, and keep cancellation/partial reads/late replies honest. Export displays the daemon's private-file receipt and never grants source Apply. Maintain stable selection and compact keyboard navigation.
+- Capture manual advice from the selected plan or open file, and recapture edited records' source hashes. Retaining a proposal lesson or check outcome derives text through the existing receipt owner. Source links explicitly read the selected path with index/scope and content-hash checks; opening a source never changes library authority.
 
 **Verification command**
 `make tui-test && ./scripts/validate.sh && git diff --check`
