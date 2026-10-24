@@ -82,6 +82,46 @@ test files before verification; missing check results must not imply tests have
 run. Busy stages do not advertise a duplicate retry. Timeout recovery identifies
 the relevant model or check limit, and interrupted checks do not trigger code repair.
 
+Mission plans share Work's plan surface. `:missions` reads local history;
+`:mission-scope main|task` explicitly selects the checkout. Enter inspects a
+saved plan and its binding freshness. Keep current and stored revisions,
+dependency/integration order, captured paths, child allocations and review state
+available through Overview, Children, Scope and Budget sections. History source
+freshness is unchecked until detail inspection. Preserve history selection by ID.
+`:plan` returns to the ordinary task plan without losing either draft.
+
+`:mission-new <goal>` creates a local draft. `:mission-edit` edits goal, files,
+integration order, or the selected child's title, approach, criteria, writes,
+reads and dependencies (`depends`). Lists use semicolons. `:mission-child <id>`
+selects or adds a child; `:mission-remove <id>` removes it locally, leaving any
+dependent references for explicit correction. `:mission-budget
+mission|planning|child <field> <integer>` edits the displayed allocations within
+their effective ceilings. These edits are passive. `e` opens the relevant field
+editor, and `j/k` selects children in the Children section. Saving (`s` /
+`:mission-save`) validates the complete graph and clears previous reviews and
+approval. Unsaved edits cannot reuse approval of the saved plan.
+
+Decomposition (`g` / `:mission-plan`) is a separate confirmed, asynchronous model
+action. Disclose the checkout, current catalog, goal, every captured path/hash
+or planned absent path, applicable instruction sharing, Function model and
+destination, and both the planning budget and future mission allocation.
+Recheck the captured draft and settings on confirmation and queued dispatch;
+refresh local provider metadata before transport. Prevent duplicate submission.
+`x` / `:mission-cancel` stops owned transport and retains the draft. Failures or
+cancellation require local history refresh before retrying, because saving may
+have completed before the receipt was lost. Reject late/replaced results, and
+clear private mission state when its project or task checkout changes.
+
+Review (`r` / `:mission-review`) shows the selected concrete child's approach,
+criteria, paths, dependencies and budget in a scrollable confirmation bound to
+the exact saved plan hash and catalog revision. Final approval (`a` /
+`:mission-approve`) requires all children reviewed and a separate confirmation
+of that hash. These decisions start no child execution and grant no Apply
+authority. History, section navigation, command completion and local editing
+never invoke providers or checks. Mission controls replace ordinary task
+generation shortcuts while the mission view is active; `:mission-draft` returns
+from history to the retained draft.
+
 Task stages follow recorded node identities, including separate generation and
 verification and parallel specialist reviews. Selection and scroll remain stable
 as progress arrives. Unknown nodes remain inspectable, and interrupted or missing

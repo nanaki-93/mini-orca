@@ -82,6 +82,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	Mission              *missionAction
 	AgentLibrary         *agentLibraryAction
 	AgentExternal        *agentExternalAction
 	AgentConnection      *agentConnectionAction
@@ -105,6 +106,8 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	Mission             *missionView
+	PlanView            string
 	AgentLibrary        *agentLibraryView
 	AgentExternal       *agentExternalView
 	AgentConnections    *agentConnectionsView

@@ -61,7 +61,7 @@ func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []Acti
 }
 
 func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, act ActionRequest) error {
-	if s.dispatchLibraryAction(ctx, cl, act) || s.dispatchGovernanceAction(ctx, cl, act) {
+	if s.dispatchPrivateAction(ctx, cl, act) {
 		return nil
 	}
 	if act.Kind == "agent-run" {
@@ -95,6 +95,16 @@ func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, ac
 	default:
 		return s.dispatchMutationAction(ctx, cl, reqID, act)
 	}
+}
+
+func (s *State) dispatchPrivateAction(ctx context.Context, cl *Client, act ActionRequest) bool {
+	if act.Kind == "mission" {
+		if s.prepareMissionAction(act.Mission) {
+			s.applyMissionResult(executeMissionAction(ctx, cl, *act.Mission))
+		}
+		return true
+	}
+	return s.dispatchLibraryAction(ctx, cl, act) || s.dispatchGovernanceAction(ctx, cl, act)
 }
 
 func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) error {

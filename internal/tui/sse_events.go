@@ -58,9 +58,11 @@ func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projec
 		return
 	}
 	s.Project = &proj
+	s.reconcileMissionScope()
 }
 
 func (s *State) loadProjectResources(ctx context.Context, client *Client) {
+	s.reconcileMissionScope()
 	s.loadCustomPresetsFromDisk()
 	revQuery, idQuery := s.resourceQueries()
 	var idx ProjectIndex

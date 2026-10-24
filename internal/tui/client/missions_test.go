@@ -79,10 +79,19 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 	if err := cl.DoJSON(t.Context(), "detail", "GET", base+"/"+saved.Mission.ID+query, nil, &detail); err != nil || detail.Mission.PlanHash != saved.Mission.PlanHash || detail.Mission.Plan.Children[0].Limits != limits {
 		t.Fatal(detail, err)
 	}
-	control := MissionMutation{ProjectIdentity: identity, CatalogRevision: saved.CatalogRevision, PlanHash: saved.Mission.PlanHash, Action: "review", ChildID: "refine", Confirm: true}
-	if err := cl.DoJSON(t.Context(), "review", "POST", base+"/"+saved.Mission.ID+query, control, &saved); err != nil || len(saved.Mission.Reviewed) != 1 {
-		t.Fatal(saved, err)
+	guardedScope := AgentSettingsScope{ProjectIdentity: identity, WorktreePath: root}
+	if records, err := cl.ReadMissions(t.Context(), "owned-list", guardedScope); err != nil || len(records.Missions) != 1 {
+		t.Fatal("typed mission catalog", records, err)
 	}
+	if record, err := cl.MissionDetail(t.Context(), "owned-detail", guardedScope, saved.Mission.ID); err != nil || record.Mission.PlanHash != saved.Mission.PlanHash {
+		t.Fatal("typed mission detail", record, err)
+	}
+	control := MissionMutation{ProjectIdentity: identity, CatalogRevision: saved.CatalogRevision, PlanHash: saved.Mission.PlanHash, Action: "review", ChildID: "refine", Confirm: true}
+	reviewed, err := cl.MutateMission(t.Context(), "review", guardedScope, saved.Mission.ID, control)
+	if err != nil || len(reviewed.Mission.Reviewed) != 1 {
+		t.Fatal(reviewed, err)
+	}
+	saved = *reviewed
 	body, _ := json.Marshal(control)
 	response, err := cl.Request(t.Context(), "stale", "POST", base+"/"+saved.Mission.ID+query, string(body))
 	if err != nil || response.Status != 409 {
@@ -122,5 +131,79 @@ func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T
 	}
 	if _, err := cl.Request(t.Context(), "invalid-method", "PATCH", target, `{}`); err == nil {
 		t.Fatal("unsupported planning method dispatched")
+	}
+}
+
+func missionClientFixture() (AgentSettingsScope, MissionPlanningRequest, MissionPlanningResult) {
+	scope := AgentSettingsScope{ProjectIdentity: ProjectIdentity{ProjectID: "project", ProjectRevision: "revision"}, WorktreePath: "/selected/task"}
+	limits := AgentLimits{ModelCalls: 2, ToolCalls: 4, InputTokens: 4096, OutputTokens: 2048, ElapsedSeconds: 60, ConcurrentCalls: 1}
+	request := MissionPlanningRequest{ProjectIdentity: scope.ProjectIdentity, Goal: "New helper", Sources: []MissionSource{{Path: "new.go"}}, Limits: limits, PlanningLimits: limits, ConfirmRemoteProvider: true}
+	plan := MissionPlan{Goal: request.Goal, Sources: request.Sources, Limits: limits, Children: []MissionChild{{ID: "helper", Title: "Helper", Approach: "Pure function", WritePaths: []string{"new.go"}, AcceptanceCriteria: []string{"Returns expected value"}, Limits: limits}}, IntegrationOrder: []string{"helper"}}
+	result := MissionPlanningResult{AgentMission: AgentMission{CatalogRevision: 1, SourceStatus: "current", Mission: MissionRecord{ProjectIdentity: scope.ProjectIdentity, ID: "mission-abcdefghijklmnopqrst", PlanHash: strings.Repeat("a", 64), Plan: plan}}, InputHash: strings.Repeat("b", 64), PromptVersion: "mission-planner-v1", PlanningLimits: limits}
+	return scope, request, result
+}
+
+func TestMissionClientRejectsForeignAndChangedPlanningReceipts(t *testing.T) {
+	for name, mutate := range map[string]func(*MissionPlanningResult){
+		"project":     func(r *MissionPlanningResult) { r.Mission.ProjectID = "foreign" },
+		"revision":    func(r *MissionPlanningResult) { r.Mission.ProjectRevision = "foreign" },
+		"hash":        func(r *MissionPlanningResult) { r.Mission.PlanHash = "invalid" },
+		"approved":    func(r *MissionPlanningResult) { r.Mission.Approved = true },
+		"reviewed":    func(r *MissionPlanningResult) { r.Mission.Reviewed = []string{"helper"} },
+		"goal":        func(r *MissionPlanningResult) { r.Mission.Plan.Goal = "Changed goal" },
+		"empty graph": func(r *MissionPlanningResult) { r.Mission.Plan.Children = nil },
+		"catalog":     func(r *MissionPlanningResult) { r.CatalogRevision = 2 },
+		"budget":      func(r *MissionPlanningResult) { r.PlanningLimits.ModelCalls++ },
+		"prompt":      func(r *MissionPlanningResult) { r.PromptVersion = "unknown" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			scope, request, result := missionClientFixture()
+			mutate(&result)
+			var calls int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.Method != "POST" || r.URL.Path != "/api/projects/current/missions/plan" || r.URL.Query().Get("worktree_path") != scope.WorktreePath {
+					t.Error("mission planner request lost its owned route")
+				}
+				_ = json.NewEncoder(w).Encode(result)
+			}))
+			defer server.Close()
+			cl, err := NewClient(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cl.Close()
+			if _, err := cl.PlanMission(t.Context(), "test", scope, request); err == nil {
+				t.Fatal("mismatched planner receipt accepted")
+			}
+			request.ProjectRevision = "changed"
+			if _, err := cl.PlanMission(t.Context(), "changed", scope, request); err == nil || calls != 1 {
+				t.Fatal("foreign request scope dispatched", calls, err)
+			}
+		})
+	}
+}
+
+func TestMissionClientRejectsMutationReceiptsThatKeepOldApproval(t *testing.T) {
+	scope, _, planning := missionClientFixture()
+	result := planning.AgentMission
+	result.Mission.Approved = true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(result)
+	}))
+	defer server.Close()
+	cl, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	request := MissionMutation{ProjectIdentity: scope.ProjectIdentity, Action: "create", Plan: &result.Mission.Plan}
+	if _, err := cl.MutateMission(t.Context(), "create", scope, "", request); err == nil {
+		t.Fatal("create inherited approval")
+	}
+	request.Action, request.Plan, request.PlanHash, request.ChildID = "review", nil, result.Mission.PlanHash, "helper"
+	request.Confirm = true
+	if _, err := cl.MutateMission(t.Context(), "review", scope, result.Mission.ID, request); err == nil {
+		t.Fatal("child review became final approval")
 	}
 }

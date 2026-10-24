@@ -958,7 +958,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 29C — Review and edit missions in the Work workspace
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/mission_actions.go`, `internal/tui/mission_commands.go`, `internal/tui/mission_view.go`, `internal/tui/mission_test.go`, `internal/tui/client/missions.go` — **new**.

@@ -152,6 +152,8 @@ type changeActionResultMsg struct {
 
 type planInvestigationResultMsg struct{ result planInvestigationResult }
 
+type missionResultMsg struct{ result missionResult }
+
 type agentRunActionResultMsg struct{ result agentRunActionResult }
 
 type agentSettingsResultMsg struct{ result agentSettingsResult }
@@ -226,7 +228,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
+	case missionResultMsg, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -239,7 +241,9 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pollInFlight = false
 		m.state.applyPollResult(ev.res)
 	}
+	m.state.reconcileMissionScope()
 	if m.state.Quitting {
+		m.state.cancelMissionRequest()
 		m.stopAgentStream()
 		return m, tea.Quit
 	}
@@ -250,6 +254,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case missionResultMsg:
+		m.state.applyMissionResult(ev.result)
 	case agentLibraryResultMsg:
 		m.state.applyLibraryResult(ev.result)
 	case agentExternalResultMsg:
@@ -313,10 +319,8 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
-	case "agent-library":
-		return m.prepareLibraryCmd(act.AgentLibrary), true
-	case "agent-external":
-		return m.prepareExternalCmd(act.AgentExternal), true
+	case "mission", "agent-library", "agent-external":
+		return m.prepareScopedWorkCmd(act), true
 	case "agent-connection":
 		if !m.state.acceptsConnectionAction(act.AgentConnection) {
 			return nil, true
@@ -366,6 +370,19 @@ func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (te
 		}, true
 	default:
 		return nil, false
+	}
+}
+
+func (m *BubbleModel) prepareScopedWorkCmd(act ActionRequest) tea.Cmd {
+	switch act.Kind {
+	case "mission":
+		return m.prepareMissionCmd(act.Mission)
+	case "agent-library":
+		return m.prepareLibraryCmd(act.AgentLibrary)
+	case "agent-external":
+		return m.prepareExternalCmd(act.AgentExternal)
+	default:
+		return nil
 	}
 }
 

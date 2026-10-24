@@ -23,6 +23,12 @@ func parentPage(page Page) Page {
 func (s *State) detailSections() []string {
 	switch s.Page {
 	case PagePlan:
+		if s.PlanView == "mission" {
+			if s.Mission != nil && s.Mission.Draft != nil && !s.Mission.History {
+				return []string{"Overview", "Children", "Scope", "Budget"}
+			}
+			return nil
+		}
 		if s.PlanDraft == nil {
 			return nil
 		}

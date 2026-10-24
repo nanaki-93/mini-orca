@@ -76,6 +76,9 @@ func formatCommandCatalogCell(th ansiTheme, it keyDesc, colW int) string {
 
 func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
 	spec := lookupPageHelpSpec(s.EffectivePage())
+	if s.EffectivePage() == PagePlan && s.PlanView == "mission" {
+		spec = s.missionHelpSpec()
+	}
 	boxW := max(44, width-4)
 	contentW := max(24, boxW-4)
 	globalItems := []keyDesc{
@@ -138,6 +141,32 @@ func lookupPageHelpSpec(page Page) pageHelpSpec {
 		return spec
 	}
 	return hubOneTwoHelpSpecs[PageSummary]
+}
+
+func (s *State) missionHelpSpec() pageHelpSpec {
+	spec := pageHelpSpec{title: "[2] WORK · MISSIONS", primary: []keyDesc{{"Enter", "Open plan"}, {"n", "New draft"}, {"r", "Refresh"}}, secondary: []keyDesc{{"←/→", "Section"}, {"PgUp/PgDn", "Details"}, {"Esc", "History / back"}}, commands: []keyDesc{{":mission-scope main|task", "Select checkout"}, {":mission-child ID", "Select / add child"}, {":mission-edit", "Edit local fields"}, {":mission-budget", "Edit explicit limits"}, {":mission-draft", "Return to draft"}, {":plan", "Ordinary task plan"}}}
+	if s.Mission != nil && s.Mission.Draft != nil && !s.Mission.History {
+		spec.primary = s.missionDraftActions()
+	}
+	if s.Mission != nil && s.Mission.Pending != nil {
+		spec.primary = []keyDesc{{"x", "Cancel request"}, {"←/→", "Section"}, {"PgUp/PgDn", "Details"}}
+	}
+	return spec
+}
+
+func (s *State) missionDraftActions() []keyDesc {
+	v := s.Mission
+	if v.Saved != nil && v.Saved.Stale {
+		return []keyDesc{{"n", "New draft"}, {"Esc", "History"}}
+	}
+	actions := []keyDesc{{"g", "Decompose"}, {"s", "Save"}, {"e", "Edit"}}
+	if v.Saved == nil || missionDigest(v.Draft) != missionDigest(v.Saved.Mission.Plan) || v.Saved.Mission.Approved {
+		return actions
+	}
+	if len(v.Saved.Mission.Reviewed) == len(v.Draft.Children) {
+		return append(actions, keyDesc{"a", "Approve plan"})
+	}
+	return append(actions, keyDesc{"r", "Review child"})
 }
 
 var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{

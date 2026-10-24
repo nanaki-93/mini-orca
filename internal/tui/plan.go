@@ -25,6 +25,7 @@ func (s *State) openTaskPlan(seed *ChangeSeed) {
 		return
 	}
 	s.cancelPlanInvestigation()
+	s.PlanView = ""
 	copy := copyTaskPlanSeed(*seed)
 	copy.Paths = domain.EnsureChangeTestPaths(seed.Paths, nil)
 	if copy.Plan == nil {
@@ -145,6 +146,9 @@ func validatePlanDraft(d *PlanDraft) error {
 }
 
 func (s *State) execPlanCommand(cmd, arg string) bool {
+	if s.interceptMissionCommand(cmd, arg) {
+		return true
+	}
 	if s.execPlanInvestigationCommand(cmd) {
 		return true
 	}
@@ -159,6 +163,7 @@ func (s *State) execPlanCommand(cmd, arg string) bool {
 		}
 		return true
 	case "plan":
+		s.PlanView = ""
 		if s.PlanDraft != nil {
 			s.Navigate(PagePlan)
 		} else {
@@ -230,6 +235,10 @@ func splitPlanList(text string) []string {
 }
 
 func (s *State) handlePlanKey(ev KeyEvent) {
+	if s.PlanView == "mission" {
+		s.handleMissionKey(ev)
+		return
+	}
 	if s.PlanDraft == nil {
 		s.handleGlobalNavigationKey(ev)
 		return
@@ -273,6 +282,9 @@ func (s *State) beginPlanEdit(field, value string) {
 }
 
 func (s *State) renderPlanPage(th ansiTheme, width int) []string {
+	if s.PlanView == "mission" {
+		return s.renderMissionPage(th, width)
+	}
 	lines := renderPageHeader(th, "TASK PLAN", "[i] Investigate · [s] Save · [g] Approve & generate · [Esc] Back")
 	if s.PlanDraft == nil {
 		return append(lines, "  Select an issue or feature, or use :agent <request> to prepare a plan.")

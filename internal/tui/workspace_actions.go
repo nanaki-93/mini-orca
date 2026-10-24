@@ -1,6 +1,9 @@
 package tui
 
 func (s *State) pageActions() []keyDesc {
+	if s.EffectivePage() == PagePlan && s.PlanView == "mission" {
+		return s.missionHelpSpec().primary
+	}
 	switch s.EffectivePage() {
 	case PageSummary:
 		if s.Project == nil {
