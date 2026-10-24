@@ -1,8 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"slices"
@@ -25,6 +28,28 @@ type MissionMutation struct {
 	ChildID         string                  `json:"child_id,omitempty"`
 	Confirm         bool                    `json:"confirm"`
 	Plan            *agentstate.MissionPlan `json:"plan,omitempty"`
+}
+
+func (request *MissionMutation) UnmarshalJSON(data []byte) error {
+	type plain MissionMutation
+	var value plain
+	if err := decodeMissionJSON(data, &value); err != nil {
+		return err
+	}
+	*request = MissionMutation(value)
+	return nil
+}
+
+func decodeMissionJSON(data []byte, destination any) error {
+	if !jsontext.Value(data).IsValid() || !bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {
+		return fmt.Errorf("mission request must be one object with distinct field names")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return fmt.Errorf("decode mission request: %w", err)
+	}
+	return nil
 }
 
 type AgentMission struct {

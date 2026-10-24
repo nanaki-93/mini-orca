@@ -937,7 +937,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 29B — Decompose missions through the native ADK planner
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/mission_planner.go`, `internal/app/agentruntime/mission_planner_test.go`, `internal/app/agent_mission_planning.go`, `internal/app/agent_mission_planning_test.go` — **new**.

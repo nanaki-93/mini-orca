@@ -41,6 +41,15 @@ func (h *AgentMissionHandler) Mutate(w http.ResponseWriter, r *http.Request) {
 	respondMission(w, value, err)
 }
 
+func (h *AgentMissionHandler) Plan(w http.ResponseWriter, r *http.Request) {
+	var request app.MissionPlanningRequest
+	if !decodeStrictJSON(w, r, &request, "invalid mission planning request", "Provide captured sources, mission and planning budgets, current project and catalog identities, and provider confirmation when required.") {
+		return
+	}
+	value, err := h.service.PlanMission(r.Context(), request)
+	respondMission(w, value, err)
+}
+
 func respondMission(w http.ResponseWriter, value any, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	switch {
@@ -50,6 +59,8 @@ func respondMission(w http.ResponseWriter, value any, err error) {
 		api.WriteAppError(w, api.Conflict("mission changed", "Reload the catalog and review the current plan before editing or approving.", err))
 	case errors.Is(err, app.ErrMissionUnavailable):
 		api.WriteAppError(w, api.Internal("mission unavailable", "The private mission catalog could not be read or written.", err))
+	case errors.Is(err, app.ErrMissionPlanningIncomplete):
+		api.WriteAppError(w, api.BadRequest("mission planning incomplete", "The provider did not return a complete valid mission. Existing plans were preserved; review the selected scope and budget before trying again.", err))
 	case err != nil:
 		if !writeContextError(w, "mission request", err) {
 			writeProjectError(w, "mission request failed", err)

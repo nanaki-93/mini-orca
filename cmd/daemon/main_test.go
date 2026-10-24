@@ -265,6 +265,7 @@ func TestLibraryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
 		{"GET", "/memory"}, {"POST", "/memory"}, {"GET", "/memory/example"}, {"POST", "/memory/example"},
 		{"GET", "/artifacts"}, {"GET", "/artifacts/example"}, {"POST", "/artifacts/example/control"},
 		{"GET", "/missions"}, {"POST", "/missions"}, {"GET", "/missions/example"}, {"POST", "/missions/example"},
+		{"POST", "/missions/plan"},
 	} {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, httptest.NewRequest(route.method, "http://127.0.0.1:9090/api/projects/current"+route.path, nil))

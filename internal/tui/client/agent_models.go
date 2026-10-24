@@ -75,6 +75,52 @@ type MissionMutation struct {
 	Plan            *MissionPlan `json:"plan,omitempty"`
 }
 
+type MissionPlanningRequest struct {
+	ProjectIdentity
+	CatalogRevision       int64           `json:"catalog_revision"`
+	Goal                  string          `json:"goal"`
+	Sources               []MissionSource `json:"sources"`
+	Limits                AgentLimits     `json:"limits"`
+	PlanningLimits        AgentLimits     `json:"planning_limits"`
+	ConfirmRemoteProvider bool            `json:"confirm_remote_provider"`
+}
+
+type MissionPlanningResult struct {
+	AgentMission
+	InputHash       string          `json:"input_hash"`
+	PromptVersion   string          `json:"prompt_version"`
+	PlanningLimits  AgentLimits     `json:"planning_limits"`
+	Usage           AgentUsage      `json:"usage"`
+	ContextManifest ContextManifest `json:"context_manifest"`
+}
+
+type ContextManifest struct {
+	Included        []ContextFile     `json:"included"`
+	Excluded        []ContextDecision `json:"excluded"`
+	EstimatedTokens int               `json:"estimated_tokens"`
+	ByteLimit       int               `json:"byte_limit"`
+	TokenLimit      int               `json:"token_limit"`
+	Truncated       bool              `json:"truncated"`
+	Scope           string            `json:"scope,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	ProviderOrigin  string            `json:"provider_origin,omitempty"`
+	RemoteProvider  bool              `json:"remote_provider,omitempty"`
+}
+
+type ContextFile struct {
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"size_bytes"`
+	Hash      string `json:"hash"`
+	Tokens    int    `json:"estimated_tokens"`
+	Truncated bool   `json:"truncated"`
+}
+
+type ContextDecision struct {
+	Path    string `json:"path"`
+	Include bool   `json:"include"`
+	Reason  string `json:"reason"`
+}
+
 type AgentUsage struct {
 	Accounting           *AgentUsageAccounting `json:"accounting,omitempty"`
 	ModelCalls           int                   `json:"model_calls"`

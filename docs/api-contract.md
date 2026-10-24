@@ -76,6 +76,7 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/export` | Export one explicitly confirmed source-free trace snapshot to the configured collector. |
 | GET | `/api/projects/current/missions` | Read bounded private mission summaries with current project guards. |
 | POST | `/api/projects/current/missions` | Save a scoped mission draft without dispatch or source mutation. |
+| POST | `/api/projects/current/missions/plan` | Explicitly decompose a bounded mission with native ADK and save an unapproved draft. |
 | GET | `/api/projects/current/missions/{missionID}` | Inspect a retained plan, review state and binding freshness. |
 | POST | `/api/projects/current/missions/{missionID}` | Revise, review a child or approve an exact saved mission plan. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
@@ -1705,8 +1706,10 @@ the normal loopback and optional worktree scope policy.
 ## Mission plans and explicit review
 
 Mission plans are private planning documents under
-`/api/projects/current/missions`. These operations do not call providers, execute
-project checks, create worktrees, launch children or change project source.
+`/api/projects/current/missions`. Listing, reading, saving, revising and reviewing
+plans do not call providers. Explicit generation uses the separate `/missions/plan`
+operation described below. None of these operations execute project checks,
+create worktrees, launch children or change project source.
 Approval records review of a plan; it does not grant Apply or Undo authority.
 
 GET list and detail require current `project_id` and `project_revision` query
@@ -1754,7 +1757,8 @@ Elapsed time and concurrency are ceilings, not summed across children. The
 mission budget must fit the effective operator/project limits. Saving a plan
 does not reserve or consume an execution budget.
 
-POST uses strict JSON with `project_id`, `project_revision`,
+POST uses strict JSON (rejecting duplicate keys, unknown fields and trailing
+values) with `project_id`, `project_revision`,
 `catalog_revision`, `plan_hash`, `action`, optional `plan` and `child_id`, and
 `confirm` for review/approval. Actions are:
 
@@ -1784,3 +1788,46 @@ returns 403, missing missions 404, changed project/source or catalog/hash
 identities 409, and private-catalog read/write failures 500. A canceled request
 cannot publish a new plan or review. A successful response reports the saved
 planning decision, never an executed child or a verified implementation.
+
+### Explicit mission decomposition
+
+`POST /api/projects/current/missions/plan` runs a cancelable native ADK planning
+invocation using the Function profile. It requires `project_id`,
+`project_revision`, current `catalog_revision`, `goal`, captured `sources`,
+mission execution `limits`, separate `planning_limits`, and
+`confirm_remote_provider` when required by that profile. The optional worktree
+selector follows the other mission routes. JSON decoding is strict. The host
+fixes the goal, inventory and execution limits; the model supplies only the
+children and integration order.
+
+Both budgets must fit effective operator/project limits. Planning additionally
+permits at most eight model calls, 24 tool calls, 1,048,576 input tokens,
+8,388,608 output tokens and 300 seconds, with `concurrent_calls: 1` and
+`repairs: 0`. Every limit field is required. Provider retries and tool turns
+share that planning budget; the Function timeout can shorten it. Planning cost
+is separate from the future execution allocation and does not authorize child
+execution. Unknown provider usage retains conservative reservation accounting.
+
+For tool-capable profiles, the native agent can use only the captured repository
+read tools: `read_snippet`, `search_repository`, `inspect_symbols`,
+`inspect_imports` and `inspect_impact`. Completion-only profiles receive the
+bounded captured source through their existing adapter. Applicable instruction
+text accompanies either path. Initial prompt text must fit both the Function
+context ceiling and 128 KiB; the captured source inventory retains its 256 KiB
+bound. Planning never invokes project checks or external integration tools.
+
+Project, source, instruction, policy, settings and catalog identities are
+rechecked at dispatch, tool boundaries and publication. The entire returned
+graph must pass the same domain validation as a manually authored mission,
+including dependency reachability, absent reads and aggregate child budgets.
+A successful response contains the normal mission detail plus `input_hash`,
+`prompt_version: mission-planner-v1`, admitted `planning_limits`, cumulative
+`usage` and `context_manifest`. It always saves a new, unapproved draft with no
+reviewed children and increments the catalog revision.
+
+Cancellation, changed identities, a full/unavailable catalog, malformed output,
+truncation or an incomplete decomposition cannot publish a usable mission or
+replace an existing draft. Invalid or incomplete decomposition returns 400 with
+`mission planning incomplete`; stale catalog or captured identities return 409.
+Provider/transport failures and request cancellation retain the normal error
+contract. Retrying is a new explicit planning request against current captures.

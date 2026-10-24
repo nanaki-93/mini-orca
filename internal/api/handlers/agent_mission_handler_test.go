@@ -9,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
 func missionHandlerDraft(t *testing.T, fixture *ChangeHandler) app.MissionMutation {
@@ -131,5 +133,51 @@ func TestMissionHandlerStalenessAndStorageFailureKeepTheirMeaning(t *testing.T) 
 	respondMission(w, nil, app.ErrMissionUnavailable)
 	if w.Code != 500 || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("storage failure became client error", w.Code)
+	}
+}
+
+func TestMissionPlanningHandlerPreservesStrictScopeAndUnapprovedReceipt(t *testing.T) {
+	var calls atomic.Int32
+	answer := ""
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{FinishReason: "stop", Message: llm.ChatMessage{Content: answer}}}})
+	}))
+	defer provider.Close()
+	fixture := newChangeHandlerFixture(t, provider.URL)
+	draft := missionHandlerDraft(t, fixture)
+	data, err := json.Marshal(map[string]any{"version": "mission-planner-v1", "status": "planned", "reason": "", "children": draft.Plan.Children, "integration_order": draft.Plan.IntegrationOrder})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer = string(data)
+	h := NewAgentMissionHandler(fixture.service)
+	request := app.MissionPlanningRequest{ProjectID: draft.ProjectID, ProjectRevision: draft.ProjectRevision, Goal: draft.Plan.Goal, Sources: draft.Plan.Sources, Limits: draft.Plan.Limits, PlanningLimits: agentstate.MissionLimits{ModelCalls: 2, ToolCalls: 4, InputTokens: 128 << 10, OutputTokens: 128 << 10, ElapsedSeconds: 60, ConcurrentCalls: 1}}
+	data, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.Plan(w, httptest.NewRequest("POST", "/missions/plan", bytes.NewReader(data)))
+	var result app.MissionPlanningResult
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Mission.Approved || result.CatalogRevision != 1 || result.Usage.ModelCalls != 1 || result.PromptVersion != "mission-planner-v1" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("planning contract: %d %s", w.Code, w.Body)
+	}
+	w = httptest.NewRecorder()
+	h.Plan(w, httptest.NewRequest("POST", "/missions/plan", bytes.NewReader(data)))
+	if w.Code != 409 || calls.Load() != 1 {
+		t.Fatal("stale planner editor dispatched", w.Code, calls.Load())
+	}
+	for _, invalid := range []string{`{}`, `{} {}`, `{"unknown":true}`, strings.Replace(string(data), `"repairs":0`, `"repairs":null`, 1), strings.Replace(string(data), `"goal":`, `"goal":"duplicate","goal":`, 1)} {
+		w := httptest.NewRecorder()
+		h.Plan(w, httptest.NewRequest("POST", "/missions/plan", strings.NewReader(invalid)))
+		if w.Code != 400 || calls.Load() != 1 {
+			t.Fatalf("invalid planner request: %d %s", w.Code, w.Body)
+		}
+	}
+	w = httptest.NewRecorder()
+	respondMission(w, nil, app.ErrMissionPlanningIncomplete)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "mission planning incomplete") {
+		t.Fatal("incomplete response lost its meaning", w.Body)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
@@ -91,5 +92,35 @@ func TestMissionWireContractUsesRealHandlersAndGuardedRoutes(t *testing.T) {
 		if _, err := cl.Request(t.Context(), "rejected", "POST", target, `{}`); err == nil {
 			t.Fatal("unimplemented mutation route allowed", target)
 		}
+	}
+}
+
+func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T) {
+	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "revision"}
+	limits := AgentLimits{ModelCalls: 4, ToolCalls: 8, InputTokens: 65536, OutputTokens: 32768, ElapsedSeconds: 60, ConcurrentCalls: 1}
+	request := MissionPlanningRequest{ProjectIdentity: identity, CatalogRevision: 7, Goal: "Plan selected scope", Sources: []MissionSource{{Path: "new.go"}}, Limits: limits, PlanningLimits: limits, ConfirmRemoteProvider: true}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/projects/current/missions/plan" || r.URL.Query().Get("worktree_path") != "/tmp/selected checkout" {
+			t.Error("planning route lost checkout ownership")
+		}
+		var received MissionPlanningRequest
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil || received.ProjectIdentity != identity || received.CatalogRevision != 7 || received.Limits != limits || received.PlanningLimits != limits || !received.ConfirmRemoteProvider {
+			t.Error("planning request lost its identity or budget", err)
+		}
+		_ = json.NewEncoder(w).Encode(MissionPlanningResult{AgentMission: AgentMission{CatalogRevision: 8, Mission: MissionRecord{ProjectIdentity: identity, ID: "mission-fixture", PlanHash: strings.Repeat("a", 64)}, SourceStatus: "current"}, InputHash: strings.Repeat("b", 64), PromptVersion: "mission-planner-v1", PlanningLimits: limits, Usage: AgentUsage{ModelCalls: 1, UnknownUsageCalls: 1, InputTokens: 1024}, ContextManifest: ContextManifest{Scope: "function", TokenLimit: 8192}})
+	}))
+	defer server.Close()
+	cl, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	target := "/api/projects/current/missions/plan?" + url.Values{"project_id": {identity.ProjectID}, "project_revision": {identity.ProjectRevision}, "worktree_path": {"/tmp/selected checkout"}}.Encode()
+	var result MissionPlanningResult
+	if err := cl.DoJSON(t.Context(), "planning", "POST", target, request, &result); err != nil || result.CatalogRevision != 8 || result.Mission.ProjectIdentity != identity || result.Mission.Approved || result.Usage.UnknownUsageCalls != 1 || result.ContextManifest.Scope != "function" {
+		t.Fatal(result, err)
+	}
+	if _, err := cl.Request(t.Context(), "invalid-method", "PATCH", target, `{}`); err == nil {
+		t.Fatal("unsupported planning method dispatched")
 	}
 }
