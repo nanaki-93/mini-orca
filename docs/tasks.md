@@ -818,26 +818,50 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: add artifact and memory library views`
 
-## Task 27 — Add traceable usage and optional telemetry export
+## Task 27A — Distinguish reported usage from conservative budget charges
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agentruntime/telemetry.go`, `internal/app/agentruntime/telemetry_test.go`, `internal/app/agent_usage.go`, `internal/app/agent_usage_test.go` — **new**.
-- `internal/app/agentruntime/runtime.go`, `internal/app/agentstate/store.go`, `internal/config/agent_runtime.go`, `internal/tui/agent_run_view.go`, `internal/tui/client/agent_models.go`, `CONFIG.md`, `config.example.yaml`.
+- `internal/app/agentstate/usage.go`, `internal/app/agentstate/usage_test.go`, `internal/app/agentruntime/usage.go`, `internal/app/agentruntime/usage_test.go` — **new**, validated source-free accounting and provider receipt projection.
+- `internal/app/agentstate/run.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/model.go`, `internal/app/agentruntime/policy_test.go`, `internal/app/agentruntime/gemini_test.go`.
+- `internal/llm/client.go`, `internal/llm/generation.go`, `internal/llm/generation_test.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `CONFIG.md`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 26B; [ADK Go tracing](https://adk.dev/observability/traces/) and durable event/usage records.
+- Task 26B; durable budget checkpoints and the existing native/compatible provider adapters.
 
 **Implementation rules**
-- Correlate run, node, tool, provider, retry, and check spans. Aggregate reported input/output/cache tokens, call counts, elapsed time, and failures without losing failed-attempt consumption.
-- Keep local source-free trace summaries as the default. Optional OTLP export requires a configured destination and explicit grant; scrub content, arguments, URLs with secrets, and provider diagnostics before persistence/export.
-- Monetary amounts require a versioned user-configured price table; otherwise show tokens and unknown cost. Display estimates and measured usage distinctly and account for summarization/delegation.
+- Keep enforced token charges cumulative across failed attempts, retries and summarization. Separately record reported input/output/cache tokens, unknown usage, failed calls and conservative estimates, grouped by hashes of configured provider/model identities; never persist endpoints, keys or provider diagnostics in accounting.
+- Preserve valid usage received before a failed native completion. Missing usage must remain unknown; a successful response without usage must not become a failed call. Validate cached tokens as a subset of reported input, retain exact integer counts and charge once under the existing budget mutex.
+- Version the accounting projection, read historical records without inventing measured usage, validate monotonic checkpoints, and show reported versus estimated consumption in the existing Usage panel. Remote delegation's separately reported or unknown usage remains explicitly remote and must not be counted as local provider measurements.
 
 **Verification command**
-`go test -race ./internal/app/agentruntime ./internal/app ./internal/config && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race ./internal/llm ./internal/app/agentstate ./internal/app/agentruntime && make tui-test && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: add source-free agent tracing and usage accounting`
+**Commit**: `feat: distinguish reported agent usage from budget estimates`
+
+## Task 27B — Add source-free traces, priced estimates and explicit telemetry export
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agentruntime/telemetry.go`, `internal/app/agentruntime/telemetry_test.go`, `internal/app/agentstate/traces.go`, `internal/app/agentstate/traces_test.go`, `internal/app/agent_usage.go`, `internal/app/agent_usage_test.go`, `internal/config/agent_telemetry.go`, `internal/config/agent_telemetry_test.go` — **new**.
+- `internal/app/agentstate/store.go`, `internal/app/agentstate/history.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/a2a_client.go`, `internal/app/agentruntime/usage.go`.
+- `internal/app/agent_limits.go`, `internal/app/service.go`, `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `cmd/daemon/main.go`, `cmd/daemon/main_test.go`.
+- `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 27A; [ADK Go tracing](https://adk.dev/observability/traces/) and the pinned Go telemetry implementation. SDK telemetry setup reads ambient exporter/resource configuration, so use an explicitly projected source-free export boundary.
+
+**Implementation rules**
+- Correlate bounded run, node, tool, provider, retry, summary, delegation and check spans with opaque identities, fixed status categories and elapsed times. Retain failures and interrupted states; report truncated history without erasing cumulative accounting.
+- Local source-free summaries remain passive. Optional bounded OTLP export requires a configured exact destination and an explicit scoped confirmation; do not enable ambient SDK exporters or resource detectors. Whitelist projected fields, reject redirects and URL credentials/query strings, bound transport and response sizes, propagate cancellation and report partial/failed export honestly.
+- Monetary estimates require a versioned user-configured price table and matching model hashes. Missing measurements/rates/cache knowledge keep total cost unknown; label any known subtotal and price version. Use existing Usage/Timeline panels, with complete destination/run confirmation before export.
+
+**Verification command**
+`go test -race ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/config ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: add source-free traces and consented telemetry export`
 
 ## Task 28 — Add task and tool-trajectory evaluation
 
@@ -849,7 +873,7 @@ This is an implementation specification, not a claim that the features below alr
 - `scripts/quality.sh`, `scripts/tests/test_quality.py`, `README.md`, `internal/AGENTS.md`.
 
 **Inputs / dependencies**
-- Task 27; existing engineering-insight evaluation conventions. [ADK evaluation documentation](https://adk.dev/evaluate/) is Python-specific; preserve a native Go harness.
+- Task 27B; existing engineering-insight evaluation conventions. [ADK evaluation documentation](https://adk.dev/evaluate/) is Python-specific; preserve a native Go harness.
 
 **Implementation rules**
 - Evaluate fixed task fixtures, tool-call correctness, scope compliance, independent regression tests, unsupported claims, cancellation, tokens, latency, and repair counts. Version corpus, prompt, model, runtime, and scoring identities.
