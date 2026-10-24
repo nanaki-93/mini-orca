@@ -334,6 +334,9 @@ func validateGenerationUsage(usage *ChatUsage) error {
 			return fmt.Errorf("%w: invalid token usage", ErrUnusableResponse)
 		}
 	}
+	if details := usage.PromptTokensDetails; details != nil && (details.CachedTokens < 0 || details.CachedTokens > usage.PromptTokens) {
+		return fmt.Errorf("%w: invalid cached token usage", ErrUnusableResponse)
+	}
 	return nil
 }
 

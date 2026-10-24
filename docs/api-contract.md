@@ -1039,6 +1039,20 @@ marked `stale`; records with no live daemon owner are `interrupted`, never
 advertised as running or cancelable. Native `parent_id`/`root_id` group attempts,
 parallel reviewers, model invocations and human input. Budgets are shared totals,
 so child usage must not be added together.
+`usage.input_tokens` and `output_tokens` are enforced budget charges, including
+conservative estimates for unavailable consumption. New usage snapshots include
+optional `accounting: {version: 1, providers: [...]}`. Each bounded provider group
+contains a `model_key` hash of the configured provider/model, call/active/failed
+counts, `reported_calls`, `partial_usage_calls`, `unknown_usage_calls`,
+`cache_known_calls`, charged input/output, reported input/output, and
+`cached_input_tokens`. Cached tokens are included in reported input. Partial
+measurements are lower bounds; estimates equal charged minus reported tokens.
+Complete usage from a failed native response is retained. Missing usage does not
+imply failure, and missing cache details do not imply zero cached tokens. The
+projection is absent for historical records whose measurements cannot be
+reconstructed. Counts use exact integers; no endpoint, credential or provider
+diagnostic is part of the projection. Remote-reported delegation consumption is
+separate from this shared local provider budget.
 Checked workflows also expose `change_session_id` and `workflow_id` for exact
 association with the proposal; legacy or unrelated invocations may omit them.
 

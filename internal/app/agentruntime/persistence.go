@@ -58,7 +58,7 @@ func (b *Budget) checkpointLocked(ctx context.Context) error {
 	if b.persist == nil {
 		return nil
 	}
-	usage := b.usage
+	usage := b.usage.Clone()
 	usage.ElapsedMillis = time.Since(b.started).Milliseconds()
 	if err := b.persist(ctx, usage); err != nil {
 		if isPersistenceCancellation(err) {

@@ -79,7 +79,7 @@ func (c *ProviderClient) reserveDispatch(ctx context.Context, request any) (*mod
 	if c.profile.IsCLI() {
 		output = 4 << 20
 	} // CLI has a bounded response, but no enforceable token setting.
-	return budget.reserveModel(ctx, int64(len(data))+256, output)
+	return budget.reserveModel(ctx, int64(len(data))+256, output, ProviderUsageKey(string(c.profile.Provider), c.profile.Model))
 }
 
 func newPolicyPlugin() (*plugin.Plugin, error) {

@@ -151,3 +151,18 @@ func TestAgentRoutesAndPrivateDetailContract(t *testing.T) {
 		t.Fatalf("detail contract: %+v %v", detail, err)
 	}
 }
+
+func TestAgentAccountingWireRetainsExactIntegersAndOptionalHistory(t *testing.T) {
+	var usage AgentUsage
+	if err := json.Unmarshal([]byte(`{"input_tokens":9007199254740993,"accounting":{"version":1,"providers":[{"model_key":"hash","reported_input_tokens":9007199254740993,"cached_input_tokens":9007199254740991,"cache_known_calls":1,"partial_usage_calls":1,"failed_calls":1}]}}`), &usage); err != nil {
+		t.Fatal(err)
+	}
+	group := usage.Accounting.Providers[0]
+	if group.ReportedInputTokens != 9007199254740993 || group.CachedInputTokens != 9007199254740991 || group.CacheKnownCalls != 1 || group.PartialUsageCalls != 1 || group.FailedCalls != 1 {
+		t.Fatal("accounting receipt rounded or discarded")
+	}
+	var legacy AgentUsage
+	if err := json.Unmarshal([]byte(`{"input_tokens":123}`), &legacy); err != nil || legacy.Accounting != nil {
+		t.Fatal("legacy receipt acquired invented accounting", err)
+	}
+}

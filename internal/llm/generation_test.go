@@ -38,6 +38,42 @@ func TestGenerationPreservesSafeFailureCategories(t *testing.T) {
 	}
 }
 
+func TestGenerationCacheUsagePreservesUnknownZeroAndRejectsInvalidCounts(t *testing.T) {
+	for _, details := range []string{"", `,"prompt_tokens_details":{"cached_tokens":0}`, `,"prompt_tokens_details":{"cached_tokens":2}`, `,"prompt_tokens_details":{"cached_tokens":-1}`, `,"prompt_tokens_details":{"cached_tokens":4}`} {
+		for _, stream := range []bool{false, true} {
+			usage := `{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5` + details + `}`
+			body := `{"model":"fixture","choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":` + usage + `}`
+			if stream {
+				body = streamDelta(t, map[string]any{"content": "done"}, "stop") + `data: {"choices":[],"usage":` + usage + "}\n\ndata: [DONE]\n\n"
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+				}
+				_, _ = io.WriteString(w, body)
+			}))
+			cl := NewClient(testProfile(server.URL, ""))
+			input := generationInput()
+			input.Stream = stream
+			result, _, err := collectGeneration(cl, t.Context(), input)
+			server.Close()
+			invalid := strings.Contains(details, ":-1") || strings.Contains(details, ":4")
+			if invalid {
+				if !errors.Is(err, ErrUnusableResponse) || result != nil {
+					t.Fatalf("invalid cache usage accepted: %+v %v", result, err)
+				}
+				continue
+			}
+			if err != nil || result == nil || result.Usage == nil || (result.Usage.PromptTokensDetails == nil) != (details == "") {
+				t.Fatalf("lost cache knowledge (stream=%t): %+v %v", stream, result, err)
+			}
+			if strings.Contains(details, ":2") && result.Usage.PromptTokensDetails.CachedTokens != 2 {
+				t.Fatal("lost cached tokens")
+			}
+		}
+	}
+}
+
 func collectGeneration(client *Client, ctx context.Context, input GenerationRequest) (*GenerationResult, []string, error) {
 	var result *GenerationResult
 	var deltas []string

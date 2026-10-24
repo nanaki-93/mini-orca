@@ -63,6 +63,34 @@ func TestExecutionSectionsAndCommandBrowsingArePassive(t *testing.T) {
 	}
 }
 
+func TestExecutionUsageSeparatesReportedEstimatedAndLegacyConsumption(t *testing.T) {
+	s, detail := executionState()
+	detail.Run.Usage = client.AgentUsage{ModelCalls: 2, InputTokens: 100, OutputTokens: 50, UnknownUsageCalls: 1, Accounting: &client.AgentUsageAccounting{Version: 1, Providers: []client.AgentProviderUsage{{ModelCalls: 2, FailedCalls: 1, ReportedCalls: 1, PartialUsageCalls: 1, CacheKnownCalls: 1, ReportedInputTokens: 20, ReportedOutputTokens: 10, CachedInputTokens: 5}}}}
+	text := strings.Join(renderAgentUsage(&detail), "\n")
+	for _, want := range []string{"Input budget charged: 100", "Provider-reported tokens: input 20 · output 10", "Conservative estimates: input 80 · output 40", "Cached input reported: 5", "Failed provider attempts: 1", "partial usage 1", "Cost: unknown"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("usage disclosure missing %q: %s", want, text)
+		}
+	}
+	s.applyAgentProgress(&agentProgressView{Request: *s.agentProgressRequest(), Detail: &detail, Status: "current"})
+	s.AgentRunSection = 3
+	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+		s.Palette = palette
+		for range 8 {
+			_ = s.Render(52, 16)
+			s.HandleKey(KeyEvent{Key: "PageDown"})
+		}
+	}
+	if len(s.PendingActions) != 0 {
+		t.Fatal("usage browsing dispatched work")
+	}
+	detail.Run.Usage.Accounting = nil
+	text = strings.Join(renderAgentUsage(&detail), "\n")
+	if !strings.Contains(text, "Legacy accounting") || strings.Contains(text, "Provider-reported tokens:") {
+		t.Fatal("legacy charges presented as measurements")
+	}
+}
+
 func TestExecutionInputUsesExactGuardAndNeverApplies(t *testing.T) {
 	for _, decision := range []string{"approve", "reject", "cancel"} {
 		t.Run(decision, func(t *testing.T) {

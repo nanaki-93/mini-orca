@@ -1912,8 +1912,9 @@ components:
         source_status: {type: string, enum: [unchecked, current, changed], description: List does not read source; detail checks source and policy. Acceptance alone does not guarantee retrieval eligibility.}
     AgentUsage:
       type: object
-      description: Shared budget totals across descendants; do not add child totals together.
+      description: Shared budget charges across descendants, including conservative estimates; do not add child totals together. Accounting is absent for legacy measurements that cannot be reconstructed.
       properties:
+        accounting: {$ref: '#/components/schemas/AgentUsageAccounting'}
         model_calls: {type: integer}
         tool_calls: {type: integer}
         repairs: {type: integer}
@@ -1924,6 +1925,29 @@ components:
         reserved_output_tokens: {type: integer, format: int64}
         active_calls: {type: integer}
         elapsed_millis: {type: integer, format: int64}
+    AgentUsageAccounting:
+      type: object
+      required: [version, providers]
+      properties:
+        version: {type: integer, enum: [1]}
+        providers: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/AgentProviderUsage'}}
+    AgentProviderUsage:
+      type: object
+      description: Source-free grouped accounting. Reported counts include partial lower bounds; charged minus reported tokens are conservative estimates. Cache tokens are included in input; missing cache knowledge remains unknown. Failed calls can still have complete usage receipts.
+      properties:
+        model_key: {type: string, pattern: '^[a-f0-9]{64}$', description: SHA-256 of the JSON pair of configured provider and model; excludes endpoint and credentials.}
+        model_calls: {type: integer, minimum: 0}
+        active_calls: {type: integer, minimum: 0}
+        failed_calls: {type: integer, minimum: 0}
+        unknown_usage_calls: {type: integer, minimum: 0}
+        reported_calls: {type: integer, minimum: 0}
+        partial_usage_calls: {type: integer, minimum: 0}
+        cache_known_calls: {type: integer, minimum: 0}
+        input_tokens: {type: integer, format: int64, minimum: 0}
+        output_tokens: {type: integer, format: int64, minimum: 0}
+        reported_input_tokens: {type: integer, format: int64, minimum: 0}
+        reported_output_tokens: {type: integer, format: int64, minimum: 0}
+        cached_input_tokens: {type: integer, format: int64, minimum: 0}
     AgentRoleSettings:
       type: object
       additionalProperties: false

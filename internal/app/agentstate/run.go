@@ -19,16 +19,17 @@ type Binding struct {
 }
 
 type BudgetUsage struct {
-	ModelCalls           int   `json:"model_calls"`
-	ToolCalls            int   `json:"tool_calls"`
-	Repairs              int   `json:"repairs"`
-	InputTokens          int64 `json:"input_tokens"`
-	OutputTokens         int64 `json:"output_tokens"`
-	UnknownUsageCalls    int   `json:"unknown_usage_calls"`
-	ReservedInputTokens  int64 `json:"reserved_input_tokens"`
-	ReservedOutputTokens int64 `json:"reserved_output_tokens"`
-	ActiveCalls          int   `json:"active_calls"`
-	ElapsedMillis        int64 `json:"elapsed_millis"`
+	Accounting           *UsageAccounting `json:"accounting,omitempty"`
+	ModelCalls           int              `json:"model_calls"`
+	ToolCalls            int              `json:"tool_calls"`
+	Repairs              int              `json:"repairs"`
+	InputTokens          int64            `json:"input_tokens"`
+	OutputTokens         int64            `json:"output_tokens"`
+	UnknownUsageCalls    int              `json:"unknown_usage_calls"`
+	ReservedInputTokens  int64            `json:"reserved_input_tokens"`
+	ReservedOutputTokens int64            `json:"reserved_output_tokens"`
+	ActiveCalls          int              `json:"active_calls"`
+	ElapsedMillis        int64            `json:"elapsed_millis"`
 }
 
 type BudgetRecord struct {
@@ -136,7 +137,7 @@ func validUsage(u BudgetUsage) bool {
 			return false
 		}
 	}
-	return u.UnknownUsageCalls <= u.ModelCalls && u.ActiveCalls <= u.ModelCalls
+	return u.UnknownUsageCalls <= u.ModelCalls && u.ActiveCalls <= u.ModelCalls && validAccounting(u)
 }
 
 func (s *Store) Checkpoint(ctx context.Context, record BudgetRecord) error {
@@ -152,7 +153,7 @@ func (s *Store) Checkpoint(ctx context.Context, record BudgetRecord) error {
 }
 
 func monotonicUsage(previous, next BudgetUsage) bool {
-	return next.ModelCalls >= previous.ModelCalls && next.ToolCalls >= previous.ToolCalls && next.Repairs >= previous.Repairs && next.InputTokens >= previous.InputTokens && next.OutputTokens >= previous.OutputTokens && next.UnknownUsageCalls >= previous.UnknownUsageCalls && next.ElapsedMillis >= previous.ElapsedMillis
+	return next.ModelCalls >= previous.ModelCalls && next.ToolCalls >= previous.ToolCalls && next.Repairs >= previous.Repairs && next.InputTokens >= previous.InputTokens && next.OutputTokens >= previous.OutputTokens && next.UnknownUsageCalls >= previous.UnknownUsageCalls && next.ElapsedMillis >= previous.ElapsedMillis && monotonicAccounting(previous, next)
 }
 
 func (s *Store) BeginRun(ctx context.Context, run Run) error {

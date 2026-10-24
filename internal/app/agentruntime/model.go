@@ -371,17 +371,31 @@ func nativeGenerationResponse(event llm.GenerationEvent) (*model.LLMResponse, er
 		FinishReason:   nativeFinishReason(result.FinishReason),
 		CustomMetadata: map[string]any{"mini_orca.finish_reason": result.FinishReason},
 	}
-	if result.Usage != nil {
-		for _, count := range []int{result.Usage.PromptTokens, result.Usage.CompletionTokens, result.Usage.TotalTokens} {
+	if err := nativeGenerationUsage(response, result.Usage); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func nativeGenerationUsage(response *model.LLMResponse, usage *llm.ChatUsage) error {
+	if usage != nil {
+		for _, count := range []int{usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens} {
 			if count < 0 || count > math.MaxInt32 {
-				return nil, fmt.Errorf("%w: invalid generation usage", llm.ErrUnusableResponse)
+				return fmt.Errorf("%w: invalid generation usage", llm.ErrUnusableResponse)
 			}
 		}
 		response.UsageMetadata = &genai.GenerateContentResponseUsageMetadata{
-			PromptTokenCount: int32(result.Usage.PromptTokens), CandidatesTokenCount: int32(result.Usage.CompletionTokens), TotalTokenCount: int32(result.Usage.TotalTokens),
+			PromptTokenCount: int32(usage.PromptTokens), CandidatesTokenCount: int32(usage.CompletionTokens), TotalTokenCount: int32(usage.TotalTokens),
+		}
+		if details := usage.PromptTokensDetails; details != nil {
+			if details.CachedTokens < 0 || details.CachedTokens > usage.PromptTokens {
+				return fmt.Errorf("%w: invalid cached generation usage", llm.ErrUnusableResponse)
+			}
+			response.UsageMetadata.CachedContentTokenCount = int32(details.CachedTokens)
+			response.CustomMetadata["mini_orca.cache_usage_known"] = true
 		}
 	}
-	return response, nil
+	return nil
 }
 
 func nativeFinishReason(reason string) genai.FinishReason {
@@ -411,6 +425,9 @@ func completionResult(response *model.LLMResponse) Result {
 		result.UsageKnown = true
 		usage := response.UsageMetadata
 		result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount), TotalTokens: int(usage.TotalTokenCount)}
+		if response.CustomMetadata["mini_orca.cache_usage_known"] == true {
+			result.Usage.PromptTokensDetails = &llm.PromptTokenDetails{CachedTokens: int(usage.CachedContentTokenCount)}
+		}
 	}
 	return result
 }

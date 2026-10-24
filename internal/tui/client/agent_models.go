@@ -1,16 +1,38 @@
 package client
 
 type AgentUsage struct {
-	ModelCalls           int   `json:"model_calls"`
-	ToolCalls            int   `json:"tool_calls"`
-	Repairs              int   `json:"repairs"`
-	InputTokens          int64 `json:"input_tokens"`
-	OutputTokens         int64 `json:"output_tokens"`
-	UnknownUsageCalls    int   `json:"unknown_usage_calls"`
-	ReservedInputTokens  int64 `json:"reserved_input_tokens"`
-	ReservedOutputTokens int64 `json:"reserved_output_tokens"`
-	ActiveCalls          int   `json:"active_calls"`
-	ElapsedMillis        int64 `json:"elapsed_millis"`
+	Accounting           *AgentUsageAccounting `json:"accounting,omitempty"`
+	ModelCalls           int                   `json:"model_calls"`
+	ToolCalls            int                   `json:"tool_calls"`
+	Repairs              int                   `json:"repairs"`
+	InputTokens          int64                 `json:"input_tokens"`
+	OutputTokens         int64                 `json:"output_tokens"`
+	UnknownUsageCalls    int                   `json:"unknown_usage_calls"`
+	ReservedInputTokens  int64                 `json:"reserved_input_tokens"`
+	ReservedOutputTokens int64                 `json:"reserved_output_tokens"`
+	ActiveCalls          int                   `json:"active_calls"`
+	ElapsedMillis        int64                 `json:"elapsed_millis"`
+}
+
+type AgentUsageAccounting struct {
+	Version   int                  `json:"version"`
+	Providers []AgentProviderUsage `json:"providers"`
+}
+
+type AgentProviderUsage struct {
+	ModelKey             string `json:"model_key"`
+	ModelCalls           int    `json:"model_calls"`
+	ActiveCalls          int    `json:"active_calls"`
+	FailedCalls          int    `json:"failed_calls"`
+	UnknownUsageCalls    int    `json:"unknown_usage_calls"`
+	ReportedCalls        int    `json:"reported_calls"`
+	PartialUsageCalls    int    `json:"partial_usage_calls"`
+	CacheKnownCalls      int    `json:"cache_known_calls"`
+	InputTokens          int64  `json:"input_tokens"`
+	OutputTokens         int64  `json:"output_tokens"`
+	ReportedInputTokens  int64  `json:"reported_input_tokens"`
+	ReportedOutputTokens int64  `json:"reported_output_tokens"`
+	CachedInputTokens    int64  `json:"cached_input_tokens"`
 }
 
 type AgentLimits struct {

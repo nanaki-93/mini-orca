@@ -256,11 +256,24 @@ no tools; their ADK policy hook rejects tool dispatch.
 Before dispatch, the runtime reserves input capacity using encoded request bytes
 plus framing allowance, and output capacity using the configured `max_tokens`
 (4 MiB for an opaque CLI). Reported usage settles reservations; Gemini thinking
-tokens count as output. Missing usage and failed/interrupted calls keep the full
-reservation and are marked unknown. A provider usage overrun stops the run and
+tokens count as output. Missing usage keeps the full reservation and remains
+unknown. Valid complete receipts from failed native calls retain their reported
+consumption; interrupted native streams retain partial measurements and charge
+at least the reservation until full consumption is known. A provider usage overrun stops the run and
 prevents final-result publication. These are local execution limits, not a billing
 guarantee: upstream internal retries and unreported consumption remain unknown.
 No reservation or usage record grants source-write or execution authority.
+
+The Task Usage panel separates enforced budget charges, provider-reported input
+and output, cached input, and conservative estimates. New records retain a
+versioned accounting projection grouped by hashes of the configured provider and
+model; endpoints, credentials and diagnostics are excluded. Cache counts are a
+subset of input tokens, never an additional charge. Missing cache details remain
+unknown. A successful response without usage is not labeled a failed call.
+Historical records without this projection retain their original totals without
+inventing measurements. Remote delegation usage remains separately labeled in
+External Work and is not added to local provider measurements. Cost is unknown
+without a versioned price table.
 
 Project-specific role, budget and skill preferences are available through the
 guarded [agent settings API](docs/api-contract.md#agent-settings-and-skill-validation).

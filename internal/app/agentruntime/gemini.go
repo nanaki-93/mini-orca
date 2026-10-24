@@ -67,8 +67,8 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 		completed := false
 		modelVersion := ""
 		for response, err := range sdk.GenerateContent(ctx, input, stream) {
-			if err != nil {
-				yield(nil, nativeProviderError(ctx, err, input.Config.ResponseJsonSchema != nil))
+			if err := googleResponseError(ctx, reservation, response, err, input.Config.ResponseJsonSchema != nil); err != nil {
+				yield(nil, err)
 				return
 			}
 			if err := validateGoogleEvent(response, completed, &modelVersion); err != nil {
@@ -95,6 +95,16 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			yield(nil, fmt.Errorf("%w: native generation ended without a complete result", llm.ErrUnusableResponse))
 		}
 	}
+}
+
+func googleResponseError(ctx context.Context, reservation *modelReservation, response *model.LLMResponse, providerErr error, structured bool) error {
+	if err := observeGoogleUsage(reservation, response); err != nil {
+		return err
+	}
+	if providerErr != nil {
+		return nativeProviderError(ctx, providerErr, structured)
+	}
+	return nil
 }
 
 func validateGoogleEvent(response *model.LLMResponse, completed bool, version *string) error {
@@ -346,11 +356,11 @@ func googleCompletionEvent(ctx agent.InvocationContext, response *model.LLMRespo
 	if !response.Partial {
 		result := Result{Content: text, Model: response.ModelVersion, FinishReason: "stop"}
 		if usage := response.UsageMetadata; usage != nil {
-			if usage.PromptTokenCount < 0 || usage.CandidatesTokenCount < 0 || usage.ThoughtsTokenCount < 0 || usage.TotalTokenCount < 0 {
-				return nil, fmt.Errorf("%w: invalid native usage", llm.ErrUnusableResponse)
+			if _, err := googleTokenReceipt(usage, true); err != nil {
+				return nil, err
 			}
 			result.UsageKnown = true
-			result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount) + int(usage.ThoughtsTokenCount), TotalTokens: int(usage.TotalTokenCount)}
+			result.Usage = llm.ChatUsage{PromptTokens: int(usage.PromptTokenCount), CompletionTokens: int(usage.CandidatesTokenCount) + int(usage.ThoughtsTokenCount), TotalTokens: int(usage.TotalTokenCount), PromptTokensDetails: &llm.PromptTokenDetails{CachedTokens: int(usage.CachedContentTokenCount)}}
 		}
 		event.Output = result
 	}
@@ -359,13 +369,30 @@ func googleCompletionEvent(ctx agent.InvocationContext, response *model.LLMRespo
 
 func settleGoogleUsage(reservation *modelReservation, usage *genai.GenerateContentResponseUsageMetadata) error {
 	if usage == nil {
-		return reservation.settle(0, 0, false, false)
+		return reservation.settle(0, 0, false, true)
 	}
-	if usage.PromptTokenCount < 0 || usage.CandidatesTokenCount < 0 || usage.ThoughtsTokenCount < 0 || usage.TotalTokenCount < 0 {
-		return fmt.Errorf("%w: invalid native usage", llm.ErrUnusableResponse)
+	receipt, err := googleTokenReceipt(usage, true)
+	if err != nil {
+		return err
 	}
-	output := max(int64(usage.CandidatesTokenCount)+int64(usage.ThoughtsTokenCount), int64(usage.TotalTokenCount)-int64(usage.PromptTokenCount))
-	return reservation.settle(int64(usage.PromptTokenCount), output, true, true)
+	if err := reservation.observeUsage(receipt); err != nil {
+		return err
+	}
+	return reservation.settle(receipt.Input, receipt.Output, true, true)
+}
+
+func observeGoogleUsage(reservation *modelReservation, response *model.LLMResponse) error {
+	if response == nil || response.UsageMetadata == nil {
+		return nil
+	}
+	// The SDK may aggregate a truncated stream. An aggregate alone does not
+	// prove that the provider supplied its terminal usage receipt.
+	final := !response.Partial && response.FinishReason != "" && response.FinishReason != genai.FinishReasonUnspecified
+	receipt, err := googleTokenReceipt(response.UsageMetadata, final)
+	if err != nil {
+		return err
+	}
+	return reservation.observeUsage(receipt)
 }
 
 func googleCompletionText(content *genai.Content) (string, error) {

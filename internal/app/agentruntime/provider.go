@@ -127,10 +127,14 @@ func (c *ProviderClient) generateCompatible(ctx context.Context, request llm.Gen
 
 func settleChatUsage(reservation *modelReservation, usage *llm.ChatUsage, known bool) error {
 	if !known {
-		return reservation.settle(0, 0, false, false)
+		return reservation.settle(0, 0, false, true)
 	}
-	if usage.PromptTokens < 0 || usage.CompletionTokens < 0 || usage.TotalTokens < 0 {
-		return fmt.Errorf("%w: invalid provider usage", llm.ErrUnusableResponse)
+	receipt, err := chatTokenReceipt(usage)
+	if err != nil {
+		return err
 	}
-	return reservation.settle(int64(usage.PromptTokens), max(int64(usage.CompletionTokens), int64(usage.TotalTokens)-int64(usage.PromptTokens)), true, true)
+	if err := reservation.observeUsage(receipt); err != nil {
+		return err
+	}
+	return reservation.settle(receipt.Input, receipt.Output, true, true)
 }

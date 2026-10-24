@@ -820,11 +820,11 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 27A — Distinguish reported usage from conservative budget charges
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentstate/usage.go`, `internal/app/agentstate/usage_test.go`, `internal/app/agentruntime/usage.go`, `internal/app/agentruntime/usage_test.go` — **new**, validated source-free accounting and provider receipt projection.
-- `internal/app/agentstate/run.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/model.go`, `internal/app/agentruntime/policy_test.go`, `internal/app/agentruntime/gemini_test.go`.
+- `internal/app/agentstate/run.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/model.go`, `internal/app/agentruntime/policy_test.go`, `internal/app/agentruntime/gemini_test.go`.
 - `internal/llm/client.go`, `internal/llm/generation.go`, `internal/llm/generation_test.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `CONFIG.md`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**

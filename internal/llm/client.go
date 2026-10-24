@@ -129,9 +129,15 @@ type ChatChoice struct {
 
 // ChatUsage tracks token usage for billing and monitoring.
 type ChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokensDetails *PromptTokenDetails `json:"prompt_tokens_details,omitempty"`
+	PromptTokens        int                 `json:"prompt_tokens"`
+	CompletionTokens    int                 `json:"completion_tokens"`
+	TotalTokens         int                 `json:"total_tokens"`
+}
+
+// Nil details mean the provider did not report whether input was cached.
+type PromptTokenDetails struct {
+	CachedTokens int `json:"cached_tokens"`
 }
 
 // ChatResponse is the response from a chat completion call.

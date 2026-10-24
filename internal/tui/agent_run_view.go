@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
@@ -128,15 +129,35 @@ func renderPrivateAgentText(disclosure *agentDisclosure) []string {
 
 func renderAgentUsage(detail *AgentRunDetail) []string {
 	u, l := detail.Run.Usage, detail.Run.Limits
-	return []string{
+	lines := []string{
 		"Shared run budget · includes child work; do not add invocation counters together.",
 		fmt.Sprintf("Model calls: %d / %d · active %d", u.ModelCalls, l.ModelCalls, u.ActiveCalls),
 		fmt.Sprintf("Tool calls: %d / %d · repairs %d / %d", u.ToolCalls, l.ToolCalls, u.Repairs, l.Repairs),
-		fmt.Sprintf("Input tokens: %d / %d · reserved %d", u.InputTokens, l.InputTokens, u.ReservedInputTokens),
-		fmt.Sprintf("Output tokens: %d / %d · reserved %d", u.OutputTokens, l.OutputTokens, u.ReservedOutputTokens),
-		fmt.Sprintf("Unknown usage: %d calls · token totals exclude unavailable measurements", u.UnknownUsageCalls),
+		fmt.Sprintf("Input budget charged: %d / %d · reserved %d", u.InputTokens, l.InputTokens, u.ReservedInputTokens),
+		fmt.Sprintf("Output budget charged: %d / %d · reserved %d", u.OutputTokens, l.OutputTokens, u.ReservedOutputTokens),
+		fmt.Sprintf("Unknown total usage: %d calls · conservative charges remain in the budget", u.UnknownUsageCalls),
 		fmt.Sprintf("Elapsed: %.1fs / %ds · concurrency limit %d", float64(u.ElapsedMillis)/1000, l.ElapsedSeconds, l.ConcurrentCalls),
-		"Usage is recorded accounting, not a measured performance improvement.",
+	}
+	lines = append(lines, renderAgentAccounting(u)...)
+	return append(lines, "Remote agent usage is separate in External Work; internal remote consumption remains unknown unless reported.", "Cost: unknown · a versioned price table is required.", "Usage is recorded accounting, not a measured performance improvement.")
+}
+
+func renderAgentAccounting(usage client.AgentUsage) []string {
+	if usage.Accounting == nil || usage.Accounting.Version != 1 {
+		return []string{"Legacy accounting · reported tokens, cache usage and estimates cannot be separated."}
+	}
+	var input, output, cached int64
+	var failed, reported, partial, cacheKnown int
+	for _, group := range usage.Accounting.Providers {
+		input, output, cached = input+group.ReportedInputTokens, output+group.ReportedOutputTokens, cached+group.CachedInputTokens
+		failed, reported, partial, cacheKnown = failed+group.FailedCalls, reported+group.ReportedCalls, partial+group.PartialUsageCalls, cacheKnown+group.CacheKnownCalls
+	}
+	return []string{
+		fmt.Sprintf("Provider-reported tokens: input %d · output %d", input, output),
+		fmt.Sprintf("Conservative estimates: input %d · output %d", usage.InputTokens-input, usage.OutputTokens-output),
+		fmt.Sprintf("Cached input reported: %d · cache known on %d / %d reported receipts", cached, cacheKnown, reported+partial),
+		fmt.Sprintf("Failed provider attempts: %d · complete usage %d · partial usage %d", failed, reported, partial),
+		"Partial receipts are lower bounds; estimated charges are not provider measurements.",
 	}
 }
 

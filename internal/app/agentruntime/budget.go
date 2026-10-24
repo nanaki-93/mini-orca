@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -58,14 +59,14 @@ func WithBudget(ctx context.Context, limits config.AgentLimits) (context.Context
 	}
 	owned, cancelCause := context.WithCancelCause(ctx)
 	timed, stop := context.WithTimeoutCause(owned, time.Duration(limits.ElapsedSeconds)*time.Second, &BudgetError{Limit: "elapsed time"})
-	budget := &Budget{limits: limits, started: time.Now(), slots: make(chan struct{}, limits.ConcurrentCalls), cancel: cancelCause}
+	budget := &Budget{limits: limits, usage: BudgetSnapshot{Accounting: &agentstate.UsageAccounting{Version: 1, Providers: []agentstate.ProviderUsage{}}}, started: time.Now(), slots: make(chan struct{}, limits.ConcurrentCalls), cancel: cancelCause}
 	return context.WithValue(timed, budgetKey{}, budget), func() { stop(); cancelCause(context.Canceled) }, nil
 }
 
 func (b *Budget) Snapshot() BudgetSnapshot {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	copy := b.usage
+	copy := b.usage.Clone()
 	copy.ElapsedMillis = time.Since(b.started).Milliseconds()
 	return copy
 }
@@ -75,11 +76,17 @@ type modelReservation struct {
 	budget        *Budget
 	input, output int64
 	finished      bool // guarded by budget.mu
+	group         int
+	reported      *tokenReceipt // guarded by budget.mu
 }
 
-func (b *Budget) reserveModel(ctx context.Context, input, output int64) (*modelReservation, error) {
+func (b *Budget) reserveModel(ctx context.Context, input, output int64, identities ...string) (*modelReservation, error) {
 	if input < 0 || output < 0 {
 		return nil, fmt.Errorf("invalid model token reservation")
+	}
+	key, err := reservationModelKey(identities)
+	if err != nil {
+		return nil, err
 	}
 	select {
 	case b.slots <- struct{}{}:
@@ -87,19 +94,7 @@ func (b *Budget) reserveModel(ctx context.Context, input, output int64) (*modelR
 		return nil, context.Cause(ctx)
 	}
 	b.mu.Lock()
-	err := b.admitModelLocked(ctx, input, output)
-	if err == nil {
-		b.usage.ModelCalls++
-		b.usage.ActiveCalls++
-		b.usage.ReservedInputTokens += input
-		b.usage.ReservedOutputTokens += output
-		err = b.checkpointLocked(ctx)
-		if err != nil {
-			b.usage.ActiveCalls--
-			b.usage.ReservedInputTokens -= input
-			b.usage.ReservedOutputTokens -= output
-		}
-	}
+	groupIndex, err := b.reserveModelLocked(ctx, key, input, output)
 	b.mu.Unlock()
 	if err != nil {
 		<-b.slots
@@ -108,7 +103,43 @@ func (b *Budget) reserveModel(ctx context.Context, input, output int64) (*modelR
 		}
 		return nil, err
 	}
-	return &modelReservation{ctx: ctx, budget: b, input: input, output: output}, nil
+	return &modelReservation{ctx: ctx, budget: b, input: input, output: output, group: groupIndex}, nil
+}
+
+func (b *Budget) reserveModelLocked(ctx context.Context, key string, input, output int64) (int, error) {
+	if err := b.admitModelLocked(ctx, input, output); err != nil {
+		return 0, err
+	}
+	index, err := b.usageGroupLocked(key)
+	if err != nil {
+		return 0, err
+	}
+	group := &b.usage.Accounting.Providers[index]
+	group.ModelCalls++
+	group.ActiveCalls++
+	b.usage.ModelCalls++
+	b.usage.ActiveCalls++
+	b.usage.ReservedInputTokens += input
+	b.usage.ReservedOutputTokens += output
+	if err := b.checkpointLocked(ctx); err != nil {
+		group.ActiveCalls--
+		b.usage.ActiveCalls--
+		b.usage.ReservedInputTokens -= input
+		b.usage.ReservedOutputTokens -= output
+		return 0, err
+	}
+	return index, nil
+}
+
+func reservationModelKey(identities []string) (string, error) {
+	if len(identities) == 0 {
+		return ProviderUsageKey("", ""), nil
+	}
+	key, err := hex.DecodeString(identities[0])
+	if len(identities) != 1 || err != nil || len(key) != 32 {
+		return "", fmt.Errorf("invalid provider accounting identity")
+	}
+	return identities[0], nil
 }
 
 func (b *Budget) admitModelLocked(ctx context.Context, input, output int64) error {
@@ -127,8 +158,8 @@ func (b *Budget) admitModelLocked(ctx context.Context, input, output int64) erro
 	return nil
 }
 
-// settle returns unused reservations. Failed or interrupted requests retain
-// their whole reservation because unreported upstream usage cannot be recovered.
+// settle returns unused reservations only when a complete usage receipt exists.
+// Unreported or interrupted consumption retains conservative budget charges.
 func (r *modelReservation) settle(input, output int64, known, completed bool) error {
 	if r == nil {
 		return nil
@@ -140,16 +171,12 @@ func (r *modelReservation) settle(input, output int64, known, completed bool) er
 		return nil
 	}
 	r.finished = true
-	if !completed {
-		input, output, known = r.input, r.output, false
-	}
+	err := r.finalUsageLocked(input, output, known)
 	b.usage.ReservedInputTokens -= r.input
 	b.usage.ReservedOutputTokens -= r.output
 	b.usage.ActiveCalls--
-	if !known {
-		b.usage.UnknownUsageCalls++
-	}
-	err := b.recordUsageLocked(input, output)
+	input, output = r.settleAccountingLocked(completed && err == nil)
+	err = errors.Join(err, b.recordUsageLocked(input, output))
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), 5*time.Second)
 	err = errors.Join(err, b.checkpointLocked(cleanup))
 	cancel()
