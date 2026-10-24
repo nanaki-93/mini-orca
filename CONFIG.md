@@ -613,6 +613,44 @@ Partial artifacts, input/auth requests, failure, cancellation and uncertainty
 retain separate states. Remote output cannot grant local permissions, execute
 project code or change source. See the [API contract](docs/api-contract.md).
 
+`integrations.a2a_server` optionally exposes Mini-Orca's native ADK A2A service.
+It is disabled by default. `bind` defaults to `127.0.0.1:9091` and must use a
+literal loopback IP; `timeout_seconds` is 1–120 (default 60), and `max_concurrent`
+is 1–4 (default 2). Configure one to eight `principals`, each with a distinct
+`id`, `bearer_token_env`, fixed `project_id` and `capabilities: [analysis]`,
+`[proposal]` or `[analysis, proposal]`. Tokens must be 32–4096 printable ASCII bytes
+without whitespace; keep them in the referenced environment variables. Reused token
+values across principals are rejected at authentication. No ambient credentials
+or project permissions are inferred from this configuration.
+
+The separate listener publishes only a generic card at
+`/.well-known/agent-card.json` and authenticated JSON-RPC at `/a2a`. Its card
+contains no project IDs, principal configuration, history or source. It reuses
+the daemon's Host/Origin checks and does not expose the development UI or REST
+API. Before any RPC can access a project, explicitly grant its principal access
+through the local `agent-access` controls described in the
+[API contract](docs/api-contract.md). A grant requires source-sharing and the
+applicable provider consent, lasts 15 minutes, and binds the current revision,
+credential and model configuration. Revoke, reindex, replacement and shutdown
+invalidate grants and cancel owned work. Grants belong to the service instance
+owning the listener; a separate worktree service reports it unavailable.
+Opening configuration or a card is passive. TUI access controls are part of the
+planned Settings integration.
+
+Requests carry explicit project/revision identity, a question, one to eight
+current source hashes and applicable per-request provider confirmation. Analysis
+uses the normal investigation workflow; proposal preparation returns a private
+draft identity for local checks and review. Neither operation applies source,
+runs project checks, grants execution trust, or merges work. Payloads are bounded
+to 16 KiB per HTTP request, 8 KiB for the request's text part and 16 KiB of result
+text. At most 16 HTTP requests and the configured number of executions are active
+at once. A process retains at most 128 attempted message IDs/tasks; duplicate
+messages are never dispatched again. A2A task/session history is private and
+process-local. Restart removes it and its grants; normal local run/proposal
+journals remain durable. After an uncertain outcome, inspect those journals
+before issuing any new request. Request disconnection, explicit task cancellation,
+timeout and daemon shutdown terminate owned execution.
+
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`

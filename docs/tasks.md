@@ -647,7 +647,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 24 — Expose a guarded Mini-Orca agent endpoint
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_remote_service.go`, `internal/app/agent_remote_service_test.go`, `internal/app/agentruntime/a2a_server.go`, `internal/app/agentruntime/a2a_server_test.go` — **new**.

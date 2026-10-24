@@ -54,6 +54,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	agentServer, err := startAgentHTTPServer(application)
+	if err != nil {
+		logging.Error("Failed to initialize local A2A service", "error", err)
+		os.Exit(1)
+	}
+
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	for _, model := range application.EffectiveModels() {
@@ -65,13 +71,16 @@ func main() {
 	server := startHTTPServer(application, projectManager)
 
 	// Wait for shutdown signal
-	quit := waitForShutdown()
-	logging.Info("Received shutdown signal", "signal", quit)
+	quit := waitForShutdown(agentServer.failures())
+	logging.Info("Daemon stopping", "reason", quit)
 	application.CancelChangeWorkflows()
 
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if err := agentServer.shutdown(shutdownCtx); err != nil {
+		logging.Error("Local A2A service shutdown error", "error", err)
+	}
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logging.Error("HTTP server shutdown error", "error", err)
 	}
@@ -195,6 +204,9 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/api-actions/{actionID}/control", apiHandler.ControlAction)
 	researchHandler := handlers.NewAgentResearchHandler(application)
 	delegationHandler := handlers.NewAgentDelegationHandler(application)
+	remoteServiceHandler := handlers.NewAgentRemoteServiceHandler(application)
+	mux.HandleFunc("GET /api/projects/current/agent-access", remoteServiceHandler.List)
+	mux.HandleFunc("POST /api/projects/current/agent-access/{principalID}/control", remoteServiceHandler.Control)
 	mux.HandleFunc("GET /api/projects/current/remote-agents", delegationHandler.Remotes)
 	mux.HandleFunc("POST /api/projects/current/remote-agents/{integrationID}/control", delegationHandler.ControlRemote)
 	mux.HandleFunc("GET /api/projects/current/delegations", delegationHandler.List)
@@ -311,11 +323,18 @@ func daemonAllowsExternalHosts() bool {
 	return ip == nil || !ip.IsLoopback()
 }
 
-// waitForShutdown blocks until a SIGINT or SIGTERM signal is received.
-func waitForShutdown() os.Signal {
+// waitForShutdown also stops the daemon if its optional listener fails.
+func waitForShutdown(failures <-chan error) string {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-sigChan
-	signal.Stop(sigChan)
-	return sig
+	defer signal.Stop(sigChan)
+	select {
+	case sig := <-sigChan:
+		return sig.String()
+	case err := <-failures:
+		if err != nil {
+			return "A2A listener failed: " + err.Error()
+		}
+		return "A2A listener stopped"
+	}
 }

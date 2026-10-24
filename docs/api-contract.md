@@ -84,6 +84,8 @@ untrusted networks.
 | POST | `/api/projects/current/research` | Explicitly research a bounded question with admitted sources and search consent. |
 | GET | `/api/projects/current/research/{reportID}/report` | Read a private HTML report preserving citations and Google Search suggestions. |
 | GET | `/api/projects/current/remote-agents` | Read passive A2A configuration and current card grants. |
+| GET | `/api/projects/current/agent-access` | List configured inbound principals and temporary access grants for this project. |
+| POST | `/api/projects/current/agent-access/{principalID}/control` | Explicitly grant or revoke bounded inbound analysis/proposal access. |
 | POST | `/api/projects/current/remote-agents/{integrationID}/control` | Explicitly discover a configured remote card or revoke its grant. |
 | GET | `/api/projects/current/delegations` | List durable delegation metadata without private advisory text. |
 | POST | `/api/projects/current/delegations` | Send one explicitly admitted advisory analysis or review task. |
@@ -1348,7 +1350,79 @@ The user checks the external service before submitting this account. The resulti
 Stale/uncertain conflicts return 409, missing receipts 404, malformed requests 400
 and journal failures 500. Existing recovery data is preserved on failures.
 
-### Remote advisory delegation
+### Inbound agent access and optional A2A listener
+
+GET `/api/projects/current/agent-access` requires current `project_id` and
+`project_revision`. It returns only this project's configured principals,
+credential environment references, capabilities, configuration fingerprints and
+states (`disabled`, `configured`, `unavailable`, `authorized`, `expired`). Reads
+never start a listener, provider call or execution. Responses are `no-store`.
+Only the application instance owning the listener can grant access; separately
+opened worktree services report it unavailable. Closing the listener revokes its
+grants, and a replacement listener requires a fresh configuration fingerprint.
+
+POST `/api/projects/current/agent-access/{principalID}/control` requires current
+project identity, `configuration`, and `action: grant|revoke`. Grant requires
+`confirm_connect: true`, `confirm_source_sharing: true`, and
+`confirm_remote_provider: true` when a selected capability uses a remote model
+(Function for analysis, Bug for proposals). Replacing/revoking a live grant also
+requires its exact `grant`. A successful grant returns `state: authorized`, a
+new grant identity and `expires_at` 15 minutes later. Scope, credential or model
+changes invalidate it. Revocation cancels and joins its active operations;
+missing consent returns 400 and stale identity returns 409.
+
+The opt-in listener configured by `integrations.a2a_server` is separate from the
+REST API. GET `/.well-known/agent-card.json` publishes generic metadata without
+project information. POST `/a2a` requires a single `Authorization: Bearer ...`
+header matching exactly one configured principal with a live local grant.
+It supports A2A 1.0 JSON-RPC `SendMessage`, `SendStreamingMessage`, `GetTask`,
+`SubscribeToTask` and `CancelTask`. Cards and navigation grant no access.
+
+Send parameters contain only `message`, with a unique bounded `messageId`,
+`role: ROLE_USER`, and one `{text: ...}` part. The text contains one strict JSON
+object, for example:
+
+```json
+{
+  "project_id": "current-project-id",
+  "project_revision": "current-revision",
+  "operation": "analysis",
+  "question": "Explain the selected function and suggest a focused improvement.",
+  "sources": [{"path": "main.go", "hash": "current-source-hash"}],
+  "acceptance_criteria": ["Preserve existing behavior"],
+  "confirm_remote_provider": false
+}
+```
+
+`operation` is `analysis` or `proposal` and must be in the principal's configured
+capabilities. Question/source limits and freshness checks match explicit external
+context admission, with 1–8 existing indexed sources. Source policy, revision,
+grant and provider confirmation are enforced before model dispatch and result
+publication. Analysis returns an advisory investigation; proposal preparation
+returns `advisory`, `proposal_id`, project identity, proposal `revision`/`hash`,
+`state` and the local review next action. It never returns Apply/Undo/Merge
+authority or invokes project checks. Normal local provider budgets and policy
+remain in force.
+
+No client-selected context/task IDs on sends, extension metadata, attachments,
+push delivery, list-all-tasks or unrestricted session APIs are accepted. Task
+reads, subscriptions and cancellation require the original authenticated grant
+owner, including while the task is active. Get accepts `id` and optional
+`historyLength` 0–1; subscribe/cancel accept only `id`. JSON-RPC IDs and message
+IDs are bounded strings. Duplicate keys, trailing JSON and unknown fields fail
+before native SDK dispatch. Invalid payloads return HTTP 400; missing credentials
+or project grants return 401. SDK task errors use native JSON-RPC envelopes with
+sanitized diagnostics. Failed model work stays failed, never an empty success.
+
+HTTP requests are at most 16 KiB, message text 8 KiB, and result text 16 KiB.
+Concurrency, deadlines and a maximum of 128 attempted message IDs bound private
+in-memory SDK task/session retention. A duplicate message never dispatches again,
+including after failure or disconnection. Disconnect/cancel/revoke/shutdown stop
+owned work. Restart clears inbound grants and A2A history without replay; local
+proposal/run journals remain available for human recovery. The listener retains
+Host/Origin protections and is disabled unless configured explicitly.
+
+### Outbound A2A delegation
 
 GET `/api/projects/current/remote-agents` uses current project identity and lists
 configured A2A connections without discovery. POST

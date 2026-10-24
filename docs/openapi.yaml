@@ -69,6 +69,32 @@ paths:
         '200': {description: Ready inventory or revoked configuration; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/AgentIntegration'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-access:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read passive inbound principal configuration and temporary grants
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Current project's configured principals; no-store and no dispatch, content: {application/json: {schema: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/RemoteServicePrincipal'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-access/{principalID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: principalID, required: true, schema: {type: string}}
+    post:
+      tags: [Projects]
+      summary: Explicitly grant or revoke an inbound principal's project access
+      description: Grants last 15 minutes and bind project revision, credential and provider configuration. Grant requires connection and source-sharing confirmation plus applicable provider confirmation. Revoke requires the current live grant, cancels and joins its operations. No source mutation authority is granted.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RemoteServiceControl'}}}}
+      responses:
+        '200': {description: Authorized or revoked principal; no-store, content: {application/json: {schema: {$ref: '#/components/schemas/RemoteServicePrincipal'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/remote-agents:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -1293,6 +1319,35 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    RemoteServicePrincipal:
+      type: object
+      required: [config, configuration, state]
+      properties:
+        config:
+          type: object
+          required: [id, bearer_token_env, project_id, capabilities]
+          properties:
+            id: {type: string}
+            bearer_token_env: {type: string, description: Credential reference only.}
+            project_id: {type: string}
+            capabilities: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {type: string, enum: [analysis, proposal]}}
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        state: {type: string, enum: [disabled, configured, unavailable, authorized, expired]}
+        grant: {type: string}
+        expires_at: {type: string, format: date-time}
+    RemoteServiceControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, configuration, action]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        action: {type: string, enum: [grant, revoke]}
+        grant: {type: string, description: Current live grant required for replacement or revocation.}
+        confirm_connect: {type: boolean, default: false}
+        confirm_source_sharing: {type: boolean, default: false}
+        confirm_remote_provider: {type: boolean, default: false}
     AgentRemote:
       type: object
       required: [config, configuration, state]

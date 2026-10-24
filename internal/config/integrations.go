@@ -17,6 +17,7 @@ type IntegrationsConfig struct {
 	MCP          []MCPServer      `yaml:"mcp"`
 	OpenAPI      []OpenAPIService `yaml:"openapi"`
 	A2A          []RemoteAgent    `yaml:"a2a"`
+	A2AServer    AgentServer      `yaml:"a2a_server"`
 	GoogleSearch bool             `yaml:"google_search"`
 }
 
@@ -77,6 +78,9 @@ func ResolveIntegrations(input IntegrationsConfig) (IntegrationsConfig, error) {
 	result.OpenAPI, err = resolveOpenAPIServices(input.OpenAPI, seen)
 	if err == nil {
 		result.A2A, err = resolveRemoteAgents(input.A2A, seen)
+	}
+	if err == nil {
+		result.A2AServer, err = resolveAgentServer(input.A2AServer)
 	}
 	return result, err
 }
