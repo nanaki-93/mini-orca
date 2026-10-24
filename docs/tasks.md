@@ -840,28 +840,50 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: distinguish reported agent usage from budget estimates`
 
-## Task 27B — Add source-free traces, priced estimates and explicit telemetry export
+## Task 27B — Add bounded local traces and versioned cost estimates
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agentruntime/telemetry.go`, `internal/app/agentruntime/telemetry_test.go`, `internal/app/agentstate/traces.go`, `internal/app/agentstate/traces_test.go`, `internal/app/agent_usage.go`, `internal/app/agent_usage_test.go`, `internal/config/agent_telemetry.go`, `internal/config/agent_telemetry_test.go` — **new**.
-- `internal/app/agentstate/store.go`, `internal/app/agentstate/history.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/provider.go`, `internal/app/agentruntime/gemini.go`, `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/a2a_client.go`, `internal/app/agentruntime/usage.go`.
-- `internal/app/agent_limits.go`, `internal/app/service.go`, `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `cmd/daemon/main.go`, `cmd/daemon/main_test.go`.
-- `internal/tui/agent_run_actions.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/app/agentruntime/telemetry.go`, `internal/app/agentruntime/telemetry_test.go`, `internal/app/agentstate/traces.go`, `internal/app/agentstate/traces_test.go`, `internal/app/agent_usage.go`, `internal/app/agent_usage_test.go`, `internal/app/agent_usage_models.go`, `internal/config/agent_telemetry.go`, `internal/config/agent_telemetry_test.go`, `internal/tui/agent_telemetry_view.go` — **new**.
+- `internal/app/agentstate/store.go`, `internal/app/agentstate/history.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/a2a_client.go`.
+- `internal/app/agent_limits.go`, `internal/app/service.go`, `internal/app/agent_settings_runtime.go`, `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler_test.go`.
+- `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
 - Task 27A; [ADK Go tracing](https://adk.dev/observability/traces/) and the pinned Go telemetry implementation. SDK telemetry setup reads ambient exporter/resource configuration, so use an explicitly projected source-free export boundary.
 
 **Implementation rules**
 - Correlate bounded run, node, tool, provider, retry, summary, delegation and check spans with opaque identities, fixed status categories and elapsed times. Retain failures and interrupted states; report truncated history without erasing cumulative accounting.
-- Local source-free summaries remain passive. Optional bounded OTLP export requires a configured exact destination and an explicit scoped confirmation; do not enable ambient SDK exporters or resource detectors. Whitelist projected fields, reject redirects and URL credentials/query strings, bound transport and response sizes, propagate cancellation and report partial/failed export honestly.
-- Monetary estimates require a versioned user-configured price table and matching model hashes. Missing measurements/rates/cache knowledge keep total cost unknown; label any known subtotal and price version. Use existing Usage/Timeline panels, with complete destination/run confirmation before export.
+- Local source-free summaries remain passive, versioned and compatible with legacy journals. Keep fixed span kinds/status categories, opaque IDs, hashed operation identities and bounded timing; never retain raw SDK payloads. Trace retention must not erase cumulative accounting. Preserve incomplete/interrupted observations and fail explicitly on journal errors.
+- Monetary estimates require a versioned user-configured price table and matching model hashes. Missing measurements/rates/cache knowledge keep total cost unknown; label any known subtotal and price version. Use existing Usage/Timeline panels, with small-terminal and all-palette verification.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/config ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: add source-free traces and consented telemetry export`
+**Commit**: `feat: add local agent traces and versioned cost estimates`
+
+## Task 27C — Export a confirmed source-free telemetry snapshot
+
+- [ ] Complete
+
+**Target files**
+- `internal/app/agentruntime/telemetry_export.go`, `internal/app/agentruntime/telemetry_export_test.go`, `internal/app/agent_usage_export.go`, `internal/app/agent_usage_export_test.go`, `internal/tui/agent_telemetry_actions.go` — **new**.
+- `internal/app/agent_usage.go`, `internal/app/agent_usage_models.go`, `internal/config/agent_telemetry.go`, `internal/config/agent_telemetry_test.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler.go`, `internal/api/handlers/agent_run_handler_test.go`, `cmd/daemon/main.go`, `cmd/daemon/main_test.go`.
+- `internal/tui/agent_run_actions.go`, `internal/tui/agent_telemetry_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 27B; [OTLP HTTP/JSON specification](https://opentelemetry.io/docs/specs/otlp/). Keep the SDK's ambient exporter/resource setup disabled.
+
+**Implementation rules**
+- Optional bounded OTLP export requires a configured exact destination and explicit confirmation of project/revision, run, destination fingerprint and source-free snapshot hash. Recheck these identities immediately before sending; browsing must never export.
+- Whitelist projected OTLP fields, reject redirects and URL credentials/query strings, bound request/response sizes and transport duration, propagate cancellation, and report partial/failed/unknown delivery honestly. Never infer destinations, resources or credentials from ambient OTEL settings; no automatic retries.
+- The TUI confirmation discloses destination, checkout/run and the exact retained snapshot, including incomplete/truncated history. Reuse owned async actions and reject stale or late responses without granting source Apply authority. Use only fake loopback collectors in tests.
+
+**Verification command**
+`go test -race ./internal/app/agentruntime ./internal/app ./internal/config ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: export confirmed source-free agent telemetry`
 
 ## Task 28 — Add task and tool-trajectory evaluation
 
@@ -873,7 +895,7 @@ This is an implementation specification, not a claim that the features below alr
 - `scripts/quality.sh`, `scripts/tests/test_quality.py`, `README.md`, `internal/AGENTS.md`.
 
 **Inputs / dependencies**
-- Task 27B; existing engineering-insight evaluation conventions. [ADK evaluation documentation](https://adk.dev/evaluate/) is Python-specific; preserve a native Go harness.
+- Task 27C; existing engineering-insight evaluation conventions. [ADK evaluation documentation](https://adk.dev/evaluate/) is Python-specific; preserve a native Go harness.
 
 **Implementation rules**
 - Evaluate fixed task fixtures, tool-call correctness, scope compliance, independent regression tests, unsupported claims, cancellation, tokens, latency, and repair counts. Version corpus, prompt, model, runtime, and scoring identities.
