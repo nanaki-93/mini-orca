@@ -43,9 +43,9 @@ func WithPersistence(ctx context.Context, store *agentstate.Store, binding agent
 		return nil, fmt.Errorf("agent budget already belongs to another journal")
 	}
 	p := &persistence{store: store, binding: binding, budgetID: rand.Text()}
-	budget.persist = func(ctx context.Context, usage BudgetSnapshot) error {
+	budget.persist = func(ctx context.Context, usage BudgetSnapshot, span *agentstate.TraceSpan) (bool, error) {
 		budget.sequence++
-		return store.Checkpoint(ctx, agentstate.BudgetRecord{ID: p.budgetID, Binding: binding, Limits: budget.limits, Sequence: budget.sequence, Usage: usage})
+		return store.Checkpoint(ctx, agentstate.BudgetRecord{ID: p.budgetID, Binding: binding, Limits: budget.limits, Sequence: budget.sequence, Usage: usage}, span)
 	}
 	if err := budget.checkpointLocked(ctx); err != nil {
 		budget.cancel(err)
@@ -55,21 +55,28 @@ func WithPersistence(ctx context.Context, store *agentstate.Store, binding agent
 }
 
 func (b *Budget) checkpointLocked(ctx context.Context) error {
+	_, err := b.checkpointTraceLocked(ctx, nil)
+	return err
+}
+
+func (b *Budget) checkpointTraceLocked(ctx context.Context, span *agentstate.TraceSpan) (bool, error) {
 	if b.persist == nil {
-		return nil
+		return false, nil
 	}
 	usage := b.usage.Clone()
 	usage.ElapsedMillis = time.Since(b.started).Milliseconds()
-	if err := b.persist(ctx, usage); err != nil {
+	recorded, err := b.persist(ctx, usage, span)
+	if err != nil {
 		if isPersistenceCancellation(err) {
-			return err
+			return false, err
 		}
-		return fmt.Errorf("%w: save shared budget: %w", agentstate.ErrPersistence, err)
+		return false, fmt.Errorf("%w: save shared budget: %w", agentstate.ErrPersistence, err)
 	}
-	return nil
+	return recorded, nil
 }
 
 type runtimeSession struct {
+	trace       *Trace
 	record      agentstate.Run
 	service     session.Service
 	session     session.Session
@@ -121,7 +128,7 @@ func createRuntimeSession(ctx context.Context, initial map[string]any, schemaVer
 	if scope, ok := ctx.Value(changeScopeKey{}).(changeRunScope); ok {
 		run.ChangeSessionID, run.WorkflowID = scope.SessionID, scope.WorkflowID
 	}
-	if err := p.store.BeginRun(ctx, run); err != nil {
+	if err := result.beginTracedRun(ctx, run); err != nil {
 		if isPersistenceCancellation(err) {
 			return nil, err
 		}
@@ -175,7 +182,7 @@ func (s *runtimeSession) finish(ctx context.Context, runErr error) error {
 	}
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err := s.persistence.store.FinishRun(cleanup, s.runID, status); err != nil {
+	if err := s.persistence.store.FinishRun(cleanup, s.runID, status, s.trace.completedSpan(ctx, runErr)); err != nil {
 		return fmt.Errorf("%w: finish invocation: %w", agentstate.ErrPersistence, err)
 	}
 	return nil

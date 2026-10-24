@@ -35,6 +35,7 @@ type Store struct {
 }
 
 type database struct {
+	Traces           map[string]TraceRecord    `json:"traces,omitempty"`
 	Settings         *SettingsRecord           `json:"settings,omitempty"`
 	Delegations      map[string]Delegation     `json:"delegations,omitempty"`
 	Actions          map[string]ExternalAction `json:"actions,omitempty"`
@@ -185,6 +186,9 @@ func (s *Store) validate(db *database) error {
 }
 
 func validateJournalDomains(db *database) error {
+	if err := validateTraces(db); err != nil {
+		return err
+	}
 	if err := validateActions(db); err != nil {
 		return err
 	}

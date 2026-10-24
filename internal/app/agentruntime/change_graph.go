@@ -133,7 +133,11 @@ func changeNodeBody(id ChangeNode, host ChangeNodeHost) workflow.EmittingFunctio
 		if err := context.Cause(ctx); err != nil {
 			return ChangeNodeResult{}, err
 		}
-		result, err := host(ctx, input)
+		kind := "node"
+		if id == ChangeVerify {
+			kind = "check"
+		}
+		result, err := tracedHost(ctx, kind, string(id), func(ctx context.Context) (ChangeNodeResult, error) { return host(ctx, input) })
 		if err != nil {
 			return ChangeNodeResult{}, fmt.Errorf("change node %s: %w", id, err)
 		}

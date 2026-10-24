@@ -62,7 +62,7 @@ func (n *knowledgeNode) Run(ctx agent.Context, _ any) iter.Seq2[*session.Event, 
 			yield(nil, err)
 			return
 		}
-		status, err := n.host(ctx)
+		status, err := tracedHost(ctx, "node", "knowledge_"+string(n.kind), n.host)
 		if err == nil {
 			err = context.Cause(ctx)
 		}

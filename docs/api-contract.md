@@ -1059,6 +1059,30 @@ association with the proposal; legacy or unrelated invocations may omit them.
 `GET /agent-runs/{runID}` returns the selected `run`, up to 256 related
 `invocations` (`has_more` identifies truncation), and the last 256 retained
 source-free `events` (`events_truncated` identifies potentially missing history).
+The passive detail also includes `trace` and `cost`. `trace` version 1 correlates
+the same shared budget across retries and children using an opaque `trace_id`,
+a content `snapshot` hash and up to 256 `spans`. Span `id`/`parent_id` are 16-digit
+hex identities; `run_key` and `operation_key` are SHA-256 hashes. Kinds are
+`invocation`, `node`, `tool`, `provider`, `retry`, `summary`, `delegation` and
+`check`. Status describes execution (`running`, `completed`, `failed`, `canceled`,
+`timed_out`, projected `interrupted`, or `unfinished` when an enclosing attempt
+has no registered invocation to establish current ownership), not the validity
+of findings or checks.
+`started` and optional `ended` are timestamps; `elapsed_nanos` is the measured
+monotonic duration only when an end was recorded. `legacy`, `incomplete`,
+`truncated` and `omitted` preserve unavailable history. The journal keeps at most
+4096 spans, never evicting unfinished spans to admit another. Trace retention
+does not remove cumulative budget accounting. Reading does not export telemetry.
+
+`cost.status` is `estimated` only when a configured versioned table covers all
+measured local token consumption; then `total` is present. Otherwise status is
+`unknown`, `total` is absent, and `known_subtotal` prices only known consumption.
+`price_version`, `currency` and fixed `reasons` identify the basis: missing table,
+legacy usage, missing model rate, incomplete usage or unknown cache split.
+These are token estimates, excluding remote agent consumption, other fees and
+taxes. No endpoint, model name, prompt, diagnostic or tool payload is exposed by
+the trace or cost projection. Rates are configured locally; see `CONFIG.md`.
+
 An existing domain checkpoint is returned as `input`; superseded or removed
 proposals have no input control. No raw SDK session, prompt or model response is
 returned by default. Explicit `include_text=true` returns `text` with availability,

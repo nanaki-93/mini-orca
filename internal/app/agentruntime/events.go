@@ -63,6 +63,9 @@ func (s *runtimeSession) activate(ctx context.Context) context.Context {
 		return ctx
 	}
 	ctx = context.WithValue(ctx, invocationKey{}, s.runID)
+	if s.trace != nil {
+		ctx = context.WithValue(ctx, traceParentKey{}, s.trace.span.ID)
+	}
 	if s.record.ChangeSessionID != "" {
 		ctx = context.WithValue(ctx, changeScopeKey{}, changeRunScope{s.record.ChangeSessionID, s.record.WorkflowID})
 	}

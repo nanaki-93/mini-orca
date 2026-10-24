@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
 
 func agentHandlerFixture(t *testing.T) (*AgentRunHandler, string) {
@@ -123,5 +126,60 @@ func TestAgentStreamBoundsSlowWritesAndFrames(t *testing.T) {
 	}
 	if err := writeAgentBatch(w, controller, &app.AgentEventBatch{Cursor: strings.Repeat("x", 1<<20)}); err == nil {
 		t.Fatal("oversized frame accepted")
+	}
+}
+
+func TestAgentDetailTraceAndCostContractRemainsScopedAndSourceFree(t *testing.T) {
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	index, err := fixture.manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := agentstate.Open(fixture.manager.Root())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := agentstate.Key{App: "mini-orca", User: "local", ID: "trace-run"}
+	if _, err := store.CreateSession(t.Context(), key, agentstate.State{"private": json.RawMessage(`"PRIVATE_PROMPT"`)}); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Checkpoint(t.Context(), agentstate.BudgetRecord{ID: "budget", Binding: agentstate.Binding{Project: index.ProjectID, Revision: index.ProjectRevision, Policy: "policy", Configuration: "config"}, Limits: runtime.Limits, Sequence: 1}, nil); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := store.BeginRun(t.Context(), agentstate.Run{ID: key.ID, Session: key, BudgetID: "budget", RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}, nil); err != nil {
+		t.Fatal(err)
+	}
+	span := agentstate.TraceSpan{ID: "0123456789abcdef", Kind: "provider", Status: "running", Started: now}
+	if _, err := store.BeginSpan(t.Context(), "budget", span); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishSpan(t.Context(), "budget", span.ID, "failed", now.Add(time.Millisecond), 1e6); err != nil {
+		t.Fatal(err)
+	}
+	h := NewAgentRunHandler(fixture.service)
+	query := url.Values{"project_id": {index.ProjectID}, "project_revision": {index.ProjectRevision}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/?"+query.Encode(), nil)
+	r.SetPathValue("runID", key.ID)
+	h.Detail(w, r)
+	var detail client.AgentRunDetail
+	if err := json.Unmarshal(w.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || detail.Trace == nil || detail.Trace.Legacy || len(detail.Trace.Spans) != 1 || detail.Trace.Spans[0].Status != "failed" || detail.Cost.Status != "unknown" || detail.Cost.Total != nil || detail.Text != nil || strings.Contains(w.Body.String(), "PRIVATE_") {
+		t.Fatalf("unsafe trace contract: %d %s", w.Code, w.Body.String())
+	}
+	query.Set("project_revision", "foreign")
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "/?"+query.Encode(), nil)
+	r.SetPathValue("runID", key.ID)
+	h.Detail(w, r)
+	if w.Code != http.StatusConflict || strings.Contains(w.Body.String(), span.ID) {
+		t.Fatal("foreign trace disclosed", w.Code)
 	}
 }

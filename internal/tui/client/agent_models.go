@@ -129,13 +129,47 @@ type AgentRunEvent struct {
 }
 
 type AgentRunDetail struct {
-	Run             AgentRun          `json:"run"`
-	Invocations     []AgentRun        `json:"invocations"`
-	HasMore         bool              `json:"has_more"`
-	Events          []AgentRunEvent   `json:"events"`
-	EventsTruncated bool              `json:"events_truncated"`
-	Input           *ChangeInput      `json:"input,omitempty"`
-	Text            *AgentPrivateText `json:"text,omitempty"`
+	Trace           *AgentTraceSummary `json:"trace,omitempty"`
+	Cost            *AgentCostEstimate `json:"cost,omitempty"`
+	Run             AgentRun           `json:"run"`
+	Invocations     []AgentRun         `json:"invocations"`
+	HasMore         bool               `json:"has_more"`
+	Events          []AgentRunEvent    `json:"events"`
+	EventsTruncated bool               `json:"events_truncated"`
+	Input           *ChangeInput       `json:"input,omitempty"`
+	Text            *AgentPrivateText  `json:"text,omitempty"`
+}
+
+type AgentTraceSpan struct {
+	ID           string `json:"id"`
+	ParentID     string `json:"parent_id,omitempty"`
+	RunKey       string `json:"run_key,omitempty"`
+	OperationKey string `json:"operation_key,omitempty"`
+	Kind         string `json:"kind"`
+	Status       string `json:"status"`
+	Started      string `json:"started"`
+	Ended        string `json:"ended,omitempty"`
+	ElapsedNanos int64  `json:"elapsed_nanos"`
+}
+
+type AgentTraceSummary struct {
+	Version    int              `json:"version"`
+	TraceID    string           `json:"trace_id"`
+	Snapshot   string           `json:"snapshot"`
+	Legacy     bool             `json:"legacy"`
+	Truncated  bool             `json:"truncated"`
+	Incomplete bool             `json:"incomplete"`
+	Omitted    uint64           `json:"omitted"`
+	Spans      []AgentTraceSpan `json:"spans"`
+}
+
+type AgentCostEstimate struct {
+	Status        string   `json:"status"`
+	Currency      string   `json:"currency,omitempty"`
+	PriceVersion  string   `json:"price_version,omitempty"`
+	KnownSubtotal float64  `json:"known_subtotal"`
+	Total         *float64 `json:"total,omitempty"`
+	Reasons       []string `json:"reasons"`
 }
 
 type AgentEventBatch struct {

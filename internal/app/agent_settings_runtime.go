@@ -81,6 +81,11 @@ func (s *Service) freezeAgentSettings(ctx context.Context, root string) (context
 func (s *Service) settingsRuntime(record agentstate.SettingsRecord, configuration string) (config.AgentRuntime, error) {
 	runtime := s.agentRuntime
 	runtime.Skills = slices.Clone(runtime.Skills)
+	telemetry, err := config.ResolveAgentTelemetry(runtime.Telemetry)
+	if err != nil {
+		return runtime, err
+	}
+	runtime.Telemetry = telemetry
 	if record.Values == nil {
 		return runtime, nil
 	}

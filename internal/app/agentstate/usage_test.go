@@ -21,7 +21,7 @@ func TestUsageJournalValidatesProjectionAndPreservesFailedWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	baseline := BudgetRecord{ID: "usage", Binding: Binding{Project: "project", Revision: "revision", Policy: "policy", Configuration: "config"}, Limits: runtime.Limits, Sequence: 1, Usage: usageFixture()}
-	if err := s.Checkpoint(t.Context(), baseline); err != nil {
+	if _, err := s.Checkpoint(t.Context(), baseline, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"version", "cache-subset", "foreign-total", "regression", "removed-projection", "duplicate", "negative", "inconsistent-calls", "arbitrary-model"} {
@@ -49,14 +49,14 @@ func TestUsageJournalValidatesProjectionAndPreservesFailedWrites(t *testing.T) {
 		case "arbitrary-model":
 			group.ModelKey = "PRIVATE_MODEL_NAME"
 		}
-		if err := s.Checkpoint(t.Context(), changed); err == nil {
+		if _, err := s.Checkpoint(t.Context(), changed, nil); err == nil {
 			t.Fatalf("accepted %s accounting", kind)
 		}
 	}
 	s.write = func(string, []byte, os.FileMode, func() error) error { return errors.New("disk failure") }
 	next := baseline
 	next.Sequence++
-	if err := s.Checkpoint(t.Context(), next); !errors.Is(err, ErrPersistence) {
+	if _, err := s.Checkpoint(t.Context(), next, nil); !errors.Is(err, ErrPersistence) {
 		t.Fatal("lost failed checkpoint", err)
 	}
 	reopened, err := Open(s.root)

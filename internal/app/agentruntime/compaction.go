@@ -85,7 +85,13 @@ func (m *summaryModel) GenerateContent(ctx context.Context, request *model.LLMRe
 	}
 }
 
-func (s *contextSummarizer) SummarizeEvents(ctx context.Context, events []*session.Event) (result compaction.SummarizeResult, err error) {
+func (s *contextSummarizer) SummarizeEvents(ctx context.Context, events []*session.Event) (compaction.SummarizeResult, error) {
+	return tracedHost(ctx, "summary", "context_compaction", func(ctx context.Context) (compaction.SummarizeResult, error) {
+		return s.summarizeEvents(ctx, events)
+	})
+}
+
+func (s *contextSummarizer) summarizeEvents(ctx context.Context, events []*session.Event) (result compaction.SummarizeResult, err error) {
 	// ADK treats tail-compaction failures as optional. Cancel the admitted run
 	// so a failed journal/guard cannot be followed by a model dispatch anyway.
 	defer func() {

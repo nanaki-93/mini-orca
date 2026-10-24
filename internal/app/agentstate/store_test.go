@@ -233,7 +233,7 @@ func TestBudgetCheckpointRejectsStaleOrChangedAccounting(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := BudgetRecord{ID: "budget", Binding: Binding{Project: "project", Revision: "revision", Policy: "policy", Configuration: "config"}, Limits: limits.Limits, Sequence: 1, Usage: BudgetUsage{ModelCalls: 1, InputTokens: 10, OutputTokens: 20}}
-	if err := s.Checkpoint(t.Context(), record); err != nil {
+	if _, err := s.Checkpoint(t.Context(), record, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"sequence", "binding", "accounting", "limits"} {
@@ -249,7 +249,7 @@ func TestBudgetCheckpointRejectsStaleOrChangedAccounting(t *testing.T) {
 		case "limits":
 			changed.Limits.ModelCalls++
 		}
-		if err := s.Checkpoint(t.Context(), changed); err == nil {
+		if _, err := s.Checkpoint(t.Context(), changed, nil); err == nil {
 			t.Fatalf("accepted changed %s", kind)
 		}
 	}
@@ -270,13 +270,13 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 		t.Fatal(err)
 	}
 	budget := BudgetRecord{ID: "budget", Binding: Binding{Project: "project", Revision: "revision", Policy: "policy", Configuration: "config"}, Limits: limits.Limits, Sequence: 1}
-	if err := s.Checkpoint(t.Context(), budget); err != nil {
+	if _, err := s.Checkpoint(t.Context(), budget, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, version := range []string{"completion-v1", "investigation-v1", "change-graph-v1", "review-graph-v1", "repair-graph-v1", "confirmation-v1", "analysis-graph-v1", "knowledge-graph-v1", "grounding-v1", "delegation-v1", "unknown-v1"} {
 		now := time.Now().UTC()
 		run := Run{ID: version, Session: key, BudgetID: budget.ID, RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: version, Status: "running", Started: now, Updated: now}
-		err := s.BeginRun(t.Context(), run)
+		_, err := s.BeginRun(t.Context(), run, nil)
 		if version == "unknown-v1" {
 			if err == nil {
 				t.Fatal("unknown graph schema was accepted")
@@ -286,7 +286,7 @@ func TestJournalVersionsCompletionInvestigationAndGraphRunsExplicitly(t *testing
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s.FinishRun(t.Context(), run.ID, "completed"); err != nil {
+		if err := s.FinishRun(t.Context(), run.ID, "completed", nil); err != nil {
 			t.Fatal(err)
 		}
 	}

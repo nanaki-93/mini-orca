@@ -67,7 +67,7 @@ func (n *repairAttemptNode) Run(ctx agent.Context, _ any) iter.Seq2[*session.Eve
 			yield(nil, err)
 			return
 		}
-		repair, err := n.host(ctx, n.attempt)
+		repair, err := tracedHost(ctx, "retry", fmt.Sprintf("attempt_%d", n.attempt), func(ctx context.Context) (bool, error) { return n.host(ctx, n.attempt) })
 		if err == nil {
 			err = context.Cause(ctx)
 		}

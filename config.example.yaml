@@ -82,6 +82,13 @@ agent_runtime:
   # Explicit project-relative directories containing indexed SKILL.md files.
   # Example: [project-skills/review-code]. Resources load only during admitted investigations.
   skills: []
+  # Optional user-maintained token prices; no prices or exporters are inferred.
+  # See CONFIG.md for a complete versioned table and the unknown-usage rules.
+  telemetry:
+    prices:
+      version: ""
+      currency: ""
+      rates: []
   roles:
     creation: bug
     testing: function

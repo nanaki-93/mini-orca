@@ -61,13 +61,15 @@ type AgentToolRecord struct {
 }
 
 type AgentRunDetail struct {
-	Run             AgentRun          `json:"run"`
-	Invocations     []AgentRun        `json:"invocations"`
-	HasMore         bool              `json:"has_more"`
-	Events          []AgentRunEvent   `json:"events"`
-	EventsTruncated bool              `json:"events_truncated"`
-	Input           *ChangeInput      `json:"input,omitempty"`
-	Text            *AgentPrivateText `json:"text,omitempty"`
+	Trace           *AgentTraceSummary `json:"trace,omitempty"`
+	Cost            *AgentCostEstimate `json:"cost,omitempty"`
+	Run             AgentRun           `json:"run"`
+	Invocations     []AgentRun         `json:"invocations"`
+	HasMore         bool               `json:"has_more"`
+	Events          []AgentRunEvent    `json:"events"`
+	EventsTruncated bool               `json:"events_truncated"`
+	Input           *ChangeInput       `json:"input,omitempty"`
+	Text            *AgentPrivateText  `json:"text,omitempty"`
 }
 
 type AgentRunEvent struct {

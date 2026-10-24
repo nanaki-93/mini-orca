@@ -20,7 +20,7 @@ func inputFixture(t *testing.T, expired bool) (*Store, Key, InputAdmission) {
 		t.Fatal(err)
 	}
 	admission := InputAdmission{RunID: "run", RequestID: "request", RequestHash: strings.Repeat("a", 64), Binding: Binding{"project", "revision", "policy", "configuration"}}
-	if err := s.Checkpoint(t.Context(), BudgetRecord{ID: "budget", Binding: admission.Binding, Limits: runtime.Limits, Sequence: 1}); err != nil {
+	if _, err := s.Checkpoint(t.Context(), BudgetRecord{ID: "budget", Binding: admission.Binding, Limits: runtime.Limits, Sequence: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	started := time.Now().UTC()
@@ -28,7 +28,7 @@ func inputFixture(t *testing.T, expired bool) (*Store, Key, InputAdmission) {
 		started = started.Add(-2 * time.Hour)
 	}
 	run := Run{ID: admission.RunID, Session: key, BudgetID: "budget", RequestHash: admission.RequestHash, SchemaHash: strings.Repeat("b", 64), SchemaVersion: "confirmation-v1", Status: "running", Started: started, Updated: started}
-	if err := s.BeginRun(t.Context(), run); err != nil {
+	if _, err := s.BeginRun(t.Context(), run, nil); err != nil {
 		t.Fatal(err)
 	}
 	checkpoint := InputCheckpoint{RequestID: admission.RequestID, NodeID: "human_review", InvocationID: "invocation", ExpiresAt: started.Add(time.Hour)}
@@ -50,7 +50,7 @@ func TestInputReceiptIsDurableIdempotentAndProtected(t *testing.T) {
 	if err := s.DeleteArtifacts(t.Context(), artifact.Key, ArtifactRetention{}); !errors.Is(err, ErrArtifactInUse) {
 		t.Fatalf("deleted waiting evidence: %v", err)
 	}
-	if err := s.FinishRun(t.Context(), admission.RunID, "completed"); err == nil {
+	if err := s.FinishRun(t.Context(), admission.RunID, "completed", nil); err == nil {
 		t.Fatal("ordinary finish bypassed input receipt")
 	}
 	if err := s.FinishInput(t.Context(), admission); err == nil {

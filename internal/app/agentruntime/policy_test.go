@@ -11,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
@@ -39,9 +40,9 @@ func TestCanceledChildReservationsDoNotCancelSharedRun(t *testing.T) {
 			ctx, cancel := context.WithCancel(parent)
 			defer cancel()
 			persist := budget.persist
-			budget.persist = func(ctx context.Context, usage BudgetSnapshot) error {
+			budget.persist = func(ctx context.Context, usage BudgetSnapshot, span *agentstate.TraceSpan) (bool, error) {
 				cancel()
-				return persist(ctx, usage)
+				return persist(ctx, usage, span)
 			}
 			var err error
 			switch kind {

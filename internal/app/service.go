@@ -308,7 +308,7 @@ func (s *Service) retryAgentRequest(ctx context.Context, runtime modelRuntime, r
 				return modelOutput{}, err
 			}
 		}
-		result, err := runtime.execute(ctx, request)
+		result, err := executeAgentAttempt(ctx, runtime, request)
 		if err == nil {
 			return result, nil
 		}
@@ -332,6 +332,15 @@ func (s *Service) retryAgentRequest(ctx context.Context, runtime modelRuntime, r
 		return modelOutput{}, context.Cause(ctx)
 	}
 	return modelOutput{}, lastErr
+}
+
+func executeAgentAttempt(ctx context.Context, runtime modelRuntime, request agentruntime.Request) (result modelOutput, err error) {
+	ctx, trace, err := agentruntime.StartTrace(ctx, "retry", "provider_attempt")
+	if err != nil {
+		return result, err
+	}
+	defer func() { err = trace.Finish(ctx, err) }()
+	return runtime.execute(ctx, request)
 }
 
 func runtimeRequestTerminal(runtime modelRuntime, err error) bool {

@@ -275,6 +275,44 @@ inventing measurements. Remote delegation usage remains separately labeled in
 External Work and is not added to local provider measurements. Cost is unknown
 without a versioned price table.
 
+Local traces retain bounded invocation, node, provider, tool, retry, summary,
+delegation and check spans. They contain opaque identities, hashed operation
+names, fixed outcomes and timing; prompts, source, tool values and diagnostics
+stay outside this projection. Timeline shows up to 256 spans from the shared
+budget, including attempts and children. The private journal retains at most
+4096 spans, evicting completed spans first and reporting omissions. Unfinished
+spans have no measured end time. Browsing reads local data and never exports it;
+ambient `OTEL_*` exporters and resource detection are not enabled.
+
+Optional `agent_runtime.telemetry.prices` supplies a user-maintained token price
+table. Set `version` to a nonempty identifier, `currency` to three uppercase
+letters, and `rates` to 1–64 unique configured `provider`/`model` pairs. Every rate
+requires explicit `input_per_million`, `output_per_million` and
+`cached_per_million` values between 0 and 1,000,000; zero explicitly means free.
+Rates are never fetched automatically. Update the version when changing them.
+For example, this is a demonstration table, not current provider pricing:
+
+```yaml
+agent_runtime:
+  telemetry:
+    prices:
+      version: example-v1
+      currency: USD
+      rates:
+        - provider: openai
+          model: your-configured-model
+          input_per_million: 2
+          output_per_million: 4
+          cached_per_million: 0.5
+```
+
+Usage labels the resulting amount as an estimate, not an invoice. Missing model
+rates, legacy/partial/active usage, or an unknown cache split with different
+cached pricing keep the total unknown. A separately labeled known subtotal
+prices only reported tokens with sufficient rate information. Cache tokens are
+priced once within input. Remote agent consumption, non-token fees and taxes are
+outside this local token estimate.
+
 Project-specific role, budget and skill preferences are available through the
 guarded [agent settings API](docs/api-contract.md#agent-settings-and-skill-validation).
 They are saved privately in the canonical checkout's agent journal and apply to

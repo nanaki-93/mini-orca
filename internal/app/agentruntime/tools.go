@@ -193,6 +193,11 @@ func (t *guardedTool) execute(ctx context.Context, args any) (result map[string]
 	if err := t.owner.admitTool(ctx); err != nil {
 		return nil, err
 	}
+	ctx, trace, err := StartTrace(ctx, "tool", t.Name())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { runErr = trace.Finish(ctx, runErr) }()
 	output, err := t.spec.Run(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("execute %s: %w", t.Name(), err)

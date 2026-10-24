@@ -88,7 +88,7 @@ func TestAgentEventsResetReplayAndDroppedNotifications(t *testing.T) {
 	}
 	query.Cursor = initial.Cursor
 	// There is deliberately no subscriber while the durable terminal event is written.
-	if err := store.FinishRun(t.Context(), run.ID, "completed"); err != nil {
+	if err := store.FinishRun(t.Context(), run.ID, "completed", nil); err != nil {
 		t.Fatal(err)
 	}
 	batch, err := s.AgentRunEvents(t.Context(), query)

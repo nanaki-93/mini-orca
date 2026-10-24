@@ -337,9 +337,14 @@ func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
 }
 
 func TestAnalyzeProjectKeepsInventoryWhenProjectSummaryTimesOut(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
 	providerCanceled := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
+		// Expire only after dispatch: filesystem and race-detector overhead
+		// must not turn a provider-timeout test into an admission-timeout test.
+		cancel(context.DeadlineExceeded)
 		<-r.Context().Done()
 		providerCanceled <- struct{}{}
 	}))
@@ -357,9 +362,6 @@ func TestAnalyzeProjectKeepsInventoryWhenProjectSummaryTimesOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
 	analysis, err := service.AnalyzeProject(ctx, root)
 	if err != nil {
 		t.Fatalf("AnalyzeProject() error = %v", err)

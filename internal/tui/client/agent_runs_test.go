@@ -166,3 +166,18 @@ func TestAgentAccountingWireRetainsExactIntegersAndOptionalHistory(t *testing.T)
 		t.Fatal("legacy receipt acquired invented accounting", err)
 	}
 }
+
+func TestAgentTraceAndCostWirePreserveUnknownsAndExactDuration(t *testing.T) {
+	var detail AgentRunDetail
+	body := `{"trace":{"version":1,"trace_id":"0123456789abcdef0123456789abcdef","snapshot":"snapshot","incomplete":true,"truncated":true,"omitted":12,"spans":[{"id":"0123456789abcdef","kind":"provider","status":"failed","elapsed_nanos":9007199254740993}]},"cost":{"status":"unknown","currency":"USD","price_version":"fixture","known_subtotal":0.125,"reasons":["usage_incomplete"]}}`
+	if err := json.Unmarshal([]byte(body), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Trace.Spans[0].ElapsedNanos != 9007199254740993 || !detail.Trace.Incomplete || detail.Trace.Omitted != 12 || detail.Cost.Total != nil || detail.Cost.KnownSubtotal != 0.125 {
+		t.Fatal("trace or cost interpretation changed", detail)
+	}
+	var legacy AgentRunDetail
+	if err := json.Unmarshal([]byte(`{"run":{},"invocations":[],"events":[]}`), &legacy); err != nil || legacy.Trace != nil || legacy.Cost != nil {
+		t.Fatal("legacy measurements fabricated", err)
+	}
+}

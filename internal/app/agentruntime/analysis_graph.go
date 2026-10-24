@@ -138,7 +138,7 @@ func (n *analysisWorkNode) Run(ctx agent.Context, _ any) iter.Seq2[*session.Even
 			yield(nil, err)
 			return
 		}
-		outcome, err := n.host(ctx, n.work)
+		outcome, err := tracedHost(ctx, "node", analysisNodeID(n.work), func(ctx context.Context) (AnalysisOutcome, error) { return n.host(ctx, n.work) })
 		if err == nil {
 			err = context.Cause(ctx)
 		}

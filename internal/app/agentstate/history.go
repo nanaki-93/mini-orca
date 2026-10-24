@@ -50,6 +50,7 @@ type RunSnapshot struct {
 }
 
 type History struct {
+	Traces   map[string]TraceRecord
 	Epoch    string
 	Sequence uint64
 	Runs     []RunSnapshot
@@ -64,7 +65,7 @@ func (s *Store) History(ctx context.Context) (History, error) {
 	if err != nil {
 		return History{}, err
 	}
-	history := History{Epoch: db.ProgressEpoch, Sequence: db.ProgressSequence, Events: slices.Clone(db.Progress), Runs: make([]RunSnapshot, 0, len(db.Runs))}
+	history := History{Traces: db.Traces, Epoch: db.ProgressEpoch, Sequence: db.ProgressSequence, Events: slices.Clone(db.Progress), Runs: make([]RunSnapshot, 0, len(db.Runs))}
 	for _, run := range db.Runs {
 		budget := db.Budgets[run.BudgetID]
 		history.Runs = append(history.Runs, RunSnapshot{Run: run, Binding: budget.Binding, Usage: budget.Usage, Limits: budget.Limits})

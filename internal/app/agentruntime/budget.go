@@ -28,7 +28,7 @@ type Budget struct {
 	usage    BudgetSnapshot
 	started  time.Time
 	sequence uint64
-	persist  func(context.Context, BudgetSnapshot) error // called only with mu held
+	persist  func(context.Context, BudgetSnapshot, *agentstate.TraceSpan) (bool, error) // called only with mu held
 	slots    chan struct{}
 	cancel   context.CancelCauseFunc
 }
@@ -72,6 +72,7 @@ func (b *Budget) Snapshot() BudgetSnapshot {
 }
 
 type modelReservation struct {
+	trace         *Trace
 	ctx           context.Context
 	budget        *Budget
 	input, output int64
@@ -93,8 +94,13 @@ func (b *Budget) reserveModel(ctx context.Context, input, output int64, identiti
 	case <-ctx.Done():
 		return nil, context.Cause(ctx)
 	}
+	trace, err := newTrace(ctx, "provider", key)
+	if err != nil {
+		<-b.slots
+		return nil, err
+	}
 	b.mu.Lock()
-	groupIndex, err := b.reserveModelLocked(ctx, key, input, output)
+	groupIndex, err := b.reserveModelLocked(ctx, key, input, output, trace)
 	b.mu.Unlock()
 	if err != nil {
 		<-b.slots
@@ -103,10 +109,10 @@ func (b *Budget) reserveModel(ctx context.Context, input, output int64, identiti
 		}
 		return nil, err
 	}
-	return &modelReservation{ctx: ctx, budget: b, input: input, output: output, group: groupIndex}, nil
+	return &modelReservation{ctx: ctx, budget: b, input: input, output: output, group: groupIndex, trace: trace}, nil
 }
 
-func (b *Budget) reserveModelLocked(ctx context.Context, key string, input, output int64) (int, error) {
+func (b *Budget) reserveModelLocked(ctx context.Context, key string, input, output int64, trace *Trace) (int, error) {
 	if err := b.admitModelLocked(ctx, input, output); err != nil {
 		return 0, err
 	}
@@ -121,12 +127,16 @@ func (b *Budget) reserveModelLocked(ctx context.Context, key string, input, outp
 	b.usage.ActiveCalls++
 	b.usage.ReservedInputTokens += input
 	b.usage.ReservedOutputTokens += output
-	if err := b.checkpointLocked(ctx); err != nil {
+	recorded, err := b.checkpointTraceLocked(ctx, trace.beginSpan())
+	if err != nil {
 		group.ActiveCalls--
 		b.usage.ActiveCalls--
 		b.usage.ReservedInputTokens -= input
 		b.usage.ReservedOutputTokens -= output
 		return 0, err
+	}
+	if trace != nil {
+		trace.recorded = recorded
 	}
 	return index, nil
 }
@@ -178,7 +188,8 @@ func (r *modelReservation) settle(input, output int64, known, completed bool) er
 	input, output = r.settleAccountingLocked(completed && err == nil)
 	err = errors.Join(err, b.recordUsageLocked(input, output))
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), 5*time.Second)
-	err = errors.Join(err, b.checkpointLocked(cleanup))
+	_, checkpointErr := b.checkpointTraceLocked(cleanup, r.completedTraceSpan(completed, err))
+	err = errors.Join(err, checkpointErr)
 	cancel()
 	b.mu.Unlock()
 	<-b.slots

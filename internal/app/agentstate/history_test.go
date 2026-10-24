@@ -80,7 +80,7 @@ func TestProgressParentIdentityAndSessionRetention(t *testing.T) {
 	}
 	parent := history.Runs[0].Run
 	parent.ID, parent.Status, parent.Input, parent.SchemaVersion = "parent", "running", nil, "change-graph-v1"
-	if err := s.BeginRun(t.Context(), parent); err != nil {
+	if _, err := s.BeginRun(t.Context(), parent, nil); err != nil {
 		t.Fatal(err)
 	}
 	child := parent
@@ -90,16 +90,16 @@ func TestProgressParentIdentityAndSessionRetention(t *testing.T) {
 	}
 	bad := child
 	bad.ParentID = "missing"
-	if err := s.BeginRun(t.Context(), bad); err == nil {
+	if _, err := s.BeginRun(t.Context(), bad, nil); err == nil {
 		t.Fatal("accepted missing parent")
 	}
-	if err := s.BeginRun(t.Context(), child); err != nil {
+	if _, err := s.BeginRun(t.Context(), child, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishRun(t.Context(), child.ID, "completed"); err != nil {
+	if err := s.FinishRun(t.Context(), child.ID, "completed", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishRun(t.Context(), parent.ID, "completed"); err != nil {
+	if err := s.FinishRun(t.Context(), parent.ID, "completed", nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteSession(t.Context(), key); err == nil {

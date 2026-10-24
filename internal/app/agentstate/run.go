@@ -140,24 +140,29 @@ func validUsage(u BudgetUsage) bool {
 	return u.UnknownUsageCalls <= u.ModelCalls && u.ActiveCalls <= u.ModelCalls && validAccounting(u)
 }
 
-func (s *Store) Checkpoint(ctx context.Context, record BudgetRecord) error {
-	return s.mutate(ctx, func(db *database) error {
+func (s *Store) Checkpoint(ctx context.Context, record BudgetRecord, span *TraceSpan) (bool, error) {
+	recorded := false
+	err := s.mutate(ctx, func(db *database) error {
 		if previous, exists := db.Budgets[record.ID]; exists {
 			if record.Binding != previous.Binding || record.Limits != previous.Limits || record.Sequence <= previous.Sequence || !monotonicUsage(previous.Usage, record.Usage) {
 				return fmt.Errorf("agent budget checkpoint conflicts with stored identity or sequence")
 			}
 		}
 		db.Budgets[record.ID] = record
-		return nil
+		var err error
+		recorded, err = applyTraceRecord(db, record.ID, span)
+		return err
 	})
+	return recorded && err == nil, err
 }
 
 func monotonicUsage(previous, next BudgetUsage) bool {
 	return next.ModelCalls >= previous.ModelCalls && next.ToolCalls >= previous.ToolCalls && next.Repairs >= previous.Repairs && next.InputTokens >= previous.InputTokens && next.OutputTokens >= previous.OutputTokens && next.UnknownUsageCalls >= previous.UnknownUsageCalls && next.ElapsedMillis >= previous.ElapsedMillis && monotonicAccounting(previous, next)
 }
 
-func (s *Store) BeginRun(ctx context.Context, run Run) error {
-	return s.mutate(ctx, func(db *database) error {
+func (s *Store) BeginRun(ctx context.Context, run Run, span *TraceSpan) (bool, error) {
+	recorded := false
+	err := s.mutate(ctx, func(db *database) error {
 		if _, exists := db.Runs[run.ID]; exists {
 			return fmt.Errorf("agent invocation already exists")
 		}
@@ -168,11 +173,17 @@ func (s *Store) BeginRun(ctx context.Context, run Run) error {
 			return fmt.Errorf("child invocation requires its active parent")
 		}
 		db.Runs[run.ID] = run
+		var err error
+		recorded, err = applyTraceRecord(db, run.BudgetID, span)
+		if err != nil {
+			return err
+		}
 		return appendProgress(db, run, "started", nil)
 	})
+	return recorded && err == nil, err
 }
 
-func (s *Store) FinishRun(ctx context.Context, id, status string) error {
+func (s *Store) FinishRun(ctx context.Context, id, status string, span *TraceSpan) error {
 	return s.mutate(ctx, func(db *database) error {
 		run, exists := db.Runs[id]
 		if !exists {
@@ -184,6 +195,9 @@ func (s *Store) FinishRun(ctx context.Context, id, status string) error {
 		run.Status = status
 		run.Updated = time.Now().UTC()
 		db.Runs[id] = run
+		if _, err := applyTraceRecord(db, run.BudgetID, span); err != nil {
+			return err
+		}
 		return appendProgress(db, run, "finished", nil)
 	})
 }

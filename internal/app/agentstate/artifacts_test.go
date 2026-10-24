@@ -102,11 +102,11 @@ func TestArtifactRetentionProtectsRecoveryAndActiveRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Checkpoint(t.Context(), BudgetRecord{ID: "budget", Binding: Binding{"project", "revision", "policy", "configuration"}, Limits: limits.Limits, Sequence: 1}); err != nil {
+	if _, err := s.Checkpoint(t.Context(), BudgetRecord{ID: "budget", Binding: Binding{"project", "revision", "policy", "configuration"}, Limits: limits.Limits, Sequence: 1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if err := s.BeginRun(t.Context(), Run{ID: "run", Session: key, BudgetID: "budget", RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}); err != nil {
+	if _, err := s.BeginRun(t.Context(), Run{ID: "run", Session: key, BudgetID: "budget", RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: "completion-v1", Status: "running", Started: now, Updated: now}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteArtifacts(t.Context(), request.Key, ArtifactRetention{}); !errors.Is(err, ErrArtifactInUse) {
@@ -147,7 +147,7 @@ func TestArtifactRetentionProtectsRecoveryAndActiveRuns(t *testing.T) {
 			}
 		}
 	}
-	if err := s.FinishRun(t.Context(), "run", "completed"); err != nil {
+	if err := s.FinishRun(t.Context(), "run", "completed", nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteArtifacts(t.Context(), request.Key, ArtifactRetention{}); err != nil {

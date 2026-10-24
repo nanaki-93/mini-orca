@@ -42,12 +42,12 @@ func seedAgentRun(t *testing.T, s *Service, store *agentstate.Store, id, parent 
 		budgetID = "budget-" + parent
 	}
 	if parent == "" {
-		if err := store.Checkpoint(t.Context(), agentstate.BudgetRecord{ID: budgetID, Binding: binding, Limits: s.agentRuntime.Limits, Sequence: 1}); err != nil {
+		if _, err := store.Checkpoint(t.Context(), agentstate.BudgetRecord{ID: budgetID, Binding: binding, Limits: s.agentRuntime.Limits, Sequence: 1}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	run := agentstate.Run{ID: id, ParentID: parent, Session: key, BudgetID: budgetID, RequestHash: strings.Repeat("a", 64), SchemaHash: strings.Repeat("b", 64), SchemaVersion: "completion-v1", Status: "running", Started: started, Updated: started}
-	if err := store.BeginRun(t.Context(), run); err != nil {
+	if _, err := store.BeginRun(t.Context(), run, nil); err != nil {
 		t.Fatal(err)
 	}
 	return run

@@ -65,7 +65,7 @@ func renderAgentTimeline(detail *AgentRunDetail) []string {
 	if detail.EventsTruncated {
 		lines = append(lines, "Earlier events are outside retained history.")
 	}
-	return lines
+	return append(lines, renderAgentTrace(detail.Trace)...)
 }
 
 func (s *State) renderAgentEvidence(detail *AgentRunDetail) []string {
@@ -139,7 +139,8 @@ func renderAgentUsage(detail *AgentRunDetail) []string {
 		fmt.Sprintf("Elapsed: %.1fs / %ds · concurrency limit %d", float64(u.ElapsedMillis)/1000, l.ElapsedSeconds, l.ConcurrentCalls),
 	}
 	lines = append(lines, renderAgentAccounting(u)...)
-	return append(lines, "Remote agent usage is separate in External Work; internal remote consumption remains unknown unless reported.", "Cost: unknown · a versioned price table is required.", "Usage is recorded accounting, not a measured performance improvement.")
+	lines = append(lines, renderAgentCost(detail.Cost)...)
+	return append(lines, "Remote agent usage is separate in External Work; internal remote consumption remains unknown unless reported.", "Usage is recorded accounting, not a measured performance improvement.")
 }
 
 func renderAgentAccounting(usage client.AgentUsage) []string {

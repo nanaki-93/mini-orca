@@ -2135,6 +2135,8 @@ components:
       type: object
       required: [run, invocations, has_more, events, events_truncated]
       properties:
+        trace: {$ref: '#/components/schemas/AgentTraceSummary'}
+        cost: {$ref: '#/components/schemas/AgentCostEstimate'}
         run: {$ref: '#/components/schemas/AgentRun'}
         invocations: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentRun'}}
         has_more: {type: boolean}
@@ -2165,6 +2167,45 @@ components:
                   kind: {type: string, enum: [arguments, result]}
                   value: {type: string, description: JSON text bounded to 2048 UTF-8 bytes; credential-bearing keys are redacted and nested values are limited to 24 levels. Truncated text need not be valid JSON.}
                   truncated: {type: boolean}
+    AgentTraceSummary:
+      type: object
+      required: [version, trace_id, snapshot, legacy, truncated, incomplete, omitted, spans]
+      properties:
+        version: {type: integer, enum: [1]}
+        trace_id: {type: string, pattern: '^[a-f0-9]{32}$'}
+        snapshot: {type: string, pattern: '^[a-f0-9]{64}$'}
+        legacy: {type: boolean}
+        truncated: {type: boolean}
+        incomplete: {type: boolean}
+        omitted: {type: integer, format: int64, minimum: 0}
+        spans: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/AgentTraceSpan'}}
+    AgentTraceSpan:
+      type: object
+      additionalProperties: false
+      required: [id, kind, status, started, elapsed_nanos]
+      properties:
+        id: {type: string, pattern: '^[a-f0-9]{16}$'}
+        parent_id: {type: string, pattern: '^[a-f0-9]{16}$'}
+        run_key: {type: string, pattern: '^[a-f0-9]{64}$'}
+        operation_key: {type: string, pattern: '^[a-f0-9]{64}$'}
+        kind: {type: string, enum: [invocation, node, tool, provider, retry, summary, delegation, check]}
+        status: {type: string, enum: [running, completed, failed, canceled, timed_out, interrupted, unfinished]}
+        started: {type: string, format: date-time}
+        ended: {type: string, format: date-time}
+        elapsed_nanos: {type: integer, format: int64, minimum: 0}
+    AgentCostEstimate:
+      type: object
+      required: [status, known_subtotal, reasons]
+      properties:
+        status: {type: string, enum: [estimated, unknown]}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        price_version: {type: string, maxLength: 64}
+        known_subtotal: {type: number, minimum: 0}
+        total: {type: number, minimum: 0, description: Present only when the token cost can be estimated completely with configured rates; not an invoice.}
+        reasons:
+          type: array
+          uniqueItems: true
+          items: {type: string, enum: [price_table_unavailable, legacy_usage, model_rate_unavailable, usage_incomplete, cache_split_unknown]}
     AgentRunControl:
       type: object
       additionalProperties: false

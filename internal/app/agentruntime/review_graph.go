@@ -89,7 +89,7 @@ func reviewNodeBody(role string, host ReviewNodeHost) workflow.EmittingFunctionF
 		if err := context.Cause(ctx); err != nil {
 			return ReviewNodeResult{}, err
 		}
-		result, err := host(ctx, role, snapshot)
+		result, err := tracedHost(ctx, "node", "review_"+role, func(ctx context.Context) (ReviewNodeResult, error) { return host(ctx, role, snapshot) })
 		if err != nil {
 			return ReviewNodeResult{}, fmt.Errorf("specialist %s: %w", role, err)
 		}

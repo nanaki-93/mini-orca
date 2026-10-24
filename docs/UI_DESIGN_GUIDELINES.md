@@ -107,6 +107,14 @@ and Apply remain separate. `:run-cancel` cancels an active native root. Task pau
 and resume are unavailable; use cancellation and a guarded stage retry. Analysis
 retains its own pause/resume controls. Usage displays the shared run budget once,
 with unavailable token measurements explicitly identified.
+Timeline also shows bounded local spans shared by retries and child work, with
+parent identities, execution outcomes and measured durations. Label omitted and
+unfinished spans; span completion does not imply a passing check or approval.
+Usage distinguishes reported tokens from conservative charges and shows the
+version/currency of a configured price table. If measurements or rates are
+incomplete, show an unknown total and a separately labeled known subtotal.
+Cost remains an estimate, not an invoice. These panels stay passive and fit the
+minimum terminal size in every palette using the existing detail scroller.
 
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.

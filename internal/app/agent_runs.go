@@ -187,6 +187,11 @@ func (s *Service) AgentRunDetail(ctx context.Context, query AgentRunQuery, id st
 	}
 	parents := agentParents(history)
 	result := &AgentRunDetail{Run: s.publicAgentRun(run, query, parents), Invocations: []AgentRun{}, Events: []AgentRunEvent{}}
+	result.Trace, err = s.agentTraceSummary(history, run)
+	if err != nil {
+		return nil, err
+	}
+	result.Cost = agentCost(run.Usage, s.agentRuntime.Telemetry.Prices)
 	summarizeAgentInput(&result.Run, history, parents)
 	for _, child := range history.Runs {
 		if agentRoot(child.ID, parents) != result.Run.RootID {

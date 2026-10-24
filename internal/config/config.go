@@ -193,6 +193,7 @@ func (c *Config) Validate() error {
 var configurationFields = fieldSet{
 	"integrations": {"mcp": {}, "openapi": {}, "a2a": {}, "a2a_server": {}, "google_search": {}},
 	"agent_runtime": {
+		"telemetry":       {"prices": {"version": {}, "currency": {}, "rates": {}}},
 		"skills":          {},
 		"roles":           {"creation": {}, "testing": {}, "review": {}},
 		"context":         {"compaction": {}, "token_threshold": {}, "retain_events": {}, "summary_max_tokens": {}, "local_cache": {}, "cache_ttl_seconds": {}, "provider_cache": {}, "provider_ttl_seconds": {}},

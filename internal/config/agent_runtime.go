@@ -15,16 +15,17 @@ type AgentRoles struct {
 }
 
 type AgentRuntimeConfig struct {
-	Roles              AgentRoles   `yaml:"roles"`
-	Context            AgentContext `yaml:"context"`
-	Skills             []string     `yaml:"skills"`
-	MaxModelCalls      int          `yaml:"max_model_calls"`
-	MaxToolCalls       int          `yaml:"max_tool_calls"`
-	MaxInputTokens     int64        `yaml:"max_input_tokens"`
-	MaxOutputTokens    int64        `yaml:"max_output_tokens"`
-	MaxElapsedSeconds  int          `yaml:"max_elapsed_seconds"`
-	MaxConcurrentCalls int          `yaml:"max_concurrent_calls"`
-	MaxRepairs         *int         `yaml:"max_repairs"`
+	Telemetry          AgentTelemetry `yaml:"telemetry"`
+	Roles              AgentRoles     `yaml:"roles"`
+	Context            AgentContext   `yaml:"context"`
+	Skills             []string       `yaml:"skills"`
+	MaxModelCalls      int            `yaml:"max_model_calls"`
+	MaxToolCalls       int            `yaml:"max_tool_calls"`
+	MaxInputTokens     int64          `yaml:"max_input_tokens"`
+	MaxOutputTokens    int64          `yaml:"max_output_tokens"`
+	MaxElapsedSeconds  int            `yaml:"max_elapsed_seconds"`
+	MaxConcurrentCalls int            `yaml:"max_concurrent_calls"`
+	MaxRepairs         *int           `yaml:"max_repairs"`
 }
 
 // AgentLimits is immutable after admission. Token budgets use reported usage
@@ -40,10 +41,13 @@ type AgentLimits struct {
 }
 
 type AgentRuntime struct {
-	Roles   AgentRoles
-	Limits  AgentLimits
-	Context AgentContext
-	Skills  []string
+	// Passive reporting settings have their own version/destination identity;
+	// they must not invalidate previously admitted execution preferences.
+	Telemetry AgentTelemetry `json:"-"`
+	Roles     AgentRoles
+	Limits    AgentLimits
+	Context   AgentContext
+	Skills    []string
 }
 
 // Skill directories are explicit project-relative grants, never search paths.
@@ -166,7 +170,11 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	if err != nil {
 		return AgentRuntime{}, err
 	}
-	return AgentRuntime{Roles: roles, Limits: limits, Context: context, Skills: skills}, nil
+	telemetry, err := ResolveAgentTelemetry(configured.Telemetry)
+	if err != nil {
+		return AgentRuntime{}, err
+	}
+	return AgentRuntime{Roles: roles, Limits: limits, Context: context, Skills: skills, Telemetry: telemetry}, nil
 }
 
 func (limits AgentLimits) Validate() error {

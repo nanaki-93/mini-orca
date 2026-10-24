@@ -842,12 +842,14 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 27B — Add bounded local traces and versioned cost estimates
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/telemetry.go`, `internal/app/agentruntime/telemetry_test.go`, `internal/app/agentstate/traces.go`, `internal/app/agentstate/traces_test.go`, `internal/app/agent_usage.go`, `internal/app/agent_usage_test.go`, `internal/app/agent_usage_models.go`, `internal/config/agent_telemetry.go`, `internal/config/agent_telemetry_test.go`, `internal/tui/agent_telemetry_view.go` — **new**.
-- `internal/app/agentstate/store.go`, `internal/app/agentstate/history.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/a2a_client.go`.
-- `internal/app/agent_limits.go`, `internal/app/service.go`, `internal/app/agent_settings_runtime.go`, `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler_test.go`.
+- `internal/app/agentstate/store.go`, `internal/app/agentstate/history.go`, `internal/app/agentstate/run.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/persistence.go`, `internal/app/agentruntime/events.go`, `internal/app/agentruntime/budget.go`, `internal/app/agentruntime/graph_runtime.go`, `internal/app/agentruntime/change_graph.go`, `internal/app/agentruntime/analysis_graph.go`, `internal/app/agentruntime/review_graph.go`, `internal/app/agentruntime/repair_graph.go`, `internal/app/agentruntime/knowledge_graph.go`, `internal/app/agentruntime/tools.go`, `internal/app/agentruntime/policy.go`, `internal/app/agentruntime/compaction.go`, `internal/app/agentruntime/a2a_client.go`.
+- `internal/app/agent_limits.go`, `internal/app/service.go`, `internal/app/agent_settings_runtime.go`, `internal/app/agent_runs.go`, `internal/app/agent_run_types.go`, `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/api/handlers/agent_run_handler_test.go`, `internal/app/agentruntime/policy_test.go`.
+- `internal/app/agentstate/store_test.go`, `internal/app/agentstate/usage_test.go`, `internal/app/agentstate/input_test.go`, `internal/app/agentstate/artifacts_test.go`, `internal/app/agentstate/history_test.go`, `internal/app/agent_events_test.go`, `internal/app/agent_runs_test.go` — update existing journal fixtures for atomic trace admission/completion.
+- `internal/app/service_test.go` — synchronize provider dispatch before simulating deadline expiry in the existing overview-inventory regression; the previous 50 ms setup deadline also fails against the unchanged baseline.
 - `internal/tui/agent_run_view.go`, `internal/tui/agent_run_test.go`, `internal/tui/client/agent_models.go`, `internal/tui/client/agent_runs_test.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
@@ -856,6 +858,7 @@ This is an implementation specification, not a claim that the features below alr
 **Implementation rules**
 - Correlate bounded run, node, tool, provider, retry, summary, delegation and check spans with opaque identities, fixed status categories and elapsed times. Retain failures and interrupted states; report truncated history without erasing cumulative accounting.
 - Local source-free summaries remain passive, versioned and compatible with legacy journals. Keep fixed span kinds/status categories, opaque IDs, hashed operation identities and bounded timing; never retain raw SDK payloads. Trace retention must not erase cumulative accounting. Preserve incomplete/interrupted observations and fail explicitly on journal errors.
+- Co-commit invocation/provider trace transitions with their existing run/budget checkpoints to avoid extra journal round trips on deadline-sensitive provider dispatch. A failed atomic write must expose neither half of the transition.
 - Monetary estimates require a versioned user-configured price table and matching model hashes. Missing measurements/rates/cache knowledge keep total cost unknown; label any known subtotal and price version. Use existing Usage/Timeline panels, with small-terminal and all-palette verification.
 
 **Verification command**

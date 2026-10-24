@@ -245,3 +245,40 @@ func TestExecutionDetailsFitAllPalettesAndSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutionTraceAndCostRemainPassiveReadableAndSanitized(t *testing.T) {
+	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+		s, detail := executionState()
+		s.Palette = palette
+		detail.Trace = &client.AgentTraceSummary{Version: 1, TraceID: strings.Repeat("a", 32), Snapshot: strings.Repeat("b", 64), Truncated: true, Omitted: 3, Incomplete: true, Spans: []client.AgentTraceSpan{{ID: "0123456789abcdef", ParentID: "abcdef0123456789", Kind: "provider\x1b]52;c;PRIVATE\x07", Status: "interrupted"}}}
+		detail.Cost = &client.AgentCostEstimate{Status: "unknown", PriceVersion: "fixture-v1", Currency: "USD", KnownSubtotal: 0.25, Reasons: []string{"usage_incomplete"}}
+		s.applyAgentProgress(&agentProgressView{Request: *s.agentProgressRequest(), Detail: &detail, Status: "current"})
+		for _, section := range []int{1, 3} {
+			s.AgentRunSection = section
+			text := strings.Join(s.renderAgentRunPage(themeForPalette(palette), 52), "\n")
+			if strings.Contains(text, "\x1b]52") || strings.Contains(text, "\x07") {
+				t.Fatal("terminal escape leaked")
+			}
+			for _, size := range [][2]int{{52, 16}, {80, 24}, {120, 36}} {
+				for range 8 {
+					assertFrameSize(t, s.Render(size[0], size[1]), size[0], size[1])
+					s.HandleKey(KeyEvent{Key: "PageDown"})
+				}
+			}
+		}
+		text := strings.Join(renderAgentTimeline(&detail), "\n") + strings.Join(renderAgentUsage(&detail), "\n")
+		for _, want := range []string{"3 spans omitted", "duration unfinished", "Total cost: unknown", "known subtotal 0.250000 USD", "fixture-v1"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("missing trace/cost disclosure %q", want)
+			}
+		}
+		if len(s.PendingActions) != 0 {
+			t.Fatal("trace/cost navigation dispatched work")
+		}
+	}
+	total := 0.125
+	text := strings.Join(renderAgentCost(&client.AgentCostEstimate{Status: "estimated", PriceVersion: "rates-v2", Currency: "USD", Total: &total}), "\n")
+	if !strings.Contains(text, "Estimated token cost: 0.125000 USD") || !strings.Contains(text, "not an invoice") {
+		t.Fatal("cost provenance missing", text)
+	}
+}
