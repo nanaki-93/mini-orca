@@ -1056,7 +1056,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 30C2 — Revalidate retained mission proposals against the current base
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agent_mission_revalidation.go`, `internal/app/agent_mission_revalidation_test.go` — **new**.

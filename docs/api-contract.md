@@ -1828,14 +1828,14 @@ execution storage is not reported as a completed or empty execution.
   settings or the editable catalog plan change. It still requires the current
   project identity and cannot control another checkout's receipt.
 
-Preparation creates a receipt in a version-3 catalog with state `prepared`, an independent
+Preparation creates a receipt in a version-4 catalog with state `prepared`, an independent
 `execution_revision` of 1, the approved `catalog_revision`, a full frozen
 `mission`, the exact Git `base`, and `children` containing each child's ID,
 `pending` state and fixed approved `limits`. The plan already bounds the sum of
 child model calls, tool calls, input/output tokens and repairs. These are future
 allocations, not measured usage. Preparation and inspection grant no provider,
 project-code execution, worktree creation, Apply or merge authority. Existing
-version-1 prepared/canceled and version-2 wave receipts remain readable and
+version-1 prepared/canceled, version-2 wave and version-3 integration receipts remain readable and
 upgrade on the next explicit mutation without resetting allocations. The initial
 `current` checkpoint copies the original revision, base, sources and instructions.
 
@@ -1857,7 +1857,7 @@ never applies source or merges a worktree. Dependent children remain pending
 until an explicit integration operation records their prerequisites.
 
 Execution states are `prepared`, `running`, `pausing`, `canceling`, `paused`,
-`canceled`, `awaiting_review`, `blocked`, `interrupted`, `integrating`, `ready` or
+`canceled`, `awaiting_review`, `blocked`, `interrupted`, `integrating`, `revalidating`, `ready` or
 `completed`. An active `wave`
 contains its opaque owner, selected children, start time and millisecond
 allowance. `elapsed_millis` charges active wave time; waiting for human review
@@ -1952,6 +1952,60 @@ receipts, and preserves corrupt or unsupported schemas. Reads and responses use
 400, absent receipts 404, stale identities or concurrent controls 409, and
 private storage failures 500. Canceled preparation cannot publish a new receipt;
 an already attempted integration still records its observed Git outcome.
+
+### Mission proposal revalidation
+
+The same execution route accepts `revalidate` and `reconcile_revalidation` with
+the current project identity, frozen `plan_hash`, exact `execution_id` and
+`execution_revision`, current checkpoint `base`, `confirm: true` and
+`confirm_execution: true`. `catalog_revision` must be zero; provider grants and
+an `integration` object are rejected. The `revalidation` object contains
+`previous`, using the integration proposal identity fields for the retained
+child, canonical path and old checkout HEAD (a draft's base or its exact reviewed
+commit). `previous.integration_id` is rejected. Recovery additionally requires
+`revalidation_id`; new attempts reject it.
+
+Only an owned `awaiting_review` child checked against an earlier mission base
+can be revalidated. The current destination must still match the verified
+mission checkpoint, sources, instructions, configuration and execution trust.
+Unrelated external changes require a new reviewed mission. Before creating any
+checkout, the service protects the previous complete proposal as an artifact
+and reserves a bounded attempt with the old identity, source commit, current
+checkpoint, owner and new candidate directory. Pending attempts block starts
+and integrations. At most three attempts per child are retained; failed and
+interrupted attempts count. Their elapsed time consumes the existing mission
+allowance and is capped by the child's original elapsed limit. Model/tool/token
+and repair allocations never change.
+
+Each attempt creates a new owned `-rN` checkout and change session, copying only
+proposal content and approved read/write scope. The original checkout, commit
+and historical model evidence remain retained. The new origin includes the
+exact `revalidation_id`; its `generation` is positive and `workflow_id` is
+empty. No provider is invoked. Fresh tests and lint run in the existing isolated
+check workspace under the current scoped execution grant. Checks, model-review
+claims, plan approval and human review are never copied from the old proposal.
+Opening and checking a candidate cannot apply source. The explicit final human
+Review approves its newly captured plan only after current checks and per-file
+review; Apply/commit and mission integration remain separate explicit actions.
+
+`revalidations[]` records `pending`, `awaiting_review`, `failed` or `interrupted`,
+the `previous` and `candidate` child receipts, old `source`, protected `evidence`,
+`before` checkpoint, allowance, owner and timestamps. Only a successfully checked
+candidate replaces the selected child. Failed candidates retain their own
+session/check evidence without replacing the preceding proposal. Integration
+then requires the exact selected candidate at the current base, including its
+empty workflow ID. Historical and unsuccessful checkout reservations remain
+protected against ordinary Git merge/discard controls.
+
+Request cancellation, mission cancellation, reindex, project replacement and
+shutdown revoke owned revalidation work. Reads never recreate candidates or
+rerun checks. Explicit recovery is available after the local owner stops or a
+foreign owner's allowance expires; it records `interrupted`, charges the full
+reserved allowance when elapsed work is uncertain, and retains any existing
+candidate and archive without promoting verification or executing anything.
+Missing checkouts or incomplete session publication remain visible uncertainty.
+Older execution catalogs are upgraded on read without writes; the next explicit
+mutation persists version 4 and no allocation is reset.
 
 ### Explicit mission decomposition
 

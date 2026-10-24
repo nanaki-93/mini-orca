@@ -254,6 +254,55 @@ func TestMissionIntegrationWirePreservesCheckpointArchiveAndGitOutcome(t *testin
 	}
 }
 
+func TestMissionRevalidationWirePreservesFreshCandidateAndHistoricalEvidence(t *testing.T) {
+	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "current"}
+	base := GitIdentity{Head: strings.Repeat("b", 40), Branch: "main"}
+	previous := MissionIntegrationRequest{ChildID: "child", SessionID: "old-session", WorkflowID: "historical-model", ProposalHash: "sha256:" + strings.Repeat("a", 64), ProposalRevision: 7, Path: "/selected/.worktrees/original", Source: GitIdentity{Head: strings.Repeat("a", 40), Branch: "codex/original"}}
+	request := MissionExecutionRequest{ProjectIdentity: identity, Action: "revalidate", PlanHash: strings.Repeat("c", 64), ExecutionID: "execution", ExecutionRevision: 12, Base: &base, Confirm: true, ConfirmExecution: true, Revalidation: &MissionRevalidationRequest{Previous: previous}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/projects/current/missions/mission/execution" || r.URL.Query().Get("worktree_path") != "/selected" {
+			t.Error("revalidation lost owned route")
+		}
+		var input app.MissionExecutionRequest
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Error(err)
+			return
+		}
+		if input.Action != "revalidate" || input.Revalidation == nil || input.Integration != nil || len(input.ConfirmedProfiles) != 0 || !input.ConfirmExecution || input.ExecutionRevision != 12 {
+			t.Error("changed revalidation admission", input)
+			return
+		}
+		old := input.Revalidation.Previous
+		if old.SessionID != previous.SessionID || old.WorkflowID != previous.WorkflowID || old.ProposalRevision != 7 || old.Source.Head != previous.Source.Head || old.Path != previous.Path || input.Revalidation.RevalidationID != "" {
+			t.Error("lost old candidate identity", old)
+		}
+		now := time.Now().UTC()
+		entry := agentstate.MissionRevalidation{ID: "revalidation-owned", Owner: "owner", State: "awaiting_review", Previous: agentstate.MissionExecutionChild{ID: old.ChildID, SessionID: old.SessionID, WorkflowID: old.WorkflowID, ProposalHash: old.ProposalHash, ProposalRevision: old.ProposalRevision}, Candidate: agentstate.MissionExecutionChild{ID: "child", Generation: 1, State: "awaiting_review", SessionID: "fresh-session", BaseHead: base.Head, Directory: "execution-child-r1", Branch: "codex/execution-child-r1", ProposalRevision: 1}, Source: old.Source, Before: agentstate.MissionCheckpoint{ProjectRevision: "current", Base: *input.Base}, AllowanceMillis: 15000, StartedAt: now, UpdatedAt: now}
+		entry.Evidence = agentstate.MissionProposalEvidence{Key: agentstate.ArtifactKey{Session: agentstate.Key{App: "mini-orca-missions", User: "local", ID: "execution"}, Name: "child-proposal.json"}, Hash: strings.Repeat("e", 64), Version: 2}
+		result := app.AgentMissionExecution{SourceStatus: "current", OwnerState: "idle", ReadyChildren: []string{}, Execution: agentstate.MissionExecution{ID: "execution", Revision: 15, Current: entry.Before, Revalidations: []agentstate.MissionRevalidation{entry}, Children: []agentstate.MissionExecutionChild{entry.Candidate}, State: "awaiting_review", ElapsedMillis: 2000}}
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer server.Close()
+	cl, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	var result AgentMissionExecution
+	if err := cl.DoJSON(t.Context(), "revalidate", "POST", "/api/projects/current/missions/mission/execution?worktree_path=%2Fselected", request, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Execution.Revalidations) != 1 || result.Execution.Children[0].Generation != 1 || result.Execution.Current.Base != base || result.Git != nil {
+		t.Fatal("lost candidate receipt", result)
+	}
+	entry := result.Execution.Revalidations[0]
+	if entry.Previous.WorkflowID != "historical-model" || entry.Candidate.WorkflowID != "" || entry.Candidate.SessionID != "fresh-session" || entry.Candidate.BaseHead != base.Head || entry.Evidence.Version != 2 || entry.AllowanceMillis != 15000 || entry.StartedAt == "" {
+		t.Fatal("historical evidence became current authority", entry)
+	}
+}
+
 func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T) {
 	identity := ProjectIdentity{ProjectID: "project", ProjectRevision: "revision"}
 	limits := AgentLimits{ModelCalls: 4, ToolCalls: 8, InputTokens: 65536, OutputTokens: 32768, ElapsedSeconds: 60, ConcurrentCalls: 1}

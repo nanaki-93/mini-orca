@@ -219,6 +219,9 @@ func (s *Service) validateHumanReview(session *ChangeSession) error {
 }
 
 func (s *Service) reviewChangeLocked(ctx context.Context, root string, session *ChangeSession) (*ChangeSession, error) {
+	if err := s.approveMissionRevalidationReviewPlan(session); err != nil {
+		return nil, err
+	}
 	if err := s.validateHumanReview(session); err != nil {
 		return nil, err
 	}

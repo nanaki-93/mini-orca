@@ -288,7 +288,7 @@ func TestMissionExecutionVersionOneUpgradesWithoutResetOrReadWrites(t *testing.T
 		t.Fatal(err)
 	}
 	after, err = os.ReadFile(path)
-	if err != nil || !bytes.Contains(after, []byte(`"version":3`)) {
+	if err != nil || !bytes.Contains(after, []byte(`"version":4`)) {
 		t.Fatal("wave did not persist upgraded receipt", err)
 	}
 }

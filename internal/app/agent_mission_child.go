@@ -20,10 +20,11 @@ import (
 )
 
 type MissionChildOrigin struct {
-	MissionID   string `json:"mission_id"`
-	ExecutionID string `json:"execution_id"`
-	ChildID     string `json:"child_id"`
-	PlanHash    string `json:"plan_hash"`
+	MissionID      string `json:"mission_id"`
+	ExecutionID    string `json:"execution_id"`
+	ChildID        string `json:"child_id"`
+	PlanHash       string `json:"plan_hash"`
+	RevalidationID string `json:"revalidation_id,omitempty"`
 }
 
 func copyMissionChildOrigin(origin *MissionChildOrigin) (*MissionChildOrigin, error) {
@@ -48,6 +49,9 @@ func validateMissionChildOrigin(origin *MissionChildOrigin) error {
 	}
 	if _, err := hex.DecodeString(origin.PlanHash); err != nil || len(origin.PlanHash) != 64 {
 		return fmt.Errorf("invalid mission proposal plan identity")
+	}
+	if origin.RevalidationID != "" && (!strings.HasPrefix(origin.RevalidationID, "revalidation-") || len(origin.RevalidationID) > 128 || strings.ContainsAny(origin.RevalidationID, "/\\\x00\n\r")) {
+		return fmt.Errorf("invalid mission revalidation origin")
 	}
 	return nil
 }

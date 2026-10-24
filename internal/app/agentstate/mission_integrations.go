@@ -122,14 +122,11 @@ func (record MissionExecution) PendingIntegration() *MissionIntegration {
 }
 
 func (integration MissionIntegration) validate(record MissionExecution) error {
-	index := slices.IndexFunc(record.Children, func(child MissionExecutionChild) bool { return child.ID == integration.ChildID })
-	if index < 0 || integration.Source.Branch != record.Children[index].Branch || integration.Source.Head == integration.Before.Base.Head {
+	child, exists := record.integrationCandidate(integration)
+	if !exists || integration.Source.Branch != child.Branch || integration.Source.Head == integration.Before.Base.Head || child.BaseHead != integration.Before.Base.Head {
 		return ErrCorrupt
 	}
-	if !integration.matchesChildProposal(record.Children[index]) {
-		return ErrCorrupt
-	}
-	for _, value := range []string{integration.ID, integration.ChildID, integration.Owner, integration.SessionID, integration.WorkflowID, integration.ProposalHash} {
+	for _, value := range []string{integration.ID, integration.ChildID, integration.Owner, integration.SessionID, integration.ProposalHash} {
 		if !validID(value) {
 			return ErrCorrupt
 		}
@@ -141,6 +138,20 @@ func (integration MissionIntegration) validate(record MissionExecution) error {
 		return ErrCorrupt
 	}
 	return integration.validateOutcome(record)
+}
+
+func (record MissionExecution) integrationCandidate(entry MissionIntegration) (MissionExecutionChild, bool) {
+	for _, child := range record.Children {
+		if child.ID == entry.ChildID && entry.matchesChildProposal(child) {
+			return child, true
+		}
+	}
+	for _, attempt := range record.Revalidations {
+		if attempt.Previous.ID == entry.ChildID && entry.matchesChildProposal(attempt.Previous) {
+			return attempt.Previous, true
+		}
+	}
+	return MissionExecutionChild{}, false
 }
 
 func (integration MissionIntegration) matchesChildProposal(child MissionExecutionChild) bool {
@@ -158,13 +169,23 @@ func (s *Store) MissionWorktree(ctx context.Context, projectID, directory, branc
 		return MissionExecution{}, err
 	}
 	for _, record := range catalog.Records {
-		if record.Mission.ProjectID == projectID && slices.ContainsFunc(record.Children, func(child MissionExecutionChild) bool {
-			return directory != "" && child.Directory == directory || branch != "" && child.Branch == branch
-		}) {
+		if record.Mission.ProjectID == projectID && record.ownsMissionWorktree(directory, branch) {
 			return record, nil
 		}
 	}
 	return MissionExecution{}, ErrNotFound
+}
+
+func (record MissionExecution) ownsMissionWorktree(directory, branch string) bool {
+	matches := func(child MissionExecutionChild) bool {
+		return directory != "" && child.Directory == directory || branch != "" && child.Branch == branch
+	}
+	if slices.ContainsFunc(record.Children, matches) {
+		return true
+	}
+	return slices.ContainsFunc(record.Revalidations, func(entry MissionRevalidation) bool {
+		return matches(entry.Previous) || matches(entry.Candidate)
+	})
 }
 
 func (s *Store) RecordMissionCleanup(ctx context.Context, identity MissionExecutionIdentity, integrationID, state, failure string, authorize func() error) (result MissionExecution, err error) {
@@ -283,7 +304,7 @@ type MissionIntegrationInput struct {
 }
 
 func (record MissionExecution) admitIntegration(input MissionIntegrationInput) error {
-	if record.Wave != nil || record.PendingIntegration() != nil || record.State == "canceled" || record.State == "completed" || len(record.Integrations) >= MaxMissionIntegrations {
+	if record.Wave != nil || record.PendingIntegration() != nil || record.PendingRevalidation() != nil || record.State == "canceled" || record.State == "completed" || len(record.Integrations) >= MaxMissionIntegrations {
 		return ErrMissionConflict
 	}
 	for _, id := range record.Mission.Plan.IntegrationOrder {

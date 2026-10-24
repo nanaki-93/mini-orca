@@ -48,6 +48,7 @@ type AgentMission struct {
 
 type MissionExecutionChild struct {
 	ID               string      `json:"id"`
+	Generation       int         `json:"generation,omitempty"`
 	State            string      `json:"state"`
 	Limits           AgentLimits `json:"limits"`
 	WaveID           string      `json:"wave_id,omitempty"`
@@ -65,10 +66,11 @@ type MissionExecutionChild struct {
 }
 
 type MissionChildOrigin struct {
-	MissionID   string `json:"mission_id"`
-	ExecutionID string `json:"execution_id"`
-	ChildID     string `json:"child_id"`
-	PlanHash    string `json:"plan_hash"`
+	MissionID      string `json:"mission_id"`
+	ExecutionID    string `json:"execution_id"`
+	ChildID        string `json:"child_id"`
+	PlanHash       string `json:"plan_hash"`
+	RevalidationID string `json:"revalidation_id,omitempty"`
 }
 
 type MissionWave struct {
@@ -87,6 +89,7 @@ type MissionExecution struct {
 	Base            GitIdentity             `json:"base"`
 	Current         MissionCheckpoint       `json:"current"`
 	Integrations    []MissionIntegration    `json:"integrations,omitempty"`
+	Revalidations   []MissionRevalidation   `json:"revalidations,omitempty"`
 	State           string                  `json:"state"`
 	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
 	Wave            *MissionWave            `json:"wave,omitempty"`
@@ -107,16 +110,17 @@ type AgentMissionExecution struct {
 
 type MissionExecutionRequest struct {
 	ProjectIdentity
-	Action            string                     `json:"action"`
-	CatalogRevision   int64                      `json:"catalog_revision"`
-	PlanHash          string                     `json:"plan_hash"`
-	ExecutionID       string                     `json:"execution_id,omitempty"`
-	ExecutionRevision int64                      `json:"execution_revision"`
-	Base              *GitIdentity               `json:"base,omitempty"`
-	Confirm           bool                       `json:"confirm"`
-	ConfirmExecution  bool                       `json:"confirm_execution,omitempty"`
-	ConfirmedProfiles []string                   `json:"confirmed_profiles,omitempty"`
-	Integration       *MissionIntegrationRequest `json:"integration,omitempty"`
+	Action            string                      `json:"action"`
+	CatalogRevision   int64                       `json:"catalog_revision"`
+	PlanHash          string                      `json:"plan_hash"`
+	ExecutionID       string                      `json:"execution_id,omitempty"`
+	ExecutionRevision int64                       `json:"execution_revision"`
+	Base              *GitIdentity                `json:"base,omitempty"`
+	Confirm           bool                        `json:"confirm"`
+	ConfirmExecution  bool                        `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string                    `json:"confirmed_profiles,omitempty"`
+	Integration       *MissionIntegrationRequest  `json:"integration,omitempty"`
+	Revalidation      *MissionRevalidationRequest `json:"revalidation,omitempty"`
 }
 
 type MissionCheckpoint struct {
@@ -163,6 +167,26 @@ type MissionIntegrationRequest struct {
 	Path             string      `json:"path"`
 	Source           GitIdentity `json:"source"`
 	IntegrationID    string      `json:"integration_id,omitempty"`
+}
+
+type MissionRevalidationRequest struct {
+	Previous       MissionIntegrationRequest `json:"previous"`
+	RevalidationID string                    `json:"revalidation_id,omitempty"`
+}
+
+type MissionRevalidation struct {
+	ID              string                  `json:"id"`
+	Owner           string                  `json:"owner"`
+	State           string                  `json:"state"`
+	Previous        MissionExecutionChild   `json:"previous"`
+	Source          GitIdentity             `json:"source"`
+	Evidence        MissionProposalEvidence `json:"evidence"`
+	Before          MissionCheckpoint       `json:"before"`
+	Candidate       MissionExecutionChild   `json:"candidate"`
+	Failure         string                  `json:"failure,omitempty"`
+	AllowanceMillis int64                   `json:"allowance_millis"`
+	StartedAt       string                  `json:"started_at"`
+	UpdatedAt       string                  `json:"updated_at"`
 }
 
 type MissionSummary struct {

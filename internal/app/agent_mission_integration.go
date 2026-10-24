@@ -28,9 +28,10 @@ type MissionIntegrationRequest struct {
 }
 
 type missionEffect struct {
-	id     string
-	cancel context.CancelFunc
-	done   chan struct{}
+	id              string
+	cancel          context.CancelFunc
+	done            chan struct{}
+	cancelOnReindex bool
 }
 
 func missionIntegrationShape(request MissionExecutionRequest) error {
@@ -48,7 +49,7 @@ func missionIntegrationShape(request MissionExecutionRequest) error {
 }
 
 func (input MissionIntegrationRequest) validateProposal() error {
-	for _, value := range []string{input.ChildID, input.SessionID, input.WorkflowID, input.Path, input.Source.Head, input.Source.Branch} {
+	for _, value := range []string{input.ChildID, input.SessionID, input.Path, input.Source.Head, input.Source.Branch} {
 		if value == "" {
 			return fmt.Errorf("select the exact owned committed child proposal")
 		}
@@ -129,10 +130,7 @@ func (s *Service) admitMissionIntegration(ctx context.Context, root string, reco
 }
 
 func validateMissionCommit(ctx context.Context, root string, record agentstate.MissionExecution, child agentstate.MissionExecutionChild, spec agentstate.MissionChild, session *ChangeSession, source agentstate.MissionBase) error {
-	origin := MissionChildOrigin{MissionID: record.Mission.ID, ExecutionID: record.ID, ChildID: child.ID, PlanHash: record.Mission.PlanHash}
-	identity := ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Hash: session.Hash, Revision: session.Revision}
-	expected := ChangeIdentity{ProjectID: child.ProjectID, ProjectRevision: child.ProjectRevision, Hash: child.ProposalHash, Revision: child.ProposalRevision}
-	if session.MissionOrigin == nil || *session.MissionOrigin != origin || identity != expected || session.ID != child.SessionID || session.Workflow == nil || session.Workflow.ID != child.WorkflowID {
+	if !matchesMissionProposal(record, child, session) || !missionProposalScope(session, spec) {
 		return ErrMissionConflict
 	}
 	if err := validateMissionCommitReview(session, child, source); err != nil {
@@ -371,15 +369,17 @@ func (s *Service) captureMissionCheckpoint(ctx context.Context, root string, rec
 
 func (s *Service) missionIntegrationResult(ctx context.Context, root string, record agentstate.MissionExecution, git *GitMutationResult) *AgentMissionExecution {
 	query := AgentRunQuery{ProjectID: record.Mission.ProjectID, ProjectRevision: record.Current.ProjectRevision}
-	if git.Index != nil {
+	if git != nil && git.Index != nil {
 		query.ProjectRevision = git.Index.ProjectRevision
 	}
 	value, err := s.inspectMissionExecution(ctx, root, query, record)
 	if err != nil {
 		value = &AgentMissionExecution{Execution: record, Stale: true, SourceStatus: "unavailable", ReadyChildren: []string{}, OwnerState: "recovery_required"}
-		git.Warnings = append(git.Warnings, "Refresh the mission receipt: "+err.Error())
+		if git != nil {
+			git.Warnings = append(git.Warnings, "Refresh the mission receipt: "+err.Error())
+		}
 	}
-	if record.PendingIntegration() != nil {
+	if record.PendingIntegration() != nil || record.PendingRevalidation() != nil {
 		value.OwnerState = "recovery_required"
 	}
 	value.Git = git

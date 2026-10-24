@@ -10,18 +10,19 @@ import (
 )
 
 type MissionExecutionRequest struct {
-	ProjectID         string                     `json:"project_id"`
-	ProjectRevision   string                     `json:"project_revision"`
-	Action            string                     `json:"action"`
-	CatalogRevision   int64                      `json:"catalog_revision"`
-	PlanHash          string                     `json:"plan_hash"`
-	ExecutionID       string                     `json:"execution_id,omitempty"`
-	ExecutionRevision int64                      `json:"execution_revision"`
-	Base              *agentstate.MissionBase    `json:"base,omitempty"`
-	Confirm           bool                       `json:"confirm"`
-	ConfirmExecution  bool                       `json:"confirm_execution,omitempty"`
-	ConfirmedProfiles []string                   `json:"confirmed_profiles,omitempty"`
-	Integration       *MissionIntegrationRequest `json:"integration,omitempty"`
+	ProjectID         string                      `json:"project_id"`
+	ProjectRevision   string                      `json:"project_revision"`
+	Action            string                      `json:"action"`
+	CatalogRevision   int64                       `json:"catalog_revision"`
+	PlanHash          string                      `json:"plan_hash"`
+	ExecutionID       string                      `json:"execution_id,omitempty"`
+	ExecutionRevision int64                       `json:"execution_revision"`
+	Base              *agentstate.MissionBase     `json:"base,omitempty"`
+	Confirm           bool                        `json:"confirm"`
+	ConfirmExecution  bool                        `json:"confirm_execution,omitempty"`
+	ConfirmedProfiles []string                    `json:"confirmed_profiles,omitempty"`
+	Integration       *MissionIntegrationRequest  `json:"integration,omitempty"`
+	Revalidation      *MissionRevalidationRequest `json:"revalidation,omitempty"`
 }
 
 func (request *MissionExecutionRequest) UnmarshalJSON(data []byte) error {
@@ -51,8 +52,8 @@ func validateMissionExecutionRequest(id string, request MissionExecutionRequest)
 }
 
 func validateMissionExecutionAction(request MissionExecutionRequest) error {
-	if request.Integration != nil && request.Action != "integrate" && request.Action != "reconcile_integration" && request.Action != "cleanup_integration" {
-		return fmt.Errorf("only integration controls may carry a committed proposal identity")
+	if err := validateMissionEffectShape(request); err != nil {
+		return err
 	}
 	switch request.Action {
 	case "prepare":
@@ -66,8 +67,20 @@ func validateMissionExecutionAction(request MissionExecutionRequest) error {
 		return missionControlShape(request)
 	case "integrate", "reconcile_integration", "cleanup_integration":
 		return missionIntegrationShape(request)
+	case "revalidate", "reconcile_revalidation":
+		return missionRevalidationShape(request)
 	default:
-		return fmt.Errorf("choose prepare, start, pause, cancel, reconcile, integrate, reconcile_integration or cleanup_integration")
+		return fmt.Errorf("choose prepare, start, pause, cancel, reconcile, integrate, reconcile_integration, cleanup_integration, revalidate or reconcile_revalidation")
+	}
+	return nil
+}
+
+func validateMissionEffectShape(request MissionExecutionRequest) error {
+	if request.Revalidation != nil && request.Action != "revalidate" && request.Action != "reconcile_revalidation" {
+		return fmt.Errorf("only revalidation controls may carry a previous candidate identity")
+	}
+	if request.Integration != nil && request.Action != "integrate" && request.Action != "reconcile_integration" && request.Action != "cleanup_integration" {
+		return fmt.Errorf("only integration controls may carry a committed proposal identity")
 	}
 	return nil
 }
@@ -123,6 +136,9 @@ func (s *Service) ControlMissionExecution(ctx context.Context, id string, reques
 	}
 	if request.Integration != nil {
 		return s.controlMissionIntegration(ctx, root, store, id, request)
+	}
+	if request.Revalidation != nil {
+		return s.controlMissionRevalidation(ctx, root, store, id, request)
 	}
 	var record agentstate.MissionExecution
 	if request.Action == "prepare" {

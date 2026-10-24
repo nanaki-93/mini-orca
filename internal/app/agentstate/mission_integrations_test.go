@@ -256,7 +256,7 @@ func TestMissionIntegrationMigratesVersionTwoActiveAndRetainedChildrenWithoutWri
 				t.Fatal(err)
 			}
 			after, err = os.ReadFile(path)
-			if err != nil || !bytes.Contains(after, []byte(`"version":3`)) {
+			if err != nil || !bytes.Contains(after, []byte(`"version":4`)) {
 				t.Fatal("explicit mutation did not persist upgraded schema", err)
 			}
 		})

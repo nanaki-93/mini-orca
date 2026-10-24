@@ -23,6 +23,7 @@ type MissionBase struct {
 
 type MissionExecutionChild struct {
 	ID               string        `json:"id"`
+	Generation       int           `json:"generation,omitempty"`
 	State            string        `json:"state"`
 	Limits           MissionLimits `json:"limits"`
 	WaveID           string        `json:"wave_id,omitempty"`
@@ -61,6 +62,7 @@ type MissionExecution struct {
 	Base            MissionBase             `json:"base"`
 	Current         MissionCheckpoint       `json:"current"`
 	Integrations    []MissionIntegration    `json:"integrations,omitempty"`
+	Revalidations   []MissionRevalidation   `json:"revalidations,omitempty"`
 	State           string                  `json:"state"`
 	ElapsedMillis   int64                   `json:"elapsed_millis,omitempty"`
 	Wave            *MissionWave            `json:"wave,omitempty"`
@@ -93,6 +95,22 @@ type missionExecutions struct {
 }
 
 func (record MissionExecution) validate() error {
+	if err := record.validateHeader(); err != nil {
+		return err
+	}
+	if err := record.validateAllocations(); err != nil {
+		return err
+	}
+	if err := record.validateIntegrations(); err != nil {
+		return err
+	}
+	if err := record.validateRevalidations(); err != nil {
+		return err
+	}
+	return record.validateWave()
+}
+
+func (record MissionExecution) validateHeader() error {
 	if !validID(record.ID) || record.Revision < 1 || record.Revision > 1<<53 || record.CatalogRevision < 1 || record.CatalogRevision > 1<<53 {
 		return ErrCorrupt
 	}
@@ -105,13 +123,7 @@ func (record MissionExecution) validate() error {
 	if record.Failure != "" && !validMemoryText(record.Failure, 1024, true) {
 		return ErrCorrupt
 	}
-	if err := record.validateAllocations(); err != nil {
-		return err
-	}
-	if err := record.validateIntegrations(); err != nil {
-		return err
-	}
-	return record.validateWave()
+	return nil
 }
 
 func (record MissionExecution) validateAllocations() error {
@@ -137,7 +149,7 @@ func (child MissionExecutionChild) validate(executionID string) error {
 	if !slices.Contains([]string{"reserved", "running", "awaiting_review", "rejected", "failed", "interrupted", "integrated"}, child.State) || !validID(child.WaveID) || child.UpdatedAt.IsZero() {
 		return ErrCorrupt
 	}
-	if child.Directory != executionID+"-"+child.ID || strings.ContainsAny(child.Directory, "/\\") || child.Branch != "codex/"+child.Directory || !validMissionBase(MissionBase{Head: child.BaseHead, Branch: child.Branch}) {
+	if child.Generation < 0 || child.Generation > MaxMissionRevalidations || child.Directory != missionCandidateDirectory(executionID, child.ID, child.Generation) || strings.ContainsAny(child.Directory, "/\\") || child.Branch != "codex/"+child.Directory || !validMissionBase(MissionBase{Head: child.BaseHead, Branch: child.Branch}) {
 		return ErrCorrupt
 	}
 	if !validMemoryText(child.Reason, 1024, true) && child.Reason != "" {
@@ -148,18 +160,15 @@ func (child MissionExecutionChild) validate(executionID string) error {
 
 func (child MissionExecutionChild) validateProposal() error {
 	if child.SessionID == "" {
-		if child.ProjectID != "" || child.ProjectRevision != "" || child.WorkflowID != "" || child.ProposalHash != "" || child.ProposalRevision != 0 {
-			return ErrCorrupt
-		}
-		if child.State == "running" || child.State == "awaiting_review" || child.State == "rejected" || child.State == "integrated" {
-			return ErrCorrupt
-		}
-		return nil
+		return child.validateMissingProposal()
 	}
-	for _, value := range []string{child.ProjectID, child.ProjectRevision, child.SessionID, child.WorkflowID, child.ProposalHash} {
+	for _, value := range []string{child.ProjectID, child.ProjectRevision, child.SessionID, child.ProposalHash} {
 		if !validID(value) {
 			return ErrCorrupt
 		}
+	}
+	if child.Generation == 0 && !validID(child.WorkflowID) || child.Generation > 0 && child.WorkflowID != "" {
+		return ErrCorrupt
 	}
 	if child.ProposalRevision < 0 {
 		return ErrCorrupt
@@ -167,8 +176,18 @@ func (child MissionExecutionChild) validateProposal() error {
 	return nil
 }
 
+func (child MissionExecutionChild) validateMissingProposal() error {
+	if child.ProjectID != "" || child.ProjectRevision != "" || child.WorkflowID != "" || child.ProposalHash != "" || child.ProposalRevision != 0 {
+		return ErrCorrupt
+	}
+	if slices.Contains([]string{"running", "awaiting_review", "rejected", "integrated"}, child.State) {
+		return ErrCorrupt
+	}
+	return nil
+}
+
 func (record MissionExecution) validateWave() error {
-	if !slices.Contains([]string{"prepared", "running", "pausing", "canceling", "paused", "canceled", "awaiting_review", "blocked", "interrupted", "integrating", "ready", "completed"}, record.State) {
+	if !slices.Contains([]string{"prepared", "running", "pausing", "canceling", "paused", "canceled", "awaiting_review", "blocked", "interrupted", "integrating", "ready", "completed", "revalidating"}, record.State) {
 		return ErrCorrupt
 	}
 	active := record.State == "running" || record.State == "pausing" || record.State == "canceling"
@@ -236,7 +255,7 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 	}
 	data, err := readJournalFile(location)
 	if errors.Is(err, os.ErrNotExist) {
-		return &missionExecutions{Version: 3, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
+		return &missionExecutions{Version: 4, Workspace: s.workspace, Records: map[string]MissionExecution{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: read mission executions: %w", ErrPersistence, err)
@@ -244,7 +263,7 @@ func (s *Store) loadMissionExecutions() (*missionExecutions, error) {
 	var catalog missionExecutions
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if len(data) > maxMissionCatalog || !validJSON(data) || decoder.Decode(&catalog) != nil || upgradeMissionExecutions(&catalog) != nil || s.validateMissionExecutions(&catalog) != nil {
+	if len(data) > maxMissionCatalog || !validJSON(data) || decoder.Decode(&catalog) != nil || upgradeMissionExecutions(&catalog) != nil || upgradeMissionRevalidations(&catalog) != nil || s.validateMissionExecutions(&catalog) != nil {
 		return nil, ErrCorrupt
 	}
 	return &catalog, nil
@@ -269,7 +288,7 @@ func upgradeMissionExecutions(catalog *missionExecutions) error {
 }
 
 func (s *Store) validateMissionExecutions(catalog *missionExecutions) error {
-	if catalog.Version != 3 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
+	if catalog.Version != 4 || catalog.Workspace != s.workspace || catalog.Records == nil || len(catalog.Records) > MaxMissions {
 		return ErrCorrupt
 	}
 	seen := map[string]bool{}
@@ -428,7 +447,7 @@ func missionExecutionAt(catalog *missionExecutions, request MissionExecutionIden
 // disjoint even if completion order differs from integration order.
 func (record MissionExecution) ReadyChildren() []string {
 	ready := []string{}
-	if record.Wave != nil || record.PendingIntegration() != nil || record.State == "canceled" {
+	if record.Wave != nil || record.PendingIntegration() != nil || record.PendingRevalidation() != nil || record.State == "canceled" {
 		return ready
 	}
 	states := map[string]string{}
@@ -457,7 +476,7 @@ func (s *Store) BeginMissionWave(ctx context.Context, request MissionExecutionId
 		if err != nil {
 			return err
 		}
-		if record.Wave != nil || record.PendingIntegration() != nil || record.State == "canceled" {
+		if record.Wave != nil || record.PendingIntegration() != nil || record.PendingRevalidation() != nil || record.State == "canceled" {
 			return ErrMissionConflict
 		}
 		ready := record.ReadyChildren()

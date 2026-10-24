@@ -230,17 +230,10 @@ func missionWaveFailure(err error) string {
 
 func (s *Service) missionOwnerState(record agentstate.MissionExecution) string {
 	if entry := record.PendingIntegration(); entry != nil {
-		s.missions.mu.Lock()
-		effect := s.missions.effects[record.ID]
-		active := effect != nil && effect.id == entry.ID
-		s.missions.mu.Unlock()
-		if active {
-			return "active"
-		}
-		if entry.Owner == s.missions.owner || !time.Now().Before(entry.Deadline()) {
-			return "recovery_required"
-		}
-		return "waiting_for_owner"
+		return s.missionEffectOwnerState(record.ID, entry.ID, entry.Owner, entry.Deadline())
+	}
+	if entry := record.PendingRevalidation(); entry != nil {
+		return s.missionEffectOwnerState(record.ID, entry.ID, entry.Owner, entry.Deadline())
 	}
 	if record.Wave == nil {
 		return "idle"
@@ -253,6 +246,20 @@ func (s *Service) missionOwnerState(record agentstate.MissionExecution) string {
 		return "active"
 	}
 	if record.Wave.Owner == s.missions.owner || !time.Now().Before(record.Wave.Deadline()) {
+		return "recovery_required"
+	}
+	return "waiting_for_owner"
+}
+
+func (s *Service) missionEffectOwnerState(executionID, effectID, owner string, deadline time.Time) string {
+	s.missions.mu.Lock()
+	effect := s.missions.effects[executionID]
+	active := effect != nil && effect.id == effectID
+	s.missions.mu.Unlock()
+	if active {
+		return "active"
+	}
+	if owner == s.missions.owner || !time.Now().Before(deadline) {
 		return "recovery_required"
 	}
 	return "waiting_for_owner"
@@ -271,6 +278,11 @@ func (s *Service) cancelMissionWaves() {
 	s.missions.mu.Lock()
 	defer s.missions.mu.Unlock()
 	s.missions.cancelWavesLocked()
+	for _, effect := range s.missions.effects {
+		if effect.cancelOnReindex {
+			effect.cancel()
+		}
+	}
 }
 
 func (controller *missionController) cancelWavesLocked() {
