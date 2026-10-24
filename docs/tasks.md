@@ -674,28 +674,95 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: expose a guarded local A2A service`
 
-## Task 25 — Add professional model, skill, and integration settings
+## Task 25A — Persist guarded settings and freeze admitted configuration
 
 - [ ] Complete
 
 **Target files**
-- `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go` — **new**, integration, exact-action and research wire contracts with production Settings callers.
 - `internal/api/handlers/agent_settings_handler.go`, `internal/api/handlers/agent_settings_handler_test.go`, `internal/app/agent_settings.go`, `internal/app/agent_settings_test.go` — **new**.
-- `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/hub_settings.go`, `internal/tui/domain/models.go`, `internal/tui/model_details_test.go`, `internal/tui/state.go`, `internal/tui/daemon_actions.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`.
+- `internal/app/agent_settings_runtime.go`, `internal/app/agent_settings_skills.go`, `internal/app/agentstate/settings.go`, `internal/app/agentstate/settings_test.go`, `internal/app/agentruntime/skill_inspection.go`, `internal/app/agentruntime/skill_inspection_test.go` — **new**, private versioned settings, immutable admission snapshots and explicit local skill inspection.
+- `internal/app/agentstate/store.go`, `internal/app/agent_limits.go`, `internal/app/agent_limits_test.go`, `internal/app/agent_context.go`, `internal/app/agent_skills.go`, `internal/app/agent_investigation.go`, `internal/app/declaration_explanation.go`, `internal/app/agent_change_review.go`, `internal/app/change_pipeline.go`, `internal/app/change_pipeline_stages.go`, `internal/app/change_pipeline_timeout.go`, `internal/app/change_pipeline_timeout_test.go` — capture effective settings before investigation/workflow preparation and reuse them throughout nested calls, budgets, repair loops and parallel reviews.
+- `cmd/daemon/main.go`, `docs/api-contract.md`, `docs/openapi.yaml`, `CONFIG.md`.
+
+**Inputs / dependencies**
+- Task 24; provider capability catalog, configured role/budget ceilings, explicit skill directories, private checkout journal and current-project guards.
+
+**Implementation rules**
+- Store source-free project overrides for role scopes, budgets and disabled configured skills using existing private atomic storage, version compare-and-swap and configuration fingerprints. Missing overrides preserve configured defaults; corrupt or stale settings cannot silently become defaults. Explicit reset restores current configuration. Budgets cannot exceed operator-configured ceilings, and settings cannot add skill directories, credentials, providers or tools.
+- Expose passive local inventory, explicit confirmed mutation and explicit bounded local skill validation through strict HTTP contracts. Skill validation describes metadata and required tools without executing resources or granting tools. Keep validation, enablement and actual run-specific tool availability distinct.
+- Freeze settings once per admission, including role defaults, skill selection, repair/concurrency limits and journal fingerprint. Nested work reuses that snapshot. Changed settings apply to subsequent admission and survive restart; copied checkout state, stale revisions/versions, write failures and cancellation remain explicit failures.
+- Keep existing model presets and explicit per-request model selections authoritative. No provider requests, process execution, source writes or grant acquisition occur through these settings controls.
+
+**Verification command**
+`go test -race ./internal/app/agentstate ./internal/app/agentruntime ./internal/app ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: persist guarded agent settings for future runs`
+
+## Task 25B — Add professional role, budget and skill settings views
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/client/agent_settings.go`, `internal/tui/client/agent_settings_test.go`, `internal/tui/agent_settings.go`, `internal/tui/agent_settings_test.go`, `internal/tui/agent_settings_commands.go`, `internal/tui/agent_settings_actions.go` — **new**, wire contracts, compact lists, selected-item details and explicit controls.
+- `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/domain/models.go`, `internal/tui/model_details_test.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/colon_commands_actions.go`, `internal/tui/command_menu.go`, `internal/tui/command_menu_test.go`, `internal/tui/keybinds_help.go`, `internal/tui/view_test.go`.
+- `docs/UI_DESIGN_GUIDELINES.md`, `CONFIG.md`.
+
+**Inputs / dependencies**
+- Task 25A; existing Settings navigation, model presets, scope assignments and confirmation patterns.
+
+**Implementation rules**
+- Keep Models, Roles/Budgets and Skills as compact Settings lists with selected-item details, bounded sanitized text and stable selection. Present configured, overridden, stale, enabled, disabled, valid and unavailable states accurately.
+- Wire role assignment, individual budget editing, skill validation/enable/disable and explicit reset to guarded backend controls. Show the future-run effect before mutation, preserve model presets/scope assignments and use role defaults when constructing workflow model selections and corresponding provider confirmations.
+- Opening or selecting entries is passive. Handle unavailable daemon data, stale results, narrow terminals, all palettes and keyboard help without introducing inert controls.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: add role budget and skill settings views`
+
+## Task 25C — Connect scoped integrations through explicit TUI controls
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go`, `internal/tui/agent_connections.go`, `internal/tui/agent_connections_test.go`, `internal/tui/agent_connections_actions.go`, `internal/tui/agent_connections_commands.go` — **new**, MCP/OpenAPI/outbound A2A/inbound principal inventory and guarded controls.
+- `internal/tui/client/client.go`, `internal/tui/client/models.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/state.go`, `internal/tui/state_test.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/plan_investigation.go`, `internal/tui/plan_investigation_test.go`, `internal/tui/client/change_plan_test.go`.
 - `docs/api-contract.md`, `docs/openapi.yaml`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
-- Task 24; provider capability catalog, role budgets, skills, MCP/OpenAPI/A2A configuration.
+- Task 25B; implemented MCP/OpenAPI/A2A configuration and short-lived grants, existing asynchronous TUI action ownership and captured plan investigations.
 
 **Implementation rules**
-- Use compact Settings lists for Models, Roles/Budgets, Skills, and Connections; place parameters and scopes in selected-item details. Show configured, disconnected, unavailable, and failed distinctly.
-- Wire connect/disconnect, validate, enable/disable, and revoke to explicit guarded actions. Opening or selecting an entry causes no network or process activity.
-- Display credential references/redacted status only. Freeze active-run configuration; changes apply to subsequent admission unless an explicit cancellation/restart is chosen. Preserve current presets and scope assignments.
+- Add a compact Connections list with destination, configured permissions, credential references and grant expiry in selected details. Preserve distinct configured, disconnected, unavailable, expired and failed states; distinguish inbound principals from outbound remotes.
+- Connect/discover and revoke/disconnect require explicit user actions and relevant confirmations. External I/O is asynchronous and cancellable, stale results cannot replace a new project/revision or selection, and browsing/local refresh cannot initiate external network or process work.
+- Select at most two currently granted MCP/API connections for an explicit plan investigation. Capture tool grants and source-sharing consent with the same project, revision, source hashes and plan input. Never attach connections to unrelated requests or treat inbound authorization as source Apply permission.
 
 **Verification command**
-`go test ./internal/app ./internal/api/handlers ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`make tui-test && ./scripts/validate.sh && git diff --check`
 
-**Commit**: `feat: add agent capability and integration settings`
+**Commit**: `feat: add explicit scoped connection controls`
+
+## Task 25D — Review external actions and remote work from the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/agent_external_work.go`, `internal/tui/agent_external_work_test.go`, `internal/tui/agent_external_actions.go`, `internal/tui/agent_external_commands.go`, `internal/tui/browser.go`, `internal/tui/browser_test.go` — **new**, exact external action review, research and delegation actions with explicit report viewing.
+- `internal/tui/client/integrations.go`, `internal/tui/client/integrations_test.go`, `internal/tui/agent_connections.go`, `internal/tui/agent_connections_actions.go`, `internal/tui/hub_settings.go`, `internal/tui/state.go`, `internal/tui/daemon_actions.go`, `internal/tui/sse_events.go`, `internal/tui/terminal_loop.go`, `internal/tui/keys.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/plan_investigation.go`.
+- `docs/UI_DESIGN_GUIDELINES.md`, `CONFIG.md`.
+
+**Inputs / dependencies**
+- Task 25C; exact API action journal, retained Google research reports, A2A delegation receipts and existing captured plan/source scope.
+
+**Implementation rules**
+- Review the exact persisted API request and current version/hash before one confirmed dispatch. Preserve unknown external outcomes, require explicit reconciliation, and never offer an automatic retry after uncertain delivery.
+- Start research or A2A analysis/review only from explicit bounded captured input, with destination/source-sharing/provider consent and configured grants. Show advisory output and remote-reported usage distinctly. Expose explicit refresh, reconnect, cancel, input and reconciliation controls only when the current receipt permits them.
+- Browsing local history is passive; external actions own their cancellation and late-result checks. Open a retained research HTML report only on an explicit action, using the guarded loopback report URL so its citations and required suggestions retain their rendered form. Never shell-interpolate model content or claim arbitrary HTML was rendered in the terminal.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: review external actions and remote agent work in the TUI`
 
 ## Task 26 — Add artifact and memory management to the TUI
 
@@ -707,7 +774,7 @@ This is an implementation specification, not a claim that the features below alr
 - `cmd/daemon/main.go`, `internal/tui/client/client.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/hub_settings.go`, `internal/tui/keys.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 25; local artifact and curated memory stores.
+- Task 25D; local artifact and curated memory stores.
 
 **Implementation rules**
 - Add artifact/evidence navigation within Code and memory/lessons management within Settings. Show versions, source links, freshness, ownership, size, retention, and whether a record is candidate or accepted.
