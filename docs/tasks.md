@@ -652,6 +652,11 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/app/agent_remote_service.go`, `internal/app/agent_remote_service_test.go`, `internal/app/agentruntime/a2a_server.go`, `internal/app/agentruntime/a2a_server_test.go` — **new**.
 - `cmd/daemon/main.go`, `cmd/daemon/main_test.go`, `internal/config/integrations.go`, `internal/api/local_policy.go`, `internal/api/request_test.go`, `CONFIG.md`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/config/a2a_server.go`, `internal/config/a2a_server_test.go` — **new**, disabled-by-default literal-loopback listener and explicit per-project principal/capability configuration; `internal/config/config.go`, `config.example.yaml` — strict keys and passive defaults.
+- `internal/app/agent_remote_work.go` — **new**, bounded request decoding and normal investigation/proposal admission; `internal/app/agent_integrations.go` — temporary inbound grants and lifecycle cancellation.
+- `internal/app/agentruntime/a2a_server_guard.go`, `internal/app/agentruntime/a2a_server_lifecycle.go` — **new**, bounded native JSON-RPC admission, authenticated task ownership, duplicate-message rejection and joined execution cleanup.
+- `internal/api/handlers/agent_remote_service_handler.go`, `internal/api/handlers/agent_remote_service_handler_test.go` — **new**, passive principal inventory and explicit local grant/revoke actions. TUI callers join Task 25.
+- `cmd/daemon/a2a_server.go`, `cmd/daemon/a2a_server_test.go` — **new**, optional listener construction, existing Host/Origin policy and shutdown wiring.
 
 **Inputs / dependencies**
 - Task 23; existing local request policy, run lifecycle, and SDK authentication/authorization facilities.
@@ -660,6 +665,9 @@ This is an implementation specification, not a claim that the features below alr
 - Add an opt-in A2A listener on loopback by default with explicit authenticated principals and per-project capabilities. Its agent card advertises only implemented operations.
 - Route requests through normal application admission. Allow analysis and proposal preparation; source Apply/Undo/Merge remain local human actions.
 - Separate public metadata from private sessions/artifacts. Test authentication, project isolation, revoked grants, resource limits, cancellation, and absence of default exposure. Do not mount the unrestricted ADK REST/dev server onto the daemon.
+- Use the pinned native ADK A2A executor and A2A 1.0 JSON-RPC handler. Accept only bounded text requests for implemented skills, with strict project/revision and 1–8 source hashes; forbid client-selected session/context IDs, metadata, attachments, push delivery and source mutation operations. Explicitly check authenticated task ownership before read, subscription and cancellation.
+- Configuration authenticates a principal but grants no project access. Local grant/revoke controls bind a 15-minute permission to the current project, capabilities, credential and provider configuration; require source-sharing and relevant remote-provider consent. Reindex, project replacement, revocation and shutdown cancel owned work. Provider confirmation is also required on each applicable request.
+- Bound request/output size, active executions and retained task/message identities. Never replay a message ID. A2A task/session state is private and process-local; restart removes grants and task access, while ordinary local proposal/run journals remain durable. Browsing cards or local inventory never dispatches work. Disconnected requests, explicit cancel and shutdown terminate and join execution; failure details cannot expose raw provider diagnostics.
 
 **Verification command**
 `go test -race ./internal/app/agentruntime ./internal/app ./internal/api ./cmd/daemon && ./scripts/validate.sh && git diff --check`
