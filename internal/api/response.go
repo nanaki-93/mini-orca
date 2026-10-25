@@ -18,7 +18,7 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 	switch status {
 	case http.StatusNotFound:
 		errType = ErrorNotFound
-	case http.StatusBadRequest:
+	case http.StatusBadRequest, http.StatusRequestTimeout, http.StatusGatewayTimeout, http.StatusUnprocessableEntity, http.StatusUnsupportedMediaType, http.StatusRequestEntityTooLarge:
 		errType = ErrorBadRequest
 	case http.StatusUnauthorized:
 		errType = ErrorUnauthorized

@@ -182,5 +182,7 @@ func writeAgentBatch(w http.ResponseWriter, controller *http.ResponseController,
 	if _, err := w.Write([]byte(frame)); err != nil {
 		return err
 	}
-	return controller.Flush()
+	err = controller.Flush()
+	_ = controller.SetWriteDeadline(time.Time{})
+	return err
 }

@@ -25,6 +25,9 @@ func lockRunnerFile(path string) (*runnerLockedFile, error) {
 }
 
 func (lock *runnerLockedFile) Close() {
+	if lock == nil || lock.file == nil {
+		return
+	}
 	_ = syscall.Flock(int(lock.file.Fd()), syscall.LOCK_UN)
 	_ = lock.file.Close()
 }

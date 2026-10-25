@@ -29,6 +29,8 @@ type EffectiveModel struct {
 	ProviderOrigin   string           `json:"provider_origin"`
 	RemoteProvider   bool             `json:"remote_provider"`
 	Temperature      *float32         `json:"temperature"`
+	TopP             *float32         `json:"top_p,omitempty"`
+	TopK             *int             `json:"top_k,omitempty"`
 	MaxTokens        *int             `json:"max_tokens"`
 	ContextMaxTokens int              `json:"context_max_tokens"`
 	Timeout          string           `json:"timeout"`
@@ -171,6 +173,8 @@ func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetr
 	}
 	if !profile.IsCLI() {
 		runtime.effective.Temperature = &profile.Temperature
+		runtime.effective.TopP = profile.TopP
+		runtime.effective.TopK = profile.TopK
 		runtime.effective.MaxTokens = &profile.MaxTokens
 	}
 	return runtime

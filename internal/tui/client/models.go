@@ -180,6 +180,8 @@ type Model struct {
 	RemoteProvider   bool              `json:"remote_provider"`
 	ReasoningEffort  string            `json:"reasoning_effort,omitempty"`
 	Temperature      *float32          `json:"temperature,omitempty"`
+	TopP             *float32          `json:"top_p,omitempty"`
+	TopK             *int              `json:"top_k,omitempty"`
 	MaxTokens        *int              `json:"max_tokens,omitempty"`
 	ContextMaxTokens int               `json:"context_max_tokens,omitempty"`
 	Timeout          string            `json:"timeout"`

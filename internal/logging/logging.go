@@ -50,20 +50,14 @@ func Init(cfg Config) {
 	opts := &slog.HandlerOptions{
 		Level: level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Case-insensitive check for sensitive keys
-			for _, key := range sensitiveKeys {
-				if strings.EqualFold(a.Key, key) {
-					return slog.String(a.Key, "[REDACTED]")
-				}
-			}
-			return a
+			return redactAttr(a, sensitiveKeys)
 		},
 	}
 
 	output := cfg.Output
 	if output == nil {
 		if cfg.Filename != "" {
-			f, err := os.OpenFile(cfg.Filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			f, err := os.OpenFile(cfg.Filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 			if err != nil {
 				// Fallback to stdout if file cannot be opened
 				output = os.Stdout
@@ -95,4 +89,22 @@ func Info(msg string, args ...any) {
 // Error logs a message at error level
 func Error(msg string, args ...any) {
 	logger.Error(msg, args...)
+}
+
+func redactAttr(a slog.Attr, sensitiveKeys []string) slog.Attr {
+	if a.Value.Kind() == slog.KindGroup {
+		attrs := a.Value.Group()
+		redacted := make([]slog.Attr, len(attrs))
+		for i, child := range attrs {
+			redacted[i] = redactAttr(child, sensitiveKeys)
+		}
+		return slog.Attr{Key: a.Key, Value: slog.GroupValue(redacted...)}
+	}
+	lowerKey := strings.ToLower(a.Key)
+	for _, key := range sensitiveKeys {
+		if strings.EqualFold(a.Key, key) || strings.Contains(lowerKey, strings.ToLower(key)) {
+			return slog.String(a.Key, "[REDACTED]")
+		}
+	}
+	return a
 }

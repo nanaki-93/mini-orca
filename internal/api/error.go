@@ -10,7 +10,7 @@ import (
 
 var (
 	errorURLPattern    = regexp.MustCompile(`https?://[^\s"']+`)
-	errorSecretPattern = regexp.MustCompile(`(?i)\b(?:api[_-]?key|token|secret|password|authorization)\b\s*[:=]\s*[^\s,;]+`)
+	errorSecretPattern = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|token|secret|password|authorization)\b\s*[:=]\s*[^\s,;]+|\bBearer\s+[^\s,;"]+)`)
 )
 
 // ErrorType categorizes a structured transport error.

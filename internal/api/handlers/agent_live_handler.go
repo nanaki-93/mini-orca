@@ -56,6 +56,8 @@ func respondLive(w http.ResponseWriter, value any, err error) {
 		api.WriteAppError(w, api.Conflict("live session changed", "Refresh local session history before another control. Restarted sessions require a new explicit connection.", err))
 	case errors.Is(err, app.ErrLiveUnavailable):
 		api.WriteAppError(w, api.NewAppError(api.ErrorInternal, "live connection unavailable", "Inspect retained local history. Input or usage may be partial; no reconnect or resend happens automatically.", http.StatusBadGateway, err))
+	case err != nil && writeContextError(w, "live session request", err):
+		return
 	default:
 		respondArtifact(w, value, err)
 	}

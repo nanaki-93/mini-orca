@@ -127,6 +127,7 @@ untrusted networks.
 | POST | `/api/projects/current/memory/{memoryID}` | Edit, accept or forget a memory using its current version. |
 | GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
+| POST | `/api/projects/current/bootstrap/exec` | Run `mise trust && mise install` and `lefthook install` in the active project root under explicit local execution trust. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
 | GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |

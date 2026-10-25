@@ -270,7 +270,8 @@ func RunEngineeringInsightEvaluation(ctx context.Context, cfg EngineeringInsight
 	}
 	manifest.Finished = true
 	if err := storeRunnerJSON(manifestPath, manifest); err != nil {
-		return manifest.Receipt, handoff, err
+		handoff.Discard()
+		return manifest.Receipt, nil, err
 	}
 	return manifest.Receipt, handoff, nil
 }

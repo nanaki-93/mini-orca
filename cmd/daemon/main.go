@@ -102,7 +102,7 @@ func startHTTPServer(
 		Addr:         daemonAddress(),
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 6 * time.Minute,
+		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -135,6 +135,9 @@ func newHTTPMux(
 	current := newProjectHTTPMux(application, projectManager)
 	worktrees := &worktreeRouter{}
 	return api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/current/events" && r.URL.Path != "/api/projects/current/agent-runs/events" {
+			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(6 * time.Minute))
+		}
 		query, err := url.ParseQuery(r.URL.RawQuery)
 		if err != nil {
 			api.WriteAppError(w, api.BadRequest("invalid request query", "Provide valid URL-encoded query parameters.", err))

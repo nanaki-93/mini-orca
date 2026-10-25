@@ -1454,6 +1454,20 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/bootstrap/exec:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    post:
+      tags: [Projects]
+      summary: Execute mise and lefthook bootstrap steps under local execution trust
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ExecutionTrustRequest'}}}
+      responses:
+        '200': {description: Bootstrap execution steps and statuses, content: {application/json: {schema: {type: object}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/index:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}

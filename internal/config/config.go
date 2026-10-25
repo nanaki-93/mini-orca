@@ -180,6 +180,9 @@ func (c *Config) Validate() error {
 	if c == nil {
 		return fmt.Errorf("configuration is required")
 	}
+	if err := c.validateRetryAndTimeouts(); err != nil {
+		return err
+	}
 	if _, err := ResolveModelProfiles(c); err != nil {
 		return err
 	}
@@ -188,6 +191,16 @@ func (c *Config) Validate() error {
 	}
 	_, err := ResolveIntegrations(c.Integrations)
 	return err
+}
+
+func (c *Config) validateRetryAndTimeouts() error {
+	if c.Retry.MaxRetries < 0 || c.Retry.MaxRetries > 10 || c.Retry.BackoffBase < 0 || c.Retry.BackoffMax < 0 || (c.Retry.BackoffMax > 0 && c.Retry.BackoffBase > c.Retry.BackoffMax) {
+		return fmt.Errorf("retry configuration must use non-negative backoff and 0..10 max_retries")
+	}
+	if c.Timeouts.ImportSeconds < 0 || c.Timeouts.AnalysisSeconds < 0 || c.Timeouts.GenerationSeconds < 0 || c.Timeouts.WorkflowModelSeconds < 0 || c.Timeouts.FocusedCheckSeconds < 0 {
+		return fmt.Errorf("timeouts must be non-negative")
+	}
+	return nil
 }
 
 var configurationFields = fieldSet{
