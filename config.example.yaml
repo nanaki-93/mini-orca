@@ -42,6 +42,15 @@ project_path: "."
 
 # Passive configuration. Discovery and each investigation require explicit grants.
 integrations:
+  cloud: [] # Explicit copies only; local journals, approvals and curated memory remain local.
+  # - id: archive
+  #   service: gcs_artifact # Or vertex_session for a completed invocation archive.
+  #   project: "123456789012" # Google Cloud project number, not the local project ID.
+  #   region: us-central1
+  #   resource: mini-orca-archives # Bucket; Vertex uses a reasoning-engine numeric ID.
+  #   principal: archive-agent@example-project.iam.gserviceaccount.com
+  #   credential_file_env: MINI_ORCA_CLOUD_KEY # Environment variable containing a service-account JSON file path.
+  #   retention_days: 30 # Operator cleanup deadline; not an automatic server TTL.
   a2a_server:
     enabled: false
     bind: "127.0.0.1:9091"

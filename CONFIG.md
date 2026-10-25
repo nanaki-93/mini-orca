@@ -330,6 +330,59 @@ retain its own conversation records under its normal settings. Application
 retry limits count CLI invocations; upstream retries internal to a CLI or its
 service are outside Mini-Orca's transport accounting.
 
+## Optional cloud copies
+
+`integrations.cloud` defaults to an empty list and accepts up to four explicit
+destinations. Configuration and local previews never authenticate, probe a
+resource or upload history. The running journal, approval checkpoints, curated
+memory and Apply/Undo authority remain local.
+
+Each destination requires `id`, `service` (`vertex_session` or `gcs_artifact`),
+`project` (Google Cloud project number as a string), `region`, `resource`,
+`principal`, `credential_file_env` and `retention_days` (1–365). Vertex resources
+are numeric reasoning-engine IDs; GCS resources are bucket names without paths.
+The region is explicit and regional, such as `us-central1`. Before GCS transfer,
+the adapter checks that the bucket's project number and location match.
+
+The named environment variable contains a path to a service-account JSON file.
+Credentials are read only during an explicitly confirmed operation; its
+`client_email` must match `principal`, and the token endpoint must be Google's.
+User ADC, external-account files and arbitrary token endpoints are not accepted.
+Supply least-privilege permissions for the configured resource. Keep key files
+and local configuration outside version control. Missing or invalid credentials
+produce an uncertain retained receipt; they never trigger credential discovery.
+
+The [cloud-copy API](docs/api-contract.md#cloud-copies) previews selected content
+and requires exact preview identity plus source-sharing consent. Vertex stores a
+completed invocation as a private archive in an ADK session; GCS stores a selected
+immutable artifact as an ADK `copy.json` artifact. Archive envelopes preserve the
+original data and numeric precision. They are not resumable checkpoints. Every
+invocation in the selected workflow must be completed, without approval
+checkpoints. Active or incomplete workflows, in-use artifacts and copies above 4 MiB are
+rejected. Copies include private prompts/tool output or the selected artifact;
+they are distinct from source-free telemetry exports.
+
+Transfers retain local originals and private, source-free receipts. Explicit
+remote Check reconciles a lost outcome; Delete removes the live remote copy.
+Failed or partial operations remain `unknown`, with no automatic upload replay.
+Operations have a one-minute context deadline; GCS permits at most 64 requests
+and Vertex permits at most 16 RPC attempts. SDK background metrics are disabled.
+A receipt lease expires after 90 seconds, allowing explicit crash recovery.
+There are at most 128 retained receipts per checkout. A changed destination must
+be restored to its recorded configuration before remote recovery.
+
+`retention_days` sets the receipt's operator cleanup deadline, not automatic
+deletion or a provider TTL. Inspect and delete expired copies explicitly. Cloud
+soft-delete, object versioning, retention locks, backups and audit retention may
+retain data after a successful live-copy deletion; manage those policies on the
+resource. Remote deletion failure never becomes a successful deletion receipt.
+
+The pinned ADK Go Memory Bank adapter has no deletion or explicit credential
+injection API, so `vertex_memory` is rejected. Curated local memory remains
+available. Vertex-session and GCS paths are covered by fake gRPC/HTTP conformance
+tests; real cloud IAM, resource retention and availability require an operator
+smoke test with their own resources.
+
 ## Agent roles and run limits
 
 `agent_runtime.roles` supplies Creation, Testing and Review profiles when an API

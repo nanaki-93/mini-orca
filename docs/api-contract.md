@@ -105,6 +105,9 @@ untrusted networks.
 | GET | `/api/projects/current/agent-access` | List configured inbound principals and temporary access grants for this project. |
 | GET | `/api/projects/current/agent-settings` | Read configured or overridden role, budget and skill settings without dispatch. |
 | GET | `/api/projects/current/agent-triggers` | Inspect main-checkout watch, grant, last attempt and persisted window consumption without dispatch. |
+| GET | `/api/projects/current/cloud-copies` | Read configured cloud destinations and local transfer receipts without network access. |
+| POST | `/api/projects/current/cloud-copies/preview` | Preview exact selected private data and its destination without uploading. |
+| POST | `/api/projects/current/cloud-copies/control` | Explicitly copy, check or delete a scoped remote archive. |
 | POST | `/api/projects/current/agent-triggers/control` | Explicitly watch, grant, revoke or disable bounded ambient semantic analysis. |
 | POST | `/api/projects/current/agent-settings/control` | Confirm a versioned replacement or reset for future admissions. |
 | POST | `/api/projects/current/agent-settings/skills/validate` | Explicitly validate a configured skill's captured local text without executing resources. |
@@ -2060,6 +2063,59 @@ replace an existing draft. Invalid or incomplete decomposition returns 400 with
 `mission planning incomplete`; stale catalog or captured identities return 409.
 Provider/transport failures and request cancellation retain the normal error
 contract. Retrying is a new explicit planning request against current captures.
+
+### Cloud copies
+
+All three routes require the current main-checkout identity and reject any
+`worktree_path` before creating a scoped service. Responses are `no-store`.
+`GET /api/projects/current/cloud-copies` takes `project_id` and
+`project_revision`, returning `destinations` and retained `copies`. Destination
+state `configured` is not a successful availability or authentication probe.
+Listing never reads credentials or contacts Google Cloud.
+
+`POST /api/projects/current/cloud-copies/preview` accepts only `project_id`,
+`project_revision`, `target_id`, `kind` and `source_id`. For `kind: session`,
+select a completed invocation ID and a `vertex_session` destination. All members
+of its root workflow must be completed; any input checkpoint is rejected.
+For `kind: artifact`, select an immutable
+artifact-library ID and a `gcs_artifact` destination; in-use evidence is rejected.
+The private archive is bounded to 4 MiB. The response contains the selection,
+unique copy `id`, exact `target`, `configuration` fingerprint, original
+`source_revision`, `source_version`, archive `hash` and `size`. Preview reads
+local data but returns no source or credential contents.
+
+`POST /api/projects/current/cloud-copies/control` accepts current checkout
+identity, `action`, `id`, `version`, optional `preview`, `confirm` and
+`confirm_source_sharing`:
+
+- `copy` requires `version: 0`, the entire unchanged preview, its exact `id`,
+  `confirm: true` and `confirm_source_sharing: true`. The application reconstructs
+  and hashes the selected data before dispatch, rejecting changed content or
+  policy. It durably claims the ID before remote effects; replaying it returns 409.
+- `check` and `delete` require the retained ID and current receipt `version`,
+  `confirm: true`, no preview, and `confirm_source_sharing: false`. Check explicitly
+  reads the remote copy to compare its exact bytes. Delete removes the live copy
+  and verifies its absence. Both require the recorded destination configuration.
+
+Receipts include current `version`, original checkout identity, target/configuration,
+source identity/version/revision, archive hash/size, state and timestamps
+(`created_at`, `updated_at`, `cleanup_at`, `lease_until`). States are `copying`,
+`checking`, `deleting`, `completed`, `unknown`, `missing` and `deleted`. Busy
+receipts have a 90-second lease. A canceled or failed operation retains `unknown`
+when its final local write succeeds; otherwise the existing busy receipt remains
+for recovery after its lease expires. No automatic retry or remote migration runs
+on restart. Remote failure may return HTTP 200 with `state: unknown`; this is an
+uncertain outcome, never success. Provider diagnostics are redacted.
+
+Local originals remain intact. `completed` means an exact remote copy was read
+back; `missing` means no live copy was found. `deleted` means an explicit Delete
+was followed by a successful absence check. Cloud retention/soft-delete policies
+may retain older data. `cleanup_at` is an operator cleanup deadline, not automatic
+deletion. Capacity is 128 receipts per checkout. Changed/stale receipts return
+409, invalid input or missing confirmation 400, oversized request bodies 413,
+and corrupt/unwritable local state 500. Restore a changed destination's recorded
+configuration before remote recovery. The API cannot resume archived invocations,
+grant Apply authority or ingest conversations into cloud memory.
 
 ### Ambient semantic analysis
 

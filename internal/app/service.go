@@ -51,6 +51,7 @@ type modelOutput = agentruntime.Result
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
+	openCloud                       func(context.Context, config.CloudTarget) (agentruntime.CloudServices, error)
 	config                          *config.Config
 	agentRuntime                    config.AgentRuntime
 	agentRuns                       *agentRunController

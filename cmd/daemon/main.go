@@ -149,6 +149,10 @@ func newHTTPMux(
 			api.WriteAppError(w, api.BadRequest("ambient analysis requires the main checkout", "Select the main project scope before inspecting or controlling its watch.", nil))
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/projects/current/cloud-copies") {
+			api.WriteAppError(w, api.BadRequest("cloud copies require the main checkout", "Select the main project scope before inspecting cloud copies.", nil))
+			return
+		}
 		if len(paths) != 1 || paths[0] == "" {
 			api.WriteAppError(w, api.BadRequest("invalid worktree scope", "Provide worktree_path once with an absolute registered worktree path.", nil))
 			return
@@ -201,6 +205,10 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	triggersHandler := handlers.NewAgentTriggersHandler(application)
 	mux.HandleFunc("GET /api/projects/current/agent-triggers", triggersHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/agent-triggers/control", triggersHandler.Control)
+	cloudHandler := handlers.NewAgentCloudHandler(application)
+	mux.HandleFunc("GET /api/projects/current/cloud-copies", cloudHandler.List)
+	mux.HandleFunc("POST /api/projects/current/cloud-copies/preview", cloudHandler.Preview)
+	mux.HandleFunc("POST /api/projects/current/cloud-copies/control", cloudHandler.Control)
 	mux.HandleFunc("GET /api/projects/current/agent-settings", settingsHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/control", settingsHandler.Control)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/skills/validate", settingsHandler.ValidateSkill)

@@ -355,6 +355,42 @@ paths:
         '413': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
         '502': {$ref: '#/components/responses/Error'}
+  /api/projects/current/cloud-copies:
+    get:
+      tags: [Projects]
+      summary: Read configured cloud destinations and local receipts without connecting
+      description: Main checkout only; any worktree_path is rejected. Configuration is not a remote availability probe.
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Passive no-store cloud metadata, content: {application/json: {schema: {$ref: '#/components/schemas/CloudCatalog'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/cloud-copies/preview:
+    post:
+      tags: [Projects]
+      summary: Preview an exact private archive and destination without uploading
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CloudSelection'}}}}
+      responses:
+        '200': {description: Local metadata and content fingerprint only, content: {application/json: {schema: {$ref: '#/components/schemas/CloudPreview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/cloud-copies/control:
+    post:
+      tags: [Projects]
+      summary: Explicitly copy, reconcile or delete a scoped cloud archive
+      description: Main checkout only. Copy requires the unchanged preview and source-sharing confirmation. Check and delete require a current receipt version and exact destination. An unknown outcome is retained without automatic upload replay. Cleanup deadlines do not imply a server TTL or deletion of provider backups.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CloudControl'}}}}
+      responses:
+        '200': {description: Durable no-store receipt; unknown is an uncertain outcome, content: {application/json: {schema: {$ref: '#/components/schemas/CloudCopy'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/agent-triggers:
     get:
       tags: [Projects]
@@ -2143,6 +2179,96 @@ components:
               type: object
               properties:
                 cached_tokens: {type: integer, minimum: 0}
+    CloudTarget:
+      type: object
+      additionalProperties: false
+      required: [id, service, project, region, resource, principal, credential_file_env, retention_days]
+      properties:
+        id: {type: string}
+        service: {type: string, enum: [vertex_session, gcs_artifact]}
+        project: {type: string, pattern: '^[1-9][0-9]{5,19}$'}
+        region: {type: string}
+        resource: {type: string}
+        principal: {type: string}
+        credential_file_env: {type: string}
+        retention_days: {type: integer, minimum: 1, maximum: 365}
+    CloudSelection:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, target_id, kind, source_id]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        target_id: {type: string}
+        kind: {type: string, enum: [session, artifact]}
+        source_id: {type: string}
+    CloudPreview:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, target_id, kind, source_id, id, target, configuration, source_revision, source_version, hash, size]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        target_id: {type: string}
+        kind: {type: string, enum: [session, artifact]}
+        source_id: {type: string}
+        id: {type: string, pattern: '^mo-[a-f0-9]{32}$'}
+        target: {$ref: '#/components/schemas/CloudTarget'}
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        source_revision: {type: string}
+        source_version: {type: integer, format: int64, minimum: 0}
+        hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        size: {type: integer, minimum: 1, maximum: 4194304}
+    CloudCopy:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, kind, source_id, id, target, configuration, source_revision, source_version, hash, size, version, state, created_at, updated_at, cleanup_at, lease_until]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        kind: {type: string, enum: [session, artifact]}
+        source_id: {type: string}
+        id: {type: string, pattern: '^mo-[a-f0-9]{32}$'}
+        target: {$ref: '#/components/schemas/CloudTarget'}
+        configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+        source_revision: {type: string}
+        source_version: {type: integer, format: int64, minimum: 0}
+        hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        size: {type: integer, minimum: 1, maximum: 4194304}
+        version: {type: integer, format: int64, minimum: 1}
+        state: {type: string, enum: [copying, checking, deleting, completed, unknown, missing, deleted]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        cleanup_at: {type: string, format: date-time}
+        lease_until: {type: string, format: date-time}
+    CloudDestination:
+      type: object
+      required: [target, configuration, state]
+      properties:
+        target: {$ref: '#/components/schemas/CloudTarget'}
+        configuration: {type: string}
+        state: {type: string, enum: [configured]}
+    CloudCatalog:
+      type: object
+      required: [project_id, project_revision, destinations, copies]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        destinations: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/CloudDestination'}}
+        copies: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/CloudCopy'}}
+    CloudControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, action, id, version, confirm]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        action: {type: string, enum: [copy, check, delete]}
+        id: {type: string, pattern: '^mo-[a-f0-9]{32}$'}
+        version: {type: integer, format: int64, minimum: 0}
+        preview: {$ref: '#/components/schemas/CloudPreview'}
+        confirm: {type: boolean, const: true}
+        confirm_source_sharing: {type: boolean}
     TriggerControl:
       type: object
       additionalProperties: false

@@ -19,6 +19,7 @@ type IntegrationsConfig struct {
 	A2A          []RemoteAgent    `yaml:"a2a"`
 	A2AServer    AgentServer      `yaml:"a2a_server"`
 	GoogleSearch bool             `yaml:"google_search"`
+	Cloud        []CloudTarget    `yaml:"cloud"`
 }
 
 type OpenAPIService struct {
@@ -81,6 +82,9 @@ func ResolveIntegrations(input IntegrationsConfig) (IntegrationsConfig, error) {
 	}
 	if err == nil {
 		result.A2AServer, err = resolveAgentServer(input.A2AServer)
+	}
+	if err == nil {
+		result.Cloud, err = resolveCloudTargets(input.Cloud, seen)
 	}
 	return result, err
 }

@@ -1247,7 +1247,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 33A — Add consented cloud copies with durable recovery
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/config/cloud.go`, `internal/config/cloud_test.go`, `internal/app/agentstate/cloud.go`, `internal/app/agentstate/cloud_test.go` — **new**, validated destinations and private transfer receipts.
