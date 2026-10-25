@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func generationInput() GenerationRequest {
@@ -23,17 +24,19 @@ func generationInput() GenerationRequest {
 
 func TestGenerationPreservesSafeFailureCategories(t *testing.T) {
 	client := NewClient(config.ModelProfile{})
+	toolSchemas := map[string]*jsonschema.Schema{"read_file": nil}
 	for _, test := range []struct {
 		refusal, finish string
+		schemas         map[string]*jsonschema.Schema
 		want            error
 	}{
 		{refusal: "PRIVATE_PROVIDER_REASON", finish: "stop", want: ErrGenerationRefused},
 		{finish: "tool_calls", want: ErrGenerationIncomplete},
-		{finish: "length", want: ErrGenerationIncomplete},
-		{finish: "content_filter", want: ErrGenerationIncomplete},
+		{finish: "length", schemas: toolSchemas, want: ErrGenerationIncomplete},
+		{finish: "content_filter", schemas: toolSchemas, want: ErrGenerationIncomplete},
 	} {
 		wire := generationWireMessage{ChatMessage: ChatMessage{Role: "assistant", Content: "PRIVATE_OUTPUT", Refusal: test.refusal}}
-		result, err := client.validateGenerationResult(wire, "model", test.finish, nil, nil, false)
+		result, err := client.validateGenerationResult(wire, "model", test.finish, nil, test.schemas, false)
 		if result != nil || !errors.Is(err, test.want) || !errors.Is(err, ErrUnusableResponse) || strings.Contains(err.Error(), "PRIVATE_") {
 			t.Fatalf("unsafe or lost failure category: result=%+v error=%v", result, err)
 		}

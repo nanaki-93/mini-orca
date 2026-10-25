@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -962,6 +963,13 @@ class DispatcherTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         self.assertFalse(outside.exists())
         self.assertEqual((self.fixture.repo / "sandbox-inside").read_text(), "ok")
+
+    def test_lease_alive_treats_permission_error_as_live_process(self) -> None:
+        with mock.patch.object(autopilot.os, "kill", side_effect=PermissionError):
+            self.assertTrue(autopilot.Lease.alive(999))
+        with mock.patch.object(autopilot.os, "kill", side_effect=ProcessLookupError):
+            self.assertFalse(autopilot.Lease.alive(999))
+
 
 
 def now_iso() -> str:

@@ -414,8 +414,10 @@ class Lease:
         try:
             os.kill(pid, 0)
             return True
-        except (ProcessLookupError, PermissionError):
+        except ProcessLookupError:
             return False
+        except PermissionError:
+            return True
 
     def __enter__(self) -> "Lease":
         self.path.parent.mkdir(parents=True, exist_ok=True)

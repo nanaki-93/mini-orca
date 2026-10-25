@@ -279,7 +279,7 @@ func (c *Client) validateGenerationResult(wire generationWireMessage, model, fin
 		return nil, err
 	}
 	if len(wire.ToolCalls) == 0 {
-		if (streaming && finish != "stop") || (finish != "" && finish != "stop") {
+		if (streaming && finish != "stop") || finish == "tool_calls" || (len(schemas) != 0 && finish != "" && finish != "stop") {
 			return nil, ErrGenerationIncomplete
 		}
 		err := c.validateFinalResponse(ChatResponse{Choices: []ChatChoice{{Message: wire.ChatMessage, FinishReason: finish}}})

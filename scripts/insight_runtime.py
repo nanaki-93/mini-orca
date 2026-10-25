@@ -593,14 +593,24 @@ def terminate_owned(config: RuntimeConfig, state: Mapping[str, Any], timeout: in
     start_identity = state.get("start_identity")
     if not isinstance(pid, int) or not isinstance(start_identity, str) or process_identity(pid) != start_identity:
         return False
-    os.kill(pid, signal.SIGTERM)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except PermissionError as error:
+        raise RuntimeError(f"cannot signal owned runtime process {pid}: {error}") from error
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process_identity(pid) is None:
             return True
         time.sleep(0.1)
     if process_identity(pid) == start_identity:
-        os.kill(pid, signal.SIGKILL)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return True
+        except PermissionError as error:
+            raise RuntimeError(f"cannot force-stop owned runtime process {pid}: {error}") from error
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             if process_identity(pid) is None:

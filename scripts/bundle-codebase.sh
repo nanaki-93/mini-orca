@@ -101,6 +101,14 @@ for rel_path in "${FILES[@]}"; do
         continue
     fi
 
+    # Never bundle local secrets, runtime configs, or generated/worktree state
+    case "$rel_path" in
+        .env|.env.*|*/.env|*/.env.*|config.yaml|*/config.yaml|.mini-orca/*|*/.mini-orca/*|build/*|*/build/*|.worktrees/*|*/.worktrees/*)
+            SKIPPED_FILES+=("$rel_path (excluded sensitive or generated path)")
+            continue
+            ;;
+    esac
+
     # Skip files that don't exist (e.g. deleted or broken symlinks)
     if [[ ! -f "$full_path" ]]; then
         continue

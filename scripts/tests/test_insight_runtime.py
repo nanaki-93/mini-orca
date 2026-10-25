@@ -328,6 +328,19 @@ class InsightRuntimeTest(unittest.TestCase):
             FakeProcess.wait.assert_called_once_with(timeout=runtime.SHUTDOWN_TIMEOUT_SECONDS)
             self.assertFalse(runtime.state_path(config).exists())
 
+    def test_terminate_owned_handles_process_exit_race_and_permission_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = self.config(Path(temporary))
+            state = {"pid": 4312, "start_identity": "owned"}
+            with mock.patch.object(runtime, "process_identity", return_value="owned"), \
+                    mock.patch.object(runtime.os, "kill", side_effect=ProcessLookupError):
+                self.assertTrue(runtime.terminate_owned(config, state))
+            with mock.patch.object(runtime, "process_identity", return_value="owned"), \
+                    mock.patch.object(runtime.os, "kill", side_effect=PermissionError("denied")):
+                with self.assertRaisesRegex(runtime.RuntimeError, "cannot signal owned runtime process"):
+                    runtime.terminate_owned(config, state)
+
+
 
 if __name__ == "__main__":
     unittest.main()
