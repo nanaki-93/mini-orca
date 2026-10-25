@@ -86,6 +86,7 @@ type generationWireCall struct {
 
 type generationWireMessage struct {
 	ChatMessage
+	Name       string               `json:"name,omitempty"`
 	ToolCalls  []generationWireCall `json:"tool_calls,omitempty"`
 	ToolCallID string               `json:"tool_call_id,omitempty"`
 }
@@ -245,6 +246,9 @@ func (c *Client) generationHTTPRequest(ctx context.Context, input GenerationRequ
 
 func generationMessageToWire(message GenerationMessage) generationWireMessage {
 	wire := generationWireMessage{ChatMessage: message.ChatMessage, ToolCallID: message.ToolCallID}
+	if message.Role == "tool" {
+		wire.Name = message.ToolName
+	}
 	for _, call := range message.ToolCalls {
 		value := generationWireCall{ID: call.ID, Type: "function"}
 		value.Function.Name, value.Function.Arguments = call.Name, string(call.Arguments)
@@ -275,7 +279,7 @@ func (c *Client) validateGenerationResult(wire generationWireMessage, model, fin
 		return nil, err
 	}
 	if len(wire.ToolCalls) == 0 {
-		if streaming && finish != "stop" || finish == "tool_calls" {
+		if (streaming && finish != "stop") || (finish != "" && finish != "stop") {
 			return nil, ErrGenerationIncomplete
 		}
 		err := c.validateFinalResponse(ChatResponse{Choices: []ChatChoice{{Message: wire.ChatMessage, FinishReason: finish}}})

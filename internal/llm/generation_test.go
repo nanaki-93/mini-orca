@@ -29,6 +29,8 @@ func TestGenerationPreservesSafeFailureCategories(t *testing.T) {
 	}{
 		{refusal: "PRIVATE_PROVIDER_REASON", finish: "stop", want: ErrGenerationRefused},
 		{finish: "tool_calls", want: ErrGenerationIncomplete},
+		{finish: "length", want: ErrGenerationIncomplete},
+		{finish: "content_filter", want: ErrGenerationIncomplete},
 	} {
 		wire := generationWireMessage{ChatMessage: ChatMessage{Role: "assistant", Content: "PRIVATE_OUTPUT", Refusal: test.refusal}}
 		result, err := client.validateGenerationResult(wire, "model", test.finish, nil, nil, false)
@@ -105,7 +107,7 @@ func TestGenerationToolConversationKeepsIdentityAndSampling(t *testing.T) {
 			io.WriteString(w, `{"model":"fixture","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"main.go\"}"}}]}}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}`)
 			return
 		}
-		if len(request.Messages) != 3 || request.Messages[1].ToolCalls[0].ID != "call_1" || request.Messages[2].ToolCallID != "call_1" || request.Messages[2].Content != `{"source":"package main"}` {
+		if len(request.Messages) != 3 || request.Messages[1].ToolCalls[0].ID != "call_1" || request.Messages[2].ToolCallID != "call_1" || request.Messages[2].Name != "read_file" || request.Messages[2].Content != `{"source":"package main"}` {
 			t.Errorf("tool history changed: %+v", request.Messages)
 		}
 		io.WriteString(w, `{"model":"fixture","choices":[{"message":{"role":"assistant","content":"The file declares main."},"finish_reason":"stop"}]}`)

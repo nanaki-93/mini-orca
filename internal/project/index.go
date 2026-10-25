@@ -93,7 +93,7 @@ func buildIndex(root, id, revision string, persist bool) (*ProjectIndex, error) 
 		}
 	}
 	paths, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
-		Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
+		Root: canonical, Policy: policy, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
 	})
 	if err != nil {
 		return nil, err

@@ -39,3 +39,14 @@ func TestGenericJavaExtractorRejectsExpressions(t *testing.T) {
 		t.Fatalf("Java symbols = %#v, want only declarations", symbols)
 	}
 }
+
+func TestGenericSymbolEndLineSupportsIndentationAndMultilineHeaders(t *testing.T) {
+	_, pySymbols := ExtractGenericFacts("Python", []byte("def compute(\n    value: int,\n) -> int:\n    result = value + 1\n    return result\n\nx = 1\n"))
+	if len(pySymbols) != 1 || pySymbols[0].StartLine != 1 || pySymbols[0].EndLine != 5 {
+		t.Fatalf("Python symbols = %#v, want span 1..5", pySymbols)
+	}
+	_, tsSymbols := ExtractGenericFacts("TypeScript", []byte("export function compute(\n  value: number,\n): number\n{\n  return value + 1;\n}\n"))
+	if len(tsSymbols) != 1 || tsSymbols[0].StartLine != 1 || tsSymbols[0].EndLine != 6 {
+		t.Fatalf("TypeScript symbols = %#v, want span 1..6", tsSymbols)
+	}
+}

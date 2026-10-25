@@ -116,7 +116,7 @@ func contextFileInventory(root string) (string, []string, []ContextDecision, err
 	if err != nil {
 		return "", nil, nil, err
 	}
-	allFiles, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles})
+	allFiles, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{Root: canonical, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles * 4})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -124,6 +124,9 @@ func contextFileInventory(root string) (string, []string, []ContextDecision, err
 	for _, file := range allFiles {
 		decision := policy.Decide(file)
 		if decision.Include {
+			if len(files) >= maxProjectFiles {
+				return "", nil, nil, fmt.Errorf("project contains more than %d files", maxProjectFiles)
+			}
 			files = append(files, file)
 		} else {
 			excluded = append(excluded, decision)

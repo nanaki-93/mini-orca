@@ -127,7 +127,11 @@ func renderFunctionContext(path string, file IndexFile, declaration string, opti
 			result.WriteString("- " + signature + "\n")
 		}
 	}
-	result.WriteString("Selected declaration:\n```go\n" + declaration + "\n```\n")
+	fenceLang := strings.ToLower(file.Language)
+	if fenceLang == "" || fenceLang == "unknown" || fenceLang == "text" {
+		fenceLang = ""
+	}
+	result.WriteString("Selected declaration:\n```" + fenceLang + "\n" + declaration + "\n```\n")
 	return result.String()
 }
 

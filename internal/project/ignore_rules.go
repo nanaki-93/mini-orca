@@ -215,8 +215,10 @@ func ignoreCharacterClass(pattern []rune, start int) (string, int) {
 	}
 	for ; end < len(pattern); end++ {
 		if pattern[end] == '[' && end+1 < len(pattern) && pattern[end+1] == ':' {
-			end += strings.Index(string(pattern[end:]), ":]") + 1
-			continue
+			if closeIdx := findPOSIXClassEnd(pattern, end); closeIdx >= 0 {
+				end = closeIdx
+				continue
+			}
 		}
 		if pattern[end] == ']' {
 			class := string(pattern[start : end+1])
@@ -229,4 +231,13 @@ func ignoreCharacterClass(pattern []rune, start int) (string, int) {
 	}
 	// An unclosed/invalid character class is a literal bracket in Git patterns.
 	return `\[`, start
+}
+
+func findPOSIXClassEnd(pattern []rune, start int) int {
+	for i := start + 2; i+1 < len(pattern); i++ {
+		if pattern[i] == ':' && pattern[i+1] == ']' {
+			return i + 1
+		}
+	}
+	return -1
 }

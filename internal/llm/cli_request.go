@@ -91,7 +91,7 @@ func cliPrompt(messages []ChatMessage, format *ResponseFormat) (string, string, 
 	conversation := make([]ChatMessage, 0, len(messages))
 	for _, message := range messages {
 		switch message.Role {
-		case "system":
+		case "system", "developer":
 			system += "\n\n" + message.Content
 		case "user", "assistant":
 			conversation = append(conversation, ChatMessage{Role: message.Role, Content: message.Content})

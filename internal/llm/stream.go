@@ -139,7 +139,7 @@ func (a *generationAccumulator) append(data []byte) (string, error) {
 	if err := a.acceptUsage(chunk); err != nil {
 		return "", err
 	}
-	if len(chunk.Choices) == 0 && chunk.Usage != nil {
+	if a.isTrailingUsageChunk(chunk) {
 		return "", nil
 	}
 	if len(chunk.Choices) != 1 || chunk.Choices[0].Index != 0 || a.finish != "" {
@@ -159,6 +159,20 @@ func (a *generationAccumulator) append(data []byte) (string, error) {
 	}
 	a.finish = choice.FinishReason
 	return choice.Delta.Content, nil
+}
+
+func (a *generationAccumulator) isTrailingUsageChunk(chunk generationChunk) bool {
+	if chunk.Usage == nil {
+		return false
+	}
+	if len(chunk.Choices) == 0 {
+		return true
+	}
+	if a.finish == "" || len(chunk.Choices) != 1 || chunk.Choices[0].Index != 0 || chunk.Choices[0].FinishReason != "" {
+		return false
+	}
+	delta := chunk.Choices[0].Delta
+	return (delta.ChatMessage == (ChatMessage{}) || delta.ChatMessage == (ChatMessage{Role: "assistant"})) && len(delta.ToolCalls) == 0
 }
 
 func (a *generationAccumulator) acceptUsage(chunk generationChunk) error {

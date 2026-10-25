@@ -48,7 +48,7 @@ func ExtractGenericFacts(language string, source []byte) ([]string, []SymbolInfo
 		if !ok {
 			continue
 		}
-		endLine := estimateGenericSymbolEndLine(lines, number)
+		endLine := estimateGenericSymbolEndLine(language, lines, number)
 		symbols = append(symbols, SymbolInfo{Name: match[2], Kind: kind, Signature: trimmed, StartLine: number + 1, EndLine: endLine, Visibility: "unknown", Confidence: "approximate", AtomicTarget: kind != "impl"})
 	}
 	return imports, symbols
@@ -71,23 +71,88 @@ func normalizeGenericSymbolKind(language, kind string) (string, bool) {
 	return kind, true
 }
 
-func estimateGenericSymbolEndLine(lines []string, startIdx int) int {
+func estimateGenericSymbolEndLine(language string, lines []string, startIdx int) int {
 	if startIdx < 0 || startIdx >= len(lines) {
 		return startIdx + 1
 	}
-	first := lines[startIdx]
-	openBraces := strings.Count(first, "{") - strings.Count(first, "}")
-	if openBraces <= 0 {
-		return startIdx + 1
+	switch language {
+	case "Python", "Ruby", "Elixir", "Lua":
+		return estimateIndentedSymbolEndLine(lines, startIdx)
+	default:
+		return estimateBraceSymbolEndLine(lines, startIdx)
 	}
-	maxScan := min(len(lines), startIdx+200)
+}
+
+func estimateIndentedSymbolEndLine(lines []string, startIdx int) int {
+	baseIndent := lineIndentation(lines[startIdx])
+	lastLine := startIdx + 1
+	maxScan := min(len(lines), startIdx+2000)
 	for i := startIdx + 1; i < maxScan; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		indent := lineIndentation(lines[i])
+		if indent > baseIndent || (indent == baseIndent && strings.HasPrefix(trimmed, ")") && strings.HasSuffix(trimmed, ":")) {
+			lastLine = i + 1
+			continue
+		}
+		if indent == baseIndent && (trimmed == "end" || strings.HasPrefix(trimmed, "end ")) {
+			return i + 1
+		}
+		break
+	}
+	return lastLine
+}
+
+func lineIndentation(line string) int {
+	indent := 0
+	for _, r := range line {
+		if r == ' ' {
+			indent++
+		} else if r == '\t' {
+			indent += 4
+		} else {
+			break
+		}
+	}
+	return indent
+}
+
+func estimateBraceSymbolEndLine(lines []string, startIdx int) int {
+	openIdx, openBraces := findOpeningBraceLine(lines, startIdx)
+	if openBraces <= 0 {
+		return openIdx + 1
+	}
+	maxScan := min(len(lines), startIdx+2000)
+	for i := openIdx + 1; i < maxScan; i++ {
 		openBraces += strings.Count(lines[i], "{") - strings.Count(lines[i], "}")
 		if openBraces <= 0 {
 			return i + 1
 		}
 	}
 	return startIdx + 1
+}
+
+func findOpeningBraceLine(lines []string, startIdx int) (int, int) {
+	maxHeader := min(len(lines), startIdx+10)
+	openBraces := 0
+	seenOpen := false
+	for i := startIdx; i < maxHeader; i++ {
+		opens := strings.Count(lines[i], "{")
+		closes := strings.Count(lines[i], "}")
+		if opens > 0 {
+			seenOpen = true
+		}
+		openBraces += opens - closes
+		if seenOpen {
+			return i, openBraces
+		}
+		if strings.HasSuffix(strings.TrimSpace(lines[i]), ";") {
+			break
+		}
+	}
+	return startIdx, 0
 }
 
 func genericJavaDeclaration(prefix string) bool {

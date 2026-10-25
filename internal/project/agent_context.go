@@ -118,8 +118,12 @@ func (c *AgentContext) indexEvidence(result *AgentEvidenceResult, kind string, s
 	switch kind {
 	case "inspect_symbols":
 		for _, symbol := range file.Symbols {
+			if symbol.EndLine < scope.StartLine || symbol.StartLine > scope.EndLine {
+				continue
+			}
 			span := scope
-			span.StartLine, span.EndLine = symbol.StartLine, symbol.EndLine
+			span.StartLine = max(scope.StartLine, symbol.StartLine)
+			span.EndLine = min(scope.EndLine, symbol.EndLine)
 			result.add(span, kind, symbol.Name+": "+symbol.Signature, symbol.Confidence)
 		}
 	case "inspect_imports":

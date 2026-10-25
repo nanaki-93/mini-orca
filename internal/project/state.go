@@ -29,7 +29,7 @@ func projectRevision(root string) (string, error) {
 		return "", err
 	}
 	files, err := WalkProjectFiles(context.Background(), ProjectWalkOptions{
-		Root: root, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
+		Root: root, Policy: policy, IgnoredDirectories: ignoredProjectDirectories, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles,
 	})
 	if err != nil {
 		return "", err
