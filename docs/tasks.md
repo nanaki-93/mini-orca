@@ -1272,7 +1272,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 33B — Review cloud destinations and transfers in the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_cloud.go`, `internal/tui/agent_cloud_actions.go`, `internal/tui/agent_cloud_view.go`, `internal/tui/agent_cloud_test.go`, `internal/tui/client/cloud.go`, `internal/tui/client/cloud_test.go` — **new**.

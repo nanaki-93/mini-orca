@@ -397,3 +397,32 @@ Use deterministic Go tests (`go test -race ./internal/tui/... ./cmd/tui/...`)
 across all 5 hubs, sub-views, palettes and terminal dimensions. Exercise
 loading, empty, populated and failure states, keyboard navigation, colon
 commands, action reachability and late-response identity guards.
+
+## Cloud copies
+
+Settings → Cloud Copies (`:cloud`) reads local configuration and transfer
+receipts for the main checkout. Navigation, details and Refresh (`r`) never
+probe Google services. Configured destinations do not imply availability.
+Opening the view from a main-checkout artifact or an inspected task can prefill
+its source; the user still selects a preview and confirms copying separately.
+
+Preview (`e` / `:cloud-preview <destination> artifact|session <source-id>`) reads
+the exact selected local archive. Show its source revision/version, hash, size,
+principal, Google project, region and resource in scrollable details. Copy (`c`)
+requires a separate confirmation of private data sharing. Bind confirmation and
+queued dispatch to the exact source, destination, checkout, draft and selection.
+An edited or replaced selection requires a fresh review.
+
+Select a retained copy for explicit remote Check (`i`) or Delete (`d`). Refresh
+reads local receipts only. Preserve original source revisions after reindexing;
+require the destination's recorded configuration for remote recovery. Distinguish
+completed, unknown, missing and deleted outcomes. An expired operation lease
+permits explicit recovery, never an automatic upload replay. Retention is a
+manual cleanup deadline; provider backups and soft-delete may retain data after
+live-copy deletion. Local originals and approval authority remain local.
+
+Cancel (`x`), navigation, project replacement and quit stop owned local transport.
+Preserve drafts and healthy metadata on errors, reject late/replaced results and
+require local refresh after uncertain controls. A successful HTTP response with
+an unknown remote outcome must stay visibly unknown. Keep five workspaces and
+use the existing palettes, text status labels, selection marker and scrolling.

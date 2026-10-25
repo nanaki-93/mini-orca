@@ -67,7 +67,7 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderDocsDecisionsPage(th, width)
 	case PageDiagrams:
 		return s.renderDiagramsPage(th, width)
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory, PageAmbient:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory, PageAmbient, PageCloud:
 		return s.renderGovernanceSubPage(th, width)
 	default:
 		return s.renderSummaryPage(th, width)

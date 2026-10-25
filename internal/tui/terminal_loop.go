@@ -234,7 +234,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case agentTriggerResultMsg, agentMediaResultMsg, mediaStreamUpdate, missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
+	case agentCloudResultMsg, agentTriggerResultMsg, agentMediaResultMsg, mediaStreamUpdate, missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -247,10 +247,12 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pollInFlight = false
 		m.state.applyPollResult(ev.res)
 	}
+	m.state.reconcileCloudScope()
 	m.state.reconcileTriggerScope()
 	m.state.reconcileMissionScope()
 	m.state.reconcileMediaScope()
 	if m.state.Quitting {
+		m.state.cancelCloudRequest()
 		m.state.cancelTriggerRequest()
 		m.state.cancelMissionRequest()
 		m.state.cancelMediaRequest()
@@ -268,6 +270,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case agentCloudResultMsg:
+		m.state.applyCloudResult(ev.result)
 	case agentTriggerResultMsg:
 		m.state.applyTriggerResult(ev.result)
 	case agentMediaResultMsg:
@@ -343,7 +347,7 @@ func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (te
 	switch act.Kind {
 	case "agent-triggers":
 		return m.prepareTriggerCmd(act.AgentTriggers), true
-	case "agent-media", "mission", "agent-library", "agent-external":
+	case "agent-cloud", "agent-media", "mission", "agent-library", "agent-external":
 		return m.prepareScopedWorkCmd(act), true
 	case "agent-connection":
 		if !m.state.acceptsConnectionAction(act.AgentConnection) {
@@ -399,6 +403,8 @@ func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (te
 
 func (m *BubbleModel) prepareScopedWorkCmd(act ActionRequest) tea.Cmd {
 	switch act.Kind {
+	case "agent-cloud":
+		return m.prepareCloudCmd(act.AgentCloud)
 	case "agent-media":
 		return m.prepareMediaCmd(act.AgentMedia)
 	case "mission":

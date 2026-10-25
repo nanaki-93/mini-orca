@@ -700,6 +700,10 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	if len(s.PendingActions) != ambientActions {
 		t.Fatal("ambient navigation dispatched work")
 	}
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageCloud || s.RulesSection != "cloud" || len(s.PendingActions) != ambientActions {
+		t.Fatal("cloud navigation changed scope or dispatched work")
+	}
 	s.HandleKey(KeyEvent{Key: "3"})
 	for _, want := range []Page{PageGit, PageHistory, PageArtifacts, PageEditor} {
 		s.HandleKey(KeyEvent{Key: "Tab"})
@@ -714,7 +718,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		PageAgents, PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
 		PageEditor, PageGit, PageHistory, PageArtifacts,
 		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageBootstrap, PageLessons, PageMemory, PageAmbient,
+		PageInstructions, PageModels, PageBootstrap, PageLessons, PageMemory, PageAmbient, PageCloud,
 	}
 	for _, p := range nonSubmenuArrowPages {
 		s.Navigate(p)

@@ -312,6 +312,12 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"o", "Select checkout"}, {"x", "Cancel request; refresh outcome"}},
 		commands:  []keyDesc{{":agent-role", "Assign model scope"}, {":agent-budget", "Reduce a budget"}, {":settings-reset", "Confirm restore defaults"}},
 	},
+	PageCloud: {
+		title:     "[5] SETTINGS · CLOUD COPIES",
+		primary:   []keyDesc{{"e", "Preview private data"}, {"c", "Confirm copy"}, {"i", "Check remote copy"}, {"d", "Delete remote copy"}},
+		secondary: []keyDesc{{"r", "Refresh local receipts"}, {"Enter", "Show or hide details"}, {"x", "Cancel local request"}},
+		commands:  []keyDesc{{":cloud-preview", "Choose destination and source"}, {":cloud-check", "Reconcile uncertain outcome"}, {":cloud-delete", "Confirm remote cleanup"}},
+	},
 	PageAmbient: {
 		title:     "[5] SETTINGS · AMBIENT ANALYSIS",
 		primary:   []keyDesc{{"w", "Set watch"}, {"g", "Grant provider permission"}, {"v", "Revoke permission"}, {"d", "Disable watch"}},
