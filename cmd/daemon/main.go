@@ -144,7 +144,7 @@ func newHTTPMux(
 			return
 		}
 		paths, scoped := query["worktree_path"]
-		if !scoped {
+		if !scoped || r.URL.Path == "/ui" {
 			current.ServeHTTP(w, r)
 			return
 		}

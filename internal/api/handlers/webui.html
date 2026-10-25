@@ -434,10 +434,19 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     window.history.replaceState(null, '', '/ui' + (qs ? '?' + qs : ''));
   }
 
-  function withWorktree(pathAndQuery) {
-    if (!state.worktreePath) return pathAndQuery;
+  function withExplicitWorktree(pathAndQuery, wtPath) {
+    if (!wtPath) return pathAndQuery;
     const sep = pathAndQuery.indexOf('?') >= 0 ? '&' : '?';
-    return pathAndQuery + sep + 'worktree_path=' + encodeURIComponent(state.worktreePath);
+    return pathAndQuery + sep + 'worktree_path=' + encodeURIComponent(wtPath);
+  }
+
+  function withWorktree(pathAndQuery) {
+    return withExplicitWorktree(pathAndQuery, state.worktreePath);
+  }
+
+  function withSessionWorktree(session, pathAndQuery) {
+    const wtPath = (session && session._worktreePath) || state.worktreePath || '';
+    return withExplicitWorktree(pathAndQuery, wtPath);
   }
 
   async function apiFetch(path, options) {
@@ -473,13 +482,67 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     });
   }
 
+  function mergeWorktreeSessionsIntoChanges(baseChanges, gitWS, activeWtPath) {
+    const out = [];
+    const seen = {};
+    (baseChanges || []).forEach(function(entry) {
+      if (!entry || !entry.id || seen[entry.id]) return;
+      seen[entry.id] = true;
+      const copy = Object.assign({}, entry);
+      if (activeWtPath && !copy._worktreePath) {
+        copy._worktreePath = activeWtPath;
+      }
+      out.push(copy);
+    });
+    if (!activeWtPath && gitWS && Array.isArray(gitWS.worktrees)) {
+      gitWS.worktrees.forEach(function(wt) {
+        if (wt.current || !wt.path || !Array.isArray(wt.sessions)) return;
+        wt.sessions.forEach(function(entry) {
+          if (!entry || !entry.id || seen[entry.id]) return;
+          seen[entry.id] = true;
+          const copy = Object.assign({}, entry, {
+            _worktreePath: wt.path,
+            _branch: wt.branch || ''
+          });
+          out.push(copy);
+        });
+      });
+    }
+    return out;
+  }
+
+  async function resolveCheckoutIdentity(wtPath) {
+    if (!wtPath && state.mainProject && state.mainProject.project_id) {
+      return {
+        project_id: state.mainProject.project_id,
+        project_revision: state.mainProject.project_revision
+      };
+    }
+    const proj = await apiFetch(withExplicitWorktree('/api/projects/current', wtPath));
+    return {
+      project_id: proj.project_id,
+      project_revision: proj.project_revision
+    };
+  }
+
   async function loadAll() {
     try {
       const status = await apiFetch('/status').catch(function() { return null; });
       if (status && status.version) {
         document.getElementById('daemon-version').textContent = 'v' + status.version;
       }
-      state.project = await apiFetch(withWorktree('/api/projects/current'));
+      state.mainProject = await apiFetch('/api/projects/current');
+      if (state.worktreePath) {
+        try {
+          state.project = await apiFetch(withWorktree('/api/projects/current'));
+        } catch (_) {
+          state.worktreePath = '';
+          syncURL();
+          state.project = state.mainProject;
+        }
+      } else {
+        state.project = state.mainProject;
+      }
       renderHeader();
       if (!state.project || !state.project.project_id) return;
 
@@ -488,10 +551,14 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       const idQuery = '?project_id=' + pid + '&project_revision=' + prev;
       const revQuery = '?project_revision=' + prev;
 
+      const mainPid = encodeURIComponent(state.mainProject.project_id);
+      const mainPrev = encodeURIComponent(state.mainProject.project_revision);
+      const mainIdQuery = '?project_id=' + mainPid + '&project_revision=' + mainPrev;
+
       const results = await Promise.allSettled([
         apiFetch(withWorktree('/api/projects/current/index')),
         apiFetch(withWorktree('/api/projects/current/execution-trust' + revQuery)),
-        apiFetch('/api/projects/current/git/workspace' + idQuery),
+        apiFetch('/api/projects/current/git/workspace' + mainIdQuery),
         apiFetch(withWorktree('/api/projects/current/changes' + idQuery)),
         apiFetch(withWorktree('/api/projects/current/findings' + revQuery))
       ]);
@@ -499,7 +566,8 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       if (results[0].status === 'fulfilled') state.index = results[0].value;
       if (results[1].status === 'fulfilled') state.trust = results[1].value;
       if (results[2].status === 'fulfilled') state.gitWorkspace = results[2].value;
-      if (results[3].status === 'fulfilled') state.changes = results[3].value || [];
+      const rawChanges = results[3].status === 'fulfilled' ? (results[3].value || []) : [];
+      state.changes = mergeWorktreeSessionsIntoChanges(rawChanges, state.gitWorkspace, state.worktreePath);
       if (results[4].status === 'fulfilled' && results[4].value) {
         state.findings = results[4].value.findings || [];
       }
@@ -533,10 +601,19 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       renderDiffTab();
       return;
     }
-    const idQuery = '?project_id=' + encodeURIComponent(state.project.project_id) +
-      '&project_revision=' + encodeURIComponent(state.project.project_revision);
+    const entry = (state.changes || []).find(function(c) { return c.id === sessionId; });
+    const wtPath = (entry && entry._worktreePath) || state.worktreePath || '';
     try {
-      state.activeSession = await apiFetch(withWorktree('/api/projects/current/changes/' + encodeURIComponent(sessionId) + idQuery));
+      const ident = await resolveCheckoutIdentity(wtPath);
+      const idQuery = '?project_id=' + encodeURIComponent(ident.project_id) +
+        '&project_revision=' + encodeURIComponent(ident.project_revision);
+      const loaded = await apiFetch(
+        withExplicitWorktree('/api/projects/current/changes/' + encodeURIComponent(sessionId) + idQuery, wtPath)
+      );
+      loaded._worktreePath = wtPath;
+      loaded._checkoutProjectId = ident.project_id;
+      loaded._checkoutProjectRevision = ident.project_revision;
+      state.activeSession = loaded;
       state.sessionId = sessionId;
       syncURL();
       renderDiffTab();
@@ -565,7 +642,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     const items = [{ path: '', label: 'main checkout' }];
     if (state.gitWorkspace && Array.isArray(state.gitWorkspace.worktrees)) {
       state.gitWorkspace.worktrees.forEach(function(wt) {
-        if (!wt.main && wt.path) {
+        if (!wt.current && wt.path) {
           items.push({ path: wt.path, label: (wt.branch || 'worktree') + ' (' + wt.path.split('/').pop() + ')' });
         }
       });
@@ -793,10 +870,18 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     return '<table class="diff-table"><tbody>' + rows + '</tbody></table>';
   }
 
+  function preserveSessionMeta(prev, next) {
+    if (!next || !prev) return next;
+    next._worktreePath = prev._worktreePath || '';
+    next._checkoutProjectId = prev._checkoutProjectId || next.project_id;
+    next._checkoutProjectRevision = prev._checkoutProjectRevision || next.project_revision;
+    return next;
+  }
+
   function changeIdentityPayload(session) {
     return {
-      project_id: session.project_id || state.project.project_id,
-      project_revision: session.project_revision || state.project.project_revision,
+      project_id: session._checkoutProjectId || session.project_id || state.project.project_id,
+      project_revision: session._checkoutProjectRevision || session.project_revision || state.project.project_revision,
       revision: session.revision,
       hash: session.hash
     };
@@ -807,10 +892,11 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     if (!s || !filePath) return;
     try {
       const body = Object.assign(changeIdentityPayload(s), { path: filePath });
-      state.activeSession = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+      const updated = await apiFetch(
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
         { method: 'POST', body: body }
       );
+      state.activeSession = preserveSessionMeta(s, updated);
       showBanner('Marked ' + filePath + ' as reviewed.', 'ok');
       renderDiffTab();
     } catch (err) {
@@ -827,17 +913,18 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
         const path = changes[i].path;
         if (!isFileReviewed(s, path)) {
           const body = Object.assign(changeIdentityPayload(s), { path: path });
-          s = await apiFetch(
-            withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+          const next = await apiFetch(
+            withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
             { method: 'POST', body: body }
           );
+          s = preserveSessionMeta(s, next);
         }
       }
-      s = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
+      const next = await apiFetch(
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
         { method: 'POST', body: changeIdentityPayload(s) }
       );
-      state.activeSession = s;
+      state.activeSession = preserveSessionMeta(s, next);
       showBanner('All files marked reviewed and proposal hash approved.', 'ok');
       await loadAll();
     } catch (err) {
@@ -851,10 +938,11 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     try {
       showBanner('Running sandboxed checks (architecture, complexity, lint, tests)…', 'info');
       const body = Object.assign(changeIdentityPayload(s), { run_lint: true, run_tests: true });
-      state.activeSession = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/checks'),
+      const updated = await apiFetch(
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/checks'),
         { method: 'POST', body: body }
       );
+      state.activeSession = preserveSessionMeta(s, updated);
       showBanner('Checks completed (state: ' + state.activeSession.state + ').', 'ok');
       await loadAll();
     } catch (err) {
@@ -872,19 +960,21 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       const changes = Array.isArray(s.changes) ? s.changes : [];
       for (let i = 0; i < changes.length; i++) {
         if (!isFileReviewed(s, changes[i].path)) {
-          s = await apiFetch(
-            withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+          const next = await apiFetch(
+            withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
             { method: 'POST', body: Object.assign(changeIdentityPayload(s), { path: changes[i].path }) }
           );
+          s = preserveSessionMeta(s, next);
         }
       }
-      s = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
+      const reviewed = await apiFetch(
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
         { method: 'POST', body: changeIdentityPayload(s) }
       );
+      s = preserveSessionMeta(s, reviewed);
       const body = Object.assign(changeIdentityPayload(s), { confirm: true });
       const res = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/apply'),
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/apply'),
         { method: 'POST', body: body }
       );
       showBanner('Applied proposal ' + s.id + ' (state: ' + (res && res.state || 'applied') + ').', 'ok');
@@ -903,7 +993,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     try {
       const body = Object.assign(changeIdentityPayload(s), { confirm: true });
       const res = await apiFetch(
-        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/undo'),
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/undo'),
         { method: 'POST', body: body }
       );
       showBanner('Reverted proposal ' + s.id + ' (state: ' + (res && res.state || 'reverted') + ').', 'ok');

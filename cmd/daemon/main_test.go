@@ -141,6 +141,20 @@ func TestLocalAPIPolicyAllowsSameOriginWebUIFetchWithCustomHeader(t *testing.T) 
 	}
 }
 
+func TestWebUIRouteAcceptsDeepLinkWorktreeQueryParameter(t *testing.T) {
+	mux := daemonTestMux(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui?session_id=chg-1&worktree_path=/tmp/task-wt&file=main.go", nil)
+	req.Host = "127.0.0.1:9090"
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /ui with worktree_path returned %d: %s", res.Code, res.Body.String())
+	}
+	if !strings.Contains(res.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("unexpected Content-Type = %q", res.Header().Get("Content-Type"))
+	}
+}
+
 func TestLocalAPIPolicyAllowsNativeDesktopCallsAndHealth(t *testing.T) {
 	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
 	mux := daemonTestMux(t)
