@@ -92,6 +92,8 @@ func (s *State) dispatchAction(ctx context.Context, cl *Client, reqID string, ac
 		return s.fetchIssueSource(ctx, cl, reqID, act)
 	case "open-file":
 		return s.fetchFileInfo(ctx, cl, reqID, act.Target)
+	case "open-web":
+		return s.dispatchOpenWebUI(ctx, cl, act.Target)
 	case "run-analysis", "reanalyze", "repair-analysis", "pause-analysis", "resume-analysis":
 		return s.dispatchAnalysisAction(ctx, cl, reqID, act)
 	default:
@@ -107,6 +109,22 @@ func (s *State) dispatchPrivateAction(ctx context.Context, cl *Client, act Actio
 		return true
 	}
 	return s.dispatchCloudAction(ctx, cl, act) || s.dispatchTriggerAction(ctx, cl, act) || s.dispatchMediaAction(ctx, cl, act) || s.dispatchLibraryAction(ctx, cl, act) || s.dispatchGovernanceAction(ctx, cl, act)
+}
+
+func (s *State) dispatchOpenWebUI(ctx context.Context, cl *Client, tab string) error {
+	var sessionID, filePath, worktreePath string
+	if s.Change != nil && s.Change.ID != "" && !isLocalPreviewChangeID(s.Change.ID) {
+		sessionID = s.Change.ID
+		worktreePath = s.Change.WorktreePath
+	}
+	if s.File != nil && s.File.Path != "" {
+		filePath = s.File.Path
+	}
+	if err := openWebUI(ctx, cl, tab, sessionID, filePath, worktreePath); err != nil {
+		return err
+	}
+	s.CmdOutput = "Opened Mini-Orca Web UI & Diff Inspector in your system browser."
+	return nil
 }
 
 func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) error {

@@ -232,16 +232,23 @@ func (c *Client) ExternalIndex(ctx context.Context, requestID string, scope Agen
 	return &result, nil
 }
 
-// ResearchReportURL only constructs a local, identity-guarded report location.
-// It neither fetches the report nor permits caller-supplied destinations.
-func (c *Client) ResearchReportURL(scope AgentSettingsScope, id string) (string, error) {
+func (c *Client) validateLoopbackBrowserOrigin() error {
 	origin, err := url.Parse(c.base)
 	if err != nil || origin == nil {
-		return "", fmt.Errorf("report browser requires a loopback daemon origin")
+		return fmt.Errorf("report browser requires a loopback daemon origin")
 	}
 	ip := net.ParseIP(origin.Hostname())
 	if origin.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return "", fmt.Errorf("report browser requires a loopback daemon origin")
+		return fmt.Errorf("report browser requires a loopback daemon origin")
+	}
+	return nil
+}
+
+// ResearchReportURL only constructs a local, identity-guarded report location.
+// It neither fetches the report nor permits caller-supplied destinations.
+func (c *Client) ResearchReportURL(scope AgentSettingsScope, id string) (string, error) {
+	if err := c.validateLoopbackBrowserOrigin(); err != nil {
+		return "", err
 	}
 	if id == "" {
 		return "", fmt.Errorf("select a retained research report")
@@ -251,4 +258,29 @@ func (c *Client) ResearchReportURL(scope AgentSettingsScope, id string) (string,
 		return "", err
 	}
 	return c.base + target, nil
+}
+
+// WebUIURL constructs a local loopback URL for the daemon's embedded Web UI and diff viewer.
+func (c *Client) WebUIURL(tab, sessionID, filePath, worktreePath string) (string, error) {
+	if err := c.validateLoopbackBrowserOrigin(); err != nil {
+		return "", err
+	}
+	query := url.Values{}
+	if tab != "" && tab != "diff" {
+		query.Set("tab", tab)
+	}
+	if sessionID != "" {
+		query.Set("session_id", sessionID)
+	}
+	if filePath != "" {
+		query.Set("file", filePath)
+	}
+	if worktreePath != "" {
+		query.Set("worktree_path", worktreePath)
+	}
+	target := c.base + "/ui"
+	if encoded := query.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+	return target, nil
 }

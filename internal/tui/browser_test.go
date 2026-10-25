@@ -73,3 +73,42 @@ func TestResearchBrowserRejectsForeignMalformedAndCanceledRequests(t *testing.T)
 		t.Fatal("browser failure was hidden", err)
 	}
 }
+
+func TestWebUIBrowserLaunchesDeepLinkedLoopbackURL(t *testing.T) {
+	cl, _ := NewClient("http://127.0.0.1:9090")
+	defer cl.Close()
+	for _, system := range []string{"darwin", "linux", "windows"} {
+		calls := 0
+		err := launchWebUI(t.Context(), cl, "diff", "chg-42", "internal/app/service.go", "/tmp/wt-1", system, func(ctx context.Context, command string, args ...string) error {
+			calls++
+			location, err := url.Parse(args[len(args)-1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if location.Path != "/ui" || location.Query().Get("session_id") != "chg-42" || location.Query().Get("file") != "internal/app/service.go" || location.Query().Get("worktree_path") != "/tmp/wt-1" {
+				t.Fatalf("unexpected web UI location: %s", location)
+			}
+			return nil
+		})
+		if err != nil || calls != 1 {
+			t.Fatalf("launchWebUI(%s) = %v, calls = %d", system, err, calls)
+		}
+	}
+}
+
+func TestColonWebCommandQueuesDeepLinkedBrowserOpen(t *testing.T) {
+	s := NewState()
+	s.Page = PageBugs
+	s.ExecuteCommand(":web")
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "open-web" || s.PendingActions[0].Target != "issues" {
+		t.Fatalf("expected open-web action for issues tab, got %+v", s.PendingActions)
+	}
+
+	s.PendingActions = nil
+	s.Page = PageEditor
+	s.Change = &ChangeSession{ID: "chg-99"}
+	s.ExecuteCommand(":ui")
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "open-web" || s.PendingActions[0].Target != "diff" {
+		t.Fatalf("expected open-web action for diff tab, got %+v", s.PendingActions)
+	}
+}

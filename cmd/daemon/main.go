@@ -202,6 +202,9 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"shared_proposals"}`))
 	})
 
+	webUIHandler := handlers.NewWebUIHandler()
+	mux.HandleFunc("GET /ui", webUIHandler.Serve)
+
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)
 	settingsHandler := handlers.NewAgentSettingsHandler(application)

@@ -18,11 +18,29 @@ func openResearchReport(ctx context.Context, cl *Client, scope client.AgentSetti
 	})
 }
 
+func openWebUI(ctx context.Context, cl *Client, tab, sessionID, filePath, worktreePath string) error {
+	return launchWebUI(ctx, cl, tab, sessionID, filePath, worktreePath, runtime.GOOS, func(ctx context.Context, command string, args ...string) error {
+		return exec.CommandContext(ctx, command, args...).Run()
+	})
+}
+
 func launchResearchReport(ctx context.Context, cl *Client, scope client.AgentSettingsScope, id, system string, run browserRunner) error {
 	location, err := cl.ResearchReportURL(scope, id)
 	if err != nil {
 		return err
 	}
+	return launchSystemBrowser(ctx, location, "open retained research report", system, run)
+}
+
+func launchWebUI(ctx context.Context, cl *Client, tab, sessionID, filePath, worktreePath, system string, run browserRunner) error {
+	location, err := cl.WebUIURL(tab, sessionID, filePath, worktreePath)
+	if err != nil {
+		return err
+	}
+	return launchSystemBrowser(ctx, location, "open local web UI", system, run)
+}
+
+func launchSystemBrowser(ctx context.Context, location, action, system string, run browserRunner) error {
 	var command string
 	var args []string
 	switch system {
@@ -41,7 +59,7 @@ func launchResearchReport(ctx context.Context, cl *Client, scope client.AgentSet
 		return err
 	}
 	if err := run(bounded, command, args...); err != nil {
-		return fmt.Errorf("open retained research report: %w", err)
+		return fmt.Errorf("%s: %w", action, err)
 	}
 	return nil
 }

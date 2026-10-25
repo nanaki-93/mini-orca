@@ -80,12 +80,16 @@ func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T)
 		path        string
 		host        string
 		origin      string
+		webUIHeader string
 		contentType string
 		preflight   bool
 		wantStatus  int
 	}{
 		{name: "forged host", method: http.MethodGet, path: "/health", host: "attacker.example", wantStatus: http.StatusForbidden},
 		{name: "hostile origin mutation", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", origin: "https://attacker.example", contentType: "application/json", wantStatus: http.StatusForbidden},
+		{name: "hostile origin with web UI header", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", origin: "https://attacker.example", webUIHeader: "1", contentType: "application/json", wantStatus: http.StatusForbidden},
+		{name: "different local port origin", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", origin: "http://localhost:3000", webUIHeader: "1", contentType: "application/json", wantStatus: http.StatusForbidden},
+		{name: "same origin without web UI header", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", origin: "http://localhost:9090", contentType: "application/json", wantStatus: http.StatusForbidden},
 		{name: "browser preflight", method: http.MethodOptions, path: "/api/projects/restore", host: "localhost:9090", origin: "https://attacker.example", preflight: true, wantStatus: http.StatusForbidden},
 		{name: "missing JSON content type", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", wantStatus: http.StatusUnsupportedMediaType},
 		{name: "non JSON mutation", method: http.MethodPost, path: "/api/projects/restore", host: "localhost:9090", contentType: "text/plain", wantStatus: http.StatusUnsupportedMediaType},
@@ -97,6 +101,9 @@ func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T)
 			request.Host = test.host
 			if test.origin != "" {
 				request.Header.Set("Origin", test.origin)
+			}
+			if test.webUIHeader != "" {
+				request.Header.Set("X-Mini-Orca-Web-UI", test.webUIHeader)
 			}
 			if test.contentType != "" {
 				request.Header.Set("Content-Type", test.contentType)
@@ -114,6 +121,23 @@ func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T)
 				t.Fatalf("unexpected CORS response header: %q", response.Header().Get("Access-Control-Allow-Origin"))
 			}
 		})
+	}
+}
+
+func TestLocalAPIPolicyAllowsSameOriginWebUIFetchWithCustomHeader(t *testing.T) {
+	handlerCalled := false
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/restore", strings.NewReader(`{"project_path":"ignored"}`))
+	req.Host = "127.0.0.1:9090"
+	req.Header.Set("Origin", "http://127.0.0.1:9090")
+	req.Header.Set("X-Mini-Orca-Web-UI", "1")
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	}), false).ServeHTTP(res, req)
+	if res.Code != http.StatusNoContent || !handlerCalled {
+		t.Fatalf("same-origin web UI request status = %d, handler called = %t", res.Code, handlerCalled)
 	}
 }
 

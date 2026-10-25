@@ -261,10 +261,41 @@ func (s *State) execSystemCommand(cmd, arg string) bool {
 		s.CmdOutput = "Reconnecting to local daemon..."
 		s.enqueueAction(ActionRequest{Kind: "reconnect"})
 		return true
+	case "web", "ui", "browser", "open-web":
+		s.openWebUIForCurrentView(arg)
+		return true
 	case "project":
 		return s.execProjectCommand(arg)
 	}
 	return false
+}
+
+func (s *State) openWebUIForCurrentView(arg string) {
+	tab := strings.ToLower(strings.TrimSpace(arg))
+	switch tab {
+	case "diff", "issues", "tasks", "files":
+	default:
+		switch s.EffectivePage() {
+		case PageBugs, PageIssueDetail:
+			tab = "issues"
+		case PageEditor:
+			if s.File != nil && !s.isViewingDiff() {
+				tab = "files"
+			} else {
+				tab = "diff"
+			}
+		case PageAgents, PagePlan:
+			if s.Change != nil && s.Change.ID != "" {
+				tab = "diff"
+			} else {
+				tab = "tasks"
+			}
+		default:
+			tab = "diff"
+		}
+	}
+	s.CmdOutput = "Opening Mini-Orca Web UI & Diff Inspector in your system browser..."
+	s.enqueueAction(ActionRequest{Kind: "open-web", Target: tab})
 }
 
 func (s *State) execProjectCommand(arg string) bool {

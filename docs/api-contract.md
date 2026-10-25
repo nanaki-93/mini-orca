@@ -53,6 +53,7 @@ untrusted networks.
 |---|---|---|
 | GET | `/health` | Liveness and daemon version. |
 | GET | `/status` | Daemon status and `shared_proposals` workflow identifier. |
+| GET | `/ui` | Self-contained local Web UI and side-by-side/unified diff inspector. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
 | GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |

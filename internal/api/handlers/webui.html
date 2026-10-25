@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini-Orca · Web UI &amp; Diff Inspector</title>
+<style>
+:root, [data-theme="dark"] {
+  --bg: #16161e;
+  --surface: #1a1b26;
+  --surface-alt: #24283b;
+  --surface-hover: #292e42;
+  --border: #3b4261;
+  --fg: #c0caf5;
+  --fg-muted: #7982a9;
+  --accent: #7aa2f7;
+  --accent-dim: rgba(122, 162, 247, 0.16);
+  --cyan: #7dcfff;
+  --green: #9ece6a;
+  --green-bg: rgba(158, 206, 106, 0.14);
+  --green-line: rgba(158, 206, 106, 0.22);
+  --red: #f7768e;
+  --red-bg: rgba(247, 118, 142, 0.14);
+  --red-line: rgba(247, 118, 142, 0.22);
+  --amber: #e0af68;
+  --amber-bg: rgba(224, 175, 104, 0.16);
+  --purple: #bb9af7;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+[data-theme="light"] {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-alt: #eef0f7;
+  --surface-hover: #e4e7f2;
+  --border: #d0d5e8;
+  --fg: #1f2335;
+  --fg-muted: #565f89;
+  --accent: #2e7de9;
+  --accent-dim: rgba(46, 125, 233, 0.12);
+  --cyan: #007197;
+  --green: #387002;
+  --green-bg: rgba(88, 166, 28, 0.14);
+  --green-line: rgba(88, 166, 28, 0.22);
+  --red: #c64343;
+  --red-bg: rgba(218, 54, 51, 0.12);
+  --red-line: rgba(218, 54, 51, 0.20);
+  --amber: #8f5e15;
+  --amber-bg: rgba(224, 175, 104, 0.20);
+  --purple: #7847bd;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.45;
+}
+button, select, input, textarea {
+  font-family: inherit; font-size: 12px; color: var(--fg);
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px;
+}
+button {
+  cursor: pointer; font-weight: 500; transition: background 0.12s, border-color 0.12s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+button:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+button:disabled { opacity: 0.48; cursor: not-allowed; }
+button.btn-primary { background: var(--accent); color: #15161e; border-color: var(--accent); font-weight: 600; }
+button.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+button.btn-success { background: var(--green-bg); color: var(--green); border-color: var(--green); font-weight: 600; }
+button.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+button.btn-amber { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
+
+.app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; color: var(--accent); }
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--surface-alt); color: var(--fg-muted); border: 1px solid var(--border);
+}
+.badge.green { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.badge.red { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.badge.amber { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
+.badge.blue { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
+.project-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.project-path { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
+
+.nav-tabs {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-group { display: flex; gap: 4px; }
+.tab-btn {
+  border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; padding: 9px 14px; font-size: 13px; color: var(--fg-muted);
+}
+.tab-btn:hover { background: var(--surface-alt); color: var(--fg); border-color: transparent; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.status-banner {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 7px 16px; font-size: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.status-banner.show { display: flex; }
+.status-banner.error { background: var(--red-bg); color: var(--red); }
+.status-banner.info { background: var(--accent-dim); color: var(--accent); }
+.status-banner.ok { background: var(--green-bg); color: var(--green); }
+
+.workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.sidebar {
+  width: 320px; min-width: 250px; max-width: 420px;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+.sidebar-section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg-muted); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
+}
+.sidebar-list { flex: 1; overflow-y: auto; padding: 6px; }
+.list-item {
+  padding: 7px 9px; border-radius: 6px; cursor: pointer; margin-bottom: 3px;
+  border: 1px solid transparent; display: flex; flex-direction: column; gap: 3px;
+}
+.list-item:hover { background: var(--surface-alt); }
+.list-item.active { background: var(--accent-dim); border-color: var(--accent); }
+.list-item-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.list-item-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-item-sub { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.main-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.action-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.action-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.content-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 14px; overflow: hidden;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.card-title { font-family: var(--font-mono); font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 12px; }
+
+.diff-table {
+  width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px;
+  line-height: 1.45; table-layout: fixed;
+}
+.diff-table td { padding: 1px 6px; vertical-align: top; white-space: pre-wrap; word-break: break-all; }
+.diff-ln {
+  width: 46px; text-align: right; color: var(--fg-muted); user-select: none;
+  background: rgba(0, 0, 0, 0.12); border-right: 1px solid var(--border); font-size: 11px;
+}
+.diff-sign { width: 20px; text-align: center; user-select: none; font-weight: 700; }
+.diff-added { background: var(--green-line); }
+.diff-added .diff-sign { color: var(--green); }
+.diff-removed { background: var(--red-line); }
+.diff-removed .diff-sign { color: var(--red); }
+.diff-empty { background: rgba(0, 0, 0, 0.08); }
+.diff-split-col { width: calc(50% - 46px); border-right: 1px solid var(--border); }
+
+.checks-strip {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.check-pill {
+  padding: 5px 10px; border-radius: 6px; background: var(--surface);
+  border: 1px solid var(--border); font-size: 11px; display: flex; align-items: center; gap: 6px;
+}
+.empty-state {
+  text-align: center; padding: 48px 20px; color: var(--fg-muted);
+}
+.form-grid { display: grid; gap: 10px; max-width: 680px; }
+.form-row { display: flex; flex-direction: column; gap: 4px; }
+.form-row label { font-size: 11px; font-weight: 600; color: var(--fg-muted); }
+.code-viewer {
+  font-family: var(--font-mono); font-size: 12px; width: 100%; border-collapse: collapse;
+}
+.code-viewer td { padding: 1px 8px; white-space: pre; }
+.code-viewer tr:target, .code-viewer tr.highlight-line { background: var(--accent-dim); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="project-meta">
+      <div class="brand">
+        <span>◆ MINI-ORCA</span>
+        <span id="daemon-version" class="badge">v4.4.0</span>
+        <span id="live-status" class="badge green">● LIVE</span>
+      </div>
+      <span id="project-name" class="badge blue">Loading project…</span>
+      <span id="project-path" class="project-path"></span>
+      <span id="project-stats" class="badge"></span>
+    </div>
+    <div class="action-group">
+      <label for="worktree-select" style="font-size:11px;color:var(--fg-muted);">Checkout:</label>
+      <select id="worktree-select" title="Select main checkout or isolated task worktree"></select>
+      <button id="trust-btn" title="Toggle local execution trust for running checks">Trust: …</button>
+      <button id="reindex-btn" title="Reindex repository files and symbols">↻ Reindex</button>
+      <button id="switch-project-btn" title="Restore a previously imported local project">📁 Switch Project</button>
+      <button id="refresh-btn" title="Refresh all current workspace state">⟳ Refresh</button>
+      <button id="theme-btn" title="Toggle Dark / Light theme">◐ Theme</button>
+    </div>
+  </header>
+
+  <nav class="nav-tabs">
+    <div class="tab-group">
+      <button class="tab-btn active" data-tab="diff">1 · Diff &amp; Review</button>
+      <button class="tab-btn" data-tab="issues">2 · Issues &amp; Findings</button>
+      <button class="tab-btn" data-tab="tasks">3 · Proposals &amp; Tasks</button>
+      <button class="tab-btn" data-tab="files">4 · Files &amp; Symbols</button>
+    </div>
+    <div class="action-group" style="padding:4px 0;">
+      <span id="revision-badge" class="project-path"></span>
+    </div>
+  </nav>
+
+  <div id="status-banner" class="status-banner">
+    <span id="status-banner-text"></span>
+    <button id="status-banner-close">✕</button>
+  </div>
+
+  <!-- TAB 1: DIFF & REVIEW -->
+  <section id="view-diff" class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">
+          <span>Change Proposals</span>
+          <span id="proposal-count" class="badge">0</span>
+        </div>
+        <select id="proposal-select" style="width:100%;"></select>
+      </div>
+      <div class="sidebar-section" style="padding-bottom:6px;">
+        <div class="sidebar-title">
+          <span>Changed Files</span>
+          <span id="changed-files-count" class="badge">0</span>
+        </div>
+      </div>
+      <div id="diff-file-list" class="sidebar-list"></div>
+    </aside>
+
+    <main class="main-pane">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong id="active-proposal-title">Select or create a proposal</strong>
+          <span id="active-proposal-state" class="badge"></span>
+          <span id="active-proposal-freshness" class="badge"></span>
+        </div>
+        <div class="action-group">
+          <button id="mode-split-btn" class="btn-primary">Split (Side-by-Side)</button>
+          <button id="mode-unified-btn">Unified</button>
+          <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full Diff</button>
+          <button id="review-all-btn" class="btn-success" title="Mark all changed files reviewed and approve current proposal hash">✓✓ Review &amp; Approve All</button>
+          <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">⚙ Run Checks</button>
+          <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">🚀 Apply</button>
+          <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">↩ Undo</button>
+        </div>
+      </div>
+      <div id="diff-content" class="content-scroll"></div>
+    </main>
+  </section>
+
+  <!-- TAB 2: ISSUES & FINDINGS -->
+  <section id="view-issues" class="workspace" style="display:none;">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title"><span>Issue Filters</span></div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="issue-cat-filter">Category</label>
+            <select id="issue-cat-filter">
+              <option value="all">All Categories</option>
+              <option value="bugs">Bugs &amp; Reliability</option>
+              <option value="security">Security</option>
+              <option value="performance">Performance</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="issue-status-filter">Status</label>
+            <select id="issue-status-filter">
+              <option value="open">Open / Active</option>
+              <option value="all">All Statuses</option>
+              <option value="dismissed">Dismissed</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="issue-search">Search</label>
+            <input id="issue-search" type="text" placeholder="Filter by file or title…">
+          </div>
+        </div>
+      </div>
+      <div id="issues-summary-list" class="sidebar-list"></div>
+    </aside>
+    <main class="main-pane">
+      <div id="issues-content" class="content-scroll"></div>
+    </main>
+  </section>
+
+  <!-- TAB 3: PROPOSALS & TASKS -->
+  <section id="view-tasks" class="workspace" style="display:none;">
+    <main class="main-pane">
+      <div class="content-scroll">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">＋ Create New Change Proposal</span>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-row">
+                <label for="new-task-title">Task Title</label>
+                <input id="new-task-title" type="text" placeholder="e.g. Fix nil pointer in handler and add regression test">
+              </div>
+              <div class="form-row">
+                <label for="new-task-kind">Kind</label>
+                <select id="new-task-kind">
+                  <option value="fix">fix (Bug Fix)</option>
+                  <option value="feature">feature (Feature)</option>
+                  <option value="refactor">refactor (Refactor)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="new-task-paths">Target File Paths (comma or newline separated, 1–8 eligible project files)</label>
+                <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, cmd/daemon/main_test.go"></textarea>
+              </div>
+              <div class="form-row">
+                <label for="new-task-criteria">Acceptance Criteria (one per line)</label>
+                <textarea id="new-task-criteria" rows="2" placeholder="Verify change passes unit tests and architecture checks"></textarea>
+              </div>
+              <div>
+                <button id="create-task-btn" class="btn-primary">Create Proposal Session</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Saved Proposals &amp; Recovery State</span>
+          </div>
+          <div id="tasks-list-body" class="card-body"></div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- TAB 4: FILES & SYMBOLS -->
+  <section id="view-files" class="workspace" style="display:none;">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">
+          <span>Indexed Files</span>
+          <span id="indexed-files-count" class="badge">0</span>
+        </div>
+        <input id="file-filter-input" type="text" placeholder="Search path…" style="width:100%;">
+      </div>
+      <div id="indexed-file-list" class="sidebar-list"></div>
+    </aside>
+    <main class="main-pane">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong id="open-file-title">Select an indexed file</strong>
+          <span id="open-file-meta" class="badge"></span>
+        </div>
+        <div class="action-group" id="open-file-symbols"></div>
+      </div>
+      <div id="file-viewer-content" class="content-scroll"></div>
+    </main>
+  </section>
+</div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const state = {
+    tab: params.get('tab') || 'diff',
+    worktreePath: params.get('worktree_path') || '',
+    sessionId: params.get('session_id') || '',
+    selectedFile: params.get('file') || '',
+    diffMode: 'split',
+    sinceLastReview: false,
+    project: null,
+    index: null,
+    trust: null,
+    gitWorkspace: null,
+    changes: [],
+    activeSession: null,
+    findings: [],
+    openFileInfo: null,
+    openFileSymbols: []
+  };
+
+  function esc(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function showBanner(msg, kind) {
+    const el = document.getElementById('status-banner');
+    const txt = document.getElementById('status-banner-text');
+    el.className = 'status-banner show ' + (kind || 'info');
+    txt.textContent = msg;
+  }
+
+  document.getElementById('status-banner-close').addEventListener('click', function() {
+    document.getElementById('status-banner').className = 'status-banner';
+  });
+
+  function syncURL() {
+    const q = new URLSearchParams();
+    if (state.tab && state.tab !== 'diff') q.set('tab', state.tab);
+    if (state.worktreePath) q.set('worktree_path', state.worktreePath);
+    if (state.sessionId) q.set('session_id', state.sessionId);
+    if (state.selectedFile) q.set('file', state.selectedFile);
+    const qs = q.toString();
+    window.history.replaceState(null, '', '/ui' + (qs ? '?' + qs : ''));
+  }
+
+  function withWorktree(pathAndQuery) {
+    if (!state.worktreePath) return pathAndQuery;
+    const sep = pathAndQuery.indexOf('?') >= 0 ? '&' : '?';
+    return pathAndQuery + sep + 'worktree_path=' + encodeURIComponent(state.worktreePath);
+  }
+
+  async function apiFetch(path, options) {
+    const opts = Object.assign({ method: 'GET', headers: {} }, options || {});
+    opts.headers = Object.assign({ 'X-Mini-Orca-Web-UI': '1' }, opts.headers);
+    if (opts.body && typeof opts.body !== 'string') {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(opts.body);
+    }
+    const res = await fetch(path, opts);
+    if (res.status === 204) return null;
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try { data = JSON.parse(text); } catch (_) { data = { error: text }; }
+    }
+    if (!res.ok) {
+      const msg = (data && (data.user_message || data.message || data.error)) || ('HTTP ' + res.status);
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  function setTab(tab) {
+    state.tab = tab;
+    syncURL();
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+    });
+    ['diff', 'issues', 'tasks', 'files'].forEach(function(id) {
+      const sec = document.getElementById('view-' + id);
+      if (sec) sec.style.display = (id === tab) ? 'flex' : 'none';
+    });
+  }
+
+  async function loadAll() {
+    try {
+      const status = await apiFetch('/status').catch(function() { return null; });
+      if (status && status.version) {
+        document.getElementById('daemon-version').textContent = 'v' + status.version;
+      }
+      state.project = await apiFetch(withWorktree('/api/projects/current'));
+      renderHeader();
+      if (!state.project || !state.project.project_id) return;
+
+      const pid = encodeURIComponent(state.project.project_id);
+      const prev = encodeURIComponent(state.project.project_revision);
+      const idQuery = '?project_id=' + pid + '&project_revision=' + prev;
+      const revQuery = '?project_revision=' + prev;
+
+      const results = await Promise.allSettled([
+        apiFetch(withWorktree('/api/projects/current/index')),
+        apiFetch(withWorktree('/api/projects/current/execution-trust' + revQuery)),
+        apiFetch('/api/projects/current/git/workspace' + idQuery),
+        apiFetch(withWorktree('/api/projects/current/changes' + idQuery)),
+        apiFetch(withWorktree('/api/projects/current/findings' + revQuery))
+      ]);
+
+      if (results[0].status === 'fulfilled') state.index = results[0].value;
+      if (results[1].status === 'fulfilled') state.trust = results[1].value;
+      if (results[2].status === 'fulfilled') state.gitWorkspace = results[2].value;
+      if (results[3].status === 'fulfilled') state.changes = results[3].value || [];
+      if (results[4].status === 'fulfilled' && results[4].value) {
+        state.findings = results[4].value.findings || [];
+      }
+
+      renderHeader();
+      renderWorktreeSelect();
+      renderFilesTab();
+      renderIssuesTab();
+      renderTasksTab();
+
+      if (!state.sessionId && state.changes.length > 0) {
+        state.sessionId = state.changes[0].id;
+      }
+      if (state.sessionId) {
+        await loadChangeSession(state.sessionId);
+      } else {
+        state.activeSession = null;
+        renderDiffTab();
+      }
+      if (state.tab === 'files' && state.selectedFile) {
+        await openSourceFile(state.selectedFile);
+      }
+    } catch (err) {
+      showBanner('Workspace load error: ' + err.message, 'error');
+    }
+  }
+
+  async function loadChangeSession(sessionId) {
+    if (!sessionId || !state.project) {
+      state.activeSession = null;
+      renderDiffTab();
+      return;
+    }
+    const idQuery = '?project_id=' + encodeURIComponent(state.project.project_id) +
+      '&project_revision=' + encodeURIComponent(state.project.project_revision);
+    try {
+      state.activeSession = await apiFetch(withWorktree('/api/projects/current/changes/' + encodeURIComponent(sessionId) + idQuery));
+      state.sessionId = sessionId;
+      syncURL();
+      renderDiffTab();
+    } catch (err) {
+      showBanner('Could not load proposal ' + sessionId + ': ' + err.message, 'error');
+    }
+  }
+
+  function renderHeader() {
+    if (!state.project) return;
+    document.getElementById('project-name').textContent = state.project.name || 'Project';
+    document.getElementById('project-path').textContent = state.project.path || '';
+    document.getElementById('project-stats').textContent =
+      (state.project.project_type || 'code') + ' · ' + (state.project.file_count || 0) + ' files';
+    document.getElementById('revision-badge').textContent =
+      'rev: ' + (state.project.project_revision ? state.project.project_revision.slice(0, 19) : 'n/a');
+
+    const trustBtn = document.getElementById('trust-btn');
+    const trusted = state.trust && state.trust.trusted;
+    trustBtn.textContent = trusted ? '✓ Trust: GRANTED' : '⚠ Trust: UNTRUSTED';
+    trustBtn.className = trusted ? 'btn-success' : 'btn-amber';
+  }
+
+  function renderWorktreeSelect() {
+    const sel = document.getElementById('worktree-select');
+    const items = [{ path: '', label: 'main checkout' }];
+    if (state.gitWorkspace && Array.isArray(state.gitWorkspace.worktrees)) {
+      state.gitWorkspace.worktrees.forEach(function(wt) {
+        if (!wt.main && wt.path) {
+          items.push({ path: wt.path, label: (wt.branch || 'worktree') + ' (' + wt.path.split('/').pop() + ')' });
+        }
+      });
+    }
+    sel.innerHTML = items.map(function(it) {
+      const selected = it.path === state.worktreePath ? ' selected' : '';
+      return '<option value="' + esc(it.path) + '"' + selected + '>' + esc(it.label) + '</option>';
+    }).join('');
+  }
+
+  function effectiveEdits(session) {
+    if (!session) return [];
+    if (state.sinceLastReview && Array.isArray(session.review_diff) && session.review_diff.length > 0) {
+      return session.review_diff;
+    }
+    const main = Array.isArray(session.changes) ? session.changes : [];
+    const pinned = Array.isArray(session.pinned_tests) ? session.pinned_tests : [];
+    const seen = {};
+    const combined = [];
+    main.concat(pinned).forEach(function(edit) {
+      if (edit && edit.path && !seen[edit.path]) {
+        seen[edit.path] = true;
+        combined.push(edit);
+      }
+    });
+    return combined;
+  }
+
+  function isFileReviewed(session, path) {
+    if (!session || session.file_review_hash !== session.hash) return false;
+    return Array.isArray(session.reviewed_files) && session.reviewed_files.indexOf(path) >= 0;
+  }
+
+  function countDiffStats(edit) {
+    let added = 0, removed = 0;
+    const lines = (edit && edit.diff && Array.isArray(edit.diff.lines)) ? edit.diff.lines : [];
+    lines.forEach(function(l) {
+      if (l.kind === 'added') added++;
+      else if (l.kind === 'removed') removed++;
+    });
+    return { added: added, removed: removed };
+  }
+
+  function renderDiffTab() {
+    document.getElementById('proposal-count').textContent = String(state.changes.length);
+    const propSelect = document.getElementById('proposal-select');
+    if (state.changes.length === 0) {
+      propSelect.innerHTML = '<option value="">No proposals yet</option>';
+    } else {
+      propSelect.innerHTML = state.changes.map(function(c) {
+        const sel = c.id === state.sessionId ? ' selected' : '';
+        return '<option value="' + esc(c.id) + '"' + sel + '>[' + esc(c.state) + '] ' + esc(c.title || c.id) + '</option>';
+      }).join('');
+    }
+
+    const session = state.activeSession;
+    const fileListEl = document.getElementById('diff-file-list');
+    const contentEl = document.getElementById('diff-content');
+
+    if (!session) {
+      document.getElementById('active-proposal-title').textContent = 'No active change proposal';
+      document.getElementById('active-proposal-state').textContent = 'idle';
+      document.getElementById('active-proposal-freshness').textContent = '';
+      document.getElementById('changed-files-count').textContent = '0';
+      fileListEl.innerHTML = '<div class="empty-state">Create or select a proposal to inspect diffs.</div>';
+      contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a proposal from the left sidebar or create a new one in the Proposals &amp; Tasks tab.</p></div>';
+      return;
+    }
+
+    document.getElementById('active-proposal-title').textContent = session.title || session.id;
+    const stBadge = document.getElementById('active-proposal-state');
+    stBadge.textContent = session.state || 'draft';
+    stBadge.className = 'badge ' + (session.state === 'applied' || session.state === 'reviewed' || session.state === 'checked' ? 'green' : (session.state === 'failed' ? 'red' : 'amber'));
+
+    const frBadge = document.getElementById('active-proposal-freshness');
+    frBadge.textContent = session.freshness || 'current';
+    frBadge.className = 'badge ' + (session.freshness === 'stale' ? 'red' : 'blue');
+
+    const edits = effectiveEdits(session);
+    document.getElementById('changed-files-count').textContent = String(edits.length);
+
+    let fileItemsHTML = '<div class="list-item' + (!state.selectedFile ? ' active' : '') + '" data-file="">' +
+      '<div class="list-item-row"><span class="list-item-title">All Changed Files (' + edits.length + ')</span></div></div>';
+
+    edits.forEach(function(edit) {
+      const stats = countDiffStats(edit);
+      const reviewed = isFileReviewed(session, edit.path);
+      const active = state.selectedFile === edit.path ? ' active' : '';
+      fileItemsHTML += '<div class="list-item' + active + '" data-file="' + esc(edit.path) + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + (reviewed ? '✓ ' : '') + esc(edit.path.split('/').pop()) + '</span>' +
+          '<span><span style="color:var(--green)">+' + stats.added + '</span> <span style="color:var(--red)">-' + stats.removed + '</span></span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc(edit.path) + '</div>' +
+      '</div>';
+    });
+    fileListEl.innerHTML = fileItemsHTML;
+    fileListEl.querySelectorAll('.list-item').forEach(function(el) {
+      el.addEventListener('click', function() {
+        state.selectedFile = el.getAttribute('data-file') || '';
+        syncURL();
+        renderDiffTab();
+      });
+    });
+
+    let html = '';
+    if (Array.isArray(session.checks) && session.checks.length > 0) {
+      html += '<div class="checks-strip">';
+      session.checks.forEach(function(chk) {
+        const cls = chk.state === 'passed' ? 'green' : (chk.state === 'failed' ? 'red' : 'amber');
+        html += '<div class="check-pill">' +
+          '<span class="badge ' + cls + '">' + esc(chk.state) + '</span>' +
+          '<strong>' + esc(chk.name) + '</strong>' +
+          (chk.duration_ms ? '<span class="project-path">' + chk.duration_ms + 'ms</span>' : '') +
+        '</div>';
+      });
+      html += '</div>';
+    }
+
+    const visibleEdits = state.selectedFile
+      ? edits.filter(function(e) { return e.path === state.selectedFile; })
+      : edits;
+
+    if (visibleEdits.length === 0) {
+      html += '<div class="empty-state"><h3>No file edits in this proposal yet</h3><p>Targets: ' +
+        esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') + '</p></div>';
+    } else {
+      visibleEdits.forEach(function(edit) {
+        const stats = countDiffStats(edit);
+        const reviewed = isFileReviewed(session, edit.path);
+        html += '<div class="card">' +
+          '<div class="card-header">' +
+            '<div class="card-title">' +
+              '<span>' + esc(edit.path) + '</span>' +
+              '<span style="color:var(--green)">+' + stats.added + '</span>' +
+              '<span style="color:var(--red)">-' + stats.removed + '</span>' +
+              (reviewed ? '<span class="badge green">✓ Reviewed</span>' : '<span class="badge amber">Needs Review</span>') +
+            '</div>' +
+            '<div class="action-group">' +
+              (edit.summary ? '<span class="project-path">' + esc(edit.summary) + '</span>' : '') +
+              '<button class="review-file-btn ' + (reviewed ? '' : 'btn-success') + '" data-path="' + esc(edit.path) + '">' +
+                (reviewed ? '✓ Reviewed' : 'Mark File Reviewed') +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="overflow-x:auto;">' +
+            (state.diffMode === 'split' ? renderSplitDiffTable(edit.diff) : renderUnifiedDiffTable(edit.diff)) +
+          '</div>' +
+        '</div>';
+      });
+    }
+
+    contentEl.innerHTML = html;
+    contentEl.querySelectorAll('.review-file-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        reviewSingleFile(btn.getAttribute('data-path'));
+      });
+    });
+  }
+
+  function renderUnifiedDiffTable(diff) {
+    const lines = (diff && Array.isArray(diff.lines)) ? diff.lines : [];
+    if (lines.length === 0) {
+      return '<div class="card-body project-path">No line differences.</div>';
+    }
+    const rows = lines.map(function(line) {
+      const cls = line.kind === 'added' ? 'diff-added' : (line.kind === 'removed' ? 'diff-removed' : '');
+      const sign = line.kind === 'added' ? '+' : (line.kind === 'removed' ? '-' : ' ');
+      const oldLn = line.old_line ? String(line.old_line) : '';
+      const newLn = line.new_line ? String(line.new_line) : '';
+      return '<tr class="' + cls + '">' +
+        '<td class="diff-ln">' + oldLn + '</td>' +
+        '<td class="diff-ln">' + newLn + '</td>' +
+        '<td class="diff-sign">' + sign + '</td>' +
+        '<td>' + esc(line.text) + '</td>' +
+      '</tr>';
+    }).join('');
+    return '<table class="diff-table"><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderSplitDiffTable(diff) {
+    const lines = (diff && Array.isArray(diff.lines)) ? diff.lines : [];
+    if (lines.length === 0) {
+      return '<div class="card-body project-path">No line differences.</div>';
+    }
+    const pairs = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].kind === 'context') {
+        pairs.push({ left: lines[i], right: lines[i] });
+        i++;
+      } else {
+        const removed = [];
+        const added = [];
+        while (i < lines.length && lines[i].kind === 'removed') {
+          removed.push(lines[i]);
+          i++;
+        }
+        while (i < lines.length && lines[i].kind === 'added') {
+          added.push(lines[i]);
+          i++;
+        }
+        const maxLen = Math.max(removed.length, added.length);
+        for (let k = 0; k < maxLen; k++) {
+          pairs.push({ left: removed[k] || null, right: added[k] || null });
+        }
+      }
+    }
+    const rows = pairs.map(function(p) {
+      const lClass = p.left ? (p.left.kind === 'removed' ? 'diff-removed' : '') : 'diff-empty';
+      const rClass = p.right ? (p.right.kind === 'added' ? 'diff-added' : '') : 'diff-empty';
+      const lLn = (p.left && p.left.old_line) ? String(p.left.old_line) : '';
+      const rLn = (p.right && p.right.new_line) ? String(p.right.new_line) : '';
+      const lPrefix = p.left ? (p.left.kind === 'removed' ? '- ' : '  ') : '';
+      const rPrefix = p.right ? (p.right.kind === 'added' ? '+ ' : '  ') : '';
+      const lText = p.left ? esc(lPrefix + p.left.text) : '';
+      const rText = p.right ? esc(rPrefix + p.right.text) : '';
+      return '<tr>' +
+        '<td class="diff-ln ' + lClass + '">' + lLn + '</td>' +
+        '<td class="diff-split-col ' + lClass + '">' + lText + '</td>' +
+        '<td class="diff-ln ' + rClass + '">' + rLn + '</td>' +
+        '<td class="diff-split-col ' + rClass + '">' + rText + '</td>' +
+      '</tr>';
+    }).join('');
+    return '<table class="diff-table"><tbody>' + rows + '</tbody></table>';
+  }
+
+  function changeIdentityPayload(session) {
+    return {
+      project_id: session.project_id || state.project.project_id,
+      project_revision: session.project_revision || state.project.project_revision,
+      revision: session.revision,
+      hash: session.hash
+    };
+  }
+
+  async function reviewSingleFile(filePath) {
+    const s = state.activeSession;
+    if (!s || !filePath) return;
+    try {
+      const body = Object.assign(changeIdentityPayload(s), { path: filePath });
+      state.activeSession = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+        { method: 'POST', body: body }
+      );
+      showBanner('Marked ' + filePath + ' as reviewed.', 'ok');
+      renderDiffTab();
+    } catch (err) {
+      showBanner('File review failed: ' + err.message, 'error');
+    }
+  }
+
+  async function reviewAndApproveAll() {
+    let s = state.activeSession;
+    if (!s) return;
+    try {
+      const changes = Array.isArray(s.changes) ? s.changes : [];
+      for (let i = 0; i < changes.length; i++) {
+        const path = changes[i].path;
+        if (!isFileReviewed(s, path)) {
+          const body = Object.assign(changeIdentityPayload(s), { path: path });
+          s = await apiFetch(
+            withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+            { method: 'POST', body: body }
+          );
+        }
+      }
+      s = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
+        { method: 'POST', body: changeIdentityPayload(s) }
+      );
+      state.activeSession = s;
+      showBanner('All files marked reviewed and proposal hash approved.', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Proposal review approval failed: ' + err.message, 'error');
+    }
+  }
+
+  async function runProposalChecks() {
+    const s = state.activeSession;
+    if (!s) return;
+    try {
+      showBanner('Running sandboxed checks (architecture, complexity, lint, tests)…', 'info');
+      const body = Object.assign(changeIdentityPayload(s), { run_lint: true, run_tests: true });
+      state.activeSession = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/checks'),
+        { method: 'POST', body: body }
+      );
+      showBanner('Checks completed (state: ' + state.activeSession.state + ').', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Check execution failed: ' + err.message, 'error');
+    }
+  }
+
+  async function applyActiveProposal() {
+    let s = state.activeSession;
+    if (!s) return;
+    if (!window.confirm('Apply reviewed proposal "' + (s.title || s.id) + '" to workspace source files?')) {
+      return;
+    }
+    try {
+      const changes = Array.isArray(s.changes) ? s.changes : [];
+      for (let i = 0; i < changes.length; i++) {
+        if (!isFileReviewed(s, changes[i].path)) {
+          s = await apiFetch(
+            withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
+            { method: 'POST', body: Object.assign(changeIdentityPayload(s), { path: changes[i].path }) }
+          );
+        }
+      }
+      s = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
+        { method: 'POST', body: changeIdentityPayload(s) }
+      );
+      const body = Object.assign(changeIdentityPayload(s), { confirm: true });
+      const res = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/apply'),
+        { method: 'POST', body: body }
+      );
+      showBanner('Applied proposal ' + s.id + ' (state: ' + (res && res.state || 'applied') + ').', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Guarded Apply failed: ' + err.message, 'error');
+    }
+  }
+
+  async function undoActiveProposal() {
+    const s = state.activeSession;
+    if (!s) return;
+    if (!window.confirm('Undo applied changes for "' + (s.title || s.id) + '"? This verifies current file hashes match the applied revision.')) {
+      return;
+    }
+    try {
+      const body = Object.assign(changeIdentityPayload(s), { confirm: true });
+      const res = await apiFetch(
+        withWorktree('/api/projects/current/changes/' + encodeURIComponent(s.id) + '/undo'),
+        { method: 'POST', body: body }
+      );
+      showBanner('Reverted proposal ' + s.id + ' (state: ' + (res && res.state || 'reverted') + ').', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Guarded Undo failed: ' + err.message, 'error');
+    }
+  }
+
+  function renderIssuesTab() {
+    const cat = document.getElementById('issue-cat-filter').value;
+    const st = document.getElementById('issue-status-filter').value;
+    const q = (document.getElementById('issue-search').value || '').toLowerCase().trim();
+
+    const filtered = state.findings.filter(function(f) {
+      if (cat !== 'all') {
+        const kind = (f.kind || f.category || '').toLowerCase();
+        if (cat === 'bugs' && kind !== 'bug' && kind !== 'bugs' && kind !== 'semantic' && kind !== 'code') return false;
+        if (cat === 'security' && kind !== 'security') return false;
+        if (cat === 'performance' && kind !== 'performance') return false;
+      }
+      if (st !== 'all') {
+        const fst = (f.status || 'open').toLowerCase();
+        if (st === 'open' && fst === 'dismissed') return false;
+        if (st === 'dismissed' && fst !== 'dismissed') return false;
+      }
+      if (q) {
+        const hay = ((f.title || '') + ' ' + (f.path || '') + ' ' + (f.description || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+
+    const listEl = document.getElementById('issues-summary-list');
+    const contentEl = document.getElementById('issues-content');
+
+    listEl.innerHTML = filtered.map(function(f, idx) {
+      return '<div class="list-item" data-idx="' + idx + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + esc(f.title || f.id) + '</span>' +
+          '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc(f.path || '') + (f.line ? ':' + f.line : '') + '</div>' +
+      '</div>';
+    }).join('') || '<div class="empty-state">No matching findings.</div>';
+
+    if (filtered.length === 0) {
+      contentEl.innerHTML = '<div class="empty-state"><h3>No matching findings</h3><p>Try adjusting the category or status filter.</p></div>';
+      return;
+    }
+
+    contentEl.innerHTML = filtered.map(function(f) {
+      const dismissed = (f.status || '').toLowerCase() === 'dismissed';
+      return '<div class="card">' +
+        '<div class="card-header">' +
+          '<div class="card-title">' +
+            '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
+            '<span>' + esc(f.title || f.id) + '</span>' +
+            '<span class="badge">' + esc(f.kind || f.source || 'finding') + '</span>' +
+          '</div>' +
+          '<div class="action-group">' +
+            (f.path ? '<button class="jump-file-btn" data-path="' + esc(f.path) + '">📄 ' + esc(f.path) + (f.line ? ':' + f.line : '') + '</button>' : '') +
+            '<button class="triage-finding-btn" data-id="' + esc(f.id) + '" data-kind="' + esc(f.kind || '') + '" data-path="' + esc(f.path || '') + '" data-source="' + esc(f.source || '') + '" data-next="' + (dismissed ? 'open' : 'dismissed') + '">' +
+              (dismissed ? 'Reopen' : 'Dismiss') +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card-body">' +
+          '<p style="margin:0 0 6px 0;">' + esc(f.description || f.message || '') + '</p>' +
+          (f.suggestion ? '<div class="project-path">Suggestion: ' + esc(f.suggestion) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    contentEl.querySelectorAll('.jump-file-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const p = btn.getAttribute('data-path');
+        state.selectedFile = p;
+        setTab('files');
+        openSourceFile(p);
+      });
+    });
+
+    contentEl.querySelectorAll('.triage-finding-btn').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        try {
+          const id = btn.getAttribute('data-id');
+          const body = {
+            project_revision: state.project.project_revision,
+            status: btn.getAttribute('data-next'),
+            kind: btn.getAttribute('data-kind') || undefined,
+            path: btn.getAttribute('data-path') || undefined,
+            source: btn.getAttribute('data-source') || undefined
+          };
+          await apiFetch(withWorktree('/api/projects/current/findings/' + encodeURIComponent(id)), {
+            method: 'PATCH',
+            body: body
+          });
+          showBanner('Updated finding status.', 'ok');
+          await loadAll();
+        } catch (err) {
+          showBanner('Finding triage failed: ' + err.message, 'error');
+        }
+      });
+    });
+  }
+
+  function renderTasksTab() {
+    const el = document.getElementById('tasks-list-body');
+    if (!state.changes || state.changes.length === 0) {
+      el.innerHTML = '<div class="empty-state">No proposals recorded for this checkout yet.</div>';
+      return;
+    }
+    el.innerHTML = state.changes.map(function(c) {
+      return '<div class="list-item" style="border:1px solid var(--border);margin-bottom:8px;padding:10px;">' +
+        '<div class="list-item-row">' +
+          '<div>' +
+            '<strong>' + esc(c.title || c.id) + '</strong> ' +
+            '<span class="badge">' + esc(c.kind || 'change') + '</span> ' +
+            '<span class="badge blue">' + esc(c.state) + '</span> ' +
+            '<span class="badge">' + esc(c.freshness || 'current') + '</span>' +
+          '</div>' +
+          '<button class="open-proposal-btn btn-primary" data-id="' + esc(c.id) + '">Inspect Diff &amp; Review →</button>' +
+        '</div>' +
+        '<div class="list-item-sub">ID: ' + esc(c.id) + ' · Paths: ' + esc((c.paths || []).join(', ')) + '</div>' +
+      '</div>';
+    }).join('');
+
+    el.querySelectorAll('.open-proposal-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const id = btn.getAttribute('data-id');
+        state.selectedFile = '';
+        setTab('diff');
+        loadChangeSession(id);
+      });
+    });
+  }
+
+  function renderFilesTab() {
+    const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
+    document.getElementById('indexed-files-count').textContent = String(files.length);
+    const q = (document.getElementById('file-filter-input').value || '').toLowerCase().trim();
+    const filtered = files.filter(function(f) {
+      return !q || f.path.toLowerCase().indexOf(q) >= 0;
+    });
+    const listEl = document.getElementById('indexed-file-list');
+    listEl.innerHTML = filtered.slice(0, 300).map(function(f) {
+      const active = state.selectedFile === f.path ? ' active' : '';
+      return '<div class="list-item' + active + '" data-path="' + esc(f.path) + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + esc(f.path.split('/').pop()) + '</span>' +
+          '<span class="badge">' + esc(f.language || 'text') + '</span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc(f.path) + '</div>' +
+      '</div>';
+    }).join('') || '<div class="empty-state">No matching files.</div>';
+
+    listEl.querySelectorAll('.list-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        const p = item.getAttribute('data-path');
+        openSourceFile(p);
+      });
+    });
+  }
+
+  async function openSourceFile(filePath) {
+    if (!filePath) return;
+    try {
+      state.selectedFile = filePath;
+      syncURL();
+      renderFilesTab();
+      const q = '?path=' + encodeURIComponent(filePath);
+      const res = await Promise.allSettled([
+        apiFetch(withWorktree('/api/projects/current/files/info' + q)),
+        apiFetch(withWorktree('/api/projects/current/files/symbols' + q))
+      ]);
+      if (res[0].status !== 'fulfilled' || !res[0].value) {
+        throw new Error(res[0].reason ? res[0].reason.message : 'File unavailable');
+      }
+      const info = res[0].value;
+      const syms = (res[1].status === 'fulfilled' && res[1].value && Array.isArray(res[1].value.symbols)) ? res[1].value.symbols : [];
+
+      document.getElementById('open-file-title').textContent = info.path || filePath;
+      document.getElementById('open-file-meta').textContent = (info.language || 'text') + ' · ' + (info.lines || 0) + ' lines';
+
+      const symEl = document.getElementById('open-file-symbols');
+      symEl.innerHTML = syms.slice(0, 12).map(function(s) {
+        return '<button class="sym-jump-btn" data-line="' + (s.start_line || 1) + '">' + esc(s.name) + '</button>';
+      }).join('');
+      symEl.querySelectorAll('.sym-jump-btn').forEach(function(b) {
+        b.addEventListener('click', function() {
+          const ln = b.getAttribute('data-line');
+          const row = document.getElementById('src-L' + ln);
+          if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+
+      const rawLines = String(info.content || '').split('\n');
+      const rows = rawLines.map(function(line, idx) {
+        const n = idx + 1;
+        return '<tr id="src-L' + n + '"><td class="diff-ln">' + n + '</td><td>' + esc(line) + '</td></tr>';
+      }).join('');
+      document.getElementById('file-viewer-content').innerHTML =
+        '<div class="card"><div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div></div>';
+    } catch (err) {
+      showBanner('Failed to read file ' + filePath + ': ' + err.message, 'error');
+    }
+  }
+
+  // Event bindings
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      setTab(btn.getAttribute('data-tab'));
+    });
+  });
+
+  document.getElementById('proposal-select').addEventListener('change', function(e) {
+    state.selectedFile = '';
+    loadChangeSession(e.target.value);
+  });
+
+  document.getElementById('worktree-select').addEventListener('change', function(e) {
+    state.worktreePath = e.target.value;
+    state.sessionId = '';
+    state.selectedFile = '';
+    syncURL();
+    loadAll();
+  });
+
+  document.getElementById('mode-split-btn').addEventListener('click', function() {
+    state.diffMode = 'split';
+    document.getElementById('mode-split-btn').className = 'btn-primary';
+    document.getElementById('mode-unified-btn').className = '';
+    renderDiffTab();
+  });
+
+  document.getElementById('mode-unified-btn').addEventListener('click', function() {
+    state.diffMode = 'unified';
+    document.getElementById('mode-unified-btn').className = 'btn-primary';
+    document.getElementById('mode-split-btn').className = '';
+    renderDiffTab();
+  });
+
+  document.getElementById('scope-delta-btn').addEventListener('click', function() {
+    state.sinceLastReview = !state.sinceLastReview;
+    const btn = document.getElementById('scope-delta-btn');
+    btn.textContent = state.sinceLastReview ? 'Since Last Review' : 'Full Diff';
+    btn.className = state.sinceLastReview ? 'btn-primary' : '';
+    renderDiffTab();
+  });
+
+  document.getElementById('review-all-btn').addEventListener('click', reviewAndApproveAll);
+  document.getElementById('run-checks-btn').addEventListener('click', runProposalChecks);
+  document.getElementById('apply-btn').addEventListener('click', applyActiveProposal);
+  document.getElementById('undo-btn').addEventListener('click', undoActiveProposal);
+
+  document.getElementById('trust-btn').addEventListener('click', async function() {
+    if (!state.project) return;
+    const nextTrust = !(state.trust && state.trust.trusted);
+    try {
+      state.trust = await apiFetch(withWorktree('/api/projects/current/execution-trust'), {
+        method: 'POST',
+        body: { project_revision: state.project.project_revision, confirm: nextTrust }
+      });
+      renderHeader();
+      showBanner(nextTrust ? 'Execution trust granted for current project.' : 'Execution trust revoked.', 'ok');
+    } catch (err) {
+      showBanner('Could not update execution trust: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('reindex-btn').addEventListener('click', async function() {
+    if (!state.project) return;
+    try {
+      await apiFetch(withWorktree('/api/projects/current/reindex'), {
+        method: 'POST',
+        body: { project_revision: state.project.project_revision }
+      });
+      showBanner('Project reindexed.', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Reindex failed: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('switch-project-btn').addEventListener('click', async function() {
+    const currentPath = state.project ? state.project.path : '';
+    const nextPath = window.prompt('Enter local absolute path of a previously imported project:', currentPath);
+    if (!nextPath || nextPath === currentPath) return;
+    try {
+      await apiFetch('/api/projects/restore', {
+        method: 'POST',
+        body: { project_path: nextPath.trim() }
+      });
+      state.worktreePath = '';
+      state.sessionId = '';
+      state.selectedFile = '';
+      syncURL();
+      showBanner('Switched active project to ' + nextPath, 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Project restore failed: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', loadAll);
+
+  document.getElementById('theme-btn').addEventListener('click', function() {
+    const htmlEl = document.documentElement;
+    const next = htmlEl.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    htmlEl.setAttribute('data-theme', next);
+  });
+
+  document.getElementById('issue-cat-filter').addEventListener('change', renderIssuesTab);
+  document.getElementById('issue-status-filter').addEventListener('change', renderIssuesTab);
+  document.getElementById('issue-search').addEventListener('input', renderIssuesTab);
+  document.getElementById('file-filter-input').addEventListener('input', renderFilesTab);
+
+  document.getElementById('create-task-btn').addEventListener('click', async function() {
+    if (!state.project) return;
+    const title = (document.getElementById('new-task-title').value || '').trim();
+    const kind = document.getElementById('new-task-kind').value || 'fix';
+    const paths = (document.getElementById('new-task-paths').value || '')
+      .split(/[\n,]+/)
+      .map(function(s) { return s.trim(); })
+      .filter(Boolean);
+    const criteria = (document.getElementById('new-task-criteria').value || '')
+      .split('\n')
+      .map(function(s) { return s.trim(); })
+      .filter(Boolean);
+    if (!title || paths.length === 0) {
+      showBanner('Provide a task title and 1–8 eligible file paths.', 'error');
+      return;
+    }
+    try {
+      const created = await apiFetch(withWorktree('/api/projects/current/changes'), {
+        method: 'POST',
+        body: {
+          project_id: state.project.project_id,
+          project_revision: state.project.project_revision,
+          kind: kind,
+          title: title,
+          paths: paths,
+          acceptance_criteria: criteria.length ? criteria : ['Changes pass verification checks']
+        }
+      });
+      state.sessionId = created.id;
+      setTab('diff');
+      await loadAll();
+      showBanner('Created proposal session ' + created.id, 'ok');
+    } catch (err) {
+      showBanner('Failed to create proposal: ' + err.message, 'error');
+    }
+  });
+
+  function connectSSE() {
+    if (typeof EventSource === 'undefined') return;
+    const es = new EventSource('/api/projects/current/events');
+    const badge = document.getElementById('live-status');
+    es.addEventListener('open', function() {
+      badge.textContent = '● LIVE';
+      badge.className = 'badge green';
+    });
+    es.addEventListener('update', function() {
+      loadAll();
+    });
+    es.addEventListener('error', function() {
+      badge.textContent = '○ RECONNECTING';
+      badge.className = 'badge amber';
+    });
+  }
+
+  setTab(state.tab);
+  loadAll();
+  connectSSE();
+})();
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -21,7 +22,7 @@ func LocalOnly(next http.Handler, allowExternalHosts bool) http.Handler {
 			WriteAppError(w, Forbidden("browser preflight requests are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
-		if r.Header.Get("Origin") != "" {
+		if r.Header.Get("Origin") != "" && !isAllowedWebUIOrigin(r, allowExternalHosts) {
 			WriteAppError(w, Forbidden("browser Origin headers are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
@@ -32,6 +33,20 @@ func LocalOnly(next http.Handler, allowExternalHosts bool) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isAllowedWebUIOrigin(r *http.Request, allowExternalHosts bool) bool {
+	if r.Header.Get("X-Mini-Orca-Web-UI") != "1" {
+		return false
+	}
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	if err != nil || origin == nil || origin.Scheme != "http" || origin.Host == "" {
+		return false
+	}
+	if !strings.EqualFold(origin.Host, r.Host) {
+		return false
+	}
+	return allowExternalHosts || isLoopbackHost(origin.Host)
 }
 
 func isLoopbackHost(host string) bool {
