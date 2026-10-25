@@ -1178,6 +1178,7 @@ This is an implementation specification, not a claim that the features below alr
 **Target files**
 - `internal/tui/agent_media.go`, `internal/tui/agent_media_actions.go`, `internal/tui/agent_media_view.go`, `internal/tui/agent_media_test.go`, `internal/tui/agent_media_stream.go`, `internal/tui/agent_media_stream_test.go` — **new**, focused media/session surface and owned passive updates.
 - `internal/tui/client/attachments.go`, `internal/tui/client/attachments_test.go`, `internal/tui/client/live.go`, `internal/tui/client/live_test.go` — **new**, typed controls and receipt validation.
+- `internal/tui/focused_pages_test.go`, `internal/tui/state_test.go` — include Media in the complete passive Work submenu keyboard cycle.
 - `internal/tui/client/client.go`, `internal/tui/client/attachment_models.go`, `internal/tui/client/live_models.go`, `internal/tui/client/agent_models.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_overview.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands_actions.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/agent_library.go`, `docs/UI_DESIGN_GUIDELINES.md`.
 
 **Inputs / dependencies**
