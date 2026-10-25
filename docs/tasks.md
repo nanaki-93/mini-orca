@@ -1245,26 +1245,51 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: add explicit ambient analysis controls to the TUI`
 
-## Task 33 — Add optional cloud-backed agent services
+## Task 33A — Add consented cloud copies with durable recovery
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agentruntime/cloud_services.go`, `internal/app/agentruntime/cloud_services_test.go`, `internal/app/agent_data_policy.go`, `internal/app/agent_data_policy_test.go` — **new**.
-- `internal/config/integrations.go`, `internal/app/agent_settings.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/session.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentruntime/memory.go`, `CONFIG.md`, `config.example.yaml`.
+- `internal/config/cloud.go`, `internal/config/cloud_test.go`, `internal/app/agentstate/cloud.go`, `internal/app/agentstate/cloud_test.go` — **new**, validated destinations and private transfer receipts.
+- `internal/app/agentruntime/cloud_services.go`, `internal/app/agentruntime/cloud_services_test.go`, `internal/app/agent_data_policy.go`, `internal/app/agent_data_policy_test.go`, `internal/app/agent_cloud.go`, `internal/app/agent_cloud_test.go` — **new**, pinned SDK conformance, explicit export and remote reconciliation/deletion.
+- `internal/api/handlers/agent_cloud_handler.go`, `internal/api/handlers/agent_cloud_handler_test.go`, `internal/tui/client/cloud_models.go` — **new**, SDK-independent contracts.
+- `go.mod`, `go.sum`, `internal/config/integrations.go`, `internal/app/service.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 32B; explicit remote grants. Real Google Cloud project, region, identities, and storage resources are deployment inputs supplied by the operator; tests use fakes.
+- Task 32B. Operator-provided Google Cloud resources and a configured service-account identity; offline tests use SDK transports and fake services. The pinned Memory Bank adapter has no deletion or credential-injection API; do not advertise it as conforming.
 
 **Implementation rules**
-- Support configured ADK Vertex session/memory and GCS artifact adapters where pinned SDK conformance passes. Keep local services the default and application mutation authority local.
-- Bind data scope, principal, project, region, retention, and deletion semantics to the selected service. Enabling a backend never migrates or uploads existing histories automatically.
-- Implement explicit validated export/migration with receipts and recoverable failures; reject unsupported checkpoint/confirmation combinations. Report remote deletion or availability failures honestly and redact diagnostics.
+- Keep the running journal, curated memory, checkpoints and application mutation authority local. Explicitly copy a selected completed invocation to a Vertex session archive or a selected immutable artifact to GCS through native ADK adapters. These copies are not resumable Mini-Orca checkpoints. Reject active/waiting-input histories and unsupported memory-service configuration.
+- Passive previews name the main checkout, exact selected content/hash/size, service, principal, Google project, region, resource and retention/deletion policy. No credential discovery, network probes, uploads or migration occurs from configuration or inspection. Require fresh scope/content/configuration identity and explicit source-sharing confirmation at dispatch.
+- Verify the configured service-account identity before authentication, bound cloud I/O, and close owned transport resources. Establish each SDK contract with a fake transport; no live cloud account is used.
+- Persist a bounded source-free transfer receipt before remote effects. Preserve uncertain or partial outcomes on cancellation, restart or local-write failure; never replay an upload automatically. Provide explicit remote reconciliation and deletion, retaining local originals. Reject stale/concurrent controls and foreign resources. Retention is an operator cleanup deadline, not a fabricated server TTL or automatic deletion promise. Redact provider diagnostics and report deletion/availability failures honestly.
+- Register real loopback routes, strict handler/client DTOs and API documentation in this commit. TUI controls follow in Task 33B.
 
 **Verification command**
-`go test -race -timeout=15m ./internal/app/agentruntime ./internal/app ./internal/config && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app/agentruntime ./internal/app/agentstate ./internal/app ./internal/config ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add optional consented cloud agent services`
+
+## Task 33B — Review cloud destinations and transfers in the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/agent_cloud.go`, `internal/tui/agent_cloud_actions.go`, `internal/tui/agent_cloud_view.go`, `internal/tui/agent_cloud_test.go`, `internal/tui/client/cloud.go`, `internal/tui/client/cloud_test.go` — **new**.
+- `internal/tui/client/cloud_models.go`, `internal/tui/client/client.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/focused_pages_test.go`, `internal/tui/state_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 33A; configured destinations, preview guards and durable transfer controls exist.
+
+**Implementation rules**
+- Preserve five workspaces, with a focused Settings cloud-copy view. Local refresh/navigation are passive; remote reconciliation, export and deletion are explicit actions with exact destination/scope confirmations. Present retention as a cleanup deadline and distinguish completed, unknown, missing, failed and deleted receipts.
+- Keep source selection and confirmation reviewable; no automatic upload after editing or selecting a target. Preserve healthy metadata and drafts on errors; cancel local transport on replacement/navigation/quit, reject late results and require refresh after uncertain controls.
+- Exercise real client/handler flows, stale confirmations, lost receipts, cancellation, all palettes and compact/wide layouts. Keep full destination details scrollable and local originals intact.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: review explicit cloud copies and recovery in the TUI`
 
 ## Task 34 — Package an authenticated remote worker and developer inspector
 
@@ -1275,7 +1300,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/app/agent_remote_service.go`, `internal/app/agentruntime/a2a_server.go`, `scripts/quality.sh`, `scripts/tests/test_quality.py`, `Makefile`, `README.md`, `internal/AGENTS.md`.
 
 **Inputs / dependencies**
-- Task 33; guarded A2A service, source-free event records, and container build conventions.
+- Task 33B; guarded A2A service, source-free event records, and container build conventions.
 
 **Implementation rules**
 - Provide a worker entry point suitable for Cloud Run or other container hosts with mandatory authenticated project-scoped requests, bounded jobs, shutdown, and no writable access to a user's local checkout.
