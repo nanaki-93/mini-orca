@@ -8,6 +8,11 @@ Mini-Orca uses a pure Go TUI client and loopback daemon for one active project.
 The shared change workflow captures up to eight explicit Go/Markdown paths,
 prepares versioned proposals, checks them, records diff review and explicitly
 applies them with guarded recovery/Undo.
+Native ADK execution records generation, test generation, verification,
+specialist review and human input separately. Run events, artifacts and model
+verdicts are evidence; they cannot replace current host admission or source
+mutation authority. See [supported capabilities](../README.md#supported-adk-capabilities)
+and [journal migration and recovery](../CONFIG.md#local-metadata-and-manual-cleanup).
 Source and composed diffs stay read-only. The daemon never writes source,
 runs project code, commits or pushes merely because a project or history is opened.
 

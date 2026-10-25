@@ -5,11 +5,40 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
+
+func TestReplayComparisonRetainsCorpusBudgetsAndNegativeOutcomes(t *testing.T) {
+	first, err := Run(t.Context(), Options{Limits: DefaultLimits()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(t.Context(), Options{Limits: first.Limits})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Mode != "replay" || second.Mode != "replay" || first.CorpusDigest != second.CorpusDigest || first.CorpusVersion != second.CorpusVersion || first.ModelKey != second.ModelKey || first.PromptVersion != second.PromptVersion || first.Scoring != second.Scoring || first.Limits != second.Limits {
+		t.Fatal("replay changed its comparison inputs")
+	}
+	if len(first.Cases) != len(second.Cases) {
+		t.Fatal("comparison dropped cases")
+	}
+	for i, before := range first.Cases {
+		after := second.Cases[i]
+		// Local harness timing is deliberately not a model-quality measurement.
+		before.ElapsedMillis, after.ElapsedMillis = nil, nil
+		if !reflect.DeepEqual(before, after) {
+			t.Fatalf("deterministic task/control changed: %s", before.ID)
+		}
+		if before.Control && before.State == "passed" {
+			t.Fatal("negative control became a successful coding task")
+		}
+	}
+}
 
 func TestReplayExercisesNativeTasksControlsRepairAndAccounting(t *testing.T) {
 	root := t.TempDir()

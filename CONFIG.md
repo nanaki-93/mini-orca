@@ -726,6 +726,19 @@ records. Corrupt, oversized or unknown-version data is preserved and rejected.
 Opening a project reads records passively; it never resumes unfinished invocations
 or grants source-write, remote-provider, or execution consent.
 
+The current journal format is version 2 with `runtime_family: adk-go-v2`.
+Version 1 journals remain readable without a write. The first admitted journal
+mutation upgrades them atomically and marks abandoned `running` invocations
+`interrupted`; valid waiting-input checkpoints, completed history and budget
+charges remain intact. Unknown versions, mismatched runtime families and
+ambiguous JSON are rejected without replacing the original data. A failed or
+uncertain write cannot authorize another provider dispatch or replay Apply.
+After restart, restore a proposal, explicitly trust and rerun its checks, then
+review the current identity before Apply. Existing approval receipts retain
+their identity but do not restore in-memory check authority. An artifact missing
+its original project revision remains locally inspectable/exportable and cannot
+be copied to a cloud destination under an invented current revision.
+
 Versioned completion results and proposal/check evidence use the adjacent private
 `artifacts.json` catalog. Each version records its SHA-256 hash, byte size, media
 type, ownership and provenance. Content is limited to 4 MiB per version, 128

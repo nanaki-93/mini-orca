@@ -9,17 +9,13 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 - **Analyze projects to find Issues**: Coordinates deterministic static/security rules alongside scoped semantic, performance, and advisory security analysis.
 - **Create structured Docs**: Synthesizes a language-agnostic engineering specification covering project purpose, how it pursues its goal, layered architecture, main dependencies, runtime scenarios, ADRs, and operational runbooks.
 - **Suggest Features**: Generates goal-aware feature ideas grounded in the repository's indexed architecture and user-defined project goals.
-- **Plan and review guarded changes**: Prepares and verifies changes across up to eight captured Go/Markdown paths (or isolated Git worktrees) after an editable plan review, then through a 4-stage pipeline—**Architect & Code → Verify & Test → Critic Review → Human Review**—with explicit diff Apply and guarded Undo.
+- **Plan and review guarded changes**: Investigates repository evidence, prepares an editable plan, and runs a native ADK workflow across up to eight captured Go/Markdown paths per task. Generation, test generation, verification, specialist review and human input retain separate outcomes. Source changes require explicit diff Apply and guarded Undo.
 
 ## How It Pursues the Goal
 
 1. **Deterministic Indexing & Context Policy**: Indexes repository files, symbols, and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
 2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `function`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
-3. **4-Stage Verified Change & Agent Pipeline**:
-   - **Step 1 · Architect & Code**: Generates a proposal from an explicitly approved approach, write scope, read context and acceptance criteria.
-   - **Step 2 · Verify & Test**: Compiles and runs scoped package checks and pinned regression tests (`go test`, syntax/vet checks) with automatic repair off by default; opt in to at most two automatic retries.
-   - **Step 3 · Critic Review**: Evaluates the checked diff for regressions, boundary violations, and clean-code precision before human sign-off.
-   - **Step 4 · Human Precision Gate**: Presents read-only unified, split and hunk diffs with per-file review for explicit **Accept & Commit**, worktree **Merge** (closing grouped findings), or **Undo**.
+3. **Native ADK Workflows with Host-Owned Guards**: Sequential change stages, parallel specialist reviews, conditional analysis and bounded repair loops share admitted budgets. Generation and test generation precede isolated checks; model advice and human approval remain separate. Repairs are off by default and can be explicitly enabled for at most two iterations. Review every changed file before **Apply**, then explicitly integrate a worktree or use guarded **Undo**.
 4. **Keyboard-First Pure Go TUI**: Provides a responsive workspace (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with a project dashboard, searchable commands, arrow/Vim navigation, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
 
 ## Navigating the workspace
@@ -34,10 +30,10 @@ Press `n` on the dashboard or Tasks page to plan a new task. On the dashboard,
 | Key | Workspace | Contents |
 | --- | --- | --- |
 | `1` | Project | Dashboard, repository inventory, tests and check output |
-| `2` | Work | Tasks, issues, features, task plans, analysis and file scope |
-| `3` | Code | Read-only files and diffs, worktrees, saved proposals |
+| `2` | Work | Tasks and execution details, mission plans, issues, features, analysis, file scope and media |
+| `3` | Code | Read-only files and diffs, worktrees, saved proposals and artifacts |
 | `4` | Docs | Context, dependencies, components, decisions and architecture |
-| `5` | Settings | Project trust, models, bootstrap checklist and lessons |
+| `5` | Settings | Trust, models, roles, skills, connections, external work, bootstrap, lessons, memory, ambient analysis and cloud copies |
 
 `Tab` / `Shift+Tab` cycle views within a workspace. Use `↑/↓` or `j/k` to
 select rows, `PgUp/PgDn` to read long pages, and `Esc` to return from details.
@@ -89,6 +85,14 @@ review progress. `:retry test` reuses implementation, while `:retry review`
 reuses current passing checks. Attempts, stage timings and failure reasons remain
 visible in workflow details.
 
+`:investigate` requests scoped repository evidence for a draft; explicitly accept
+the result before it changes the plan. `:execution` opens task details with
+Overview, Timeline, Evidence, Usage and Recovery sections. `:run-output <ID>`
+discloses one private invocation; `:hide-output` closes it. A waiting human input
+can be approved, rejected or canceled with `:run-input <decision>`; recording the
+decision does not apply files. Interrupted work requires fresh consent and checks.
+Opening history never resumes a provider call.
+
 Project execution trust is remembered for the same canonical project path across
 reopening and reindexing. `:trust` toggles consent and saves revocation too.
 Other checkouts and changed command scopes require their own confirmation.
@@ -136,10 +140,13 @@ Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 | --- | --- |
 | `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`, `cmd/agent-eval`, `cmd/agent-worker`, `cmd/agent-inspect` | Daemon, terminal UI, evaluation, isolated remote analysis and read-only local inspection entry points. |
 | `internal/api` | Loopback HTTP decoding, browser-origin protection, local request policy, and structured error responses. |
-| `internal/app` | Workflow orchestration, analysis runs, 4-stage change/agent sessions, Git worktree isolation, and guarded source mutation. |
+| `internal/app` | Admission, native workflow hosts, analysis, mission scheduling, consent, Git isolation, and guarded source mutation. |
+| `internal/app/agentruntime` | ADK Go agents, model adapters, graphs, tools, plugins and optional service adapters; the only package importing the SDK. |
+| `internal/app/agentstate` | Private durable sessions, invocations, budgets, checkpoints, artifacts, curated memory and mission records. |
 | `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
 | `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their persisted schemas. |
-| `internal/llm`, `internal/config` | Provider transport (OpenAI-compatible HTTP, `agy`, `pi`), timeouts, and 3-scope model configuration. |
+| `internal/llm`, `internal/config` | Compatible HTTP/CLI transport, provider capabilities, explicit Gemini/Vertex configuration, and three model scopes. |
+| `internal/agenteval`, `internal/insighteval` | Synthetic agent task/trajectory evaluation and engineering-insight evaluation, separate from ordinary use. |
 | `internal/tui` | Guarded daemon client, 5-hub TUI state machine, keyboard/colon-command handlers, and ANSI terminal renderer. |
 
 `make build-agents` builds the worker, inspector and evaluation commands;
@@ -154,8 +161,42 @@ authentication, privacy, bounds and recovery behavior.
 | Dependency | Scope | Purpose |
 | --- | --- | --- |
 | **Go 1.27.3+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
-| **Model Providers** (`HTTP` / `agy` / `pi`) | AI Transport | Pluggable local or remote LLM execution for `analyze`, `bug`, and `function` scopes. |
+| **Google ADK Go v2.6.0 / GenAI Go v1.74.0** | Agent runtime | Typed model/tool events, native graphs, sessions and capability-gated Google services. |
+| **Model Providers** (compatible HTTP, Gemini, Vertex, `agy`, `pi`) | AI Transport | Explicit local or remote execution for `analyze`, `bug`, and `function`; CLI profiles remain completion-only. |
 | **Go Quality & Race Gates** | Verification | Deterministic TUI/daemon verification (`make check`) and static/reachability/complexity/clone checks (`make quality`). |
+
+## Supported ADK capabilities
+
+Capabilities are admitted for the configured provider and exact operation. No
+provider fallback occurs. See [configuration and limits](CONFIG.md), the
+[API contract](docs/api-contract.md), and [TUI interactions](docs/UI_DESIGN_GUIDELINES.md).
+
+| Capability | Delivered behavior and boundary |
+| --- | --- |
+| Models and streaming | Compatible HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles provide completion only. Partial output never becomes an approved proposal. |
+| Repository tools | Planning and declaration investigations use captured snippets, symbols, imports, search and impact evidence. Tools cannot expand their admitted scope or write source. |
+| Workflow graphs | Sequential stages, parallel specialist reviews, conditional branches, bounded repairs and durable human-input checkpoints run through ADK with host-owned checks and budgets. |
+| Sessions and artifacts | Local private journals and immutable versioned evidence support explicit inspection/export and guarded deletion. Restart retains history and charges, not execution authority. |
+| Memory, skills and context | Curated memory requires acceptance and current provenance; indexed ADK skill packages load within admitted scope. Compaction and context caching are optional; remote cache retention requires consent. |
+| External tools and agents | Explicit MCP connections, guarded OpenAPI adapters, A2A delegation and an optional authenticated A2A server. Discovery and source-sharing grants are separate from tool or execution permission. |
+| Grounding and media | Explicit grounded research and attachment advice use eligible native Google profiles. Bounded live advice requires an explicitly configured supported Gemini live model; it captures no microphone or screen automatically. |
+| Missions | Reviewed plans allocate fixed budgets to bounded children in isolated worktrees. Checked children integrate in the reviewed order with fresh base checks, explicit approval and retained recovery receipts. |
+| Ambient analysis | Off until an explicit watch selection and bounded grant. Debounce, deduplication, deadlines and durable charges apply; restart never silently restores a grant. |
+| Cloud copies | Optional Vertex session archives and GCS artifact copies require exact preview/confirmation, explicit credentials and durable transfer receipts. Local state remains authoritative; uncertain outcomes require explicit recovery. |
+| Observability | Local source-free traces and separate reported/estimated usage, optional versioned cost estimates, and explicitly confirmed telemetry export. Missing usage and unknown cost stay unknown. |
+| Evaluation and deployment | Frozen synthetic replay corpus, opt-in live evaluation, authenticated source-manifest worker and a read-only local inspector. See [deployment](docs/agent-deployment.md). |
+
+Vertex Memory Bank is unavailable with the pinned Go adapter because the required
+explicit credential injection and deletion controls are absent. Cloud archives
+are copies, not remote resume or shared approval state. Unrestricted shell tools,
+implicit credentials, automatic source writes and automatic merges are outside
+the supported execution boundary.
+
+Conformance and integration tests use fake providers and temporary projects.
+They establish transport, lifecycle and guard behavior; they do not establish
+live model quality, cloud IAM or billing savings. No matched live baseline is
+recorded, so no quality, speed or cost improvement is claimed. Container execution
+remains unverified where the Docker engine is unavailable.
 
 ## Run Locally
 
@@ -174,6 +215,8 @@ go run ./cmd/tui
 ```
 
 The daemon defaults to `127.0.0.1:9090`; the TUI connects to `http://127.0.0.1:9090` unless `MINI_ORCA_URL` or `-url` is set. Keep `config.yaml` local. Every prompt-bearing request to a non-loopback HTTP or CLI provider requires scope-specific consent.
+
+<a id="project-intelligence"></a>
 
 ### Project Intelligence & Storage (`.mini-orca/`)
 

@@ -12,6 +12,10 @@ info:
     each of those requests. Verified scans, validation, checks, Apply, and Undo
     do not send prompts. An explicitly started change workflow runs its trusted
     checks after generation; source Apply and Undo always require human action.
+    Native ADK graphs retain separate stage and human-input outcomes. Persisted
+    events, model verdicts, artifacts and restored approvals do not grant current
+    execution or source-mutation authority. Optional external services require
+    their configured capability and the explicit operation-specific grant.
 servers:
   - url: http://localhost:9090
     description: Local daemon

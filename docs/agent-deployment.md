@@ -6,6 +6,12 @@ access. Build with `make build-agents`; use `make build-agents-linux` for Linux
 amd64 binaries with `CGO_ENABLED=0`. Both commands are also included in `make build`
 and `make build-linux`.
 
+The supported build uses Go 1.27.3, ADK Go v2.6.0 and GenAI Go v1.74.0 from
+`go.mod`. Native and Linux amd64 targets build the daemon, TUI, both evaluation
+commands, worker and inspector without CGO. Cross-compilation establishes binary
+compatibility, not a live deployment. Optional cloud copies remain separate from
+worker deployment and never turn local approvals into remote execution authority.
+
 ## Explicit worker startup
 
 `build/mini-orca-agent-worker --help` describes the flags and starts no listener.
@@ -168,6 +174,11 @@ or live model quality. Container execution has not been verified in the current
 environment because the Docker engine is unavailable.
 
 ## Read-only local inspection
+
+Inspection accepts current version 2 journals and readable version 1 history.
+It never triggers migration or resumes an invocation. The first admitted
+journal mutation handles migration through the store; see
+[journal migration and recovery](../CONFIG.md#local-metadata-and-manual-cleanup).
 
 ```sh
 build/mini-orca-agent-inspect --root /absolute/checkout --limit 100

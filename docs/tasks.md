@@ -1364,7 +1364,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 37 — Validate the full integration and document supported behavior
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/agenteval/runner_test.go`, `internal/agenteval/fixtures_test.go`, `internal/agenteval/testdata/tasks.json`, `internal/app/agent_integration_test.go`, `internal/tui/agent_journey_test.go` — final two files **new**.

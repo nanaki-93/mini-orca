@@ -46,6 +46,9 @@ the backend guide for changes to `cmd/`.
   deliberately. Invalidate incompatible evidence; keep required historical
   records readable. Change the relevant schema/prompt/policy identity when its
   semantics change, and cover migration or rejection with fixtures.
+  Journal format 2 binds `runtime_family` to `adk-go-v2`; version 1 reads are
+  passive and migration belongs to the first admitted store mutation. Restored
+  checkpoints or approval receipts never recreate execution/check authority.
 
 ## Models, jobs and execution
 

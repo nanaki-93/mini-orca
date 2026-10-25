@@ -13,7 +13,7 @@ guides add local detail; keep shared rules here instead of copying them.
 ## Quick commands & single-test execution
 
 - Bootstrap & entrypoints (`justfile` / `Makefile`): `just setup`, `just dev`, `just tui` (daemon + Go TUI), `just tui-run`, `just test`, `just check` (or `make build`, `make dev`, `make tui-run`, `make test`, `make check`, `make quality`).
-- Build daemon and TUI: `make build` (or `just build`).
+- Build all binaries: `make build` (or `just build`); CGO-free Linux amd64: `make build-linux`.
 - Run a single Go test: `go test ./internal/app -run TestName -v` (or `just test-one TestName`).
 - Run Go TUI tests: `go test -race ./internal/tui/... ./cmd/tui/...` (or `make tui-test`).
 
@@ -24,13 +24,14 @@ Terminal UI (`cmd/tui`, `internal/tui`) and a loopback HTTP API. It supports
 project-wide analysis and checked chat proposals across up to eight captured
 paths, with diff review, explicit Apply and guarded Undo.
 
-- `cmd/` owns startup, configuration wiring and command entry points (`cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`).
+- `cmd/` owns startup, configuration wiring and command entry points (`daemon`, `tui`, `engineering-insight-eval`, `agent-eval`, `agent-worker`, `agent-inspect`).
 - `internal/api/` owns HTTP decoding, local request policy and error responses (`internal/api/handlers`). Handlers must never import `internal/storage` or `internal/llm` directly; always call `internal/app` service methods.
 - `internal/app/` owns workflow orchestration, model calls and guarded changes, with isolated domain subpackages for architecture/complexity checks (`internal/app/archgate`), sandboxed workspace and check execution (`internal/app/sandbox`), pure change source/hash/metadata path helpers (`internal/app/changes`), Git repository/worktree/merge operations (`internal/app/gitops`), and feature suggestion parsing/history (`internal/app/features`).
 - `internal/project/` owns project facts, indexing, context policy and composition, with isolated domain subpackages for unified diff/impact analysis (`internal/project/diff`), multi-language symbol and import extraction (`internal/project/symbols`), heuristic code insight (`internal/project/insight`), engineering handbook generation (`internal/project/handbook`), deterministic security rules (`internal/project/securityrules`), and `AGENTS.md` instruction catalog/preset suggestions (`internal/project/instructions`). It must never import `internal/app` or `internal/api`.
 - `internal/storage/` owns durable file primitives; domain stores own their schemas.
+- `internal/app/agentruntime/` owns SDK adapters, native graphs and tools; it is the only ADK import boundary. `internal/app/agentstate/` owns private durable runtime records. Both remain leaf packages; `internal/app` retains consent, admission and mutation authority.
 - `internal/llm/` owns provider transport; `internal/config/` owns configuration.
-- `internal/insighteval/` owns the evaluation runner, separate from normal app use.
+- `internal/insighteval/` and `internal/agenteval/` own engineering-insight and synthetic task/trajectory evaluation, separate from normal app use. Replay evidence must not be presented as live model quality or cost improvement.
 - `internal/tui/` owns the terminal UI state machine, keyboard/colon-command handling and hub views, with isolated subpackages for the guarded loopback HTTP client and wire DTOs (`internal/tui/client`), ANSI palettes and Lip Gloss layout primitives (`internal/tui/theme`), and pure TUI domain/diff/issue/model logic (`internal/tui/domain`).
 
 ## Workspace & commit conventions

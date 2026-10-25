@@ -88,6 +88,8 @@ integrations:
   #   timeout_seconds: 30 # A2A 1.0 JSON-RPC; plain-text advisory results only.
 
 agent_runtime:
+  # ADK budgets and future-run defaults. This section grants no execution,
+  # source-sharing, cloud-copy or source-write permission. See README capability matrix.
   # Optional explicit live advice; empty disables connections. Gemini API + API key only.
   # Uses the Function destination/credentials; its ordinary model stays unchanged.
   live_model: "" # Supported: gemini-3.8-live. See CONFIG.md for limits and consent.
