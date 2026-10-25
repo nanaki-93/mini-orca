@@ -1197,27 +1197,53 @@ This is an implementation specification, not a claim that the features below alr
 
 **Commit**: `feat: present explicit attachments and live sessions in the TUI`
 
-## Task 32 — Add opt-in ambient analysis triggers
+## Task 32A — Own opt-in ambient analysis with durable grants and budgets
 
 - [ ] Complete
 
 **Target files**
-- `internal/app/agent_triggers.go`, `internal/app/agent_triggers_test.go`, `internal/app/agentstate/triggers.go`, `internal/app/agentstate/triggers_test.go` — **new**.
-- `internal/config/agent_runtime.go`, `internal/app/project_lifecycle.go`, `internal/app/service.go`, `internal/app/agent_settings.go`, `internal/api/handlers/agent_settings_handler.go`, `cmd/daemon/main.go`.
-- `internal/tui/hub_settings.go`, `internal/tui/dashboard.go`, `internal/tui/agent_run_test.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `internal/config/agent_triggers.go`, `internal/config/agent_triggers_test.go` — **new**, bounded polling, debounce, quiet, grant and window ceilings.
+- `internal/app/agent_triggers.go`, `internal/app/agent_trigger_lifecycle.go`, `internal/app/agent_trigger_analysis.go`, `internal/app/agent_triggers_test.go`, `internal/app/agent_trigger_lifecycle_test.go` — **new**, scoped controls, owned watcher and admitted semantic analysis.
+- `internal/app/agentstate/triggers.go`, `internal/app/agentstate/triggers_test.go` — **new**, private versioned trigger state and conservative window reservations.
+- `internal/api/handlers/agent_triggers_handler.go`, `internal/api/handlers/agent_triggers_handler_test.go`, `internal/tui/client/trigger_models.go` — **new**, passive availability and explicit control contracts.
+- `internal/config/agent_runtime.go`, `internal/config/config.go`, `internal/app/service.go`, `internal/app/project_lifecycle.go`, `internal/app/change_pipeline_control.go`, `internal/app/agent_settings.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
-- Task 31C; reusable analysis admission, persisted limits, and lifecycle cancellation.
+- Task 31C; existing ADK file-analysis admission, context authority, shared budgets, private stores and lifecycle cancellation. The main checkout is the ambient scope; task-worktree requests must be rejected explicitly.
 
 **Implementation rules**
-- Offer explicit per-project file-change/interval triggers with debounce, deduplication, quiet periods, and persisted per-window budgets. Disabled is the default.
-- Read-only change detection may suggest a run; automatic provider work requires a separately recorded trigger grant naming scope, provider, and limits. Never auto-apply or auto-merge.
-- Revocation stops pending work; project replacement and shutdown cleanly stop owned watchers/timers. Restoring settings does not replay missed triggers. Show last run, next eligible time, reason, and disable action without noisy repeated notifications.
+- Disabled is the default. Explicit watch configuration selects file-change or interval mode and one to eight eligible indexed paths. Capture bounded current source facts through project containment/context policy, debounce changes, deduplicate snapshots and enforce a quiet period between attempts. Detection alone only records a suggestion.
+- Automatic semantic analysis requires a separate expiring grant naming the project, selected paths and filtered project context, Bug model/destination, configuration, settings and policy, plus fixed run/window limits. Use the existing `AnalyzeFile` ADK knowledge workflow; no separate completion path, project-code execution, automatic Apply/Merge, feature generation or Security AI review.
+- Reserve each attempt's worst-case model/token/time allowance durably before dispatch, enforce the same allowance at the actual provider boundary, and retain charges after cancellation, errors or uncertain delivery. Preserve window consumption across settings changes and restarts. Recheck the current grant, destination, source and settings on dispatch; no implicit provider fallback.
+- Own and join watchers/model calls on disable, revocation, project replacement and shutdown. Skip competing active work before updating a changed source index. Restoring an enabled watch establishes a fresh baseline and future eligibility; it never replays missed ticks or unfinished provider work. Persistence failure stops automatic work and remains visible.
+- Expose passive state with last attempt/result, next eligibility, reason and remaining window allocation. Configuration alone never starts a watcher or grants source sharing. Cover fake-provider dispatch, no-grant detection, debounce/deduplication, budget exhaustion, restart/uncertain receipts, stale guards, path safety, corrupt state, cancellation and write failures. TUI controls follow in Task 32B.
 
 **Verification command**
-`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/config ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
+`go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/config ./internal/api/handlers ./cmd/daemon && ./scripts/validate.sh && git diff --check`
 
 **Commit**: `feat: add opt-in bounded ambient analysis`
+
+## Task 32B — Review and control ambient analysis in the TUI
+
+- [ ] Complete
+
+**Target files**
+- `internal/tui/agent_triggers.go`, `internal/tui/agent_trigger_actions.go`, `internal/tui/agent_trigger_view.go`, `internal/tui/agent_triggers_test.go`, `internal/tui/client/triggers.go`, `internal/tui/client/triggers_test.go` — **new**, explicit watch/grant controls and passive status.
+- `internal/tui/client/trigger_models.go`, `internal/tui/client/client.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_settings.go`, `internal/tui/dashboard.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/focused_pages_test.go`, `internal/tui/state_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+
+**Inputs / dependencies**
+- Task 32A; real scoped HTTP controls and owned cancellation are verified.
+
+**Implementation rules**
+- Keep five workspaces. Provide a focused Settings view for disabled/watch-only/granted/stale/failed states, exact selected paths, model/destination, expiry, conservative window consumption, last result, next eligibility and reason.
+- Watch setup and provider permission are separate explicit confirmations. Bind both to the current checkout, configuration and control revision; grant confirmation names filtered context sharing and fixed limits. Refresh, navigation, drafts and disclosures remain passive.
+- Keep revoke and disable easy to find. Cancel pending local requests without claiming a lost receipt had no effect; refresh before retrying. Preserve drafts and healthy status on errors and reject late responses after scope or selection changes. Avoid repeated notifications for unchanged state.
+- Exercise real client/handler controls, keyboard flows, all palettes, compact/wide layouts, stale confirmations, unknown outcomes and passive navigation.
+
+**Verification command**
+`make tui-test && ./scripts/validate.sh && git diff --check`
+
+**Commit**: `feat: add explicit ambient analysis controls to the TUI`
 
 ## Task 33 — Add optional cloud-backed agent services
 
@@ -1228,7 +1254,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/config/integrations.go`, `internal/app/agent_settings.go`, `internal/app/agentruntime/runtime.go`, `internal/app/agentruntime/session.go`, `internal/app/agentruntime/artifacts.go`, `internal/app/agentruntime/memory.go`, `CONFIG.md`, `config.example.yaml`.
 
 **Inputs / dependencies**
-- Task 32; explicit remote grants. Real Google Cloud project, region, identities, and storage resources are deployment inputs supplied by the operator; tests use fakes.
+- Task 32B; explicit remote grants. Real Google Cloud project, region, identities, and storage resources are deployment inputs supplied by the operator; tests use fakes.
 
 **Implementation rules**
 - Support configured ADK Vertex session/memory and GCS artifact adapters where pinned SDK conformance passes. Keep local services the default and application mutation authority local.
