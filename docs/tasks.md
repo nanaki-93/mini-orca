@@ -1229,7 +1229,7 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `internal/tui/agent_triggers.go`, `internal/tui/agent_trigger_actions.go`, `internal/tui/agent_trigger_view.go`, `internal/tui/agent_triggers_test.go`, `internal/tui/client/triggers.go`, `internal/tui/client/triggers_test.go` — **new**, explicit watch/grant controls and passive status.
-- `internal/tui/client/trigger_models.go`, `internal/tui/client/client.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_settings.go`, `internal/tui/dashboard.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/focused_pages_test.go`, `internal/tui/state_test.go`, `docs/UI_DESIGN_GUIDELINES.md`.
+- `internal/tui/client/trigger_models.go`, `internal/tui/client/client.go`, `internal/tui/state.go`, `internal/tui/keys.go`, `internal/tui/hub_settings.go`, `internal/tui/hub_overview.go`, `internal/tui/dashboard.go`, `internal/tui/daemon_actions.go`, `internal/tui/terminal_loop.go`, `internal/tui/colon_commands.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`, `internal/tui/focused_pages_test.go`, `internal/tui/state_test.go`, `docs/UI_DESIGN_GUIDELINES.md` — include the owning focused-page render dispatch.
 
 **Inputs / dependencies**
 - Task 32A; real scoped HTTP controls and owned cancellation are verified.
