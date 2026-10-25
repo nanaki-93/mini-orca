@@ -1297,18 +1297,20 @@ This is an implementation specification, not a claim that the features below alr
 
 **Target files**
 - `cmd/agent-worker/main.go`, `cmd/agent-worker/main_test.go`, `cmd/agent-inspect/main.go`, `cmd/agent-inspect/main_test.go`, `Dockerfile.agent-worker`, `docs/agent-deployment.md` — **new**.
-- `internal/app/agent_remote_service.go`, `internal/app/agentruntime/a2a_server.go`, `scripts/quality.sh`, `scripts/tests/test_quality.py`, `Makefile`, `README.md`, `internal/AGENTS.md`.
+- `internal/app/agent_worker.go`, `internal/app/agent_worker_source.go`, `internal/app/agent_worker_test.go`, `internal/app/agent_inspect.go`, `internal/app/agent_inspect_test.go` — **new**, filesystem-free remote analysis and read-only local inspection.
+- `internal/app/agentruntime/a2a_server.go`, `internal/app/agentruntime/a2a_server_guard.go`, `internal/app/agentruntime/a2a_server_test.go`, `scripts/quality.sh`, `scripts/tests/test_quality.py`, `Makefile`, `README.md`, `internal/AGENTS.md`.
 
 **Inputs / dependencies**
 - Task 33B; guarded A2A service, source-free event records, and container build conventions.
 
 **Implementation rules**
-- Provide a worker entry point suitable for Cloud Run or other container hosts with mandatory authenticated project-scoped requests, bounded jobs, shutdown, and no writable access to a user's local checkout.
-- Provide a local inspector for recorded graphs/events/artifacts. ADK development UI, if offered, runs only in an explicit isolated debug session with the same guarded host interface; it must not add unrestricted browser routes to the daemon.
+- Provide an explicitly started worker for Cloud Run or other container hosts. Pin its project/revision and one to eight admitted source path/hash pairs in an operator-supplied scope manifest. Require configured bearer principals for that project, explicit provider/source-sharing consent, bounded request content, model/tool budgets, lifetime and job count. Read only request-supplied source matching the admitted hashes; never open a checkout or execute project code. Return advisory analysis with validated citations through the native ADK tool runner.
+- Reuse the native A2A transport, ownership and cancellation guards. Advertise only the worker's analysis capability; keep the daemon's existing analysis/proposal contract and input ceilings unchanged. Permit a separately bounded worker payload size. No implicit credential discovery, provider fallback, remote deployment or upload occurs during configuration or help. Stop admission and cancel/join owned work on shutdown; ephemeral worker tasks do not become resumable local checkpoints.
+- Provide a local JSON inspector for recorded invocation ancestry, node events, usage and artifact metadata. Read through the existing journal owner without constructing a running service, repairing stores or dispatching work. Exact private session/artifact inspection requires an explicit flag and selection; preserve corrupt data and report truncation. Do not add browser or debug routes to the daemon.
 - Add build/run documentation and offline container validation. Do not deploy infrastructure, enable billing, publish images, or open network access as an implementation side effect. Add both command roots to quality analysis.
 
 **Verification command**
-`go test ./cmd/agent-worker ./cmd/agent-inspect ./internal/app ./internal/app/agentruntime && python3 -m unittest discover -s scripts/tests -p 'test_*.py' && ./scripts/validate.sh && git diff --check`
+`go test -race ./cmd/agent-worker ./cmd/agent-inspect ./internal/app ./internal/app/agentruntime -run 'Test(AgentWorker|AgentInspector|AgentServer)' && python3 -m unittest discover -s scripts/tests -p 'test_*.py' && ./scripts/validate.sh && make build-agents && make build-agents-linux && git diff --check`
 
 **Commit**: `feat: package guarded agent workers and local inspection`
 
