@@ -37,7 +37,7 @@ func TestAgentRetriesConsumeSharedBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop()
-	_, err = s.retry(ctx, s.runtimes.bug, []llm.ChatMessage{{Role: "user", Content: "request"}})
+	_, err = s.retryRequest(ctx, s.runtimes.bug, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
 	if !errors.Is(err, agentruntime.ErrBudgetExceeded) || calls.Load() != 2 {
 		t.Fatalf("retry error=%v calls=%d", err, calls.Load())
 	}

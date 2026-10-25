@@ -40,22 +40,14 @@ func loadChangeSession(root, id string) (*ChangeSession, error) {
 	if err := boundedChangeFile(input); err != nil {
 		return nil, err
 	}
-	var session ChangeSession
-	decoder := json.NewDecoder(io.LimitReader(input, 2*1024*1024))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&session); err != nil {
-		return nil, fmt.Errorf("decode change history: %w", err)
+	data, err := io.ReadAll(io.LimitReader(input, (2<<20)+1))
+	if err != nil {
+		return nil, fmt.Errorf("read change history: %w", err)
 	}
-	if decoder.Decode(new(any)) != io.EOF {
+	if len(data) > 2<<20 {
 		return nil, fmt.Errorf("change history has trailing data or exceeds its limit")
 	}
-	if session.SchemaVersion != 1 || session.ID != id || len(session.Targets) == 0 || len(session.Targets) > maxChangePaths || len(session.Messages) > maxChangeMessages {
-		return nil, fmt.Errorf("unsupported or corrupt change history")
-	}
-	if err := validateStoredChange(session); err != nil {
-		return nil, err
-	}
-	return &session, nil
+	return decodeCompatibleChangeHistory(data, id)
 }
 
 func validateStoredChange(session ChangeSession) error {

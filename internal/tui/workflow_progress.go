@@ -31,7 +31,11 @@ func workflowTimingSummary(chg *ChangeSession) string {
 	if w.AutoRepair {
 		mode = "up to 2 automatic repairs"
 	}
-	return fmt.Sprintf("Attempt %d · elapsed %s · %s · resume: %s", max(1, w.Attempt)+w.AutoRepairAttempts, workflowElapsed(w.StartedAt, end), mode, firstWorkflowStage(w.ResumeFrom))
+	recovery := "resume: " + firstWorkflowStage(w.ResumeFrom)
+	if w.Status == "interrupted" || w.Status == "outdated" || w.Status == "stale" {
+		recovery = "restart requires fresh consent and checks"
+	}
+	return fmt.Sprintf("Attempt %d · elapsed %s · %s · %s", max(1, w.Attempt)+w.AutoRepairAttempts, workflowElapsed(w.StartedAt, end), mode, recovery)
 }
 
 func firstWorkflowStage(value string) string {

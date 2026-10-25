@@ -284,14 +284,7 @@ func isLoopbackURL(rawURL string) bool {
 	return address != nil && address.IsLoopback()
 }
 
-func (s *Service) retry(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage) (modelOutput, error) {
-	return s.retryRequestAuthorized(ctx, runtime, messages, nil, nil)
-}
-
 func (s *Service) retryRequest(ctx context.Context, runtime modelRuntime, messages []llm.ChatMessage, schema *llm.JSONSchema) (modelOutput, error) {
-	if schema == nil {
-		return s.retry(ctx, runtime, messages)
-	}
 	return s.retryRequestAuthorized(ctx, runtime, messages, schema, nil)
 }
 
@@ -353,13 +346,6 @@ func executeAgentAttempt(ctx context.Context, runtime modelRuntime, request agen
 func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
 	return errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
 		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
-}
-
-func (r modelRuntime) execute(ctx context.Context, request agentruntime.Request) (modelOutput, error) {
-	if r.client == nil {
-		return modelOutput{}, fmt.Errorf("model client is not configured")
-	}
-	return agentruntime.Complete(ctx, r.client, request)
 }
 
 func providerOrigin(rawURL string) string {

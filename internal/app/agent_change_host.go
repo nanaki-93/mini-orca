@@ -18,6 +18,9 @@ func graphChangeIdentity(snapshot agentruntime.ChangeSnapshot) ChangeIdentity {
 }
 
 func (s *Service) executeChangeGraph(ctx context.Context, job *changeWorkflowJob, startStage int, message string) error {
+	if startStage < 0 || startStage > 2 {
+		return fmt.Errorf("invalid checked-change start stage")
+	}
 	s.changesMu.Lock()
 	session, err := loadChangeSession(job.root, job.sessionID)
 	if err == nil && (session.Workflow == nil || session.Workflow.ID != job.id) {

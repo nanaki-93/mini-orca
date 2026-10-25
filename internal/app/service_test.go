@@ -123,7 +123,7 @@ func TestNativeGoogleRequestRejectionIsTerminalAndSecretsDoNotChangeModelID(t *t
 	profile := service.runtimes.function.profile
 	profile.Provider, profile.APIKey = config.GeminiProvider, "first-secret"
 	runtime := newModelRuntime(profile, time.Minute, 3)
-	_, err := service.retry(context.Background(), runtime, []llm.ChatMessage{{Role: "user", Content: "request"}})
+	_, err := service.retryRequest(context.Background(), runtime, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
 	if !errors.Is(err, llm.ErrRequestRejected) || requests != 1 {
 		t.Fatalf("error=%v requests=%d", err, requests)
 	}
@@ -162,7 +162,7 @@ func TestRetryDoesNotResendPromptAfterProviderRedirectRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = service.retry(context.Background(), service.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "prompt must not be delivered twice"}})
+	_, err = service.retryRequest(context.Background(), service.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "prompt must not be delivered twice"}}, nil)
 	if !errors.Is(err, llm.ErrRedirectRejected) {
 		t.Fatalf("retry error = %v", err)
 	}

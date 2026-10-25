@@ -5,6 +5,37 @@ import (
 	"testing"
 )
 
+func TestWorkflowRecoveryUsesNamedStagesAndFreshConsentGuidance(t *testing.T) {
+	if resumableWorkflowStage(nil) != "create" {
+		t.Fatal("missing workflow skipped generation")
+	}
+	session := &ChangeSession{Changes: []FileChange{{Path: "main.go"}}, Workflow: &ChangeWorkflow{Status: "interrupted", Stages: []ChangeWorkflowStage{{Name: "review", Status: "pending"}, {Name: "test", Status: "pending"}, {Name: "create", Status: "completed"}}}}
+	if got := resumableWorkflowStage(session); got != "test" {
+		t.Fatal("named generation evidence lost", got)
+	}
+	session.Checks = []Check{{Name: "tests", State: "passed", Required: true}}
+	session.Workflow.Stages[1].Status = "completed"
+	if got := resumableWorkflowStage(session); got != "review" {
+		t.Fatal("named checked evidence lost", got)
+	}
+	session.Workflow.Stages = append(session.Workflow.Stages, session.Workflow.Stages[1])
+	if got := resumableWorkflowStage(session); got != "create" {
+		t.Fatal("ambiguous stage authorized retry", got)
+	}
+	for _, state := range []string{"interrupted", "outdated", "stale"} {
+		session.Workflow.Status = state
+		if !strings.Contains(workflowTimingSummary(session), "fresh consent and checks") {
+			t.Fatal("recovery hid fresh admission", state)
+		}
+	}
+	s := NewState()
+	s.Change = session
+	s.execRetryCommand("unknown-native-node")
+	if len(s.PendingActions) != 0 || s.Confirmation != nil || s.Error == "" {
+		t.Fatal("unknown node dispatched")
+	}
+}
+
 func TestRetryConsentRejectsChangedTaskAndUnconfirmedRemoteDispatch(t *testing.T) {
 	s := settingsTestState()
 	remote := s.Models.Scopes["function"]

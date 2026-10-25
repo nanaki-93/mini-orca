@@ -1316,7 +1316,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 35 — Finish compatibility migration and remove superseded execution paths
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/service.go`, `internal/app/model_runtime.go`, `internal/app/service_test.go`, `internal/app/agent_limits_test.go` — remove the redundant completion wrapper while retaining host retry/admission ownership and the sole ADK execution path.

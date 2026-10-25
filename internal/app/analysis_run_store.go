@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,36 +94,7 @@ func loadAnalysisRun(root string) (*AnalysisRun, error) {
 	if len(data) > maxAnalysisRunMetadataBytes {
 		return nil, errAnalysisRunCorrupt
 	}
-	// Retired single-stage jobs carry no authority in the unified workflow.
-	// Leave their bytes untouched until an explicit new run replaces the journal.
-	var header struct {
-		SchemaVersion string `json:"schema_version"`
-		Plan          struct {
-			RetiredStage string `json:"compatibility_stage"`
-		} `json:"plan"`
-	}
-	if err := json.Unmarshal(data, &header); err != nil {
-		return nil, errAnalysisRunCorrupt
-	}
-	if header.SchemaVersion == AnalysisRunSchemaVersion && (header.Plan.RetiredStage == "semantic" || header.Plan.RetiredStage == "performance") {
-		return nil, nil
-	}
-	var run AnalysisRun
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&run); err != nil {
-		return nil, errAnalysisRunCorrupt
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return nil, errAnalysisRunCorrupt
-	}
-	if err := validateStoredAnalysisRun(&run); err != nil {
-		return nil, errAnalysisRunCorrupt
-	}
-	// Schema 1 originally counted ineligible stages as unavailable. Validate the
-	// saved aggregate first, then expose the same eligible coverage as file status.
-	normalizeAnalysisRunEligibility(&run)
-	return &run, nil
+	return decodeCompatibleAnalysisHistory(data)
 }
 
 func (s *Service) restoreAnalysisRunLocked() error {

@@ -61,8 +61,8 @@ func (s *Service) prepareWorkflowRun(session *ChangeSession, request ChangeWorkf
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
 	w.Specialists = s.prepareWorkflowSpecialists(session, request.Models.Review)
 	for i := 0; i < startStage; i++ {
-		if session.Workflow != nil && i < len(session.Workflow.Stages) {
-			w.Stages[i] = session.Workflow.Stages[i]
+		if previous, ok := savedWorkflowStage(session.Workflow, w.Stages[i].Name); ok {
+			w.Stages[i] = previous
 		}
 		w.Stages[i].Status, w.Stages[i].Reason = "completed", ""
 	}
@@ -77,14 +77,37 @@ func (s *Service) prepareWorkflowRun(session *ChangeSession, request ChangeWorkf
 }
 
 func validateResumedModels(session *ChangeSession, models ChangeWorkflowModels, startStage int) error {
+	if startStage < 0 || startStage > 2 {
+		return fmt.Errorf("invalid checked-change start stage")
+	}
 	if session.Workflow == nil {
 		return nil
 	}
 	profiles := models.selections()
 	for i := 0; i < startStage; i++ {
-		if session.Workflow.Stages[i].Model.Profile != profiles[i] {
-			return fmt.Errorf("retry from %s to change its model, or retain its previously selected model", session.Workflow.Stages[i].Name)
+		name := []string{"create", "test"}[i]
+		stage, ok := savedWorkflowStage(session.Workflow, name)
+		if !ok || stage.Model == nil || stage.Model.Profile != profiles[i] {
+			return fmt.Errorf("retry from %s to change its model, or retain its previously selected model", name)
 		}
 	}
 	return nil
+}
+
+func savedWorkflowStage(workflow *ChangeWorkflow, name string) (ChangeWorkflowStage, bool) {
+	var result ChangeWorkflowStage
+	found := false
+	if workflow == nil {
+		return result, false
+	}
+	for _, stage := range workflow.Stages {
+		if stage.Name != name {
+			continue
+		}
+		if found {
+			return ChangeWorkflowStage{}, false
+		}
+		result, found = stage, true
+	}
+	return result, found
 }

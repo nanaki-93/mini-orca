@@ -103,7 +103,7 @@ func validateRun(id string, run Run) error {
 		return ErrCorrupt
 	}
 	switch run.Status {
-	case "running", "waiting_input", "completed", "failed", "canceled", "expired":
+	case "running", "waiting_input", "completed", "failed", "canceled", "expired", "interrupted":
 		return nil
 	default:
 		return ErrCorrupt

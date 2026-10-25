@@ -27,18 +27,29 @@ func updateSavedPlanTask(ctx context.Context, cl *Client, task *startAgentTask, 
 }
 
 func resumableWorkflowStage(session *ChangeSession) string {
-	if session.Workflow == nil || len(session.Workflow.Stages) < 3 {
+	if session == nil || session.Workflow == nil {
 		return "create"
 	}
 	w := session.Workflow
 	passed, total := domain.CountPassedChecks(session.Checks)
-	if w.Stages[1].Status == "completed" && total > 0 && passed == total && w.Review == nil {
+	if savedStageCompleted(w, "test") && total > 0 && passed == total && w.Review == nil {
 		return "review"
 	}
-	if w.Stages[0].Status == "completed" && len(session.Changes) > 0 && len(session.Checks) == 0 {
+	if savedStageCompleted(w, "create") && len(session.Changes) > 0 && len(session.Checks) == 0 {
 		return "test"
 	}
 	return "create"
+}
+
+func savedStageCompleted(workflow *ChangeWorkflow, name string) bool {
+	count, completed := 0, false
+	for _, stage := range workflow.Stages {
+		if stage.Name == name {
+			count++
+			completed = stage.Status == "completed"
+		}
+	}
+	return count == 1 && completed
 }
 
 func allProposalFilesReviewed(session *ChangeSession) bool {

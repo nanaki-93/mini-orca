@@ -78,6 +78,37 @@ func cloudCopyRequest(p *CloudPreview) CloudControl {
 	return CloudControl{ProjectID: p.ProjectID, ProjectRevision: p.ProjectRevision, Action: "copy", ID: p.ID, Preview: p, Confirm: true, ConfirmSourceSharing: true}
 }
 
+func TestCloudHistoricalArtifactWithoutRevisionRemainsLocalAndCopyIsUnavailable(t *testing.T) {
+	s, store, query, write := libraryFixture(t)
+	delete(write.Provenance, "revision")
+	record, err := store.SaveArtifact(t.Context(), write)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.integrations.config.Cloud = []config.CloudTarget{cloudTestTarget()}
+	opened := 0
+	s.openCloud = func(context.Context, config.CloudTarget) (agentruntime.CloudServices, error) {
+		opened++
+		return &fakeCloud{}, nil
+	}
+	selection := CloudSelection{ProjectID: query.ProjectID, ProjectRevision: query.ProjectRevision, TargetID: "archive", Kind: "artifact", SourceID: artifactLibraryID(*record)}
+	if preview, err := s.PreviewCloudCopy(t.Context(), selection); err == nil || preview != nil || !strings.Contains(err.Error(), "no recorded source revision") {
+		t.Fatal("historical artifact appeared copyable", preview, err)
+	}
+	listed, err := s.ListArtifacts(t.Context(), query)
+	if err != nil || len(listed.Artifacts) != 1 || listed.Artifacts[0].ProjectRevision != "" {
+		t.Fatal("historical artifact hidden or provenance invented", listed, err)
+	}
+	exported, err := store.ExportArtifact(t.Context(), record.Key, record.Version)
+	if err != nil || string(exported.Data) != string(write.Data) || exported.Hash != record.Hash || exported.Provenance["revision"] != "" {
+		t.Fatal("historical payload/provenance changed", err)
+	}
+	receipts, err := store.CloudCopies(t.Context(), query.ProjectID)
+	if err != nil || len(receipts) != 0 || opened != 0 {
+		t.Fatal("preview recorded a copy intent or connected", err)
+	}
+}
+
 func TestCloudCopiesPreviewConfirmationAndExactRecovery(t *testing.T) {
 	s, store, selection, remote := cloudAppFixture(t)
 	p, err := s.PreviewCloudCopy(t.Context(), selection)

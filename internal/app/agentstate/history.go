@@ -163,7 +163,7 @@ func validateProgressEvent(event ProgressEvent) error {
 			return ErrCorrupt
 		}
 	}
-	if !slices.Contains([]string{"started", "finished", "node", "input_requested", "input_received", "input_finished"}, event.Kind) || !slices.Contains([]string{"running", "waiting_input", "completed", "failed", "canceled", "expired", "recorded"}, event.State) {
+	if !slices.Contains([]string{"started", "finished", "node", "input_requested", "input_received", "input_finished"}, event.Kind) || !slices.Contains([]string{"running", "waiting_input", "completed", "failed", "canceled", "expired", "interrupted", "recorded"}, event.State) {
 		return ErrCorrupt
 	}
 	for _, reference := range event.Evidence {

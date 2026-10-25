@@ -35,6 +35,7 @@ type Store struct {
 }
 
 type database struct {
+	RuntimeFamily    string                    `json:"runtime_family,omitempty"`
 	Traces           map[string]TraceRecord    `json:"traces,omitempty"`
 	Settings         *SettingsRecord           `json:"settings,omitempty"`
 	Delegations      map[string]Delegation     `json:"delegations,omitempty"`
@@ -84,7 +85,7 @@ func (s *Store) path(name string) (string, error) {
 }
 
 func (s *Store) empty() *database {
-	return &database{Version: 1, Workspace: s.workspace, Sessions: map[string]*Session{}, AppState: map[string]State{}, UserState: map[string]State{}, Runs: map[string]Run{}, Budgets: map[string]BudgetRecord{}}
+	return &database{Version: journalVersion, RuntimeFamily: journalRuntimeFamily, Workspace: s.workspace, Sessions: map[string]*Session{}, AppState: map[string]State{}, UserState: map[string]State{}, Runs: map[string]Run{}, Budgets: map[string]BudgetRecord{}}
 }
 
 func (s *Store) load() (*database, error) {
@@ -170,7 +171,10 @@ func privateJournalMode(info os.FileInfo) bool {
 }
 
 func (s *Store) validate(db *database) error {
-	if db.Version != 1 || db.Workspace != s.workspace || db.Sessions == nil || db.AppState == nil || db.UserState == nil || db.Runs == nil || db.Budgets == nil {
+	if err := validateJournalFormat(db); err != nil {
+		return err
+	}
+	if db.Workspace != s.workspace || db.Sessions == nil || db.AppState == nil || db.UserState == nil || db.Runs == nil || db.Budgets == nil {
 		return ErrCorrupt
 	}
 	if len(db.Sessions) > 4096 || len(db.Runs) > 8192 || len(db.Budgets) > 2048 {
@@ -263,6 +267,9 @@ func (s *Store) mutate(ctx context.Context, change func(*database) error) (err e
 	}()
 	db, err := s.load()
 	if err != nil {
+		return err
+	}
+	if err := migrateJournalForWrite(ctx, db); err != nil {
 		return err
 	}
 	if err := change(db); err != nil {

@@ -73,7 +73,7 @@ func TestJournalRejectsCorruptAndForeignCheckoutRecords(t *testing.T) {
 			}
 			switch kind {
 			case "version":
-				data = []byte(strings.Replace(string(data), `"version":1`, `"version":99`, 1))
+				data = []byte(strings.Replace(string(data), fmt.Sprintf(`"version":%d`, journalVersion), `"version":99`, 1))
 			case "trailing":
 				data = append(data, []byte(` {}`)...)
 			case "duplicate":

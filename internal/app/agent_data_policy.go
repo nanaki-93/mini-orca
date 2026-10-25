@@ -142,6 +142,9 @@ func cloudArtifactData(ctx context.Context, store *agentstate.Store, query Agent
 	if view.InUse {
 		return nil, "", 0, fmt.Errorf("wait for the artifact owner to finish before copying")
 	}
+	if view.ProjectRevision == "" {
+		return nil, "", 0, fmt.Errorf("this historical artifact has no recorded source revision; export it locally or create fresh evidence before cloud copying")
+	}
 	record, err := store.ExportArtifact(ctx, key, view.Version)
 	if err != nil {
 		return nil, "", 0, err
