@@ -470,6 +470,46 @@ func validateDirectProposal(request InstructionProposalRequest) error {
 	return nil
 }
 
+type InstructionPreview struct {
+	ProjectID       string                        `json:"project_id"`
+	ProjectRevision string                        `json:"project_revision"`
+	Path            string                        `json:"path"`
+	ExistingContent string                        `json:"existing_content"`
+	Exists          bool                          `json:"exists"`
+	Effective       project.EffectiveInstructions `json:"effective"`
+	Presets         []project.InstructionPreset   `json:"presets"`
+}
+
+func (s *Service) PreviewInstructions(path string) (*InstructionPreview, error) {
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	root := s.manager.Root()
+	effective, err := project.ResolveInstructions(root, path)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := project.SuggestInstructionPresets(root, path, index.Files)
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	if s.manager.Root() != root || current.ProjectID != index.ProjectID || current.ProjectRevision != index.ProjectRevision {
+		return nil, project.ErrRevisionConflict
+	}
+	preview := &InstructionPreview{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Path: path, Effective: effective, Presets: presets}
+	for _, file := range effective.Files {
+		if file.Path == path {
+			preview.Exists, preview.ExistingContent = true, file.Content
+		}
+	}
+	return preview, nil
+}
+
 func (s *Service) ProposeInstructions(ctx context.Context, request InstructionProposalRequest) (*ChangeSession, error) {
 	if err := validateDirectProposal(request); err != nil {
 		return nil, err

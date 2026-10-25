@@ -214,8 +214,14 @@ func (s *Service) ExecuteBootstrapToolchain(ctx context.Context, revision string
 		if _, err := s.TrustProjectExecution(ctx, revision, true); err != nil {
 			return nil, err
 		}
-	} else if err := s.requireProjectExecutionTrust(ctx, revision); err != nil {
-		return nil, err
+	} else {
+		workspaceHash, err := workspaceFingerprint(ctx, s.manager.Root())
+		if err != nil {
+			return nil, err
+		}
+		if err := s.requireWorkspaceExecutionTrust(ctx, revision, workspaceHash); err != nil {
+			return nil, err
+		}
 	}
 	analysis, err := s.manager.Analysis()
 	if err != nil {

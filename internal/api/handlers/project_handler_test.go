@@ -69,6 +69,12 @@ func TestProjectIndexAndSymbolAPIs(t *testing.T) {
 		t.Fatalf("unsafe or unexpected index paths: %+v", index.Files)
 	}
 
+	envFileResponse := httptest.NewRecorder()
+	handler.FileInfo(envFileResponse, httptest.NewRequest(http.MethodGet, "/api/project/file-info?path=.env", nil))
+	if envFileResponse.Code != http.StatusForbidden {
+		t.Fatalf("excluded file-info status = %d, want %d: %s", envFileResponse.Code, http.StatusForbidden, envFileResponse.Body.String())
+	}
+
 	symbolsResponse := httptest.NewRecorder()
 	handler.Symbols(symbolsResponse, httptest.NewRequest(http.MethodGet, "/api/projects/current/files/symbols?path=main.go", nil))
 	if symbolsResponse.Code != http.StatusOK {

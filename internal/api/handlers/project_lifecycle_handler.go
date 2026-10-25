@@ -101,7 +101,12 @@ func (h *ProjectHandler) Overview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) FileInfo(w http.ResponseWriter, r *http.Request) {
-	info, err := project.GetFileInfo(h.manager.Root(), r.URL.Query().Get("path"))
+	path := r.URL.Query().Get("path")
+	if _, err := h.manager.IndexedFile(path); err != nil {
+		writeProjectError(w, "file information failed", err)
+		return
+	}
+	info, err := project.GetFileInfo(h.manager.Root(), path)
 	if err != nil {
 		api.WriteAppError(w, api.BadRequest("file information failed", "Choose an eligible project file and try again.", err))
 		return

@@ -97,19 +97,30 @@ func (s *Service) worktreeServices() []*Service {
 }
 
 func (s *Service) closeWorktreeServices() error {
-	children := s.worktreeServices()
-	for _, child := range children {
+	s.worktreesMu.Lock()
+	entries := make(map[string]*Service, len(s.worktrees))
+	for path, child := range s.worktrees {
+		entries[path] = child
+	}
+	s.worktreesMu.Unlock()
+	for _, child := range entries {
 		child.invalidateJobsForProjectChange()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, child := range children {
+	var firstErr error
+	for path, child := range entries {
 		if err := child.ShutdownChangeWorkflows(ctx); err != nil {
-			return fmt.Errorf("wait for worktree cleanup before switching projects: %w", err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("wait for worktree cleanup before switching projects: %w", err)
+			}
+			continue
 		}
+		s.worktreesMu.Lock()
+		if s.worktrees[path] == child {
+			delete(s.worktrees, path)
+		}
+		s.worktreesMu.Unlock()
 	}
-	s.worktreesMu.Lock()
-	s.worktrees = make(map[string]*Service)
-	s.worktreesMu.Unlock()
-	return nil
+	return firstErr
 }

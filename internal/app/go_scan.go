@@ -175,12 +175,12 @@ func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan)
 	}{{"vet", []string{"go", "vet", "./..."}, project.FindingSourceVet}, {"tests", []string{"go", "test", "./..."}, project.FindingSourceTest}} {
 		result := s.runGoScanPhase(ctx, scan, phase.name, phase.command)
 		scan.report.Phases = append(scan.report.Phases, result)
+		if result.State == CheckCanceled {
+			break
+		}
 		scan.findings = append(scan.findings, toolScanFindings(result, phase.source, scan.fileHashes)...)
 		if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, phase.source); err != nil {
 			return err
-		}
-		if result.State == CheckCanceled {
-			break
 		}
 	}
 	return nil
@@ -229,6 +229,20 @@ func (s *Service) StartGoScan(ctx context.Context, revision string) (*GoScanRepo
 		cancel()
 		return existing, nil
 	}
+	prevCancel, prevDone := s.goScan.cancel, s.goScan.done
+	s.goScan.mu.Unlock()
+	if prevCancel != nil {
+		prevCancel()
+	}
+	if prevDone != nil {
+		select {
+		case <-prevDone:
+		case <-ctx.Done():
+			cancel()
+			return nil, ctx.Err()
+		}
+	}
+	s.goScan.mu.Lock()
 	now := time.Now().UTC()
 	report := &GoScanReport{ProjectID: analysis.ProjectID, ProjectRevision: revision, Status: "running", StartedAt: now, UpdatedAt: now, Phases: []GoScanPhase{}}
 	done := make(chan struct{})

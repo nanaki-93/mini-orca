@@ -92,7 +92,12 @@ func ReadWorktrees(ctx context.Context, root string) ([]GitWorktree, error) {
 		if tree.Path == "" {
 			return nil, fmt.Errorf("invalid Git worktree record")
 		}
-		tree.Current = filepath.Clean(tree.Path) == filepath.Clean(root)
+		if canonical, err := project.CanonicalRoot(tree.Path); err == nil {
+			tree.Path = canonical
+		} else {
+			tree.Path = filepath.Clean(tree.Path)
+		}
+		tree.Current = tree.Path == filepath.Clean(root)
 		result = append(result, tree)
 		if len(result) > 100 {
 			return nil, fmt.Errorf("more than 100 worktrees; use Git directly to manage this repository")

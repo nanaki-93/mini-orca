@@ -382,9 +382,21 @@ func buildDocsDependencies(analysis Analysis, index *ProjectIndex, components []
 	return deps
 }
 
+func readBoundedRegularFile(path string, maxBytes int64) ([]byte, bool) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxBytes {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || int64(len(data)) > maxBytes {
+		return nil, false
+	}
+	return data, true
+}
+
 func parseGoModDependencies(goModPath string) []ProjectDocsDependency {
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
+	data, ok := readBoundedRegularFile(goModPath, 512<<10)
+	if !ok {
 		return nil
 	}
 	var out []ProjectDocsDependency
@@ -439,8 +451,8 @@ func parseGoModDependencies(goModPath string) []ProjectDocsDependency {
 }
 
 func parsePackageJSONDependencies(pkgPath, sourceLabel string) []ProjectDocsDependency {
-	data, err := os.ReadFile(pkgPath)
-	if err != nil {
+	data, ok := readBoundedRegularFile(pkgPath, 512<<10)
+	if !ok {
 		return nil
 	}
 	var parsed struct {

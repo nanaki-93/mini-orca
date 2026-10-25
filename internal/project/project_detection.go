@@ -55,13 +55,21 @@ func detectGradleProject(root string) projectDetection {
 }
 
 func gradleBuildDeclaresKotlin(root, buildFile string) bool {
-	data, err := os.ReadFile(filepath.Join(root, buildFile))
+	fullPath, err := ResolveFile(root, buildFile)
+	if err != nil {
+		return false
+	}
+	data, err := readLimited(fullPath, maxFileViewBytes)
 	return err == nil && (strings.Contains(string(data), "kotlin(") || strings.Contains(string(data), "org.jetbrains.kotlin"))
 }
 
 func projectFileExists(root, name string) bool {
-	info, err := os.Stat(filepath.Join(root, name))
-	return err == nil && !info.IsDir()
+	fullPath, err := ResolveFile(root, name)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(fullPath)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func projectDirectoryExists(root, name string) bool {

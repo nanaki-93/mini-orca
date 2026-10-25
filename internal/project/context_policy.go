@@ -181,7 +181,7 @@ func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	if slices.Contains(strings.Split(path, "/"), ".worktrees") {
 		return ContextDecision{Path: path, Reason: "isolated worktrees"}
 	}
-	if info, err := os.Lstat(filepath.Join(p.root, filepath.FromSlash(path))); err == nil && info.Mode()&os.ModeSymlink != 0 {
+	if hasSymlinkComponent(p.root, path) {
 		return ContextDecision{Path: path, Reason: "symlink is excluded from model context"}
 	}
 	name := strings.ToLower(filepath.Base(path))
@@ -201,6 +201,21 @@ func (p *ContextPolicy) Decide(relative string) ContextDecision {
 		return ContextDecision{Path: path, Reason: "ignored by .gitignore or .mini-orcaignore"}
 	}
 	return ContextDecision{Path: path, Include: true, Reason: "eligible source or text file"}
+}
+
+func hasSymlinkComponent(root, relative string) bool {
+	current := root
+	for _, part := range strings.Split(relative, "/") {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return false
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func secretFile(name string) bool {
