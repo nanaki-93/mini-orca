@@ -1319,17 +1319,20 @@ This is an implementation specification, not a claim that the features below alr
 - [ ] Complete
 
 **Target files**
-- `internal/app/service.go`, `internal/app/model_runtime.go`, `internal/app/change_pipeline.go`, `internal/app/change_pipeline_control.go`, `internal/app/change_pipeline_resume.go`, `internal/app/change_pipeline_stages.go`, `internal/app/analysis_run.go`, `internal/app/analysis_stage_runner.go`, `internal/app/change_store.go`, `internal/app/analysis_run_store.go`.
+- `internal/app/service.go`, `internal/app/model_runtime.go`, `internal/app/service_test.go`, `internal/app/agent_limits_test.go` — remove the redundant completion wrapper while retaining host retry/admission ownership and the sole ADK execution path.
+- `internal/app/agentstate/store.go`, `internal/app/agentstate/run.go`, `internal/app/agentstate/history.go`, `internal/app/agentstate/store_test.go` — journal format ownership, persisted interruption and downgrade rejection.
+- `internal/app/change_pipeline_resume.go`, `internal/app/agent_change_host.go`, `internal/app/change_store.go`, `internal/app/analysis_run_store.go` — named stage evidence, bounded graph entry and strict compatible history decoding.
 - `internal/app/agent_migration.go`, `internal/app/agent_migration_test.go`, `internal/app/agentstate/migration.go`, `internal/app/agentstate/migration_test.go` — **new**.
-- `internal/app/change_pipeline_recovery_test.go`, `internal/app/analysis_restart_test.go`, `internal/app/analysis_run_store_test.go`, `cmd/daemon/main.go`, `internal/tui/workflow_progress.go`, `internal/tui/domain/remediation.go`.
+- `internal/app/change_pipeline_recovery_test.go`, `internal/app/analysis_restart_test.go`, `internal/app/analysis_run_store_test.go`, `internal/tui/plan_actions.go`, `internal/tui/workflow_progress.go`, `internal/tui/workflow_progress_test.go`.
 
 **Inputs / dependencies**
 - Task 34; every model-backed application workflow has a tested ADK path.
 
 **Implementation rules**
-- Make ADK the single execution path; remove obsolete runner loops, unused wrappers, old stage-index assumptions, and transitional switches. Preserve domain guard and storage ownership.
-- Migrate compatible historical records without erasing provenance; keep old completed history readable. Mark incompatible active records interrupted and require fresh admission rather than inventing resumable SDK state.
-- Exercise corrupt history, failed migrations, downgrade rejection, cancellation during migration, and recovery after partial persistence. Restoring legacy state never dispatches work.
+- Keep ADK as the single execution path. Remove the redundant schema-free completion wrapper; retain host-owned retries, consent and publication guards. Resolve saved retry evidence by stage name and reject invalid graph entry indices without panics; the public checked-change stage contract remains compatible.
+- Introduce journal format 2 with an explicit ADK Go v2 runtime family. Read valid format-1 history without writes; upgrade atomically with the first authorized journal mutation. Preserve terminal runs, budgets, traces, sessions and valid host-owned review checkpoints. Mark legacy running invocations interrupted, retaining original identity and usage, and append an honest interruption event. Never manufacture resumable SDK state or restore provider/execution authority. Reject unknown formats/families and downgraded envelopes while preserving bytes.
+- Keep compatible schema-1 change/analysis history readable and provenance intact. Reject duplicate/trailing JSON before legacy compatibility decisions. Retired single-stage analysis metadata remains archived in place under its existing read-only behavior; do not invent an interpretation for obsolete schemas.
+- Exercise corrupt history, failed migrations, cancellation before commit, unknown commit outcomes and idempotent recovery. Restoring or inspecting legacy state never dispatches work; migration errors fail admission before provider calls. TUI recovery names stages and makes fresh consent/check requirements clear.
 
 **Verification command**
 `go test -race -timeout=15m ./internal/app ./internal/app/agentstate ./internal/app/agentruntime ./cmd/daemon && make tui-test && ./scripts/validate.sh && git diff --check`
