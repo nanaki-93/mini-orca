@@ -418,11 +418,11 @@ func integratedMissionState(record MissionExecution) string {
 	if record.PendingIntegration() != nil {
 		return "blocked"
 	}
-	if len(record.ReadyChildren()) > 0 {
-		return "ready"
-	}
 	if slices.ContainsFunc(record.Children, func(child MissionExecutionChild) bool { return child.State == "awaiting_review" }) {
 		return "awaiting_review"
+	}
+	if len(record.ReadyChildren()) > 0 {
+		return "ready"
 	}
 	if !slices.ContainsFunc(record.Children, func(child MissionExecutionChild) bool { return child.State != "integrated" }) {
 		return "completed"

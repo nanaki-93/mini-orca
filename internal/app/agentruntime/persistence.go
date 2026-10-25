@@ -44,8 +44,13 @@ func WithPersistence(ctx context.Context, store *agentstate.Store, binding agent
 	}
 	p := &persistence{store: store, binding: binding, budgetID: rand.Text()}
 	budget.persist = func(ctx context.Context, usage BudgetSnapshot, span *agentstate.TraceSpan) (bool, error) {
-		budget.sequence++
-		return store.Checkpoint(ctx, agentstate.BudgetRecord{ID: p.budgetID, Binding: binding, Limits: budget.limits, Sequence: budget.sequence, Usage: usage}, span)
+		next := budget.sequence + 1
+		recorded, err := store.Checkpoint(ctx, agentstate.BudgetRecord{ID: p.budgetID, Binding: binding, Limits: budget.limits, Sequence: next, Usage: usage}, span)
+		if err != nil {
+			return false, err
+		}
+		budget.sequence = next
+		return recorded, nil
 	}
 	if err := budget.checkpointLocked(ctx); err != nil {
 		budget.cancel(err)

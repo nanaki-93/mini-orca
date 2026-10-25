@@ -264,21 +264,25 @@ func appendUniqueImportRule(rules []architectureImportRule, candidate architectu
 
 func parseAgentsBudgetLine(line string, budgets *architectureQualityBudgets) {
 	lower := strings.ToLower(line)
-	match := budgetNumberPattern.FindStringSubmatch(lower)
-	if len(match) != 2 {
-		return
-	}
-	val, err := strconv.Atoi(match[1])
-	if err != nil || val <= 0 {
-		return
-	}
-	switch {
-	case strings.Contains(lower, "max function complexity"):
-		budgets.maxComplexity = val
-	case strings.Contains(lower, "max function lines"):
-		budgets.maxFunctionLines = val
-	case strings.Contains(lower, "max file lines"):
-		budgets.maxFileLines = val
+	for _, spec := range []struct {
+		phrase string
+		target *int
+	}{
+		{"max function complexity", &budgets.maxComplexity},
+		{"max function lines", &budgets.maxFunctionLines},
+		{"max file lines", &budgets.maxFileLines},
+	} {
+		idx := strings.Index(lower, spec.phrase)
+		if idx < 0 {
+			continue
+		}
+		match := budgetNumberPattern.FindStringSubmatch(lower[idx+len(spec.phrase):])
+		if len(match) != 2 {
+			continue
+		}
+		if val, err := strconv.Atoi(match[1]); err == nil && val > 0 {
+			*spec.target = val
+		}
 	}
 }
 
@@ -410,12 +414,7 @@ func agentRuntimeImportViolations(path string, imports []string) []string {
 }
 
 func hasRuntimeBoundary(path string) bool {
-	for _, area := range []string{"internal/app", "internal/api", "internal/project", "internal/tui", "internal/llm", "internal/config", "cmd/daemon", "cmd/tui", "cmd/engineering-insight-eval"} {
-		if pathMatchesPrefix(path, area) {
-			return true
-		}
-	}
-	return false
+	return pathMatchesPrefix(path, "internal") || pathMatchesPrefix(path, "cmd")
 }
 
 func pathMatchesPrefix(slashPath, prefix string) bool {

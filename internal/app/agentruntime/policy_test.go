@@ -64,6 +64,10 @@ func TestCanceledChildReservationsDoNotCancelSharedRun(t *testing.T) {
 			if err := reservation.settle(1, 1, true, true); err != nil {
 				t.Fatal(err)
 			}
+			got := budget.Snapshot()
+			if got.ModelCalls != 1 || got.ToolCalls != 0 || got.Repairs != 0 || len(got.Accounting.Providers) != 1 || got.Accounting.Providers[0].ModelCalls != 1 {
+				t.Fatalf("canceled child reservation leaked into accounting: %+v", got)
+			}
 		})
 	}
 }

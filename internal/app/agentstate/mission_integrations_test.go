@@ -91,6 +91,14 @@ func TestMissionIntegrationStoreSerializesIntentAndReleasesDependencyOnlyAfterRe
 	if err != nil || next.Children[1].BaseHead != merged.Current.Base.Head || next.Children[1].Limits != ready.Children[1].Limits {
 		t.Fatal(next, err)
 	}
+	if state := integratedMissionState(MissionExecution{
+		Children: []MissionExecutionChild{
+			{ID: "first", State: "awaiting_review"},
+			{ID: "second", State: "pending"},
+		},
+	}); state != "awaiting_review" {
+		t.Fatalf("expected awaiting_review when sibling is pending, got %q", state)
+	}
 }
 
 func TestMissionIntegrationStoreFailureAndCancellationPreserveEvidence(t *testing.T) {

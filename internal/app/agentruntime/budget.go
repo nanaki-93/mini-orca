@@ -129,7 +129,9 @@ func (b *Budget) reserveModelLocked(ctx context.Context, key string, input, outp
 	b.usage.ReservedOutputTokens += output
 	recorded, err := b.checkpointTraceLocked(ctx, trace.beginSpan())
 	if err != nil {
+		group.ModelCalls--
 		group.ActiveCalls--
+		b.usage.ModelCalls--
 		b.usage.ActiveCalls--
 		b.usage.ReservedInputTokens -= input
 		b.usage.ReservedOutputTokens -= output
@@ -236,6 +238,9 @@ func (b *Budget) admitCount(ctx context.Context, name string, counter func() (*i
 	}
 	*used = *used + 1
 	err := b.checkpointLocked(ctx)
+	if err != nil {
+		*used = *used - 1
+	}
 	b.mu.Unlock()
 	if err != nil && !isPersistenceCancellation(err) {
 		b.cancel(err)

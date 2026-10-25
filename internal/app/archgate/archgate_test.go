@@ -14,14 +14,16 @@ func TestArchitecturePolicyDeduplicationAndFileLineBudgetWithoutFunctions(t *tes
 		"- `internal/api` must never import `internal/storage` or `internal/llm`.",
 		"- `cmd` must never import `storage`.",
 		"- src/ui/ must never import src/db/.",
-		"- Max file lines: 5",
+		"1. Max function complexity: 12",
+		"2. Max function lines: 80",
+		"3. Max file lines: 5",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(agentsMd), 0644); err != nil {
 		t.Fatal(err)
 	}
 	rules, budgets := loadArchitecturePolicy(root)
-	if budgets.maxFileLines != 5 {
-		t.Fatalf("expected maxFileLines=5, got %+v", budgets)
+	if budgets.maxComplexity != 12 || budgets.maxFunctionLines != 80 || budgets.maxFileLines != 5 {
+		t.Fatalf("expected maxComplexity=12 maxFunctionLines=80 maxFileLines=5, got %+v", budgets)
 	}
 	var apiRuleCount, cmdRuleCount, uiRuleCount int
 	for _, r := range rules {
@@ -140,7 +142,13 @@ func TestAgentRuntimeImportBoundary(t *testing.T) {
 		{"internal/app/service.go", "google.golang.org/adk/v2/runner", false},
 		{"internal/tui/client/models.go", "google.golang.org/genai", false},
 		{"internal/project/project_overview.go", "google.golang.org/adk/v2/model", false},
+		{"internal/storage/file.go", "google.golang.org/adk/v2/session", false},
+		{"internal/agenteval/eval.go", "google.golang.org/adk/v2/runner", false},
+		{"internal/insighteval/eval.go", "google.golang.org/genai", false},
 		{"cmd/daemon/main.go", "google.golang.org/adk/v2/runner", false},
+		{"cmd/agent-eval/main.go", "google.golang.org/adk/v2/runner", false},
+		{"cmd/agent-worker/main.go", "google.golang.org/adk/v2/runner", false},
+		{"cmd/agent-inspect/main.go", "google.golang.org/genai", false},
 		{"main.go", "google.golang.org/adk/v2/runner", true},
 	} {
 		t.Run(test.path+"/"+test.imported, func(t *testing.T) {
