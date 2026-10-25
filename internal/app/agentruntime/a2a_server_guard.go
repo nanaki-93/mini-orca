@@ -33,11 +33,11 @@ type serverSend struct {
 	} `json:"message"`
 }
 
-func guardServerRequest(w http.ResponseWriter, r *http.Request) error {
+func guardServerRequest(w http.ResponseWriter, r *http.Request, inputBytes int) error {
 	if version := r.Header.Get("A2A-Version"); version != "" && version != "1.0" {
 		return a2a.ErrInvalidRequest
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<10))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(inputBytes)*2))
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func guardServerRequest(w http.ResponseWriter, r *http.Request) error {
 	if strictServerJSON(body, &envelope) != nil || envelope.Version != "2.0" || !serverIdentity.MatchString(envelope.ID) {
 		return a2a.ErrInvalidRequest
 	}
-	if err := validateServerParams(envelope); err != nil {
+	if err := validateServerParams(envelope, inputBytes); err != nil {
 		return err
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -61,10 +61,10 @@ func strictServerJSON(data []byte, value any) error {
 	return decoder.Decode(value)
 }
 
-func validateServerParams(envelope serverEnvelope) error {
+func validateServerParams(envelope serverEnvelope, inputBytes int) error {
 	switch envelope.Method {
 	case "SendMessage", "SendStreamingMessage":
-		return validateServerSend(envelope.Params)
+		return validateServerSend(envelope.Params, inputBytes)
 	case "GetTask":
 		var request a2a.GetTaskRequest
 		if strictServerJSON(envelope.Params, &request) != nil || request.Tenant != "" || !serverIdentity.MatchString(string(request.ID)) {
@@ -87,13 +87,13 @@ func validateServerParams(envelope serverEnvelope) error {
 	}
 }
 
-func validateServerSend(data []byte) error {
+func validateServerSend(data []byte, inputBytes int) error {
 	var request serverSend
 	if strictServerJSON(data, &request) != nil || request.Message == nil {
 		return a2a.ErrInvalidParams
 	}
 	msg := request.Message
-	if !serverIdentity.MatchString(msg.ID) || msg.Role != "ROLE_USER" || len(msg.Parts) != 1 || len(msg.Parts[0].Text) == 0 || len(msg.Parts[0].Text) > 8<<10 {
+	if !serverIdentity.MatchString(msg.ID) || msg.Role != "ROLE_USER" || len(msg.Parts) != 1 || len(msg.Parts[0].Text) == 0 || len(msg.Parts[0].Text) > inputBytes {
 		return a2a.ErrInvalidParams
 	}
 	return nil

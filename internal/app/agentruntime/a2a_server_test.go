@@ -69,6 +69,46 @@ func localAgentMessage(id string) *a2a.SendMessageRequest {
 	return &a2a.SendMessageRequest{Message: &a2a.Message{ID: id, Role: a2a.MessageRoleUser, Parts: a2a.ContentParts{a2a.NewTextPart(`{"operation":"analysis"}`)}}}
 }
 
+func TestAgentServerWorkerPayloadDoesNotRelaxDaemonAdmission(t *testing.T) {
+	var calls atomic.Int32
+	admit := func(_ context.Context, token string) (ServerAdmission, error) {
+		return ServerAdmission{Owner: token, ExpiresAt: time.Now().Add(time.Minute), Validate: func(ctx context.Context) error { return context.Cause(ctx) }, Execute: func(_ context.Context, text string) (string, error) { calls.Add(1); return "advisory", nil }}, nil
+	}
+	for _, inputLimit := range []int{0, 128 << 10} {
+		cfg := AgentServerConfig{Endpoint: "http://127.0.0.1:9091/a2a", Version: "fixture", Timeout: time.Second, MaxConcurrent: 1, InputBytes: inputLimit, AnalysisOnly: inputLimit != 0}
+		native, err := NewAgentServer(cfg, admit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(native)
+		message := localAgentMessage("large")
+		message.Message.Parts = a2a.ContentParts{a2a.NewTextPart(strings.Repeat("x", 9<<10))}
+		before := calls.Load()
+		_, body := localAgentRPC(t, server, "owner", "SendMessage", message)
+		if inputLimit == 0 && calls.Load() != before {
+			t.Fatal("daemon payload limit expanded", body)
+		}
+		if inputLimit != 0 && (calls.Load() != before+1 || !strings.Contains(body, "advisory")) {
+			t.Fatal("worker payload rejected", body)
+		}
+		card := serverCard(cfg)
+		if (inputLimit == 0 && len(card.Skills) != 2) || (inputLimit != 0 && (len(card.Skills) != 1 || card.Skills[0].ID != "analysis")) {
+			t.Fatal("incorrect capabilities", card)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := native.Close(ctx); err != nil {
+			t.Error(err)
+		}
+		cancel()
+		server.Close()
+	}
+	for _, limit := range []int{-1, 8191, (128 << 10) + 1} {
+		if _, err := NewAgentServer(AgentServerConfig{Timeout: time.Second, MaxConcurrent: 1, InputBytes: limit}, admit); err == nil {
+			t.Fatal("unbounded input admitted", limit)
+		}
+	}
+}
+
 func TestAgentServerNativeExecutionAndPrivateTaskOwnership(t *testing.T) {
 	var calls atomic.Int32
 	_, server := localAgentFixture(t, func(_ context.Context, _ string) (string, error) {

@@ -134,13 +134,20 @@ Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 
 | Layer / Path | Responsibility |
 | --- | --- |
-| `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`, `cmd/agent-eval` | Daemon startup, terminal UI and separate evaluation CLI entry points. |
+| `cmd/daemon`, `cmd/tui`, `cmd/engineering-insight-eval`, `cmd/agent-eval`, `cmd/agent-worker`, `cmd/agent-inspect` | Daemon, terminal UI, evaluation, isolated remote analysis and read-only local inspection entry points. |
 | `internal/api` | Loopback HTTP decoding, browser-origin protection, local request policy, and structured error responses. |
 | `internal/app` | Workflow orchestration, analysis runs, 4-stage change/agent sessions, Git worktree isolation, and guarded source mutation. |
 | `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
 | `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their persisted schemas. |
 | `internal/llm`, `internal/config` | Provider transport (OpenAI-compatible HTTP, `agy`, `pi`), timeouts, and 3-scope model configuration. |
 | `internal/tui` | Guarded daemon client, 5-hub TUI state machine, keyboard/colon-command handlers, and ANSI terminal renderer. |
+
+`make build-agents` builds the worker, inspector and evaluation commands;
+`make build-agents-linux` cross-builds them for Linux amd64 without CGO.
+The worker requires an explicit start and a pinned source manifest. The inspector
+reads local invocation history without constructing a running service. See
+[agent deployment and inspection](docs/agent-deployment.md) for commands,
+authentication, privacy, bounds and recovery behavior.
 
 ## Main Dependencies
 

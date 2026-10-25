@@ -40,6 +40,8 @@ type AgentServerConfig struct {
 	Version       string
 	Timeout       time.Duration
 	MaxConcurrent int
+	InputBytes    int
+	AnalysisOnly  bool
 }
 
 type AgentServer struct {
@@ -67,6 +69,12 @@ func NewAgentServer(cfg AgentServerConfig, admit func(context.Context, string) (
 	if admit == nil || cfg.Timeout <= 0 || cfg.Timeout > 120*time.Second || cfg.MaxConcurrent < 1 || cfg.MaxConcurrent > 4 {
 		return nil, fmt.Errorf("invalid agent server configuration")
 	}
+	if cfg.InputBytes == 0 {
+		cfg.InputBytes = 8 << 10
+	}
+	if cfg.InputBytes < 8<<10 || cfg.InputBytes > 128<<10 {
+		return nil, fmt.Errorf("agent input limit must be 8–128 KiB")
+	}
 	s := &AgentServer{config: cfg, admit: admit, messages: map[string]bool{}, active: map[a2a.TaskID]*serverExecution{}, requests: map[*serverRequest]bool{}, permits: make(chan struct{}, 16)}
 	worker, err := agent.New(agent.Config{Name: "mini_orca", Description: "Host-admitted project analysis and proposal preparation", Run: runServerAgent})
 	if err != nil {
@@ -89,7 +97,7 @@ func NewAgentServer(cfg AgentServerConfig, admit func(context.Context, string) (
 }
 
 func serverCard(cfg AgentServerConfig) *a2a.AgentCard {
-	return &a2a.AgentCard{Name: "Mini-Orca", Version: cfg.Version,
+	card := &a2a.AgentCard{Name: "Mini-Orca", Version: cfg.Version,
 		Description:         "Explicitly granted project work. Send one text part containing the documented Mini-Orca request JSON. Local human review is required for source changes.",
 		SupportedInterfaces: []*a2a.AgentInterface{{URL: cfg.Endpoint, ProtocolBinding: "JSONRPC", ProtocolVersion: "1.0"}},
 		Capabilities:        a2a.AgentCapabilities{Streaming: true}, DefaultInputModes: []string{"text/plain"}, DefaultOutputModes: []string{"text/plain"},
@@ -99,6 +107,11 @@ func serverCard(cfg AgentServerConfig) *a2a.AgentCard {
 			{ID: "analysis", Name: "Analyze admitted source", Description: "Evidence-backed advisory investigation of one to eight captured paths", Tags: []string{"analysis"}},
 			{ID: "proposal", Name: "Prepare a proposal", Description: "Create a private local draft for human review; never apply source", Tags: []string{"proposal"}},
 		}}
+	if cfg.AnalysisOnly {
+		card.Description = "Authenticated advisory analysis of request-supplied source matching an operator-approved project, revision and path/hash manifest. No checkout access or source changes."
+		card.Skills = card.Skills[:1]
+	}
+	return card
 }
 
 func runServerAgent(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
@@ -153,7 +166,7 @@ func (s *AgentServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authenticated project grant required", http.StatusUnauthorized)
 		return
 	}
-	if err := guardServerRequest(w, r); err != nil {
+	if err := guardServerRequest(w, r, s.config.InputBytes); err != nil {
 		http.Error(w, "invalid or unsupported A2A request", http.StatusBadRequest)
 		return
 	}

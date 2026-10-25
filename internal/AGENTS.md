@@ -72,6 +72,10 @@ the backend guide for changes to `cmd/`.
   production ADK execution and repository tools without opening a checkout.
   Keep negative controls replay-only and independent regression inputs out of
   model prompts. Ordinary validation must never select live evaluation mode.
+- `cmd/agent-worker` explicitly starts authenticated, manifest-bound analysis of
+  request-supplied source. It has no checkout or project-execution authority.
+  `cmd/agent-inspect` reads journal metadata directly; private exports require an
+  exact selection. Neither command constructs the daemon's running service.
 
 ## Verification
 

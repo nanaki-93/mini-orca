@@ -1293,7 +1293,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 34 — Package an authenticated remote worker and developer inspector
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `cmd/agent-worker/main.go`, `cmd/agent-worker/main_test.go`, `cmd/agent-inspect/main.go`, `cmd/agent-inspect/main_test.go`, `Dockerfile.agent-worker`, `docs/agent-deployment.md` — **new**.

@@ -24,6 +24,7 @@ COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
 .PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: build-agents build-agents-linux
 
 # ─── Default Target ────────────────────────────────────────────────────────────
 all: help
@@ -37,7 +38,7 @@ help: ## Show this help message
 	@echo ""
 
 # ─── Local Build ───────────────────────────────────────────────────────────────
-build: ## Build the daemon and TUI binaries locally
+build: build-agents ## Build daemon, TUI, evaluation and agent command binaries locally
 	@echo "$(COLOR_GREEN)Building $(APP_NAME) $(VERSION)...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
@@ -63,11 +64,23 @@ install: build ## Build and substitute mini-orca into ~/DEV/lab/mini-orca (and M
 	fi
 	@echo "$(COLOR_GREEN)Updated $(APP_NAME) in $$HOME/DEV/lab/mini-orca/$(APP_NAME)$(COLOR_RESET)"
 
-build-linux: ## Build the Linux amd64 release daemon and TUI
+build-linux: build-agents-linux ## Build all Linux amd64 release command binaries
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64 ./cmd/daemon
 	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64 ./cmd/tui
 	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64, $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64$(COLOR_RESET)"
+
+build-agents: ## Build evaluation, worker and inspector commands without CGO
+	@mkdir -p $(BUILD_DIR)
+	@for agent_command in engineering-insight-eval agent-eval agent-worker agent-inspect; do \
+		CGO_ENABLED=0 $(GO) build -o $(BUILD_DIR)/$(APP_NAME)-$$agent_command ./cmd/$$agent_command || exit $$?; \
+	done
+
+build-agents-linux: ## Cross-build evaluation, worker and inspector for Linux amd64 without CGO
+	@mkdir -p $(BUILD_DIR)
+	@for agent_command in engineering-insight-eval agent-eval agent-worker agent-inspect; do \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(APP_NAME)-$$agent_command-linux-amd64 ./cmd/$$agent_command || exit $$?; \
+	done
 
 clean: ## Remove build artifacts
 	@echo "$(COLOR_YELLOW)Cleaning build artifacts...$(COLOR_RESET)"

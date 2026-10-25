@@ -30,9 +30,9 @@ run_stage() {
 }
 
 run_go_reachability() {
-  # Keep all roots: daemon, evaluation CLI, and terminal UI.
+  # Keep daemon, evaluation, worker, inspector and terminal UI roots.
   # deadcode reports findings on stdout but exits successfully when it finds any.
-  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/tui)
+  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/agent-worker ./cmd/agent-inspect ./cmd/tui)
   reachability_status=$?
   if [ -n "$reachability_output" ]; then
     printf '%s\n' "$reachability_output"
