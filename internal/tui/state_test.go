@@ -2937,3 +2937,89 @@ func TestDeleteIssueFromIssuesListAndDetailRemovesIssueAndPersistsDismissal(t *t
 		t.Fatalf("expected reloaded state to exclude dismissed issues, got %+v", reloaded.CollectAllIssues())
 	}
 }
+
+func TestSyncFromDaemonResetsProjectScopedStateOnProjectSwitch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/status":
+			_, _ = w.Write([]byte(`{"version":"v2-test"}`))
+		case "/api/projects/restore":
+			_, _ = w.Write([]byte(`{"project_id":"p2","project_revision":"r2","name":"second","path":"/repo-two"}`))
+		case "/api/projects/current/execution-trust":
+			_, _ = w.Write([]byte(`{"project_id":"p2","project_revision":"r2","trusted":false}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "p1", ProjectRevision: "r1"}, Name: "first", Path: "/repo-one"}
+	s.Findings = []Finding{{ID: "f-stale", Title: "Stale finding", Status: "open"}}
+	s.Change = &ChangeSession{ID: "chg-stale", Title: "Stale change"}
+	s.File = &FileInfo{Path: "old.go", Content: "package old"}
+	s.Symbols = []SymbolInfo{{Name: "OldFunc"}}
+	s.WorkspaceTrust = true
+	s.SelectedIssueIDs = []string{"semantic:f-stale"}
+
+	if err := s.SyncFromDaemon(context.Background(), cli, "/repo-two"); err != nil {
+		t.Fatalf("SyncFromDaemon failed: %v", err)
+	}
+	if s.Project == nil || s.Project.ProjectID != "p2" {
+		t.Fatalf("expected active project p2, got %+v", s.Project)
+	}
+	if len(s.Findings) != 0 || s.Change != nil || s.File != nil || len(s.Symbols) != 0 || s.WorkspaceTrust || len(s.SelectedIssueIDs) != 0 {
+		t.Fatalf("expected project-scoped state to reset on project switch, got findings=%d change=%v file=%v symbols=%d trust=%v selected=%v",
+			len(s.Findings), s.Change, s.File, len(s.Symbols), s.WorkspaceTrust, s.SelectedIssueIDs)
+	}
+}
+
+func TestFetchFileInfoRejectsStaleSymbolsAndDecodeInputBytesKeys(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/current/files/info":
+			_, _ = w.Write([]byte(`{"path":"stale.go","content_hash":"h1","content":"package main"}`))
+		case "/api/projects/current/files/symbols":
+			_, _ = w.Write([]byte(`{"symbols":[{"name":"StaleSym"}]}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	s := NewState()
+	s.File = &FileInfo{Path: "current.go", ContentHash: "h2"}
+	s.Symbols = []SymbolInfo{{Name: "CurrentSym"}}
+	if err := s.fetchFileInfo(context.Background(), cli, "req-1", "stale.go"); err != nil {
+		t.Fatalf("fetchFileInfo failed: %v", err)
+	}
+	if s.File.Path != "current.go" || len(s.Symbols) != 1 || s.Symbols[0].Name != "CurrentSym" {
+		t.Fatalf("expected stale fetchFileInfo to preserve current file and symbols, got file=%+v symbols=%+v", s.File, s.Symbols)
+	}
+
+	events := DecodeInputBytes([]byte("\x1b[H\x1b[F\x1b[3~\x1b[5~\x1b[6~\x01\x05\x0e\x10\x15"))
+	wantKeys := []string{"Home", "End", "Delete", "PageUp", "PageDown", "a", "e", "n", "p", "u"}
+	if len(events) != len(wantKeys) {
+		t.Fatalf("expected %d decoded events, got %d (%+v)", len(wantKeys), len(events), events)
+	}
+	for i, want := range wantKeys {
+		if events[i].Key != want {
+			t.Fatalf("event[%d].Key = %q, want %q", i, events[i].Key, want)
+		}
+		if i >= 5 && !events[i].Ctrl {
+			t.Fatalf("expected event[%d] (%q) to have Ctrl=true", i, want)
+		}
+	}
+}

@@ -33,12 +33,13 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 	s.Error = ""
 
 	if projectPath != "" {
-		s.openOrRestoreProject(ctx, client, projectPath)
-	}
-	if s.Project == nil {
+		if !s.openOrRestoreProject(ctx, client, projectPath) {
+			return nil
+		}
+	} else {
 		var proj Project
-		if err := client.DoJSON(ctx, "sync-project", http.MethodGet, "/api/projects/current", nil, &proj); err == nil {
-			s.Project = &proj
+		if err := client.DoJSON(ctx, "sync-project", http.MethodGet, "/api/projects/current", nil, &proj); err == nil && (proj.ProjectID != "" || proj.Path != "" || proj.Name != "") {
+			s.setActiveProject(&proj)
 		}
 	}
 	if s.Project != nil {
@@ -50,15 +51,67 @@ func (s *State) SyncFromDaemon(ctx context.Context, client *Client, projectPath 
 	return nil
 }
 
-func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projectPath string) {
+func (s *State) openOrRestoreProject(ctx context.Context, client *Client, projectPath string) bool {
 	var proj Project
 	body := map[string]string{"project_path": projectPath}
 	if err := client.DoJSON(ctx, "sync-restore", http.MethodPost, "/api/projects/restore", body, &proj); err != nil {
 		s.Error = err.Error()
+		return false
+	}
+	s.setActiveProject(&proj)
+	s.reconcileMissionScope()
+	return true
+}
+
+func (s *State) setActiveProject(proj *Project) {
+	if proj == nil {
 		return
 	}
-	s.Project = &proj
-	s.reconcileMissionScope()
+	if s.isDifferentProject(proj) {
+		s.resetProjectScopedState()
+	}
+	s.Project = proj
+}
+
+func (s *State) isDifferentProject(next *Project) bool {
+	if s.Project == nil || next == nil {
+		return false
+	}
+	if s.Project.ProjectID != "" && next.ProjectID != "" {
+		return s.Project.ProjectID != next.ProjectID
+	}
+	if s.Project.Path != "" && next.Path != "" {
+		return s.Project.Path != next.Path
+	}
+	return false
+}
+
+func (s *State) resetProjectScopedState() {
+	s.Index = nil
+	s.Overview = nil
+	s.Findings = nil
+	s.CompletedFindings = nil
+	s.DismissedTargets = nil
+	s.Results = make(map[string]SectionResults)
+	s.SecurityReport = nil
+	s.Run = nil
+	s.Selection = nil
+	s.File = nil
+	s.IssueFile = nil
+	s.Symbols = nil
+	s.Change = nil
+	s.ActiveChanges = nil
+	s.ChangeReceipt = nil
+	s.ChangeHistory = nil
+	s.Repository = nil
+	s.GitWorkspace = nil
+	s.Features = nil
+	s.Instructions = nil
+	s.Scan = nil
+	s.WorkspaceTrust = false
+	s.SelectedIssueIDs = nil
+	s.SelectedIdx = 0
+	s.DetailScroll = 0
 }
 
 func (s *State) loadProjectResources(ctx context.Context, client *Client) {
@@ -713,13 +766,14 @@ func (s *State) fetchFileInfo(ctx context.Context, cl *Client, reqID, path strin
 	if err := cl.DoJSON(ctx, reqID, http.MethodGet, "/api/projects/current/files/info?path="+escaped, nil, &info); err != nil {
 		return err
 	}
-	if s.AcceptFileResponse(info.Path, "") {
-		s.File = &info
+	if !s.AcceptFileResponse(info.Path, "") {
+		return nil
 	}
+	s.File = &info
 	var symResp struct {
 		Symbols []SymbolInfo `json:"symbols"`
 	}
-	if err := cl.DoJSON(ctx, reqID+"-sym", http.MethodGet, "/api/projects/current/files/symbols?path="+escaped, nil, &symResp); err == nil {
+	if err := cl.DoJSON(ctx, reqID+"-sym", http.MethodGet, "/api/projects/current/files/symbols?path="+escaped, nil, &symResp); err == nil && s.AcceptFileResponse(info.Path, info.ContentHash) {
 		s.Symbols = symResp.Symbols
 	}
 	return nil

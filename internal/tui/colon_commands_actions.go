@@ -26,10 +26,10 @@ func (s *State) SelectedIssue() *IssueRow {
 	} else {
 		list = s.FilteredIssues()
 	}
-	idx := s.ClampedIdx()
-	if idx < 0 || idx >= len(list) {
+	if len(list) == 0 {
 		return nil
 	}
+	idx := min(max(0, s.SelectedIdx), len(list)-1)
 	row := list[idx]
 	return &row
 }

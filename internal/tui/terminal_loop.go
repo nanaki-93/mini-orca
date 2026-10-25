@@ -95,33 +95,66 @@ func DecodeInputBytes(data []byte) []KeyEvent {
 	return events
 }
 
+var csiThreeByteKeys = map[byte]KeyEvent{
+	'A': {Key: "ArrowUp"},
+	'B': {Key: "ArrowDown"},
+	'C': {Key: "ArrowRight"},
+	'D': {Key: "ArrowLeft"},
+	'H': {Key: "Home"},
+	'F': {Key: "End"},
+	'Z': {Key: "Tab", Shift: true},
+}
+
+var csiTildeKeys = map[byte]KeyEvent{
+	'1': {Key: "Home"},
+	'3': {Key: "Delete"},
+	'4': {Key: "End"},
+	'5': {Key: "PageUp"},
+	'6': {Key: "PageDown"},
+	'7': {Key: "Home"},
+	'8': {Key: "End"},
+}
+
+var ctrlSingleKeys = map[byte]KeyEvent{
+	0x01: {Key: "a", Ctrl: true},
+	0x03: {Key: "c", Ctrl: true},
+	0x05: {Key: "e", Ctrl: true},
+	0x0b: {Key: "k", Ctrl: true},
+	0x0e: {Key: "n", Ctrl: true},
+	0x10: {Key: "p", Ctrl: true},
+	0x15: {Key: "u", Ctrl: true},
+}
+
 func decodeEscapeSequence(buf []byte) (KeyEvent, int) {
 	if len(buf) == 0 || buf[0] != 0x1b {
 		return KeyEvent{}, 0
 	}
+	if len(buf) >= 4 && buf[1] == '[' && buf[3] == '~' {
+		if ev, ok := csiTildeKeys[buf[2]]; ok {
+			return ev, 4
+		}
+	}
 	if len(buf) >= 3 && buf[1] == '[' {
+		if ev, ok := csiThreeByteKeys[buf[2]]; ok {
+			return ev, 3
+		}
+	}
+	if len(buf) >= 3 && buf[1] == 'O' {
 		switch buf[2] {
-		case 'A':
-			return KeyEvent{Key: "ArrowUp"}, 3
-		case 'B':
-			return KeyEvent{Key: "ArrowDown"}, 3
-		case 'C':
-			return KeyEvent{Key: "ArrowRight"}, 3
-		case 'D':
-			return KeyEvent{Key: "ArrowLeft"}, 3
-		case 'Z':
-			return KeyEvent{Key: "Tab", Shift: true}, 3
+		case 'H':
+			return KeyEvent{Key: "Home"}, 3
+		case 'F':
+			return KeyEvent{Key: "End"}, 3
 		}
 	}
 	return KeyEvent{Key: "Escape"}, 1
 }
 
 func decodeSingleKey(buf []byte) (KeyEvent, int) {
+	if ev, ok := ctrlSingleKeys[buf[0]]; ok {
+		return ev, 1
+	}
 	switch buf[0] {
-	case 0x03:
-		return KeyEvent{Key: "c", Ctrl: true}, 1
-	case 0x0b:
-		return KeyEvent{Key: "k", Ctrl: true}, 1
 	case '\r', '\n':
 		return KeyEvent{Key: "Enter"}, 1
 	case '\t':
@@ -484,6 +517,7 @@ func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, ou
 	defer cancel()
 	model := NewBubbleModel(ctx, s, client, width, height)
 	defer model.stopAgentStream()
+	defer model.stopMissionExecutionStream()
 	defer model.stopMediaStream()
 	if _, isTTY := isCharDevice(in); isTTY {
 		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
