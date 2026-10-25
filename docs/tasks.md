@@ -1199,7 +1199,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 32A — Own opt-in ambient analysis with durable grants and budgets
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/config/agent_triggers.go`, `internal/config/agent_triggers_test.go` — **new**, bounded polling, debounce, quiet, grant and window ceilings.

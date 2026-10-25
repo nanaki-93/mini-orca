@@ -194,6 +194,7 @@ var configurationFields = fieldSet{
 	"integrations": {"mcp": {}, "openapi": {}, "a2a": {}, "a2a_server": {}, "google_search": {}},
 	"agent_runtime": {
 		"live_model":      {},
+		"triggers":        {"poll_seconds": {}, "debounce_seconds": {}, "quiet_seconds": {}, "window_seconds": {}, "max_runs": {}, "max_model_calls": {}, "max_input_tokens": {}, "max_output_tokens": {}, "run_seconds": {}, "grant_seconds": {}},
 		"telemetry":       {"prices": {"version": {}, "currency": {}, "rates": {}}, "export": {"endpoint": {}, "bearer_env": {}}},
 		"skills":          {},
 		"roles":           {"creation": {}, "testing": {}, "review": {}},

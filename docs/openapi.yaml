@@ -355,6 +355,31 @@ paths:
         '413': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
         '502': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-triggers:
+    get:
+      tags: [Projects]
+      summary: Inspect ambient watch, grant and retained budget without dispatch
+      description: Main checkout only; any worktree_path is rejected. Permission state is separate from the last detection/attempt. A stored watch is inactive after restart until an explicit control.
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Passive no-store metadata, content: {application/json: {schema: {$ref: '#/components/schemas/AgentTriggers'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/agent-triggers/control:
+    post:
+      tags: [Projects]
+      summary: Explicitly watch, grant, revoke or disable ambient semantic analysis
+      description: Main checkout only. Watch does not grant source sharing; grant binds the exact semantic destination and filtered context to an expiry and fixed limits. Revoke/disable join active work and preserve window consumption. A lost receipt requires a passive refresh before retrying.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TriggerControl'}}}}
+      responses:
+        '200': {description: Updated no-store watch metadata, content: {application/json: {schema: {$ref: '#/components/schemas/AgentTriggers'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/live-sessions:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2118,6 +2143,132 @@ components:
               type: object
               properties:
                 cached_tokens: {type: integer, minimum: 0}
+    TriggerControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, configuration, settings_version, policy, model, provider_origin, control_revision, action, confirm]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string, description: Revoke/disable may use an older revision for the current project.}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        policy: {type: string}
+        model: {type: string}
+        provider_origin: {type: string}
+        control_revision: {type: integer, format: int64, minimum: 0}
+        action: {type: string, enum: [watch, grant, revoke, disable]}
+        confirm: {type: boolean, enum: [true]}
+        options: {$ref: '#/components/schemas/TriggerOptions', description: Required for watch; rejected for other actions.}
+        scope_hash: {type: string, description: Exact current scope hash required for grant.}
+        grant_seconds: {type: integer, minimum: 60, maximum: 86400, description: Required for grant and capped by configured ceiling.}
+        confirm_source_sharing: {type: boolean, description: Required true for grant; selected sources and filtered project context.}
+        confirm_remote_provider: {type: boolean, description: Required true for grant when the actual semantic destination is remote.}
+    TriggerOptions:
+      type: object
+      additionalProperties: false
+      required: [mode, interval_seconds, paths]
+      properties:
+        mode: {type: string, enum: [disabled, changes, interval]}
+        interval_seconds: {type: integer, minimum: 0, maximum: 86400, description: Zero for changes/disabled; 60–86400 for interval.}
+        paths: {type: array, maxItems: 8, uniqueItems: true, items: {type: string, maxLength: 512}, description: One to eight canonical indexed source paths for an active watch; empty when disabled.}
+    TriggerAllowance:
+      type: object
+      required: [runs, model_calls, input_tokens, output_tokens, seconds]
+      properties:
+        runs: {type: integer, minimum: 0, maximum: 16}
+        model_calls: {type: integer, minimum: 0, maximum: 64}
+        input_tokens: {type: integer, format: int64, minimum: 0, maximum: 67108864}
+        output_tokens: {type: integer, format: int64, minimum: 0, maximum: 16777216}
+        seconds: {type: integer, minimum: 0, maximum: 86400}
+    TriggerCeilings:
+      type: object
+      required: [poll_seconds, debounce_seconds, quiet_seconds, window_seconds, max_runs, max_model_calls, max_input_tokens, max_output_tokens, run_seconds, grant_seconds]
+      properties:
+        poll_seconds: {type: integer, minimum: 1, maximum: 60, default: 2}
+        debounce_seconds: {type: integer, minimum: 1, maximum: 300, default: 3}
+        quiet_seconds: {type: integer, minimum: 5, maximum: 3600, default: 60}
+        window_seconds: {type: integer, minimum: 60, maximum: 86400, default: 3600}
+        max_runs: {type: integer, minimum: 1, maximum: 16, default: 4}
+        max_model_calls: {type: integer, minimum: 1, maximum: 64, default: 16}
+        max_input_tokens: {type: integer, format: int64, minimum: 1024, maximum: 67108864, default: 4194304}
+        max_output_tokens: {type: integer, format: int64, minimum: 1024, maximum: 16777216, default: 262144}
+        run_seconds: {type: integer, minimum: 1, maximum: 300, default: 120}
+        grant_seconds: {type: integer, minimum: 60, maximum: 86400, default: 3600}
+    TriggerGrant:
+      type: object
+      nullable: true
+      required: [id, project_id, configuration, settings_version, policy, scope_hash, model, provider_origin, created_at, expires_at, run_limits]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        policy: {type: string}
+        scope_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        model: {type: string}
+        provider_origin: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        run_limits: {$ref: '#/components/schemas/AgentLimits'}
+    TriggerAttempt:
+      type: object
+      nullable: true
+      required: [id, project_revision, path, source_hash, state, started_at, finished_at, reserved, usage]
+      properties:
+        id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        source_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        state: {type: string, enum: [running, completed, failed, interrupted, canceled]}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time, description: Zero time while running; an uncertain final receipt can remain running without an owner.}
+        reserved: {$ref: '#/components/schemas/TriggerAllowance'}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+    TriggerRecord:
+      type: object
+      required: [version, control_revision, project_id, options, grant, window, observed, handled, changed_at, next_eligible_at, last_attempt, state, reason, updated_at]
+      properties:
+        version: {type: integer, format: int64, minimum: 0}
+        control_revision: {type: integer, format: int64, minimum: 0}
+        project_id: {type: string}
+        options: {$ref: '#/components/schemas/TriggerOptions'}
+        grant: {$ref: '#/components/schemas/TriggerGrant'}
+        window:
+          type: object
+          required: [started_at, ends_at, limits, charged]
+          description: Fixed allowance and conservative nonrefundable charges. Zero times before the first attempt; controls and restart cannot reset an open window.
+          properties:
+            started_at: {type: string, format: date-time}
+            ends_at: {type: string, format: date-time}
+            limits: {$ref: '#/components/schemas/TriggerAllowance'}
+            charged: {$ref: '#/components/schemas/TriggerAllowance'}
+        observed: {type: object, additionalProperties: {type: string, pattern: '^[a-f0-9]{64}$'}}
+        handled: {type: object, additionalProperties: {type: string, pattern: '^[a-f0-9]{64}$'}}
+        changed_at: {type: string, format: date-time}
+        next_eligible_at: {type: string, format: date-time}
+        last_attempt: {$ref: '#/components/schemas/TriggerAttempt'}
+        state: {type: string, enum: [disabled, watching, suggested, waiting, unchanged, running, completed, failed, interrupted, canceled, budget_exhausted, stale, unavailable]}
+        reason: {type: string, maxLength: 256}
+        updated_at: {type: string, format: date-time}
+    AgentTriggers:
+      type: object
+      required: [project_id, project_revision, configuration, settings_version, policy, model, provider_origin, state, owned, fault, scope_hash, record, ceilings, run_limits, destination]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        policy: {type: string}
+        model: {type: string}
+        provider_origin: {type: string}
+        state: {type: string, enum: [disabled, watch_only, granted, grant_expired, stale_settings, stale_grant, interrupted, failed]}
+        owned: {type: boolean}
+        fault: {type: boolean}
+        scope_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        record: {$ref: '#/components/schemas/TriggerRecord'}
+        ceilings: {$ref: '#/components/schemas/TriggerCeilings'}
+        run_limits: {$ref: '#/components/schemas/AgentLimits'}
+        destination: {$ref: '#/components/schemas/ScopedModel'}
     LiveOpenRequest:
       type: object
       additionalProperties: false

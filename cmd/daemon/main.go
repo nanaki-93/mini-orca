@@ -145,6 +145,10 @@ func newHTTPMux(
 			current.ServeHTTP(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/projects/current/agent-triggers") {
+			api.WriteAppError(w, api.BadRequest("ambient analysis requires the main checkout", "Select the main project scope before inspecting or controlling its watch.", nil))
+			return
+		}
 		if len(paths) != 1 || paths[0] == "" {
 			api.WriteAppError(w, api.BadRequest("invalid worktree scope", "Provide worktree_path once with an absolute registered worktree path.", nil))
 			return
@@ -194,6 +198,9 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)
 	settingsHandler := handlers.NewAgentSettingsHandler(application)
+	triggersHandler := handlers.NewAgentTriggersHandler(application)
+	mux.HandleFunc("GET /api/projects/current/agent-triggers", triggersHandler.Get)
+	mux.HandleFunc("POST /api/projects/current/agent-triggers/control", triggersHandler.Control)
 	mux.HandleFunc("GET /api/projects/current/agent-settings", settingsHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/control", settingsHandler.Control)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/skills/validate", settingsHandler.ValidateSkill)

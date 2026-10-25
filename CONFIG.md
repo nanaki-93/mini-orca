@@ -149,6 +149,51 @@ artifact library's inspection, export and deletion controls. Provider-side
 retention follows the operator's chosen service; deleting a local artifact cannot
 retract bytes already sent. Conformance uses fake providers, not a live account.
 
+### Ambient semantic analysis
+
+Ambient analysis is disabled by default. `agent_runtime.triggers` sets ceilings;
+it never enables a watch or permits provider calls. In the main checkout, an
+explicit watch selects one to eight indexed source files for change detection
+or intervals of 60–86400 seconds. Detection alone records suggestions. A separate
+expiring grant confirms sharing the selected sources and filtered project context
+with the current semantic-analysis model and destination. The Bug profile is the
+default; an explicit retained analysis model selection takes precedence.
+
+| Setting | Default | Allowed range |
+| --- | ---: | --- |
+| `poll_seconds` | 2 | 1–60 |
+| `debounce_seconds` | 3 | 1–300 |
+| `quiet_seconds` | 60 | 5–3600 |
+| `window_seconds` | 3600 | 60–86400 |
+| `max_runs` | 4 | 1–16 |
+| `max_model_calls` | 16 | 1–64, at least `max_runs` |
+| `max_input_tokens` | 4194304 | 1024–67108864 |
+| `max_output_tokens` | 262144 | 1024–16777216 |
+| `run_seconds` | 120 | 1–300 |
+| `grant_seconds` | 3600 | 60–86400 |
+
+Run, quiet and debounce durations must fit within the window. Each attempt's
+model/token limits divide the window allowance by `max_runs`, further restricted
+by current agent settings; its duration is capped by `run_seconds`, the grant
+expiry and the remaining window. Each attempt reserves its entire allowance
+durably before dispatch. These conservative charges remain after cache hits,
+failure, cancellation or an uncertain receipt; separately reported usage is not
+a refund. Regranting or restarting never replenishes an open window.
+
+Only future eligible snapshots run, after debounce and quiet periods; unchanged
+sources and missed ticks are not replayed. Active project jobs take priority.
+Disable, revoke, reindex, settings changes, project replacement and shutdown
+cancel and join automatic work. Restart and project replacement leave watches
+inactive until an explicit watch/grant control establishes a fresh baseline.
+Stale destination, configuration, policy or source identity prevents dispatch.
+Persistence failures stop the watcher and require inspection before recovery.
+
+Results use the existing ADK semantic-analysis workflow and remain advisory.
+This feature does not run project commands, Security AI reviews or feature
+generation, and cannot Apply or merge source changes. Task worktrees are excluded.
+See the [ambient API contract](docs/api-contract.md#ambient-semantic-analysis)
+for exact controls, metadata and recovery rules.
+
 ### Explicit live sessions
 
 Live advice is disabled by default. Set `agent_runtime.live_model: gemini-3.8-live`

@@ -51,6 +51,25 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	}
 }
 
+func TestAmbientRoutesRejectTaskScopeBeforeWorktreeRouting(t *testing.T) {
+	mux := daemonTestMux(t)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/projects/current/agent-triggers"},
+		{http.MethodPost, "/api/projects/current/agent-triggers/control"},
+	} {
+		for _, scope := range []string{"/unregistered/private/task", ""} {
+			r := httptest.NewRequest(route.method, route.path+"?worktree_path="+scope, strings.NewReader(`{}`))
+			r.Host = "localhost:9090"
+			r.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, r)
+			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "ambient analysis requires the main checkout") {
+				t.Fatalf("task scope reached a service: %d %s", w.Code, w.Body.String())
+			}
+		}
+	}
+}
+
 func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T) {
 	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
 	mux := daemonTestMux(t)

@@ -16,6 +16,7 @@ type AgentRoles struct {
 
 type AgentRuntimeConfig struct {
 	LiveModel          string         `yaml:"live_model"`
+	Triggers           AgentTriggers  `yaml:"triggers"`
 	Telemetry          AgentTelemetry `yaml:"telemetry"`
 	Roles              AgentRoles     `yaml:"roles"`
 	Context            AgentContext   `yaml:"context"`
@@ -46,6 +47,7 @@ type AgentRuntime struct {
 	// Passive reporting settings have their own version/destination identity;
 	// they must not invalidate previously admitted execution preferences.
 	Telemetry AgentTelemetry `json:"-"`
+	Triggers  AgentTriggers  `json:"-"`
 	Roles     AgentRoles
 	Limits    AgentLimits
 	Context   AgentContext
@@ -179,7 +181,11 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	if err != nil {
 		return AgentRuntime{}, err
 	}
-	return AgentRuntime{LiveModel: configured.LiveModel, Roles: roles, Limits: limits, Context: context, Skills: skills, Telemetry: telemetry}, nil
+	triggers, err := ResolveAgentTriggers(configured.Triggers)
+	if err != nil {
+		return AgentRuntime{}, err
+	}
+	return AgentRuntime{LiveModel: configured.LiveModel, Roles: roles, Limits: limits, Context: context, Skills: skills, Telemetry: telemetry, Triggers: triggers}, nil
 }
 
 func (limits AgentLimits) Validate() error {

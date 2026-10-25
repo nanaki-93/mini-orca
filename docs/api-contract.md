@@ -104,6 +104,8 @@ untrusted networks.
 | GET | `/api/projects/current/remote-agents` | Read passive A2A configuration and current card grants. |
 | GET | `/api/projects/current/agent-access` | List configured inbound principals and temporary access grants for this project. |
 | GET | `/api/projects/current/agent-settings` | Read configured or overridden role, budget and skill settings without dispatch. |
+| GET | `/api/projects/current/agent-triggers` | Inspect main-checkout watch, grant, last attempt and persisted window consumption without dispatch. |
+| POST | `/api/projects/current/agent-triggers/control` | Explicitly watch, grant, revoke or disable bounded ambient semantic analysis. |
 | POST | `/api/projects/current/agent-settings/control` | Confirm a versioned replacement or reset for future admissions. |
 | POST | `/api/projects/current/agent-settings/skills/validate` | Explicitly validate a configured skill's captured local text without executing resources. |
 | POST | `/api/projects/current/agent-access/{principalID}/control` | Explicitly grant or revoke bounded inbound analysis/proposal access. |
@@ -2058,6 +2060,72 @@ replace an existing draft. Invalid or incomplete decomposition returns 400 with
 `mission planning incomplete`; stale catalog or captured identities return 409.
 Provider/transport failures and request cancellation retain the normal error
 contract. Retrying is a new explicit planning request against current captures.
+
+### Ambient semantic analysis
+
+`GET /api/projects/current/agent-triggers` is a passive, `no-store` read requiring
+current `project_id` and `project_revision`. These routes reject any
+`worktree_path`, including an empty value, before creating a task-scoped service.
+The response includes exact `configuration`, `settings_version`, `policy`,
+`model`, `provider_origin`, `scope_hash`, `destination`, `ceilings`, `run_limits`,
+`owned`, `fault`, permission `state` and the durable `record`.
+
+Permission states are `disabled`, `watch_only`, `granted`, `grant_expired`,
+`stale_settings`, `stale_grant`, `interrupted` and `failed`. Separately,
+`record.state` describes detection or the last attempt: `disabled`, `watching`,
+`waiting`, `suggested`, `unchanged`, `running`, `completed`, `failed`, `canceled`,
+`interrupted`, `budget_exhausted`, `stale` or `unavailable`. A completed attempt
+does not mean the watch has continuing permission. `reason` contains bounded
+source-free guidance; provider diagnostics and source content are not included.
+
+`POST /api/projects/current/agent-triggers/control` requires the exact returned
+binding (`project_id`, `project_revision`, `configuration`, `settings_version`,
+`policy`, `model`, `provider_origin`), current `control_revision`, `confirm: true`
+and one `action`:
+
+- `watch`: `options: {mode, interval_seconds, paths}` selects `changes` (interval
+  zero) or `interval` (60–86400 seconds), with one to eight distinct canonical
+  project-relative indexed source files. Excluded, symlinked, non-text, oversized
+  or unavailable sources are rejected. This replaces any grant with a fresh local
+  baseline; it grants no provider permission.
+- `grant`: supply the current `scope_hash`, `grant_seconds` (60 through the
+  configured ceiling), `confirm_source_sharing: true` for selected sources and
+  filtered project context, and `confirm_remote_provider: true` for a remote
+  semantic destination. The exact current model may reflect a retained analysis
+  selection. Each activation captures a fresh baseline and future eligibility.
+- `revoke`: stop and join automatic analysis, remove its grant and establish a
+  new watch-only baseline. If the selected sources cannot be recaptured, the
+  control fails and the old owner remains stopped; `disable` remains available.
+- `disable`: stop and join work, clear watch selection and permission, and retain
+  previous receipts/window consumption. Both revoke and disable require the
+  current project/control revision but allow old configuration/revision fields
+  so stopping an outdated grant remains possible.
+
+Only watch accepts `options`. A lost or canceled control receipt may have a
+durable outcome: refresh before retrying. Stale identities/control revisions
+return 409; invalid controls or missing consent return 400; body size violations
+return 413; corrupt or unavailable persistence retains the normal 500 contract.
+Reads/controls never include source text and do not silently discard errors.
+
+`record` includes journal `version`, `control_revision`, `project_id`, `options`,
+nullable `grant`, `observed`/`handled` hashes, `changed_at`, `next_eligible_at`,
+`updated_at`, `reason`, `window` and nullable `last_attempt`. A grant retains its
+exact binding, ID, scope hash, creation/expiry and immutable `run_limits`. A window
+contains start/end, fixed `limits` and cumulative `charged` runs, calls, tokens
+and seconds; remaining allocation is limits minus charges. It cannot be reset by
+new controls or a daemon restart. The last attempt names its source hash,
+revision, ID, timestamps, state, full `reserved` allowance and separate `usage`.
+
+An eligible attempt reserves its worst-case allowance before the existing ADK
+file-analysis workflow dispatches. Cache hits, errors, cancellations and uncertain
+delivery keep that charge. A failed final save leaves an uncertain running receipt
+and stops the owner; an explicit control settles it as interrupted without replay.
+Elapsed grants, changed bindings and unsafe sources prevent provider calls.
+Active project work takes priority before a changed file is reindexed. Reindex,
+settings changes, replacement and shutdown join the watcher. After restart or
+project replacement, stored watches are inactive until explicitly activated.
+Only semantic advice is automatic: execution, Security AI, feature generation,
+Apply and merge keep their separate explicit admission paths.
 
 ### Explicit live sessions
 

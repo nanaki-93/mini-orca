@@ -11,6 +11,9 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
+	if err := s.stopTriggersForLifecycle(); err != nil {
+		return nil, err
+	}
 	if err := s.stopLiveSessions(); err != nil {
 		return nil, err
 	}
@@ -45,6 +48,9 @@ func (s *Service) RestoreActiveProject(root string, analysis *project.Analysis) 
 func (s *Service) replaceActiveProject(activate func() error) error {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
+	if err := s.stopTriggersForLifecycle(); err != nil {
+		return err
+	}
 	s.cancelMissionJobs()
 	if err := s.closeWorktreeServices(); err != nil {
 		return err
