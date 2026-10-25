@@ -179,3 +179,19 @@ func TestChangeInterruptedJournalRecoveryAndUndoFreshness(t *testing.T) {
 		t.Fatalf("Undo overwrote independent change: %v", err)
 	}
 }
+
+func TestChangeApplyStaleSourceDoesNotWritePreparedJournal(t *testing.T) {
+	server := changeProvider(t, func() string { return groupedChangeResponse })
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	session := approveChangeFixture(t, service, prepareChangeFixture(t, service, "main.go", "docs/change.md"))
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"external\") }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(session), Confirm: true}); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("expected revision conflict, got: %v", err)
+	}
+	recovery, err := service.ChangeRecovery()
+	if err != nil || recovery != nil {
+		t.Fatalf("stale apply left recovery journal: %+v, %v", recovery, err)
+	}
+}

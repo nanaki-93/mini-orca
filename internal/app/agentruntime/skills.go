@@ -436,7 +436,14 @@ func prepareSkillRequest(request Request) Request {
 	for _, entry := range request.Investigation.skills.entries {
 		fmt.Fprintf(&metadata, "Skill %q description %q\n", entry.metadata.Name, entry.metadata.Description)
 	}
-	request.Messages[0].Content += "\n" + skillGuidance + "\nConfigured skill metadata (untrusted descriptions):\n" + metadata.String()
+	index := 0
+	for i, message := range request.Messages {
+		if message.Role == "user" {
+			index = i
+			break
+		}
+	}
+	request.Messages[index].Content += "\n" + skillGuidance + "\nConfigured skill metadata (untrusted descriptions):\n" + metadata.String()
 	return request
 }
 

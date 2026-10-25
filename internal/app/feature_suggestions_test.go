@@ -835,4 +835,23 @@ func TestFeatureGenerationWithProfileAndSelection(t *testing.T) {
 	if err == nil || !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("expected ErrRevisionConflict for stale selection ID, got %v", err)
 	}
+
+	// 5. Failed generation with changed goals marks existing suggestions stale
+	provider5, url5 := newFeatureTestProvider(t, validFeatureResponse)
+	s5, _ := newSemanticAnalysisService(t, url5, 0)
+	initial5, err := generateFeaturesFor(t, s5, "Initial goals.")
+	if err != nil || initial5.Freshness != "current" {
+		t.Fatalf("initial5: %+v, %v", initial5, err)
+	}
+	provider5.output.Store("not-json")
+	req5 := featureRequestFor(t, s5, "Updated goals.")
+	req5.ExpectedHash = initial5.Hash
+	_, err = s5.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: req5})
+	if err == nil {
+		t.Fatal("expected invalid feature response error")
+	}
+	after5, err := s5.Features(context.Background())
+	if err != nil || after5.Status != "failed" || after5.Goals != "Updated goals." || after5.Freshness != "stale" {
+		t.Fatalf("expected failed generation with changed goals to mark report stale, got %+v, err=%v", after5, err)
+	}
 }

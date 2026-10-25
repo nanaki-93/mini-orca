@@ -289,6 +289,9 @@ func (s *Service) publishFeatureGeneration(ctx context.Context, generation *feat
 	next.Goals = request.Goals
 	if generationErr != nil {
 		next.Status, next.Failure = "failed", features.GenerationFailure(generationErr)
+		if previous.Goals != request.Goals && len(next.Suggestions) > 0 {
+			next.Freshness = "stale"
+		}
 	} else {
 		record := FeatureGeneration{ID: generation.id, GeneratedAt: time.Now().UTC(), ProjectRevision: request.ProjectRevision,
 			WorkspaceHash: generation.fingerprint, GoalsHash: contentHash([]byte(request.Goals)), Model: featureModelSummary(generation.runtime)}

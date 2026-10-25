@@ -95,6 +95,9 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 	if previous != nil && previous.State != "applied" && previous.State != "undone" {
 		return nil, fmt.Errorf("recover the pending change before applying another proposal")
 	}
+	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
+		return nil, err
+	}
 	journal := &changeJournal{Version: 1, Session: *session, State: "prepared"}
 	journal.Commit, err = preflightChangeCommit(ctx, root, session, request)
 	if err != nil {
@@ -102,9 +105,6 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 	}
 	if err := writeChangeJournal(root, journal); err != nil {
 		return nil, fmt.Errorf("save recovery journal; source was not changed: %w", err)
-	}
-	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
-		return nil, err
 	}
 	if err := writeChangeFiles(ctx, root, session, write); err != nil {
 		return s.failedChangeMutation(root, journal, previous, err)
@@ -339,7 +339,10 @@ func syncDirectChangeFindingCompletions(root string, journal *changeJournal) {
 }
 
 func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {
-	journal, err := readChangeJournal(s.manager.Root())
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	root := s.manager.Root()
+	journal, err := readChangeJournal(root)
 	if err != nil || journal == nil {
 		return nil, err
 	}
@@ -347,7 +350,7 @@ func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	verification, err := s.currentChangeVerification(context.Background(), s.manager.Root(), journal, index)
+	verification, err := s.currentChangeVerification(context.Background(), root, journal, index)
 	if err != nil {
 		return nil, err
 	}

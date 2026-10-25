@@ -34,6 +34,8 @@ type investigationModel struct {
 	inner         model.LLM
 	scope         *Investigation
 	contextTokens int
+	system        string
+	prefix        []*genai.Content
 	protected     string
 }
 
@@ -63,17 +65,47 @@ func (m *investigationModel) GenerateContent(ctx context.Context, request *model
 }
 
 func (m *investigationModel) protectContext(request *model.LLMRequest) *model.LLMRequest {
-	if request == nil || m.protected == "" {
-		return request
-	}
-	for _, content := range request.Contents {
-		if content != nil && content.Role == genai.RoleUser && len(content.Parts) == 1 && content.Parts[0] != nil && content.Parts[0].Text == m.protected {
-			return request
-		}
+	if request == nil {
+		return nil
 	}
 	copy := *request
-	copy.Contents = append([]*genai.Content{genai.NewContentFromText(m.protected, genai.RoleUser)}, slices.Clone(request.Contents)...)
+	if m.protected != "" && !hasProtectedUserPrompt(copy.Contents, m.protected) {
+		copy.Contents = append([]*genai.Content{genai.NewContentFromText(m.protected, genai.RoleUser)}, slices.Clone(copy.Contents)...)
+	}
+	if len(m.prefix) > 0 && !hasContentPrefix(copy.Contents, m.prefix) {
+		copy.Contents = append(slices.Clone(m.prefix), slices.Clone(copy.Contents)...)
+	}
+	if m.system != "" {
+		cfg := &genai.GenerateContentConfig{}
+		if copy.Config != nil {
+			*cfg = *copy.Config
+		}
+		cfg.SystemInstruction = genai.NewContentFromText(m.system, genai.RoleUser)
+		copy.Config = cfg
+	}
 	return &copy
+}
+
+func hasProtectedUserPrompt(contents []*genai.Content, prompt string) bool {
+	for _, content := range contents {
+		if content != nil && content.Role == genai.RoleUser && len(content.Parts) == 1 && content.Parts[0] != nil && content.Parts[0].Text == prompt {
+			return true
+		}
+	}
+	return false
+}
+
+func hasContentPrefix(contents, prefix []*genai.Content) bool {
+	if len(contents) < len(prefix) {
+		return false
+	}
+	for i, want := range prefix {
+		got := contents[i]
+		if got == nil || want == nil || got.Role != want.Role || len(got.Parts) != 1 || len(want.Parts) != 1 || got.Parts[0] == nil || want.Parts[0] == nil || got.Parts[0].Text != want.Parts[0].Text {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *investigationModel) validateContext(request *model.LLMRequest) error {

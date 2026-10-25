@@ -246,7 +246,7 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	}
 	current.Changes = mergeWorkflowTests(current.Changes, testEdits)
 	current.Hash, current.Revision = changeProposalHash(current.Changes), current.Revision+1
-	current.Checks, current.ReviewedHash = []CheckResult{}, ""
+	current.Checks, current.ReviewedHash, current.PinnedTests = []CheckResult{}, "", nil
 	now := time.Now().UTC()
 	current.Messages = append(current.Messages, ChangeMessage{Role: "user", Content: message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	current.UpdatedAt = now

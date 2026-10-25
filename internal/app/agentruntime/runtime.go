@@ -130,7 +130,7 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	}
 	var input *genai.Content
 	if request.Investigation != nil {
-		input = genai.NewContentFromText(request.Messages[0].Content, genai.RoleUser)
+		input = genai.NewContentFromText(request.Messages[len(request.Messages)-1].Content, genai.RoleUser)
 	}
 	return collectCompletion(ctx, runtime.Run(ctx, userID, invocation.session.ID(), input, agent.RunConfig{}), request.OnText)
 }

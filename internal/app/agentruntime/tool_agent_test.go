@@ -100,3 +100,32 @@ func TestInvestigationNativeGoogleToolRoundTrip(t *testing.T) {
 		t.Fatalf("result=%+v error=%v calls=%d", result, err, calls)
 	}
 }
+
+func TestInvestigationSupportsSystemInstructionAndConversationPrefix(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"role":"system","content":"Keep exact policy."`) || !strings.Contains(string(body), `"content":"Earlier turn"`) || !strings.Contains(string(body), `"content":"Earlier answer"`) || !strings.Contains(string(body), `"content":"Final user turn"`) {
+			t.Errorf("system or conversation prefix lost: %s", body)
+		}
+		if calls == 1 {
+			writeLookupCall(w, "lookup-prefix")
+			return
+		}
+		json.NewEncoder(w).Encode(fixtureResponse("done"))
+	}))
+	defer server.Close()
+	ctx, budget := budgetContext(t, nil)
+	client := NewProviderClient(config.ModelProfile{Provider: config.OpenAIProvider, APIBaseURL: server.URL, Model: "fixture", MaxTokens: 100})
+	messages := []llm.ChatMessage{
+		{Role: "system", Content: "Keep exact policy."},
+		{Role: "user", Content: "Earlier turn"},
+		{Role: "assistant", Content: "Earlier answer"},
+		{Role: "user", Content: "Final user turn"},
+	}
+	result, err := Complete(ctx, client, Request{Messages: messages, Investigation: fixtureInvestigation(t, nil, nil)})
+	if err != nil || result.Content != "done" || calls != 2 || budget.Snapshot().ToolCalls != 1 {
+		t.Fatalf("result=%+v error=%v calls=%d", result, err, calls)
+	}
+}

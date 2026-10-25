@@ -220,7 +220,7 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	if isChangePipelineActive(session.Workflow) {
 		return nil, fmt.Errorf("%w: cancel the workflow before restoring its conversation", project.ErrRevisionConflict)
 	}
-	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	session.Checks, session.ReviewedHash, session.PinnedTests = []CheckResult{}, "", nil
 	invalidateChangeWorkflow(session, "Restored workflow evidence requires a new run.")
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	if err := storeChangeSession(root, session); err != nil {
@@ -313,7 +313,7 @@ func (s *Service) updateChangeProposal(ctx context.Context, id string, request C
 	}
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
-	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	session.Checks, session.ReviewedHash, session.PinnedTests = []CheckResult{}, "", nil
 	invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	now := time.Now().UTC()
@@ -419,7 +419,6 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	}
 	if request.Repair && len(session.Changes) > 0 {
 		edits = preservePinnedTests(edits, session.Changes)
-		session.PinnedTests = nil
 	} else if len(session.PinnedTests) > 0 {
 		edits = preservePinnedTests(edits, session.PinnedTests)
 	} else {
@@ -427,7 +426,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	}
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
-	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	session.Checks, session.ReviewedHash, session.PinnedTests = []CheckResult{}, "", nil
 	if ctx.Value(changeWorkflowContextKey{}) == nil {
 		invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
 	}

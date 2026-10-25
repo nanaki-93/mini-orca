@@ -189,11 +189,20 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 }
 
 func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
+	checks := []CheckResult{}
+	newTests := newChangeTestEdits(session)
+	if options.RunTests && runner != "" && testTarget != "" && len(newTests) > 0 {
+		if err := stageChangeEdits(workspace, newTests); err != nil {
+			return nil, err
+		}
+		baseline := s.runCheck(ctx, workspace, session.ProjectRevision, "regression baseline", false, buildTaskRunnerArgv(runner, testTarget), false, true)
+		classifyNonGoRegressionBaseline(&baseline)
+		checks = append(checks, baseline)
+	}
 	if err := stageChangeEdits(workspace, session.Changes); err != nil {
 		return nil, err
 	}
-	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
-	checks := []CheckResult{}
 	if options.RunLint {
 		if runner != "" && checkTarget != "" {
 			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
@@ -203,20 +212,30 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 	}
 	if options.RunTests {
 		if runner != "" && testTarget != "" {
-			testCheck := s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true)
-			if len(newChangeTestEdits(session)) > 0 {
-				checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: testCheck.State, Output: testCheck.Output})
-			}
-			checks = append(checks, testCheck)
+			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
 		} else {
 			msg := "No executable test runner is configured or available for this workspace."
-			if len(newChangeTestEdits(session)) > 0 {
+			if len(newTests) > 0 {
 				checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckUnavailable, Output: msg})
 			}
 			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckUnavailable, Output: msg})
 		}
 	}
 	return checks, ctx.Err()
+}
+
+func classifyNonGoRegressionBaseline(check *CheckResult) {
+	check.Required = false
+	switch {
+	case check.State == CheckCanceled:
+		check.Outcome = "could_not_execute"
+	case check.State == CheckPassed && check.ExitCode == 0:
+		check.State, check.Outcome = CheckSkipped, "already_passes"
+	case check.State == CheckFailed:
+		check.State, check.Outcome = CheckPassed, "failed_before_change"
+	default:
+		check.State, check.Outcome = CheckUnavailable, "could_not_execute"
+	}
 }
 
 func buildTaskRunnerArgv(runner, target string) []string {

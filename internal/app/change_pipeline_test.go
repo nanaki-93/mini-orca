@@ -477,6 +477,16 @@ func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) 
 			continue
 		}
 	}
+	edited, err := s.SendChangeMessage(context.Background(), second.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(second),
+		Changes: []ChangeEditInput{
+			{Path: "new.go", Content: "package main\nfunc Helper() int { return 8 }\n"},
+			{Path: "new_test.go", Content: "package main\nimport \"testing\"\nfunc TestHelper(t *testing.T) { if Helper() != 8 { t.Fatal(\"wrong result\") } }\n"},
+		},
+	})
+	if err != nil || len(edited.PinnedTests) != 0 {
+		t.Fatalf("expected manual test update after pinned tests to succeed and clear stale pin, got %+v, err=%v", edited, err)
+	}
 }
 
 func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing.T) {

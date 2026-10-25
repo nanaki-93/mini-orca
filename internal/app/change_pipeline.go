@@ -294,7 +294,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 		session.Workflow.Stages[i].Reason = ""
 		session.Workflow.Stages[i].StartedAt, session.Workflow.Stages[i].FinishedAt = time.Time{}, time.Time{}
 	}
-	session.ReviewedHash = ""
+	session.ReviewedHash, session.PinnedTests = "", nil
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	if err := storeChangeSession(job.root, session); err != nil {
 		return "", err
