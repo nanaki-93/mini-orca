@@ -75,7 +75,13 @@ func fitFrame(th ansiTheme, lines []string, width, height int) string {
 func (s *State) renderSmallTerminal(th ansiTheme, width, height int) string {
 	lines := []string{"MINI-ORCA", "", "Enlarge the terminal to 52 × 16.", "Your workspace is preserved.", "", "Ctrl+C: quit"}
 	if s.CmdActive {
-		lines = []string{"MINI-ORCA", th.renderCommandInput(s.CmdInput, s.commandCursor, width), "Enter: run · Esc: cancel"}
+		lines = []string{"MINI-ORCA", th.renderCommandInput(s.CmdInput, s.commandCursor, width)}
+		if s.commandMissingArguments() != nil {
+			lines = append(lines, theme.WrapVisibleLine(requiredCommandArgumentHint, width)...)
+			lines = append(lines, "Esc: cancel")
+		} else {
+			lines = append(lines, "Enter: run · Esc: cancel")
+		}
 	}
 	return fitFrame(th, lines, width, height)
 }
@@ -322,6 +328,9 @@ func (s *State) renderActionBar(th ansiTheme, width int) string {
 	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
 	if s.CmdActive {
 		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}}
+		if s.commandMissingArguments() != nil {
+			items[0].desc = "Needs arguments"
+		}
 		right = th.keyPill("Esc", "Cancel") + " "
 	} else if s.Error != "" && !s.ShowKeybindsModal {
 		items = []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}

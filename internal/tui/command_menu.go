@@ -14,6 +14,8 @@ type commandItem struct {
 	page                 Page
 }
 
+const requiredCommandArgumentHint = "Argument required. Type a value, then Enter."
+
 func commandCatalog() []commandItem {
 	items := []commandItem{
 		{command: "project", title: "Open or switch project", hint: "project /absolute/path · Restore local project data and index.", argument: true},
@@ -124,7 +126,7 @@ func commandCatalog() []commandItem {
 		commandItem{command: "connection-cancel", title: "Cancel connection request", hint: "Stop the request; refresh local inventory before reusing its grant."},
 		commandItem{command: "connection-use", title: "Select connection for plan investigation", hint: "Select at most two granted MCP/API connections; source sharing is confirmed when investigating."},
 		commandItem{command: "connections-clear", title: "Remove plan connection selections", hint: "Clear ephemeral tool choices from the current draft without revoking existing grants."},
-		commandItem{command: "agent-settings", title: "Select settings checkout", hint: "agent-settings main or task · Load local settings for the main checkout or selected task worktree.", argument: true},
+		commandItem{command: "agent-settings", title: "Choose settings checkout", hint: "main: project checkout (default). task: selected task worktree. Scope for future runs. Open :roles or :skills to edit.", argument: true},
 		commandItem{command: "settings-refresh", title: "Refresh agent settings", hint: "Read local saved settings; no provider discovery."},
 		commandItem{command: "cloud", title: "Inspect cloud copies", hint: "Read local destinations and retained receipts. An inspected main-checkout artifact or task can prefill the source."},
 		commandItem{command: "cloud-refresh", title: "Refresh local cloud receipts", hint: "Read local state only; remote availability is checked separately."},
@@ -218,6 +220,15 @@ func (s *State) commandArgumentContext() *commandItem {
 	return nil
 }
 
+func (s *State) commandMissingArguments() *commandItem {
+	for _, item := range commandCatalog() {
+		if item.argument && strings.EqualFold(strings.TrimSpace(s.CmdInput), item.command) {
+			return &item
+		}
+	}
+	return nil
+}
+
 func (s *State) openCommandInput(value string) {
 	s.CmdActive, s.CmdInput = true, value
 	s.commandCursor = len([]rune(value))
@@ -238,11 +249,16 @@ func (s *State) handleCommandInputKey(ev KeyEvent) {
 	case "Tab":
 		s.completeCommand(false)
 	case "ArrowUp", "ArrowDown":
+		count := len(s.commandMatches())
+		if count == 0 {
+			s.commandSelection = -1
+			return
+		}
 		delta := 1
 		if ev.Key == "ArrowUp" {
 			delta = -1
 		}
-		s.commandSelection = min(max(0, s.commandSelection+delta), max(0, len(s.commandMatches())-1))
+		s.commandSelection = min(max(0, s.commandSelection+delta), count-1)
 	case "ArrowLeft", "ArrowRight", "Home", "End", "Backspace", "Delete":
 		s.editCommandInput(ev.Key)
 	default:
@@ -340,11 +356,9 @@ func (s *State) submitCommandInput() {
 		return
 	}
 	// A bare command needing arguments opens an editor instead of using an alias.
-	for _, item := range commandCatalog() {
-		if item.argument && strings.TrimSpace(s.CmdInput) == item.command {
-			s.openCommandInput(item.command + " ")
-			return
-		}
+	if item := s.commandMissingArguments(); item != nil {
+		s.openCommandInput(item.command + " ")
+		return
 	}
 	raw := s.CmdInput
 	s.CmdActive, s.CmdInput = false, ""
@@ -377,6 +391,9 @@ func (s *State) renderCommandMenu(th ansiTheme, width, rows int) []string {
 		lines = append(lines, "")
 	}
 	if item := s.commandArgumentContext(); item != nil {
+		if s.commandMissingArguments() != nil {
+			lines = appendWrappedText(lines, requiredCommandArgumentHint, width)
+		}
 		lines = append(lines, "  "+th.cyan+item.title+th.reset)
 		return appendWrappedText(lines, item.hint, width)
 	}

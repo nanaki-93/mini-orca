@@ -450,6 +450,7 @@ var teaNavigationKeys = map[tea.KeyType]KeyEvent{
 	tea.KeyTab:       {Key: "Tab"},
 	tea.KeyShiftTab:  {Key: "Tab", Shift: true},
 	tea.KeyEnter:     {Key: "Enter"},
+	tea.KeyCtrlJ:     {Key: "Enter"}, // Accept LF as well as CR, matching stream input.
 	tea.KeyEsc:       {Key: "Escape"},
 	tea.KeyBackspace: {Key: "Backspace"},
 	tea.KeySpace:     {Key: " "},

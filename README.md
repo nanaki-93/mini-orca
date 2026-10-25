@@ -48,6 +48,11 @@ and `Delete` to edit; `Ctrl+P/N` recalls session history and `Ctrl+U` clears the
 cancels without running anything. Confirmation dialogs keep keyboard focus until
 you confirm or cancel them.
 
+`:roles` opens Roles & Budgets; `:skills` opens Skills. Settings initially use the
+main project checkout. Use `:agent-settings task` to select the inspected task's
+worktree, or `:agent-settings main` to switch back. `main` and `task` are fixed
+checkout choices. Saved edits affect future runs in that checkout.
+
 Workspace areas have distinct accents, with filled panels and selection highlights
 across Tokyo, CRT, Amber and Paper. Wide terminals use a sidebar with a compact
 model summary; narrow terminals use navigation tabs. The dashboard adds count

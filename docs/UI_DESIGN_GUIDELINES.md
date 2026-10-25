@@ -44,6 +44,9 @@ editable arguments and session command history. Keep its input above the results
 and the selected command's explanation visible, including in compact terminals.
 Browsing or completing a command is passive. Enter explicitly runs the
 chosen command; commands requiring arguments stay in the editor until supplied.
+Show a missing-argument message and usage guidance, and label Enter as needing
+arguments until a value is supplied. Checkout choices explain their scope and
+purpose; `main` selects the project checkout and `task` its selected task worktree.
 Pasted text is inert outside that editor. Keep existing guards on every command
 route. Opening a project and planning a custom task have visible prompt shortcuts.
 `Ctrl+K` preserves an already-open input draft and cannot bypass a confirmation.

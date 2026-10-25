@@ -177,6 +177,117 @@ func TestCommandMenuCompletesAndSubmitsExplicitProjectPath(t *testing.T) {
 	}
 }
 
+func TestCommandEnterAcceptsTerminalLineEndings(t *testing.T) {
+	for _, key := range []struct {
+		name   string
+		typeID tea.KeyType
+	}{
+		{name: "carriage return", typeID: tea.KeyEnter},
+		{name: "line feed", typeID: tea.KeyCtrlJ},
+	} {
+		t.Run(key.name, func(t *testing.T) {
+			s := NewState()
+			s.openCommandInput("reindex")
+			s.HandleKey(keyEventFromTea(tea.KeyMsg{Type: key.typeID}))
+			if s.CmdActive || len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "reindex" {
+				t.Fatalf("Enter did not submit the command: active=%v actions=%+v", s.CmdActive, s.PendingActions)
+			}
+		})
+	}
+}
+
+func TestCommandArrowsWithoutSuggestionsDoNotBlockSubmission(t *testing.T) {
+	for _, input := range []string{"project /tmp/my project", "unknown-command"} {
+		for _, key := range []string{"ArrowUp", "ArrowDown"} {
+			t.Run(input+"/"+key, func(t *testing.T) {
+				s := NewState()
+				s.openCommandInput(input)
+				s.HandleKey(KeyEvent{Key: key})
+				if s.CmdInput != input || s.commandSelection != -1 || len(s.PendingActions) != 0 {
+					t.Fatalf("arrow selected a nonexistent suggestion or changed the draft: input=%q selection=%d actions=%+v", s.CmdInput, s.commandSelection, s.PendingActions)
+				}
+				s.HandleKey(KeyEvent{Key: "Enter"})
+				if s.CmdActive {
+					t.Fatal("Enter left the command editor open")
+				}
+				if input == "unknown-command" {
+					if !strings.Contains(s.CmdOutput, `Unknown command "unknown-command"`) || len(s.PendingActions) != 0 {
+						t.Fatalf("unknown command did not report an error without dispatch: output=%q actions=%+v", s.CmdOutput, s.PendingActions)
+					}
+					return
+				}
+				if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "open-project" || s.PendingActions[0].Target != "/tmp/my project" {
+					t.Fatalf("Enter did not submit the original project path: %+v", s.PendingActions)
+				}
+			})
+		}
+	}
+}
+
+func TestAgentSettingsCommandWaitsForExplicitCheckout(t *testing.T) {
+	for _, checkout := range []string{"main", "task"} {
+		t.Run(checkout, func(t *testing.T) {
+			s := settingsTestState()
+			s.Change = &ChangeSession{ID: "task", ProjectIdentity: ProjectIdentity{ProjectID: "child", ProjectRevision: "c"}, WorktreePath: "/repo/task"}
+			s.openCommandInput("agent-settings")
+			s.HandleKey(KeyEvent{Key: "Enter"})
+			if !s.CmdActive || s.CmdInput != "agent-settings " || len(s.PendingActions) != 0 {
+				t.Fatal("bare command must wait for an explicit checkout")
+			}
+			s.HandleKey(KeyEvent{Text: checkout})
+			s.HandleKey(KeyEvent{Key: "ArrowDown"})
+			s.HandleKey(keyEventFromTea(tea.KeyMsg{Type: tea.KeyCtrlJ}))
+			if s.CmdActive || s.Error != "" || len(s.PendingActions) != 1 {
+				t.Fatalf("settings command did not submit: active=%v error=%q actions=%+v", s.CmdActive, s.Error, s.PendingActions)
+			}
+			request := s.PendingActions[0]
+			if request.Kind != "agent-settings" || request.AgentSettings == nil || request.AgentSettings.Operation != "read" {
+				t.Fatalf("settings command did not request local metadata: %+v", request)
+			}
+			if checkout == "task" && request.AgentSettings.Scope.WorktreePath != "/repo/task" || checkout == "main" && request.AgentSettings.Scope.WorktreePath != "" {
+				t.Fatalf("settings command selected the wrong checkout: %+v", request.AgentSettings.Scope)
+			}
+		})
+	}
+}
+
+func TestCommandMissingArgumentsExplainRequiredInput(t *testing.T) {
+	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+		for _, size := range [][2]int{{40, 10}, {52, 16}, {80, 24}, {100, 20}, {120, 36}} {
+			s := settingsTestState()
+			s.Palette = palette
+			s.openCommandInput("agent-settings")
+			s.HandleKey(KeyEvent{Key: "Enter"})
+			s.HandleKey(KeyEvent{Key: "Enter"})
+			frame := ansi.Strip(s.Render(size[0], size[1]))
+			assertFrameSize(t, frame, size[0], size[1])
+			if !strings.Contains(frame, "Argument required") || strings.Contains(frame, "[Enter] Run") || len(s.PendingActions) != 0 {
+				t.Fatalf("missing argument was not explained at %v in %s:\n%s", size, palette, frame)
+			}
+			if size[0] >= 52 {
+				var content []string
+				for _, line := range strings.Split(frame, "\n") {
+					if _, body, sidebar := strings.Cut(line, "│"); sidebar {
+						line = body
+					}
+					content = append(content, strings.Fields(line)...)
+				}
+				text := strings.Join(content, " ")
+				for _, explanation := range []string{"main: project checkout (default)", "task: selected task worktree", "future runs", ":roles or :skills"} {
+					if !strings.Contains(text, explanation) {
+						t.Fatalf("settings purpose or choices hidden at %v in %s: missing %q in %s", size, palette, explanation, text)
+					}
+				}
+			}
+			s.HandleKey(KeyEvent{Text: "main"})
+			frame = ansi.Strip(s.Render(size[0], size[1]))
+			if strings.Contains(frame, "Argument required") || size[0] >= 52 && !strings.Contains(frame, "[Enter] Run") || len(s.PendingActions) != 0 {
+				t.Fatalf("supplying an argument did not restore passive command submission at %v:\n%s", size, frame)
+			}
+		}
+	}
+}
+
 func TestCommandArgumentsAreNeverTreatedAsSearchTerms(t *testing.T) {
 	for _, argument := range []string{"open", "project", "switch project"} {
 		s := NewState()
