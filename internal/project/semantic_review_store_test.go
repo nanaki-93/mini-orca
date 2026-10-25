@@ -84,8 +84,7 @@ func TestFileAnalysisCacheRoundTripAndSourceFreePersistence(t *testing.T) {
 	analysis := newFreshAnalysis(input)
 	analysis.Purpose = "Runs the command."
 	analysis.Responsibilities = []string{"dispatches work"}
-	analysis.SymbolExplanations = map[string]string{"Run": "Starts the command."}
-	analysis.Risks = []Finding{{Severity: "high", Summary: "Check errors.", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func Run()", AcceptanceCriteria: []string{"Return errors."}, NonGoals: []string{}}}}
+	analysis.Risks = []Finding{{Severity: "high", Summary: "Check errors.", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", AcceptanceCriteria: []string{"Return errors."}, NonGoals: []string{}}}}
 	if err := cache.Store(analysis); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +92,7 @@ func TestFileAnalysisCacheRoundTripAndSourceFreePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Status != AnalysisStatusFresh || loaded.Purpose != analysis.Purpose || loaded.SymbolExplanations["Run"] == "" || loaded.Risks[0].TaskSpec == nil || loaded.Risks[0].TaskSpec.TargetSymbol != "Run" {
+	if loaded.Status != AnalysisStatusFresh || loaded.Purpose != analysis.Purpose || loaded.Risks[0].TaskSpec == nil || loaded.Risks[0].TaskSpec.TargetPath != "main.go" {
 		t.Fatalf("loaded analysis = %+v", loaded)
 	}
 	data, err := os.ReadFile(cache.cachePath("main.go"))

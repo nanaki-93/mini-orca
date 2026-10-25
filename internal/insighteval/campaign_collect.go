@@ -47,7 +47,7 @@ func executeRemainingAttempts(ctx context.Context, cfg EngineeringInsightRunnerC
 			// Publish the source-free diagnostic before the raw private response.
 			// A failure between either immutable write and the receipt update leaves
 			// the reserved attempt unknown, and resume intentionally never replays it.
-			if err := storePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: buildExpectedAttemptID(item.Expected), ResponseDigest: attempt.ResponseDigest, Insights: diagnostics.Insights, SymbolExplanationsDegraded: diagnostics.SymbolExplanationsDegraded, TaskSpecDegradedRiskIndices: diagnostics.TaskSpecDegradedRiskIndices}); err != nil {
+			if err := storePrivateOptionalDiagnostics(directory, engineeringInsightOptionalDiagnostics{RunID: cfg.RunID, AttemptID: buildExpectedAttemptID(item.Expected), ResponseDigest: attempt.ResponseDigest, Insights: diagnostics.Insights, TaskSpecDegradedRiskIndices: diagnostics.TaskSpecDegradedRiskIndices}); err != nil {
 				return err
 			}
 			if err := storePrivateResponse(handoff.privateDir, buildExpectedAttemptID(item.Expected), response); err != nil {

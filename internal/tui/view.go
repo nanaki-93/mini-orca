@@ -174,7 +174,7 @@ func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
 
 func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
 	var lines []string
-	for _, role := range []struct{ scope, label string }{{"analyze", "Analyze"}, {"bug", "Bug"}, {"function", "Code"}} {
+	for _, role := range []struct{ scope, label string }{{"analyze", "Analyze"}, {"bug", "Bug"}, {"code", "Code"}} {
 		model := s.EffectiveScopeModel(role.scope).Model
 		if model == "" || model == role.scope {
 			model = "unavailable"
@@ -182,7 +182,7 @@ func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
 		color := th.cyan
 		if role.scope == "bug" {
 			color = th.purple
-		} else if role.scope == "function" {
+		} else if role.scope == "code" {
 			color = th.green
 		}
 		lines = append(lines, fmt.Sprintf("  %s%-7s%s %s", color, role.label, th.reset, theme.TruncatePlain(theme.SanitizeSingleLine(model), max(1, width-10))))

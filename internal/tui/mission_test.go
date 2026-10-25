@@ -24,7 +24,7 @@ func missionTestState() *State {
 	s.Index = &ProjectIndex{ProjectIdentity: s.Project.ProjectIdentity, Files: []IndexedFile{{Path: "main.go", ContentHash: "sha256:" + strings.Repeat("a", 64), LineCount: 2}}}
 	s.Connected = true
 	limits := client.AgentLimits{ModelCalls: 8, ToolCalls: 16, InputTokens: 1 << 20, OutputTokens: 8 << 20, ElapsedSeconds: 120, ConcurrentCalls: 1, Repairs: 1}
-	settings := &client.AgentSettings{ProjectIdentity: s.Project.ProjectIdentity, Version: 1, Configuration: "configuration", State: "configured", Limits: limits, Ceilings: limits, Models: []client.Model{{Scope: "function", Model: "fixture", ProviderOrigin: "https://provider.example", RemoteProvider: true, Capabilities: client.ModelCapabilities{Completion: true, Tools: true}}}}
+	settings := &client.AgentSettings{ProjectIdentity: s.Project.ProjectIdentity, Version: 1, Configuration: "configuration", State: "configured", Limits: limits, Ceilings: limits, Models: []client.Model{{Scope: "code", Model: "fixture", ProviderOrigin: "https://provider.example", RemoteProvider: true, Capabilities: client.ModelCapabilities{Completion: true, Tools: true}}}}
 	s.Mission = &missionView{Parent: s.Project.ProjectIdentity, Scope: client.AgentSettingsScope{ProjectIdentity: s.Project.ProjectIdentity}, Path: s.Project.Path, Epoch: "initial", Catalog: &client.MissionList{ProjectIdentity: s.Project.ProjectIdentity, Missions: []client.MissionSummary{}}, Settings: settings, Index: s.Index}
 	s.ExecuteCommand(":mission-new Extract helper")
 	s.ExecuteCommand(":mission-edit files new.go; main.go")

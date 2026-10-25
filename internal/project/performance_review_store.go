@@ -37,7 +37,6 @@ type PerformanceFinding struct {
 	VerificationPlan   string              `json:"verification_plan"`
 	StartLine          int                 `json:"start_line"`
 	EndLine            int                 `json:"end_line"`
-	Symbol             string              `json:"symbol,omitempty"`
 	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
@@ -77,12 +76,11 @@ type performanceFindingWire struct {
 	VerificationPlan   string          `json:"verification_plan"`
 	StartLine          int             `json:"start_line"`
 	EndLine            int             `json:"end_line"`
-	Symbol             string          `json:"symbol"`
 	Insight            json.RawMessage `json:"engineering_insight"`
 }
 
 // ParsePerformanceFindings rejects malformed parent output but omits malformed optional insights.
-func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo) ([]PerformanceFinding, string, error) {
+func ParsePerformanceFindings(output, path, source string) ([]PerformanceFinding, string, error) {
 	if len(output) > maxPerformanceOutputBytes {
 		return nil, "", PerformanceOutputTooLarge
 	}
@@ -102,13 +100,10 @@ func ParsePerformanceFindings(output, path, source string, symbols []SymbolInfo)
 	valid := make([]PerformanceFinding, 0, len(wire.Findings))
 	dropped := performanceFindingValidationFailures{}
 	for _, item := range wire.Findings {
-		finding := PerformanceFinding{Category: strings.ToLower(strings.TrimSpace(item.Category)), PotentialImpact: strings.ToLower(strings.TrimSpace(item.PotentialImpact)), Confidence: strings.ToLower(strings.TrimSpace(item.Confidence)), Title: strings.TrimSpace(item.Title), ObservedPattern: strings.TrimSpace(item.ObservedPattern), WorkloadConditions: strings.TrimSpace(item.WorkloadConditions), Recommendation: strings.TrimSpace(item.Recommendation), Tradeoff: strings.TrimSpace(item.Tradeoff), VerificationPlan: strings.TrimSpace(item.VerificationPlan), StartLine: item.StartLine, EndLine: item.EndLine, Symbol: strings.TrimSpace(item.Symbol)}
-		if failure := invalidPerformanceFinding(finding, lines, symbols); failure != performanceFindingValid {
+		finding := PerformanceFinding{Category: strings.ToLower(strings.TrimSpace(item.Category)), PotentialImpact: strings.ToLower(strings.TrimSpace(item.PotentialImpact)), Confidence: strings.ToLower(strings.TrimSpace(item.Confidence)), Title: strings.TrimSpace(item.Title), ObservedPattern: strings.TrimSpace(item.ObservedPattern), WorkloadConditions: strings.TrimSpace(item.WorkloadConditions), Recommendation: strings.TrimSpace(item.Recommendation), Tradeoff: strings.TrimSpace(item.Tradeoff), VerificationPlan: strings.TrimSpace(item.VerificationPlan), StartLine: item.StartLine, EndLine: item.EndLine}
+		if failure := invalidPerformanceFinding(finding, lines); failure != performanceFindingValid {
 			dropped.add(failure)
 			continue
-		}
-		if finding.Symbol == "" {
-			finding.Symbol = performanceSymbolForRange(symbols, finding.StartLine, finding.EndLine)
 		}
 		finding.EngineeringInsight, _ = ParseOptionalEngineeringInsight(item.Insight)
 		sum := sha256.Sum256([]byte(path + fmt.Sprintf(":%d:%d:%s:%s", finding.StartLine, finding.EndLine, finding.Category, finding.Title)))
@@ -140,14 +135,14 @@ type performanceFindingValidationFailures struct {
 	anchor bool
 }
 
-func invalidPerformanceFinding(f PerformanceFinding, lines int, symbols []SymbolInfo) performanceFindingValidationFailure {
+func invalidPerformanceFinding(f PerformanceFinding, lines int) performanceFindingValidationFailure {
 	if !validPerformanceFindingFields(f) {
 		return performanceFindingInvalidFields
 	}
 	if !validPerformanceFindingEnums(f) {
 		return performanceFindingInvalidEnums
 	}
-	if !validPerformanceFindingAnchor(f, lines, symbols) {
+	if !validPerformanceFindingAnchor(f, lines) {
 		return performanceFindingInvalidAnchor
 	}
 	return performanceFindingValid
@@ -199,19 +194,8 @@ func validPerformanceFindingEnums(f PerformanceFinding) bool {
 	return oneOf(f.Category, "cpu", "memory", "io", "concurrency", "caching", "ui") && oneOf(f.PotentialImpact, "high", "medium", "low", "unknown") && oneOf(f.Confidence, "high", "medium", "low")
 }
 
-func validPerformanceFindingAnchor(f PerformanceFinding, lines int, symbols []SymbolInfo) bool {
-	if f.StartLine < 1 || f.EndLine < f.StartLine || f.EndLine > lines {
-		return false
-	}
-	if f.Symbol == "" {
-		return true
-	}
-	for _, symbol := range symbols {
-		if symbol.Name == f.Symbol && f.StartLine >= symbol.StartLine && f.EndLine <= symbol.EndLine {
-			return true
-		}
-	}
-	return false
+func validPerformanceFindingAnchor(f PerformanceFinding, lines int) bool {
+	return f.StartLine >= 1 && f.EndLine >= f.StartLine && f.EndLine <= lines
 }
 func oneOf(value string, values ...string) bool {
 	for _, candidate := range values {
@@ -351,27 +335,6 @@ func clonePerformanceFileReport(source *PerformanceFileReport) *PerformanceFileR
 	return &copy
 }
 
-// Label a range only when one innermost declaration contains all of it. A range
-// spanning declarations or with equally narrow, conflicting labels stays at
-// file/line scope. Names never come from model guesses on the current prompt.
-func performanceSymbolForRange(symbols []SymbolInfo, start, end int) string {
-	name := ""
-	width := -1
-	for _, symbol := range symbols {
-		if symbol.Name == "" || symbol.StartLine > start || symbol.EndLine < end {
-			continue
-		}
-		span := symbol.EndLine - symbol.StartLine
-		switch {
-		case width < 0 || span < width:
-			name, width = symbol.Name, span
-		case span == width && symbol.Name != name:
-			name = ""
-		}
-	}
-	return name
-}
-
 // PerformanceReviewFailure is safe to retain in source-free run metadata. It
 // never contains provider output, prose, paths, or decoder-supplied field names.
 type PerformanceReviewFailure string
@@ -380,7 +343,7 @@ const (
 	PerformanceOutputTooLarge  PerformanceReviewFailure = "The Performance response exceeded the output size limit."
 	PerformanceInvalidJSON     PerformanceReviewFailure = "The Performance response was not valid findings JSON."
 	PerformanceInvalidShape    PerformanceReviewFailure = "The Performance response must contain a findings array with at most five entries."
-	PerformanceInvalidAnchors  PerformanceReviewFailure = "Performance findings referenced invalid lines or symbols."
+	PerformanceInvalidAnchors  PerformanceReviewFailure = "Performance findings referenced invalid lines."
 	PerformanceInvalidFields   PerformanceReviewFailure = "Performance findings were missing required explanations."
 	PerformanceInvalidValues   PerformanceReviewFailure = "Performance findings used unsupported category, impact or confidence values."
 	PerformanceInvalidFindings PerformanceReviewFailure = "No Performance findings passed the required field and source anchor checks."

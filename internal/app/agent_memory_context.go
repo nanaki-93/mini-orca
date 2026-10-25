@@ -177,8 +177,5 @@ func (s *Service) securityReviewMemoryContext(ctx context.Context, snapshot secu
 		return nil, err
 	}
 	sources := []project.AgentScope{{Path: snapshot.file.Path, Hash: snapshot.file.ContentHash}}
-	if snapshot.symbol != nil {
-		sources[0].StartLine, sources[0].EndLine = snapshot.symbol.StartLine, snapshot.symbol.EndLine
-	}
 	return withProjectMemory(ctx, snapshot.root, snapshot.analysis.ProjectID, snapshot.analysis.ProjectRevision, snapshot.file.Path+" security review lessons", sources, func(ctx context.Context) error { return s.validateSecurityReviewSnapshot(ctx, snapshot) })
 }

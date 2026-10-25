@@ -20,7 +20,7 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T)
 	cfg := scopedTestConfig("http://127.0.0.1:1")
 	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: "/private/test-agy", Model: "configured-agy", ReasoningEffort: "medium"}
 	cfg.ModelScopes.Bug = cfg.ModelScopes.Analyze
-	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: "/private/test-pi", Model: "provider/default"}
+	cfg.ModelScopes.Code = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: "/private/test-pi", Model: "provider/default"}
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T)
 	if err != nil || len(catalog.Models) != 6 || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" {
 		t.Fatalf("catalog = %+v, %v", catalog, err)
 	}
-	if catalog.Defaults["analyze"] != catalog.Defaults["bug"] || catalog.Defaults["bug"] == catalog.Defaults["function"] {
+	if catalog.Defaults["analyze"] != catalog.Defaults["bug"] || catalog.Defaults["bug"] == catalog.Defaults["code"] {
 		t.Fatalf("models still depend on their original job: %+v", catalog.Defaults)
 	}
 	locations := map[string]string{"pi:lm-studio/qwen/local": "local", "pi:openai-codex/gpt-5": "remote", "pi:custom/model": "unknown"}
@@ -98,7 +98,7 @@ func TestCatalogModelsDispatchIndependentlyOfConfiguredJobsAndPersist(t *testing
 	base, root := newSemanticAnalysisService(t, analyze.URL, 0)
 	cfg := scopedTestConfig(analyze.URL)
 	cfg.ModelScopes.Bug.APIBaseURL = bug.URL
-	cfg.ModelScopes.Function.APIBaseURL = function.URL
+	cfg.ModelScopes.Code.APIBaseURL = function.URL
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestCatalogModelsDispatchIndependentlyOfConfiguredJobsAndPersist(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	models := &AnalysisModels{Code: catalog.Defaults["function"], Review: catalog.Defaults["bug"], Features: catalog.Defaults["analyze"]}
+	models := &AnalysisModels{Code: catalog.Defaults["code"], Review: catalog.Defaults["bug"], Features: catalog.Defaults["analyze"]}
 	preview := analysisModelsPreviewFor(t, s, models, AnalysisRunLimits{100, 30, 2})
 	if analyzeCalls.Load()+bugCalls.Load()+functionCalls.Load() != 0 {
 		t.Fatal("preview dispatched inference")
@@ -160,7 +160,7 @@ func testCLICatalogChoiceAdmission(t *testing.T, provider config.ModelProvider) 
 	if provider == config.PiProvider {
 		model = "lm-studio/local-model"
 	}
-	cfg.ModelScopes.Function = cliAppProfile(t, provider, model, validFeatureResponse, calls)
+	cfg.ModelScopes.Code = cliAppProfile(t, provider, model, validFeatureResponse, calls)
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -228,7 +228,7 @@ func TestModelSelectionsCheckBothCatalogsOnceAndPreserveLimits(t *testing.T) {
 		t.Fatalf("Agy operation limits = %+v", selected)
 	}
 	for _, selection := range []string{"agy:", "agy:--prompt", "agy:Gemini Flash", "agy:gemini\n", "agy:../model"} {
-		models := &AnalysisModels{Code: selection, Review: "analyze", Features: "function"}
+		models := &AnalysisModels{Code: selection, Review: "analyze", Features: "code"}
 		if err := models.Validate(); err == nil {
 			t.Fatalf("invalid selection accepted: %q", selection)
 		}

@@ -43,7 +43,7 @@ func TestCheckedChangeGraphPersistsOnlyIdentityAndRequiresLiveHandoffEvidence(t 
 		}
 		graphs++
 		var graph agentruntime.ChangeGraphInput
-		if err := json.Unmarshal(input, &graph); err != nil || graph.Snapshot.WorkflowID != ready.Workflow.ID || graph.Start != agentruntime.ChangeCreate || graph.Models != [3]string{"bug", "analyze", "function"} {
+		if err := json.Unmarshal(input, &graph); err != nil || graph.Snapshot.WorkflowID != ready.Workflow.ID || graph.Start != agentruntime.ChangeCreate || graph.Models != [3]string{"bug", "analyze", "code"} {
 			t.Fatalf("graph admission lost identity: %+v %v", graph, err)
 		}
 		var nodes []agentruntime.ChangeNode

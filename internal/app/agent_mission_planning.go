@@ -63,7 +63,7 @@ type preparedMissionPlanning struct {
 // PlanMission is an explicit generation request. Its own bounded planning run
 // produces a fresh unapproved draft; existing plans remain untouched on failure.
 func (s *Service) PlanMission(ctx context.Context, request MissionPlanningRequest) (*MissionPlanningResult, error) {
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	if agentruntime.BudgetFromContext(ctx) != nil {
@@ -192,7 +192,7 @@ func (p *preparedMissionPlanning) plannerInput() agentruntime.MissionPlannerInpu
 }
 
 func (s *Service) validateMissionPlanning(ctx context.Context, p *preparedMissionPlanning) error {
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, p.request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, p.request.ConfirmRemoteProvider); err != nil {
 		return err
 	}
 	if err := s.validateMissionBinding(ctx, p.context.root, p.record); err != nil {

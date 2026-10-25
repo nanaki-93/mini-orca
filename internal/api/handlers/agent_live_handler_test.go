@@ -68,7 +68,7 @@ func liveHandlerFixture(t *testing.T, endpoint string) (*AgentLiveHandler, strin
 	t.Helper()
 	fixture := newChangeHandlerFixture(t, endpoint)
 	cfg := scopedHandlerConfig(endpoint)
-	cfg.ModelScopes.Function.Provider, cfg.ModelScopes.Function.APIKey, cfg.ModelScopes.Function.Model = config.GeminiProvider, "explicit-key", "gemini-2.5-flash"
+	cfg.ModelScopes.Code.Provider, cfg.ModelScopes.Code.APIKey, cfg.ModelScopes.Code.Model = config.GeminiProvider, "explicit-key", "gemini-2.5-flash"
 	cfg.AgentRuntime.LiveModel = "gemini-3.8-live"
 	s, err := app.New(cfg, fixture.manager)
 	if err != nil {

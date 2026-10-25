@@ -217,10 +217,10 @@ func TestAgentTriggersActualSemanticSelectionAndRemoteConsent(t *testing.T) {
 	s.runtimes.function.effective.RemoteProvider = true
 	identity := triggerView(t, s).ProjectID
 	s.analysisRun.run = &AnalysisRun{Identity: AnalysisRunIdentity{ProjectID: identity}, Status: AnalysisRunCompleted,
-		Plan: AnalysisRunPreview{Models: &AnalysisModels{Code: "function"}}}
+		Plan: AnalysisRunPreview{Models: &AnalysisModels{Code: "code"}}}
 	triggerControl(t, s, "watch", &agentstate.TriggerOptions{Mode: "changes", Paths: []string{"main.go"}})
 	v := triggerView(t, s)
-	if v.Model != s.runtimes.function.effective.Model || v.Destination.Profile != "function" {
+	if v.Model != s.runtimes.function.effective.Model || v.Destination.Profile != "code" {
 		t.Fatal("explicit semantic selection was ignored")
 	}
 	request := TriggerControl{TriggerBinding: v.TriggerBinding, ControlRevision: v.Record.ControlRevision, Action: "grant", Confirm: true, ConfirmSourceSharing: true, ScopeHash: v.ScopeHash, GrantSeconds: 60}
@@ -242,7 +242,7 @@ func TestAgentTriggersActualSemanticSelectionAndRemoteConsent(t *testing.T) {
 		t.Fatal("changed model inherited old permission")
 	}
 	s.analysisRun.mu.Lock()
-	s.analysisRun.run.Plan.Models.Code = "function"
+	s.analysisRun.run.Plan.Models.Code = "code"
 	s.analysisRun.mu.Unlock()
 	triggerControl(t, s, "grant", nil)
 	changeTriggerFile(t, s, root, "ChangedAgain")

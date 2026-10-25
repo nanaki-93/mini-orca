@@ -88,7 +88,7 @@ func pickPath(files map[string]bool, candidates ...string) string {
 
 // CanonicalModelScopes returns the three primary LLM routing scopes in Mini-Orca.
 func CanonicalModelScopes() []string {
-	return []string{"analyze", "bug", "function"}
+	return []string{"analyze", "bug", "code"}
 }
 
 // ScopeRoleDescription returns the purpose of a model scope.
@@ -98,7 +98,7 @@ func ScopeRoleDescription(scope string) string {
 		return "Architecture and Security AI; workflow roles are assigned in Roles & Budgets"
 	case "bug":
 		return "Semantic bug detection; workflow roles are assigned in Roles & Budgets"
-	case "function":
+	case "code":
 		return "Scoped tasks and investigation; workflow roles are assigned in Roles & Budgets"
 	default:
 		return "Scoped LLM Runtime"
@@ -108,9 +108,9 @@ func ScopeRoleDescription(scope string) string {
 // DefaultModelPresets returns the built-in 3-scope model configuration presets.
 func DefaultModelPresets() []client.ModelPreset {
 	return []client.ModelPreset{
-		{ID: "local-default", Name: "Local Studio Default", Analyze: "local", Bug: "local", Function: "local"},
-		{ID: "hybrid-precision", Name: "Hybrid Precision", Analyze: "local", Bug: "remote-pro", Function: "local"},
-		{ID: "deep-audit", Name: "Deep Security & Bug Audit", Analyze: "remote-pro", Bug: "remote-pro", Function: "remote-fast"},
+		{ID: "local-default", Name: "Local Studio Default", Analyze: "local", Bug: "local", Code: "local"},
+		{ID: "hybrid-precision", Name: "Hybrid Precision", Analyze: "local", Bug: "remote-pro", Code: "local"},
+		{ID: "deep-audit", Name: "Deep Security & Bug Audit", Analyze: "remote-pro", Bug: "remote-pro", Code: "remote-fast"},
 	}
 }
 
@@ -151,7 +151,7 @@ func SlugifyPresetID(raw string) string {
 func BuildCustomModelPreset(name string, scopeModels map[string]string, existingCount int) client.ModelPreset {
 	analyze := AssignedScopeModelID(scopeModels, "analyze")
 	bug := AssignedScopeModelID(scopeModels, "bug")
-	function := AssignedScopeModelID(scopeModels, "function")
+	code := AssignedScopeModelID(scopeModels, "code")
 	cleanName := strings.TrimSpace(name)
 	id := SlugifyPresetID(cleanName)
 	if cleanName == "" {
@@ -161,11 +161,11 @@ func BuildCustomModelPreset(name string, scopeModels map[string]string, existing
 		id = fmt.Sprintf("custom-%s-%d", client.FirstNonEmpty(id, "preset"), existingCount+1)
 	}
 	return client.ModelPreset{
-		ID:       id,
-		Name:     cleanName,
-		Analyze:  analyze,
-		Bug:      bug,
-		Function: function,
+		ID:      id,
+		Name:    cleanName,
+		Analyze: analyze,
+		Bug:     bug,
+		Code:    code,
 	}
 }
 

@@ -55,13 +55,12 @@ type Finding struct {
 type Suggestion struct {
 	Title              string              `json:"title"`
 	Summary            string              `json:"summary"`
-	TargetSymbol       string              `json:"target_symbol,omitempty"`
 	Action             string              `json:"action,omitempty"`
 	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
 // FileAnalysis is a source-free, versioned semantic summary for one file.
-// Deterministic symbols and imports remain in ProjectIndex; this record only
+// Deterministic imports remain in ProjectIndex; this record only
 // stores model interpretation and its validity inputs.
 type FileAnalysis struct {
 	SchemaVersion           string              `json:"schema_version"`
@@ -72,14 +71,12 @@ type FileAnalysis struct {
 	Language                string              `json:"language"`
 	Purpose                 string              `json:"purpose,omitempty"`
 	Responsibilities        []string            `json:"responsibilities,omitempty"`
-	Symbols                 []SymbolInfo        `json:"symbols,omitempty"`
 	Imports                 []string            `json:"imports,omitempty"`
 	Dependencies            []string            `json:"dependencies,omitempty"`
 	SideEffects             []string            `json:"side_effects,omitempty"`
 	EngineeringInsight      *EngineeringInsight `json:"engineering_insight,omitempty"`
 	Risks                   []Finding           `json:"risks,omitempty"`
 	Suggestions             []Suggestion        `json:"suggestions,omitempty"`
-	SymbolExplanations      map[string]string   `json:"symbol_explanations,omitempty"`
 	Status                  string              `json:"status"`
 	Failure                 string              `json:"failure,omitempty"`
 	Model                   string              `json:"model,omitempty"`
@@ -304,7 +301,6 @@ func analysisPathKey(path string) string {
 func cloneFileAnalysis(source *FileAnalysis) *FileAnalysis {
 	copy := *source
 	copy.Responsibilities = append([]string(nil), source.Responsibilities...)
-	copy.Symbols = append([]SymbolInfo(nil), source.Symbols...)
 	copy.Imports = append([]string(nil), source.Imports...)
 	copy.Dependencies = append([]string(nil), source.Dependencies...)
 	copy.SideEffects = append([]string(nil), source.SideEffects...)
@@ -318,12 +314,6 @@ func cloneFileAnalysis(source *FileAnalysis) *FileAnalysis {
 		copy.Suggestions[index].EngineeringInsight = CloneEngineeringInsight(source.Suggestions[index].EngineeringInsight)
 	}
 	copy.EngineeringInsight = CloneEngineeringInsight(source.EngineeringInsight)
-	if source.SymbolExplanations != nil {
-		copy.SymbolExplanations = make(map[string]string, len(source.SymbolExplanations))
-		for name, explanation := range source.SymbolExplanations {
-			copy.SymbolExplanations[name] = explanation
-		}
-	}
 	return &copy
 }
 

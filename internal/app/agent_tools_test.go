@@ -28,7 +28,7 @@ func declarationRequest(t *testing.T, service *Service) DeclarationExplanationRe
 	if err != nil {
 		t.Fatal(err)
 	}
-	return DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"}
+	return DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"}
 }
 
 func repositoryToolCall(w io.Writer, name, args string) {
@@ -98,7 +98,7 @@ func TestAgentChecksRemainSourceFreeProposalEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := project.AgentScope{Path: "main.go", Hash: request.BaseFileHash, StartLine: prepared.symbol.StartLine, EndLine: prepared.symbol.EndLine}
+	scope := project.AgentScope{Path: "main.go", Hash: request.BaseFileHash, StartLine: 1, EndLine: max(1, prepared.file.LineCount)}
 	read := func() project.AgentEvidenceResult {
 		t.Helper()
 		result, err := service.agentCheckEvidence(context.Background(), root, request, scope, prepared.policy)

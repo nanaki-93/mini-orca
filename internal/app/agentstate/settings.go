@@ -68,8 +68,8 @@ func (p AgentPreferences) Validate() error {
 		return fmt.Errorf("disabled_skills must be an explicit array")
 	}
 	for _, role := range []string{p.Roles.Creation, p.Roles.Testing, p.Roles.Review} {
-		if !slices.Contains([]string{"analyze", "bug", "function"}, role) {
-			return fmt.Errorf("roles must reference analyze, bug or function")
+		if !slices.Contains([]string{"analyze", "bug", "code"}, role) {
+			return fmt.Errorf("roles must reference analyze, bug or code")
 		}
 	}
 	if err := p.Limits.Validate(); err != nil {

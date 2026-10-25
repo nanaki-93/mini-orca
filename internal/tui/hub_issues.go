@@ -127,15 +127,11 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 	origin := formatIssueOrigin(cur)
 	rule := client.FirstNonEmpty(cur.Rule, cur.Category+"-check")
 	fresh := client.FirstNonEmpty(cur.Freshness, "current")
-	symbol, signature, fileMeta := s.resolveIssueSymbolAndFileMeta(cur)
+	fileMeta := s.resolveIssueFileMeta(cur)
 	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s",
 		th.muted, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset)
 	if fileMeta != "" {
 		locLine += fmt.Sprintf("   %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
-	}
-	symLine := fmt.Sprintf("%sSymbol:%s     %s%s%s", th.muted, th.reset, th.bold+th.fg, symbol, th.reset)
-	if signature != "" {
-		symLine += fmt.Sprintf("   %sSignature:%s %s%s%s", th.muted, th.reset, th.purple, signature, th.reset)
 	}
 	scopePaths := domain.EnsureChangeTestPaths([]string{cur.Path}, s.Index)
 	scopeStr := client.FirstNonEmpty(strings.Join(scopePaths, ", "), cur.Path, "workspace")
@@ -150,7 +146,6 @@ func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []stri
 			th.muted, th.reset, th.purple, rule, th.reset,
 			th.muted, th.reset, th.green, fresh, th.reset),
 		locLine,
-		symLine,
 		fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset),
 	}
 }
@@ -258,27 +253,16 @@ func formatIssueLocationSpan(cur IssueRow) string {
 	return fmt.Sprintf("%s:%d", path, cur.Line)
 }
 
-func (s *State) resolveIssueSymbolAndFileMeta(cur IssueRow) (symbol, signature, fileMeta string) {
-	symbol = cur.Symbol
-	signature = cur.Signature
+func (s *State) resolveIssueFileMeta(cur IssueRow) string {
 	if s.Index == nil || cur.Path == "" {
-		return client.FirstNonEmpty(symbol, "file-scope"), signature, ""
+		return ""
 	}
 	for _, f := range s.Index.Files {
-		if f.Path != cur.Path {
-			continue
+		if f.Path == cur.Path {
+			return formatIndexedFileSummary(f)
 		}
-		fileMeta = formatIndexedFileSummary(f)
-		sym, sig := domain.MatchIndexedSymbolForFinding(f.Symbols, symbol, cur.Line, cur.Title, cur.Cause)
-		if symbol == "" {
-			symbol = sym
-		}
-		if signature == "" {
-			signature = sig
-		}
-		break
 	}
-	return client.FirstNonEmpty(symbol, "file-scope"), signature, fileMeta
+	return ""
 }
 
 func formatIndexedFileSummary(f IndexedFile) string {

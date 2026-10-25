@@ -20,7 +20,7 @@ func workerFixture(t *testing.T, endpoint string) (*config.Config, AgentWorkerOp
 	t.Helper()
 	t.Setenv("MINI_ORCA_WORKER_FIXTURE", serviceFixtureToken)
 	p := config.ModelProfileConfig{Provider: config.GeminiProvider, APIBaseURL: endpoint, APIKey: "PRIVATE_KEY", Model: "fixture"}
-	cfg := &config.Config{ModelScopes: config.ModelScopesConfig{Analyze: p, Bug: p, Function: p}, Integrations: config.IntegrationsConfig{A2AServer: config.AgentServer{Enabled: true, Principals: []config.AgentPrincipal{{ID: "worker", BearerTokenEnv: "MINI_ORCA_WORKER_FIXTURE", ProjectID: "project", Capabilities: []string{"analysis"}}}}}}
+	cfg := &config.Config{ModelScopes: config.ModelScopesConfig{Analyze: p, Bug: p, Code: p}, Integrations: config.IntegrationsConfig{A2AServer: config.AgentServer{Enabled: true, Principals: []config.AgentPrincipal{{ID: "worker", BearerTokenEnv: "MINI_ORCA_WORKER_FIXTURE", ProjectID: "project", Capabilities: []string{"analysis"}}}}}}
 	o := AgentWorkerOptions{Scope: AgentWorkerScope{ProjectID: "project", ProjectRevision: "revision", Files: []ExternalSource{{Path: "sample.go", Hash: contentHash([]byte(workerFixtureSource))}}}, Endpoint: "http://127.0.0.1:9091/a2a", Lifetime: time.Minute, MaxJobs: 2, ConfirmSourceSharing: true}
 	r := AgentWorkerRequest{ProjectID: "project", ProjectRevision: "revision", Question: "Inspect Sum", Files: map[string]string{"sample.go": workerFixtureSource}, ConfirmSourceSharing: true}
 	return cfg, o, r
@@ -154,7 +154,7 @@ func TestAgentWorkerRejectsScopeConsentAndMalformedRequestsWithoutDispatch(t *te
 			cfg, o, _ := workerFixture(t, provider.URL)
 			switch kind {
 			case "remote":
-				cfg.ModelScopes.Function.APIBaseURL = "https://provider.example"
+				cfg.ModelScopes.Code.APIBaseURL = "https://provider.example"
 			case "source":
 				o.ConfirmSourceSharing = false
 			case "lifetime":

@@ -113,7 +113,7 @@ func (s *State) currentPlanConnection(selected investigationConnection) (*client
 
 func (s *State) investigationConsent(d *PlanDraft, model Model) (string, string, error) {
 	if len(d.Connections) > 0 && !model.Capabilities.Tools {
-		return "", "", fmt.Errorf("the configured Function adapter does not advertise tool support; refresh or configure a tool-capable model before using connections")
+		return "", "", fmt.Errorf("the configured Code adapter does not advertise tool support; refresh or configure a tool-capable model before using connections")
 	}
 	_, _, err := s.planConnectionUses(d)
 	if err != nil {

@@ -47,7 +47,7 @@ func TestRetryLoadsTaskRolesBeforeProviderConsent(t *testing.T) {
 	s.Models.Scopes["bug"] = remote
 	settings := *s.AgentSettings.Data
 	settings.ProjectIdentity = s.Change.ProjectIdentity
-	settings.Roles = client.AgentRoles{Creation: "bug", Testing: "function", Review: "analyze"}
+	settings.Roles = client.AgentRoles{Creation: "bug", Testing: "code", Review: "analyze"}
 	updated := cloneChangeSessionSnapshot(s.Change)
 	updated.Workflow.Status = "running"
 	var calls atomic.Int32
@@ -137,7 +137,7 @@ func TestRetrySettingsCompletionRejectsChangedRequest(t *testing.T) {
 		{"plan", func(s *State) { s.Change.Plan.Hash = "new-plan" }},
 		{"checkout", func(s *State) { s.Change.WorktreePath = "/repo/another-task" }},
 		{"project", func(s *State) { s.Project.ProjectRevision = "new-parent" }},
-		{"routing", func(s *State) { s.ScopeModels["bug"] = "function" }},
+		{"routing", func(s *State) { s.ScopeModels["bug"] = "code" }},
 		{"navigation", func(s *State) { s.Navigate(PageSummary) }},
 		{"command editor", func(s *State) { s.openCommandInput("agent-settings ") }},
 		{"confirmation", func(s *State) { s.Confirmation = &Confirmation{Title: "Another decision"} }},

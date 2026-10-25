@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
@@ -46,26 +45,13 @@ const securityReviewResponseSchemaDocument = `{
 
 func securityReviewResponseSchema(snapshot securityReviewSnapshot) (llm.JSONSchema, error) {
 	first, last := 1, max(1, snapshot.file.LineCount)
-	symbols := []string{""}
 	required := []string{"path", "start_line", "end_line"}
-	if snapshot.symbol != nil {
-		first, last = snapshot.symbol.StartLine, snapshot.symbol.EndLine
-		symbols = []string{snapshot.symbol.Name}
-		required = append(required, "symbol")
-	} else {
-		for _, symbol := range snapshot.file.Symbols {
-			if !slices.Contains(symbols, symbol.Name) {
-				symbols = append(symbols, symbol.Name)
-			}
-		}
-	}
 	line := map[string]any{"type": "integer", "minimum": first, "maximum": last}
 	anchor, err := json.Marshal(map[string]any{
 		"type": "object", "additionalProperties": false, "required": required,
 		"properties": map[string]any{
 			"path":       map[string]any{"enum": []string{snapshot.file.Path}},
 			"start_line": line, "end_line": line,
-			"symbol": map[string]any{"enum": symbols},
 		},
 	})
 	if err != nil {

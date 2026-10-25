@@ -22,22 +22,19 @@ const (
 )
 
 // DeclarationExplanationRequest pins one read-only request to the exact active
-// project, source file, and indexed Go declaration.
+// project and indexed source file.
 type DeclarationExplanationRequest struct {
 	Integrations          []IntegrationUse `json:"integrations,omitempty"`
 	ProjectID             string           `json:"project_id"`
 	ProjectRevision       string           `json:"project_revision"`
 	BaseFileHash          string           `json:"base_file_hash"`
 	TargetPath            string           `json:"target_path"`
-	TargetSymbol          string           `json:"target_symbol"`
 	ConfirmRemoteProvider bool             `json:"confirm_remote_provider,omitempty"`
 }
 
 // SourceAnchor identifies the bounded source range that the explanation covers.
 type SourceAnchor struct {
 	Path      string `json:"path"`
-	Symbol    string `json:"symbol"`
-	Signature string `json:"signature"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
 }
@@ -84,7 +81,6 @@ type declarationExplanationWireResponse struct {
 
 type preparedDeclarationExplanation struct {
 	file         project.IndexFile
-	symbol       project.SymbolInfo
 	context      string
 	manifest     project.ContextManifest
 	policy       string
@@ -93,14 +89,13 @@ type preparedDeclarationExplanation struct {
 }
 
 type currentDeclarationExplanationTarget struct {
-	file   project.IndexFile
-	symbol project.SymbolInfo
+	file project.IndexFile
 }
 
-// ExplainDeclaration investigates an admitted declaration without creating a
+// ExplainDeclaration investigates an admitted file without creating a
 // proposal or granting check, Apply or Undo authority.
 func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExplanationRequest) (*DeclarationExplanation, error) {
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	ctx, err := s.freezeAgentSettings(ctx, s.manager.Root())
@@ -133,8 +128,9 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	authorize := func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) }
-	sources := []project.AgentScope{{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: prepared.symbol.StartLine, EndLine: prepared.symbol.EndLine}}
-	timed, err := withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, prepared.symbol.Name+" "+prepared.symbol.Signature, sources, authorize)
+	endLine := max(1, prepared.file.LineCount)
+	sources := []project.AgentScope{{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: 1, EndLine: endLine}}
+	timed, err := withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, prepared.file.Path, sources, authorize)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +146,7 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 		return nil, err
 	}
 	// Re-read both policy and index state after provider work so a policy change,
-	// reindex, or source edit cannot publish against a superseded declaration.
+	// reindex, or source edit cannot publish against a superseded file.
 	if err := s.validateExplanationContext(ctx, request, prepared); err != nil {
 		return nil, err
 	}
@@ -163,7 +159,7 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 	return &DeclarationExplanation{
 		Version: parsed.Version, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
 		BaseFileHash: request.BaseFileHash,
-		Anchor:       SourceAnchor{Path: prepared.file.Path, Symbol: prepared.symbol.Name, Signature: prepared.symbol.Signature, StartLine: prepared.symbol.StartLine, EndLine: prepared.symbol.EndLine},
+		Anchor:       SourceAnchor{Path: prepared.file.Path, StartLine: 1, EndLine: endLine},
 		Summary:      parsed.Summary, Behavior: parsed.Behavior, Inputs: parsed.Inputs, Outputs: parsed.Outputs,
 		SideEffects: parsed.SideEffects, ErrorBehavior: parsed.ErrorBehavior,
 		EngineeringInsight: project.CloneEngineeringInsight(parsed.EngineeringInsight), ContextManifest: prepared.manifest,
@@ -185,29 +181,29 @@ func (s *Service) prepareDeclarationExplanation(ctx context.Context, request Dec
 		return preparedDeclarationExplanation{}, err
 	}
 	functionContext, manifest, err := s.buildDeclarationContext(s.manager.Root(), project.FunctionContextOptions{
-		TargetPath: request.TargetPath, TargetSymbol: request.TargetSymbol,
-		Index:     index,
-		MaxTokens: declarationContextLimit(runtime.effective.ContextMaxTokens),
-		Context:   ctx,
+		TargetPath: request.TargetPath,
+		Index:      index,
+		MaxTokens:  declarationContextLimit(runtime.effective.ContextMaxTokens),
+		Context:    ctx,
 	})
 	if err != nil {
 		return preparedDeclarationExplanation{}, fmt.Errorf("build declaration explanation context: %w", err)
 	}
-	if err := s.validatePreparedExplanationTarget(request, target.file, target.symbol); err != nil {
+	if err := s.validatePreparedExplanationTarget(request, target.file); err != nil {
 		return preparedDeclarationExplanation{}, err
 	}
 	if err := project.ValidateInstructions(root, request.TargetPath, instructions.Fingerprint); err != nil {
 		return preparedDeclarationExplanation{}, err
 	}
-	return preparedDeclarationExplanation{file: target.file, symbol: target.symbol, context: functionContext, manifest: s.contextManifestForRuntime(manifest, runtime), policy: policy.Version(), instructions: instructions.Fingerprint, root: root}, nil
+	return preparedDeclarationExplanation{file: target.file, context: functionContext, manifest: s.contextManifestForRuntime(manifest, runtime), policy: policy.Version(), instructions: instructions.Fingerprint, root: root}, nil
 }
 
-func (s *Service) validatePreparedExplanationTarget(request DeclarationExplanationRequest, preparedFile project.IndexFile, preparedSymbol project.SymbolInfo) error {
+func (s *Service) validatePreparedExplanationTarget(request DeclarationExplanationRequest, preparedFile project.IndexFile) error {
 	current, err := s.currentDeclarationExplanationTarget(request)
 	if err != nil {
 		return err
 	}
-	if !sameExplanationAnchor(preparedFile, preparedSymbol, current.file, current.symbol) {
+	if !sameExplanationAnchor(preparedFile, current.file) {
 		return project.ErrRevisionConflict
 	}
 	return nil
@@ -236,37 +232,18 @@ func (s *Service) currentDeclarationExplanationTargetWithIndex(request Declarati
 	if file.Binary || file.Language == "Text" || file.Language == "Markdown" {
 		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("%w: declaration explanation requires an indexed source file", project.ErrUnsupportedFile)
 	}
-	symbol := exactExplanationSymbol(*file, request.TargetSymbol)
-	if symbol == nil {
-		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("declaration explanation requires one exact atomic declaration")
-	}
-	return currentDeclarationExplanationTarget{file: *file, symbol: *symbol}, index, nil
+	return currentDeclarationExplanationTarget{file: *file}, index, nil
 }
 
-func sameExplanationAnchor(preparedFile project.IndexFile, preparedSymbol project.SymbolInfo, currentFile project.IndexFile, currentSymbol project.SymbolInfo) bool {
-	return preparedFile.Path == currentFile.Path && preparedSymbol.Name == currentSymbol.Name && preparedSymbol.Signature == currentSymbol.Signature && preparedSymbol.StartLine == currentSymbol.StartLine && preparedSymbol.EndLine == currentSymbol.EndLine
-}
-
-func exactExplanationSymbol(file project.IndexFile, target string) *project.SymbolInfo {
-	var match *project.SymbolInfo
-	for i := range file.Symbols {
-		candidate := file.Symbols[i]
-		if candidate.Name == target && candidate.AtomicTarget && (candidate.Confidence == "exact" || candidate.Confidence == "approximate") {
-			if match != nil {
-				return nil
-			}
-			copy := candidate
-			match = &copy
-		}
-	}
-	return match
+func sameExplanationAnchor(preparedFile project.IndexFile, currentFile project.IndexFile) bool {
+	return preparedFile.Path == currentFile.Path && preparedFile.ContentHash == currentFile.ContentHash && preparedFile.LineCount == currentFile.LineCount
 }
 
 func declarationExplanationPrompt(functionContext string) string {
-	return "Explain the supplied declaration. Return one JSON object only, without Markdown or code fences. " +
+	return "Explain the supplied source file. Return one JSON object only, without Markdown or code fences. " +
 		"Required fields: version (\"v1\"), summary (string), behavior (string array), inputs (string array), outputs (string array), side_effects (string array), error_behavior (string array). " +
 		"Each array must contain at most six concise items. Optionally include engineering_insight with exactly mechanism, why_it_matters_here, and optional tradeoff_or_failure_mode and transferable_lesson. " + project.EngineeringInsightPromptInstructions +
-		"Ground every statement in the supplied declaration and indexed facts. Do not propose edits, invent callers, or reproduce the declaration wholesale.\n\n" + functionContext
+		"Ground every statement in the supplied source file and indexed facts. Do not propose edits, invent callers, or reproduce the file wholesale.\n\n" + functionContext
 }
 
 // ParseDeclarationExplanationResponse accepts one small, closed JSON contract.

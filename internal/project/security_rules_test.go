@@ -21,6 +21,6 @@ func TestScanGoSecurityRulesRejectsUnsupportedAndStaleInput(t *testing.T) {
 }
 
 func securityRuleIndexedFile(path, source string) IndexFile {
-	_, syms, _ := symbols.ExtractGoFacts(path, []byte(source))
-	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Symbols: syms}
+	imports, _ := symbols.ExtractGoFacts(path, []byte(source))
+	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Imports: imports}
 }

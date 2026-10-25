@@ -190,8 +190,8 @@ func TestAgentMigrationPreservesSchemaOneConversationAndRejectsAmbiguity(t *test
 }
 
 func TestAgentMigrationNamesSavedStagesAndRejectsInvalidGraphEntry(t *testing.T) {
-	models := ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}
-	session := &ChangeSession{Workflow: &ChangeWorkflow{Stages: []ChangeWorkflowStage{{Name: "test", Model: &EffectiveModel{Profile: "function"}}, {Name: "create", Model: &EffectiveModel{Profile: "bug"}}}}}
+	models := ChangeWorkflowModels{Create: "bug", Test: "code", Review: "analyze"}
+	session := &ChangeSession{Workflow: &ChangeWorkflow{Stages: []ChangeWorkflowStage{{Name: "test", Model: &EffectiveModel{Profile: "code"}}, {Name: "create", Model: &EffectiveModel{Profile: "bug"}}}}}
 	if err := validateResumedModels(session, models, 2); err != nil {
 		t.Fatal("named stage provenance lost", err)
 	}

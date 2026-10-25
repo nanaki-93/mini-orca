@@ -382,7 +382,7 @@ func (s *State) renderSelectedModelInspector(th ansiTheme, panelW int) []string 
 func renderModelPresetInspector(th ansiTheme, panelW int, preset ModelPreset) []string {
 	contentW := issuePanelContentWidth(panelW)
 	body := renderDiagnosticRow(th, th.cyan, "Preset:", th.fg, preset.Name, contentW)
-	for _, role := range []struct{ label, model string }{{"Analyze:", preset.Analyze}, {"Bug:", preset.Bug}, {"Code:", preset.Function}} {
+	for _, role := range []struct{ label, model string }{{"Analyze:", preset.Analyze}, {"Bug:", preset.Bug}, {"Code:", preset.Code}} {
 		body = append(body, renderDiagnosticRow(th, th.cyan, role.label, th.fg, role.model, contentW)...)
 	}
 	return th.renderPanelBox("PRESET DETAILS", "[Enter] Apply", panelW, body)

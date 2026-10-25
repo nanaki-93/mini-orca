@@ -40,7 +40,7 @@ MODELS
 	}
 	cfg := config.Default()
 	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: agyCommand, Model: "configured-agy"}
-	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: command, Model: "local-server/default"}
+	cfg.ModelScopes.Code = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: command, Model: "local-server/default"}
 	service, err := app.New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
@@ -91,9 +91,9 @@ func TestCurrentModelCatalogExposesOnlyScopedProfilesWithoutSecrets(t *testing.T
 	}
 	service, err := app.New(&config.Config{
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "secret-value", Model: "analyze", ReasoningEffort: "high"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug", ReasoningEffort: "low"},
-			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "secret-value", Model: "function", ReasoningEffort: "max"},
+			Analyze: config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "secret-value", Model: "analyze", ReasoningEffort: "high"},
+			Bug:     config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug", ReasoningEffort: "low"},
+			Code:    config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "secret-value", Model: "code", ReasoningEffort: "max"},
 		},
 	}, manager)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestCurrentModelCatalogExposesOnlyScopedProfilesWithoutSecrets(t *testing.T
 	if err := json.NewDecoder(response.Body).Decode(&catalog); err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Scopes) != 3 || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["function"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if len(catalog.Scopes) != 3 || catalog.Scopes["analyze"].Model != "analyze" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["code"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["code"].RemoteProvider {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	if strings.Contains(response.Body.String(), "secret-value") || strings.Contains(response.Body.String(), "/v1") {
@@ -123,7 +123,7 @@ func TestCLIModelCatalogRequiresConsentWithoutLaunchingOrExposingExecutablePaths
 	}
 	cfg := config.Default()
 	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: "/not-installed/private-agy", Model: "agy-model"}
-	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: "/not-installed/private-pi", Model: "pi-model"}
+	cfg.ModelScopes.Code = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: "/not-installed/private-pi", Model: "pi-model"}
 	service, err := app.New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestCLIModelCatalogRequiresConsentWithoutLaunchingOrExposingExecutablePaths
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil {
 		t.Fatalf("catalog = %s", response.Body.String())
 	}
-	for scope, provider := range map[string]string{"analyze": "agy", "function": "pi"} {
+	for scope, provider := range map[string]string{"analyze": "agy", "code": "pi"} {
 		model := catalog.Scopes[scope]
 		if model.ProviderOrigin != "cli://"+provider || !model.RemoteProvider || model.Temperature != nil || model.MaxTokens != nil {
 			t.Fatalf("CLI metadata = %+v", model)

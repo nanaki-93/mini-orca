@@ -38,7 +38,7 @@ func TestAgentRetrievalKeepsScopeAndProvenance(t *testing.T) {
 			t.Fatalf("scope expanded: %+v %v", result, err)
 		}
 	}
-	for _, kind := range []string{"read_snippet", "search_repository", "inspect_symbols", "inspect_imports", "inspect_impact"} {
+	for _, kind := range []string{"read_snippet", "search_repository", "inspect_imports", "inspect_impact"} {
 		result, err := reader.Retrieve(t.Context(), kind, AgentQuery{Path: "main.go", Query: "selected"})
 		if err != nil {
 			t.Fatal(err)

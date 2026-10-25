@@ -15,7 +15,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-const validSecurityReview = `{"findings":[{"rule":"go.input.validation","category":"input-validation","title":"Input reaches an operation","source_anchor":{"path":"main.go","start_line":5,"end_line":5,"symbol":"Run"},"severity":"medium","confidence":"low","evidence_kind":"model_suspicion","observed_condition":"The operation uses input without an observed validation boundary.","preconditions_or_unknowns":"Attacker control and reachability are unknown.","remediation":"Validate untrusted input at the boundary.","verification_idea":"Use a safe unit test with a representative invalid value."}]}`
+const validSecurityReview = `{"findings":[{"rule":"go.input.validation","category":"input-validation","title":"Input reaches an operation","source_anchor":{"path":"main.go","start_line":5,"end_line":5},"severity":"medium","confidence":"low","evidence_kind":"model_suspicion","observed_condition":"The operation uses input without an observed validation boundary.","preconditions_or_unknowns":"Attacker control and reachability are unknown.","remediation":"Validate untrusted input at the boundary.","verification_idea":"Use a safe unit test with a representative invalid value."}]}`
 
 func TestReviewSecurityFilePinsPromptFocusAndReturnsSanitizedReport(t *testing.T) {
 	var prompt string
@@ -34,10 +34,10 @@ func TestReviewSecurityFilePinsPromptFocusAndReturnsSanitizedReport(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Status != project.SecurityStatusCompleted || len(report.Findings) != 1 || report.Findings[0].Anchor.Symbol != "Run" || strings.Contains(report.Model, "provider-secret") {
+	if report.Status != project.SecurityStatusCompleted || len(report.Findings) != 1 || report.Findings[0].Anchor.StartLine != 5 || strings.Contains(report.Model, "provider-secret") {
 		t.Fatalf("report = %+v", report)
 	}
-	if !strings.Contains(prompt, "untrusted data") || !strings.Contains(prompt, "focused declaration") || !strings.Contains(prompt, "func Run") || strings.Contains(prompt, "helper secret") {
+	if !strings.Contains(prompt, "untrusted data") || !strings.Contains(prompt, "func Run") || strings.Contains(prompt, "helper secret") {
 		t.Fatalf("security prompt lost its fixed boundary: %s", prompt)
 	}
 	data, err := os.ReadFile(filepath.Join(root, ".mini-orca", "security", "files", securityCacheEntry(t, root)))
@@ -109,7 +109,7 @@ func TestReviewSecurityFileRejectsConsentAndStaleResultsWithoutPublishing(t *tes
 func TestReviewSecurityFileRejectsMalformedOversizedAndFocusedOutOfRangeOutput(t *testing.T) {
 	for _, output := range []string{
 		`{"findings":[`,
-		`{"findings":[{"rule":"go.input.validation","category":"input-validation","title":"Bad","source_anchor":{"path":"main.go","start_line":1,"end_line":1,"symbol":"Run"},"severity":"medium","confidence":"low","evidence_kind":"model_suspicion","observed_condition":"Observed.","preconditions_or_unknowns":"Unknown.","remediation":"Fix.","verification_idea":"Safely test."}]}`,
+		`{"findings":[{"rule":"go.input.validation","category":"input-validation","title":"Bad","source_anchor":{"path":"main.go","start_line":1,"end_line":99},"severity":"medium","confidence":"low","evidence_kind":"model_suspicion","observed_condition":"Observed.","preconditions_or_unknowns":"Unknown.","remediation":"Fix.","verification_idea":"Safely test."}]}`,
 		strings.Repeat("x", project.SecurityMaxSourceBytes+1),
 	} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -234,7 +234,7 @@ func TestReviewSecurityFilePreservesSourceLinesAndRejectsRuntimeTransition(t *te
 	}
 }
 
-func securityReviewRequestFor(t *testing.T, service *Service, symbol string) SecurityReviewRequest {
+func securityReviewRequestFor(t *testing.T, service *Service, _ string) SecurityReviewRequest {
 	t.Helper()
 	analysis, err := service.manager.Analysis()
 	if err != nil {
@@ -244,7 +244,7 @@ func securityReviewRequestFor(t *testing.T, service *Service, symbol string) Sec
 	if err != nil {
 		t.Fatal(err)
 	}
-	return SecurityReviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Path: file.Path, Symbol: symbol}
+	return SecurityReviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: file.ContentHash, Path: file.Path}
 }
 
 func securityCacheEntry(t *testing.T, root string) string {

@@ -52,7 +52,7 @@ the backend guide for changes to `cmd/`.
 
 ## Models, jobs and execution
 
-- Use configured `analyze`, `bug` and `function` scopes through existing clients.
+- Use configured `analyze`, `bug` and `code` scopes through existing clients.
   Preserve scope-specific remote confirmation and context filtering. Treat model
   output as untrusted data: validate it before composition or publication.
 - Whole-project analysis uses the existing admission and job lifecycle. Keep

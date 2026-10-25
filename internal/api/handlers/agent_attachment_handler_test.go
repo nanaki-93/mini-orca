@@ -31,7 +31,7 @@ func TestAttachmentHandlerTypedImportAdviceAndPassiveLibraryDisclosure(t *testin
 	defer provider.Close()
 	fixture := newChangeHandlerFixture(t, provider.URL)
 	cfg := scopedHandlerConfig(provider.URL)
-	cfg.ModelScopes.Function.Provider, cfg.ModelScopes.Function.APIKey, cfg.ModelScopes.Function.Model = config.GeminiProvider, "explicit-key", "gemini-2.5-flash"
+	cfg.ModelScopes.Code.Provider, cfg.ModelScopes.Code.APIKey, cfg.ModelScopes.Code.Model = config.GeminiProvider, "explicit-key", "gemini-2.5-flash"
 	s, err := app.New(cfg, fixture.manager)
 	if err != nil {
 		t.Fatal(err)

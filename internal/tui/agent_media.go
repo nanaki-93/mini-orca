@@ -259,7 +259,7 @@ func (s *State) confirmMediaAdvice(question string) {
 	v := s.AgentMedia
 	v.Question = question
 	if v.Attachments == nil || v.Attachments.State != "available" || v.Failures["attachments"] != "" {
-		s.Error = "Refresh attachments and configure a supported native Function model for advice."
+		s.Error = "Refresh attachments and configure a supported native Code model for advice."
 		return
 	}
 	refs, _ := s.selectedMediaRefs()
@@ -284,7 +284,7 @@ func (s *State) confirmMediaOpen() {
 		return
 	}
 	if v.Live.State != "available" {
-		s.Error = "Live is " + v.Live.State + ". Configure agent_runtime.live_model: gemini-3.8-live and an explicit Gemini API Function profile, then refresh."
+		s.Error = "Live is " + v.Live.State + ". Configure agent_runtime.live_model: gemini-3.8-live and an explicit Gemini API Code profile, then refresh."
 		return
 	}
 	b := v.Live.LiveBinding

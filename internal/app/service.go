@@ -138,7 +138,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		runtimes: scopedRuntimes{
 			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
 			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
-			function: newModelRuntime(profiles.Function, functionTimeout, maxRetries),
+			function: newModelRuntime(profiles.Code, functionTimeout, maxRetries),
 		},
 		importTimeout:           importTimeout,
 		analysisTimeout:         analysisTimeout,

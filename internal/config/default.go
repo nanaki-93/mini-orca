@@ -8,9 +8,9 @@ const DefaultProviderAPIBaseURL = "http://localhost:1234/v1"
 func Default() *Config {
 	cfg := &Config{
 		ModelScopes: ModelScopesConfig{
-			Analyze:  ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-analysis-model"},
-			Bug:      ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-bug-model"},
-			Function: ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-function-model"},
+			Analyze: ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-analysis-model"},
+			Bug:     ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-bug-model"},
+			Code:    ModelProfileConfig{APIBaseURL: DefaultProviderAPIBaseURL, Model: "local-code-model"},
 		},
 		Retry: RetryConfig{MaxRetries: 3, BackoffBase: 1000, BackoffMax: 30000},
 		Timeouts: TimeoutConfig{

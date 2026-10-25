@@ -32,9 +32,9 @@ type LoggingConfig struct {
 
 // ModelScopesConfig contains the three fixed model profiles used by the daemon.
 type ModelScopesConfig struct {
-	Analyze  ModelProfileConfig `yaml:"analyze"`
-	Bug      ModelProfileConfig `yaml:"bug"`
-	Function ModelProfileConfig `yaml:"function"`
+	Analyze ModelProfileConfig `yaml:"analyze"`
+	Bug     ModelProfileConfig `yaml:"bug"`
+	Code    ModelProfileConfig `yaml:"code"`
 }
 
 // ModelProfileConfig is the configured portion of a fixed scope. Pointer
@@ -216,9 +216,9 @@ var configurationFields = fieldSet{
 		"max_elapsed_seconds": {}, "max_concurrent_calls": {}, "max_repairs": {},
 	},
 	"model_scopes": {
-		"analyze":  modelProfileFields,
-		"bug":      modelProfileFields,
-		"function": modelProfileFields,
+		"analyze": modelProfileFields,
+		"bug":     modelProfileFields,
+		"code":    modelProfileFields,
 	},
 	"retry": {
 		"max_retries": {}, "backoff_base": {}, "backoff_max": {},

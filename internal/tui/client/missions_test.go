@@ -171,7 +171,7 @@ func TestMissionSchedulerWireCarriesConsentOwnershipAndRetainedEvidence(t *testi
 		if request.ProjectID != identity.ProjectID || request.ProjectRevision != identity.ProjectRevision || request.ExecutionID != "execution" || request.ExecutionRevision != 7 || request.PlanHash != planHash || !request.Confirm {
 			t.Error("lost control identity", request)
 		}
-		if request.Action == "start" && (!request.ConfirmExecution || len(request.ConfirmedProfiles) != 1 || request.ConfirmedProfiles[0] != "function") {
+		if request.Action == "start" && (!request.ConfirmExecution || len(request.ConfirmedProfiles) != 1 || request.ConfirmedProfiles[0] != "code") {
 			t.Error("lost start consent")
 		}
 		if request.Action != "start" && (request.ConfirmExecution || len(request.ConfirmedProfiles) != 0) {
@@ -192,7 +192,7 @@ func TestMissionSchedulerWireCarriesConsentOwnershipAndRetainedEvidence(t *testi
 		request := MissionExecutionRequest{ProjectIdentity: identity, Action: action, ExecutionID: "execution", ExecutionRevision: 7, PlanHash: planHash, Confirm: true}
 		if action == "start" {
 			request.ConfirmExecution = true
-			request.ConfirmedProfiles = []string{"function"}
+			request.ConfirmedProfiles = []string{"code"}
 		}
 		var response AgentMissionExecution
 		if err := cl.DoJSON(t.Context(), action, "POST", "/api/projects/current/missions/mission/execution?worktree_path=%2Fselected%2Fcheckout", request, &response); err != nil {
@@ -322,7 +322,7 @@ func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil || received.ProjectIdentity != identity || received.CatalogRevision != 7 || received.Limits != limits || received.PlanningLimits != limits || !received.ConfirmRemoteProvider {
 			t.Error("planning request lost its identity or budget", err)
 		}
-		_ = json.NewEncoder(w).Encode(MissionPlanningResult{AgentMission: AgentMission{CatalogRevision: 8, Mission: MissionRecord{ProjectIdentity: identity, ID: "mission-fixture", PlanHash: strings.Repeat("a", 64)}, SourceStatus: "current"}, InputHash: strings.Repeat("b", 64), PromptVersion: "mission-planner-v1", PlanningLimits: limits, Usage: AgentUsage{ModelCalls: 1, UnknownUsageCalls: 1, InputTokens: 1024}, ContextManifest: ContextManifest{Scope: "function", TokenLimit: 8192}})
+		_ = json.NewEncoder(w).Encode(MissionPlanningResult{AgentMission: AgentMission{CatalogRevision: 8, Mission: MissionRecord{ProjectIdentity: identity, ID: "mission-fixture", PlanHash: strings.Repeat("a", 64)}, SourceStatus: "current"}, InputHash: strings.Repeat("b", 64), PromptVersion: "mission-planner-v1", PlanningLimits: limits, Usage: AgentUsage{ModelCalls: 1, UnknownUsageCalls: 1, InputTokens: 1024}, ContextManifest: ContextManifest{Scope: "code", TokenLimit: 8192}})
 	}))
 	defer server.Close()
 	cl, err := NewClient(server.URL)
@@ -332,7 +332,7 @@ func TestMissionPlanningClientCarriesBothBudgetsAndCheckoutIdentity(t *testing.T
 	defer cl.Close()
 	target := "/api/projects/current/missions/plan?" + url.Values{"project_id": {identity.ProjectID}, "project_revision": {identity.ProjectRevision}, "worktree_path": {"/tmp/selected checkout"}}.Encode()
 	var result MissionPlanningResult
-	if err := cl.DoJSON(t.Context(), "planning", "POST", target, request, &result); err != nil || result.CatalogRevision != 8 || result.Mission.ProjectIdentity != identity || result.Mission.Approved || result.Usage.UnknownUsageCalls != 1 || result.ContextManifest.Scope != "function" {
+	if err := cl.DoJSON(t.Context(), "planning", "POST", target, request, &result); err != nil || result.CatalogRevision != 8 || result.Mission.ProjectIdentity != identity || result.Mission.Approved || result.Usage.UnknownUsageCalls != 1 || result.ContextManifest.Scope != "code" {
 		t.Fatal(result, err)
 	}
 	if _, err := cl.Request(t.Context(), "invalid-method", "PATCH", target, `{}`); err == nil {

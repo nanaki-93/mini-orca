@@ -28,7 +28,7 @@ func newAnalysisHandlerFixture(t *testing.T) (*AnalysisHandler, *ProjectHandler,
 		_ = json.NewDecoder(r.Body).Decode(&request)
 		reply := `{"findings":[]}`
 		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
-			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`
+			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[]}`
 		}
 		if request.ResponseFormat != nil && request.ResponseFormat.JSONSchema != nil && request.ResponseFormat.JSONSchema.Name == "feature_suggestions" {
 			reply = `{"suggestions":[]}`
@@ -207,7 +207,7 @@ func TestAnalysisHandlerFeatureStepRequiresMatchingAdmission(t *testing.T) {
 
 func TestAnalysisHandlerModelsRequireMatchingAdmission(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
-	models := &app.AnalysisModels{Code: "function", Performance: "bug", Security: "function", Features: "analyze"}
+	models := &app.AnalysisModels{Code: "code", Performance: "bug", Security: "code", Features: "analyze"}
 	request := app.AnalysisPreviewRequest{IncludeFeatures: true, Models: models,
 		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
 		Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
@@ -220,7 +220,7 @@ func TestAnalysisHandlerModelsRequireMatchingAdmission(t *testing.T) {
 		t.Fatalf("model plan=%+v %v", preview, err)
 	}
 	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits,
-		IncludeFeatures: true, Models: &app.AnalysisModels{Code: "function", Performance: "bug", Security: "analyze", Features: "analyze"},
+		IncludeFeatures: true, Models: &app.AnalysisModels{Code: "code", Performance: "bug", Security: "analyze", Features: "analyze"},
 		Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
 	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
 	if w.Code != http.StatusConflict || calls.Load() != 0 {

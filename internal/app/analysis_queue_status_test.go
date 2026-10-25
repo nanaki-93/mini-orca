@@ -286,8 +286,8 @@ func TestAnalysisSelectionRecoveryStateOrderAndCounts(t *testing.T) {
 	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence("model.go"), nil), AnalysisRecoveryBlocked, 0, 0, "the bug model profile used for Code analysis")
 	review := evidence("ignored.go")
 	review.files["ignored.go"] = analysisFileRecovery{performanceModelMissing: true}
-	review.models = &AnalysisModels{Code: "bug", Review: "function", Features: "analyze"}
-	assertRecovery(t, s.analysisRecoverySummaryLocked(review, nil), AnalysisRecoveryBlocked, 0, 0, "the function model profile used for Performance")
+	review.models = &AnalysisModels{Code: "bug", Review: "code", Features: "analyze"}
+	assertRecovery(t, s.analysisRecoverySummaryLocked(review, nil), AnalysisRecoveryBlocked, 0, 0, "the code model profile used for Performance")
 	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence(), nil), AnalysisRecoveryComplete, 0, 0, "")
 	// Persistence faults and active workers supersede saved-selection work, as at admission.
 	s.analysisRun.fault = errAnalysisRunPersistence

@@ -25,9 +25,9 @@ func TestResearchHandlerConsentReportIsolationAndPassiveReads(t *testing.T) {
 	fixture := newChangeHandlerFixture(t, remote.URL)
 	cfg := scopedHandlerConfig(remote.URL)
 	cfg.Integrations.GoogleSearch = true
-	cfg.ModelScopes.Function.Provider = config.GeminiProvider
-	cfg.ModelScopes.Function.APIKey = "explicit-key"
-	cfg.ModelScopes.Function.Model = "gemini-2.5-flash"
+	cfg.ModelScopes.Code.Provider = config.GeminiProvider
+	cfg.ModelScopes.Code.APIKey = "explicit-key"
+	cfg.ModelScopes.Code.Model = "gemini-2.5-flash"
 	s, err := app.New(cfg, fixture.manager)
 	if err != nil {
 		t.Fatal(err)

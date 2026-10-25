@@ -77,7 +77,7 @@ func TestMissionPlanningUsesNativeToolsAndPublishesOnlyAnUnapprovedDraft(t *test
 			if calls.Load() != 2 || result.Usage.ModelCalls != 2 || result.Usage.ToolCalls != 1 || result.PromptVersion != agentruntime.MissionPlannerVersion || len(result.InputHash) != 64 || result.Mission.Approved || len(result.Mission.Reviewed) != 0 {
 				t.Fatalf("planning receipt: %+v calls=%d", result, calls.Load())
 			}
-			if result.Mission.Plan.Goal != request.Goal || result.Mission.Plan.Limits != request.Limits || len(result.Mission.Plan.Children) != 2 || result.ContextManifest.Scope != "function" {
+			if result.Mission.Plan.Goal != request.Goal || result.Mission.Plan.Limits != request.Limits || len(result.Mission.Plan.Children) != 2 || result.ContextManifest.Scope != "code" {
 				t.Fatal("constraints lost", result)
 			}
 			detail, err := s.MissionDetail(t.Context(), settingsQuery(t, s), result.Mission.ID)

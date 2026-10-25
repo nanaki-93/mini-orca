@@ -306,7 +306,7 @@ func TestMediaPassiveNavigationAndUnsupportedProfiles(t *testing.T) {
 	s.Error = ""
 	s.AgentMedia.Attachments.State = "unsupported_profile"
 	s.ExecuteCommand(":media-ask Review")
-	if !strings.Contains(s.Error, "native Function") || s.Confirmation != nil {
+	if !strings.Contains(s.Error, "native Code") || s.Confirmation != nil {
 		t.Fatal("unsupported advice missing recovery")
 	}
 	s.Error = ""

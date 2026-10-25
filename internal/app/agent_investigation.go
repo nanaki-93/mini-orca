@@ -79,7 +79,7 @@ type preparedPlanInvestigation struct {
 
 // InvestigatePlan returns suggestions without storing or approving a change plan.
 func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigationRequest) (*PlanInvestigation, error) {
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	ctx, err := s.freezeAgentSettings(ctx, s.manager.Root())

@@ -47,7 +47,7 @@ func TestAgentEvaluationLiveDisclosurePrecedesAnyRequest(t *testing.T) {
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	text := "model_scopes:\n"
-	for _, scope := range []string{"analyze", "bug", "function"} {
+	for _, scope := range []string{"analyze", "bug", "code"} {
 		text += fmt.Sprintf("  %s: {provider: openai, api_base_url: '%s', model: fixture, api_key: PRIVATE_KEY, max_tokens: 512}\n", scope, server.URL)
 	}
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {

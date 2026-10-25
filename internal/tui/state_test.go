@@ -904,8 +904,8 @@ func TestModelInspectionAndScopeRoutingManagement(t *testing.T) {
 				ReasoningEffort: "medium", ProviderOrigin: "http://127.0.0.1:11434",
 				RemoteProvider: false, ContextMaxTokens: 16384, Timeout: "3m0s", MaxRetries: 2,
 			},
-			"function": {
-				Scope: "function", Profile: "function", Model: "qwen2.5-coder:7b",
+			"code": {
+				Scope: "code", Profile: "code", Model: "qwen2.5-coder:7b",
 				ReasoningEffort: "low", ProviderOrigin: "http://127.0.0.1:11434",
 				RemoteProvider: false, ContextMaxTokens: 8192, Timeout: "1m0s", MaxRetries: 1,
 			},
@@ -1316,7 +1316,7 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 	s.Navigate(PageModels)
 	s.ExecuteCommand(":model analyze pi:qwen")
 	s.ExecuteCommand(":model bug agy:claude")
-	s.ExecuteCommand(":model function local")
+	s.ExecuteCommand(":model code local")
 
 	// 1. Save named preset via :preset-save
 	s.ExecuteCommand(":preset-save Rust Audit")
@@ -1347,7 +1347,7 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 	}
 
 	// 4. Verify custom presets, active preset ID, and selected scope models are persisted and reloaded
-	s.ExecuteCommand(":model function agy:claude")
+	s.ExecuteCommand(":model code agy:claude")
 	s2 := NewState()
 	s2.Project = s.Project
 	s2.loadCustomPresetsFromDisk()
@@ -1357,7 +1357,7 @@ func TestCustomModelPresetSaveCycleApplyDeleteAndPersistence(t *testing.T) {
 	if s2.ActivePresetID != "rust-audit" ||
 		s2.AssignedScopeModelID("analyze") != "pi:qwen" ||
 		s2.AssignedScopeModelID("bug") != "agy:claude" ||
-		s2.AssignedScopeModelID("function") != "agy:claude" {
+		s2.AssignedScopeModelID("code") != "agy:claude" {
 		t.Fatalf("expected active preset and selected scope models to persist across restarts, got preset=%q scopes=%+v", s2.ActivePresetID, s2.ScopeModels)
 	}
 
@@ -1405,7 +1405,7 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 							Remediation:       "Validate fixed salt and derived key lengths before comparison.",
 							VerificationIdea:  "Reject single-byte hex derived key in unit test.",
 							Triage:            "open",
-							SourceAnchor:      SourceAnchor{Path: "internal/utils/utils.go", StartLine: 84, Symbol: "verifyPBKDF2"},
+							SourceAnchor:      SourceAnchor{Path: "internal/utils/utils.go", StartLine: 84},
 						},
 					},
 				},
@@ -1424,7 +1424,6 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 							Recommendation:   "Instantiate HMAC once outside the loop and reuse via Reset.",
 							VerificationPlan: "Verify PBKDF2 output vectors and reduced allocations.",
 							StartLine:        101,
-							Symbol:           "pbkdf2SHA256",
 						},
 					},
 				},
@@ -1481,10 +1480,10 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Unvalidated derived key length",
-		"internal/utils/utils.go:84 · verifyPBKDF2",
+		"internal/utils/utils.go:84",
 		"Validate fixed salt and derived key lengths",
 		"Per-iteration HMAC allocation in PBKDF2",
-		"internal/utils/utils.go:101 · pbkdf2SHA256",
+		"internal/utils/utils.go:101",
 		"Instantiate HMAC once outside the loop",
 	} {
 		if !strings.Contains(workflowMessages[0], want) {
@@ -1937,15 +1936,6 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 				Path:      "internal/app/second.go",
 				Language:  "Go",
 				LineCount: 120,
-				Symbols: []SymbolInfo{
-					{
-						Name:      "ValidateToken",
-						Kind:      "func",
-						Signature: "func ValidateToken(tok string) error",
-						StartLine: 20,
-						EndLine:   45,
-					},
-				},
 			},
 			{
 				Path:     "internal/app/second_test.go",
@@ -1974,10 +1964,8 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 			Evidence:   "if token == \"\" { return nil }",
 			Status:     "open",
 			Freshness:  "current",
-			Location:   SourceAnchor{Path: "internal/app/second.go", StartLine: 25, EndLine: 32, Symbol: "ValidateToken"},
+			Location:   SourceAnchor{Path: "internal/app/second.go", StartLine: 25, EndLine: 32},
 			TaskSpec: &TaskSpec{
-				TargetSymbol:       "ValidateToken",
-				TargetSignature:    "func ValidateToken(tok string) error",
 				AcceptanceCriteria: []string{"Reject empty token in ValidateToken", "Cover empty token in unit test"},
 				NonGoals:           []string{"Do not alter token signing format"},
 			},
@@ -2025,7 +2013,6 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		"SEC-JWT-01",
 		"internal/app/second.go:25-32",
 		"ValidateToken",
-		"func ValidateToken(tok string) error",
 		"Go ·",
 		"120 lines",
 		"if token == \"\" { return nil }",
@@ -2964,7 +2951,6 @@ func TestSyncFromDaemonResetsProjectScopedStateOnProjectSwitch(t *testing.T) {
 	s.Findings = []Finding{{ID: "f-stale", Title: "Stale finding", Status: "open"}}
 	s.Change = &ChangeSession{ID: "chg-stale", Title: "Stale change"}
 	s.File = &FileInfo{Path: "old.go", Content: "package old"}
-	s.Symbols = []SymbolInfo{{Name: "OldFunc"}}
 	s.WorkspaceTrust = true
 	s.SelectedIssueIDs = []string{"semantic:f-stale"}
 
@@ -2974,19 +2960,17 @@ func TestSyncFromDaemonResetsProjectScopedStateOnProjectSwitch(t *testing.T) {
 	if s.Project == nil || s.Project.ProjectID != "p2" {
 		t.Fatalf("expected active project p2, got %+v", s.Project)
 	}
-	if len(s.Findings) != 0 || s.Change != nil || s.File != nil || len(s.Symbols) != 0 || s.WorkspaceTrust || len(s.SelectedIssueIDs) != 0 {
-		t.Fatalf("expected project-scoped state to reset on project switch, got findings=%d change=%v file=%v symbols=%d trust=%v selected=%v",
-			len(s.Findings), s.Change, s.File, len(s.Symbols), s.WorkspaceTrust, s.SelectedIssueIDs)
+	if len(s.Findings) != 0 || s.Change != nil || s.File != nil || s.WorkspaceTrust || len(s.SelectedIssueIDs) != 0 {
+		t.Fatalf("expected project-scoped state to reset on project switch, got findings=%d change=%v file=%v trust=%v selected=%v",
+			len(s.Findings), s.Change, s.File, s.WorkspaceTrust, s.SelectedIssueIDs)
 	}
 }
 
-func TestFetchFileInfoRejectsStaleSymbolsAndDecodeInputBytesKeys(t *testing.T) {
+func TestFetchFileInfoRejectsStaleResponseAndDecodeInputBytesKeys(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/projects/current/files/info":
 			_, _ = w.Write([]byte(`{"path":"stale.go","content_hash":"h1","content":"package main"}`))
-		case "/api/projects/current/files/symbols":
-			_, _ = w.Write([]byte(`{"symbols":[{"name":"StaleSym"}]}`))
 		default:
 			_, _ = w.Write([]byte(`{}`))
 		}
@@ -3001,12 +2985,11 @@ func TestFetchFileInfoRejectsStaleSymbolsAndDecodeInputBytesKeys(t *testing.T) {
 
 	s := NewState()
 	s.File = &FileInfo{Path: "current.go", ContentHash: "h2"}
-	s.Symbols = []SymbolInfo{{Name: "CurrentSym"}}
 	if err := s.fetchFileInfo(context.Background(), cli, "req-1", "stale.go"); err != nil {
 		t.Fatalf("fetchFileInfo failed: %v", err)
 	}
-	if s.File.Path != "current.go" || len(s.Symbols) != 1 || s.Symbols[0].Name != "CurrentSym" {
-		t.Fatalf("expected stale fetchFileInfo to preserve current file and symbols, got file=%+v symbols=%+v", s.File, s.Symbols)
+	if s.File.Path != "current.go" {
+		t.Fatalf("expected stale fetchFileInfo to preserve current file, got file=%+v", s.File)
 	}
 
 	events := DecodeInputBytes([]byte("\x1b[H\x1b[F\x1b[3~\x1b[5~\x1b[6~\x01\x05\x0e\x10\x15"))

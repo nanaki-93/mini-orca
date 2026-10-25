@@ -112,7 +112,7 @@ func TestChangeMessageUsesSelectedProfileAndItsConsent(t *testing.T) {
 	}
 	request.Profile = catalog.Defaults["bug"]
 	proposal, err = service.SendChangeMessage(context.Background(), session.ID, request)
-	if err != nil || proposal.ContextManifest.Scope != "function" || calls.Load() != 2 {
+	if err != nil || proposal.ContextManifest.Scope != "code" || calls.Load() != 2 {
 		t.Fatalf("catalog profile failed: %+v, %v", proposal, err)
 	}
 }

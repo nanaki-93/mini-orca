@@ -17,7 +17,6 @@ type (
 	ChangePlanInput         = client.ChangePlanInput
 	ProjectIdentity         = client.ProjectIdentity
 	Project                 = client.Project
-	SymbolInfo              = client.SymbolInfo
 	IndexedFile             = client.IndexedFile
 	ProjectIndex            = client.ProjectIndex
 	FileInfo                = client.FileInfo

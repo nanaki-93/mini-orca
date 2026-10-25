@@ -13,9 +13,9 @@ import (
 type ModelScope string
 
 const (
-	AnalyzeModelScope  ModelScope = "analyze"
-	BugModelScope      ModelScope = "bug"
-	FunctionModelScope ModelScope = "function"
+	AnalyzeModelScope ModelScope = "analyze"
+	BugModelScope     ModelScope = "bug"
+	CodeModelScope    ModelScope = "code"
 
 	MaxModelOutputTokens  = 65536
 	MaxModelContextTokens = 120000
@@ -45,9 +45,9 @@ type ModelProfile struct {
 
 // ModelProfiles contains every resolved fixed scope.
 type ModelProfiles struct {
-	Analyze  ModelProfile
-	Bug      ModelProfile
-	Function ModelProfile
+	Analyze ModelProfile
+	Bug     ModelProfile
+	Code    ModelProfile
 }
 
 // ResolveModelProfiles validates each declared scope independently. There is no
@@ -64,7 +64,7 @@ func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {
 	if profiles.Bug, err = resolveProfile(BugModelScope, cfg.ModelScopes.Bug); err != nil {
 		return ModelProfiles{}, err
 	}
-	if profiles.Function, err = resolveProfile(FunctionModelScope, cfg.ModelScopes.Function); err != nil {
+	if profiles.Code, err = resolveProfile(CodeModelScope, cfg.ModelScopes.Code); err != nil {
 		return ModelProfiles{}, err
 	}
 	return profiles, nil
@@ -244,7 +244,7 @@ func defaultContextBudget(scope ModelScope) int {
 		return 120000
 	case BugModelScope:
 		return 32000
-	case FunctionModelScope:
+	case CodeModelScope:
 		return 4000
 	default:
 		return 0

@@ -30,7 +30,7 @@ func (s *Service) declarationInvestigation(ctx context.Context, request Declarat
 	if policy.Version() != prepared.policy || instructions.Fingerprint != prepared.instructions {
 		return nil, fmt.Errorf("%w: investigation context changed", agentruntime.ErrPolicyDenied)
 	}
-	scope := project.AgentScope{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: prepared.symbol.StartLine, EndLine: prepared.symbol.EndLine}
+	scope := project.AgentScope{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: 1, EndLine: max(1, prepared.file.LineCount)}
 	reader, err := project.NewAgentContext(&project.ProjectIndex{Files: []project.IndexFile{prepared.file}}, []project.AgentScope{scope}, policy.ReadSource)
 	if err != nil {
 		return nil, err
@@ -96,11 +96,10 @@ func (s *Service) validateInvestigationIndex(request DeclarationExplanationReque
 	if err != nil {
 		return err
 	}
-	symbol := exactExplanationSymbol(*file, request.TargetSymbol)
-	if s.manager.Root() != prepared.root || file.ContentHash != request.BaseFileHash || symbol == nil {
+	if s.manager.Root() != prepared.root || file.ContentHash != request.BaseFileHash {
 		return project.ErrRevisionConflict
 	}
-	if !sameExplanationAnchor(prepared.file, prepared.symbol, *file, *symbol) {
+	if !sameExplanationAnchor(prepared.file, *file) {
 		return project.ErrRevisionConflict
 	}
 	return nil
@@ -109,8 +108,7 @@ func (s *Service) validateInvestigationIndex(request DeclarationExplanationReque
 func repositoryTools(reader *project.AgentContext) []agentruntime.ToolSpec {
 	descriptions := map[string]string{
 		"read_snippet":      "Read only the admitted source span. A wider path or line range returns scope_required.",
-		"search_repository": "Search literal text within an admitted declaration; returns at most 20 hash-bound matches.",
-		"inspect_symbols":   "Inspect admitted indexed symbol signatures and spans, not other declaration bodies.",
+		"search_repository": "Search literal text within an admitted file; returns at most 20 hash-bound matches.",
 		"inspect_imports":   "Inspect admitted indexed imports. An import is not permission to read its destination.",
 		"inspect_impact":    "Inspect heuristic import relationships within admitted scope; this is not a verified call graph.",
 	}

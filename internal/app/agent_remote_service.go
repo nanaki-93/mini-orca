@@ -219,7 +219,7 @@ func remoteServiceCredential(principal config.AgentPrincipal) ([32]byte, error) 
 
 func (s *Service) confirmRemoteServiceProviders(principal config.AgentPrincipal, confirmed bool) error {
 	for _, capability := range principal.Capabilities {
-		scope := config.FunctionModelScope
+		scope := config.CodeModelScope
 		if capability == "proposal" {
 			scope = config.BugModelScope
 		}

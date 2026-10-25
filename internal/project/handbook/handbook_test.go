@@ -69,9 +69,6 @@ func TestBuildAndPersistProjectDocsSynthesizesC4Arc42AndADRSpec(t *testing.T) {
 				Path:      "internal/app/service.go",
 				Language:  "Go",
 				LineCount: 140,
-				Symbols: []SymbolInfo{
-					{Name: "Service", Kind: "struct", StartLine: 10, EndLine: 45},
-				},
 			},
 			{
 				Path:      "desktop/frontend/src/main.tsx",

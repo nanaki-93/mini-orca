@@ -41,16 +41,16 @@ func TestExplainDeclarationReturnsBoundedTransientResultWithoutMutation(t *testi
 
 	result, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{
 		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash,
-		TargetPath: "main.go", TargetSymbol: "Run",
+		TargetPath: "main.go",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(filepath.Join(root, "main.go"))
-	if result.Anchor.Path != "main.go" || result.Anchor.Symbol != "Run" || result.Anchor.StartLine <= 0 || result.Summary == "" {
+	if result.Anchor.Path != "main.go" || result.Anchor.StartLine <= 0 || result.Summary == "" {
 		t.Fatalf("explanation = %+v", result)
 	}
-	if result.ContextManifest.Scope != "function" || len(result.ContextManifest.Included) != 1 || result.ContextManifest.Included[0].Path != "main.go" {
+	if result.ContextManifest.Scope != "code" || len(result.ContextManifest.Included) != 1 || result.ContextManifest.Included[0].Path != "main.go" {
 		t.Fatalf("manifest = %+v", result.ContextManifest)
 	}
 	if calls.Load() != 1 || !strings.Contains(prompt, "func Run") || strings.Contains(prompt, "helper secret") {
@@ -73,14 +73,14 @@ func TestExplainDeclarationRequiresConsentAndRejectsIneligibleOrStaleTargetsWith
 	service.runtimes.function.effective.RemoteProvider = true
 	index, _ := service.manager.Index()
 	file, _ := service.manager.IndexedFile("main.go")
-	base := DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"}
+	base := DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"}
 
 	if _, err := service.ExplainDeclaration(context.Background(), base); err == nil || !strings.Contains(err.Error(), "explicit confirmation") {
 		t.Fatalf("consent error = %v", err)
 	}
 	missing := base
 	missing.ConfirmRemoteProvider = true
-	missing.TargetSymbol = "Missing"
+	missing.TargetPath = "missing.go"
 	if _, err := service.ExplainDeclaration(context.Background(), missing); err == nil {
 		t.Fatal("missing target accepted")
 	}
@@ -90,17 +90,17 @@ func TestExplainDeclarationRequiresConsentAndRejectsIneligibleOrStaleTargetsWith
 	if _, err := service.ExplainDeclaration(context.Background(), stale); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("stale error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n\nfunc Run() {}\nfunc Run() {}\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# Docs\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	duplicateIndex, err := service.Reindex()
+	docIndex, err := service.Reindex()
 	if err != nil {
 		t.Fatal(err)
 	}
-	duplicateFile, _ := service.manager.IndexedFile("main.go")
-	ambiguous := DeclarationExplanationRequest{ProjectID: duplicateIndex.ProjectID, ProjectRevision: duplicateIndex.ProjectRevision, BaseFileHash: duplicateFile.ContentHash, TargetPath: "main.go", TargetSymbol: "Run", ConfirmRemoteProvider: true}
-	if _, err := service.ExplainDeclaration(context.Background(), ambiguous); err == nil {
-		t.Fatal("ambiguous declaration target accepted")
+	docFile, _ := service.manager.IndexedFile("README.md")
+	unsupported := DeclarationExplanationRequest{ProjectID: docIndex.ProjectID, ProjectRevision: docIndex.ProjectRevision, BaseFileHash: docFile.ContentHash, TargetPath: "README.md", ConfirmRemoteProvider: true}
+	if _, err := service.ExplainDeclaration(context.Background(), unsupported); !errors.Is(err, project.ErrUnsupportedFile) {
+		t.Fatalf("unsupported markdown target accepted: %v", err)
 	}
 	if calls.Load() != 0 {
 		t.Fatalf("invalid requests made %d provider calls", calls.Load())
@@ -121,7 +121,7 @@ func TestExplainDeclarationRejectsLatePublicationAfterSourceChanges(t *testing.T
 	file, _ := service.manager.IndexedFile("main.go")
 	result := make(chan error, 1)
 	go func() {
-		_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+		_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 		result <- err
 	}()
 	<-started
@@ -151,7 +151,7 @@ func TestExplainDeclarationRejectsLatePublicationAfterPolicyChange(t *testing.T)
 	before, _ := os.ReadFile(filepath.Join(root, "main.go"))
 	result := make(chan error, 1)
 	go func() {
-		_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+		_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 		result <- err
 	}()
 	<-started
@@ -187,7 +187,7 @@ func TestExplainDeclarationRevalidatesPolicyAfterContextPreparationBeforeProvide
 		return contextValue, manifest, err
 	}
 
-	_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+	_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 	if !errors.Is(err, project.ErrExcludedFile) {
 		t.Fatalf("post-context policy error = %v", err)
 	}
@@ -208,7 +208,7 @@ func TestExplainDeclarationPreservesCancellationWithoutWorkflowMutation(t *testi
 	file, _ := service.manager.IndexedFile("main.go")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := service.ExplainDeclaration(ctx, DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+	_, err := service.ExplainDeclaration(ctx, DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
@@ -225,7 +225,7 @@ func TestExplainDeclarationReturnsProviderFailureWithoutWorkflowMutation(t *test
 	service, _ := newSemanticAnalysisService(t, server.URL, 0)
 	index, _ := service.manager.Index()
 	file, _ := service.manager.IndexedFile("main.go")
-	_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+	_, err := service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 	if err == nil {
 		t.Fatal("provider failure was accepted")
 	}
@@ -251,7 +251,7 @@ func TestExplainDeclarationHandlesRefusedLoopbackProviderWithoutWorkflowMutation
 		t.Fatal(err)
 	}
 
-	_, err = service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go", TargetSymbol: "Run"})
+	_, err = service.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"})
 	if err == nil {
 		t.Fatal("refused provider request was accepted")
 	}

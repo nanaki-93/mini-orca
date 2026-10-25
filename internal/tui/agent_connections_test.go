@@ -63,7 +63,7 @@ func TestConnectionConfirmationBindsCheckoutConfigurationAndProvider(t *testing.
 	s := connectionsTestState()
 	s.SelectedIdx = 3
 	s.confirmConnectionControl("discover")
-	s.Models.Scopes["function"] = Model{Model: "different", ProviderOrigin: "https://different.example", RemoteProvider: true}
+	s.Models.Scopes["code"] = Model{Model: "different", ProviderOrigin: "https://different.example", RemoteProvider: true}
 	s.Confirmation.OnConfirm(s)
 	if len(s.PendingActions) != 0 || !strings.Contains(s.Error, "changed") {
 		t.Fatal("incoming grant confirmation authorized another provider")

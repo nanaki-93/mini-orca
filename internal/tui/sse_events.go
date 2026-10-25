@@ -98,7 +98,6 @@ func (s *State) resetProjectScopedState() {
 	s.Selection = nil
 	s.File = nil
 	s.IssueFile = nil
-	s.Symbols = nil
 	s.Change = nil
 	s.ActiveChanges = nil
 	s.ChangeReceipt = nil
@@ -770,12 +769,6 @@ func (s *State) fetchFileInfo(ctx context.Context, cl *Client, reqID, path strin
 		return nil
 	}
 	s.File = &info
-	var symResp struct {
-		Symbols []SymbolInfo `json:"symbols"`
-	}
-	if err := cl.DoJSON(ctx, reqID+"-sym", http.MethodGet, "/api/projects/current/files/symbols?path="+escaped, nil, &symResp); err == nil && s.AcceptFileResponse(info.Path, info.ContentHash) {
-		s.Symbols = symResp.Symbols
-	}
 	return nil
 }
 

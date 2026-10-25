@@ -334,7 +334,7 @@ func TestLibraryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
 
 func requestPathForDocumentedRoute(path string) string {
 	switch path {
-	case "/api/projects/current/files/info", "/api/projects/current/files/symbols", "/api/projects/current/files/analysis", "/api/projects/current/context":
+	case "/api/projects/current/files/info", "/api/projects/current/files/analysis", "/api/projects/current/context":
 		return path + "?path=missing.go"
 	case "/api/projects/current/overview", "/api/projects/current/findings", "/api/projects/current/scan":
 		return path + "?project_revision=sha256:missing"

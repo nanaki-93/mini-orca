@@ -25,9 +25,8 @@ func TestParseSecurityFindingsIsStrictAnchoredAndAllowsEmpty(t *testing.T) {
 	}{
 		{name: "unknown field", output: strings.Replace(validSecurityFindingsJSON(), `"title":"TLS verification disabled"`, `"title":"TLS verification disabled","unknown":true`, 1)},
 		{name: "other file", output: strings.Replace(validSecurityFindingsJSON(), `"path":"main.go"`, `"path":"other.go"`, 1)},
-		{name: "outside symbol", output: strings.Replace(validSecurityFindingsJSON(), `"start_line":4,"end_line":4`, `"start_line":1,"end_line":1`, 1)},
-		{name: "path only anchor", output: strings.Replace(validSecurityFindingsJSON(), `"start_line":4,"end_line":4,"symbol":"Run"`, `"symbol":"Run"`, 1)},
-		{name: "unknown symbol", output: strings.Replace(validSecurityFindingsJSON(), `"symbol":"Run"`, `"symbol":"Missing"`, 1)},
+		{name: "outside file", output: strings.Replace(validSecurityFindingsJSON(), `"start_line":4,"end_line":4`, `"start_line":10,"end_line":10`, 1)},
+		{name: "path only anchor", output: strings.Replace(validSecurityFindingsJSON(), `"start_line":4,"end_line":4`, `"start_line":0,"end_line":0`, 1)},
 		{name: "deterministic evidence in model response", output: strings.Replace(validSecurityFindingsJSON(), `"evidence_kind":"model_suspicion"`, `"evidence_kind":"rule_match"`, 1)},
 		{name: "verified reproduction in model response", output: strings.Replace(validSecurityFindingsJSON(), `"evidence_kind":"model_suspicion"`, `"evidence_kind":"verified_reproduction"`, 1)},
 		{name: "overlong raw title", output: strings.Replace(validSecurityFindingsJSON(), `"title":"TLS verification disabled"`, `"title":"`+strings.Repeat("x", maxSecurityTextBytes+1)+`"`, 1)},
@@ -244,7 +243,6 @@ func TestSecurityStoreRejectsNonCanonicalProvenanceAndAnchors(t *testing.T) {
 			report.Findings[0].Title = strings.Repeat("x", maxSecurityTextBytes+1)
 		}},
 		{name: "out of range anchor", mutate: func(report *SecurityFileReport) { report.Findings[0].Anchor.EndLine = 99 }},
-		{name: "unknown symbol", mutate: func(report *SecurityFileReport) { report.Findings[0].Anchor.Symbol = "Missing" }},
 		{name: "wrong indexed file", mutate: func(report *SecurityFileReport) { report.Path = "other.go" }},
 		{name: "wrong indexed hash", mutate: func(report *SecurityFileReport) { report.ContentHash = "sha256:other" }},
 		{name: "secret in identity", mutate: func(report *SecurityFileReport) { report.ProjectID = `"api_key":"identity-secret"` }},
@@ -351,7 +349,7 @@ func securitySource() string {
 }
 
 func securityIndexedFile() IndexFile {
-	return IndexFile{Path: "main.go", ContentHash: contentHash([]byte(securitySource())), LineCount: 5, Symbols: []SymbolInfo{{Name: "Run", StartLine: 3, EndLine: 5}}}
+	return IndexFile{Path: "main.go", ContentHash: contentHash([]byte(securitySource())), LineCount: 5}
 }
 
 func TestParseSecurityFindingsUsesIndexedLineCountForTrailingNewlineFiles(t *testing.T) {
@@ -399,7 +397,7 @@ func TestValidateSecurityFileReportSourceFreeNormalizesMeaningfulSourceLines(t *
 }
 
 func validSecurityFindingsJSON() string {
-	return `{"findings":[{"rule":"go.tls.insecure-skip-verify","category":"transport-security","title":"TLS verification disabled","source_anchor":{"path":"main.go","start_line":4,"end_line":4,"symbol":"Run"},"severity":"high","confidence":"high","evidence_kind":"model_suspicion","observed_condition":"The transport disables certificate verification.","preconditions_or_unknowns":"Reachability from an external request is unknown.","remediation":"Keep certificate verification enabled.","verification_idea":"Exercise the request against an invalid certificate."}]}`
+	return `{"findings":[{"rule":"go.tls.insecure-skip-verify","category":"transport-security","title":"TLS verification disabled","source_anchor":{"path":"main.go","start_line":4,"end_line":4},"severity":"high","confidence":"high","evidence_kind":"model_suspicion","observed_condition":"The transport disables certificate verification.","preconditions_or_unknowns":"Reachability from an external request is unknown.","remediation":"Keep certificate verification enabled.","verification_idea":"Exercise the request against an invalid certificate."}]}`
 }
 
 func securityRequiredFieldValue(field string) string {

@@ -28,15 +28,15 @@ func TestCLIProvidersAnalyzeAndProposeChangesWithScopeConsent(t *testing.T) {
 			cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
 			calls := filepath.Join(t.TempDir(), "calls")
 			cfg.ModelScopes = config.ModelScopesConfig{
-				Analyze:  cliAppProfile(t, provider, "analyze-model", `{"purpose":"Explains the fixture.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[],"engineering_insight":null}`, calls),
-				Bug:      cliAppProfile(t, provider, "bug-model", strings.TrimSuffix(validSemanticAnalysis, "}")+`,"engineering_insight":null}`, calls),
-				Function: cliAppProfile(t, provider, "function-model", `{"explanation":"Updates the message.","changes":[{"path":"main.go","content":"package main\nimport \"fmt\"\nfunc Run() { fmt.Println(\"updated\") }\n"}]}`, calls),
+				Analyze: cliAppProfile(t, provider, "analyze-model", `{"purpose":"Explains the fixture.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[],"engineering_insight":null}`, calls),
+				Bug:     cliAppProfile(t, provider, "bug-model", strings.TrimSuffix(validSemanticAnalysis, "}")+`,"engineering_insight":null}`, calls),
+				Code:    cliAppProfile(t, provider, "function-model", `{"explanation":"Updates the message.","changes":[{"path":"main.go","content":"package main\nimport \"fmt\"\nfunc Run() { fmt.Println(\"updated\") }\n"}]}`, calls),
 			}
 			service, err := New(cfg, fixture.manager)
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.FunctionModelScope} {
+			for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.CodeModelScope} {
 				if service.RequireRemoteConfirmation(scope, false) == nil {
 					t.Fatalf("%s was not gated", scope)
 				}

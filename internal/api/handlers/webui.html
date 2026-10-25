@@ -6,22 +6,22 @@
 <title>Mini-Orca · Web UI &amp; Diff Inspector</title>
 <style>
 :root, [data-theme="dark"] {
-  --bg: #16161e;
+  --bg: #13141c;
   --surface: #1a1b26;
-  --surface-alt: #24283b;
+  --surface-alt: #222436;
   --surface-hover: #292e42;
-  --border: #3b4261;
-  --fg: #c0caf5;
-  --fg-muted: #7982a9;
+  --border: #333952;
+  --fg: #c8d3f5;
+  --fg-muted: #7a88cf;
   --accent: #7aa2f7;
-  --accent-dim: rgba(122, 162, 247, 0.16);
+  --accent-dim: rgba(122, 162, 247, 0.15);
   --cyan: #7dcfff;
   --green: #9ece6a;
   --green-bg: rgba(158, 206, 106, 0.14);
-  --green-line: rgba(158, 206, 106, 0.22);
+  --green-line: rgba(158, 206, 106, 0.20);
   --red: #f7768e;
   --red-bg: rgba(247, 118, 142, 0.14);
-  --red-line: rgba(247, 118, 142, 0.22);
+  --red-line: rgba(247, 118, 142, 0.20);
   --amber: #e0af68;
   --amber-bg: rgba(224, 175, 104, 0.16);
   --purple: #bb9af7;
@@ -29,10 +29,10 @@
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
 }
 [data-theme="light"] {
-  --bg: #f5f6fa;
+  --bg: #f6f7fb;
   --surface: #ffffff;
   --surface-alt: #eef0f7;
-  --surface-hover: #e4e7f2;
+  --surface-hover: #e3e7f4;
   --border: #d0d5e8;
   --fg: #1f2335;
   --fg-muted: #565f89;
@@ -41,10 +41,10 @@
   --cyan: #007197;
   --green: #387002;
   --green-bg: rgba(88, 166, 28, 0.14);
-  --green-line: rgba(88, 166, 28, 0.22);
+  --green-line: rgba(88, 166, 28, 0.20);
   --red: #c64343;
   --red-bg: rgba(218, 54, 51, 0.12);
-  --red-line: rgba(218, 54, 51, 0.20);
+  --red-line: rgba(218, 54, 51, 0.18);
   --amber: #8f5e15;
   --amber-bg: rgba(224, 175, 104, 0.20);
   --purple: #7847bd;
@@ -53,35 +53,40 @@
 html, body {
   margin: 0; padding: 0; height: 100%;
   background: var(--bg); color: var(--fg);
-  font-family: var(--font-sans); font-size: 13px; line-height: 1.45;
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.5;
 }
 button, select, input, textarea {
   font-family: inherit; font-size: 12px; color: var(--fg);
   background: var(--surface-alt); border: 1px solid var(--border);
-  border-radius: 6px; padding: 5px 10px;
+  border-radius: 6px; padding: 6px 11px;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--accent);
 }
 button {
-  cursor: pointer; font-weight: 500; transition: background 0.12s, border-color 0.12s;
+  cursor: pointer; font-weight: 500; transition: background 0.12s, border-color 0.12s, opacity 0.12s;
   display: inline-flex; align-items: center; gap: 5px;
 }
 button:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
-button:disabled { opacity: 0.48; cursor: not-allowed; }
-button.btn-primary { background: var(--accent); color: #15161e; border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.btn-primary { background: var(--accent); color: #13141c; border-color: var(--accent); font-weight: 600; }
 button.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 button.btn-success { background: var(--green-bg); color: var(--green); border-color: var(--green); font-weight: 600; }
 button.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red); }
 button.btn-amber { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
+button.btn-ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+button.btn-ghost:hover:not(:disabled) { background: var(--surface-alt); color: var(--fg); border-color: var(--border); }
 
 .app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; flex-wrap: wrap;
+  padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14px; color: var(--accent); letter-spacing: 0.02em; }
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
   background: var(--surface-alt); color: var(--fg-muted); border: 1px solid var(--border);
 }
 .badge.green { background: var(--green-bg); color: var(--green); border-color: var(--green); }
@@ -92,22 +97,50 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 .project-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .project-path { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
 
+.menu-wrap { position: relative; }
+.dropdown-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 6px);
+  min-width: 220px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  z-index: 100; flex-direction: column; gap: 3px;
+}
+.dropdown-menu.open { display: flex; }
+.dropdown-menu button {
+  width: 100%; justify-content: flex-start; background: transparent;
+  border-color: transparent; padding: 7px 10px; border-radius: 5px;
+}
+.dropdown-menu button:hover { background: var(--surface-hover); border-color: transparent; }
+.dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
 .nav-tabs {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 18px; background: var(--surface); border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.tab-group { display: flex; gap: 4px; }
+.tab-group { display: flex; gap: 6px; }
 .tab-btn {
   border: none; border-bottom: 2px solid transparent; border-radius: 0;
-  background: transparent; padding: 9px 14px; font-size: 13px; color: var(--fg-muted);
+  background: transparent; padding: 10px 16px; font-size: 13px; color: var(--fg-muted);
 }
 .tab-btn:hover { background: var(--surface-alt); color: var(--fg); border-color: transparent; }
 .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
+.segmented {
+  display: inline-flex; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; padding: 2px; gap: 2px; width: 100%;
+}
+.segmented button {
+  flex: 1; justify-content: center; border: none; background: transparent;
+  padding: 5px 9px; border-radius: 5px; font-size: 11.5px; color: var(--fg-muted);
+}
+.segmented button.active {
+  background: var(--surface-alt); color: var(--accent); font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
 .status-banner {
   display: none; align-items: center; justify-content: space-between;
-  padding: 7px 16px; font-size: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  padding: 7px 18px; font-size: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .status-banner.show { display: flex; }
 .status-banner.error { background: var(--red-bg); color: var(--red); }
@@ -116,7 +149,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 
 .workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .sidebar {
-  width: 320px; min-width: 250px; max-width: 420px;
+  width: 310px; min-width: 250px; max-width: 400px;
   background: var(--surface); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
 }
@@ -127,7 +160,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 }
 .sidebar-list { flex: 1; overflow-y: auto; padding: 6px; }
 .list-item {
-  padding: 7px 9px; border-radius: 6px; cursor: pointer; margin-bottom: 3px;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 3px;
   border: 1px solid transparent; display: flex; flex-direction: column; gap: 3px;
 }
 .list-item:hover { background: var(--surface-alt); }
@@ -139,11 +172,11 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 .main-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .action-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 9px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 9px 18px; background: var(--surface); border-bottom: 1px solid var(--border);
   flex-shrink: 0; flex-wrap: wrap;
 }
-.action-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.content-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; }
+.action-group { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.content-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; }
 
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -151,11 +184,27 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 }
 .card-header {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 9px 12px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
+  padding: 9px 14px; background: var(--surface-alt); border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
 .card-title { font-family: var(--font-mono); font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 8px; }
-.card-body { padding: 12px; }
+.card-body { padding: 14px; }
+
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.doc-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.doc-block h4 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); }
+.doc-pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px; font-family: var(--font-mono); font-size: 11.5px; overflow-x: auto; white-space: pre-wrap;
+}
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 6px; font-family: var(--font-mono); font-size: 11px;
+  background: var(--surface-alt); border: 1px solid var(--border); color: var(--cyan); cursor: pointer;
+}
+.file-chip:hover { border-color: var(--accent); background: var(--accent-dim); }
+.file-chip.selected { background: var(--accent-dim); border-color: var(--accent); color: var(--fg); }
 
 .diff-table {
   width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px;
@@ -174,22 +223,16 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 .diff-empty { background: rgba(0, 0, 0, 0.08); }
 .diff-split-col { width: calc(50% - 46px); border-right: 1px solid var(--border); }
 
-.checks-strip {
-  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
-}
+.checks-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .check-pill {
   padding: 5px 10px; border-radius: 6px; background: var(--surface);
   border: 1px solid var(--border); font-size: 11px; display: flex; align-items: center; gap: 6px;
 }
-.empty-state {
-  text-align: center; padding: 48px 20px; color: var(--fg-muted);
-}
-.form-grid { display: grid; gap: 10px; max-width: 680px; }
-.form-row { display: flex; flex-direction: column; gap: 4px; }
-.form-row label { font-size: 11px; font-weight: 600; color: var(--fg-muted); }
-.code-viewer {
-  font-family: var(--font-mono); font-size: 12px; width: 100%; border-collapse: collapse;
-}
+.empty-state { text-align: center; padding: 48px 20px; color: var(--fg-muted); }
+.form-grid { display: grid; gap: 12px; max-width: 780px; }
+.form-row { display: flex; flex-direction: column; gap: 5px; }
+.form-row label { font-size: 11.5px; font-weight: 600; color: var(--fg-muted); }
+.code-viewer { font-family: var(--font-mono); font-size: 12px; width: 100%; border-collapse: collapse; }
 .code-viewer td { padding: 1px 8px; white-space: pre; }
 .code-viewer tr:target, .code-viewer tr.highlight-line { background: var(--accent-dim); }
 </style>
@@ -210,20 +253,26 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     <div class="action-group">
       <label for="worktree-select" style="font-size:11px;color:var(--fg-muted);">Checkout:</label>
       <select id="worktree-select" title="Select main checkout or isolated task worktree"></select>
-      <button id="trust-btn" title="Toggle local execution trust for running checks">Trust: …</button>
-      <button id="reindex-btn" title="Reindex repository files and symbols">↻ Reindex</button>
-      <button id="switch-project-btn" title="Restore a previously imported local project">📁 Switch Project</button>
-      <button id="refresh-btn" title="Refresh all current workspace state">⟳ Refresh</button>
-      <button id="theme-btn" title="Toggle Dark / Light theme">◐ Theme</button>
+      <span id="trust-status-pill" class="badge">Trust: …</span>
+      <div class="menu-wrap">
+        <button id="workspace-menu-btn" title="Workspace actions and settings">⋯ Workspace</button>
+        <div id="workspace-menu" class="dropdown-menu">
+          <button id="trust-btn" title="Toggle local execution trust for running checks">Trust: …</button>
+          <button id="reindex-btn" title="Reindex repository files">↻ Reindex Files</button>
+          <button id="switch-project-btn" title="Restore or import a local project">📁 Switch Project</button>
+          <button id="refresh-btn" title="Refresh all current workspace state">⟳ Refresh Workspace</button>
+          <div class="dropdown-divider"></div>
+          <button id="theme-btn" title="Toggle Dark / Light theme">◐ Toggle Theme</button>
+        </div>
+      </div>
     </div>
   </header>
 
   <nav class="nav-tabs">
     <div class="tab-group">
-      <button class="tab-btn active" data-tab="diff">1 · Diff &amp; Review</button>
-      <button class="tab-btn" data-tab="issues">2 · Issues &amp; Findings</button>
-      <button class="tab-btn" data-tab="tasks">3 · Proposals &amp; Tasks</button>
-      <button class="tab-btn" data-tab="files">4 · Files &amp; Symbols</button>
+      <button class="tab-btn active" data-tab="understand">1 · Understand</button>
+      <button class="tab-btn" data-tab="build">2 · Build &amp; Fix</button>
+      <button class="tab-btn" data-tab="diff">3 · Review &amp; Apply <span id="nav-proposal-badge" class="badge" style="margin-left:4px;">0</span></button>
     </div>
     <div class="action-group" style="padding:4px 0;">
       <span id="revision-badge" class="project-path"></span>
@@ -232,15 +281,208 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
 
   <div id="status-banner" class="status-banner">
     <span id="status-banner-text"></span>
-    <button id="status-banner-close">✕</button>
+    <button id="status-banner-close" class="btn-ghost">✕</button>
   </div>
 
-  <!-- TAB 1: DIFF & REVIEW -->
-  <section id="view-diff" class="workspace">
+  <!-- WORKSPACE 1: UNDERSTAND (DOCS & SOURCE FILES) -->
+  <section id="view-understand" class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="segmented">
+          <button id="understand-mode-docs" class="active">📘 Project Docs</button>
+          <button id="understand-mode-files">📄 Source Files (<span id="indexed-files-count">0</span>)</button>
+        </div>
+      </div>
+
+      <!-- Docs Navigation Sidebar -->
+      <div id="understand-docs-sidebar" class="sidebar-list">
+        <div class="list-item active" data-doc-sec="overview">
+          <div class="list-item-title">System Purpose &amp; Goals</div>
+          <div class="list-item-sub">Executive summary, stack &amp; metrics</div>
+        </div>
+        <div class="list-item" data-doc-sec="architecture">
+          <div class="list-item-title">Architecture &amp; Topology</div>
+          <div class="list-item-sub">Dataflow, boundaries &amp; diagrams</div>
+        </div>
+        <div class="list-item" data-doc-sec="components">
+          <div class="list-item-title">Components &amp; Modules</div>
+          <div class="list-item-sub">Responsibilities &amp; key files</div>
+        </div>
+        <div class="list-item" data-doc-sec="scenarios">
+          <div class="list-item-title">Runtime Scenarios</div>
+          <div class="list-item-sub">Step-by-step execution flows</div>
+        </div>
+        <div class="list-item" data-doc-sec="decisions">
+          <div class="list-item-title">Decisions &amp; Runbook</div>
+          <div class="list-item-sub">ADRs, dependencies &amp; operations</div>
+        </div>
+      </div>
+
+      <!-- Source Files Sidebar -->
+      <div id="understand-files-sidebar" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div class="sidebar-section">
+          <input id="file-filter-input" type="text" placeholder="Filter files by path…" style="width:100%;">
+        </div>
+        <div id="indexed-file-list" class="sidebar-list"></div>
+      </div>
+    </aside>
+
+    <!-- Understand: Docs Main Pane -->
+    <main id="understand-docs-main" class="main-pane">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong id="docs-heading">Project Engineering Handbook</strong>
+          <span id="docs-status-badge" class="badge"></span>
+        </div>
+        <div class="action-group">
+          <button id="run-analysis-btn" class="btn-primary" title="Generate or refresh app-created project documentation and semantic analysis">✦ Generate / Refresh Project Docs</button>
+        </div>
+      </div>
+      <div id="docs-content" class="content-scroll"></div>
+    </main>
+
+    <!-- Understand: Source Files Main Pane -->
+    <main id="understand-files-main" class="main-pane" style="display:none;">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong id="open-file-title">Select a source file</strong>
+          <span id="open-file-meta" class="badge"></span>
+        </div>
+        <div class="action-group">
+          <button id="explain-file-btn" title="Generate an AI explanation of this file's behavior, inputs, outputs and risks">✦ Explain File</button>
+          <button id="task-from-file-btn" class="btn-primary" title="Create a new feature or bug-fix spec targeting this file">＋ Create Task for File</button>
+        </div>
+      </div>
+      <div id="file-viewer-content" class="content-scroll"></div>
+    </main>
+  </section>
+
+  <!-- WORKSPACE 2: BUILD & FIX (SPECS & ISSUES) -->
+  <section id="view-build" class="workspace" style="display:none;">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="segmented">
+          <button id="build-mode-spec" class="active">✦ Create from Spec</button>
+          <button id="build-mode-issues">🐛 Fix Bugs (<span id="issues-count-badge">0</span>)</button>
+        </div>
+      </div>
+
+      <!-- Spec Sidebar: Active & Saved Proposals -->
+      <div id="build-spec-sidebar" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div class="sidebar-section" style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="sidebar-title" style="margin:0;">Saved Proposals</span>
+          <button id="reset-spec-btn" class="btn-ghost" style="padding:2px 7px;">＋ New Spec</button>
+        </div>
+        <div id="tasks-list-body" class="sidebar-list"></div>
+      </div>
+
+      <!-- Issues Sidebar: Filters & Issue List -->
+      <div id="build-issues-sidebar" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div class="sidebar-section">
+          <div class="form-grid" style="gap:8px;">
+            <div class="form-row">
+              <label for="issue-cat-filter">Category</label>
+              <select id="issue-cat-filter">
+                <option value="all">All Categories</option>
+                <option value="bugs">Bugs &amp; Reliability</option>
+                <option value="security">Security</option>
+                <option value="performance">Performance</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="issue-status-filter">Status</label>
+              <select id="issue-status-filter">
+                <option value="open">Open / Active</option>
+                <option value="all">All Statuses</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <input id="issue-search" type="text" placeholder="Search findings by file or title…">
+            </div>
+          </div>
+        </div>
+        <div id="issues-summary-list" class="sidebar-list"></div>
+      </div>
+    </aside>
+
+    <!-- Build: Spec Composer Main Pane -->
+    <main id="build-spec-main" class="main-pane">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong>Spec-to-Code Studio</strong>
+          <span class="project-path">Write a specification to create functions, add features, or fix bugs across 1–8 files</span>
+        </div>
+        <div class="action-group">
+          <button id="create-task-btn" title="Save proposal session without running the model yet">Save Draft Only</button>
+          <button id="generate-spec-btn" class="btn-primary" title="Create session and generate code changes from this specification">⚡ Generate Code Changes</button>
+        </div>
+      </div>
+      <div class="content-scroll">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">1 · Task Specification</span>
+          </div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div style="display:grid;grid-template-columns:1fr 180px;gap:10px;">
+                <div class="form-row">
+                  <label for="new-task-title">Task Summary / Title</label>
+                  <input id="new-task-title" type="text" placeholder="e.g. Add rate-limiter middleware and unit tests">
+                </div>
+                <div class="form-row">
+                  <label for="new-task-kind">Task Kind</label>
+                  <select id="new-task-kind">
+                    <option value="feature">feature (New Function / Feature)</option>
+                    <option value="fix">fix (Bug Fix)</option>
+                    <option value="refactor">refactor (Refactor)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <label for="new-task-spec">Detailed Specification &amp; Prompt (behavior, function inputs/outputs, edge cases)</label>
+                <textarea id="new-task-spec" rows="5" placeholder="Describe what functions or changes should be created, expected signatures, error handling, and invariants to preserve…"></textarea>
+              </div>
+              <div class="form-row">
+                <label for="new-task-paths">Target File Paths (1–8 Go or Markdown files, comma or newline separated)</label>
+                <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, internal/api/local_policy_test.go"></textarea>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                  <input id="spec-file-search" type="text" placeholder="Quick-add indexed file…" style="flex:1;">
+                  <span class="project-path">Click a file chip below to toggle selection (companion *_test.go auto-suggested)</span>
+                </div>
+                <div id="spec-file-chips" class="chip-list"></div>
+              </div>
+              <div class="form-row">
+                <label for="new-task-criteria">Acceptance Criteria (one per line)</label>
+                <textarea id="new-task-criteria" rows="3" placeholder="All unit tests and go vet pass&#10;Edge cases are covered by unit tests"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Build: Issues Main Pane -->
+    <main id="build-issues-main" class="main-pane" style="display:none;">
+      <div class="action-bar">
+        <div class="action-group">
+          <strong>Triaged Findings &amp; Bug Reports</strong>
+          <span class="project-path">Select any issue to pre-fill a targeted bug-fix specification</span>
+        </div>
+        <div class="action-group">
+          <button id="run-scan-btn" class="btn-primary" title="Run Go workspace parser, go vet and unit test scan">⚙ Run Go Scan</button>
+        </div>
+      </div>
+      <div id="issues-content" class="content-scroll"></div>
+    </main>
+  </section>
+
+  <!-- WORKSPACE 3: REVIEW & APPLY (DIFF INSPECTOR) -->
+  <section id="view-diff" class="workspace" style="display:none;">
     <aside class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-title">
-          <span>Change Proposals</span>
+          <span>Active Proposal</span>
           <span id="proposal-count" class="badge">0</span>
         </div>
         <select id="proposal-select" style="width:100%;"></select>
@@ -252,6 +494,13 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
         </div>
       </div>
       <div id="diff-file-list" class="sidebar-list"></div>
+      <div class="sidebar-section" style="border-top:1px solid var(--border);border-bottom:none;">
+        <div class="sidebar-title"><span>Iterate / Refine with AI</span></div>
+        <div class="form-row">
+          <textarea id="proposal-message-input" rows="3" placeholder="Ask the model to refine this proposal or fix a failing check…"></textarea>
+          <button id="send-message-btn" style="width:100%;justify-content:center;margin-top:4px;">⚡ Generate Update</button>
+        </div>
+      </div>
     </aside>
 
     <main class="main-pane">
@@ -274,126 +523,49 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       <div id="diff-content" class="content-scroll"></div>
     </main>
   </section>
-
-  <!-- TAB 2: ISSUES & FINDINGS -->
-  <section id="view-issues" class="workspace" style="display:none;">
-    <aside class="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-title"><span>Issue Filters</span></div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="issue-cat-filter">Category</label>
-            <select id="issue-cat-filter">
-              <option value="all">All Categories</option>
-              <option value="bugs">Bugs &amp; Reliability</option>
-              <option value="security">Security</option>
-              <option value="performance">Performance</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="issue-status-filter">Status</label>
-            <select id="issue-status-filter">
-              <option value="open">Open / Active</option>
-              <option value="all">All Statuses</option>
-              <option value="dismissed">Dismissed</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="issue-search">Search</label>
-            <input id="issue-search" type="text" placeholder="Filter by file or title…">
-          </div>
-        </div>
-      </div>
-      <div id="issues-summary-list" class="sidebar-list"></div>
-    </aside>
-    <main class="main-pane">
-      <div id="issues-content" class="content-scroll"></div>
-    </main>
-  </section>
-
-  <!-- TAB 3: PROPOSALS & TASKS -->
-  <section id="view-tasks" class="workspace" style="display:none;">
-    <main class="main-pane">
-      <div class="content-scroll">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">＋ Create New Change Proposal</span>
-          </div>
-          <div class="card-body">
-            <div class="form-grid">
-              <div class="form-row">
-                <label for="new-task-title">Task Title</label>
-                <input id="new-task-title" type="text" placeholder="e.g. Fix nil pointer in handler and add regression test">
-              </div>
-              <div class="form-row">
-                <label for="new-task-kind">Kind</label>
-                <select id="new-task-kind">
-                  <option value="fix">fix (Bug Fix)</option>
-                  <option value="feature">feature (Feature)</option>
-                  <option value="refactor">refactor (Refactor)</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <label for="new-task-paths">Target File Paths (comma or newline separated, 1–8 eligible project files)</label>
-                <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, cmd/daemon/main_test.go"></textarea>
-              </div>
-              <div class="form-row">
-                <label for="new-task-criteria">Acceptance Criteria (one per line)</label>
-                <textarea id="new-task-criteria" rows="2" placeholder="Verify change passes unit tests and architecture checks"></textarea>
-              </div>
-              <div>
-                <button id="create-task-btn" class="btn-primary">Create Proposal Session</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Saved Proposals &amp; Recovery State</span>
-          </div>
-          <div id="tasks-list-body" class="card-body"></div>
-        </div>
-      </div>
-    </main>
-  </section>
-
-  <!-- TAB 4: FILES & SYMBOLS -->
-  <section id="view-files" class="workspace" style="display:none;">
-    <aside class="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-title">
-          <span>Indexed Files</span>
-          <span id="indexed-files-count" class="badge">0</span>
-        </div>
-        <input id="file-filter-input" type="text" placeholder="Search path…" style="width:100%;">
-      </div>
-      <div id="indexed-file-list" class="sidebar-list"></div>
-    </aside>
-    <main class="main-pane">
-      <div class="action-bar">
-        <div class="action-group">
-          <strong id="open-file-title">Select an indexed file</strong>
-          <span id="open-file-meta" class="badge"></span>
-        </div>
-        <div class="action-group" id="open-file-symbols"></div>
-      </div>
-      <div id="file-viewer-content" class="content-scroll"></div>
-    </main>
-  </section>
 </div>
 
 <script>
 (function() {
   const params = new URLSearchParams(window.location.search);
+  const rawTab = params.get('tab') || '';
+  const initialSessionId = params.get('session_id') || '';
+  const initialFile = params.get('file') || '';
+
+  let initialWorkspace = 'understand';
+  let initialUnderstandMode = initialFile ? 'files' : 'docs';
+  let initialBuildMode = 'spec';
+
+  if (rawTab === 'diff' || (!rawTab && initialSessionId)) {
+    initialWorkspace = 'diff';
+  } else if (rawTab === 'files') {
+    initialWorkspace = 'understand';
+    initialUnderstandMode = 'files';
+  } else if (rawTab === 'docs' || rawTab === 'understand') {
+    initialWorkspace = 'understand';
+    initialUnderstandMode = 'docs';
+  } else if (rawTab === 'issues') {
+    initialWorkspace = 'build';
+    initialBuildMode = 'issues';
+  } else if (rawTab === 'tasks' || rawTab === 'build') {
+    initialWorkspace = 'build';
+    initialBuildMode = 'spec';
+  }
+
   const state = {
-    tab: params.get('tab') || 'diff',
+    tab: initialWorkspace,
+    understandMode: initialUnderstandMode,
+    docSection: 'overview',
+    buildMode: initialBuildMode,
     worktreePath: params.get('worktree_path') || '',
-    sessionId: params.get('session_id') || '',
-    selectedFile: params.get('file') || '',
+    sessionId: initialSessionId,
+    selectedFile: initialFile,
     diffMode: 'split',
     sinceLastReview: false,
     project: null,
+    mainProject: null,
+    overview: null,
+    models: null,
     index: null,
     trust: null,
     gitWorkspace: null,
@@ -401,7 +573,8 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     activeSession: null,
     findings: [],
     openFileInfo: null,
-    openFileSymbols: []
+    openFileAnalysis: null,
+    openFileExplanation: null
   };
 
   function esc(str) {
@@ -424,9 +597,28 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     document.getElementById('status-banner').className = 'status-banner';
   });
 
+  // Workspace overflow menu
+  const menuBtn = document.getElementById('workspace-menu-btn');
+  const menuEl = document.getElementById('workspace-menu');
+  menuBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    menuEl.classList.toggle('open');
+  });
+  document.addEventListener('click', function() {
+    menuEl.classList.remove('open');
+  });
+
   function syncURL() {
     const q = new URLSearchParams();
-    if (state.tab && state.tab !== 'diff') q.set('tab', state.tab);
+    if (state.tab === 'understand' && state.understandMode === 'files') {
+      q.set('tab', 'files');
+    } else if (state.tab === 'build' && state.buildMode === 'issues') {
+      q.set('tab', 'issues');
+    } else if (state.tab === 'build') {
+      q.set('tab', 'tasks');
+    } else if (state.tab && state.tab !== 'diff') {
+      q.set('tab', state.tab);
+    }
     if (state.worktreePath) q.set('worktree_path', state.worktreePath);
     if (state.sessionId) q.set('session_id', state.sessionId);
     if (state.selectedFile) q.set('file', state.selectedFile);
@@ -470,16 +662,64 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     return data;
   }
 
+  function isScopeRemote(scopeName) {
+    const scopes = state.models && state.models.scopes;
+    if (!scopes || !scopes[scopeName]) return false;
+    return Boolean(scopes[scopeName].remote_provider);
+  }
+
+  function confirmRemoteScopeIfNeeded(scopeName, actionLabel) {
+    if (!isScopeRemote(scopeName)) return true;
+    const model = state.models.scopes[scopeName];
+    return window.confirm(
+      actionLabel + ' uses remote provider ' + (model.provider_origin || model.model || scopeName) +
+      ' (scope: ' + scopeName + '). Confirm sending bounded project context for this request?'
+    );
+  }
+
   function setTab(tab) {
-    state.tab = tab;
+    if (tab === 'files') {
+      state.tab = 'understand';
+      state.understandMode = 'files';
+    } else if (tab === 'docs') {
+      state.tab = 'understand';
+      state.understandMode = 'docs';
+    } else if (tab === 'issues') {
+      state.tab = 'build';
+      state.buildMode = 'issues';
+    } else if (tab === 'tasks') {
+      state.tab = 'build';
+      state.buildMode = 'spec';
+    } else {
+      state.tab = tab;
+    }
     syncURL();
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === state.tab);
     });
-    ['diff', 'issues', 'tasks', 'files'].forEach(function(id) {
+    ['understand', 'build', 'diff'].forEach(function(id) {
       const sec = document.getElementById('view-' + id);
-      if (sec) sec.style.display = (id === tab) ? 'flex' : 'none';
+      if (sec) sec.style.display = (id === state.tab) ? 'flex' : 'none';
     });
+    syncSubModes();
+  }
+
+  function syncSubModes() {
+    const isDocs = state.understandMode === 'docs';
+    document.getElementById('understand-mode-docs').classList.toggle('active', isDocs);
+    document.getElementById('understand-mode-files').classList.toggle('active', !isDocs);
+    document.getElementById('understand-docs-sidebar').style.display = isDocs ? 'block' : 'none';
+    document.getElementById('understand-files-sidebar').style.display = isDocs ? 'none' : 'flex';
+    document.getElementById('understand-docs-main').style.display = isDocs ? 'flex' : 'none';
+    document.getElementById('understand-files-main').style.display = isDocs ? 'none' : 'flex';
+
+    const isSpec = state.buildMode === 'spec';
+    document.getElementById('build-mode-spec').classList.toggle('active', isSpec);
+    document.getElementById('build-mode-issues').classList.toggle('active', !isSpec);
+    document.getElementById('build-spec-sidebar').style.display = isSpec ? 'flex' : 'none';
+    document.getElementById('build-issues-sidebar').style.display = isSpec ? 'none' : 'flex';
+    document.getElementById('build-spec-main').style.display = isSpec ? 'flex' : 'none';
+    document.getElementById('build-issues-main').style.display = isSpec ? 'none' : 'flex';
   }
 
   function mergeWorktreeSessionsIntoChanges(baseChanges, gitWS, activeWtPath) {
@@ -531,6 +771,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       if (status && status.version) {
         document.getElementById('daemon-version').textContent = 'v' + status.version;
       }
+      state.models = await apiFetch('/api/models/current').catch(function() { return null; });
       state.mainProject = await apiFetch('/api/projects/current');
       if (state.worktreePath) {
         try {
@@ -560,7 +801,8 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
         apiFetch(withWorktree('/api/projects/current/execution-trust' + revQuery)),
         apiFetch('/api/projects/current/git/workspace' + mainIdQuery),
         apiFetch(withWorktree('/api/projects/current/changes' + idQuery)),
-        apiFetch(withWorktree('/api/projects/current/findings' + revQuery))
+        apiFetch(withWorktree('/api/projects/current/findings' + revQuery)),
+        apiFetch(withWorktree('/api/projects/current/overview' + revQuery))
       ]);
 
       if (results[0].status === 'fulfilled') state.index = results[0].value;
@@ -571,12 +813,19 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       if (results[4].status === 'fulfilled' && results[4].value) {
         state.findings = results[4].value.findings || [];
       }
+      if (results[5].status === 'fulfilled') {
+        state.overview = results[5].value;
+      }
 
       renderHeader();
       renderWorktreeSelect();
+      renderUnderstandDocs();
       renderFilesTab();
+      renderSpecFileChips();
       renderIssuesTab();
       renderTasksTab();
+
+      document.getElementById('nav-proposal-badge').textContent = String(state.changes.length);
 
       if (!state.sessionId && state.changes.length > 0) {
         state.sessionId = state.changes[0].id;
@@ -587,7 +836,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
         state.activeSession = null;
         renderDiffTab();
       }
-      if (state.tab === 'files' && state.selectedFile) {
+      if (state.selectedFile && state.understandMode === 'files') {
         await openSourceFile(state.selectedFile);
       }
     } catch (err) {
@@ -627,14 +876,17 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     document.getElementById('project-name').textContent = state.project.name || 'Project';
     document.getElementById('project-path').textContent = state.project.path || '';
     document.getElementById('project-stats').textContent =
-      (state.project.project_type || 'code') + ' · ' + (state.project.file_count || 0) + ' files';
+      (state.project.type || state.project.project_type || 'code') + ' · ' + (state.project.file_count || 0) + ' files';
     document.getElementById('revision-badge').textContent =
       'rev: ' + (state.project.project_revision ? state.project.project_revision.slice(0, 19) : 'n/a');
 
+    const trusted = Boolean(state.trust && state.trust.trusted);
+    const pill = document.getElementById('trust-status-pill');
+    pill.textContent = trusted ? '✓ Trusted' : '⚠ Untrusted';
+    pill.className = 'badge ' + (trusted ? 'green' : 'amber');
+
     const trustBtn = document.getElementById('trust-btn');
-    const trusted = state.trust && state.trust.trusted;
-    trustBtn.textContent = trusted ? '✓ Trust: GRANTED' : '⚠ Trust: UNTRUSTED';
-    trustBtn.className = trusted ? 'btn-success' : 'btn-amber';
+    trustBtn.textContent = trusted ? '✓ Execution Trust: GRANTED (Click to Revoke)' : '⚠ Grant Execution Trust for Checks';
   }
 
   function renderWorktreeSelect() {
@@ -652,6 +904,645 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       return '<option value="' + esc(it.path) + '"' + selected + '>' + esc(it.label) + '</option>';
     }).join('');
   }
+
+  // ==================== WORKSPACE 1: UNDERSTAND (PROJECT DOCS & FILES) ====================
+
+  function renderUnderstandDocs() {
+    const ov = state.overview || {};
+    const docs = ov.docs || null;
+    const analysis = ov.analysis || {};
+    const metrics = ov.metrics || state.project || {};
+
+    const badge = document.getElementById('docs-status-badge');
+    const statusText = (docs && docs.status) || analysis.ai_status || 'deterministic';
+    badge.textContent = statusText;
+    badge.className = 'badge ' + (statusText === 'completed' || statusText === 'fresh' ? 'green' : 'blue');
+
+    const container = document.getElementById('docs-content');
+    const sec = state.docSection || 'overview';
+    let html = '';
+
+    if (sec === 'overview') {
+      const ctx = (docs && docs.context) || {};
+      const purpose = ctx.system_purpose || analysis.summary || (state.project && state.project.summary) ||
+        'Run Project Analysis to generate a comprehensive architectural handbook for this repository.';
+      const goals = ctx.goal_pursuit || '';
+      const stack = Array.isArray(ctx.tech_stack) && ctx.tech_stack.length
+        ? ctx.tech_stack
+        : Object.keys(metrics.languages || {});
+
+      html += '<div class="card">' +
+        '<div class="card-header"><span class="card-title">System Purpose &amp; Overview</span></div>' +
+        '<div class="card-body">' +
+          '<p style="margin:0 0 10px 0;font-size:13.5px;">' + esc(purpose) + '</p>' +
+          (goals ? '<p style="margin:0;color:var(--fg-muted);"><strong>Goal Alignment:</strong> ' + esc(goals) + '</p>' : '') +
+        '</div>' +
+      '</div>';
+
+      html += '<div class="doc-grid">' +
+        '<div class="doc-block">' +
+          '<h4>Repository Metrics</h4>' +
+          '<div><strong>Files:</strong> ' + esc(metrics.file_count || 0) + ' (' + esc(metrics.source_file_count || 0) + ' source)</div>' +
+          '<div><strong>Lines of Code:</strong> ' + esc(metrics.total_lines || 0) + '</div>' +
+          '<div><strong>Primary Type:</strong> ' + esc(metrics.type || 'Software Project') + '</div>' +
+        '</div>' +
+        '<div class="doc-block">' +
+          '<h4>Technology Stack</h4>' +
+          '<div class="chip-list">' +
+            (stack.map(function(s) { return '<span class="badge blue">' + esc(s) + '</span>'; }).join('') || '<span class="project-path">No stack metadata</span>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    } else if (sec === 'architecture') {
+      const ctx = (docs && docs.context) || {};
+      const topo = ctx.architecture_topology || '';
+      const archDiagram = analysis.architecture || '';
+      html += '<div class="card">' +
+        '<div class="card-header"><span class="card-title">Architecture &amp; System Topology</span></div>' +
+        '<div class="card-body">' +
+          (topo ? '<p style="margin-top:0;">' + esc(topo) + '</p>' : '') +
+          (archDiagram ? '<div class="doc-pre">' + esc(archDiagram) + '</div>' : '<div class="empty-state">No architecture diagram generated yet. Click "Generate / Refresh Project Docs" above.</div>') +
+        '</div>' +
+      '</div>';
+    } else if (sec === 'components') {
+      const comps = (docs && Array.isArray(docs.components)) ? docs.components : [];
+      const fallbackComps = Array.isArray(analysis.components) ? analysis.components : [];
+      if (comps.length > 0) {
+        html += comps.map(function(c) {
+          const paths = Array.isArray(c.paths) ? c.paths : [];
+          return '<div class="card">' +
+            '<div class="card-header">' +
+              '<div class="card-title">' +
+                '<span>' + esc(c.name) + '</span>' +
+                (c.layer ? '<span class="badge blue">' + esc(c.layer) + '</span>' : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="card-body">' +
+              '<p style="margin:0 0 8px 0;">' + esc(c.responsibility || '') + '</p>' +
+              (paths.length ? '<div class="chip-list">' + paths.map(function(p) {
+                return '<span class="file-chip doc-file-jump" data-path="' + esc(p) + '">📄 ' + esc(p) + '</span>';
+              }).join('') + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      } else if (fallbackComps.length > 0) {
+        html += '<div class="card"><div class="card-header"><span class="card-title">Project Components</span></div><div class="card-body">' +
+          fallbackComps.map(function(line) { return '<div style="margin-bottom:6px;">• ' + esc(line) + '</div>'; }).join('') +
+        '</div></div>';
+      } else {
+        html += '<div class="empty-state"><h3>No Component Breakdown Yet</h3><p>Click "Generate / Refresh Project Docs" to synthesize the C4 component catalog.</p></div>';
+      }
+    } else if (sec === 'scenarios') {
+      const scenarios = (docs && Array.isArray(docs.scenarios)) ? docs.scenarios : [];
+      const flows = Array.isArray(analysis.flows) ? analysis.flows : [];
+      if (scenarios.length > 0) {
+        html += scenarios.map(function(sc) {
+          const steps = Array.isArray(sc.steps) ? sc.steps : [];
+          return '<div class="card">' +
+            '<div class="card-header">' +
+              '<span class="card-title">' + esc(sc.title) + '</span>' +
+              (sc.trigger ? '<span class="badge">' + esc(sc.trigger) + '</span>' : '') +
+            '</div>' +
+            '<div class="card-body">' +
+              steps.map(function(st) {
+                return '<div style="margin-bottom:8px;">' +
+                  '<strong>' + esc(st.step) + '. ' + esc(st.actor) + ':</strong> ' + esc(st.action) +
+                  (st.outcome ? ' <span style="color:var(--fg-muted);">→ ' + esc(st.outcome) + '</span>' : '') +
+                  (st.path ? ' <span class="file-chip doc-file-jump" data-path="' + esc(st.path) + '">📄 ' + esc(st.path) + '</span>' : '') +
+                '</div>';
+              }).join('') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      } else if (flows.length > 0) {
+        html += flows.map(function(fl, idx) {
+          return '<div class="card"><div class="card-header"><span class="card-title">Execution Flow ' + (idx + 1) + '</span></div>' +
+            '<div class="card-body"><div class="doc-pre">' + esc(fl) + '</div></div></div>';
+        }).join('');
+      } else {
+        html += '<div class="empty-state"><h3>No Runtime Scenarios Yet</h3><p>Run Project Analysis to generate end-to-end execution scenarios.</p></div>';
+      }
+    } else if (sec === 'decisions') {
+      const decisions = (docs && Array.isArray(docs.decisions)) ? docs.decisions : [];
+      const deps = (docs && Array.isArray(docs.dependencies)) ? docs.dependencies : [];
+      const ops = (docs && Array.isArray(docs.operational_notes)) ? docs.operational_notes : [];
+
+      if (decisions.length > 0) {
+        html += decisions.map(function(d) {
+          return '<div class="card">' +
+            '<div class="card-header"><span class="card-title">' + esc(d.title) + '</span></div>' +
+            '<div class="card-body">' +
+              '<p style="margin:0 0 6px 0;"><strong>Decision:</strong> ' + esc(d.decision) + '</p>' +
+              '<p style="margin:0 0 6px 0;color:var(--fg-muted);"><strong>Rationale:</strong> ' + esc(d.rationale) + '</p>' +
+              (d.consequences ? '<div class="project-path">Consequences: ' + esc(d.consequences) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+      if (deps.length > 0) {
+        html += '<div class="card"><div class="card-header"><span class="card-title">Key Dependencies</span></div><div class="card-body">' +
+          deps.map(function(dep) {
+            return '<div style="margin-bottom:6px;"><strong>' + esc(dep.name) + '</strong> <span class="badge">' + esc(dep.kind || 'module') + '</span> — ' + esc(dep.purpose || '') + '</div>';
+          }).join('') +
+        '</div></div>';
+      }
+      if (ops.length > 0) {
+        html += '<div class="card"><div class="card-header"><span class="card-title">Operational Runbook</span></div><div class="card-body">' +
+          ops.map(function(note) { return '<div style="margin-bottom:6px;">• ' + esc(note) + '</div>'; }).join('') +
+        '</div></div>';
+      }
+      if (!decisions.length && !deps.length && !ops.length) {
+        html += '<div class="empty-state"><h3>No Architectural Decisions or Runbook Notes</h3><p>Click "Generate / Refresh Project Docs" to populate ADRs and operational notes.</p></div>';
+      }
+    }
+
+    container.innerHTML = html;
+    container.querySelectorAll('.doc-file-jump').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        const p = chip.getAttribute('data-path');
+        state.understandMode = 'files';
+        syncSubModes();
+        openSourceFile(p);
+      });
+    });
+  }
+
+  function renderFilesTab() {
+    const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
+    document.getElementById('indexed-files-count').textContent = String(files.length);
+    const q = (document.getElementById('file-filter-input').value || '').toLowerCase().trim();
+    const filtered = files.filter(function(f) {
+      return !q || f.path.toLowerCase().indexOf(q) >= 0;
+    });
+    const listEl = document.getElementById('indexed-file-list');
+    listEl.innerHTML = filtered.slice(0, 300).map(function(f) {
+      const active = state.selectedFile === f.path ? ' active' : '';
+      return '<div class="list-item' + active + '" data-path="' + esc(f.path) + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + esc(f.path.split('/').pop()) + '</span>' +
+          '<span class="badge">' + esc(f.language || 'text') + '</span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc(f.path) + (f.line_count ? ' · ' + f.line_count + ' lines' : '') + '</div>' +
+      '</div>';
+    }).join('') || '<div class="empty-state">No matching files.</div>';
+
+    listEl.querySelectorAll('.list-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        const p = item.getAttribute('data-path');
+        openSourceFile(p);
+      });
+    });
+  }
+
+  async function openSourceFile(filePath) {
+    if (!filePath) return;
+    try {
+      state.selectedFile = filePath;
+      state.openFileExplanation = null;
+      syncURL();
+      renderFilesTab();
+      const q = '?path=' + encodeURIComponent(filePath);
+      const revQ = state.project ? ('&project_revision=' + encodeURIComponent(state.project.project_revision)) : '';
+      const res = await Promise.allSettled([
+        apiFetch(withWorktree('/api/projects/current/files/info' + q)),
+        apiFetch(withWorktree('/api/projects/current/files/analysis' + q + revQ))
+      ]);
+      if (res[0].status !== 'fulfilled' || !res[0].value) {
+        throw new Error(res[0].reason ? res[0].reason.message : 'File unavailable');
+      }
+      state.openFileInfo = res[0].value;
+      state.openFileAnalysis = (res[1].status === 'fulfilled' && res[1].value && res[1].value.status === 'fresh') ? res[1].value : null;
+
+      document.getElementById('open-file-title').textContent = state.openFileInfo.path || filePath;
+      document.getElementById('open-file-meta').textContent =
+        (state.openFileInfo.language || 'text') + ' · ' + (state.openFileInfo.line_count || state.openFileInfo.lines || 0) + ' lines';
+
+      renderOpenFileContent();
+    } catch (err) {
+      showBanner('Failed to read file ' + filePath + ': ' + err.message, 'error');
+    }
+  }
+
+  function renderOpenFileContent() {
+    const info = state.openFileInfo;
+    if (!info) return;
+    let html = '';
+
+    if (state.openFileExplanation) {
+      const ex = state.openFileExplanation;
+      html += '<div class="card">' +
+        '<div class="card-header"><span class="card-title">✦ File Explanation · ' + esc(info.path) + '</span></div>' +
+        '<div class="card-body">' +
+          '<p style="margin:0 0 8px 0;font-weight:600;">' + esc(ex.summary || '') + '</p>' +
+          (Array.isArray(ex.behavior) && ex.behavior.length ? '<div style="margin-bottom:6px;"><strong>Behavior:</strong> ' + ex.behavior.map(esc).join(' · ') + '</div>' : '') +
+          (Array.isArray(ex.inputs) && ex.inputs.length ? '<div style="margin-bottom:6px;"><strong>Inputs:</strong> ' + ex.inputs.map(esc).join(', ') + '</div>' : '') +
+          (Array.isArray(ex.outputs) && ex.outputs.length ? '<div style="margin-bottom:6px;"><strong>Outputs:</strong> ' + ex.outputs.map(esc).join(', ') + '</div>' : '') +
+          (Array.isArray(ex.error_behavior) && ex.error_behavior.length ? '<div><strong>Error Handling:</strong> ' + ex.error_behavior.map(esc).join(' · ') + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    } else if (state.openFileAnalysis && state.openFileAnalysis.purpose) {
+      const fa = state.openFileAnalysis;
+      html += '<div class="card">' +
+        '<div class="card-header"><span class="card-title">📘 Cached File Summary</span></div>' +
+        '<div class="card-body">' +
+          '<p style="margin:0 0 6px 0;">' + esc(fa.purpose) + '</p>' +
+          (Array.isArray(fa.responsibilities) && fa.responsibilities.length ? '<div class="project-path">Responsibilities: ' + fa.responsibilities.map(esc).join(' · ') + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }
+
+    const rawLines = String(info.content || '').split('\n');
+    const rows = rawLines.map(function(line, idx) {
+      const n = idx + 1;
+      return '<tr id="src-L' + n + '"><td class="diff-ln">' + n + '</td><td>' + esc(line) + '</td></tr>';
+    }).join('');
+    html += '<div class="card"><div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div></div>';
+    document.getElementById('file-viewer-content').innerHTML = html;
+  }
+
+  async function explainCurrentFile() {
+    const info = state.openFileInfo;
+    if (!info || !state.project) {
+      showBanner('Select an indexed source file first.', 'info');
+      return;
+    }
+    const isGo = (info.path || '').endsWith('.go');
+    const scopeName = isGo ? 'code' : 'bug';
+    if (!confirmRemoteScopeIfNeeded(scopeName, 'Explain file ' + info.path)) return;
+    try {
+      showBanner('Generating explanation for ' + info.path + '…', 'info');
+      if (isGo && info.content_hash) {
+        const exp = await apiFetch(withWorktree('/api/projects/current/files/explanation'), {
+          method: 'POST',
+          body: {
+            project_id: state.project.project_id,
+            project_revision: state.project.project_revision,
+            base_file_hash: info.content_hash,
+            target_path: info.path,
+            confirm_remote_provider: isScopeRemote('code')
+          }
+        });
+        state.openFileExplanation = exp;
+      } else {
+        const fa = await apiFetch(withWorktree('/api/projects/current/files/analysis'), {
+          method: 'POST',
+          body: {
+            path: info.path,
+            project_revision: state.project.project_revision,
+            refresh: true,
+            confirm_remote_provider: isScopeRemote('bug')
+          }
+        });
+        state.openFileAnalysis = fa;
+      }
+      renderOpenFileContent();
+      showBanner('Explanation ready for ' + info.path + '.', 'ok');
+    } catch (err) {
+      showBanner('File explanation failed: ' + err.message, 'error');
+    }
+  }
+
+  async function runProjectDocsAnalysis() {
+    if (!state.project) return;
+    try {
+      showBanner('Preparing project analysis preflight…', 'info');
+      const preview = await apiFetch(withWorktree('/api/projects/current/analysis/preview'), {
+        method: 'POST',
+        body: {
+          project_id: state.project.project_id,
+          project_revision: state.project.project_revision,
+          categories: ['bugs', 'performance', 'security'],
+          security_mode: 'rules_only'
+        }
+      });
+      const requiredScopes = Array.isArray(preview.required_remote_scopes) ? preview.required_remote_scopes : [];
+      if (requiredScopes.length > 0) {
+        const ok = window.confirm(
+          'Project documentation & analysis requires remote provider confirmation for scopes: ' +
+          requiredScopes.join(', ') + '. Proceed?'
+        );
+        if (!ok) return;
+      }
+      await apiFetch(withWorktree('/api/projects/current/analysis/run'), {
+        method: 'POST',
+        body: {
+          project_id: state.project.project_id,
+          project_revision: state.project.project_revision,
+          selection_hash: preview.selection_hash,
+          categories: preview.categories,
+          security_mode: preview.security_mode || 'rules_only',
+          confirmed_remote_scopes: requiredScopes
+        }
+      });
+      showBanner('Started project documentation & analysis run. Live updates will stream automatically.', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Could not start project analysis: ' + err.message, 'error');
+    }
+  }
+
+  // ==================== WORKSPACE 2: BUILD & FIX (SPECS & ISSUES) ====================
+
+  function parseTargetPathsInput() {
+    return (document.getElementById('new-task-paths').value || '')
+      .split(/[\n,]+/)
+      .map(function(s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  function setTargetPathsInput(paths) {
+    const unique = [];
+    paths.forEach(function(p) {
+      if (p && unique.indexOf(p) < 0 && unique.length < 8) unique.push(p);
+    });
+    document.getElementById('new-task-paths').value = unique.join(', ');
+    renderSpecFileChips();
+  }
+
+  function toggleTargetPathWithCompanionTest(path) {
+    const current = parseTargetPathsInput();
+    const idx = current.indexOf(path);
+    if (idx >= 0) {
+      current.splice(idx, 1);
+    } else {
+      current.push(path);
+      if (path.endsWith('.go') && !path.endsWith('_test.go')) {
+        const testCandidate = path.slice(0, -3) + '_test.go';
+        const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
+        if (files.some(function(f) { return f.path === testCandidate; }) && current.indexOf(testCandidate) < 0) {
+          current.push(testCandidate);
+        }
+      }
+    }
+    setTargetPathsInput(current);
+  }
+
+  function renderSpecFileChips() {
+    const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
+    const selected = parseTargetPathsInput();
+    const q = (document.getElementById('spec-file-search').value || '').toLowerCase().trim();
+    const eligible = files.filter(function(f) {
+      const p = f.path || '';
+      if (!p.endsWith('.go') && !p.endsWith('.md')) return false;
+      return !q || p.toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 18);
+
+    const chipsEl = document.getElementById('spec-file-chips');
+    chipsEl.innerHTML = eligible.map(function(f) {
+      const isSel = selected.indexOf(f.path) >= 0;
+      return '<span class="file-chip' + (isSel ? ' selected' : '') + '" data-path="' + esc(f.path) + '">' +
+        (isSel ? '✓ ' : '+ ') + esc(f.path) +
+      '</span>';
+    }).join('');
+
+    chipsEl.querySelectorAll('.file-chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        toggleTargetPathWithCompanionTest(chip.getAttribute('data-path'));
+      });
+    });
+  }
+
+  async function submitSpecTask(runGeneration) {
+    if (!state.project) return;
+    const title = (document.getElementById('new-task-title').value || '').trim();
+    const kind = document.getElementById('new-task-kind').value || 'feature';
+    const specText = (document.getElementById('new-task-spec').value || '').trim();
+    const paths = parseTargetPathsInput();
+    const criteria = (document.getElementById('new-task-criteria').value || '')
+      .split('\n')
+      .map(function(s) { return s.trim(); })
+      .filter(Boolean);
+
+    if (!title || paths.length === 0) {
+      showBanner('Provide a task title and 1–8 eligible file paths.', 'error');
+      return;
+    }
+
+    try {
+      const effectiveCriteria = criteria.length ? criteria : ['Changes pass verification checks'];
+      const created = await apiFetch(withWorktree('/api/projects/current/changes'), {
+        method: 'POST',
+        body: {
+          project_id: state.project.project_id,
+          project_revision: state.project.project_revision,
+          kind: kind,
+          title: title,
+          paths: paths,
+          acceptance_criteria: effectiveCriteria,
+          plan: specText ? {
+            problem: title,
+            approach: specText
+          } : undefined
+        }
+      });
+
+      state.sessionId = created.id;
+
+      if (runGeneration) {
+        const promptMessage = specText
+          ? (title + '\n\nSpecification:\n' + specText)
+          : title;
+        const confirmRemote = isScopeRemote('code');
+        if (confirmRemote && !confirmRemoteScopeIfNeeded('code', 'Generate code changes for "' + title + '"')) {
+          setTab('diff');
+          await loadAll();
+          return;
+        }
+        showBanner('Generating code proposal from specification…', 'info');
+        await apiFetch(withWorktree('/api/projects/current/changes/' + encodeURIComponent(created.id) + '/messages'), {
+          method: 'POST',
+          body: {
+            project_id: created.project_id || state.project.project_id,
+            project_revision: created.project_revision || state.project.project_revision,
+            revision: created.revision,
+            hash: created.hash,
+            message: promptMessage,
+            profile: 'code',
+            confirm_remote_provider: confirmRemote
+          }
+        });
+        showBanner('Code changes generated for "' + title + '". Review the diff below.', 'ok');
+      } else {
+        showBanner('Saved draft proposal session ' + created.id, 'ok');
+      }
+
+      setTab('diff');
+      await loadAll();
+    } catch (err) {
+      showBanner('Failed to create or generate proposal: ' + err.message, 'error');
+    }
+  }
+
+  function prefillSpecFromFinding(f) {
+    state.tab = 'build';
+    state.buildMode = 'spec';
+    syncURL();
+    syncSubModes();
+
+    document.getElementById('new-task-title').value = 'Fix: ' + (f.title || f.id || 'Finding');
+    document.getElementById('new-task-kind').value = 'fix';
+    const cause = f.description || f.message || '';
+    const suggestion = f.suggestion || 'Resolve the root cause and add a regression test.';
+    document.getElementById('new-task-spec').value =
+      'Root cause (' + (f.path || 'workspace') + (f.line ? ':' + f.line : '') + '):\n' + cause +
+      '\n\nRemediation plan:\n' + suggestion;
+
+    const paths = [];
+    if (f.path) {
+      paths.push(f.path);
+      if (f.path.endsWith('.go') && !f.path.endsWith('_test.go')) {
+        const companion = f.path.slice(0, -3) + '_test.go';
+        const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
+        if (files.some(function(ix) { return ix.path === companion; })) {
+          paths.push(companion);
+        }
+      }
+    }
+    setTargetPathsInput(paths);
+    document.getElementById('new-task-criteria').value =
+      'Resolve "' + (f.title || f.id) + '" without breaking existing callers\nPass unit tests and static checks';
+    showBanner('Pre-filled bug-fix specification from finding. Click "⚡ Generate Code Changes" to produce a fix.', 'info');
+  }
+
+  function renderIssuesTab() {
+    const openCount = state.findings.filter(function(f) {
+      return (f.status || 'open').toLowerCase() !== 'dismissed';
+    }).length;
+    document.getElementById('issues-count-badge').textContent = String(openCount);
+
+    const cat = document.getElementById('issue-cat-filter').value;
+    const st = document.getElementById('issue-status-filter').value;
+    const q = (document.getElementById('issue-search').value || '').toLowerCase().trim();
+
+    const filtered = state.findings.filter(function(f) {
+      if (cat !== 'all') {
+        const kind = (f.kind || f.category || '').toLowerCase();
+        if (cat === 'bugs' && kind !== 'bug' && kind !== 'bugs' && kind !== 'semantic' && kind !== 'code') return false;
+        if (cat === 'security' && kind !== 'security') return false;
+        if (cat === 'performance' && kind !== 'performance') return false;
+      }
+      if (st !== 'all') {
+        const fst = (f.status || 'open').toLowerCase();
+        if (st === 'open' && fst === 'dismissed') return false;
+        if (st === 'dismissed' && fst !== 'dismissed') return false;
+      }
+      if (q) {
+        const hay = ((f.title || '') + ' ' + (f.path || '') + ' ' + (f.description || '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+
+    const listEl = document.getElementById('issues-summary-list');
+    const contentEl = document.getElementById('issues-content');
+
+    listEl.innerHTML = filtered.map(function(f, idx) {
+      return '<div class="list-item" data-idx="' + idx + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + esc(f.title || f.id) + '</span>' +
+          '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc(f.path || '') + (f.line ? ':' + f.line : '') + '</div>' +
+      '</div>';
+    }).join('') || '<div class="empty-state">No matching findings.</div>';
+
+    if (filtered.length === 0) {
+      contentEl.innerHTML = '<div class="empty-state"><h3>No matching findings</h3><p>Run a Go Scan or Project Analysis, or adjust the category/status filter.</p></div>';
+      return;
+    }
+
+    contentEl.innerHTML = filtered.map(function(f, idx) {
+      const dismissed = (f.status || '').toLowerCase() === 'dismissed';
+      return '<div class="card">' +
+        '<div class="card-header">' +
+          '<div class="card-title">' +
+            '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
+            '<span>' + esc(f.title || f.id) + '</span>' +
+            '<span class="badge">' + esc(f.kind || f.source || 'finding') + '</span>' +
+          '</div>' +
+          '<div class="action-group">' +
+            (f.path ? '<button class="jump-file-btn btn-ghost" data-path="' + esc(f.path) + '">📄 ' + esc(f.path) + (f.line ? ':' + f.line : '') + '</button>' : '') +
+            '<button class="triage-finding-btn" data-id="' + esc(f.id) + '" data-kind="' + esc(f.kind || '') + '" data-path="' + esc(f.path || '') + '" data-source="' + esc(f.source || '') + '" data-next="' + (dismissed ? 'open' : 'dismissed') + '">' +
+              (dismissed ? 'Reopen' : 'Dismiss') +
+            '</button>' +
+            '<button class="fix-finding-btn btn-primary" data-idx="' + idx + '">🔧 Fix This Bug →</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card-body">' +
+          '<p style="margin:0 0 6px 0;">' + esc(f.description || f.message || '') + '</p>' +
+          (f.suggestion ? '<div class="project-path">Remediation: ' + esc(f.suggestion) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    contentEl.querySelectorAll('.jump-file-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const p = btn.getAttribute('data-path');
+        state.selectedFile = p;
+        setTab('files');
+        openSourceFile(p);
+      });
+    });
+
+    contentEl.querySelectorAll('.fix-finding-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const idx = Number(btn.getAttribute('data-idx'));
+        if (filtered[idx]) prefillSpecFromFinding(filtered[idx]);
+      });
+    });
+
+    contentEl.querySelectorAll('.triage-finding-btn').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        try {
+          const id = btn.getAttribute('data-id');
+          const body = {
+            project_revision: state.project.project_revision,
+            status: btn.getAttribute('data-next'),
+            kind: btn.getAttribute('data-kind') || undefined,
+            path: btn.getAttribute('data-path') || undefined,
+            source: btn.getAttribute('data-source') || undefined
+          };
+          await apiFetch(withWorktree('/api/projects/current/findings/' + encodeURIComponent(id)), {
+            method: 'PATCH',
+            body: body
+          });
+          showBanner('Updated finding status.', 'ok');
+          await loadAll();
+        } catch (err) {
+          showBanner('Finding triage failed: ' + err.message, 'error');
+        }
+      });
+    });
+  }
+
+  function renderTasksTab() {
+    const el = document.getElementById('tasks-list-body');
+    if (!state.changes || state.changes.length === 0) {
+      el.innerHTML = '<div class="empty-state">No proposals yet.</div>';
+      return;
+    }
+    el.innerHTML = state.changes.map(function(c) {
+      const active = c.id === state.sessionId ? ' active' : '';
+      return '<div class="list-item open-proposal-item' + active + '" data-id="' + esc(c.id) + '">' +
+        '<div class="list-item-row">' +
+          '<span class="list-item-title">' + esc(c.title || c.id) + '</span>' +
+          '<span class="badge blue">' + esc(c.state) + '</span>' +
+        '</div>' +
+        '<div class="list-item-sub">' + esc((c.paths || []).join(', ')) + '</div>' +
+      '</div>';
+    }).join('');
+
+    el.querySelectorAll('.open-proposal-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        const id = item.getAttribute('data-id');
+        state.selectedFile = '';
+        setTab('diff');
+        loadChangeSession(id);
+      });
+    });
+  }
+
+  // ==================== WORKSPACE 3: REVIEW & APPLY (DIFF INSPECTOR) ====================
 
   function effectiveEdits(session) {
     if (!session) return [];
@@ -707,8 +1598,8 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       document.getElementById('active-proposal-state').textContent = 'idle';
       document.getElementById('active-proposal-freshness').textContent = '';
       document.getElementById('changed-files-count').textContent = '0';
-      fileListEl.innerHTML = '<div class="empty-state">Create or select a proposal to inspect diffs.</div>';
-      contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a proposal from the left sidebar or create a new one in the Proposals &amp; Tasks tab.</p></div>';
+      fileListEl.innerHTML = '<div class="empty-state">Create a spec in "2 · Build &amp; Fix" to inspect diffs.</div>';
+      contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a proposal from the left sidebar or create a new one in <strong>2 · Build &amp; Fix</strong>.</p></div>';
       return;
     }
 
@@ -767,8 +1658,9 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       : edits;
 
     if (visibleEdits.length === 0) {
-      html += '<div class="empty-state"><h3>No file edits in this proposal yet</h3><p>Targets: ' +
-        esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') + '</p></div>';
+      html += '<div class="empty-state"><h3>No file edits generated yet</h3><p>Targets: ' +
+        esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') +
+        '</p><p>Use the "Iterate / Refine with AI" box in the left sidebar to generate code for this session.</p></div>';
     } else {
       visibleEdits.forEach(function(edit) {
         const stats = countDiffStats(edit);
@@ -1003,211 +1895,103 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
     }
   }
 
-  function renderIssuesTab() {
-    const cat = document.getElementById('issue-cat-filter').value;
-    const st = document.getElementById('issue-status-filter').value;
-    const q = (document.getElementById('issue-search').value || '').toLowerCase().trim();
-
-    const filtered = state.findings.filter(function(f) {
-      if (cat !== 'all') {
-        const kind = (f.kind || f.category || '').toLowerCase();
-        if (cat === 'bugs' && kind !== 'bug' && kind !== 'bugs' && kind !== 'semantic' && kind !== 'code') return false;
-        if (cat === 'security' && kind !== 'security') return false;
-        if (cat === 'performance' && kind !== 'performance') return false;
-      }
-      if (st !== 'all') {
-        const fst = (f.status || 'open').toLowerCase();
-        if (st === 'open' && fst === 'dismissed') return false;
-        if (st === 'dismissed' && fst !== 'dismissed') return false;
-      }
-      if (q) {
-        const hay = ((f.title || '') + ' ' + (f.path || '') + ' ' + (f.description || '')).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
-      }
-      return true;
-    });
-
-    const listEl = document.getElementById('issues-summary-list');
-    const contentEl = document.getElementById('issues-content');
-
-    listEl.innerHTML = filtered.map(function(f, idx) {
-      return '<div class="list-item" data-idx="' + idx + '">' +
-        '<div class="list-item-row">' +
-          '<span class="list-item-title">' + esc(f.title || f.id) + '</span>' +
-          '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
-        '</div>' +
-        '<div class="list-item-sub">' + esc(f.path || '') + (f.line ? ':' + f.line : '') + '</div>' +
-      '</div>';
-    }).join('') || '<div class="empty-state">No matching findings.</div>';
-
-    if (filtered.length === 0) {
-      contentEl.innerHTML = '<div class="empty-state"><h3>No matching findings</h3><p>Try adjusting the category or status filter.</p></div>';
+  async function sendProposalRefinement() {
+    const s = state.activeSession;
+    if (!s) return;
+    const msg = (document.getElementById('proposal-message-input').value || '').trim();
+    if (!msg) {
+      showBanner('Enter a refinement instruction or prompt first.', 'info');
       return;
     }
-
-    contentEl.innerHTML = filtered.map(function(f) {
-      const dismissed = (f.status || '').toLowerCase() === 'dismissed';
-      return '<div class="card">' +
-        '<div class="card-header">' +
-          '<div class="card-title">' +
-            '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
-            '<span>' + esc(f.title || f.id) + '</span>' +
-            '<span class="badge">' + esc(f.kind || f.source || 'finding') + '</span>' +
-          '</div>' +
-          '<div class="action-group">' +
-            (f.path ? '<button class="jump-file-btn" data-path="' + esc(f.path) + '">📄 ' + esc(f.path) + (f.line ? ':' + f.line : '') + '</button>' : '') +
-            '<button class="triage-finding-btn" data-id="' + esc(f.id) + '" data-kind="' + esc(f.kind || '') + '" data-path="' + esc(f.path || '') + '" data-source="' + esc(f.source || '') + '" data-next="' + (dismissed ? 'open' : 'dismissed') + '">' +
-              (dismissed ? 'Reopen' : 'Dismiss') +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="card-body">' +
-          '<p style="margin:0 0 6px 0;">' + esc(f.description || f.message || '') + '</p>' +
-          (f.suggestion ? '<div class="project-path">Suggestion: ' + esc(f.suggestion) + '</div>' : '') +
-        '</div>' +
-      '</div>';
-    }).join('');
-
-    contentEl.querySelectorAll('.jump-file-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const p = btn.getAttribute('data-path');
-        state.selectedFile = p;
-        setTab('files');
-        openSourceFile(p);
-      });
-    });
-
-    contentEl.querySelectorAll('.triage-finding-btn').forEach(function(btn) {
-      btn.addEventListener('click', async function() {
-        try {
-          const id = btn.getAttribute('data-id');
-          const body = {
-            project_revision: state.project.project_revision,
-            status: btn.getAttribute('data-next'),
-            kind: btn.getAttribute('data-kind') || undefined,
-            path: btn.getAttribute('data-path') || undefined,
-            source: btn.getAttribute('data-source') || undefined
-          };
-          await apiFetch(withWorktree('/api/projects/current/findings/' + encodeURIComponent(id)), {
-            method: 'PATCH',
-            body: body
-          });
-          showBanner('Updated finding status.', 'ok');
-          await loadAll();
-        } catch (err) {
-          showBanner('Finding triage failed: ' + err.message, 'error');
-        }
-      });
-    });
-  }
-
-  function renderTasksTab() {
-    const el = document.getElementById('tasks-list-body');
-    if (!state.changes || state.changes.length === 0) {
-      el.innerHTML = '<div class="empty-state">No proposals recorded for this checkout yet.</div>';
+    const confirmRemote = isScopeRemote('code');
+    if (confirmRemote && !confirmRemoteScopeIfNeeded('code', 'Refine proposal "' + (s.title || s.id) + '"')) {
       return;
     }
-    el.innerHTML = state.changes.map(function(c) {
-      return '<div class="list-item" style="border:1px solid var(--border);margin-bottom:8px;padding:10px;">' +
-        '<div class="list-item-row">' +
-          '<div>' +
-            '<strong>' + esc(c.title || c.id) + '</strong> ' +
-            '<span class="badge">' + esc(c.kind || 'change') + '</span> ' +
-            '<span class="badge blue">' + esc(c.state) + '</span> ' +
-            '<span class="badge">' + esc(c.freshness || 'current') + '</span>' +
-          '</div>' +
-          '<button class="open-proposal-btn btn-primary" data-id="' + esc(c.id) + '">Inspect Diff &amp; Review →</button>' +
-        '</div>' +
-        '<div class="list-item-sub">ID: ' + esc(c.id) + ' · Paths: ' + esc((c.paths || []).join(', ')) + '</div>' +
-      '</div>';
-    }).join('');
-
-    el.querySelectorAll('.open-proposal-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const id = btn.getAttribute('data-id');
-        state.selectedFile = '';
-        setTab('diff');
-        loadChangeSession(id);
-      });
-    });
-  }
-
-  function renderFilesTab() {
-    const files = (state.index && Array.isArray(state.index.files)) ? state.index.files : [];
-    document.getElementById('indexed-files-count').textContent = String(files.length);
-    const q = (document.getElementById('file-filter-input').value || '').toLowerCase().trim();
-    const filtered = files.filter(function(f) {
-      return !q || f.path.toLowerCase().indexOf(q) >= 0;
-    });
-    const listEl = document.getElementById('indexed-file-list');
-    listEl.innerHTML = filtered.slice(0, 300).map(function(f) {
-      const active = state.selectedFile === f.path ? ' active' : '';
-      return '<div class="list-item' + active + '" data-path="' + esc(f.path) + '">' +
-        '<div class="list-item-row">' +
-          '<span class="list-item-title">' + esc(f.path.split('/').pop()) + '</span>' +
-          '<span class="badge">' + esc(f.language || 'text') + '</span>' +
-        '</div>' +
-        '<div class="list-item-sub">' + esc(f.path) + '</div>' +
-      '</div>';
-    }).join('') || '<div class="empty-state">No matching files.</div>';
-
-    listEl.querySelectorAll('.list-item').forEach(function(item) {
-      item.addEventListener('click', function() {
-        const p = item.getAttribute('data-path');
-        openSourceFile(p);
-      });
-    });
-  }
-
-  async function openSourceFile(filePath) {
-    if (!filePath) return;
     try {
-      state.selectedFile = filePath;
-      syncURL();
-      renderFilesTab();
-      const q = '?path=' + encodeURIComponent(filePath);
-      const res = await Promise.allSettled([
-        apiFetch(withWorktree('/api/projects/current/files/info' + q)),
-        apiFetch(withWorktree('/api/projects/current/files/symbols' + q))
-      ]);
-      if (res[0].status !== 'fulfilled' || !res[0].value) {
-        throw new Error(res[0].reason ? res[0].reason.message : 'File unavailable');
-      }
-      const info = res[0].value;
-      const syms = (res[1].status === 'fulfilled' && res[1].value && Array.isArray(res[1].value.symbols)) ? res[1].value.symbols : [];
-
-      document.getElementById('open-file-title').textContent = info.path || filePath;
-      document.getElementById('open-file-meta').textContent = (info.language || 'text') + ' · ' + (info.lines || 0) + ' lines';
-
-      const symEl = document.getElementById('open-file-symbols');
-      symEl.innerHTML = syms.slice(0, 12).map(function(s) {
-        return '<button class="sym-jump-btn" data-line="' + (s.start_line || 1) + '">' + esc(s.name) + '</button>';
-      }).join('');
-      symEl.querySelectorAll('.sym-jump-btn').forEach(function(b) {
-        b.addEventListener('click', function() {
-          const ln = b.getAttribute('data-line');
-          const row = document.getElementById('src-L' + ln);
-          if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
+      showBanner('Generating updated diff for proposal…', 'info');
+      const body = Object.assign(changeIdentityPayload(s), {
+        message: msg,
+        profile: 'code',
+        confirm_remote_provider: confirmRemote
       });
-
-      const rawLines = String(info.content || '').split('\n');
-      const rows = rawLines.map(function(line, idx) {
-        const n = idx + 1;
-        return '<tr id="src-L' + n + '"><td class="diff-ln">' + n + '</td><td>' + esc(line) + '</td></tr>';
-      }).join('');
-      document.getElementById('file-viewer-content').innerHTML =
-        '<div class="card"><div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div></div>';
+      const updated = await apiFetch(
+        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/messages'),
+        { method: 'POST', body: body }
+      );
+      state.activeSession = preserveSessionMeta(s, updated);
+      document.getElementById('proposal-message-input').value = '';
+      showBanner('Updated proposal diff.', 'ok');
+      await loadAll();
     } catch (err) {
-      showBanner('Failed to read file ' + filePath + ': ' + err.message, 'error');
+      showBanner('Refinement failed: ' + err.message, 'error');
     }
   }
 
-  // Event bindings
+  // ==================== EVENT BINDINGS ====================
+
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       setTab(btn.getAttribute('data-tab'));
     });
+  });
+
+  document.getElementById('understand-mode-docs').addEventListener('click', function() {
+    state.understandMode = 'docs';
+    syncURL();
+    syncSubModes();
+  });
+  document.getElementById('understand-mode-files').addEventListener('click', function() {
+    state.understandMode = 'files';
+    syncURL();
+    syncSubModes();
+    if (state.selectedFile) openSourceFile(state.selectedFile);
+  });
+
+  document.querySelectorAll('#understand-docs-sidebar .list-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      document.querySelectorAll('#understand-docs-sidebar .list-item').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      item.classList.add('active');
+      state.docSection = item.getAttribute('data-doc-sec') || 'overview';
+      renderUnderstandDocs();
+    });
+  });
+
+  document.getElementById('build-mode-spec').addEventListener('click', function() {
+    state.buildMode = 'spec';
+    syncURL();
+    syncSubModes();
+  });
+  document.getElementById('build-mode-issues').addEventListener('click', function() {
+    state.buildMode = 'issues';
+    syncURL();
+    syncSubModes();
+  });
+
+  document.getElementById('reset-spec-btn').addEventListener('click', function() {
+    document.getElementById('new-task-title').value = '';
+    document.getElementById('new-task-spec').value = '';
+    document.getElementById('new-task-paths').value = '';
+    document.getElementById('new-task-criteria').value = '';
+    renderSpecFileChips();
+  });
+
+  document.getElementById('run-analysis-btn').addEventListener('click', runProjectDocsAnalysis);
+  document.getElementById('explain-file-btn').addEventListener('click', explainCurrentFile);
+  document.getElementById('task-from-file-btn').addEventListener('click', function() {
+    const p = state.selectedFile || (state.openFileInfo && state.openFileInfo.path) || '';
+    state.tab = 'build';
+    state.buildMode = 'spec';
+    syncURL();
+    syncSubModes();
+    if (p) {
+      setTargetPathsInput([p]);
+      if (p.endsWith('.go') && !p.endsWith('_test.go')) {
+        toggleTargetPathWithCompanionTest(p);
+        toggleTargetPathWithCompanionTest(p);
+      }
+    }
   });
 
   document.getElementById('proposal-select').addEventListener('change', function(e) {
@@ -1249,6 +2033,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
   document.getElementById('run-checks-btn').addEventListener('click', runProposalChecks);
   document.getElementById('apply-btn').addEventListener('click', applyActiveProposal);
   document.getElementById('undo-btn').addEventListener('click', undoActiveProposal);
+  document.getElementById('send-message-btn').addEventListener('click', sendProposalRefinement);
 
   document.getElementById('trust-btn').addEventListener('click', async function() {
     if (!state.project) return;
@@ -1272,22 +2057,44 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
         method: 'POST',
         body: { project_revision: state.project.project_revision }
       });
-      showBanner('Project reindexed.', 'ok');
+      showBanner('Project files reindexed.', 'ok');
       await loadAll();
     } catch (err) {
       showBanner('Reindex failed: ' + err.message, 'error');
     }
   });
 
+  document.getElementById('run-scan-btn').addEventListener('click', async function() {
+    if (!state.project) return;
+    try {
+      showBanner('Running Go static scan (parser, vet, tests)…', 'info');
+      await apiFetch(withWorktree('/api/projects/current/scan'), {
+        method: 'POST',
+        body: { project_revision: state.project.project_revision }
+      });
+      showBanner('Go static scan completed.', 'ok');
+      await loadAll();
+    } catch (err) {
+      showBanner('Go scan failed: ' + err.message, 'error');
+    }
+  });
+
   document.getElementById('switch-project-btn').addEventListener('click', async function() {
     const currentPath = state.project ? state.project.path : '';
-    const nextPath = window.prompt('Enter local absolute path of a previously imported project:', currentPath);
+    const nextPath = window.prompt('Enter local absolute path of a project to restore or import:', currentPath);
     if (!nextPath || nextPath === currentPath) return;
     try {
-      await apiFetch('/api/projects/restore', {
-        method: 'POST',
-        body: { project_path: nextPath.trim() }
-      });
+      try {
+        await apiFetch('/api/projects/restore', {
+          method: 'POST',
+          body: { project_path: nextPath.trim() }
+        });
+      } catch (_) {
+        await apiFetch('/api/projects/import', {
+          method: 'POST',
+          body: { project_path: nextPath.trim() }
+        });
+      }
       state.worktreePath = '';
       state.sessionId = '';
       state.selectedFile = '';
@@ -1295,7 +2102,7 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
       showBanner('Switched active project to ' + nextPath, 'ok');
       await loadAll();
     } catch (err) {
-      showBanner('Project restore failed: ' + err.message, 'error');
+      showBanner('Project switch failed: ' + err.message, 'error');
     }
   });
 
@@ -1311,42 +2118,14 @@ button.btn-amber { background: var(--amber-bg); color: var(--amber); border-colo
   document.getElementById('issue-status-filter').addEventListener('change', renderIssuesTab);
   document.getElementById('issue-search').addEventListener('input', renderIssuesTab);
   document.getElementById('file-filter-input').addEventListener('input', renderFilesTab);
+  document.getElementById('spec-file-search').addEventListener('input', renderSpecFileChips);
+  document.getElementById('new-task-paths').addEventListener('input', renderSpecFileChips);
 
-  document.getElementById('create-task-btn').addEventListener('click', async function() {
-    if (!state.project) return;
-    const title = (document.getElementById('new-task-title').value || '').trim();
-    const kind = document.getElementById('new-task-kind').value || 'fix';
-    const paths = (document.getElementById('new-task-paths').value || '')
-      .split(/[\n,]+/)
-      .map(function(s) { return s.trim(); })
-      .filter(Boolean);
-    const criteria = (document.getElementById('new-task-criteria').value || '')
-      .split('\n')
-      .map(function(s) { return s.trim(); })
-      .filter(Boolean);
-    if (!title || paths.length === 0) {
-      showBanner('Provide a task title and 1–8 eligible file paths.', 'error');
-      return;
-    }
-    try {
-      const created = await apiFetch(withWorktree('/api/projects/current/changes'), {
-        method: 'POST',
-        body: {
-          project_id: state.project.project_id,
-          project_revision: state.project.project_revision,
-          kind: kind,
-          title: title,
-          paths: paths,
-          acceptance_criteria: criteria.length ? criteria : ['Changes pass verification checks']
-        }
-      });
-      state.sessionId = created.id;
-      setTab('diff');
-      await loadAll();
-      showBanner('Created proposal session ' + created.id, 'ok');
-    } catch (err) {
-      showBanner('Failed to create proposal: ' + err.message, 'error');
-    }
+  document.getElementById('create-task-btn').addEventListener('click', function() {
+    submitSpecTask(false);
+  });
+  document.getElementById('generate-spec-btn').addEventListener('click', function() {
+    submitSpecTask(true);
   });
 
   function connectSSE() {

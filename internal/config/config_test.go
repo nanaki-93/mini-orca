@@ -47,7 +47,7 @@ func TestNativeGoogleYAMLRemainsStrict(t *testing.T) {
 	text := `model_scopes:
   analyze: {provider: gemini, model: fixture, api_key: explicit-key}
   bug: {provider: vertex, model: fixture, access_token: explicit-token, vertex_project: project-id, vertex_location: global}
-  function: {api_base_url: "http://localhost:1234/v1", model: local-model}
+  code: {api_base_url: "http://localhost:1234/v1", model: local-model}
 `
 	if _, err := LoadFromYAML(writeConfig(t, text)); err != nil {
 		t.Fatal(err)
@@ -82,9 +82,9 @@ model_scopes:
     api_base_url: "http://localhost:11434/v1"
     api_key: ""
     model: "bug-model"
-  function:
+  code:
     api_base_url: "http://localhost:1234/v1"
-    model: "function-model"
+    model: "code-model"
 `)
 	cfg, err := LoadFromYAML(path)
 	if err != nil {
@@ -103,7 +103,7 @@ model_scopes:
 	if profiles.Bug.TopP != nil || profiles.Bug.TopK != nil || profiles.Bug.MinP != nil || profiles.Bug.PresencePenalty != nil || profiles.Bug.RepeatPenalty != nil {
 		t.Fatalf("omitted sampling values became defaults: %+v", profiles.Bug)
 	}
-	if profiles.Bug.ContextMaxTokens != 32000 || profiles.Function.ContextMaxTokens != 4000 {
+	if profiles.Bug.ContextMaxTokens != 32000 || profiles.Code.ContextMaxTokens != 4000 {
 		t.Fatalf("default context budgets = %+v", profiles)
 	}
 	if cfg.Retry.MaxRetries != 3 || cfg.Timeouts.GenerationSeconds != 300 || cfg.Timeouts.WorkflowModelSeconds != 900 || cfg.Logging.Level != "info" {
@@ -112,7 +112,7 @@ model_scopes:
 }
 
 func TestWorkflowModelTimeoutDefaultsAndOverride(t *testing.T) {
-	profiles := "model_scopes:\n  analyze: {api_base_url: 'http://localhost:1234/v1', model: a}\n  bug: {api_base_url: 'http://localhost:1234/v1', model: b}\n  function: {api_base_url: 'http://localhost:1234/v1', model: f}\n"
+	profiles := "model_scopes:\n  analyze: {api_base_url: 'http://localhost:1234/v1', model: a}\n  bug: {api_base_url: 'http://localhost:1234/v1', model: b}\n  code: {api_base_url: 'http://localhost:1234/v1', model: f}\n"
 	for _, test := range []struct {
 		name, settings string
 		want           int
@@ -186,12 +186,12 @@ func TestResolveModelProfilesRejectsUnsafeAndInvalidValuesWithoutSecret(t *testi
 	}{
 		{name: "user information", change: func(cfg *Config) { cfg.ModelScopes.Analyze.APIBaseURL = "https://user:password@example.test/v1" }, want: "must not include user information"},
 		{name: "query", change: func(cfg *Config) { cfg.ModelScopes.Bug.APIBaseURL = "https://example.test/v1?token=secret" }, want: "must not include user information"},
-		{name: "temperature", change: func(cfg *Config) { cfg.ModelScopes.Function.Temperature = &temperature }, want: "temperature must be between 0 and 2"},
-		{name: "top p range", change: func(cfg *Config) { cfg.ModelScopes.Function.TopP = &tooHigh }, want: "top_p must be between 0 and 1"},
-		{name: "minimum p nonfinite", change: func(cfg *Config) { cfg.ModelScopes.Function.MinP = &nan }, want: "min_p must be between 0 and 1"},
-		{name: "presence penalty nonfinite", change: func(cfg *Config) { cfg.ModelScopes.Function.PresencePenalty = &infinity }, want: "presence_penalty must be between -2 and 2"},
-		{name: "top k integer", change: func(cfg *Config) { cfg.ModelScopes.Function.TopK = &negativeTopK }, want: "top_k must be at least 0"},
-		{name: "repeat penalty zero", change: func(cfg *Config) { cfg.ModelScopes.Function.RepeatPenalty = &zero }, want: "repeat_penalty must be greater than 0 and at most 2"},
+		{name: "temperature", change: func(cfg *Config) { cfg.ModelScopes.Code.Temperature = &temperature }, want: "temperature must be between 0 and 2"},
+		{name: "top p range", change: func(cfg *Config) { cfg.ModelScopes.Code.TopP = &tooHigh }, want: "top_p must be between 0 and 1"},
+		{name: "minimum p nonfinite", change: func(cfg *Config) { cfg.ModelScopes.Code.MinP = &nan }, want: "min_p must be between 0 and 1"},
+		{name: "presence penalty nonfinite", change: func(cfg *Config) { cfg.ModelScopes.Code.PresencePenalty = &infinity }, want: "presence_penalty must be between -2 and 2"},
+		{name: "top k integer", change: func(cfg *Config) { cfg.ModelScopes.Code.TopK = &negativeTopK }, want: "top_k must be at least 0"},
+		{name: "repeat penalty zero", change: func(cfg *Config) { cfg.ModelScopes.Code.RepeatPenalty = &zero }, want: "repeat_penalty must be greater than 0 and at most 2"},
 		{name: "model", change: func(cfg *Config) { cfg.ModelScopes.Bug.Model = "" }, want: "model_scopes.bug.model is required"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -211,8 +211,8 @@ func TestDefaultIsACompleteLocalScopedConfiguration(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Default().Validate() error = %v", err)
 	}
-	if cfg.ModelScopes.Function.APIBaseURL != DefaultProviderAPIBaseURL {
-		t.Fatalf("function API base = %q", cfg.ModelScopes.Function.APIBaseURL)
+	if cfg.ModelScopes.Code.APIBaseURL != DefaultProviderAPIBaseURL {
+		t.Fatalf("code API base = %q", cfg.ModelScopes.Code.APIBaseURL)
 	}
 }
 

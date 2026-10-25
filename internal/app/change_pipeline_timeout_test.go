@@ -27,7 +27,7 @@ func TestWorkflowModelTimeoutHonorsConfigurationWithoutChangingOtherRequests(t *
 			t.Fatal(err)
 		}
 		want := time.Duration(max(900, seconds)) * time.Second
-		for stage, profile := range []string{"bug", "function", "analyze"} {
+		for stage, profile := range []string{"bug", "code", "analyze"} {
 			if got := s.workflowStageRuntime(stage, profile).effective.Timeout; got != want.String() {
 				t.Fatalf("stage %d timeout = %s, want %s", stage, got, want)
 			}
@@ -165,7 +165,7 @@ func TestWorkflowRepairsOnlyEstablishedCheckFailures(t *testing.T) {
 func TestWorkflowTotalDeadlineAccommodatesStagesChecksAndRepairs(t *testing.T) {
 	s := &Service{workflowModelTimeout: 15 * time.Minute, focusedCheckTimeout: time.Minute}
 	s.agentRuntime, _ = config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
-	models := ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}
+	models := ChangeWorkflowModels{Create: "bug", Test: "code", Review: "analyze"}
 	full := s.changeWorkflowTimeout(t.Context(), models, 0, false)
 	resumed := s.changeWorkflowTimeout(t.Context(), models, 1, false)
 	if full <= 45*time.Minute || resumed <= 30*time.Minute || resumed >= full {

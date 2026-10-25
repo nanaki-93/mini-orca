@@ -168,7 +168,7 @@ func TestMemoryCurationRejectsInvalidDraftsWithoutCatalog(t *testing.T) {
 func TestMemoryRetainedHarnessLessonPreservesExactProvenance(t *testing.T) {
 	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	session := openChangeFixture(t, s, "main.go")
-	session.Workflow = s.prepareWorkflowRun(session, ChangeWorkflowRequest{Models: ChangeWorkflowModels{Create: "function", Test: "function", Review: "analyze"}}, 0, nil)
+	session.Workflow = s.prepareWorkflowRun(session, ChangeWorkflowRequest{Models: ChangeWorkflowModels{Create: "code", Test: "code", Review: "analyze"}}, 0, nil)
 	session.Workflow.Status = "failed"
 	session.Workflow.HarnessLessons = []string{"Run formatting before rerunning the isolated checks."}
 	if err := storeChangeSession(root, session); err != nil {

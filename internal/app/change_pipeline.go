@@ -19,7 +19,7 @@ func workflowStageScope(stage int) config.ModelScope {
 	case 0:
 		return config.BugModelScope
 	case 1:
-		return config.FunctionModelScope
+		return config.CodeModelScope
 	default:
 		return config.AnalyzeModelScope
 	}

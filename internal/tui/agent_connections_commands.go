@@ -127,7 +127,7 @@ func connectionControlMessage(row agentConnectionRow, action string) string {
 func (s *State) inboundConnectionProviders(config client.ConnectionConfig) ([]Model, error) {
 	var models []Model
 	for _, capability := range config.Capabilities {
-		scope := "function"
+		scope := "code"
 		if capability == "proposal" {
 			scope = "bug"
 		}

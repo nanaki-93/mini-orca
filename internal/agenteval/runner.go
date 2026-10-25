@@ -99,7 +99,7 @@ func Run(ctx context.Context, options Options) (Receipt, error) {
 		replay = &replayProvider{}
 		server := httptest.NewServer(replay)
 		defer server.Close()
-		profile = config.ModelProfile{Provider: config.OpenAIProvider, Scope: config.FunctionModelScope, APIBaseURL: server.URL, Model: "replay", MaxTokens: 512, ContextMaxTokens: 16000}
+		profile = config.ModelProfile{Provider: config.OpenAIProvider, Scope: config.CodeModelScope, APIBaseURL: server.URL, Model: "replay", MaxTokens: 512, ContextMaxTokens: 16000}
 	}
 	evaluator, cancel, err := app.NewAgentEvaluator(ctx, profile, options.Limits, options.Confirmed)
 	if err != nil {

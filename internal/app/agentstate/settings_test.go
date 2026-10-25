@@ -20,7 +20,7 @@ func settingsPreferences(t *testing.T) *AgentPreferences {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &AgentPreferences{Roles: RoleSettings{"bug", "function", "analyze"}, Limits: runtime.Limits, DisabledSkills: []string{"skills/review-code"}}
+	return &AgentPreferences{Roles: RoleSettings{"bug", "code", "analyze"}, Limits: runtime.Limits, DisabledSkills: []string{"skills/review-code"}}
 }
 
 func TestSettingsPassiveReadCASResetAndRestart(t *testing.T) {

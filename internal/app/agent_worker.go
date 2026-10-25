@@ -80,9 +80,9 @@ func NewAgentWorker(ctx context.Context, cfg *config.Config, options AgentWorker
 	if err != nil {
 		return nil, err
 	}
-	profile := profiles.Function
+	profile := profiles.Code
 	if profile.IsCLI() || !integrations.A2AServer.Enabled {
-		return nil, fmt.Errorf("worker requires an enabled A2A service and an HTTP Function model")
+		return nil, fmt.Errorf("worker requires an enabled A2A service and an HTTP Code model")
 	}
 	if !isLoopbackURL(profile.APIBaseURL) && !options.ConfirmRemoteProvider {
 		return nil, fmt.Errorf("worker requires explicit remote provider confirmation")

@@ -5,163 +5,17 @@ import (
 	"strings"
 )
 
-var genericDeclarationPatterns = map[string]*regexp.Regexp{
-	"Kotlin":     regexp.MustCompile(`^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:data\s+|sealed\s+|abstract\s+|suspend\s+)?(class|interface|object|fun)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Java":       regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+)?(?:static\s+|final\s+|abstract\s+)*(class|interface|enum|record|[A-Za-z_][A-Za-z0-9_<>, ?\[\]]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|\{)`),
-	"TypeScript": regexp.MustCompile(`^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(class|interface|type|function|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)`),
-	"JavaScript": regexp.MustCompile(`^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(class|function|const)\s+([A-Za-z_$][A-Za-z0-9_$]*)`),
-	"Python":     regexp.MustCompile(`^\s*(?:async\s+)?(class|def)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Rust":       regexp.MustCompile(`^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(struct|enum|trait|fn|impl)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Ruby":       regexp.MustCompile(`^\s*(class|module|def)\s+([A-Za-z_][A-Za-z0-9_?!]*)`),
-	"PHP":        regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+|static\s+|abstract\s+|final\s+)*(class|interface|trait|function)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Swift":      regexp.MustCompile(`^\s*(?:public\s+|private\s+|internal\s+|fileprivate\s+|open\s+|final\s+)*(class|struct|enum|protocol|actor|func)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"C#":         regexp.MustCompile(`^\s*(?:public\s+|private\s+|protected\s+|internal\s+|static\s+|sealed\s+|abstract\s+|async\s+)*(class|interface|struct|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"C":          regexp.MustCompile(`^\s*(?:static\s+|inline\s+|extern\s+)*(struct|enum|typedef|[A-Za-z_][A-Za-z0-9_*\s]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(`),
-	"C++":        regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?(?:static\s+|inline\s+|virtual\s+|constexpr\s+)*(class|struct|enum|namespace|[A-Za-z_][A-Za-z0-9_:<>,*\s]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(|\{)`),
-	"Scala":      regexp.MustCompile(`^\s*(?:private\s+|protected\s+|final\s+|sealed\s+|case\s+|abstract\s+)*(class|trait|object|def)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Dart":       regexp.MustCompile(`^\s*(?:abstract\s+)?(class|mixin|enum|void|Future)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Lua":        regexp.MustCompile(`^\s*(?:local\s+)?(function)\s+([A-Za-z_][A-Za-z0-9_.:]*)`),
-	"Zig":        regexp.MustCompile(`^\s*(?:pub\s+)?(fn|const)\s+([A-Za-z_][A-Za-z0-9_]*)`),
-	"Elixir":     regexp.MustCompile(`^\s*(defmodule|def|defp)\s+([A-Za-z_][A-Za-z0-9_.?!]*)`),
-	"Shell":      regexp.MustCompile(`^\s*(?:(function)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{?`),
-}
-
-// ExtractGenericFacts extracts approximate imports and symbol spans for non-Go languages.
-func ExtractGenericFacts(language string, source []byte) ([]string, []SymbolInfo) {
+// ExtractGenericFacts extracts approximate imports for non-Go languages.
+func ExtractGenericFacts(language string, source []byte) []string {
 	imports := []string{}
-	symbols := []SymbolInfo{}
-	declaration := genericDeclarationPatterns[language]
 	lines := strings.Split(string(source), "\n")
-	for number, line := range lines {
+	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if genericImport(language, trimmed) {
 			imports = append(imports, trimmed)
 		}
-		if declaration == nil {
-			continue
-		}
-		match := declaration.FindStringSubmatch(line)
-		if len(match) != 3 {
-			continue
-		}
-		kind, ok := normalizeGenericSymbolKind(language, match[1])
-		if !ok {
-			continue
-		}
-		endLine := estimateGenericSymbolEndLine(language, lines, number)
-		symbols = append(symbols, SymbolInfo{Name: match[2], Kind: kind, Signature: trimmed, StartLine: number + 1, EndLine: endLine, Visibility: "unknown", Confidence: "approximate", AtomicTarget: kind != "impl"})
 	}
-	return imports, symbols
-}
-
-var genericTypeKinds = map[string]bool{
-	"class": true, "interface": true, "enum": true, "record": true, "struct": true, "namespace": true, "typedef": true,
-}
-
-func normalizeGenericSymbolKind(language, kind string) (string, bool) {
-	if kind == "" {
-		return "function", true
-	}
-	if (language == "Java" || language == "C" || language == "C++") && !genericTypeKinds[kind] {
-		if !genericJavaDeclaration(kind) {
-			return "", false
-		}
-		return "method", true
-	}
-	return kind, true
-}
-
-func estimateGenericSymbolEndLine(language string, lines []string, startIdx int) int {
-	if startIdx < 0 || startIdx >= len(lines) {
-		return startIdx + 1
-	}
-	switch language {
-	case "Python", "Ruby", "Elixir", "Lua":
-		return estimateIndentedSymbolEndLine(lines, startIdx)
-	default:
-		return estimateBraceSymbolEndLine(lines, startIdx)
-	}
-}
-
-func estimateIndentedSymbolEndLine(lines []string, startIdx int) int {
-	baseIndent := lineIndentation(lines[startIdx])
-	lastLine := startIdx + 1
-	maxScan := min(len(lines), startIdx+2000)
-	for i := startIdx + 1; i < maxScan; i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "--") {
-			continue
-		}
-		indent := lineIndentation(lines[i])
-		if indent > baseIndent || (indent == baseIndent && strings.HasPrefix(trimmed, ")") && strings.HasSuffix(trimmed, ":")) {
-			lastLine = i + 1
-			continue
-		}
-		if indent == baseIndent && (trimmed == "end" || strings.HasPrefix(trimmed, "end ")) {
-			return i + 1
-		}
-		break
-	}
-	return lastLine
-}
-
-func lineIndentation(line string) int {
-	indent := 0
-	for _, r := range line {
-		if r == ' ' {
-			indent++
-		} else if r == '\t' {
-			indent += 4
-		} else {
-			break
-		}
-	}
-	return indent
-}
-
-func estimateBraceSymbolEndLine(lines []string, startIdx int) int {
-	openIdx, openBraces := findOpeningBraceLine(lines, startIdx)
-	if openBraces <= 0 {
-		return openIdx + 1
-	}
-	maxScan := min(len(lines), startIdx+2000)
-	for i := openIdx + 1; i < maxScan; i++ {
-		openBraces += strings.Count(lines[i], "{") - strings.Count(lines[i], "}")
-		if openBraces <= 0 {
-			return i + 1
-		}
-	}
-	return startIdx + 1
-}
-
-func findOpeningBraceLine(lines []string, startIdx int) (int, int) {
-	maxHeader := min(len(lines), startIdx+10)
-	openBraces := 0
-	seenOpen := false
-	for i := startIdx; i < maxHeader; i++ {
-		opens := strings.Count(lines[i], "{")
-		closes := strings.Count(lines[i], "}")
-		if opens > 0 {
-			seenOpen = true
-		}
-		openBraces += opens - closes
-		if seenOpen {
-			return i, openBraces
-		}
-		if strings.HasSuffix(strings.TrimSpace(lines[i]), ";") {
-			break
-		}
-	}
-	return startIdx, 0
-}
-
-func genericJavaDeclaration(prefix string) bool {
-	switch prefix {
-	case "new", "return", "throw", "case", "else", "for", "while", "switch", "catch", "try", "do", "assert", "yield", "if", "sizeof":
-		return false
-	default:
-		return true
-	}
+	return imports
 }
 
 func genericImport(language, line string) bool {
@@ -187,16 +41,15 @@ func genericImport(language, line string) bool {
 	}
 }
 
-// ExtractFileFacts returns the detected language, raw import lines, and symbol spans
-// for any source file.
-func ExtractFileFacts(path string, source []byte) (string, []string, []SymbolInfo) {
+// ExtractFileFacts returns the detected language and raw import lines for any source file.
+func ExtractFileFacts(path string, source []byte) (string, []string) {
 	lang := DetectLanguage(path)
 	if lang == "Go" {
-		imports, symbols, _ := ExtractGoFacts(path, source)
-		return lang, imports, symbols
+		imports, _ := ExtractGoFacts(path, source)
+		return lang, imports
 	}
-	imports, symbols := ExtractGenericFacts(lang, source)
-	return lang, imports, symbols
+	imports := ExtractGenericFacts(lang, source)
+	return lang, imports
 }
 
 var quotedImportPattern = regexp.MustCompile(`['"<]([^'">]+)['">]`)

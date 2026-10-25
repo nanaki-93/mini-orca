@@ -95,7 +95,7 @@ func classifyFailedCheckFriction(check CheckResult) (string, string) {
 	case name == "secret & hygiene gate":
 		return "Remove hardcoded tokens/keys and unresolved conflict markers; inject secrets from configuration or environment.", "Never embed credentials, API tokens, or merge conflict markers in source or documentation."
 	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "format:") || name == "lint":
-		return "Fix syntax, formatting, and static analysis diagnostics using sibling symbol signatures.", "Ensure all proposed edits compile cleanly and pass static/lint checks before test execution."
+		return "Fix syntax, formatting, and static analysis diagnostics using sibling file declarations.", "Ensure all proposed edits compile cleanly and pass static/lint checks before test execution."
 	case name == "tests" || name == "regression baseline":
 		return "Align implementation logic with failing test assertions without weakening pinned regression tests.", "Verify edge cases and return contracts against unit test assertions before finalizing changes."
 	default:

@@ -57,8 +57,8 @@ func TestPerformanceRequestsStructuredOutputWithExactSourceLines(t *testing.T) {
 			if err != nil || result.Progress.Status != want || result.Performance == nil || result.Progress.Attempts != 1 {
 				t.Fatalf("stage=%+v err=%v", result, err)
 			}
-			if path == "main.go" && result.Performance.Findings[0].Symbol != "Run" {
-				t.Fatal("missing indexed declaration label")
+			if path == "main.go" && (result.Performance.Findings[0].StartLine != 5 || result.Performance.Findings[0].EndLine != 5) {
+				t.Fatal("missing source line anchor")
 			}
 			format := received.ResponseFormat
 			if format == nil || format.Type != "json_schema" || format.JSONSchema == nil || !format.JSONSchema.Strict {
@@ -116,9 +116,9 @@ func TestPerformanceFailuresRetainSafeSpecificReasonsAcrossRestart(t *testing.T)
 		{"fenced empty", "```json\n{\"findings\":[]}\n```", project.PerformanceInvalidJSON},
 		{"fenced finding", "```json\n" + validPerformanceReview + "\n```", project.PerformanceInvalidJSON},
 		{"unescaped quotes", strings.Replace(validPerformanceReview, "Avoid repeated formatting", `Format "quoted" data`, 1), project.PerformanceInvalidJSON},
-		{"callback symbol", strings.Replace(validPerformanceReview, `"symbol":"Run"`, `"symbol":"RunE"`, 1), project.PerformanceInvalidAnchors},
-		{"imported symbol", strings.Replace(validPerformanceReview, `"symbol":"Run"`, `"symbol":"GlobalLogger"`, 1), project.PerformanceInvalidAnchors},
-		{"outside declaration", strings.Replace(validPerformanceReview, `"start_line":5`, `"start_line":1`, 1), project.PerformanceInvalidAnchors},
+		{"zero start line", strings.Replace(validPerformanceReview, `"start_line":5`, `"start_line":0`, 1), project.PerformanceInvalidAnchors},
+		{"inverted range", strings.Replace(validPerformanceReview, `"start_line":5,"end_line":5`, `"start_line":5,"end_line":4`, 1), project.PerformanceInvalidAnchors},
+		{"past file end", strings.Replace(validPerformanceReview, `"end_line":5`, `"end_line":99`, 1), project.PerformanceInvalidAnchors},
 		{"missing explanation", strings.Replace(validPerformanceReview, "Measure before changing the formatting path.", "", 1), project.PerformanceInvalidFields},
 		{"invalid value", strings.Replace(validPerformanceReview, `"category":"cpu"`, `"category":"network"`, 1), project.PerformanceInvalidValues},
 		{"missing findings", `{}`, project.PerformanceInvalidShape},

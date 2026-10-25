@@ -193,9 +193,6 @@ func formatBatchIssueItems(rows []IssueRow) ([]string, []string) {
 		if row.Line > 0 {
 			loc = fmt.Sprintf("%s:%d", row.Path, row.Line)
 		}
-		if row.Symbol != "" {
-			loc += " · " + row.Symbol
-		}
 		itemLines = append(itemLines, fmt.Sprintf(
 			"%d. %s (%s)\n   Cause: %s\n   Proposed solution: %s",
 			idx+1, row.Title, loc, row.Cause, row.Solution,
@@ -893,10 +890,10 @@ func (s *State) applyModelPreset(p ModelPreset) {
 	}
 	s.ScopeModels["analyze"] = p.Analyze
 	s.ScopeModels["bug"] = p.Bug
-	s.ScopeModels["function"] = p.Function
+	s.ScopeModels["code"] = p.Code
 	s.saveCustomPresetsToDisk()
-	s.CmdOutput = fmt.Sprintf("Applied model preset: %s (analyze:%s · bug:%s · function:%s)",
-		p.Name, p.Analyze, p.Bug, p.Function)
+	s.CmdOutput = fmt.Sprintf("Applied model preset: %s (analyze:%s · bug:%s · code:%s)",
+		p.Name, p.Analyze, p.Bug, p.Code)
 }
 
 // SaveModelPreset saves the current 3-scope model assignment as a new or updated custom preset.
@@ -917,8 +914,8 @@ func (s *State) SaveModelPreset(name string) ModelPreset {
 	s.ActivePresetID = preset.ID
 	s.SelectedIdx = len(domain.CanonicalModelScopes()) + len(domain.DefaultModelPresets()) + updatedIdx
 	s.saveCustomPresetsToDisk()
-	s.CmdOutput = fmt.Sprintf("Saved model preset %q (%s) [analyze:%s · bug:%s · function:%s]",
-		preset.Name, preset.ID, preset.Analyze, preset.Bug, preset.Function)
+	s.CmdOutput = fmt.Sprintf("Saved model preset %q (%s) [analyze:%s · bug:%s · code:%s]",
+		preset.Name, preset.ID, preset.Analyze, preset.Bug, preset.Code)
 	return preset
 }
 
@@ -1128,7 +1125,7 @@ func (s *State) execSetModelArg(arg string) {
 	}
 	scope := strings.ToLower(fields[0])
 	if !domain.ContainsString(scopes, scope) {
-		s.CmdOutput = fmt.Sprintf("Unknown model scope %q (use: analyze, bug, function)", fields[0])
+		s.CmdOutput = fmt.Sprintf("Unknown model scope %q (use: analyze, bug, code)", fields[0])
 		return
 	}
 	for idx, sc := range scopes {

@@ -90,7 +90,7 @@ func TestAgentSettingsArePassiveGuardedDurableAndBounded(t *testing.T) {
 			t.Fatal("invalid settings mutation succeeded", invalid)
 		}
 	}
-	request.Values.Roles.Creation = "function"
+	request.Values.Roles.Creation = "code"
 	request.Values.Limits.ModelCalls = 10
 	request.Values.DisabledSkills = []string{"project-skills/review-code"}
 	updated, err := s.ControlAgentSettings(t.Context(), request)
@@ -101,7 +101,7 @@ func TestAgentSettingsArePassiveGuardedDurableAndBounded(t *testing.T) {
 	// provider, acquiring a tool grant, or modifying project source.
 	restarted := &Service{manager: s.manager, runtimes: s.runtimes, agentRuntime: s.agentRuntime}
 	reloaded, err := restarted.AgentSettings(t.Context(), query)
-	if err != nil || reloaded.Roles.Creation != "function" || reloaded.Version != updated.Version {
+	if err != nil || reloaded.Roles.Creation != "code" || reloaded.Version != updated.Version {
 		t.Fatal(reloaded, err)
 	}
 	if _, err := s.ControlAgentSettings(t.Context(), request); !errors.Is(err, project.ErrRevisionConflict) {
@@ -124,11 +124,11 @@ func TestSettingsFreezeNestedBudgetsRolesSkillsAndDeadlines(t *testing.T) {
 	}
 	defer release()
 	before := s.admittedRuntime(ctx)
-	models := ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}
+	models := ChangeWorkflowModels{Create: "bug", Test: "code", Review: "analyze"}
 	deadline := s.changeWorkflowTimeout(ctx, models, 0, true)
 	request := settingsControl(t, s)
 	request.Values.Limits.ToolCalls, request.Values.Limits.Repairs, request.Values.Limits.ConcurrentCalls = 1, 0, 1
-	request.Values.Roles.Creation = "function"
+	request.Values.Roles.Creation = "code"
 	request.Values.DisabledSkills = []string{"project-skills/review-code"}
 	if _, err := s.ControlAgentSettings(t.Context(), request); err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestSettingsFreezeNestedBudgetsRolesSkillsAndDeadlines(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cancel()
-	if s.admittedRuntime(next).Limits.Repairs != 0 || len(s.admittedRuntime(next).Skills) != 0 || s.resolveWorkflowModels(next, ChangeWorkflowModels{}).Create != "function" || s.workflowReviewWaves(next, 3) != 3 {
+	if s.admittedRuntime(next).Limits.Repairs != 0 || len(s.admittedRuntime(next).Skills) != 0 || s.resolveWorkflowModels(next, ChangeWorkflowModels{}).Create != "code" || s.workflowReviewWaves(next, 3) != 3 {
 		t.Fatal("future admission ignored settings")
 	}
 	if err := agentruntime.BudgetFromContext(next).AdmitTool(next); err != nil {

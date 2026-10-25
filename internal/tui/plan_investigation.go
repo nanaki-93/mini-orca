@@ -50,9 +50,9 @@ func (s *State) planInvestigationModel(d *PlanDraft) (Model, error) {
 	if s.Models == nil {
 		return Model{}, fmt.Errorf("refresh project model information before investigation")
 	}
-	model, ok := s.Models.Scopes["function"]
+	model, ok := s.Models.Scopes["code"]
 	if !ok {
-		return Model{}, fmt.Errorf("configure the Function model before investigation")
+		return Model{}, fmt.Errorf("configure the Code model before investigation")
 	}
 	return model, nil
 }

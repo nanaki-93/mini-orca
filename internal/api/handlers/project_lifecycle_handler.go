@@ -31,14 +31,6 @@ type reindexRequest struct {
 	ProjectRevision string `json:"project_revision"`
 }
 
-type symbolsResponse struct {
-	ProjectID       string               `json:"project_id"`
-	ProjectRevision string               `json:"project_revision"`
-	Path            string               `json:"path"`
-	Language        string               `json:"language"`
-	Symbols         []project.SymbolInfo `json:"symbols"`
-}
-
 func NewProjectHandler(manager *project.Manager, service *app.Service) *ProjectHandler {
 	return &ProjectHandler{manager: manager, service: service}
 }
@@ -125,30 +117,8 @@ func (h *ProjectHandler) Index(w http.ResponseWriter, _ *http.Request) {
 	api.WriteJSON(w, http.StatusOK, index)
 }
 
-// Symbols returns valid atomic targets for one policy-eligible project file.
-func (h *ProjectHandler) Symbols(w http.ResponseWriter, r *http.Request) {
-	file, err := h.manager.IndexedFile(r.URL.Query().Get("path"))
-	if err != nil {
-		writeProjectError(w, "symbol lookup failed", err)
-		return
-	}
-	if file.Binary {
-		writeProjectError(w, "symbol lookup failed", project.ErrUnsupportedFile)
-		return
-	}
-	index, err := h.manager.Index()
-	if err != nil {
-		writeProjectError(w, "symbol lookup failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, symbolsResponse{
-		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
-		Path: file.Path, Language: file.Language, Symbols: file.Symbols,
-	})
-}
-
 func (h *ProjectHandler) Impact(w http.ResponseWriter, r *http.Request) {
-	preview, err := h.manager.ImpactPreview(r.URL.Query().Get("path"), r.URL.Query().Get("symbol"))
+	preview, err := h.manager.ImpactPreview(r.URL.Query().Get("path"))
 	if err != nil {
 		writeProjectError(w, "impact preview failed", err)
 		return
@@ -266,7 +236,7 @@ func writeProjectError(w http.ResponseWriter, action string, err error) {
 	case errors.Is(err, project.ErrRevisionConflict):
 		api.WriteAppError(w, api.Conflict(action, "The active project changed. Refresh and try again.", err))
 	case errors.Is(err, project.ErrUnsupportedFile):
-		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "This file does not support symbol extraction.", http.StatusUnprocessableEntity, err))
+		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "This file does not support explanation.", http.StatusUnprocessableEntity, err))
 	case errors.Is(err, project.ErrSecurityRulesUnavailable):
 		api.WriteAppError(w, api.NewAppError(api.ErrorBadRequest, action, "Security source-only scanning is unavailable for this file language.", http.StatusUnprocessableEntity, err))
 	default:

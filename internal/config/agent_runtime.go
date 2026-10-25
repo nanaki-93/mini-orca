@@ -125,14 +125,14 @@ func resolveAgentRoles(roles AgentRoles) (AgentRoles, error) {
 		roles.Creation = BugModelScope
 	}
 	if roles.Testing == "" {
-		roles.Testing = FunctionModelScope
+		roles.Testing = CodeModelScope
 	}
 	if roles.Review == "" {
 		roles.Review = AnalyzeModelScope
 	}
 	for _, scope := range []ModelScope{roles.Creation, roles.Testing, roles.Review} {
-		if scope != AnalyzeModelScope && scope != BugModelScope && scope != FunctionModelScope {
-			return AgentRoles{}, fmt.Errorf("agent_runtime.roles must reference analyze, bug, or function profiles")
+		if scope != AnalyzeModelScope && scope != BugModelScope && scope != CodeModelScope {
+			return AgentRoles{}, fmt.Errorf("agent_runtime.roles must reference analyze, bug, or code profiles")
 		}
 	}
 	return roles, nil

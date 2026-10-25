@@ -110,7 +110,7 @@ func (s *Service) RunResearch(ctx context.Context, request ResearchRequest) (*Re
 	if !request.ConfirmSearch || !request.ConfirmSourceSharing {
 		return nil, fmt.Errorf("explicit search and source-sharing confirmation are required")
 	}
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	prepared, err := s.prepareResearch(ctx, request)

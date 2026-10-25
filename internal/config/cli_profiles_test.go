@@ -16,7 +16,7 @@ model_scopes:
     provider: openai
     api_base_url: http://localhost:1234/v1
     model: local-model
-  function:
+  code:
     provider: pi
     cli_path: /opt/agent tools/pi
     model: test-provider/test-model
@@ -33,7 +33,7 @@ model_scopes:
 	if !profiles.Analyze.IsCLI() || profiles.Analyze.CLIPath != "agy" || profiles.Analyze.APIBaseURL != "" || profiles.Analyze.ContextMaxTokens != 120000 || profiles.Analyze.MaxTokens != 0 {
 		t.Fatalf("agy profile = %+v", profiles.Analyze)
 	}
-	if profiles.Bug.IsCLI() || profiles.Bug.Provider != OpenAIProvider || profiles.Function.CLIPath != "/opt/agent tools/pi" || profiles.Function.ContextMaxTokens != 8000 || profiles.Function.ReasoningEffort != "none" {
+	if profiles.Bug.IsCLI() || profiles.Bug.Provider != OpenAIProvider || profiles.Code.CLIPath != "/opt/agent tools/pi" || profiles.Code.ContextMaxTokens != 8000 || profiles.Code.ReasoningEffort != "none" {
 		t.Fatalf("mixed profiles = %+v", profiles)
 	}
 }
@@ -64,10 +64,10 @@ func TestCLIProfilesRejectAmbiguousOrUnsupportedSettings(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := Default()
-			cfg.ModelScopes.Function = ModelProfileConfig{Provider: AgyProvider, Model: "test-model"}
-			test.edit(&cfg.ModelScopes.Function)
+			cfg.ModelScopes.Code = ModelProfileConfig{Provider: AgyProvider, Model: "test-model"}
+			test.edit(&cfg.ModelScopes.Code)
 			_, err := ResolveModelProfiles(cfg)
-			if err == nil || !strings.Contains(err.Error(), "model_scopes.function") || !strings.Contains(err.Error(), test.want) || strings.Contains(err.Error(), "private-marker") {
+			if err == nil || !strings.Contains(err.Error(), "model_scopes.code") || !strings.Contains(err.Error(), test.want) || strings.Contains(err.Error(), "private-marker") {
 				t.Fatalf("configuration error = %v", err)
 			}
 		})

@@ -43,7 +43,6 @@ type FindingLocation struct {
 	Path      string `json:"path,omitempty"`
 	StartLine int    `json:"start_line,omitempty"`
 	EndLine   int    `json:"end_line,omitempty"`
-	Symbol    string `json:"symbol,omitempty"`
 }
 
 // UnifiedFinding keeps model suggestions structurally distinct from verified
@@ -308,7 +307,6 @@ func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding
 	finding.Evidence = sanitizeFindingText(finding.Evidence, maxProjectAnalysisBytes)
 	finding.TaskSpec = SanitizeBugTaskSpec(finding.TaskSpec)
 	finding.Location.Path = filepath.ToSlash(strings.TrimSpace(finding.Location.Path))
-	finding.Location.Symbol = strings.TrimSpace(finding.Location.Symbol)
 	if finding.Status == "" {
 		finding.Status = FindingStatusOpen
 	}
@@ -325,7 +323,7 @@ func normalizeFinding(finding UnifiedFinding, input FindingInput) UnifiedFinding
 // FindingID excludes revision, hash and category. Adding or correcting a category
 // preserves triage for the same evidence; freshness is checked independently.
 func FindingID(finding UnifiedFinding) string {
-	values := []string{finding.Source, finding.Rule, finding.Location.Path, fmt.Sprint(finding.Location.StartLine), fmt.Sprint(finding.Location.EndLine), finding.Location.Symbol, finding.Message}
+	values := []string{finding.Source, finding.Rule, finding.Location.Path, fmt.Sprint(finding.Location.StartLine), fmt.Sprint(finding.Location.EndLine), finding.Message}
 	sum := sha256.Sum256([]byte(strings.Join(values, "\x00")))
 	return "finding:" + hex.EncodeToString(sum[:])
 }
@@ -380,8 +378,8 @@ func validPersistedBugTaskSpec(spec *BugTaskSpec) bool {
 }
 
 func validPersistedBugTaskTarget(spec *BugTaskSpec) bool {
-	return spec.SchemaVersion == BugTaskSpecSchemaVersion && spec.TargetPath != "" && spec.TargetSymbol != "" &&
-		spec.TargetSignature != "" && len(spec.AcceptanceCriteria) > 0 &&
+	return spec.SchemaVersion == BugTaskSpecSchemaVersion && spec.TargetPath != "" &&
+		len(spec.AcceptanceCriteria) > 0 &&
 		len(spec.AcceptanceCriteria) <= MaxBugTaskItems && len(spec.NonGoals) <= MaxBugTaskItems
 }
 
@@ -454,16 +452,6 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 			title = risk.Summary
 		}
 		location := FindingLocation{Path: analysis.Path}
-		if spec := risk.TaskSpec; spec != nil {
-			location.Symbol = spec.TargetSymbol
-			for _, symbol := range analysis.Symbols {
-				if symbol.Name == spec.TargetSymbol {
-					location.StartLine = symbol.StartLine
-					location.EndLine = symbol.EndLine
-					break
-				}
-			}
-		}
 		eng := resolveFileRiskInsight(analysis, risk, idx)
 		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: insight.CloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: eng})
 	}
@@ -474,7 +462,7 @@ func resolveFileRiskInsight(analysis FileAnalysis, risk Finding, riskIdx int) *E
 	if risk.EngineeringInsight != nil {
 		return CloneEngineeringInsight(risk.EngineeringInsight)
 	}
-	if sug := matchSuggestionForRisk(analysis.Suggestions, risk, riskIdx, len(analysis.Risks)); sug != nil {
+	if sug := matchSuggestionForRisk(analysis.Suggestions, riskIdx, len(analysis.Risks)); sug != nil {
 		if sug.EngineeringInsight != nil {
 			return CloneEngineeringInsight(sug.EngineeringInsight)
 		}
@@ -497,21 +485,9 @@ func resolveFileRiskInsight(analysis FileAnalysis, risk Finding, riskIdx int) *E
 	return CloneEngineeringInsight(analysis.EngineeringInsight)
 }
 
-func matchSuggestionForRisk(suggestions []Suggestion, risk Finding, riskIdx, riskCount int) *Suggestion {
+func matchSuggestionForRisk(suggestions []Suggestion, riskIdx, riskCount int) *Suggestion {
 	if len(suggestions) == 0 {
 		return nil
-	}
-	if risk.TaskSpec != nil && risk.TaskSpec.TargetSymbol != "" {
-		for i := range suggestions {
-			if suggestions[i].TargetSymbol == risk.TaskSpec.TargetSymbol {
-				return &suggestions[i]
-			}
-		}
-	}
-	for i := range suggestions {
-		if suggestions[i].TargetSymbol != "" && (strings.Contains(risk.Summary, suggestions[i].TargetSymbol) || strings.Contains(risk.Title, suggestions[i].TargetSymbol)) {
-			return &suggestions[i]
-		}
 	}
 	if riskCount == 1 && len(suggestions) == 1 {
 		return &suggestions[0]

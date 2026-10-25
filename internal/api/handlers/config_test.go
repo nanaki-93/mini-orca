@@ -6,6 +6,6 @@ func scopedHandlerConfig(apiBaseURL string) *config.Config {
 	cfg := config.Default()
 	cfg.ModelScopes.Analyze.APIBaseURL = apiBaseURL
 	cfg.ModelScopes.Bug.APIBaseURL = apiBaseURL
-	cfg.ModelScopes.Function.APIBaseURL = apiBaseURL
+	cfg.ModelScopes.Code.APIBaseURL = apiBaseURL
 	return cfg
 }

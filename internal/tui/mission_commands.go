@@ -375,9 +375,9 @@ func (s *State) confirmMissionPlanning() {
 		s.Error = "Create a mission goal and capture explicit paths before decomposition."
 		return
 	}
-	model, ok := missionFunctionModel(v.Settings)
+	model, ok := missionCodeModel(v.Settings)
 	if !ok {
-		s.Error = "Refresh mission settings with an available Function model before planning."
+		s.Error = "Refresh mission settings with an available Code model before planning."
 		return
 	}
 	request := client.MissionPlanningRequest{ProjectIdentity: v.Scope.ProjectIdentity, CatalogRevision: v.Catalog.CatalogRevision, Goal: v.Draft.Goal, Sources: slices.Clone(v.Draft.Sources), Limits: v.Draft.Limits, PlanningLimits: v.PlanningLimits, ConfirmRemoteProvider: model.RemoteProvider}
@@ -385,9 +385,9 @@ func (s *State) confirmMissionPlanning() {
 	s.confirmMissionAction("Decompose mission", missionPlanningDisclosure(v, model), action)
 }
 
-func missionFunctionModel(settings *client.AgentSettings) (client.Model, bool) {
+func missionCodeModel(settings *client.AgentSettings) (client.Model, bool) {
 	for _, model := range settings.Models {
-		if model.Scope == "function" && model.Model != "" && model.ProviderOrigin != "" && model.Capabilities.Completion {
+		if model.Scope == "code" && model.Model != "" && model.ProviderOrigin != "" && model.Capabilities.Completion {
 			return model, true
 		}
 	}

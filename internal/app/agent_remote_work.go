@@ -36,7 +36,7 @@ func (s *Service) executeRemoteService(ctx context.Context, grant remoteServiceG
 	if err := s.validateRemoteServiceGrant(scoped, grant); err != nil {
 		return "", err
 	}
-	scope := config.FunctionModelScope
+	scope := config.CodeModelScope
 	if request.Operation == "proposal" {
 		scope = config.BugModelScope
 	}

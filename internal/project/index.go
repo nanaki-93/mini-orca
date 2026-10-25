@@ -12,13 +12,12 @@ import (
 )
 
 const (
-	indexSchemaVersion = "3"
+	indexSchemaVersion = "4"
 	indexRelativePath  = ".mini-orca/index.json"
 )
 
 type ProjectIndex = symbols.ProjectIndex
 type IndexFile = symbols.IndexFile
-type SymbolInfo = symbols.SymbolInfo
 type Diagnostic = symbols.Diagnostic
 
 // BuildIndex scans only context-policy-eligible project files and writes the
@@ -135,22 +134,21 @@ func buildIndexFile(root, relative string, previous IndexFile) (IndexFile, error
 	}
 	entry := IndexFile{
 		Path: relative, ContentHash: content.hash, Language: detectLanguage(relative), SizeBytes: content.size,
-		ModifiedAt: info.ModTime().UTC(), Binary: content.binary, Imports: []string{}, Symbols: []SymbolInfo{}, AnalysisStatus: "missing",
+		ModifiedAt: info.ModTime().UTC(), Binary: content.binary, Imports: []string{}, AnalysisStatus: "missing",
 	}
 	if !entry.Binary {
 		entry.LineCount = content.lines
 	}
 	if previous.Path == relative && previous.ContentHash == content.hash {
 		entry.Imports = append([]string(nil), previous.Imports...)
-		entry.Symbols = append([]SymbolInfo(nil), previous.Symbols...)
 		entry.Diagnostics = append([]Diagnostic(nil), previous.Diagnostics...)
 		entry.AnalysisStatus = previous.AnalysisStatus
 	} else if !entry.Binary && content.size > maxFileViewBytes {
-		entry.Diagnostics = []Diagnostic{{Message: fmt.Sprintf("File exceeds %d bytes; symbol extraction is unavailable.", maxFileViewBytes)}}
+		entry.Diagnostics = []Diagnostic{{Message: fmt.Sprintf("File exceeds %d bytes; import extraction is unavailable.", maxFileViewBytes)}}
 	} else if entry.Language == "Go" && !entry.Binary {
-		entry.Imports, entry.Symbols, entry.Diagnostics = symbols.ExtractGoFacts(relative, content.source)
+		entry.Imports, entry.Diagnostics = symbols.ExtractGoFacts(relative, content.source)
 	} else if !entry.Binary {
-		entry.Imports, entry.Symbols = symbols.ExtractGenericFacts(entry.Language, content.source)
+		entry.Imports = symbols.ExtractGenericFacts(entry.Language, content.source)
 	}
 	return entry, nil
 }

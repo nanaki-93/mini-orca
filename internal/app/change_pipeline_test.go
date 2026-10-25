@@ -33,7 +33,7 @@ func workflowService(t *testing.T, outputs [3]func() string) (*Service, string, 
 	// Deliberately choose profiles independently of their usual prompt scopes.
 	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = create.URL, "creator"
 	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = test.URL, "tester"
-	cfg.ModelScopes.Function.APIBaseURL, cfg.ModelScopes.Function.Model = review.URL, "reviewer"
+	cfg.ModelScopes.Code.APIBaseURL, cfg.ModelScopes.Code.Model = review.URL, "reviewer"
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func workflowService(t *testing.T, outputs [3]func() string) (*Service, string, 
 }
 
 func workflowRequest(session *ChangeSession) ChangeWorkflowRequest {
-	return ChangeWorkflowRequest{ChangeIdentity: changeIdentity(session), Message: "Add Helper returning two, with a regression test.", Models: ChangeWorkflowModels{Create: "bug", Test: "analyze", Review: "function"}}
+	return ChangeWorkflowRequest{ChangeIdentity: changeIdentity(session), Message: "Add Helper returning two, with a regression test.", Models: ChangeWorkflowModels{Create: "bug", Test: "analyze", Review: "code"}}
 }
 
 func finishedWorkflow(t *testing.T, s *Service, id string) *ChangeSession {
@@ -188,7 +188,7 @@ func TestChangeWorkflowDefaultRolesRequireConsentAndShareBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if started.Workflow.Models != (ChangeWorkflowModels{"bug", "function", "analyze"}) {
+	if started.Workflow.Models != (ChangeWorkflowModels{"bug", "code", "analyze"}) {
 		t.Fatalf("resolved models not saved: %+v", started.Workflow.Models)
 	}
 	finished := finishedWorkflow(t, s, initial.ID)
@@ -324,7 +324,7 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	}
 	s.runtimes.bug.effective.Timeout = "2m0s"
 	s.runtimes.function.effective.Timeout = "5m0s"
-	request.Models.Review = catalog.Defaults["function"]
+	request.Models.Review = catalog.Defaults["code"]
 	started, err := s.StartChangeWorkflow(context.Background(), initial.ID, request)
 	if err != nil || started.Workflow.Status != "running" {
 		t.Fatalf("catalog workflow admission: %+v, %v", started, err)
@@ -333,8 +333,8 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	if session.Workflow.Status != "awaiting_human_review" {
 		t.Fatalf("catalog workflow status: %+v", session.Workflow)
 	}
-	expectedProfiles := []string{catalog.Defaults["bug"], catalog.Defaults["analyze"], catalog.Defaults["function"]}
-	expectedScopes := []string{"bug", "function", "analyze"}
+	expectedProfiles := []string{catalog.Defaults["bug"], catalog.Defaults["analyze"], catalog.Defaults["code"]}
+	expectedScopes := []string{"bug", "code", "analyze"}
 	for i, name := range []string{"creator", "tester", "reviewer"} {
 		stage := session.Workflow.Stages[i]
 		if calls[i].Load() != []int32{1, 1, 3}[i] || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] || stage.Model.Timeout != "15m0s" {
@@ -375,7 +375,7 @@ func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
 	cfg := scopedTestConfig(create.URL)
 	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = create.URL, "creator"
 	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = testSrv.URL, "tester"
-	cfg.ModelScopes.Function.APIBaseURL, cfg.ModelScopes.Function.Model = fnServer.URL, "reviewer"
+	cfg.ModelScopes.Code.APIBaseURL, cfg.ModelScopes.Code.Model = fnServer.URL, "reviewer"
 	s, err := New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)
@@ -392,9 +392,9 @@ func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
 	}
 	explanation, err := s.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{
 		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: tsFile.ContentHash,
-		TargetPath: "app.ts", TargetSymbol: "compute",
+		TargetPath: "app.ts",
 	})
-	if err != nil || explanation.Anchor.Symbol != "compute" {
+	if err != nil || explanation.Anchor.Path != "app.ts" {
 		t.Fatalf("TypeScript declaration explanation failed: %+v, %v", explanation, err)
 	}
 
@@ -445,8 +445,8 @@ func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) 
 		t.Fatal(err)
 	}
 	req := workflowRequest(session)
-	req.Models = ChangeWorkflowModels{Create: "function", Test: "analyze", Review: "function"}
-	// Route function profile to creator on stage 0 and reviewer on stage 2 by using catalog IDs.
+	req.Models = ChangeWorkflowModels{Create: "code", Test: "analyze", Review: "code"}
+	// Route code profile to creator on stage 0 and reviewer on stage 2 by using catalog IDs.
 	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) {
 		return []llm.AgyModel{{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro"}}, nil
 	}
@@ -454,7 +454,7 @@ func TestChangeWorkflowRerunAfterPinnedTestsAndLargeFunctionScope(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Models = ChangeWorkflowModels{Create: catalog.Defaults["bug"], Test: catalog.Defaults["analyze"], Review: catalog.Defaults["function"]}
+	req.Models = ChangeWorkflowModels{Create: catalog.Defaults["bug"], Test: catalog.Defaults["analyze"], Review: catalog.Defaults["code"]}
 	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, req); err != nil {
 		t.Fatalf("first workflow start failed: %v", err)
 	}

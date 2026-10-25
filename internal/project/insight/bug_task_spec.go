@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	BugTaskSpecSchemaVersion = "1"
+	BugTaskSpecSchemaVersion = "2"
 	MaxBugTaskItems          = 8
 	MaxBugTaskItemBytes      = 512
 	MaxBugTaskCandidateBytes = 16 * 1024
@@ -15,13 +15,11 @@ const (
 
 var findingSecret = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential|authorization)\b\s*[:=]\s*[^\s,;]+`)
 
-// BugTaskSpec is a bounded model proposal for one exact declaration edit. Its
+// BugTaskSpec is a bounded model proposal for one file edit. Its
 // target fields are always validated against the deterministic project index.
 type BugTaskSpec struct {
 	SchemaVersion      string               `json:"schema_version"`
 	TargetPath         string               `json:"target_path"`
-	TargetSymbol       string               `json:"target_symbol"`
-	TargetSignature    string               `json:"target_signature"`
 	AcceptanceCriteria []string             `json:"acceptance_criteria"`
 	NonGoals           []string             `json:"non_goals"`
 	GoTestCandidate    *GoTestCandidateSpec `json:"go_test_candidate,omitempty"`
@@ -52,8 +50,6 @@ func SanitizeBugTaskSpec(spec *BugTaskSpec) *BugTaskSpec {
 	result := &BugTaskSpec{
 		SchemaVersion:      strings.TrimSpace(spec.SchemaVersion),
 		TargetPath:         strings.TrimSpace(spec.TargetPath),
-		TargetSymbol:       strings.TrimSpace(spec.TargetSymbol),
-		TargetSignature:    strings.TrimSpace(spec.TargetSignature),
 		AcceptanceCriteria: sanitizeBugTaskItems(spec.AcceptanceCriteria),
 		NonGoals:           sanitizeBugTaskItems(spec.NonGoals),
 	}

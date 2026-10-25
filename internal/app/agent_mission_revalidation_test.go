@@ -266,7 +266,7 @@ func TestMissionRevalidationRejectsChangedIdentityAndExternalBaseBeforeEffects(t
 		"branch":   func(r *MissionExecutionRequest) { r.Revalidation.Previous.Source.Branch = "codex/foreign" },
 		"source":   func(r *MissionExecutionRequest) { r.Revalidation.Previous.Source.Head = strings.Repeat("a", 40) },
 		"path":     func(r *MissionExecutionRequest) { r.Revalidation.Previous.Path += "-moved" },
-		"grant":    func(r *MissionExecutionRequest) { r.ConfirmedProfiles = []string{"function"} },
+		"grant":    func(r *MissionExecutionRequest) { r.ConfirmedProfiles = []string{"code"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			invalid := request

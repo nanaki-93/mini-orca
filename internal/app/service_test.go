@@ -28,7 +28,7 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.FunctionModelScope} {
+	for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.CodeModelScope} {
 		if err := service.RequireRemoteConfirmation(scope, false); err == nil {
 			t.Fatalf("expected %s confirmation error", scope)
 		}
@@ -36,7 +36,7 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !service.CurrentModelCatalog().Scopes["function"].RemoteProvider {
+	if !service.CurrentModelCatalog().Scopes["code"].RemoteProvider {
 		t.Fatal("effective model must disclose that the configured provider is remote")
 	}
 }
@@ -178,9 +178,9 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	}
 	service, err := New(&config.Config{
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "do-not-return", Model: "analyze-model", ReasoningEffort: "high"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug-model", ReasoningEffort: "low"},
-			Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "do-not-return", Model: "function-model", ReasoningEffort: "max"},
+			Analyze: config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", APIKey: "do-not-return", Model: "analyze-model", ReasoningEffort: "high"},
+			Bug:     config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "bug-model", ReasoningEffort: "low"},
+			Code:    config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", APIKey: "do-not-return", Model: "function-model", ReasoningEffort: "max"},
 		},
 	}, manager)
 	if err != nil {
@@ -190,7 +190,7 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	if len(catalog.Scopes) != 3 {
 		t.Fatalf("catalog top-level compatibility = %+v", catalog)
 	}
-	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["function"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["function"].RemoteProvider {
+	if catalog.Scopes["analyze"].ProviderOrigin != "https://analyze.example" || catalog.Scopes["analyze"].ReasoningEffort != "high" || catalog.Scopes["bug"].ReasoningEffort != "low" || catalog.Scopes["code"].ReasoningEffort != "max" || catalog.Scopes["bug"].RemoteProvider || !catalog.Scopes["code"].RemoteProvider {
 		t.Fatalf("scope catalog = %+v", catalog.Scopes)
 	}
 	encoded, err := json.Marshal(catalog)
@@ -206,7 +206,7 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	if err := service.RequireRemoteConfirmation(config.AnalyzeModelScope, false); err == nil {
 		t.Fatal("remote analyze provider was not gated")
 	}
-	if err := service.RequireRemoteConfirmation(config.FunctionModelScope, false); err == nil {
+	if err := service.RequireRemoteConfirmation(config.CodeModelScope, false); err == nil {
 		t.Fatal("remote function provider was not gated")
 	}
 }
@@ -214,18 +214,18 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 func TestEffectiveModelKeepsCatalogAndPreviewMetadataShapes(t *testing.T) {
 	temperature := float32(0.2)
 	metadata := EffectiveModel{
-		Scope: "function", Profile: "function", Model: "fixture-model", ReasoningEffort: "high",
+		Scope: "code", Profile: "code", Model: "fixture-model", ReasoningEffort: "high",
 		ProviderOrigin: "https://provider.example", RemoteProvider: true,
 		Temperature: &temperature, MaxTokens: intPointer(4096), ContextMaxTokens: 8192, Timeout: "5m0s", MaxRetries: 3,
 	}
-	wantMetadata := `{"scope":"function","profile":"function","model":"fixture-model","reasoning_effort":"high","provider_origin":"https://provider.example","remote_provider":true,"temperature":0.2,"max_tokens":4096,"context_max_tokens":8192,"timeout":"5m0s","max_retries":3}`
+	wantMetadata := `{"scope":"code","profile":"code","model":"fixture-model","reasoning_effort":"high","provider_origin":"https://provider.example","remote_provider":true,"temperature":0.2,"max_tokens":4096,"context_max_tokens":8192,"timeout":"5m0s","max_retries":3}`
 	encodedMetadata, err := json.Marshal(metadata)
 	if err != nil || string(encodedMetadata) != wantMetadata {
 		t.Fatalf("effective model JSON = %s, %v", encodedMetadata, err)
 	}
 
 	for name, value := range map[string]any{
-		"catalog": ModelCatalog{Scopes: map[string]EffectiveModel{"function": metadata}},
+		"catalog": ModelCatalog{Scopes: map[string]EffectiveModel{"code": metadata}},
 		"preview": AnalysisProviderRequirement{Model: metadata},
 	} {
 		encoded, err := json.Marshal(value)
@@ -248,29 +248,29 @@ func TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider(t *testi
 		{
 			name: "all local",
 			scopes: config.ModelScopesConfig{
-				Analyze:  config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "local-analyze"},
-				Bug:      config.ModelProfileConfig{APIBaseURL: "http://localhost:1234/v1", Model: "local-bug"},
-				Function: config.ModelProfileConfig{APIBaseURL: "http://[::1]:8080/v1", Model: "local-function"},
+				Analyze: config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "local-analyze"},
+				Bug:     config.ModelProfileConfig{APIBaseURL: "http://localhost:1234/v1", Model: "local-bug"},
+				Code:    config.ModelProfileConfig{APIBaseURL: "http://[::1]:8080/v1", Model: "local-function"},
 			},
-			remote: map[string]bool{"analyze": false, "bug": false, "function": false},
+			remote: map[string]bool{"analyze": false, "bug": false, "code": false},
 		},
 		{
 			name: "mixed cloud cloud local",
 			scopes: config.ModelScopesConfig{
-				Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", Model: "cloud-analyze"},
-				Bug:      config.ModelProfileConfig{APIBaseURL: "https://bug.example/v1", Model: "cloud-bug"},
-				Function: config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "local-function"},
+				Analyze: config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", Model: "cloud-analyze"},
+				Bug:     config.ModelProfileConfig{APIBaseURL: "https://bug.example/v1", Model: "cloud-bug"},
+				Code:    config.ModelProfileConfig{APIBaseURL: "http://127.0.0.1:11434/v1", Model: "local-function"},
 			},
-			remote: map[string]bool{"analyze": true, "bug": true, "function": false},
+			remote: map[string]bool{"analyze": true, "bug": true, "code": false},
 		},
 		{
 			name: "all remote",
 			scopes: config.ModelScopesConfig{
-				Analyze:  config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", Model: "cloud-analyze"},
-				Bug:      config.ModelProfileConfig{APIBaseURL: "https://bug.example/v1", Model: "cloud-bug"},
-				Function: config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", Model: "cloud-function"},
+				Analyze: config.ModelProfileConfig{APIBaseURL: "https://analyze.example/v1", Model: "cloud-analyze"},
+				Bug:     config.ModelProfileConfig{APIBaseURL: "https://bug.example/v1", Model: "cloud-bug"},
+				Code:    config.ModelProfileConfig{APIBaseURL: "https://function.example/v1", Model: "cloud-function"},
 			},
-			remote: map[string]bool{"analyze": true, "bug": true, "function": true},
+			remote: map[string]bool{"analyze": true, "bug": true, "code": true},
 		},
 	}
 	for _, test := range tests {
@@ -284,7 +284,7 @@ func TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider(t *testi
 				t.Fatal(err)
 			}
 			catalog := service.CurrentModelCatalog()
-			for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.FunctionModelScope} {
+			for _, scope := range []config.ModelScope{config.AnalyzeModelScope, config.BugModelScope, config.CodeModelScope} {
 				profile := catalog.Scopes[string(scope)]
 				if profile.RemoteProvider != test.remote[string(scope)] {
 					t.Fatalf("%s remote metadata = %+v", scope, profile)
@@ -420,9 +420,9 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	}
 	service, err := New(&config.Config{
 		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model", ReasoningEffort: "high"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model", ReasoningEffort: "medium"},
-			Function: config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model", ReasoningEffort: "low"},
+			Analyze: config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model", ReasoningEffort: "high"},
+			Bug:     config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model", ReasoningEffort: "medium"},
+			Code:    config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model", ReasoningEffort: "low"},
 		},
 		Retry: config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
 	}, manager)
@@ -452,7 +452,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proposal.ContextManifest.Scope != "function" || proposal.ContextManifest.Model != "function-model" || proposal.ContextManifest.ProviderOrigin != functionServer.URL {
+	if proposal.ContextManifest.Scope != "code" || proposal.ContextManifest.Model != "function-model" || proposal.ContextManifest.ProviderOrigin != functionServer.URL {
 		t.Fatalf("draft provenance = %+v", proposal.ContextManifest)
 	}
 	if analyzeCalls != 1 || bugCalls != 1 || functionCalls != 1 {
@@ -469,6 +469,6 @@ func scopedTestConfig(apiBaseURL string) *config.Config {
 	cfg := config.Default()
 	cfg.ModelScopes.Analyze.APIBaseURL = apiBaseURL
 	cfg.ModelScopes.Bug.APIBaseURL = apiBaseURL
-	cfg.ModelScopes.Function.APIBaseURL = apiBaseURL
+	cfg.ModelScopes.Code.APIBaseURL = apiBaseURL
 	return cfg
 }

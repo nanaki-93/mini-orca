@@ -175,7 +175,7 @@ func TestScanGoSecurityRulesMatchesOnlyExactSourcePatterns(t *testing.T) {
 			}
 			for index, rule := range test.rules {
 				finding := findings[index]
-				if finding.Rule != rule || finding.EvidenceKind != "rule_match" || finding.Anchor.Path != test.path || finding.Anchor.StartLine < 3 || finding.Anchor.EndLine != finding.Anchor.StartLine || finding.Anchor.Symbol == "" {
+				if finding.Rule != rule || finding.EvidenceKind != "rule_match" || finding.Anchor.Path != test.path || finding.Anchor.StartLine < 3 || finding.Anchor.EndLine != finding.Anchor.StartLine {
 					t.Fatalf("finding = %+v", finding)
 				}
 				if !strings.Contains(finding.Preconditions, "unknown") || !strings.Contains(finding.Preconditions, "syntactic review") {
@@ -220,8 +220,8 @@ func TestScanGoSecurityRulesSortsCandidatesBeforeCapping(t *testing.T) {
 }
 
 func securityRuleIndexedFile(path, source string) IndexFile {
-	_, symbols, _ := symbols.ExtractGoFacts(path, []byte(source))
-	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Symbols: symbols}
+	imports, _ := symbols.ExtractGoFacts(path, []byte(source))
+	return IndexFile{Path: path, ContentHash: contentHash([]byte(source)), Language: "Go", LineCount: strings.Count(source, "\n"), Imports: imports}
 }
 
 func contentHash(data []byte) string {

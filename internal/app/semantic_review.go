@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v16"
+	semanticAnalysisPromptVersion = "file-analysis-v17"
 	maxSemanticAnalysisBytes      = 64 * 1024
 	fileAnalysisInsightFieldCount = 4
 	fileAnalysisInsightMaxChars   = 250
@@ -29,12 +29,12 @@ const (
 const fileAnalysisResponseSchemaName = "file_analysis_response"
 
 // fileAnalysisResponseSchemaDocument mirrors the wire response accepted by
-// parseSemanticReviewResponse. Target-specific checks (such as an exact symbol name)
+// parseSemanticReviewResponse. Target-specific checks (such as the target file path)
 // remain in the parser because they depend on the selected file.
 const fileAnalysisResponseSchemaDocument = `{
   "type":"object",
   "additionalProperties":false,
-  "required":["purpose","responsibilities","dependencies","side_effects","risks","suggestions","symbol_explanations"],
+  "required":["purpose","responsibilities","dependencies","side_effects","risks","suggestions"],
   "properties":{
     "purpose":{"type":"string","minLength":1},
     "responsibilities":{"type":"array","maxItems":3,"items":{"type":"string","minLength":1}},
@@ -42,7 +42,6 @@ const fileAnalysisResponseSchemaDocument = `{
     "side_effects":{"type":"array","maxItems":3,"items":{"type":"string","minLength":1}},
     "risks":{"type":"array","maxItems":3,"items":{"$ref":"#/$defs/risk"}},
     "suggestions":{"type":"array","maxItems":3,"items":{"$ref":"#/$defs/suggestion"}},
-    "symbol_explanations":{"type":"object","additionalProperties":{"type":"string","minLength":1}},
     "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
   },
   "$defs":{
@@ -62,12 +61,10 @@ const fileAnalysisResponseSchemaDocument = `{
     "taskSpec":{
       "type":"object",
       "additionalProperties":false,
-      "required":["schema_version","target_path","target_symbol","target_signature","acceptance_criteria","non_goals"],
+      "required":["schema_version","target_path","acceptance_criteria","non_goals"],
       "properties":{
-        "schema_version":{"enum":["1"]},
+        "schema_version":{"enum":["2"]},
         "target_path":{"type":"string","minLength":1,"maxLength":1024},
-        "target_symbol":{"type":"string","minLength":1,"maxLength":512},
-        "target_signature":{"type":"string","minLength":1,"maxLength":1024},
         "acceptance_criteria":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"string","minLength":1,"maxLength":512}},
         "non_goals":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":512}},
         "go_test_candidate":{"anyOf":[{"$ref":"#/$defs/goTestCandidate"},{"type":"null"}]}
@@ -99,7 +96,6 @@ const fileAnalysisResponseSchemaDocument = `{
       "properties":{
         "title":{"type":"string","minLength":1},
         "summary":{"type":"string","minLength":1},
-        "target_symbol":{"type":"string","minLength":1},
         "action":{"type":"string","minLength":1},
         "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
       }
@@ -135,7 +131,6 @@ type semanticAnalysisResponse struct {
 	SideEffects        []string                    `json:"side_effects"`
 	Risks              []project.Finding           `json:"risks"`
 	Suggestions        []project.Suggestion        `json:"suggestions"`
-	SymbolExplanations map[string]string           `json:"symbol_explanations"`
 	EngineeringInsight *project.EngineeringInsight `json:"engineering_insight,omitempty"`
 }
 
@@ -149,7 +144,6 @@ type semanticAnalysisWireResponse struct {
 	SideEffects        []string                     `json:"side_effects"`
 	Risks              []semanticAnalysisFinding    `json:"risks"`
 	Suggestions        []semanticAnalysisSuggestion `json:"suggestions"`
-	SymbolExplanations map[string]string            `json:"symbol_explanations"`
 	EngineeringInsight json.RawMessage              `json:"engineering_insight"`
 }
 
@@ -163,11 +157,10 @@ type semanticAnalysisFinding struct {
 }
 
 type semanticAnalysisSuggestion struct {
-	Title        string          `json:"title"`
-	Summary      string          `json:"summary"`
-	TargetSymbol string          `json:"target_symbol"`
-	Action       string          `json:"action"`
-	Insight      json.RawMessage `json:"engineering_insight"`
+	Title   string          `json:"title"`
+	Summary string          `json:"summary"`
+	Action  string          `json:"action"`
+	Insight json.RawMessage `json:"engineering_insight"`
 }
 
 type preparedFileAnalysis struct {
@@ -346,11 +339,11 @@ func newFileAnalysis(prepared preparedFileAnalysis, parsed semanticAnalysisRespo
 	fresh := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision,
 		Path: input.Path, ContentHash: input.ContentHash, Language: input.Language,
-		Purpose: parsed.Purpose, Responsibilities: parsed.Responsibilities, Symbols: append([]project.SymbolInfo(nil), indexedFile.Symbols...),
+		Purpose: parsed.Purpose, Responsibilities: parsed.Responsibilities,
 		Imports: append([]string(nil), indexedFile.Imports...), Dependencies: parsed.Dependencies,
 		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions, EngineeringInsight: project.CloneEngineeringInsight(parsed.EngineeringInsight),
-		SymbolExplanations: parsed.SymbolExplanations, Status: project.AnalysisStatusFresh,
-		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
+		Status: project.AnalysisStatusFresh,
+		Model:  input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
 		GeneratedAt:             time.Now().UTC(),
 		InstructionsFingerprint: prepared.instructions.Fingerprint,
 	}
@@ -447,16 +440,15 @@ func (s *Service) storeAnalysisFailure(ctx context.Context, prepared preparedFil
 	return &failed, nil
 }
 
-func semanticPrompt(source string, analysis project.Analysis, index *project.ProjectIndex, target project.IndexFile, manifest project.ContextManifest) (string, error) {
+func semanticPrompt(source string, analysis project.Analysis, _ *project.ProjectIndex, target project.IndexFile, manifest project.ContextManifest) (string, error) {
 	if len(source) > maxSemanticAnalysisBytes {
 		return "", fmt.Errorf("selected file is too large for semantic analysis")
 	}
 	projectFacts := struct {
-		Name       string   `json:"name"`
-		Type       string   `json:"type"`
-		Summary    string   `json:"summary"`
-		Signatures []string `json:"relevant_signatures"`
-	}{Name: analysis.Name, Type: analysis.Type, Summary: analysis.Summary, Signatures: boundedSignatures(index, target.Path)}
+		Name    string `json:"name"`
+		Type    string `json:"type"`
+		Summary string `json:"summary"`
+	}{Name: analysis.Name, Type: analysis.Type, Summary: analysis.Summary}
 	facts, err := json.Marshal(projectFacts)
 	if err != nil {
 		return "", err
@@ -466,23 +458,22 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	targetJSON, err := json.Marshal(struct {
-		Path     string               `json:"path"`
-		Language string               `json:"language"`
-		Imports  []string             `json:"imports"`
-		Symbols  []project.SymbolInfo `json:"symbols"`
-	}{target.Path, target.Language, target.Imports, target.Symbols})
+		Path     string   `json:"path"`
+		Language string   `json:"language"`
+		Imports  []string `json:"imports"`
+	}{target.Path, target.Language, target.Imports})
 	if err != nil {
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({category,severity,title,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({category,severity,title,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,action?,engineering_insight?} array), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
 		analysisFindingTitleGuidance +
 		fileAnalysisInsightSchema + project.EngineeringInsightPromptInstructions +
-		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
+		"Risk severity must be low, medium, or high. " +
 		fileAnalysisInsightGuidance +
 		"Every risk must have exactly one category: bugs for incorrect behavior, performance for avoidable resource costs, or security for a trust-boundary weakness. Choose the category from the demonstrated failure mechanism, independently of severity. State the relevant local control/data flow and conditions in summary. Performance concerns are hypotheses unless measurements are supplied; never invent measured impact. For security, identify the visible input and sensitive operation; do not infer missing safeguards in an unseen callee. Omit concerns unsupported by TARGET_SOURCE. General cleanup, explanations and best-practice advice belong in suggestions, not risks; an empty risks array is valid. " +
 		"Keep each insight field at or below 250 Unicode characters. Generic advice to use defer, handle errors, or follow best practices is not an insight. " +
-		"Include task_spec when a risk targets one exact atomic symbol in TARGET_FACTS.symbols; otherwise omit it. If you include one, it must have only these fields: schema_version \"1\", target_path copied exactly from TARGET_FACTS.path, target_symbol copied exactly from one exact atomic TARGET_FACTS.symbols name, target_signature copied exactly from that symbol's TARGET_FACTS signature, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Do not use a symbol field. Never target another file. " +
+		"Include task_spec when a risk has a concrete file-scoped fix; otherwise omit it. If you include one, it must have only these fields: schema_version \"2\", target_path copied exactly from TARGET_FACTS.path, acceptance_criteria (array), non_goals (array), and optional go_test_candidate {name,content}. Never target another file. " +
 		"Treat all interpretations as suggestions. Do not quote source wholesale, invent files, or include source from another file.\n\n" +
 		"PROJECT_FACTS:\n" + string(facts) + "\n\nCONTEXT_MANIFEST:\n" + string(manifestJSON) + "\n\nTARGET_FACTS:\n" + string(targetJSON) + "\n\nTARGET_SOURCE (the only source content supplied):\n```\n" + source + "\n```\n", nil
 }
@@ -503,22 +494,6 @@ func semanticInstructionManifest(target project.IndexFile, instructions project.
 	manifest.ByteLimit += project.MaxInstructionBytes
 	manifest.TokenLimit += project.MaxInstructionBytes / 4
 	return manifest
-}
-
-func boundedSignatures(index *project.ProjectIndex, targetPath string) []string {
-	const limit = 64
-	result := make([]string, 0, limit)
-	for _, file := range index.Files {
-		for _, symbol := range file.Symbols {
-			if file.Path == targetPath || len(result) < limit {
-				result = append(result, file.Path+": "+symbol.Signature)
-			}
-			if len(result) == limit {
-				return result
-			}
-		}
-	}
-	return result
 }
 
 func parseSemanticReviewResponse(output string, target project.IndexFile, source string) (semanticAnalysisResponse, error) {
@@ -569,14 +544,6 @@ func parseSemanticSections(wire semanticAnalysisWireResponse, target project.Ind
 		Dependencies: wire.Dependencies, SideEffects: wire.SideEffects,
 		Diagnostics: FileAnalysisDiagnostics{Insights: make([]FileAnalysisInsightDiagnostic, 0, 1+len(wire.Risks)+len(wire.Suggestions))},
 	}
-	var err error
-	parsed.SymbolExplanations, err = normalizeSymbolExplanations(wire.SymbolExplanations, target.Symbols)
-	if err != nil {
-		// Optional explanations cannot grant target authority. Omit the entire
-		// section on an invalid key instead of losing an otherwise valid summary.
-		parsed.SymbolExplanations = map[string]string{}
-		parsed.Diagnostics.SymbolExplanationsDegraded = true
-	}
 	parsed.EngineeringInsight = parsed.Diagnostics.parseInsight("top_level", nil, wire.EngineeringInsight)
 	parsed.Risks = parseSemanticRisks(wire.Risks, target, source, &parsed.Diagnostics)
 	parsed.Suggestions = parseSemanticSuggestions(wire.Suggestions, &parsed.Diagnostics)
@@ -602,38 +569,6 @@ func validateSemanticAnalysisLimits(parsed semanticAnalysisWireResponse) error {
 	return nil
 }
 
-func normalizeSymbolExplanations(explanations map[string]string, symbols []project.SymbolInfo) (map[string]string, error) {
-	allowed := make(map[string]bool, len(symbols))
-	shortNames := make(map[string][]string)
-	for _, symbol := range symbols {
-		allowed[symbol.Name] = true
-		if separator := strings.LastIndexByte(symbol.Name, '.'); separator >= 0 {
-			shortName := symbol.Name[separator+1:]
-			shortNames[shortName] = append(shortNames[shortName], symbol.Name)
-		}
-	}
-	normalizedExplanations := make(map[string]string, len(explanations))
-	for name, explanation := range explanations {
-		normalizedName := name
-		if !allowed[name] {
-			candidates := shortNames[name]
-			if len(candidates) != 1 {
-				return nil, fmt.Errorf("semantic analysis contains an unknown or ambiguous symbol explanation")
-			}
-			normalizedName = candidates[0]
-		}
-		explanation = strings.TrimSpace(explanation)
-		if explanation == "" {
-			return nil, fmt.Errorf("semantic analysis contains an unknown or empty symbol explanation")
-		}
-		if _, exists := normalizedExplanations[normalizedName]; exists {
-			return nil, fmt.Errorf("semantic analysis contains duplicate symbol explanations")
-		}
-		normalizedExplanations[normalizedName] = explanation
-	}
-	return normalizedExplanations, nil
-}
-
 func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFile, source string, diagnostics *FileAnalysisDiagnostics) []project.Finding {
 	parsed := make([]project.Finding, 0, len(risks))
 	for index, risk := range risks {
@@ -657,7 +592,7 @@ func parseSemanticSuggestions(suggestions []semanticAnalysisSuggestion, diagnost
 	parsed := make([]project.Suggestion, 0, len(suggestions))
 	for index, suggestion := range suggestions {
 		insight := diagnostics.parseInsight("suggestion", &index, suggestion.Insight)
-		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, TargetSymbol: suggestion.TargetSymbol, Action: suggestion.Action, EngineeringInsight: insight})
+		parsed = append(parsed, project.Suggestion{Title: suggestion.Title, Summary: suggestion.Summary, Action: suggestion.Action, EngineeringInsight: insight})
 	}
 	return parsed
 }
@@ -732,14 +667,8 @@ func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, so
 	if err := validateBugTaskItems(spec.NonGoals, false); err != nil {
 		return nil, err
 	}
-	matching, ok := exactAtomicSymbol(target.Language, target.Symbols, spec.TargetSymbol)
-	if !ok {
-		return nil, fmt.Errorf("semantic analysis bug task target is not one exact atomic symbol")
-	}
 	validated := project.SanitizeBugTaskSpec(spec)
 	validated.TargetPath = target.Path
-	validated.TargetSymbol = matching.Name
-	validated.TargetSignature = matching.Signature
 	if validated.GoTestCandidate != nil {
 		validated.GoTestCandidate = validateGoTestCandidate(validated.GoTestCandidate, target, source)
 	}
@@ -748,27 +677,7 @@ func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, so
 
 func validBugTaskTarget(spec *project.BugTaskSpec, targetPath string) bool {
 	return spec.SchemaVersion == project.BugTaskSpecSchemaVersion && len(spec.TargetPath) <= 1024 &&
-		len(spec.TargetSymbol) <= project.MaxBugTaskItemBytes && len(spec.TargetSignature) <= 1024 &&
-		spec.TargetPath == targetPath && strings.TrimSpace(spec.TargetSymbol) != ""
-}
-
-func exactAtomicSymbol(language string, symbols []project.SymbolInfo, name string) (project.SymbolInfo, bool) {
-	matching := make([]project.SymbolInfo, 0, 1)
-	for _, symbol := range symbols {
-		if symbol.Name == name {
-			matching = append(matching, symbol)
-		}
-	}
-	if len(matching) != 1 || !matching[0].AtomicTarget || matching[0].Signature == "" {
-		return project.SymbolInfo{}, false
-	}
-	if language == "Go" && matching[0].Confidence != "exact" {
-		return project.SymbolInfo{}, false
-	}
-	if language != "Go" && matching[0].Confidence != "exact" && matching[0].Confidence != "approximate" {
-		return project.SymbolInfo{}, false
-	}
-	return matching[0], true
+		spec.TargetPath == targetPath
 }
 
 func validateBugTaskItems(items []string, required bool) error {

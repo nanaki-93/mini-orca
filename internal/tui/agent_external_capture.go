@@ -129,10 +129,10 @@ func (s *State) captureExternalPlanScope(d *externalDraft) error {
 }
 
 func (s *State) externalResearchModel() (Model, error) {
-	model := s.workflowBoundModel("function")
+	model := s.workflowBoundModel("code")
 	view := s.AgentExternal.Research
 	if view == nil || view.State != "available" || model.Model != view.Model || model.ProviderOrigin == "" || !model.Capabilities.Grounding {
-		return Model{}, fmt.Errorf("research requires available Google Search and current Function model metadata with grounding support")
+		return Model{}, fmt.Errorf("research requires available Google Search and current Code model metadata with grounding support")
 	}
 	// Pointer-valued generation parameters are part of the captured binding;
 	// later metadata edits must not mutate the confirmation's snapshot.

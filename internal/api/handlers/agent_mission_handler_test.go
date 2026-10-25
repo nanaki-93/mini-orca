@@ -175,7 +175,7 @@ func TestMissionExecutionHandlerAdmitsStopControlsAndRejectsForgedGrants(t *test
 	for _, action := range []string{"pause", "cancel", "reconcile"} {
 		invalid := request
 		invalid.Action = action
-		invalid.ConfirmedProfiles = []string{"function"}
+		invalid.ConfirmedProfiles = []string{"code"}
 		if w := control(invalid); w.Code != 400 {
 			t.Fatal("control accepted provider grant", w.Code, w.Body)
 		}
@@ -245,7 +245,7 @@ func TestMissionIntegrationHandlerRejectsUnownedEffectsAndNestedGrantChanges(t *
 		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","child_id":"foreign"`, 1),
 		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","unknown":true`, 1),
 		strings.Replace(string(data), `"action":"integrate"`, `"action":"cancel"`, 1),
-		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":true,"confirmed_profiles":["function"]`, 1),
+		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":true,"confirmed_profiles":["code"]`, 1),
 		string(data) + ` {}`,
 	} {
 		if w := control([]byte(body)); w.Code != 400 {
@@ -302,7 +302,7 @@ func TestMissionRevalidationHandlerRejectsUnownedCandidatesAndMixedGrants(t *tes
 		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","child_id":"foreign"`, 1),
 		strings.Replace(string(data), `"child_id":"first"`, `"child_id":"first","unknown":true`, 1),
 		strings.Replace(string(data), `"action":"revalidate"`, `"action":"start"`, 1),
-		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":true,"confirmed_profiles":["function"]`, 1),
+		strings.Replace(string(data), `"confirm_execution":true`, `"confirm_execution":true,"confirmed_profiles":["code"]`, 1),
 		strings.Replace(string(data), `"revalidation":`, `"integration":{},"revalidation":`, 1),
 		strings.Replace(string(data), `"previous":`, `"revalidation_id":"old","previous":`, 1),
 		strings.Replace(string(data), `"child_id":"first"`, `"integration_id":"old","child_id":"first"`, 1),

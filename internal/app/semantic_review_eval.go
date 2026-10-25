@@ -49,7 +49,6 @@ func AssessFileAnalysisEvaluation(content string, target project.IndexFile, sour
 // from the displayed summary without being classified as rejected.
 type FileAnalysisDiagnostics struct {
 	Insights                    []FileAnalysisInsightDiagnostic
-	SymbolExplanationsDegraded  bool
 	TaskSpecDegradedRiskIndices []int
 }
 
@@ -80,9 +79,9 @@ func (diagnostics FileAnalysisDiagnostics) OptionalInsight() string {
 	return state
 }
 
-// Degraded includes independent symbol and task-spec failures as well as insights.
+// Degraded includes independent task-spec failures as well as insights.
 func (diagnostics FileAnalysisDiagnostics) Degraded() bool {
-	return diagnostics.OptionalInsight() == "rejected" || diagnostics.SymbolExplanationsDegraded || len(diagnostics.TaskSpecDegradedRiskIndices) > 0
+	return diagnostics.OptionalInsight() == "rejected" || len(diagnostics.TaskSpecDegradedRiskIndices) > 0
 }
 
 func (diagnostics *FileAnalysisDiagnostics) parseInsight(location string, index *int, raw json.RawMessage) *project.EngineeringInsight {

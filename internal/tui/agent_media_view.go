@@ -179,7 +179,7 @@ func (s *State) mediaAvailability() []string {
 			return []string{"  [r] Load local attachment metadata."}
 		}
 		if v.Attachments.State != "available" {
-			return []string{"  Advice unavailable: " + externalSafeText(v.Attachments.State), "  Local import remains available; configure a native Function model for advice."}
+			return []string{"  Advice unavailable: " + externalSafeText(v.Attachments.State), "  Local import remains available; configure a native Code model for advice."}
 		}
 		refs, total := s.selectedMediaRefs()
 		return []string{fmt.Sprintf("  Selected: %d / 4 · %d bytes · [Space] Toggle · [n] Import · [q] Ask", len(refs), total)}
@@ -188,7 +188,7 @@ func (s *State) mediaAvailability() []string {
 			return []string{"  [r] Read live availability."}
 		}
 		if v.Live.State != "available" {
-			return []string{"  Live: " + externalSafeText(v.Live.State), "  Configure agent_runtime.live_model and a Gemini API Function profile."}
+			return []string{"  Live: " + externalSafeText(v.Live.State), "  Configure agent_runtime.live_model and a Gemini API Code profile."}
 		}
 		return []string{"  :live-open · Enter inspects · :live-close joins the selected session"}
 	default:

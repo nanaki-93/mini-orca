@@ -21,7 +21,7 @@ func TestLargeSourceIndexRetainsFullHashAndLinesWithoutParsingPartialSource(t *t
 	if entry.Binary || entry.SizeBytes != int64(len(content)) || entry.ContentHash != contentHash([]byte(content)) || entry.LineCount != countLines([]byte(content)) {
 		t.Fatalf("large source facts must cover all bytes: %+v", entry)
 	}
-	if len(entry.Symbols) != 0 || len(entry.Imports) != 0 || len(entry.Diagnostics) != 1 || !strings.Contains(entry.Diagnostics[0].Message, "symbol extraction is unavailable") {
+	if len(entry.Imports) != 0 || len(entry.Diagnostics) != 1 || !strings.Contains(entry.Diagnostics[0].Message, "import extraction is unavailable") {
 		t.Fatalf("oversized source must not have partial parser facts: %+v", entry)
 	}
 	path := filepath.Join(root, "large.go")
@@ -33,14 +33,14 @@ func TestLargeSourceIndexRetainsFullHashAndLinesWithoutParsingPartialSource(t *t
 	if err != nil || len(read.source) > maxFileViewBytes {
 		t.Fatalf("source retention exceeded the parsing budget: %d, %v", len(read.source), err)
 	}
-	legacy := ProjectIndex{SchemaVersion: "2", Files: []IndexFile{{Path: "large.go", ContentHash: entry.ContentHash, Symbols: []SymbolInfo{{Name: "BeyondLimit", AtomicTarget: true}}}}}
+	legacy := ProjectIndex{SchemaVersion: "2", Files: []IndexFile{{Path: "large.go", ContentHash: entry.ContentHash}}}
 	data, err := json.Marshal(legacy)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeIndexFixture(t, root, indexRelativePath, string(data))
 	rebuilt, err := BuildIndex(root, "project", "revision")
-	if err != nil || len(rebuilt.Files) != 1 || len(rebuilt.Files[0].Symbols) != 0 || len(rebuilt.Files[0].Diagnostics) != 1 {
+	if err != nil || len(rebuilt.Files) != 1 || len(rebuilt.Files[0].Diagnostics) != 1 {
 		t.Fatalf("legacy unbounded parser facts must be rebuilt: %+v, %v", rebuilt, err)
 	}
 }

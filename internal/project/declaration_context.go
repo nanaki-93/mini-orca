@@ -4,22 +4,20 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
-// FunctionContextOptions describes the bounded declaration-focused context for
-// one Function-scope request. It intentionally contains no unrelated source.
+// FunctionContextOptions describes the bounded file-focused context for
+// one code-scope request. It intentionally contains no unrelated source.
 type FunctionContextOptions struct {
-	TargetPath   string
-	TargetSymbol string
-	Index        *ProjectIndex
-	MaxTokens    int
-	Context      context.Context
+	TargetPath string
+	Index      *ProjectIndex
+	MaxTokens  int
+	Context    context.Context
 }
 
 // BuildFunctionWithManifest retains policy and manifest semantics while
-// emitting only deterministic facts plus the selected declaration.
+// emitting only deterministic facts plus the selected file source.
 func (b *ContextBuilder) BuildFunctionWithManifest(root string, options FunctionContextOptions) (string, ContextManifest, error) {
 	manifest := ContextManifest{Included: []ContextFile{}, Excluded: []ContextDecision{}, ByteLimit: maxContextBytes, TokenLimit: options.MaxTokens}
 	if options.MaxTokens <= 0 {
@@ -37,11 +35,11 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	decision := policy.Decide(path)
 	if !decision.Include {
 		manifest.Excluded = append(manifest.Excluded, decision)
-		return "", manifest, fmt.Errorf("function context target is not eligible: %s", decision.Reason)
+		return "", manifest, fmt.Errorf("file context target is not eligible: %s", decision.Reason)
 	}
 	file := functionContextFile(options.Index, path)
 	if file == nil {
-		return "", manifest, fmt.Errorf("function context target is not indexed")
+		return "", manifest, fmt.Errorf("file context target is not indexed")
 	}
 	ctx := options.Context
 	if ctx == nil {
@@ -49,12 +47,9 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	}
 	data, err := policy.ReadSource(ctx, path, file.ContentHash)
 	if err != nil {
-		return "", manifest, fmt.Errorf("read function context target: %w", err)
+		return "", manifest, fmt.Errorf("read file context target: %w", err)
 	}
-	declaration, err := functionContextDeclaration(string(data), *file, options.TargetSymbol)
-	if err != nil {
-		return "", manifest, err
-	}
+	source := string(data)
 	instructions, err := ResolveInstructions(canonical, path)
 	if err != nil {
 		return "", manifest, err
@@ -63,10 +58,10 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	if instructions.Text != "" {
 		guidance = InstructionPromptGuidance + instructions.Text + "\n"
 		if estimateTokens(guidance) >= manifest.TokenLimit {
-			return "", manifest, fmt.Errorf("project instructions exceed the function context token limit")
+			return "", manifest, fmt.Errorf("project instructions exceed the file context token limit")
 		}
 	}
-	text := guidance + renderFunctionContext(path, *file, declaration, options)
+	text := guidance + renderFunctionContext(path, *file, source)
 	for _, instruction := range instructions.Files {
 		manifest.Included = append(manifest.Included, ContextFile{Path: instruction.Path, SizeBytes: int64(len(instruction.Content)), Hash: instruction.Hash, Tokens: estimateTokens(instruction.Content)})
 	}
@@ -74,7 +69,7 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	text, truncated := limitContextTokens(text, manifest.TokenLimit)
 	manifest.Truncated = truncated
 	manifest.EstimatedTokens = estimateTokens(text)
-	manifest.Included = append(manifest.Included, ContextFile{Path: path, SizeBytes: int64(len(declaration)), Hash: file.ContentHash, Tokens: estimateTokens(declaration), Truncated: truncated})
+	manifest.Included = append(manifest.Included, ContextFile{Path: path, SizeBytes: int64(len(source)), Hash: file.ContentHash, Tokens: estimateTokens(source), Truncated: truncated})
 	return text, manifest, nil
 }
 
@@ -91,15 +86,6 @@ func functionContextFile(index *ProjectIndex, path string) *IndexFile {
 	return nil
 }
 
-func functionContextDeclaration(source string, file IndexFile, symbol string) (string, error) {
-	for _, candidate := range file.Symbols {
-		if candidate.Name == symbol && (candidate.Confidence == "exact" || candidate.Confidence == "approximate") && candidate.AtomicTarget {
-			return sourceLines(source, candidate.StartLine, candidate.EndLine), nil
-		}
-	}
-	return "", fmt.Errorf("function context target symbol is not exact")
-}
-
 func sourceLines(source string, start, end int) string {
 	if start <= 0 || end < start {
 		return ""
@@ -114,39 +100,17 @@ func sourceLines(source string, start, end int) string {
 	return strings.Join(lines[start-1:end], "\n")
 }
 
-func renderFunctionContext(path string, file IndexFile, declaration string, options FunctionContextOptions) string {
+func renderFunctionContext(path string, file IndexFile, source string) string {
 	var result strings.Builder
-	result.WriteString("## Function task context\n")
+	result.WriteString("## File task context\n")
 	result.WriteString("Target path: " + path + "\n")
-	result.WriteString("Target symbol: " + options.TargetSymbol + "\n")
 	result.WriteString("Package/import facts: " + strings.Join(file.Imports, ", ") + "\n")
-	signatures := directlyRelevantSignatures(file, options.TargetSymbol)
-	if len(signatures) > 0 {
-		result.WriteString("Relevant indexed signatures:\n")
-		for _, signature := range signatures {
-			result.WriteString("- " + signature + "\n")
-		}
-	}
 	fenceLang := strings.ToLower(file.Language)
 	if fenceLang == "" || fenceLang == "unknown" || fenceLang == "text" {
 		fenceLang = ""
 	}
-	result.WriteString("Selected declaration:\n```" + fenceLang + "\n" + declaration + "\n```\n")
+	result.WriteString("Target file source:\n```" + fenceLang + "\n" + source + "\n```\n")
 	return result.String()
-}
-
-func directlyRelevantSignatures(file IndexFile, target string) []string {
-	values := make([]string, 0, len(file.Symbols))
-	for _, symbol := range file.Symbols {
-		if symbol.Name == target || symbol.Confidence == "exact" || symbol.Confidence == "approximate" {
-			values = append(values, symbol.Name+": "+symbol.Signature)
-		}
-	}
-	sort.Strings(values)
-	if len(values) > 16 {
-		values = values[:16]
-	}
-	return values
 }
 
 func limitContextTokens(value string, maxTokens int) (string, bool) {

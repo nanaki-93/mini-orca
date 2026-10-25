@@ -116,7 +116,7 @@ func evaluationOptions(options commandOptions, diagnostics io.Writer) (agenteval
 	if err != nil {
 		return result, fmt.Errorf("resolve evaluation model failed")
 	}
-	result.Profile = profiles.Function
+	result.Profile = profiles.Code
 	fmt.Fprintf(diagnostics, "Live source: embedded synthetic corpus %s (%s), no workspace files. Destination: %q; model: %q. Campaign limits: %d requests, %d input-token charges, %d output-token charges.\n", version, digest, result.Profile.APIBaseURL, result.Profile.Model, result.Limits.ModelCalls, result.Limits.InputTokens, result.Limits.OutputTokens)
 	if !options.confirm {
 		return result, fmt.Errorf("inspect this disclosure and add --confirm-live to dispatch")

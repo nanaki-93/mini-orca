@@ -63,7 +63,7 @@ func mediaClientFixture(t *testing.T) (*Client, AgentSettingsScope, *atomic.Int3
 	}
 	cfg := config.Default()
 	cfg.AgentRuntime.LiveModel = "gemini-3.8-live"
-	cfg.ModelScopes.Function.Provider, cfg.ModelScopes.Function.APIKey, cfg.ModelScopes.Function.Model, cfg.ModelScopes.Function.APIBaseURL = config.GeminiProvider, "explicit-test-key", "gemini-2.5-flash", provider.URL
+	cfg.ModelScopes.Code.Provider, cfg.ModelScopes.Code.APIKey, cfg.ModelScopes.Code.Model, cfg.ModelScopes.Code.APIBaseURL = config.GeminiProvider, "explicit-test-key", "gemini-2.5-flash", provider.URL
 	service, err := app.New(cfg, manager)
 	if err != nil {
 		t.Fatal(err)

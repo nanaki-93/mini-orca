@@ -188,7 +188,6 @@ type State struct {
 	Selection         *Selection
 	File              *FileInfo
 	IssueFile         *FileInfo
-	Symbols           []SymbolInfo
 	Change            *ChangeSession
 	ActiveChanges     []*ChangeSession
 	ChangeReceipt     *ChangeMutation
@@ -289,9 +288,9 @@ func NewState() *State {
 		DiffMode:            "hunk",
 		ActivePresetID:      "local-default",
 		ScopeModels: map[string]string{
-			"analyze":  "analyze",
-			"bug":      "bug",
-			"function": "function",
+			"analyze": "analyze",
+			"bug":     "bug",
+			"code":    "code",
 		},
 		AnalysisConfig: domain.DefaultAnalysisRunConfig(),
 		WorkspaceTrust: false,
@@ -691,15 +690,13 @@ func (s *State) pushSemanticIssue(rows []IssueRow, f Finding, cat string, agents
 	agentPath := s.resolveSemanticAgentPath(done, f, agents, target, name, title)
 	cause := client.FirstNonEmpty(f.Message, f.Evidence, "No cause recorded.")
 	evidence := domain.DistinctInsightEvidence(f.Evidence, cause, f.EngineeringInsight)
-	symbol, signature, sol, criteria, nonGoals := s.extractSemanticIssueDetails(f, cat, title, cause)
+	sol, criteria, nonGoals := s.extractSemanticIssueDetails(f, cat, title, cause)
 	commitOID, commitCode := completionCommitMeta(comp)
 	rows = append(rows, IssueRow{
 		ID:                 id,
 		Title:              title,
 		Name:               name,
 		Path:               f.Location.Path,
-		Symbol:             symbol,
-		Signature:          signature,
 		Line:               f.Location.StartLine,
 		EndLine:            f.Location.EndLine,
 		Severity:           f.Severity,
@@ -735,42 +732,16 @@ func (s *State) resolveSemanticAgentPath(done bool, f Finding, agents []AgentIte
 	return ""
 }
 
-func (s *State) extractSemanticIssueDetails(f Finding, cat, title, cause string) (symbol, signature, solution string, criteria, nonGoals []string) {
-	symbol = f.Location.Symbol
+func (s *State) extractSemanticIssueDetails(f Finding, cat, title, cause string) (solution string, criteria, nonGoals []string) {
 	if f.TaskSpec != nil {
-		if symbol == "" {
-			symbol = f.TaskSpec.TargetSymbol
-		}
-		signature = f.TaskSpec.TargetSignature
 		nonGoals = f.TaskSpec.NonGoals
 		if len(f.TaskSpec.AcceptanceCriteria) > 0 {
 			criteria = f.TaskSpec.AcceptanceCriteria
 		}
 	}
-	if (symbol == "" || signature == "") && s.Index != nil && f.Location.Path != "" {
-		sym, sig := s.lookupIndexedSymbolForIssue(f.Location.Path, symbol, f.Location.StartLine, title, cause)
-		if symbol == "" {
-			symbol = sym
-		}
-		if signature == "" {
-			signature = sig
-		}
-	}
 	src := client.FirstNonEmpty(f.Source, "ai")
-	solution = domain.SynthesizeIssueRemediation(title, cause, cat, f.Rule, src, f.Location.Path, symbol, f.Location.StartLine, f.EngineeringInsight)
-	return symbol, signature, solution, criteria, nonGoals
-}
-
-func (s *State) lookupIndexedSymbolForIssue(path, targetSymbol string, line int, title, cause string) (string, string) {
-	if s.Index == nil {
-		return "", ""
-	}
-	for _, f := range s.Index.Files {
-		if f.Path == path {
-			return domain.MatchIndexedSymbolForFinding(f.Symbols, targetSymbol, line, title, cause)
-		}
-	}
-	return "", ""
+	solution = domain.SynthesizeIssueRemediation(title, cause, cat, f.Rule, src, f.Location.Path, f.Location.StartLine, f.EngineeringInsight)
+	return solution, criteria, nonGoals
 }
 
 func completionCommitMeta(comp *FindingCompletion) (string, string) {
@@ -805,14 +776,13 @@ func (s *State) pushPerformanceIssues(rows []IssueRow, rep PerformanceReport, ag
 		cause := client.FirstNonEmpty(f.ObservedPattern, "No cause recorded.")
 		sol := strings.TrimSpace(f.Recommendation)
 		if sol == "" {
-			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "performance", f.Category, "ai", rep.Path, f.Symbol, f.StartLine, nil)
+			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "performance", f.Category, "ai", rep.Path, f.StartLine, nil)
 		}
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
 			Name:               name,
 			Path:               rep.Path,
-			Symbol:             f.Symbol,
 			Line:               f.StartLine,
 			EndLine:            f.EndLine,
 			Severity:           f.PotentialImpact,
@@ -864,14 +834,13 @@ func (s *State) pushSecurityIssues(rows []IssueRow, rep SecurityReport, agents [
 		cause := client.FirstNonEmpty(f.ObservedCondition, "No cause recorded.")
 		sol := strings.TrimSpace(f.Remediation)
 		if sol == "" {
-			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "security", f.Rule, src, path, f.SourceAnchor.Symbol, f.SourceAnchor.StartLine, nil)
+			sol = domain.SynthesizeIssueRemediation(f.Title, cause, "security", f.Rule, src, path, f.SourceAnchor.StartLine, nil)
 		}
 		rows = append(rows, IssueRow{
 			ID:                 id,
 			Title:              f.Title,
 			Name:               name,
 			Path:               path,
-			Symbol:             f.SourceAnchor.Symbol,
 			Line:               f.SourceAnchor.StartLine,
 			EndLine:            f.SourceAnchor.EndLine,
 			Severity:           f.Severity,

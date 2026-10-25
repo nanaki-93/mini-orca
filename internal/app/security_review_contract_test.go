@@ -83,7 +83,7 @@ func TestSecurityReviewSchemaConstrainsFindingFieldsAndFileAnchors(t *testing.T)
 	for _, test := range []struct{ name, from, to string }{
 		{"uppercase rule", "go.input.validation", "VULN_SCAN_GENERIC"},
 		{"uppercase category", "input-validation", "Input Validation"},
-		{"invented symbol", `"symbol":"Run"`, `"symbol":"import"`},
+		{"legacy symbol field", `"end_line":5`, `"end_line":5,"symbol":"Run"`},
 		{"wrong file", `"path":"main.go"`, `"path":"other.go"`},
 		{"zero line", `"start_line":5`, `"start_line":0`},
 		{"past file", `"end_line":5`, `"end_line":9999`},
@@ -112,24 +112,22 @@ func TestSecurityReviewSchemaPinsFocusAndSupportsFilesWithoutSymbols(t *testing.
 	for _, test := range []struct {
 		name    string
 		file    project.IndexFile
-		focus   *project.SymbolInfo
 		allowed bool
 	}{
-		{"focused", project.IndexFile{Path: "main.go", LineCount: 8}, &project.SymbolInfo{Name: "Run", StartLine: 5, EndLine: 5}, true},
-		{"outside focus", project.IndexFile{Path: "main.go", LineCount: 8}, &project.SymbolInfo{Name: "Run", StartLine: 6, EndLine: 8}, false},
-		{"no symbols", project.IndexFile{Path: "main.go", LineCount: 8}, nil, false},
-		{"empty file", project.IndexFile{Path: "main.go"}, nil, false},
+		{"within file", project.IndexFile{Path: "main.go", LineCount: 8}, true},
+		{"past file line count", project.IndexFile{Path: "main.go", LineCount: 4}, false},
+		{"empty file", project.IndexFile{Path: "main.go"}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			response, err := securityReviewResponseSchema(securityReviewSnapshot{file: test.file, symbol: test.focus})
+			response, err := securityReviewResponseSchema(securityReviewSnapshot{file: test.file})
 			if err != nil {
 				t.Fatal(err)
 			}
 			schema := compileReviewSchema(t, response.Schema)
 			assertReviewSchemaAccepts(t, schema, validSecurityReview, test.allowed)
 			assertReviewSchemaAccepts(t, schema, `{"findings":[]}`, true)
-			withoutSymbol := strings.Replace(validSecurityReview, `,"symbol":"Run"`, "", 1)
-			assertReviewSchemaAccepts(t, schema, withoutSymbol, test.focus == nil && test.file.LineCount > 0)
+			withSymbol := strings.Replace(validSecurityReview, `"end_line":5`, `"end_line":5,"symbol":"Run"`, 1)
+			assertReviewSchemaAccepts(t, schema, withSymbol, false)
 		})
 	}
 }
@@ -138,7 +136,7 @@ func TestSecurityAIRejectsInvalidResponsesWithoutPublishing(t *testing.T) {
 	for _, output := range []string{
 		"```json\n{\"findings\":[]}\n```",
 		strings.Replace(validSecurityReview, "go.input.validation", "VULN_SCAN_GENERIC", 1),
-		strings.Replace(validSecurityReview, `"symbol":"Run"`, `"symbol":"import"`, 1),
+		strings.Replace(validSecurityReview, `"end_line":5`, `"end_line":999`, 1),
 		strings.Replace(validSecurityReview, "The operation uses input without an observed validation boundary.", "package main", 1),
 	} {
 		server, _ := analysisResponseServer(t, func(AnalysisStage) string { return output })

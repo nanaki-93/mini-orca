@@ -34,12 +34,20 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 	body := res.Body.String()
 	for _, needle := range []string{
 		"Mini-Orca · Web UI &amp; Diff Inspector",
+		"1 · Understand",
+		"2 · Build &amp; Fix",
+		"3 · Review &amp; Apply",
 		"Split (Side-by-Side)",
 		"X-Mini-Orca-Web-UI",
+		"/api/projects/current/overview",
+		"/api/projects/current/files/explanation",
 		"/api/projects/current/changes",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)
 		}
+	}
+	if strings.Contains(body, "/api/projects/current/files/symbols") {
+		t.Fatalf("embedded webui.html still references removed symbols endpoint")
 	}
 }

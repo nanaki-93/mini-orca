@@ -30,15 +30,15 @@ func TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, syms, diagnostics := symbols.ExtractGoFacts("main.go", mainSource)
-	if len(syms) != 3 || len(diagnostics) != 0 {
-		t.Fatalf("main fixture facts = symbols:%+v diagnostics:%+v", syms, diagnostics)
+	imports, diagnostics := symbols.ExtractGoFacts("main.go", mainSource)
+	if imports == nil || len(diagnostics) != 0 {
+		t.Fatalf("main fixture facts = imports:%+v diagnostics:%+v", imports, diagnostics)
 	}
 	brokenSource, err := os.ReadFile(filepath.Join(root, "malformed.go.fixture"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, diagnostics = symbols.ExtractGoFacts("malformed.go", brokenSource)
+	_, diagnostics = symbols.ExtractGoFacts("malformed.go", brokenSource)
 	if len(diagnostics) == 0 {
 		t.Fatal("expected malformed fixture diagnostics")
 	}

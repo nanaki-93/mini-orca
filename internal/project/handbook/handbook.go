@@ -24,7 +24,6 @@ const (
 type EngineeringInsight = insight.EngineeringInsight
 type ProjectIndex = symbols.ProjectIndex
 type IndexFile = symbols.IndexFile
-type SymbolInfo = symbols.SymbolInfo
 
 // ProjectAnalysisRisk is a bounded model interpretation, not a verified issue.
 type ProjectAnalysisRisk struct {
@@ -734,16 +733,6 @@ func appendIndexContracts(comp *ProjectDocsComponent, files []IndexFile) {
 		if len(comp.Responsibilities) < 4 {
 			role := fmt.Sprintf("Indexed %s (%s, %d lines)", filepath.Base(f.Path), f.Language, f.LineCount)
 			comp.Responsibilities = appendUniqueString(comp.Responsibilities, role)
-		}
-		for _, sym := range f.Symbols {
-			if len(comp.Contracts) >= 4 {
-				break
-			}
-			comp.Contracts = append(comp.Contracts, ProjectDocsContract{
-				Name:    sym.Name,
-				Kind:    "Indexed declaration",
-				Summary: fmt.Sprintf("Indexed %s in %s (lines %d-%d). Runtime behavior is unverified.", sym.Kind, f.Path, sym.StartLine, sym.EndLine),
-			})
 		}
 		for _, dependency := range f.Imports {
 			if len(comp.Dependencies) >= 16 {

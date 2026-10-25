@@ -58,7 +58,7 @@ func cliModelSelection(selection string) (config.ModelProvider, string, bool) {
 }
 
 func validModelSelection(selection string) bool {
-	if selection == "analyze" || selection == "bug" || selection == "function" {
+	if selection == "analyze" || selection == "bug" || selection == "code" {
 		return true
 	}
 	if _, _, ok := cliModelSelection(selection); ok {

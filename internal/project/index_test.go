@@ -35,7 +35,7 @@ func TestManagerSetBuildsPolicyFilteredPersistentIndex(t *testing.T) {
 		t.Fatalf("excluded content appeared in index: %+v", index.Files)
 	}
 	binary := findIndexFile(index, "binary.dat")
-	if binary == nil || !binary.Binary || binary.LineCount != 0 || len(binary.Imports) != 0 || len(binary.Symbols) != 0 {
+	if binary == nil || !binary.Binary || binary.LineCount != 0 || len(binary.Imports) != 0 {
 		t.Fatalf("binary metadata entry = %+v", binary)
 	}
 
@@ -190,7 +190,7 @@ func TestManagerRestoreRefreshesIndexWithoutRewritingPersistedCache(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(index.Files) != 1 || len(index.Files[0].Symbols) != 1 || index.Files[0].Symbols[0].Name != "Run" {
+	if len(index.Files) != 1 || index.Files[0].LineCount != 2 {
 		t.Fatalf("restored in-memory index = %+v", index.Files)
 	}
 }

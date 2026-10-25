@@ -19,7 +19,7 @@ func (s *Service) OpenLiveSession(ctx context.Context, request LiveOpenRequest) 
 	if !request.ConfirmConnect || !llm.SupportsLiveSessions(s.liveRuntime().profile) {
 		return nil, fmt.Errorf("configure a supported live model and explicitly confirm connection")
 	}
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	owner, err := s.admitLiveOwner(ctx, request.LiveBinding)
@@ -271,7 +271,7 @@ func (s *Service) liveControlInput(ctx context.Context, owner *liveSessionOwner,
 		return s.validateLiveBinding(ctx, owner.root, owner.policy, owner.binding)
 	}
 	if request.Action == "send" || request.Action == "reconnect" {
-		if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+		if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 			return input, nil, err
 		}
 	}

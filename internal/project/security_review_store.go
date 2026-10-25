@@ -193,7 +193,7 @@ func validSecurityWireLengths(item securityFindingWire) bool {
 	values := []struct {
 		value string
 		limit int
-	}{{item.Rule, 128}, {item.Category, 128}, {item.Title, maxSecurityTextBytes}, {item.ObservedCondition, maxSecurityTextBytes}, {item.Preconditions, maxSecurityTextBytes}, {item.Remediation, maxSecurityTextBytes}, {item.VerificationIdea, maxSecurityTextBytes}, {item.CWE, 32}, {item.Reference, 512}, {item.Anchor.Path, 1024}, {item.Anchor.Symbol, 256}}
+	}{{item.Rule, 128}, {item.Category, 128}, {item.Title, maxSecurityTextBytes}, {item.ObservedCondition, maxSecurityTextBytes}, {item.Preconditions, maxSecurityTextBytes}, {item.Remediation, maxSecurityTextBytes}, {item.VerificationIdea, maxSecurityTextBytes}, {item.CWE, 32}, {item.Reference, 512}, {item.Anchor.Path, 1024}}
 	for _, value := range values {
 		if len(value.value) > value.limit {
 			return false
@@ -212,19 +212,11 @@ func validSecurityFindingContent(f SecurityFinding) bool {
 }
 
 func validSecurityAnchor(anchor SecuritySourceAnchor, indexed IndexFile) bool {
-	return validSecurityAnchorShape(anchor) && anchor.Path == indexed.Path && anchor.EndLine <= indexed.LineCount && (anchor.Symbol == "" || containsSecuritySymbol(indexed.Symbols, anchor))
+	return validSecurityAnchorShape(anchor) && anchor.Path == indexed.Path && anchor.EndLine <= indexed.LineCount
 }
 func validSecurityAnchorShape(anchor SecuritySourceAnchor) bool {
 	path, err := normalizedIndexedPath(anchor.Path)
-	return err == nil && path == anchor.Path && anchor.StartLine >= 1 && anchor.EndLine >= anchor.StartLine && len(anchor.Symbol) <= 256 && anchor.Symbol == strings.TrimSpace(anchor.Symbol)
-}
-func containsSecuritySymbol(symbols []SymbolInfo, anchor SecuritySourceAnchor) bool {
-	for _, symbol := range symbols {
-		if symbol.Name == anchor.Symbol && anchor.StartLine >= symbol.StartLine && anchor.EndLine <= symbol.EndLine {
-			return true
-		}
-	}
-	return false
+	return err == nil && path == anchor.Path && anchor.StartLine >= 1 && anchor.EndLine >= anchor.StartLine
 }
 func validSecurityIdentifier(value string, limit int) bool {
 	return value != "" && value == strings.ToLower(value) && validSecurityText(value, limit)

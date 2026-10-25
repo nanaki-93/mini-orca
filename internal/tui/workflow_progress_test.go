@@ -38,9 +38,9 @@ func TestWorkflowRecoveryUsesNamedStagesAndFreshConsentGuidance(t *testing.T) {
 
 func TestRetryConsentRejectsChangedTaskAndUnconfirmedRemoteDispatch(t *testing.T) {
 	s := settingsTestState()
-	remote := s.Models.Scopes["function"]
+	remote := s.Models.Scopes["code"]
 	remote.RemoteProvider, remote.ProviderOrigin = true, "https://provider.example"
-	s.Models.Scopes["function"] = remote
+	s.Models.Scopes["code"] = remote
 	s.Change = &ChangeSession{ID: "task", ProjectIdentity: s.Project.ProjectIdentity, Hash: "original", Targets: []ChangeTarget{{Path: "main.go"}}}
 	s.execRetryCommand("review")
 	if s.Confirmation == nil || len(s.PendingActions) != 0 {

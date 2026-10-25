@@ -194,16 +194,7 @@ func TestCommitCodeGenerationAndFormatting(t *testing.T) {
 	}
 }
 
-func TestSynthesizeIssueRemediationAndSymbolMatching(t *testing.T) {
-	syms := []client.SymbolInfo{
-		{Name: "Server.Start", Signature: "func (s *Server) Start(ctx context.Context) error", StartLine: 10, EndLine: 30},
-		{Name: "parsePayload", Signature: "func parsePayload(raw []byte) error", StartLine: 35, EndLine: 60},
-	}
-	sym, sig := MatchIndexedSymbolForFinding(syms, "", 0, "Unchecked error in parsePayload", "parsePayload ignores Close error.")
-	if sym != "parsePayload" || sig != "func parsePayload(raw []byte) error" {
-		t.Fatalf("expected text-matched symbol parsePayload, got sym=%q sig=%q", sym, sig)
-	}
-
+func TestSynthesizeIssueRemediation(t *testing.T) {
 	remErr := SynthesizeIssueRemediation(
 		"Unchecked error return",
 		"Close error is ignored after writing payload.",
@@ -211,11 +202,10 @@ func TestSynthesizeIssueRemediationAndSymbolMatching(t *testing.T) {
 		"",
 		"ai",
 		"internal/api/server.go",
-		"parsePayload",
 		42,
 		nil,
 	)
-	if strings.Contains(remErr, "Synthesize a minimal, verified fix") || !strings.Contains(remErr, "parsePayload") || !strings.Contains(remErr, "internal/api/server_test.go") {
+	if strings.Contains(remErr, "Synthesize a minimal, verified fix") || !strings.Contains(remErr, "internal/api/server.go:42") || !strings.Contains(remErr, "internal/api/server_test.go") {
 		t.Fatalf("expected specific error-handling remediation, got %q", remErr)
 	}
 
@@ -224,7 +214,7 @@ func TestSynthesizeIssueRemediationAndSymbolMatching(t *testing.T) {
 		WhyItMattersHere:   "Timing side-channel leaks HMAC byte prefix.",
 		TransferableLesson: "Use hmac.Equal for constant-time MAC comparison and test rejected tokens.",
 	}
-	remInsight := SynthesizeIssueRemediation("Timing side-channel", "Non-constant-time comparison", "security", "SEC-01", "ai", "auth.go", "Verify", 12, insight)
+	remInsight := SynthesizeIssueRemediation("Timing side-channel", "Non-constant-time comparison", "security", "SEC-01", "ai", "auth.go", 12, insight)
 	if remInsight != insight.TransferableLesson {
 		t.Fatalf("expected insight TransferableLesson %q, got %q", insight.TransferableLesson, remInsight)
 	}

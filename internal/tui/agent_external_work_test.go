@@ -22,10 +22,10 @@ const externalTestID = "abcdefghijklmnopqrstuvwx12"
 
 func externalTestState() *State {
 	s := connectionsTestState()
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Model, model.ProviderOrigin, model.RemoteProvider = "research-model", "https://provider.example", true
 	model.Capabilities.Grounding = true
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	remote := &s.AgentConnections.Records[client.ConnectionRemote][0]
 	remote.Inventory.Skills = []client.ConnectionSkill{{ID: "review", Name: "Review"}}
 	remote.Inventory.Streaming = true
@@ -224,9 +224,9 @@ func TestExternalConfirmationRejectsChangedPlanProviderGrantAndCheckout(t *testi
 			case "plan":
 				s.PlanDraft.Seed.Plan.Approach = "Changed"
 			case "provider":
-				model := s.Models.Scopes["function"]
+				model := s.Models.Scopes["code"]
 				model.ProviderOrigin = "https://different.example"
-				s.Models.Scopes["function"] = model
+				s.Models.Scopes["code"] = model
 			case "grant":
 				s.AgentConnections.Records[client.ConnectionRemote][0].Grant = "changed"
 			case "expiry":
@@ -250,9 +250,9 @@ func TestExternalQueuedWorkRechecksProviderAndDoesNotShareNewSources(t *testing.
 	s.PendingActions = nil
 	s.applyExternalResult(agentExternalResult{Action: a, Index: s.Index})
 	s.HandleKey(KeyEvent{Key: "Enter"})
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Model = "changed"
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	bubble := NewBubbleModel(t.Context(), s, nil, 80, 24)
 	cmd, _ := bubble.prepareAsyncActionCmd("queued", s.PendingActions[0])
 	if cmd != nil || s.AgentExternal.Pending != "" || s.Error == "" {
@@ -268,10 +268,10 @@ func TestExternalAdmissionRejectsUnavailableCapabilitiesAndUnboundedInput(t *tes
 		case "disabled":
 			s.AgentExternal.Research.State = "disabled"
 		case "tools-only":
-			model := s.Models.Scopes["function"]
+			model := s.Models.Scopes["code"]
 			model.Capabilities.Grounding = false
 			model.Capabilities.Tools = true
-			s.Models.Scopes["function"] = model
+			s.Models.Scopes["code"] = model
 		case "too-long":
 			d.Question = strings.Repeat("界", 700)
 		case "too-many-paths":
@@ -289,9 +289,9 @@ func TestExternalAdmissionRejectsUnavailableCapabilitiesAndUnboundedInput(t *tes
 	}
 	s := externalTestState()
 	temperature := float32(0.2)
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Temperature = &temperature
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	d := externalDraft{Mode: "research", Question: "Inspect"}
 	if err := s.prepareExternalDraft(&d); err != nil {
 		t.Fatal(err)

@@ -13,21 +13,26 @@ import (
 )
 
 func TestPerformanceRetryCompletesRangesSpanningDeclarations(t *testing.T) {
+	type declSpan struct {
+		name      string
+		startLine int
+		endLine   int
+	}
 	for _, test := range []struct {
 		name        string
 		start, end  int
 		wrongSymbol string
-		symbols     []project.SymbolInfo
+		spans       []declSpan
 	}{
-		{"command and helper", 38, 57, "logResult", []project.SymbolInfo{{Name: "command", StartLine: 12, EndLine: 45}, {Name: "logResult", StartLine: 47, EndLine: 64}}},
-		{"logging methods", 39, 65, "Info", []project.SymbolInfo{{Name: "Info", StartLine: 39, EndLine: 44}, {Name: "Warn", StartLine: 46, EndLine: 51}, {Name: "Error", StartLine: 53, EndLine: 58}, {Name: "Debug", StartLine: 60, EndLine: 65}}},
+		{"command and helper", 38, 57, "logResult", []declSpan{{name: "command", startLine: 12, endLine: 45}, {name: "logResult", startLine: 47, endLine: 64}}},
+		{"logging methods", 39, 65, "Info", []declSpan{{name: "Info", startLine: 39, endLine: 44}, {name: "Warn", startLine: 46, endLine: 51}, {name: "Error", startLine: 53, endLine: 58}, {name: "Debug", startLine: 60, endLine: 65}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lines := make([]string, 69)
 			lines[0] = "package main"
-			for _, symbol := range test.symbols {
-				lines[symbol.StartLine-1] = "func " + symbol.Name + "() {"
-				lines[symbol.EndLine-1] = "}"
+			for _, span := range test.spans {
+				lines[span.startLine-1] = "func " + span.name + "() {"
+				lines[span.endLine-1] = "}"
 			}
 			currentReply := strings.Replace(validPerformanceLineReview, `"start_line":5,"end_line":5`, fmt.Sprintf(`"start_line":%d,"end_line":%d`, test.start, test.end), 1)
 			legacyReply := strings.Replace(currentReply, `"title":`, `"symbol":"`+test.wrongSymbol+`","title":`, 1)
@@ -53,7 +58,7 @@ func TestPerformanceRetryCompletesRangesSpanningDeclarations(t *testing.T) {
 				t.Fatal(err)
 			}
 			failed := completedAnalysisRun(t, s)
-			if failed.Files[0].Stages[1].Status != AnalysisStageFailed || failed.Files[0].Stages[1].Reason != project.PerformanceInvalidAnchors.Error() {
+			if failed.Files[0].Stages[1].Status != AnalysisStageFailed || failed.Files[0].Stages[1].Reason != project.PerformanceInvalidJSON.Error() {
 				t.Fatalf("old response did not reproduce failure: %+v", failed)
 			}
 			snapshot, err := s.preparePerformanceReview("main.go")
@@ -84,7 +89,7 @@ func TestPerformanceRetryCompletesRangesSpanningDeclarations(t *testing.T) {
 				t.Fatalf("report=%+v err=%v", report, err)
 			}
 			finding := report.Findings[0]
-			if finding.Symbol != "" || finding.StartLine != test.start || finding.EndLine != test.end {
+			if finding.StartLine != test.start || finding.EndLine != test.end {
 				t.Fatalf("range was altered: %+v", finding)
 			}
 			s.analysisRun = &analysisRunController{}

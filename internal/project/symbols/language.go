@@ -25,21 +25,8 @@ type IndexFile struct {
 	ModifiedAt     time.Time    `json:"modified_at"`
 	Binary         bool         `json:"binary"`
 	Imports        []string     `json:"imports"`
-	Symbols        []SymbolInfo `json:"symbols"`
 	Diagnostics    []Diagnostic `json:"diagnostics,omitempty"`
 	AnalysisStatus string       `json:"analysis_status"`
-}
-
-// SymbolInfo describes a deterministic or approximate source declaration span.
-type SymbolInfo struct {
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`
-	Signature    string `json:"signature"`
-	StartLine    int    `json:"start_line"`
-	EndLine      int    `json:"end_line"`
-	Visibility   string `json:"visibility"`
-	Confidence   string `json:"confidence"`
-	AtomicTarget bool   `json:"atomic_target"`
 }
 
 // Diagnostic records non-fatal deterministic extraction issues.

@@ -15,7 +15,7 @@
     "source": "package cases\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct {\n\tmu sync.Mutex\n}\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tdefer g.mu.Unlock()\n\t<-ctx.Done()\n}\n",
     "anchor": {"start_line": 12, "end_line": 15, "evidence": "<-ctx.Done()"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Waits for cancellation while owning the gate.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Wait holds g.mu while it blocks on context cancellation.\",\"why_it_matters_here\":\"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits for cancellation.\",\"tradeoff_or_failure_mode\":\"Releasing g.mu before waiting would let concurrent Wait calls stop serializing; whether that serialization is needed is not shown.\",\"transferable_lesson\":\"Keep blocking waits outside ownership locks; cancel one waiter while another acquires g.mu.\"}}"
+    "sanitized_output": "{\"purpose\":\"Waits for cancellation while owning the gate.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Wait holds g.mu while it blocks on context cancellation.\",\"why_it_matters_here\":\"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits for cancellation.\",\"tradeoff_or_failure_mode\":\"Releasing g.mu before waiting would let concurrent Wait calls stop serializing; whether that serialization is needed is not shown.\",\"transferable_lesson\":\"Keep blocking waits outside ownership locks; cancel one waiter while another acquires g.mu.\"}}"
   },
   {
     "name": "development-slice-capacity",
@@ -33,7 +33,7 @@
     "source": "package cases\n\nimport \"fmt\"\n\ntype User struct {\n\tName string\n\tID   int\n}\n\nfunc Labels(users []User) []string {\n\tlabels := []string{}\n\tfor _, user := range users {\n\t\tlabels = append(labels, fmt.Sprintf(\"%s:%d\", user.Name, user.ID))\n\t}\n\treturn labels\n}\n",
     "anchor": {"start_line": 11, "end_line": 13, "evidence": "labels = append"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Formats user labels.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Labels grows a zero-capacity result slice once per user.\",\"why_it_matters_here\":\"The input length is known before the labels append loop.\",\"tradeoff_or_failure_mode\":\"Preallocating len(users) keeps result capacity and does not remove fmt.Sprintf allocations.\",\"transferable_lesson\":\"Use -benchmem with representative user counts before treating slice growth as important.\"}}"
+    "sanitized_output": "{\"purpose\":\"Formats user labels.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Labels grows a zero-capacity result slice once per user.\",\"why_it_matters_here\":\"The input length is known before the labels append loop.\",\"tradeoff_or_failure_mode\":\"Preallocating len(users) keeps result capacity and does not remove fmt.Sprintf allocations.\",\"transferable_lesson\":\"Use -benchmem with representative user counts before treating slice growth as important.\"}}"
   },
   {
     "name": "development-trivial-wrapper",
@@ -46,7 +46,7 @@
     "source": "package cases\n\nfunc StatusLabel() string {\n\treturn \"ready\"\n}\n",
     "anchor": {"start_line": 4, "end_line": 4, "evidence": "return \"ready\""},
     "expect_insight": false,
-    "sanitized_output": "{\"purpose\":\"Returns a status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+    "sanitized_output": "{\"purpose\":\"Returns a status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[]}"
   },
   {
     "name": "qualification-lock-snapshot",
@@ -59,7 +59,7 @@
     "source": "package cases\n\nimport \"sync\"\n\ntype Cache struct {\n\tmu      sync.Mutex\n\tcurrent string\n}\n\nfunc (c *Cache) Snapshot() string {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\treturn c.current\n}\n",
     "anchor": {"start_line": 11, "end_line": 13, "evidence": "return c.current"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Reads the current cache value.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Snapshot reads c.current while holding c.mu.\",\"why_it_matters_here\":\"The mutex is the local ownership boundary for the shared current field.\",\"tradeoff_or_failure_mode\":\"A simpler read lock may help only if measured readers contend with writers.\",\"transferable_lesson\":\"Exercise concurrent reads and writes under the race detector before changing this lock.\"}}"
+    "sanitized_output": "{\"purpose\":\"Reads the current cache value.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Snapshot reads c.current while holding c.mu.\",\"why_it_matters_here\":\"The mutex is the local ownership boundary for the shared current field.\",\"tradeoff_or_failure_mode\":\"A simpler read lock may help only if measured readers contend with writers.\",\"transferable_lesson\":\"Exercise concurrent reads and writes under the race detector before changing this lock.\"}}"
   },
   {
     "name": "qualification-cancellation-loop",
@@ -72,7 +72,7 @@
     "source": "package cases\n\nimport (\n\t\"context\"\n\t\"fmt\"\n)\n\nfunc Copy(ctx context.Context, values []string) ([]string, error) {\n\tresult := make([]string, 0, len(values))\n\tfor _, value := range values {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\treturn result, ctx.Err()\n\t\tdefault:\n\t\t}\n\t\tresult = append(result, fmt.Sprintf(\"copy:%s\", value))\n\t}\n\treturn result, nil\n}\n",
     "anchor": {"start_line": 11, "end_line": 15, "evidence": "case <-ctx.Done()"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Copies labels while observing cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Copy checks ctx.Done before each append.\",\"why_it_matters_here\":\"The select sits inside the values loop, so later values are skipped after cancellation.\",\"tradeoff_or_failure_mode\":\"Cancellation can return a partial result; callers need that contract to be intentional.\",\"transferable_lesson\":\"Cancel a long copy and verify both the returned error and partial-result behavior.\"}}"
+    "sanitized_output": "{\"purpose\":\"Copies labels while observing cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Copy checks ctx.Done before each append.\",\"why_it_matters_here\":\"The select sits inside the values loop, so later values are skipped after cancellation.\",\"tradeoff_or_failure_mode\":\"Cancellation can return a partial result; callers need that contract to be intentional.\",\"transferable_lesson\":\"Cancel a long copy and verify both the returned error and partial-result behavior.\"}}"
   },
   {
     "name": "qualification-allocation-preallocated",
@@ -85,7 +85,7 @@
     "source": "package cases\n\ntype Record struct {\n\tKey string\n}\n\nfunc Render(records []Record) []string {\n\tresult := make([]string, 0, len(records))\n\tfor _, record := range records {\n\t\tresult = append(result, \"record:\"+record.Key)\n\t}\n\treturn result\n}\n",
     "anchor": {"start_line": 8, "end_line": 10, "evidence": "make([]string, 0, len(records))"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Renders record labels.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Render reserves result capacity from len(records) before appending.\",\"why_it_matters_here\":\"Each record produces one result entry in the selected loop.\",\"tradeoff_or_failure_mode\":\"The capacity avoids result-slice growth but string concatenation can still allocate.\",\"transferable_lesson\":\"Compare representative record sizes with allocation reporting before optimizing further.\"}}"
+    "sanitized_output": "{\"purpose\":\"Renders record labels.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Render reserves result capacity from len(records) before appending.\",\"why_it_matters_here\":\"Each record produces one result entry in the selected loop.\",\"tradeoff_or_failure_mode\":\"The capacity avoids result-slice growth but string concatenation can still allocate.\",\"transferable_lesson\":\"Compare representative record sizes with allocation reporting before optimizing further.\"}}"
   },
   {
     "name": "qualification-repeated-io",
@@ -98,7 +98,7 @@
     "source": "package cases\n\nimport \"context\"\n\ntype Order struct {\n\tCustomerID string\n}\n\ntype Store interface {\n\tCustomer(context.Context, string) (string, error)\n}\n\nfunc Load(ctx context.Context, store Store, orders []Order) error {\n\tfor _, order := range orders {\n\t\tif _, err := store.Customer(ctx, order.CustomerID); err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}\n",
     "anchor": {"start_line": 15, "end_line": 17, "evidence": "store.Customer(ctx, order.CustomerID)"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Loads customers for orders.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Load calls the opaque Store.Customer once for each order.\",\"why_it_matters_here\":\"The orders loop can repeat a customer ID and therefore repeat the call.\",\"tradeoff_or_failure_mode\":\"Batching or caching must preserve missing-customer and error behavior and may use more memory.\",\"transferable_lesson\":\"Count Store.Customer calls for repeated customer IDs before choosing a batch API.\"}}"
+    "sanitized_output": "{\"purpose\":\"Loads customers for orders.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Load calls the opaque Store.Customer once for each order.\",\"why_it_matters_here\":\"The orders loop can repeat a customer ID and therefore repeat the call.\",\"tradeoff_or_failure_mode\":\"Batching or caching must preserve missing-customer and error behavior and may use more memory.\",\"transferable_lesson\":\"Count Store.Customer calls for repeated customer IDs before choosing a batch API.\"}}"
   },
   {
     "name": "qualification-idempotency-guard",
@@ -111,7 +111,7 @@
     "source": "package cases\n\nimport (\n\t\"errors\"\n\t\"sync\"\n)\n\ntype Ledger struct {\n\tmu   sync.Mutex\n\tseen map[string]bool\n}\n\nfunc (l *Ledger) Reserve(key string) bool {\n\tl.mu.Lock()\n\tdefer l.mu.Unlock()\n\tif l.seen == nil {\n\t\tl.seen = make(map[string]bool)\n\t}\n\tif l.seen[key] {\n\t\treturn false\n\t}\n\tl.seen[key] = true\n\treturn true\n}\n\ntype Gateway interface {\n\tCharge(string, int) error\n}\n\ntype Billing struct {\n\tledger  *Ledger\n\tgateway Gateway\n}\n\nfunc (b *Billing) Charge(key string, amount int) error {\n\tif !b.ledger.Reserve(key) {\n\t\treturn errors.New(\"duplicate request\")\n\t}\n\treturn b.gateway.Charge(key, amount)\n}\n",
     "anchor": {"start_line": 35, "end_line": 39, "evidence": "b.ledger.Reserve(key)"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Charges a request after reserving its key.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Reserve initializes and locks the in-process key ledger before Charge calls Gateway.Charge.\",\"why_it_matters_here\":\"A repeated key returns before the gateway call, and the direct return means a gateway error still consumes that key.\",\"tradeoff_or_failure_mode\":\"This source does not establish durable, expiring, or cross-process reservations; consumed-on-error behavior must match the caller contract.\",\"transferable_lesson\":\"Make one gateway error, retry the same key, and assert one gateway call before deciding whether another failure policy is needed.\"}}"
+    "sanitized_output": "{\"purpose\":\"Charges a request after reserving its key.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Reserve initializes and locks the in-process key ledger before Charge calls Gateway.Charge.\",\"why_it_matters_here\":\"A repeated key returns before the gateway call, and the direct return means a gateway error still consumes that key.\",\"tradeoff_or_failure_mode\":\"This source does not establish durable, expiring, or cross-process reservations; consumed-on-error behavior must match the caller contract.\",\"transferable_lesson\":\"Make one gateway error, retry the same key, and assert one gateway call before deciding whether another failure policy is needed.\"}}"
   },
   {
     "name": "qualification-authorization-guard",
@@ -124,7 +124,7 @@
     "source": "package cases\n\nimport (\n\t\"context\"\n\t\"errors\"\n)\n\ntype Authorizer interface {\n\tAllow(context.Context, string, string) bool\n}\n\ntype AccountRepository interface {\n\tDelete(context.Context, string) error\n}\n\ntype Accounts struct {\n\tauthz Authorizer\n\trepo  AccountRepository\n}\n\nfunc (a *Accounts) Delete(ctx context.Context, id string) error {\n\tif !a.authz.Allow(ctx, \"delete_account\", id) {\n\t\treturn errors.New(\"forbidden\")\n\t}\n\treturn a.repo.Delete(ctx, id)\n}\n",
     "anchor": {"start_line": 21, "end_line": 24, "evidence": "a.authz.Allow(ctx, \"delete_account\", id)"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Deletes an authorized account.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Delete checks authz.Allow before calling repo.Delete.\",\"why_it_matters_here\":\"A denied account ID returns at this service boundary without the repository call.\",\"tradeoff_or_failure_mode\":\"The source does not reveal the policy inside Authorizer or protection for other repository callers.\",\"transferable_lesson\":\"Use a denied authorizer and assert repo.Delete receives no call.\"}}"
+    "sanitized_output": "{\"purpose\":\"Deletes an authorized account.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Delete checks authz.Allow before calling repo.Delete.\",\"why_it_matters_here\":\"A denied account ID returns at this service boundary without the repository call.\",\"tradeoff_or_failure_mode\":\"The source does not reveal the policy inside Authorizer or protection for other repository callers.\",\"transferable_lesson\":\"Use a denied authorizer and assert repo.Delete receives no call.\"}}"
   },
   {
     "name": "qualification-opaque-verifier",
@@ -137,7 +137,7 @@
     "source": "package cases\n\nimport (\n\t\"context\"\n\t\"errors\"\n)\n\ntype Principal struct {\n\tTenant string\n}\n\ntype Verifier interface {\n\tVerify(context.Context, string) (Principal, error)\n}\n\nfunc Authorize(ctx context.Context, verifier Verifier, token, tenant string) error {\n\tprincipal, err := verifier.Verify(ctx, token)\n\tif err != nil {\n\t\treturn err\n\t}\n\tif principal.Tenant != tenant {\n\t\treturn errors.New(\"tenant mismatch\")\n\t}\n\treturn nil\n}\n",
     "anchor": {"start_line": 16, "end_line": 22, "evidence": "principal.Tenant != tenant"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Authorizes a verified principal for one tenant.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Authorize delegates token handling to Verifier and rejects a returned principal from another tenant.\",\"why_it_matters_here\":\"The local decision is the principal.Tenant comparison after Verify succeeds.\",\"tradeoff_or_failure_mode\":\"Signature, expiry, and revocation rules are verifier behavior and cannot be inferred here.\",\"transferable_lesson\":\"Return a principal for a different tenant from a fake verifier and assert denial.\"}}"
+    "sanitized_output": "{\"purpose\":\"Authorizes a verified principal for one tenant.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Authorize delegates token handling to Verifier and rejects a returned principal from another tenant.\",\"why_it_matters_here\":\"The local decision is the principal.Tenant comparison after Verify succeeds.\",\"tradeoff_or_failure_mode\":\"Signature, expiry, and revocation rules are verifier behavior and cannot be inferred here.\",\"transferable_lesson\":\"Return a principal for a different tenant from a fake verifier and assert denial.\"}}"
   },
   {
     "name": "qualification-backpressure-send",
@@ -150,7 +150,7 @@
     "source": "package cases\n\nimport \"context\"\n\nfunc Send(ctx context.Context, out chan<- string, value string) error {\n\tselect {\n\tcase out <- value:\n\t\treturn nil\n\tcase <-ctx.Done():\n\t\treturn ctx.Err()\n\t}\n}\n",
     "anchor": {"start_line": 6, "end_line": 10, "evidence": "case out <- value"},
     "expect_insight": true,
-    "sanitized_output": "{\"purpose\":\"Sends a value while respecting cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{},\"engineering_insight\":{\"mechanism\":\"Send waits for either an out receiver or ctx cancellation in one select.\",\"why_it_matters_here\":\"The out <- value case can apply backpressure when a receiver is not ready.\",\"tradeoff_or_failure_mode\":\"Capacity and receiver scheduling determine throughput and are not shown here.\",\"transferable_lesson\":\"Use an unread channel, cancel the context, and verify Send returns promptly.\"}}"
+    "sanitized_output": "{\"purpose\":\"Sends a value while respecting cancellation.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"engineering_insight\":{\"mechanism\":\"Send waits for either an out receiver or ctx cancellation in one select.\",\"why_it_matters_here\":\"The out <- value case can apply backpressure when a receiver is not ready.\",\"tradeoff_or_failure_mode\":\"Capacity and receiver scheduling determine throughput and are not shown here.\",\"transferable_lesson\":\"Use an unread channel, cancel the context, and verify Send returns promptly.\"}}"
   },
   {
     "name": "qualification-control-trivial-label",
@@ -163,7 +163,7 @@
     "source": "package cases\n\nfunc Label() string {\n\treturn \"ready\"\n}\n",
     "anchor": {"start_line": 4, "end_line": 4, "evidence": "return \"ready\""},
     "expect_insight": false,
-    "sanitized_output": "{\"purpose\":\"Returns a status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+    "sanitized_output": "{\"purpose\":\"Returns a status label.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[]}"
   },
   {
     "name": "qualification-control-trim-wrapper",
@@ -176,7 +176,7 @@
     "source": "package cases\n\nimport \"strings\"\n\nfunc Trim(value string) string {\n\treturn strings.TrimSpace(value)\n}\n",
     "anchor": {"start_line": 6, "end_line": 6, "evidence": "strings.TrimSpace(value)"},
     "expect_insight": false,
-    "sanitized_output": "{\"purpose\":\"Trims surrounding whitespace.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+    "sanitized_output": "{\"purpose\":\"Trims surrounding whitespace.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[]}"
   },
   {
     "name": "qualification-control-identity",
@@ -189,7 +189,7 @@
     "source": "package cases\n\nfunc Identity(value string) string {\n\treturn value\n}\n",
     "anchor": {"start_line": 4, "end_line": 4, "evidence": "return value"},
     "expect_insight": false,
-    "sanitized_output": "{\"purpose\":\"Returns the supplied value.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+    "sanitized_output": "{\"purpose\":\"Returns the supplied value.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[]}"
   },
   {
     "name": "qualification-control-empty-slice",
@@ -202,6 +202,6 @@
     "source": "package cases\n\nfunc Empty() []string {\n\treturn []string{}\n}\n",
     "anchor": {"start_line": 4, "end_line": 4, "evidence": "return []string{}"},
     "expect_insight": false,
-    "sanitized_output": "{\"purpose\":\"Returns an empty string slice.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[],\"symbol_explanations\":{}}"
+    "sanitized_output": "{\"purpose\":\"Returns an empty string slice.\",\"responsibilities\":[],\"dependencies\":[],\"side_effects\":[],\"risks\":[],\"suggestions\":[]}"
   }
 ]

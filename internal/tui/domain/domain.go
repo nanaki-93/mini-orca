@@ -123,8 +123,6 @@ type IssueRow struct {
 	Title              string
 	Name               string
 	Path               string
-	Symbol             string
-	Signature          string
 	Line               int
 	EndLine            int
 	Severity           string

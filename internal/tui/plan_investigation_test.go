@@ -18,9 +18,9 @@ import (
 func connectionInvestigationState(t *testing.T) *State {
 	t.Helper()
 	s := connectionsTestState()
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Capabilities.Tools = true
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	s.Index = &ProjectIndex{ProjectIdentity: s.Project.ProjectIdentity, Files: []IndexedFile{{Path: "main.go", ContentHash: "captured-source"}}}
 	s.openTaskPlan(&ChangeSeed{Title: "Review Run", Paths: []string{"main.go", "main_test.go"}, AcceptanceCriteria: []string{"Preserve behavior"}, Plan: &ChangePlanInput{Problem: "Missing coverage", Approach: "Inspect Run"}})
 	s.Navigate(PageConnections)
@@ -91,9 +91,9 @@ func TestPlanConnectionsRejectChangedGrantExpiryProviderAndCheckout(t *testing.T
 			s.AgentConnections.Records[client.ConnectionMCP][0].ExpiresAt = &expired
 		},
 		func(s *State) {
-			model := s.Models.Scopes["function"]
+			model := s.Models.Scopes["code"]
 			model.ProviderOrigin = "https://different.example"
-			s.Models.Scopes["function"] = model
+			s.Models.Scopes["code"] = model
 		},
 		func(s *State) { s.PlanDraft.Seed.WorktreePath = "/repo/other" },
 		func(s *State) { s.PlanDraft.Seed.Plan.Approach = "A different plan" },
@@ -110,9 +110,9 @@ func TestPlanConnectionsRejectChangedGrantExpiryProviderAndCheckout(t *testing.T
 	s := connectionInvestigationState(t)
 	s.startPlanInvestigation(false)
 	s.HandleKey(KeyEvent{Key: "Enter"})
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Model = "changed-after-approval"
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	if _, ok := s.preparePlanInvestigationTask(s.PendingActions[0]); ok {
 		t.Fatal("queued investigation retargeted after approval")
 	}
@@ -174,9 +174,9 @@ func TestInvestigationConnectionGrantCannotFollowChangedWorktreeIndex(t *testing
 
 func TestInvestigationConnectionsRequireAdvertisedToolCapability(t *testing.T) {
 	s := connectionInvestigationState(t)
-	model := s.Models.Scopes["function"]
+	model := s.Models.Scopes["code"]
 	model.Capabilities.Tools = false
-	s.Models.Scopes["function"] = model
+	s.Models.Scopes["code"] = model
 	s.startPlanInvestigation(false)
 	if s.Confirmation != nil || len(s.PendingActions) != 0 || !strings.Contains(s.Error, "tool support") {
 		t.Fatal("unknown adapter capability admitted integration tools")
@@ -189,7 +189,7 @@ func investigationState(t *testing.T) *State {
 	identity := ProjectIdentity{ProjectID: "p", ProjectRevision: "r"}
 	s.Project = &Project{ProjectIdentity: identity}
 	s.Index = &ProjectIndex{ProjectIdentity: identity, Files: []IndexedFile{{Path: "main.go", ContentHash: "source-hash", LineCount: 3}}}
-	s.Models = &ModelCatalog{Scopes: map[string]Model{"function": {Model: "fixture"}}}
+	s.Models = &ModelCatalog{Scopes: map[string]Model{"code": {Model: "fixture"}}}
 	s.openTaskPlan(&ChangeSeed{Title: "Improve Run", Paths: []string{"main.go"}, AcceptanceCriteria: []string{"Preserve behavior"}, Plan: &ChangePlanInput{Problem: "Missing coverage", Approach: "Inspect Run"}})
 	if len(s.PendingActions) != 0 {
 		t.Fatal("opening a draft dispatched work")
@@ -267,7 +267,7 @@ func TestPlanInvestigationRequiresAcceptanceAndPreservesExplicitScope(t *testing
 func TestPlanInvestigationRemoteConfirmationBindsCurrentDraft(t *testing.T) {
 	for _, edited := range []bool{false, true} {
 		s := investigationState(t)
-		s.Models.Scopes["function"] = Model{Model: "remote", RemoteProvider: true, ProviderOrigin: "https://provider.example"}
+		s.Models.Scopes["code"] = Model{Model: "remote", RemoteProvider: true, ProviderOrigin: "https://provider.example"}
 		s.HandleKey(KeyEvent{Key: "i"})
 		if s.Confirmation == nil || len(s.PendingActions) != 0 || s.PlanDraft.InvestigationState != "" {
 			t.Fatal("remote investigation bypassed confirmation")

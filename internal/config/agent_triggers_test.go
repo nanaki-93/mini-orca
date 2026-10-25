@@ -10,7 +10,7 @@ import (
 
 func TestAgentTriggersStrictConfiguration(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	profiles := "model_scopes:\n  analyze: {api_base_url: 'http://localhost:1234/v1', model: a}\n  bug: {api_base_url: 'http://localhost:1234/v1', model: b}\n  function: {api_base_url: 'http://localhost:1234/v1', model: f}\n"
+	profiles := "model_scopes:\n  analyze: {api_base_url: 'http://localhost:1234/v1', model: a}\n  bug: {api_base_url: 'http://localhost:1234/v1', model: b}\n  code: {api_base_url: 'http://localhost:1234/v1', model: f}\n"
 	for _, value := range []struct {
 		yaml  string
 		valid bool

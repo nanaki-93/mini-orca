@@ -385,7 +385,7 @@ func (execution *analysisFileStageExecution) performance(ctx context.Context, re
 	if err != nil {
 		return analysisStageModelFailure(ctx, result, err)
 	}
-	findings, warning, err := project.ParsePerformanceFindings(output.Content, snapshot.file.Path, snapshot.source, snapshot.file.Symbols)
+	findings, warning, err := project.ParsePerformanceFindings(output.Content, snapshot.file.Path, snapshot.source)
 	if err != nil {
 		return analysisStageModelFailure(ctx, result, err)
 	}

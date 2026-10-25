@@ -886,7 +886,7 @@ func TestEngineeringInsightRunnerStoresOnlyDigestBoundScores(t *testing.T) {
 
 func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwrite(t *testing.T) {
 	const privateText = "private optional insight prose"
-	response := `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"},"engineering_insight":{"mechanism":"` + privateText + `","why_it_matters_here":"local"}}],"suggestions":[],"symbol_explanations":{"unselected":"private symbol explanation"}}`
+	response := `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"},"engineering_insight":{"mechanism":"` + privateText + `","why_it_matters_here":"local"}}],"suggestions":[]}`
 	client := &fakeEngineeringInsightClient{reply: response}
 	cfg := runnerTestConfig(t, "optional-diagnostics", EngineeringInsightCollectRunMode, 3, client)
 	receipt, _, err := RunEngineeringInsightEvaluation(context.Background(), cfg)
@@ -904,7 +904,7 @@ func TestEngineeringInsightRunnerPersistsPrivateOptionalDiagnosticsWithoutOverwr
 	if err := json.Unmarshal(data, &artifact); err != nil {
 		t.Fatal(err)
 	}
-	if artifact.RunID != cfg.RunID || artifact.AttemptID != id || artifact.ResponseDigest != receipt.Attempts[0].ResponseDigest || len(artifact.Insights) != 2 || !artifact.SymbolExplanationsDegraded || len(artifact.TaskSpecDegradedRiskIndices) != 1 || artifact.TaskSpecDegradedRiskIndices[0] != 0 {
+	if artifact.RunID != cfg.RunID || artifact.AttemptID != id || artifact.ResponseDigest != receipt.Attempts[0].ResponseDigest || len(artifact.Insights) != 2 || len(artifact.TaskSpecDegradedRiskIndices) != 1 || artifact.TaskSpecDegradedRiskIndices[0] != 0 {
 		t.Fatalf("diagnostic artifact identity = %+v", artifact)
 	}
 	if artifact.Insights[0].Location != "top_level" || artifact.Insights[0].Reason != project.OptionalEngineeringInsightAbsent || artifact.Insights[1].Location != "risk" || artifact.Insights[1].Index == nil || *artifact.Insights[1].Index != 0 || artifact.Insights[1].Reason != project.OptionalEngineeringInsightEmptyRequiredField || !artifact.Insights[1].Mechanism.RuneCountKnown || artifact.Insights[1].Mechanism.Runes != len(privateText) {
@@ -1043,11 +1043,11 @@ func TestEngineeringInsightRunnerRejectsIncompleteFileInsightsAcrossOptionalLoca
 	response := func(location, insight string) string {
 		switch location {
 		case "top-level":
-			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":` + insight + `}`
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"engineering_insight":` + insight + `}`
 		case "risk":
-			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":` + insight + `}],"suggestions":[],"symbol_explanations":{}}`
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":` + insight + `}],"suggestions":[]}`
 		case "suggestion":
-			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":` + insight + `}],"symbol_explanations":{}}`
+			return `{"purpose":"Summarizes.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":` + insight + `}]}`
 		default:
 			return ""
 		}
@@ -1136,7 +1136,7 @@ func qualificationRunnerTestConfig(t *testing.T, runID string, client Engineerin
 }
 
 func runnerValidResponse() string {
-	return `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`
+	return `{"purpose":"model reply is private","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[]}`
 }
 
 func TestEngineeringInsightRunnerRejectsHistoricalPromptDispatch(t *testing.T) {
@@ -1563,10 +1563,10 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	return root, base
 }
 
-// Prompt digests bind the reviewed v16 finding-title prompt and provider metadata.
+// Prompt digests bind the reviewed v17 file-analysis prompt and provider metadata.
 func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 	source := "package fixture\nfunc Run() {}\n"
-	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
+	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash"}
 	analysis := project.Analysis{Name: "fixture", Type: "go", Summary: "Synthetic project."}
 	index := &project.ProjectIndex{Files: []project.IndexFile{target}}
 	for _, test := range []struct {
@@ -1574,13 +1574,13 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 		remote           bool
 		promptDigest     string
 	}{
-		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "24d52717fb650385ba5e412a5baaffbb7bf72365449cc34c3f2814c9bf463e8c"},
-		{"http://localhost:1234/v1", "http://localhost:1234", false, "a00b1c637d6946c5ff87b07feb28529924bd6251313921c70c388159b494adb0"},
-		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "68041955e48129ea515f32b8b0414b595041d5489b7816e7e5b6e081332f70d0"},
-		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "6a0a48284d0b812250f8059c0a051526b7743ed5d671780ef0689219841cb5b9"},
-		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "d61e4769708e8cb8d303e9a4de85877bc6ac3b83a75e3f461b81d175344c1307"},
-		{"http://localhost.example/v1", "http://localhost.example", true, "5c9b1b836864f817ac540297562a3f8fc8c20a5818d86a925d05e943a91797ea"},
-		{"invalid endpoint", "", true, "f2c61c5c9bfcac22a2e70077688671512ace1b8a0c524c3b49c4050e0cf779fc"},
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "81088806e4ff60bf024e62fc877166c20c400d9c30cff3e73e49d32573cabeb0"},
+		{"http://localhost:1234/v1", "http://localhost:1234", false, "9eafa56fe36d8c695a85cf0dbde97cd523446f501f9685685c79cff67d5e8e49"},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "10d60a00483f7b92bee97ac95689e0898bea56ef7eb8e5c200d0502e1c929a1b"},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "2014cb9f668e6b0436f97c1c45ca42b477a63dd4cea8df38c48ba13f2e945260"},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "50bdd98c43c97b4f8554366eeea7262b67857696394d6571c0fdca343fc69bde"},
+		{"http://localhost.example/v1", "http://localhost.example", true, "52cb6b73eed9dd7a58440e4b0ca3d685103e2302657b4969dc1f4cd542c627d8"},
+		{"invalid endpoint", "", true, "e0581af4447da3d26c8f25870fd69003c6c6fd00243730d708038fd9b2ff86ff"},
 	} {
 		t.Run(test.endpoint, func(t *testing.T) {
 			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
@@ -1619,7 +1619,6 @@ func TestFileAnalysisEvaluationAssessmentMatchesRunner(t *testing.T) {
 		{"explicit null", `{"purpose":"Explains.","engineering_insight":null}`, "omitted", true, false},
 		{"accepted", `{"purpose":"Explains.","engineering_insight":{"mechanism":"One operation.","why_it_matters_here":"A local call.","tradeoff_or_failure_mode":"Changes its result.","transferable_lesson":"Verify its result."}}`, "present", true, false},
 		{"rejected", `{"purpose":"Explains.","engineering_insight":false}`, "rejected", true, true},
-		{"symbol degradation", `{"purpose":"Explains.","symbol_explanations":{"missing":"Explanation"}}`, "omitted", true, true},
 		{"task degradation", `{"purpose":"Explains.","risks":[{"category":"bugs","severity":"low","summary":"Risk.","task_spec":{}}]}`, "omitted", true, true},
 		{"category rejected", `{"purpose":"Explains.","risks":[{"severity":"low","summary":"Legacy.","engineering_insight":false}]}`, "rejected", false, true},
 		{"parent rejected", `{"purpose":"","engineering_insight":false}`, "rejected", false, true},

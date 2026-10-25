@@ -163,7 +163,6 @@ var defaultArchitectureImportRules = []architectureImportRule{
 type parsedEditFacts struct {
 	lang       string
 	rawImports []string
-	symbols    []symbols.SymbolInfo
 }
 
 var (
@@ -210,11 +209,10 @@ func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
 		if filepath.Ext(edit.Path) == ".go" {
 			continue
 		}
-		lang, rawImports, syms := symbols.ExtractFileFacts(edit.Path, []byte(edit.Content))
+		lang, rawImports := symbols.ExtractFileFacts(edit.Path, []byte(edit.Content))
 		facts[edit.Path] = parsedEditFacts{
 			lang:       lang,
 			rawImports: rawImports,
-			symbols:    syms,
 		}
 	}
 	return facts
@@ -440,7 +438,7 @@ func extractEditImports(path, content string, rawImports []string) []string {
 	}
 	slashDir := filepath.Dir(strings.TrimPrefix(filepath.ToSlash(path), "./"))
 	if rawImports == nil {
-		_, rawImports, _ = symbols.ExtractFileFacts(path, []byte(content))
+		_, rawImports = symbols.ExtractFileFacts(path, []byte(content))
 	}
 	imports := make([]string, 0, len(rawImports)*2)
 	appendNorm := func(raw string) {
@@ -488,7 +486,7 @@ func changeHasCodeSource(edits []ChangeEdit, factsByPath map[string]parsedEditFa
 	}
 	for _, edit := range edits {
 		f := factsByPath[edit.Path]
-		if f.lang != "" && f.lang != "Markdown" && f.lang != "Text" && len(f.symbols) > 0 {
+		if f.lang != "" && f.lang != "Markdown" && f.lang != "Text" {
 			return true
 		}
 	}
@@ -501,8 +499,8 @@ func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQ
 		violations = append(violations, fileLineBudgetViolations(edit, budgets)...)
 		if filepath.Ext(edit.Path) == ".go" {
 			violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content, budgets)...)
-		} else {
-			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets, factsByPath[edit.Path].symbols)...)
+		} else if f := factsByPath[edit.Path]; f.lang != "" && f.lang != "Markdown" && f.lang != "Text" {
+			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets)...)
 		}
 	}
 	if len(violations) > 0 {
@@ -517,7 +515,7 @@ func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQ
 		Name:     "complexity gate",
 		Required: true,
 		State:    CheckPassed,
-		Output:   fmt.Sprintf("All proposed functions are within the cyclomatic complexity budget (<= %d).", budgets.maxComplexity),
+		Output:   fmt.Sprintf("All proposed files are within the cyclomatic complexity budget (<= %d).", budgets.maxComplexity),
 	}
 }
 
@@ -557,38 +555,17 @@ func goEditComplexityViolations(path, content string, budgets architectureQualit
 	return violations
 }
 
-func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets, syms []symbols.SymbolInfo) []string {
-	if syms == nil {
-		_, _, syms = symbols.ExtractFileFacts(path, []byte(content))
-	}
-	if len(syms) == 0 {
+func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
 		return nil
 	}
-	lines := strings.Split(content, "\n")
 	var violations []string
-	for _, sym := range syms {
-		if !isCallableSymbolKind(sym.Kind) {
-			continue
-		}
-		complexity := genericSpanComplexity(lines, sym.StartLine, sym.EndLine)
-		if complexity > budgets.maxComplexity {
-			violations = append(violations, fmt.Sprintf("%s:%d: function %s has cyclomatic complexity %d (max %d); split into smaller helpers", filepath.ToSlash(path), sym.StartLine, sym.Name, complexity, budgets.maxComplexity))
-		}
-		spanLines := sym.EndLine - sym.StartLine + 1
-		if budgets.maxFunctionLines > 0 && spanLines > budgets.maxFunctionLines {
-			violations = append(violations, fmt.Sprintf("%s:%d: function %s has %d lines (max %d); split into smaller helpers", filepath.ToSlash(path), sym.StartLine, sym.Name, spanLines, budgets.maxFunctionLines))
-		}
+	complexity := genericSpanComplexity(lines, 1, len(lines))
+	if complexity > budgets.maxComplexity {
+		violations = append(violations, fmt.Sprintf("%s:1: file has cyclomatic complexity %d (max %d); split into smaller modules", filepath.ToSlash(path), complexity, budgets.maxComplexity))
 	}
 	return violations
-}
-
-func isCallableSymbolKind(kind string) bool {
-	switch kind {
-	case "function", "fun", "fn", "def", "defp", "method", "const":
-		return true
-	default:
-		return false
-	}
 }
 
 func genericSpanComplexity(lines []string, startLine, endLine int) int {

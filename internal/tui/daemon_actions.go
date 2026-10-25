@@ -512,7 +512,7 @@ func (s *State) dispatchCancelWorkflow(ctx context.Context, cl *Client, reqID, s
 
 func (s *State) resolveDaemonModelSelection(candidate, fallbackScope string) string {
 	switch candidate {
-	case "analyze", "bug", "function":
+	case "analyze", "bug", "code":
 		return candidate
 	}
 	if s.AvailableModels != nil {

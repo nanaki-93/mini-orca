@@ -5,7 +5,7 @@ import "testing"
 func TestReviewSectionsAllowEmptyButRejectMalformedFindings(t *testing.T) {
 	for _, output := range []string{"", " \n\t", "[]", "[ \n ]", `{"findings":[]}`} {
 		t.Run("empty:"+output, func(t *testing.T) {
-			performance, warning, err := ParsePerformanceFindings(output, "main.go", securitySource(), nil)
+			performance, warning, err := ParsePerformanceFindings(output, "main.go", securitySource())
 			if err != nil || performance == nil || len(performance) != 0 || warning != "" {
 				t.Fatalf("performance=%+v warning=%q err=%v", performance, warning, err)
 			}
@@ -17,7 +17,7 @@ func TestReviewSectionsAllowEmptyButRejectMalformedFindings(t *testing.T) {
 	}
 	for _, output := range []string{`{}`, `null`, `{"findings":null}`, `{"findings":[{}]}`, `[{}]`, `[] {}`, `{"findings":`, "No issues found"} {
 		t.Run("invalid:"+output, func(t *testing.T) {
-			if _, _, err := ParsePerformanceFindings(output, "main.go", securitySource(), nil); err == nil {
+			if _, _, err := ParsePerformanceFindings(output, "main.go", securitySource()); err == nil {
 				t.Fatal("invalid performance response passed")
 			}
 			if _, err := ParseSecurityFindings(output, securityIndexedFile(), securitySource()); err == nil {

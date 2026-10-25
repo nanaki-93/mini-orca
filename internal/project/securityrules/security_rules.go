@@ -25,7 +25,6 @@ const (
 )
 
 type IndexFile = symbols.IndexFile
-type SymbolInfo = symbols.SymbolInfo
 type EngineeringInsight = insight.EngineeringInsight
 
 // SecuritySourceAnchor identifies the source file and line span of a security finding.
@@ -33,7 +32,6 @@ type SecuritySourceAnchor struct {
 	Path      string `json:"path"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
-	Symbol    string `json:"symbol,omitempty"`
 }
 
 // SecurityFinding keeps the user's triage separate from verification evidence.
@@ -59,7 +57,7 @@ type SecurityFinding struct {
 
 // SecurityFindingID excludes model wording, insights, CWE, and references.
 func SecurityFindingID(f SecurityFinding) string {
-	parts := []string{f.Rule, f.Category, f.Anchor.Path, fmt.Sprint(f.Anchor.StartLine), fmt.Sprint(f.Anchor.EndLine), f.Anchor.Symbol, f.EvidenceKind}
+	parts := []string{f.Rule, f.Category, f.Anchor.Path, fmt.Sprint(f.Anchor.StartLine), fmt.Sprint(f.Anchor.EndLine), f.EvidenceKind}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "security:" + hex.EncodeToString(sum[:])
 }
@@ -801,7 +799,7 @@ func shellObservedCondition(shell, flag string) string {
 
 func (v *securityRuleVisitor) addFinding(finding SecurityFinding, position token.Pos) {
 	line := v.fset.Position(position).Line
-	finding.Anchor = SecuritySourceAnchor{Path: v.indexed.Path, StartLine: line, EndLine: line, Symbol: securitySymbolForLine(v.indexed.Symbols, line)}
+	finding.Anchor = SecuritySourceAnchor{Path: v.indexed.Path, StartLine: line, EndLine: line}
 	finding.Triage = SecurityTriageOpen
 	finding.VerificationState = SecurityVerificationUnverified
 	finding.ID = SecurityFindingID(finding)
@@ -822,13 +820,4 @@ func (v *securityRuleVisitor) finalize() {
 		}
 		v.findings = append(v.findings, candidate.finding)
 	}
-}
-
-func securitySymbolForLine(symbols []SymbolInfo, line int) string {
-	for _, symbol := range symbols {
-		if line >= symbol.StartLine && line <= symbol.EndLine {
-			return symbol.Name
-		}
-	}
-	return ""
 }

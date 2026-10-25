@@ -44,7 +44,7 @@ func TestWorkflowSettingsStayFrozenThroughWorkAndHumanReview(t *testing.T) {
 	})
 	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	control := settingsControl(t, s)
-	control.Values.Roles = agentstate.RoleSettings{Creation: "bug", Testing: "analyze", Review: "function"}
+	control.Values.Roles = agentstate.RoleSettings{Creation: "bug", Testing: "analyze", Review: "code"}
 	control.Values.Limits.ConcurrentCalls = 1
 	if _, err := s.ControlAgentSettings(t.Context(), control); err != nil {
 		t.Fatal(err)
@@ -61,13 +61,13 @@ func TestWorkflowSettingsStayFrozenThroughWorkAndHumanReview(t *testing.T) {
 	}
 	control = settingsControl(t, s)
 	control.Values.Limits.ModelCalls = 1
-	control.Values.Roles.Creation = "function"
+	control.Values.Roles.Creation = "code"
 	if _, err := s.ControlAgentSettings(t.Context(), control); err != nil {
 		t.Fatal(err)
 	}
 	once.Do(func() { close(release) })
 	ready := finishedWorkflow(t, s, initial.ID)
-	if ready.Workflow.Status != "awaiting_human_review" || ready.Workflow.Models != (ChangeWorkflowModels{Create: "bug", Test: "analyze", Review: "function"}) {
+	if ready.Workflow.Status != "awaiting_human_review" || ready.Workflow.Models != (ChangeWorkflowModels{Create: "bug", Test: "analyze", Review: "code"}) {
 		t.Fatal("future settings changed active workflow", ready.Workflow)
 	}
 	approved, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve"))
@@ -191,7 +191,7 @@ func TestWorkflowInputRestoreRequiresFreshChecksAndExplicitResponse(t *testing.T
 	cfg := scopedTestConfig(s.runtimes.bug.profile.APIBaseURL)
 	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = s.runtimes.bug.profile.APIBaseURL, s.runtimes.bug.profile.Model
 	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = s.runtimes.analyze.profile.APIBaseURL, s.runtimes.analyze.profile.Model
-	cfg.ModelScopes.Function.APIBaseURL, cfg.ModelScopes.Function.Model = s.runtimes.function.profile.APIBaseURL, s.runtimes.function.profile.Model
+	cfg.ModelScopes.Code.APIBaseURL, cfg.ModelScopes.Code.Model = s.runtimes.function.profile.APIBaseURL, s.runtimes.function.profile.Model
 	restarted, err := New(cfg, s.manager)
 	if err != nil {
 		t.Fatal(err)

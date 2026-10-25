@@ -70,7 +70,7 @@ Unknown, unavailable, stale, partial, failed and canceled states retain meaning.
 
 Task selection opens an editable plan without generation. Make approach, evidence,
 write/read scope, criteria and non-goals inspectable before explicit approval.
-Investigation is an explicit action (`i` / `:investigate`) using the Function
+Investigation is an explicit action (`i` / `:investigate`) using the Code
 profile, with remote-provider confirmation when required. Keep it asynchronous
 and cancelable (`x` / `:cancel-investigation`), retaining the draft on failure or
 cancellation. Show pending approach, quoted evidence, assumptions, suggested
@@ -113,7 +113,7 @@ approval. Unsaved edits cannot reuse approval of the saved plan.
 
 Decomposition (`g` / `:mission-plan`) is a separate confirmed, asynchronous model
 action. Disclose the checkout, current catalog, goal, every captured path/hash
-or planned absent path, applicable instruction sharing, Function model and
+or planned absent path, applicable instruction sharing, Code model and
 destination, and both the planning budget and future mission allocation.
 Recheck the captured draft and settings on confirmation and queued dispatch;
 refresh local provider metadata before transport. Prevent duplicate submission.
@@ -342,13 +342,13 @@ Review the captured name, MIME, byte count and hash before private local import.
 PNG, JPEG, PDF, supported WAV and raw 16 kHz PCM have no implicit conversion.
 Space selects up to four immutable imported versions totaling at most 1 MiB.
 Ask (`q` / `:media-ask <question>`) separately confirms the exact question,
-versions, checkout, settings and Function provider destination. Answers remain
+versions, checkout, settings and Code provider destination. Answers remain
 advisory. Enter explicitly discloses private retained text; Esc hides it.
 Binary/audio outputs expose metadata and a confirmed private export (`e`), with
 no automatic playback. Older outputs remain available in Code / Artifacts.
 
 `:live-open` confirms the configured live destination, conservative budget and
-bounded lifetime. Missing `agent_runtime.live_model` or an unsupported Function
+bounded lifetime. Missing `agent_runtime.live_model` or an unsupported Code
 profile explains the configuration required. Inspect a session with Enter before
 acting. `s` / `:live-send <text>` confirms each text input; `:live-send-media`
 confirms exactly one selected JPEG or raw PCM version of at most 64 KiB.

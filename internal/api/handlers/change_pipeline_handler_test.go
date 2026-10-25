@@ -72,7 +72,7 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 	if err := json.Unmarshal(started.Body.Bytes(), &active); err != nil {
 		t.Fatal(err)
 	}
-	if active.Workflow.Models != (app.ChangeWorkflowModels{Create: "bug", Test: "function", Review: "analyze"}) {
+	if active.Workflow.Models != (app.ChangeWorkflowModels{Create: "bug", Test: "code", Review: "analyze"}) {
 		t.Fatalf("omitted models were not resolved: %+v", active.Workflow.Models)
 	}
 	if len(active.Workflow.Specialists) != 4 || active.Workflow.Specialists[3].ID != "security" {

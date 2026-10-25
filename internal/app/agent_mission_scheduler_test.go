@@ -30,7 +30,7 @@ func missionSchedulerFixture(t *testing.T, handler http.HandlerFunc, calls int, 
 		t.Fatal(err)
 	}
 	cfg := base.config
-	cfg.ModelScopes.Bug.Model, cfg.ModelScopes.Function.Model, cfg.ModelScopes.Analyze.Model = "mission-create", "mission-test", "mission-review"
+	cfg.ModelScopes.Bug.Model, cfg.ModelScopes.Code.Model, cfg.ModelScopes.Analyze.Model = "mission-create", "mission-test", "mission-review"
 	service, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -343,7 +343,7 @@ func TestMissionSchedulerCapturesRolePreferencesAndRequiresSelectedRemoteConsent
 		writeMissionPlanningAnswer(w, output)
 	}, 12, func(service *Service, _ *agentstate.MissionPlan) {
 		control := settingsControl(t, service)
-		control.Values.Roles.Creation, control.Values.Roles.Testing, control.Values.Roles.Review = "function", "analyze", "bug"
+		control.Values.Roles.Creation, control.Values.Roles.Testing, control.Values.Roles.Review = "code", "analyze", "bug"
 		if _, err := service.ControlAgentSettings(t.Context(), control); err != nil {
 			t.Fatal(err)
 		}
@@ -355,7 +355,7 @@ func TestMissionSchedulerCapturesRolePreferencesAndRequiresSelectedRemoteConsent
 	if _, err := service.TrustProjectExecution(t.Context(), request.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, grants := range [][]string{nil, {"function"}, {"function", "function"}, {"unknown"}} {
+	for _, grants := range [][]string{nil, {"code"}, {"code", "code"}, {"unknown"}} {
 		request.ConfirmedProfiles = grants
 		if _, err := service.ControlMissionExecution(t.Context(), prepared.Execution.Mission.ID, request); err == nil {
 			t.Fatal("incomplete or forged consent accepted", grants)
@@ -368,7 +368,7 @@ func TestMissionSchedulerCapturesRolePreferencesAndRequiresSelectedRemoteConsent
 	if err != nil || current.Execution.Revision != prepared.Execution.Revision {
 		t.Fatal("rejected consent consumed allocation", current, err)
 	}
-	request.ConfirmedProfiles = []string{"function", "analyze", "bug"}
+	request.ConfirmedProfiles = []string{"code", "analyze", "bug"}
 	if _, err := service.ControlMissionExecution(t.Context(), prepared.Execution.Mission.ID, request); err != nil {
 		t.Fatal(err)
 	}

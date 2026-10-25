@@ -13,22 +13,22 @@ import (
 
 func TestPlanRoleModelsRequireDestinationAndScopeBoundConsent(t *testing.T) {
 	s := settingsTestState()
-	remote := s.Models.Scopes["function"]
+	remote := s.Models.Scopes["code"]
 	remote.Model, remote.ProviderOrigin, remote.RemoteProvider = "remote-code", "https://models.example", true
-	s.Models.Scopes["function"] = remote
+	s.Models.Scopes["code"] = remote
 	s.openTaskPlan(&ChangeSeed{Title: "Fix result", Paths: []string{"main.go", "main_test.go"}, AcceptanceCriteria: []string{"Returns two"}, Plan: &ChangePlanInput{Problem: "Wrong result", Approach: "Correct return", ReadPaths: []string{"README.md"}}})
 	s.submitTaskPlan(true)
 	if s.Confirmation == nil || len(s.PendingActions) != 0 || s.PlanDraft.Submitted {
 		t.Fatal("remote generation bypassed confirmation")
 	}
-	for _, text := range []string{"create: function", "remote-code", "https://models.example", "main.go", "README.md"} {
+	for _, text := range []string{"create: code", "remote-code", "https://models.example", "main.go", "README.md"} {
 		if !strings.Contains(s.Confirmation.Message, text) {
 			t.Fatal("confirmation omitted selected destination or source", text)
 		}
 	}
 	confirmation := s.Confirmation
 	remote.ProviderOrigin = "https://changed.example"
-	s.Models.Scopes["function"] = remote
+	s.Models.Scopes["code"] = remote
 	confirmation.OnConfirm(s)
 	if len(s.PendingActions) != 0 || !strings.Contains(s.Error, "changed") {
 		t.Fatal("old confirmation authorized a new provider")
@@ -40,7 +40,7 @@ func TestPlanRoleModelsRequireDestinationAndScopeBoundConsent(t *testing.T) {
 		t.Fatalf("confirmed plan not queued: %s", s.Error)
 	}
 	action := s.PendingActions[0]
-	if action.WorkflowChoice.Models["create"] != "function" || action.WorkflowChoice.Models["test"] != "analyze" || len(action.WorkflowChoice.Confirmed) != 1 || action.WorkflowChoice.Confirmed[0] != "function" {
+	if action.WorkflowChoice.Models["create"] != "code" || action.WorkflowChoice.Models["test"] != "analyze" || len(action.WorkflowChoice.Confirmed) != 1 || action.WorkflowChoice.Confirmed[0] != "code" {
 		t.Fatal("configured roles or exact consent lost")
 	}
 	task, ok := s.prepareStartAgentTask("start", action)
@@ -51,7 +51,7 @@ func TestPlanRoleModelsRequireDestinationAndScopeBoundConsent(t *testing.T) {
 	if task.act.Seed.Plan.ReadPaths[0] != "README.md" {
 		t.Fatal("queued provider request shared its mutable plan draft")
 	}
-	s.ScopeModels["function"] = "bug"
+	s.ScopeModels["code"] = "bug"
 	if _, ok := s.prepareStartAgentTask("changed", action); ok {
 		t.Fatal("queued task retargeted after approval")
 	}

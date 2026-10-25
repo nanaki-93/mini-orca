@@ -882,7 +882,7 @@ func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 				s := NewState()
 				s.Palette = palette
 				s.Models = &ModelCatalog{Scopes: map[string]Model{
-					"analyze": {Model: "inspector"}, "bug": {Model: "reviewer"}, "function": {Model: "coder"},
+					"analyze": {Model: "inspector"}, "bug": {Model: "reviewer"}, "code": {Model: "coder"},
 				}}
 				s.Navigate(hub.Page)
 				frame := s.Render(120, height)
@@ -912,7 +912,7 @@ func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
 		}
 	}
 	s := NewState()
-	s.ScopeModels["function"] = "chosen-model"
+	s.ScopeModels["code"] = "chosen-model"
 	if frame := s.Render(120, 24); !strings.Contains(frame, "chosen-model") || !strings.Contains(frame, "unavailable") {
 		t.Fatal("sidebar lost assigned model or missing-model state")
 	}

@@ -11,10 +11,10 @@ The daemon configures three model profiles, used by default as follows:
 | --- | --- |
 | `analyze` | Project import, architectural summaries and source-based Performance review |
 | `bug` | Selected-file and unified semantic analysis |
-| `function` | Declaration proposals and explicit repairs |
+| `code` | File proposals and explicit repairs |
 
 The Chat agent workflow chooses a model independently for Creation, Testing
-and Review. Their prompt scopes are `bug`, `function` and `analyze`, respectively. Choose
+and Review. Their prompt scopes are `bug`, `code` and `analyze`, respectively. Choose
 configured profiles or discovered Agy/Pi catalog models on **Models**. A captured run
 keeps its selected model, timeout and retry budget; remote consent covers every
 selected remote profile. These selections do not change other operations' defaults.
@@ -42,14 +42,14 @@ model_scopes:
     api_base_url: "http://localhost:11434/v1"
     api_key: ""
     model: "bug-model-id"
-  function:
+  code:
     api_base_url: "http://localhost:1234/v1"
     api_key: ""
-    model: "function-model-id"
+    model: "code-model-id"
 ```
 
 The default context budgets are 120000 tokens for `analyze`, 32000 for `bug`,
-and 4000 for `function`. For HTTP profiles, `temperature` must be from 0 through 2;
+and 4000 for `code`. For HTTP profiles, `temperature` must be from 0 through 2;
 `max_tokens` must be 1–65536; `context_max_tokens` must be 1–120000. API keys
 are never returned, logged, or embedded in metadata. Mini-Orca does not perform
 environment interpolation or use a vault or Keychain.
@@ -122,11 +122,11 @@ account or model has been used for this validation. See the
 
 ### Explicit media attachments
 
-The attachment advice API uses the configured **Function** profile. Native Gemini
+The attachment advice API uses the configured **Code** profile. Native Gemini
 and Vertex general-purpose multimodal models advertise `attachments: true`;
 compatible HTTP and CLI profiles do not. Model entitlement and availability are
 still determined by the provider response. Local import and library inspection
-work even when the Function profile cannot process attachments.
+work even when the Code profile cannot process attachments.
 
 Import is an explicit local write of supplied bytes, up to 512 KiB per file.
 Supported imports are PNG/JPEG (up to 4096 pixels per side and 4 megapixels), PDF
@@ -138,7 +138,7 @@ conversion, microphone/camera capture, provider URL fetch, or file upload servic
 Advice requires a question and one to four exact imported versions, at most
 1 MiB combined, plus current settings/model/destination and explicit media-sharing
 and applicable remote-provider consent. It makes one ADK model attempt under the
-normal run budget and Function timeout, with no tools, retries, memory retrieval,
+normal run budget and Code timeout, with no tools, retries, memory retrieval,
 compaction or provider caching. Selected byte content contributes to conservative
 input reservations; unavailable usage remains explicitly unknown. Responses are
 private advisory text, never checked project findings or proposals.
@@ -197,7 +197,7 @@ for exact controls, metadata and recovery rules.
 ### Explicit live sessions
 
 Live advice is disabled by default. Set `agent_runtime.live_model: gemini-3.8-live`
-to enable the conformed Gemini API combination. It uses the Function profile's
+to enable the conformed Gemini API combination. It uses the Code profile's
 explicit API key and destination, preserving its ordinary completion model.
 Vertex, CLI, compatible HTTP, bearer tokens and ephemeral live credentials are
 not supported for this path. HTTPS and explicit loopback HTTP test/proxy endpoints
@@ -251,7 +251,7 @@ model_scopes:
     provider: pi
     model: provider/exact-model-id
     context_max_tokens: 32000
-  function:
+  code:
     provider: pi
     model: provider/exact-model-id
     reasoning_effort: high
@@ -275,7 +275,7 @@ catalog without adding them to a scope in `config.yaml`. The picker reads
 `agy models` for exact slugs and display names, including model variants, and
 Pi's `get_available_models` RPC catalog, including custom local models from Pi's
 `models.json`. For each CLI it uses the first matching configured `cli_path`
-(Analyze, Bug, then Function), or `agy`/`pi` on the daemon's `PATH` if no scope
+(Analyze, Bug, then Code), or `agy`/`pi` on the daemon's `PATH` if no scope
 uses that CLI. No prompt or project context is sent during discovery. Agy may
 contact its catalog service; Pi discovery uses its offline inventory.
 
@@ -386,7 +386,7 @@ smoke test with their own resources.
 ## Agent roles and run limits
 
 `agent_runtime.roles` supplies Creation, Testing and Review profiles when an API
-request omits a model choice. Defaults are `bug`, `function`, and `analyze`.
+request omits a model choice. Defaults are `bug`, `code`, and `analyze`.
 Explicit catalog selections take precedence. Resolved roles are frozen at
 admission, saved with the workflow, and require the same profile-specific remote
 consent as explicit choices. The runtime never silently switches providers.
@@ -395,7 +395,7 @@ consent as explicit choices. The runtime never silently switches providers.
 agent_runtime:
   roles:
     creation: bug
-    testing: function
+    testing: code
     review: analyze
   max_model_calls: 1024
   max_tool_calls: 4096
@@ -518,7 +518,7 @@ explicit reset before new work; reset follows current configuration defaults.
 In the TUI, Settings has separate Models, Roles & Budgets, and Skills views.
 Use `:agent-settings main` or `:agent-settings task` to explicitly load the main
 checkout or selected task worktree. Opening the views is passive; settings refresh
-reads local metadata without provider discovery. `:agent-role creation function`
+reads local metadata without provider discovery. `:agent-role creation code`
 assigns a workflow role; `:agent-budget model_calls 12` reduces a budget within its
 configured ceiling. Both require confirmation before saving. Select a skill and
 press Enter to validate its captured metadata and resource hashes, or `e` to
@@ -551,8 +551,8 @@ at most eight distinct, non-overlapping directories. Reindex after adding or
 changing a skill. Excluded files and escaping symlinks cannot become skill context.
 Loading configuration and browsing project state do not run skill tools.
 
-Tool-capable Function profiles use the native ADK `list_skills`, `load_skill`, and
-`load_skill_resource` tools during plan investigation and declaration explanation.
+Tool-capable Code profiles use the native ADK `list_skills`, `load_skill`, and
+`load_skill_resource` tools during plan investigation and file explanation.
 Only names and descriptions enter the initial prompt. Instructions and indexed
 resources under `references/`, `assets/`, and `scripts/` load on demand. Completion-only
 profiles retain their existing behavior and do not advertise these tools.
@@ -752,9 +752,9 @@ reject evidence retained by an unfinished run or change recovery. Generic ADK
 artifact operations cannot delete recovery-pinned proposal/check snapshots. There
 is no automatic cleanup, source write or external upload.
 
-Explicit declaration explanations use an ADK investigation with the selected
-Function profile when it supports tools. Search, snippet, symbol, import and
-heuristic impact tools admit only the selected declaration's source span and
+Explicit file explanations use an ADK investigation with the selected
+Code profile when it supports tools. Search, snippet, import and
+heuristic impact tools admit only the selected file's source span and
 indexed metadata. Other paths or line ranges return `scope_required`; they do
 not widen consent. The current-check tool returns source-free, proposal-bound
 check states; absent or stale evidence never implies a pass. It does not execute
@@ -765,7 +765,7 @@ the private journal. Limits survive provider retries: eight model turns, 24 tool
 calls, 16 KiB per tool payload and 128 KiB of aggregate tool output. Retrieval
 returns at most 20 evidence items and 8 KiB of text, with file/hash/span provenance.
 Source reads are capped at 1 MiB. Model context is capped at 128 KiB and the
-Function profile's context token estimate (four bytes per token), whichever is
+Code profile's context token estimate (four bytes per token), whichever is
 smaller. Source, policy, instructions and project identity are rechecked at
 dispatch and publication; a changed scope stops the investigation.
 
@@ -848,14 +848,14 @@ existing receipts remain readable. Review is bounded to 128 live candidates and
 contain admitted source text; credentials are excluded.
 
 `integrations.google_search: true` enables a separate explicit research action
-using the Function profile. It requires native Gemini or Vertex and a supported
+using the Code profile. It requires native Gemini or Vertex and a supported
 text model: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
 `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`,
 `gemini-3.1-pro-preview` or `gemini-3-flash-preview`. Unknown models remain
 unavailable until their capability is verified. Each request separately confirms
 search, source sharing and any remote-provider destination. A question is limited
 to 2048 UTF-8 bytes, with up to eight explicit path/hash selections and a combined
-64 KiB context within the configured Function token estimate. Search never joins
+64 KiB context within the configured Code token estimate. Search never joins
 planning JSON or function tools and does not use provider caching or retries.
 The private report displays validated inline/aggregate citations and the original
 Google Search suggestions in a sandboxed, script-free frame. Search metadata is
@@ -893,7 +893,7 @@ grant cancels and joins admitted operations; restart retains no connection grant
 Delegation requires explicit analysis/review intent, a selected advertised skill,
 a question up to 2048 UTF-8 bytes, source-sharing confirmation and up to eight
 current path/hash selections. The combined prompt is bounded by 64 KiB and the
-Function context estimate. Ambient memory, skills and history are excluded.
+Code context estimate. Ambient memory, skills and history are excluded.
 Each card/RPC request consumes a tool-call allowance; the total operation uses
 the configured timeout. Remote model/search call counts remain unknown. Optional
 valid ADK token metadata is labelled `remote_reported`, never measured locally.

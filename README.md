@@ -13,8 +13,8 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 
 ## How It Pursues the Goal
 
-1. **Deterministic Indexing & Context Policy**: Indexes repository files, symbols, and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
-2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `function`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
+1. **Deterministic Indexing & Context Policy**: Indexes repository files and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
+2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `code`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
 3. **Native ADK Workflows with Host-Owned Guards**: Sequential change stages, parallel specialist reviews, conditional analysis and bounded repair loops share admitted budgets. Generation and test generation precede isolated checks; model advice and human approval remain separate. Repairs are off by default and can be explicitly enabled for at most two iterations. Review every changed file before **Apply**, then explicitly integrate a worktree or use guarded **Undo**.
 4. **Keyboard-First Pure Go TUI**: Provides a responsive workspace (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with a project dashboard, searchable commands, arrow/Vim navigation, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
 
@@ -148,7 +148,7 @@ Mini-Orca enforces strict layered ownership across the Go daemon and Go TUI:
 | `internal/app` | Admission, native workflow hosts, analysis, mission scheduling, consent, Git isolation, and guarded source mutation. |
 | `internal/app/agentruntime` | ADK Go agents, model adapters, graphs, tools, plugins and optional service adapters; the only package importing the SDK. |
 | `internal/app/agentstate` | Private durable sessions, invocations, budgets, checkpoints, artifacts, curated memory and mission records. |
-| `internal/project` | Repository facts, symbol/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
+| `internal/project` | Repository facts, file/import indexing, context composition, structured `ProjectDocsReport` synthesis, and `AGENTS.md` instructions. |
 | `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their persisted schemas. |
 | `internal/llm`, `internal/config` | Compatible HTTP/CLI transport, provider capabilities, explicit Gemini/Vertex configuration, and three model scopes. |
 | `internal/agenteval`, `internal/insighteval` | Synthetic agent task/trajectory evaluation and engineering-insight evaluation, separate from ordinary use. |
@@ -165,9 +165,9 @@ authentication, privacy, bounds and recovery behavior.
 
 | Dependency | Scope | Purpose |
 | --- | --- | --- |
-| **Go 1.27.3+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, AST/symbol indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
+| **Go 1.27.3+** (`go.mod`, `gopkg.in/yaml.v3`) | Daemon, TUI & CLI | Core HTTP daemon, terminal UI, file/import indexing, analysis orchestration, and atomic `.mini-orca/` storage. |
 | **Google ADK Go v2.6.0 / GenAI Go v1.74.0** | Agent runtime | Typed model/tool events, native graphs, sessions and capability-gated Google services. |
-| **Model Providers** (compatible HTTP, Gemini, Vertex, `agy`, `pi`) | AI Transport | Explicit local or remote execution for `analyze`, `bug`, and `function`; CLI profiles remain completion-only. |
+| **Model Providers** (compatible HTTP, Gemini, Vertex, `agy`, `pi`) | AI Transport | Explicit local or remote execution for `analyze`, `bug`, and `code`; CLI profiles remain completion-only. |
 | **Go Quality & Race Gates** | Verification | Deterministic TUI/daemon verification (`make check`) and static/reachability/complexity/clone checks (`make quality`). |
 
 ## Supported ADK capabilities
@@ -179,7 +179,7 @@ provider fallback occurs. See [configuration and limits](CONFIG.md), the
 | Capability | Delivered behavior and boundary |
 | --- | --- |
 | Models and streaming | Compatible HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles provide completion only. Partial output never becomes an approved proposal. |
-| Repository tools | Planning and declaration investigations use captured snippets, symbols, imports, search and impact evidence. Tools cannot expand their admitted scope or write source. |
+| Repository tools | Planning and file investigations use captured snippets, imports, search and impact evidence. Tools cannot expand their admitted scope or write source. |
 | Workflow graphs | Sequential stages, parallel specialist reviews, conditional branches, bounded repairs and durable human-input checkpoints run through ADK with host-owned checks and budgets. |
 | Sessions and artifacts | Local private journals and immutable versioned evidence support explicit inspection/export and guarded deletion. Restart retains history and charges, not execution authority. |
 | Memory, skills and context | Curated memory requires acceptance and current provenance; indexed ADK skill packages load within admitted scope. Compaction and context caching are optional; remote cache retention requires consent. |
@@ -257,7 +257,7 @@ detected; control cases retain their actual failed/incomplete/canceled states.
 Receipts omit source, paths, prompts, model answers, credentials and raw errors.
 Unavailable build metadata remains labeled `unavailable`.
 
-Live mode sends only the embedded synthetic corpus to the configured **function**
+Live mode sends only the embedded synthetic corpus to the configured **code**
 profile and excludes negative controls. It requires an explicit command and
 campaign limits. Omitting `--confirm-live` prints the source/destination disclosure
 without sending a request:

@@ -147,7 +147,7 @@ func TestEngineeringInsightEvaluationV2QualificationFixturesHaveSealedAbsentStat
 
 func TestEngineeringInsightEvaluationMalformedOutputIsSeparateFromControls(t *testing.T) {
 	target := project.IndexFile{Path: "fixture.go", Language: "Go"}
-	validParent := `{"purpose":"Summarizes the fixture.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}`
+	validParent := `{"purpose":"Summarizes the fixture.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[]`
 	for name, output := range map[string]string{
 		"unknown parent field": validParent + `,"unexpected":true}`,
 		"trailing JSON":        validParent + `}{}`,

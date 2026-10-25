@@ -21,7 +21,7 @@ type workflowChoice struct {
 }
 
 func (s *State) workflowRoles(path string) client.AgentRoles {
-	roles := client.AgentRoles{Creation: "bug", Testing: "function", Review: "analyze"}
+	roles := client.AgentRoles{Creation: "bug", Testing: "code", Review: "analyze"}
 	v := s.AgentSettings
 	if s.settingsScopeCurrent(v) && v.Data != nil && v.Scope.WorktreePath == path {
 		roles = v.Data.Roles

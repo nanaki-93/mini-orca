@@ -60,7 +60,7 @@ func NewAgentContext(index *ProjectIndex, scopes []AgentScope, read func(context
 		if _, exists := result.scopes[scope.Path]; exists {
 			return nil, fmt.Errorf("duplicate agent scope")
 		}
-		file.Imports, file.Symbols = slices.Clone(file.Imports), slices.Clone(file.Symbols)
+		file.Imports = slices.Clone(file.Imports)
 		file.Diagnostics = nil
 		result.files[scope.Path], result.scopes[scope.Path] = *file, scope
 	}
@@ -98,7 +98,7 @@ func (c *AgentContext) Retrieve(ctx context.Context, kind string, query AgentQue
 				result.add(match, kind, line, "exact")
 			}
 		}
-	case "inspect_symbols", "inspect_imports", "inspect_impact":
+	case "inspect_imports", "inspect_impact":
 		c.indexEvidence(&result, kind, scope)
 	default:
 		return result, fmt.Errorf("unsupported repository query")
@@ -116,16 +116,6 @@ func outsideAgentSpan(scope AgentScope, query AgentQuery) bool {
 func (c *AgentContext) indexEvidence(result *AgentEvidenceResult, kind string, scope AgentScope) {
 	file := c.files[scope.Path]
 	switch kind {
-	case "inspect_symbols":
-		for _, symbol := range file.Symbols {
-			if symbol.EndLine < scope.StartLine || symbol.StartLine > scope.EndLine {
-				continue
-			}
-			span := scope
-			span.StartLine = max(scope.StartLine, symbol.StartLine)
-			span.EndLine = min(scope.EndLine, symbol.EndLine)
-			result.add(span, kind, symbol.Name+": "+symbol.Signature, symbol.Confidence)
-		}
 	case "inspect_imports":
 		for _, path := range file.Imports {
 			result.add(scope, kind, path, "indexed")
@@ -135,7 +125,7 @@ func (c *AgentContext) indexEvidence(result *AgentEvidenceResult, kind string, s
 		for _, path := range slices.Sorted(maps.Keys(c.files)) {
 			index.Files = append(index.Files, c.files[path])
 		}
-		impact := BuildImpactPreview(index, scope.Path, "")
+		impact := BuildImpactPreview(index, scope.Path)
 		for _, reference := range impact.References {
 			result.add(c.scopes[reference.Path], kind, reference.Reason, "heuristic")
 		}

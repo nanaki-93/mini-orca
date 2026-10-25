@@ -33,7 +33,7 @@ func missionExecutionTestState(task bool) *State {
 	v.Saved.Mission.Approved, v.Saved.Mission.Reviewed = true, []string{"helper", "use"}
 	v.Saved.Mission.Instructions = map[string]string{"main.go": "instructions", "new.go": "instructions"}
 	v.Catalog.CatalogRevision = 4
-	v.Settings.Roles = client.AgentRoles{Creation: "function", Testing: "function", Review: "function"}
+	v.Settings.Roles = client.AgentRoles{Creation: "code", Testing: "code", Review: "code"}
 	v.Repository = &GitRepository{ProjectIdentity: v.Scope.ProjectIdentity, GitIdentity: client.GitIdentity{Head: strings.Repeat("a", 40), Branch: "main"}, Root: v.Path, Available: true, AtRoot: true}
 	v.Trust = &ExecutionTrust{ProjectIdentity: v.Scope.ProjectIdentity, Trusted: true, Commands: [][]string{{"go", "test", "./..."}, {"go", "vet", "./..."}}}
 	r := client.MissionExecution{ID: missionExecutionUIID, Revision: 1, CatalogRevision: 4, Mission: v.Saved.Mission, State: "prepared", Base: v.Repository.GitIdentity, Current: client.MissionCheckpoint{ProjectRevision: v.Scope.ProjectRevision, Base: v.Repository.GitIdentity, Sources: slices.Clone(plan.Sources), Instructions: v.Saved.Mission.Instructions}}
@@ -205,7 +205,7 @@ func TestMissionExecutionTUIPreparesTrustsAndStartsOnlyConfirmedReadyChildren(t 
 			}
 			f.execution = prepared
 		case "start":
-			if !request.ConfirmExecution || !slices.Equal(request.ConfirmedProfiles, []string{"function"}) || request.Base != nil || request.ExecutionRevision != 1 {
+			if !request.ConfirmExecution || !slices.Equal(request.ConfirmedProfiles, []string{"code"}) || request.Base != nil || request.ExecutionRevision != 1 {
 				t.Error("start lost fixed allocation or provider consent")
 			}
 			f.execution.Execution.Revision++

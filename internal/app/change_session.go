@@ -363,15 +363,15 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessageRequest) (modelRuntime, error) {
 	profile := request.Profile
 	if profile == "" {
-		profile = "function"
+		profile = "code"
 	}
 	if !validModelSelection(profile) {
-		return modelRuntime{}, fmt.Errorf("choose a catalog model ID or configured analyze, bug or function profile")
+		return modelRuntime{}, fmt.Errorf("choose a catalog model ID or configured analyze, bug or code profile")
 	}
 	if err := s.validateModelSelections(ctx, []string{profile}); err != nil {
 		return modelRuntime{}, err
 	}
-	runtime, _ := s.selectedRuntime(config.FunctionModelScope, profile)
+	runtime, _ := s.selectedRuntime(config.CodeModelScope, profile)
 	if genTimeout := duration(s.runtimes.function.effective.Timeout); genTimeout > duration(runtime.effective.Timeout) {
 		runtime.effective.Timeout = genTimeout.String()
 	}

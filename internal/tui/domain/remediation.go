@@ -50,68 +50,6 @@ var actionablePrefixes = []string{
 	"handle ", "bound ", "pass ", "add ", "verify ", "enforce ", "preallocate ",
 }
 
-// MatchIndexedSymbolForFinding resolves the best-matching symbol and signature from indexed file symbols
-// using explicit symbol name, line span, or identifier mention in the finding title/cause.
-func MatchIndexedSymbolForFinding(symbols []client.SymbolInfo, targetName string, line int, title, cause string) (string, string) {
-	for _, sym := range symbols {
-		if targetName != "" && sym.Name == targetName {
-			return sym.Name, sym.Signature
-		}
-	}
-	if line > 0 {
-		for _, sym := range symbols {
-			if sym.StartLine <= line && (sym.EndLine >= line || sym.StartLine == line) {
-				return sym.Name, sym.Signature
-			}
-		}
-	}
-	return matchSymbolMentionInText(symbols, title+" "+cause)
-}
-
-func matchSymbolMentionInText(symbols []client.SymbolInfo, text string) (string, string) {
-	if strings.TrimSpace(text) == "" || len(symbols) == 0 {
-		return "", ""
-	}
-	var best client.SymbolInfo
-	for _, sym := range symbols {
-		short := shortSymbolIdentifier(sym.Name)
-		if len(short) < 3 {
-			continue
-		}
-		if containsIdentifierToken(text, sym.Name) || containsIdentifierToken(text, short) {
-			if len(sym.Name) > len(best.Name) {
-				best = sym
-			}
-		}
-	}
-	return best.Name, best.Signature
-}
-
-func shortSymbolIdentifier(name string) string {
-	if idx := strings.LastIndexByte(name, '.'); idx >= 0 {
-		return name[idx+1:]
-	}
-	return name
-}
-
-func containsIdentifierToken(text, ident string) bool {
-	if ident == "" {
-		return false
-	}
-	idx := strings.Index(text, ident)
-	if idx < 0 {
-		return false
-	}
-	beforeOK := idx == 0 || !isIdentByte(text[idx-1])
-	end := idx + len(ident)
-	afterOK := end >= len(text) || !isIdentByte(text[end])
-	return beforeOK && afterOK
-}
-
-func isIdentByte(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
-}
-
 // DistinctInsightEvidence returns non-redundant evidence from explicit finding evidence or model EngineeringInsight.
 func DistinctInsightEvidence(evidence, cause string, insight *client.EngineeringInsight) string {
 	trimmedCause := strings.TrimSpace(cause)
@@ -130,12 +68,12 @@ func DistinctInsightEvidence(evidence, cause string, insight *client.Engineering
 }
 
 // SynthesizeIssueRemediation produces a specific, finding-grounded remediation plan when TaskSpec is absent.
-func SynthesizeIssueRemediation(title, cause, category, rule, source, path, symbol string, line int, insight *client.EngineeringInsight) string {
+func SynthesizeIssueRemediation(title, cause, category, rule, source, path string, line int, insight *client.EngineeringInsight) string {
 	if fromInsight := remediationFromInsight(insight, cause); fromInsight != "" {
 		return fromInsight
 	}
 	subject := conciseSubject(title, cause)
-	target := formatRemediationTarget(path, symbol, line)
+	target := formatRemediationTarget(path, line)
 	testSuffix := formatCompanionTestSuffix(path)
 	if fromTool := remediationForToolSource(source, rule, subject, target); fromTool != "" {
 		return fromTool
@@ -149,7 +87,7 @@ func SynthesizeIssueRemediation(title, cause, category, rule, source, path, symb
 			return fmt.Sprintf(r.template, subject, target, testSuffix)
 		}
 	}
-	return fallbackCategoryRemediation(category, subject, cause, formatRemediationNounTarget(path, symbol, line), testSuffix)
+	return fallbackCategoryRemediation(category, subject, cause, formatRemediationNounTarget(path, line), testSuffix)
 }
 
 func remediationFromInsight(insight *client.EngineeringInsight, cause string) string {
@@ -238,30 +176,23 @@ func conciseCauseDetail(subject, cause string) string {
 	return fmt.Sprintf(" (%s)", c)
 }
 
-func formatRemediationTarget(path, symbol string, line int) string {
-	noun := formatRemediationNounTarget(path, symbol, line)
-	if strings.TrimSpace(symbol) != "" || noun == "target scope" {
+func formatRemediationTarget(path string, line int) string {
+	noun := formatRemediationNounTarget(path, line)
+	if noun == "target scope" {
 		return "in " + noun
 	}
 	return "at " + noun
 }
 
-func formatRemediationNounTarget(path, symbol string, line int) string {
+func formatRemediationNounTarget(path string, line int) string {
 	loc := strings.TrimSpace(path)
 	if loc != "" && line > 0 {
 		loc = fmt.Sprintf("%s:%d", loc, line)
 	}
-	sym := strings.TrimSpace(symbol)
-	switch {
-	case sym != "" && loc != "":
-		return fmt.Sprintf("%s (%s)", sym, loc)
-	case sym != "":
-		return sym
-	case loc != "":
+	if loc != "" {
 		return loc
-	default:
-		return "target scope"
 	}
+	return "target scope"
 }
 
 func formatCompanionTestSuffix(path string) string {
@@ -286,7 +217,7 @@ func deriveCompanionTestPath(path string) string {
 // SynthesizeIssueVerification builds a specific verification plan for Issue Detail when AcceptanceCriteria are absent.
 func SynthesizeIssueVerification(cur IssueRow, index *client.ProjectIndex) string {
 	subject := conciseSubject(cur.Title, cur.Cause)
-	nounTarget := formatRemediationNounTarget(cur.Path, cur.Symbol, cur.Line)
+	nounTarget := formatRemediationNounTarget(cur.Path, cur.Line)
 	scope := EnsureChangeTestPaths([]string{cur.Path}, index)
 	testTarget := deriveCompanionTestPath(cur.Path)
 	for _, sp := range scope {

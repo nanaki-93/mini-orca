@@ -10,29 +10,27 @@ import (
 
 func TestParsePerformanceFindingsKeepsOnlyAnchoredSourceBasedOpportunities(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
 	valid := validPerformanceFindingsJSON()
-	findings, warning, err := ParsePerformanceFindings(valid, "main.go", source, symbols)
+	findings, warning, err := ParsePerformanceFindings(valid, "main.go", source)
 	if err != nil || warning != "" || len(findings) != 1 || findings[0].ID == "" {
 		t.Fatalf("findings = %+v, %q, %v", findings, warning, err)
 	}
-	partial := strings.Replace(valid, `"start_line":3,"end_line":3,"symbol":"Run"`, `"start_line":30,"end_line":30`, 1)
-	if _, _, err := ParsePerformanceFindings(partial, "main.go", source, symbols); err == nil {
+	partial := strings.Replace(valid, `"start_line":3,"end_line":3`, `"start_line":30,"end_line":30`, 1)
+	if _, _, err := ParsePerformanceFindings(partial, "main.go", source); err == nil {
 		t.Fatal("all-invalid nonempty output became empty success")
 	}
 }
 
 func TestParsePerformanceFindingsAllowsEmptyAndWarnsForInvalidAnchors(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
-	findings, warning, err := ParsePerformanceFindings(`{"findings":[]}`, "main.go", source, symbols)
+	findings, warning, err := ParsePerformanceFindings(`{"findings":[]}`, "main.go", source)
 	if err != nil || warning != "" || len(findings) != 0 {
 		t.Fatalf("empty findings = %+v, %q, %v", findings, warning, err)
 	}
 	validFinding := strings.TrimSuffix(strings.TrimPrefix(validPerformanceFindingsJSON(), `{"findings":[`), `]}`)
-	invalidAnchor := strings.Replace(validFinding, `"start_line":3,"end_line":3,"symbol":"Run"`, `"start_line":30,"end_line":30`, 1)
+	invalidAnchor := strings.Replace(validFinding, `"start_line":3,"end_line":3`, `"start_line":30,"end_line":30`, 1)
 	mixed := `{"findings":[` + validFinding + `,` + invalidAnchor + `]}`
-	findings, warning, err = ParsePerformanceFindings(mixed, "main.go", source, symbols)
+	findings, warning, err = ParsePerformanceFindings(mixed, "main.go", source)
 	if err != nil || len(findings) != 1 || warning != "Some model opportunities were omitted because their source anchors were invalid." {
 		t.Fatalf("mixed findings = %+v, %q, %v", findings, warning, err)
 	}
@@ -40,12 +38,11 @@ func TestParsePerformanceFindingsAllowsEmptyAndWarnsForInvalidAnchors(t *testing
 
 func TestParsePerformanceFindingsWarnsTruthfullyForMixedInvalidFieldsAndEnums(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
 	validFinding := strings.TrimSuffix(strings.TrimPrefix(validPerformanceFindingsJSON(), `{"findings":[`), `]}`)
 	missingField := strings.Replace(validFinding, `"title":"Repeated work"`, `"title":""`, 1)
 	invalidEnum := strings.Replace(validFinding, `"category":"cpu"`, `"category":"network"`, 1)
 	output := `{"findings":[` + validFinding + `,` + missingField + `,` + invalidEnum + `]}`
-	findings, warning, err := ParsePerformanceFindings(output, "main.go", source, symbols)
+	findings, warning, err := ParsePerformanceFindings(output, "main.go", source)
 	if err != nil || len(findings) != 1 || warning != "Some model opportunities were omitted because required fields or category, potential impact, or confidence values were invalid." {
 		t.Fatalf("mixed findings = %+v, %q, %v", findings, warning, err)
 	}
@@ -53,7 +50,6 @@ func TestParsePerformanceFindingsWarnsTruthfullyForMixedInvalidFieldsAndEnums(t 
 
 func TestParsePerformanceFindingsWarnsTruthfullyForOneInvalidReason(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
 	validFinding := strings.TrimSuffix(strings.TrimPrefix(validPerformanceFindingsJSON(), `{"findings":[`), `]}`)
 	for _, test := range []struct {
 		name    string
@@ -73,7 +69,7 @@ func TestParsePerformanceFindingsWarnsTruthfullyForOneInvalidReason(t *testing.T
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			output := `{"findings":[` + validFinding + `,` + test.invalid + `]}`
-			findings, warning, err := ParsePerformanceFindings(output, "main.go", source, symbols)
+			findings, warning, err := ParsePerformanceFindings(output, "main.go", source)
 			if err != nil || len(findings) != 1 || warning != test.warning {
 				t.Fatalf("mixed findings = %+v, %q, %v", findings, warning, err)
 			}
@@ -81,9 +77,8 @@ func TestParsePerformanceFindingsWarnsTruthfullyForOneInvalidReason(t *testing.T
 	}
 }
 
-func TestParsePerformanceFindingsValidatesFieldsEnumsAndSymbolAnchors(t *testing.T) {
+func TestParsePerformanceFindingsValidatesFieldsEnumsAndLineAnchors(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
 	for _, test := range []struct {
 		name   string
 		output string
@@ -91,10 +86,10 @@ func TestParsePerformanceFindingsValidatesFieldsEnumsAndSymbolAnchors(t *testing
 		{name: "missing required field", output: strings.Replace(validPerformanceFindingsJSON(), `"title":"Repeated work"`, `"title":""`, 1)},
 		{name: "invalid category", output: strings.Replace(validPerformanceFindingsJSON(), `"category":"cpu"`, `"category":"network"`, 1)},
 		{name: "reversed source range", output: strings.Replace(validPerformanceFindingsJSON(), `"start_line":3,"end_line":3`, `"start_line":4,"end_line":3`, 1)},
-		{name: "outside symbol range", output: strings.Replace(validPerformanceFindingsJSON(), `"start_line":3,"end_line":3`, `"start_line":1,"end_line":1`, 1)},
+		{name: "outside file range", output: strings.Replace(validPerformanceFindingsJSON(), `"start_line":3,"end_line":3`, `"start_line":10,"end_line":10`, 1)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, _, err := ParsePerformanceFindings(test.output, "main.go", source, symbols); err == nil {
+			if _, _, err := ParsePerformanceFindings(test.output, "main.go", source); err == nil {
 				t.Fatal("invalid finding was accepted")
 			}
 		})
@@ -103,10 +98,9 @@ func TestParsePerformanceFindingsValidatesFieldsEnumsAndSymbolAnchors(t *testing
 
 func TestParsePerformanceFindingsOmitsMalformedOptionalInsight(t *testing.T) {
 	source := "package main\nfunc Run() {\n for range []int{1} {}\n}\n"
-	symbols := []SymbolInfo{{Name: "Run", StartLine: 2, EndLine: 4}}
 	for _, insight := range []string{`"not an object"`, `{"mechanism":"m"}`, `{"mechanism":"m","why_it_matters_here":"w","unknown":true}`, `null`} {
-		output := strings.Replace(validPerformanceFindingsJSON(), `"symbol":"Run"`, `"symbol":"Run","engineering_insight":`+insight, 1)
-		findings, warning, err := ParsePerformanceFindings(output, "main.go", source, symbols)
+		output := strings.Replace(validPerformanceFindingsJSON(), `"end_line":3`, `"end_line":3,"engineering_insight":`+insight, 1)
+		findings, warning, err := ParsePerformanceFindings(output, "main.go", source)
 		if err != nil || warning != "" || len(findings) != 1 || findings[0].EngineeringInsight != nil {
 			t.Fatalf("findings with malformed insight %q = %+v, %q, %v", insight, findings, warning, err)
 		}
@@ -114,7 +108,7 @@ func TestParsePerformanceFindingsOmitsMalformedOptionalInsight(t *testing.T) {
 }
 
 func validPerformanceFindingsJSON() string {
-	return `{"findings":[{"category":"cpu","potential_impact":"medium","confidence":"low","title":"Repeated work","observed_pattern":"The loop repeats local work.","workload_conditions":"Only if the input collection grows.","recommendation":"Measure then cache safely.","tradeoff":"Caching retains memory.","verification_plan":"Benchmark representative input sizes.","start_line":3,"end_line":3,"symbol":"Run"}]}`
+	return `{"findings":[{"category":"cpu","potential_impact":"medium","confidence":"low","title":"Repeated work","observed_pattern":"The loop repeats local work.","workload_conditions":"Only if the input collection grows.","recommendation":"Measure then cache safely.","tradeoff":"Caching retains memory.","verification_plan":"Benchmark representative input sizes.","start_line":3,"end_line":3}]}`
 }
 
 func TestPerformanceCacheIsSeparateSourceFreeAndFreshnessBound(t *testing.T) {

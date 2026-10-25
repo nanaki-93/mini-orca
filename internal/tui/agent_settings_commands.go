@@ -78,8 +78,8 @@ func (s *State) confirmSettingsControl(values *client.AgentPreferences, action, 
 }
 
 func (s *State) editAgentRole(fields []string) {
-	if len(fields) != 2 || !slices.Contains([]string{"analyze", "bug", "function"}, fields[1]) {
-		s.Error = "Use :agent-role creation|testing|review analyze|bug|function."
+	if len(fields) != 2 || !slices.Contains([]string{"analyze", "bug", "code"}, fields[1]) {
+		s.Error = "Use :agent-role creation|testing|review analyze|bug|code."
 		return
 	}
 	data := s.editableSettings()

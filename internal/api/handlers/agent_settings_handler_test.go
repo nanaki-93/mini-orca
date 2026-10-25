@@ -18,7 +18,7 @@ import (
 func TestAgentSettingsHTTPRequiresCurrentConfirmedCompleteValues(t *testing.T) {
 	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	cfg := scopedHandlerConfig("http://127.0.0.1:1")
-	cfg.ModelScopes.Function.APIKey = "SETTINGS_SECRET_MUST_NOT_LEAK"
+	cfg.ModelScopes.Code.APIKey = "SETTINGS_SECRET_MUST_NOT_LEAK"
 	service, err := app.New(cfg, fixture.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestAgentSettingsHTTPRequiresCurrentConfirmedCompleteValues(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.Get(w, httptest.NewRequest("GET", "/?"+query.Encode(), nil))
 	var view app.AgentSettings
-	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil || w.Code != 200 || view.State != "configured" || w.Header().Get("Cache-Control") != "no-store" || strings.Contains(w.Body.String(), cfg.ModelScopes.Function.APIKey) {
+	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil || w.Code != 200 || view.State != "configured" || w.Header().Get("Cache-Control") != "no-store" || strings.Contains(w.Body.String(), cfg.ModelScopes.Code.APIKey) {
 		t.Fatal("settings inventory", w.Code, w.Body.String(), err)
 	}
 	post := func(data []byte) *httptest.ResponseRecorder {

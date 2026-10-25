@@ -124,13 +124,12 @@ func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapsho
 
 func performancePrompt(source string, analysis project.Analysis, file project.IndexFile) (string, error) {
 	facts, err := json.Marshal(struct {
-		Name      string               `json:"name"`
-		Type      string               `json:"type"`
-		Path      string               `json:"path"`
-		Language  string               `json:"language"`
-		LineCount int                  `json:"line_count"`
-		Symbols   []project.SymbolInfo `json:"symbols"`
-	}{analysis.Name, analysis.Type, file.Path, file.Language, file.LineCount, file.Symbols})
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Path      string `json:"path"`
+		Language  string `json:"language"`
+		LineCount int    `json:"line_count"`
+	}{analysis.Name, analysis.Type, file.Path, file.Language, file.LineCount})
 	if err != nil {
 		return "", err
 	}
@@ -139,5 +138,4 @@ func performancePrompt(source string, analysis project.Analysis, file project.In
 
 const performanceReviewAnchorGuidance = "Keep each finding explanation concise and under 1,000 characters; escape quotes and line breaks inside JSON strings. " +
 	"Line numbers count every line of SOURCE, including blank lines, and must satisfy 1 <= start_line <= end_line <= FILE_FACTS.line_count. " +
-	"Return start_line and end_line for the observed operation or pattern, including ranges spanning multiple declarations when relevant. " +
-	"Do not return a symbol field. The application will derive any enclosing declaration from the indexed line range."
+	"Return start_line and end_line for the observed operation or pattern."

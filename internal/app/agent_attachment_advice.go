@@ -91,7 +91,7 @@ func (s *Service) prepareAttachmentAdvice(ctx context.Context, request Attachmen
 	if !llm.SupportsAttachments(s.runtimes.function.profile) || !request.ConfirmSourceSharing {
 		return prepared, fmt.Errorf("attachment advice requires a supported Function profile and explicit media-sharing confirmation")
 	}
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := s.RequireRemoteConfirmation(config.CodeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return prepared, err
 	}
 	if err := validateExternalQuestion(request.Question, nil); err != nil {

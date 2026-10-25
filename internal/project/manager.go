@@ -210,7 +210,7 @@ func (m *Manager) updateIndexedFileStatus(normalized, status string) error {
 	return fmt.Errorf("indexed file not found: %s", normalized)
 }
 
-func (m *Manager) ImpactPreview(relative, symbol string) (ImpactPreview, error) {
+func (m *Manager) ImpactPreview(relative string) (ImpactPreview, error) {
 	if _, err := m.IndexedFile(relative); err != nil {
 		return ImpactPreview{}, err
 	}
@@ -218,7 +218,7 @@ func (m *Manager) ImpactPreview(relative, symbol string) (ImpactPreview, error) 
 	if err != nil {
 		return ImpactPreview{}, err
 	}
-	return BuildImpactPreview(index, relative, symbol), nil
+	return BuildImpactPreview(index, relative), nil
 }
 
 // IndexedFile returns one active-project file after canonical-path and policy
@@ -264,7 +264,6 @@ func (m *Manager) IndexedFile(relative string) (*IndexFile, error) {
 		if file.Path == normalized {
 			copy := file
 			copy.Imports = append([]string(nil), file.Imports...)
-			copy.Symbols = append([]SymbolInfo(nil), file.Symbols...)
 			copy.Diagnostics = append([]Diagnostic(nil), file.Diagnostics...)
 			return &copy, nil
 		}
@@ -335,7 +334,6 @@ func cloneIndex(source *ProjectIndex) *ProjectIndex {
 	for i, file := range source.Files {
 		copy.Files[i] = file
 		copy.Files[i].Imports = append([]string(nil), file.Imports...)
-		copy.Files[i].Symbols = append([]SymbolInfo(nil), file.Symbols...)
 		copy.Files[i].Diagnostics = append([]Diagnostic(nil), file.Diagnostics...)
 	}
 	return &copy

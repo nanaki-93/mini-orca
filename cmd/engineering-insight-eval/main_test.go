@@ -29,11 +29,11 @@ func TestRunEvaluationModeCompletesOfflineDevelopmentLifecycle(t *testing.T) {
 	var calls int
 	provider := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		calls++
-		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "fixture-model", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
+		_ = json.NewEncoder(writer).Encode(map[string]any{"model": "fixture-model", "choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": `{"purpose":"summary","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[]}`}, "finish_reason": "stop"}}, "usage": map[string]int{"completion_tokens": 7}})
 	}))
 	defer provider.Close()
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	configText := "model_scopes:\n  analyze: {api_base_url: " + provider.URL + ", model: fixture-model}\n  bug: {api_base_url: " + provider.URL + ", model: fixture-model}\n  function: {api_base_url: " + provider.URL + ", model: fixture-model}\n"
+	configText := "model_scopes:\n  analyze: {api_base_url: " + provider.URL + ", model: fixture-model}\n  bug: {api_base_url: " + provider.URL + ", model: fixture-model}\n  code: {api_base_url: " + provider.URL + ", model: fixture-model}\n"
 	if err := os.WriteFile(configPath, []byte(configText), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestEvaluationBugProfilePreservesExplicitSamplingControls(t *testing.T) {
     min_p: 0
     presence_penalty: 0
     repeat_penalty: 1
-  function: {api_base_url: http://127.0.0.1:1234/v1, model: function}
+  code: {api_base_url: http://127.0.0.1:1234/v1, model: code}
 `
 	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
 		t.Fatal(err)

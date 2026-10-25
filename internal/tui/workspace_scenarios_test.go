@@ -14,7 +14,7 @@ func workspaceSampleState() *State {
 	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "fixture", ProjectRevision: "rev-1"}, Name: "atlas", Path: "/workspace/atlas", Type: "Go", FileCount: 128, TotalLines: 18420}
 	s.Repository = &GitRepository{Available: true, GitIdentity: GitIdentity{Branch: "main"}}
 	s.WorkspaceTrust = true
-	s.Models = &ModelCatalog{Scopes: map[string]Model{"analyze": {Model: "local-analyst"}, "bug": {Model: "local-reviewer"}, "function": {Model: "local-coder"}}}
+	s.Models = &ModelCatalog{Scopes: map[string]Model{"analyze": {Model: "local-analyst"}, "bug": {Model: "local-reviewer"}, "code": {Model: "local-coder"}}}
 	s.Findings = []Finding{
 		{ID: "timeout", Title: "Propagate request deadlines to the storage client", Message: "The downstream call ignores cancellation.", Severity: "high", Category: "bugs", Status: "open", Location: SourceAnchor{Path: "internal/storage/client.go", StartLine: 84}},
 		{ID: "path", Title: "Validate upload paths before opening files", Message: "Check containment before writing uploads.", Severity: "high", Category: "security", Status: "open", Location: SourceAnchor{Path: "internal/api/uploads.go", StartLine: 32}},

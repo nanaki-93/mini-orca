@@ -38,7 +38,7 @@ func TestWorkflowSpecialistRoutingAndEvidenceLabels(t *testing.T) {
 	}
 	s, _, session := workflowService(t, [3]func() string{func() string { return workflowImplementation }, func() string { return workflowTests }, func() string { return workflowApproval }})
 	session.Kind = "performance"
-	w := &ChangeWorkflow{Models: workflowRequest(session).Models, Specialists: s.prepareWorkflowSpecialists(session, "function")}
+	w := &ChangeWorkflow{Models: workflowRequest(session).Models, Specialists: s.prepareWorkflowSpecialists(session, "code")}
 	if err := validateWorkflowSpecialists(w); err != nil || w.Specialists[3].Evidence != "unmeasured" {
 		t.Fatalf("performance advice was promoted: %+v %v", w.Specialists, err)
 	}
@@ -124,7 +124,7 @@ func TestWorkflowSpecialistsShareProposalAndJoinActionableFindings(t *testing.T)
 		t.Fatalf("partial review became approval: %+v %v", active, err)
 	}
 	for _, report := range active.Workflow.Specialists {
-		if report.Status != "running" || report.Model.Profile != "function" {
+		if report.Status != "running" || report.Model.Profile != "code" {
 			t.Fatalf("missing admitted reviewer progress: %+v", report)
 		}
 	}

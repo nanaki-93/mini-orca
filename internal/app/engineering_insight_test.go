@@ -8,8 +8,8 @@ import (
 )
 
 func TestOptionalInsightsDoNotRejectSemanticParents(t *testing.T) {
-	target := project.IndexFile{Path: "main.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"engineering_insight":{"mechanism":"A cache entry must remain tied to the reviewed file.","why_it_matters_here":"A late model result otherwise looks current after the source changes.","tradeoff_or_failure_mode":"More identity inputs make stale results unavailable sooner.","transferable_lesson":"Change the file hash and verify the cache reports stale."},"risks":[{"category":"bugs","severity":"low","summary":"A conditional risk.","engineering_insight":{"mechanism":2}}],"suggestions":[{"title":"Keep identity","summary":"Retain the hash.","engineering_insight":{"mechanism":"Hashes bind advice to source.","why_it_matters_here":"Readers can see stale advice without treating it as current evidence.","tradeoff_or_failure_mode":"Additional identity comparisons can invalidate cached advice.","transferable_lesson":"Change the hash and verify the cached analysis becomes stale."}}],"symbol_explanations":{}}`
+	target := project.IndexFile{Path: "main.go", Language: "Go"}
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"engineering_insight":{"mechanism":"A cache entry must remain tied to the reviewed file.","why_it_matters_here":"A late model result otherwise looks current after the source changes.","tradeoff_or_failure_mode":"More identity inputs make stale results unavailable sooner.","transferable_lesson":"Change the file hash and verify the cache reports stale."},"risks":[{"category":"bugs","severity":"low","summary":"A conditional risk.","engineering_insight":{"mechanism":2}}],"suggestions":[{"title":"Keep identity","summary":"Retain the hash.","engineering_insight":{"mechanism":"Hashes bind advice to source.","why_it_matters_here":"Readers can see stale advice without treating it as current evidence.","tradeoff_or_failure_mode":"Additional identity comparisons can invalidate cached advice.","transferable_lesson":"Change the hash and verify the cached analysis becomes stale."}}]}`
 	parsed, err := parseSemanticReviewResponse(output, target, "package main\nfunc Run() {}")
 	if err != nil || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight == nil {
 		t.Fatalf("parsed semantic insight = %+v, %v", parsed, err)
@@ -18,12 +18,12 @@ func TestOptionalInsightsDoNotRejectSemanticParents(t *testing.T) {
 }
 
 func TestFileAnalysisInsightUsesCompleteGroundedAdviceOrOmission(t *testing.T) {
-	target := project.IndexFile{Path: "gate.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Gate.Wait", Signature: "func (g *Gate) Wait(ctx context.Context)", Confidence: "exact", AtomicTarget: true}}}
+	target := project.IndexFile{Path: "gate.go", Language: "Go"}
 	lockSource := "package cases\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct { mu sync.Mutex }\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tdefer g.mu.Unlock()\n\t<-ctx.Done()\n}\n"
 	complete := `{"mechanism":"Wait holds g.mu while it blocks on context cancellation.","why_it_matters_here":"If another caller needs g.mu, the lock spans <-ctx.Done() and that caller waits.","tradeoff_or_failure_mode":"Releasing g.mu before waiting would let concurrent Wait calls stop serializing; whether that serialization is needed is not shown.","transferable_lesson":"Cancel one waiter while another acquires g.mu and expect the second caller to proceed only after release."}`
 	incomplete := `{"mechanism":"Wait has a mutex.","why_it_matters_here":"Use locks carefully."}`
 	parent := func(insight string) string {
-		return `{"purpose":"Waits for cancellation.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":` + insight + `}`
+		return `{"purpose":"Waits for cancellation.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"engineering_insight":` + insight + `}`
 	}
 
 	positive, err := parseSemanticReviewResponse(parent(complete), target, lockSource)
@@ -38,7 +38,7 @@ func TestFileAnalysisInsightUsesCompleteGroundedAdviceOrOmission(t *testing.T) {
 
 func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go"}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":{"mechanism":"risk","why_it_matters_here":"local"}}],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":{"mechanism":"  ","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}],"symbol_explanations":{},"engineering_insight":{"mechanism":"top","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}`
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","engineering_insight":{"mechanism":"risk","why_it_matters_here":"local"}}],"suggestions":[{"title":"Keep behavior","summary":"No change.","engineering_insight":{"mechanism":"  ","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}],"engineering_insight":{"mechanism":"top","why_it_matters_here":"local","tradeoff_or_failure_mode":"cost","transferable_lesson":"verify"}}`
 	parsed, err := parseSemanticReviewResponse(output, target, "package main\nfunc Run() {}")
 	if err != nil || parsed.Purpose != "Explains." || parsed.EngineeringInsight == nil || parsed.Risks[0].EngineeringInsight != nil || parsed.Suggestions[0].EngineeringInsight != nil {
 		t.Fatalf("optional rejection changed parent data: %+v, %v", parsed, err)
@@ -58,28 +58,28 @@ func TestFileAnalysisInsightDiagnosticsKeepRejectionsIsolatedByLocation(t *testi
 		t.Fatalf("suggestion diagnostic = %+v", diagnostics[2])
 	}
 	state := parsed.Diagnostics
-	if state.OptionalInsight() != "rejected" || state.SymbolExplanationsDegraded || len(state.TaskSpecDegradedRiskIndices) > 0 {
+	if state.OptionalInsight() != "rejected" || len(state.TaskSpecDegradedRiskIndices) > 0 {
 		t.Fatalf("insight rejection was not isolated: %+v", state)
 	}
 }
 
 func TestEvaluationOptionalStateSeparatesSymbolAndTaskSpecDegradation(t *testing.T) {
 	target := project.IndexFile{Path: "main.go", Language: "Go"}
-	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"}}],"suggestions":[],"symbol_explanations":{"unselected":"Not a declaration."}}`
+	output := `{"purpose":"Explains.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional.","task_spec":{"schema_version":"1"}}],"suggestions":[]}`
 	parsed, err := parseSemanticReviewResponse(output, target, "package main\nfunc Run() {}")
-	if err != nil || len(parsed.Risks) != 1 || parsed.Risks[0].TaskSpec != nil || len(parsed.SymbolExplanations) != 0 {
+	if err != nil || len(parsed.Risks) != 1 || parsed.Risks[0].TaskSpec != nil {
 		t.Fatalf("parent optional data was not isolated: %+v, %v", parsed, err)
 	}
 	state := parsed.Diagnostics
-	if state.OptionalInsight() != "omitted" || !state.Degraded() || !state.SymbolExplanationsDegraded || len(state.TaskSpecDegradedRiskIndices) != 1 || state.TaskSpecDegradedRiskIndices[0] != 0 {
+	if state.OptionalInsight() != "omitted" || !state.Degraded() || len(state.TaskSpecDegradedRiskIndices) != 1 || state.TaskSpecDegradedRiskIndices[0] != 0 {
 		t.Fatalf("non-insight degradation was merged into insight rejection: %+v", state)
 	}
 }
 
 func TestFileAnalysisInsightPreservesQualifiedUnknownCalleeBehavior(t *testing.T) {
-	target := project.IndexFile{Path: "verify.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Verify", Signature: "func Verify(ctx context.Context, verifier Verifier, user string) error", Confidence: "exact", AtomicTarget: true}}}
+	target := project.IndexFile{Path: "verify.go", Language: "Go"}
 	source := "package cases\n\nimport \"context\"\n\ntype Verifier interface { Check(context.Context, string) error }\n\nfunc Verify(ctx context.Context, verifier Verifier, user string) error {\n\treturn verifier.Check(ctx, user)\n}\n"
-	output := `{"purpose":"Delegates verification.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":{"mechanism":"Verify delegates to verifier.Check.","why_it_matters_here":"The selected file shows the call with ctx and user but not the verifier implementation, so authorization behavior is unknown here.","tradeoff_or_failure_mode":"Adding a local authorization check may duplicate or conflict with the callee's policy.","transferable_lesson":"Use a fake Verifier and verify the forwarded arguments; test authorization behavior where the implementation is available."}}`
+	output := `{"purpose":"Delegates verification.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"engineering_insight":{"mechanism":"Verify delegates to verifier.Check.","why_it_matters_here":"The selected file shows the call with ctx and user but not the verifier implementation, so authorization behavior is unknown here.","tradeoff_or_failure_mode":"Adding a local authorization check may duplicate or conflict with the callee's policy.","transferable_lesson":"Use a fake Verifier and verify the forwarded arguments; test authorization behavior where the implementation is available."}}`
 	parsed, err := parseSemanticReviewResponse(output, target, source)
 	if err != nil || parsed.EngineeringInsight == nil {
 		t.Fatalf("qualified unknown-callee insight = %+v, %v", parsed.EngineeringInsight, err)
@@ -159,7 +159,7 @@ func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testin
 	topLevel := `{"mechanism":"Process delegates one local operation.","why_it_matters_here":"The selected function calls the local operation once.","tradeoff_or_failure_mode":"Changing the call order can alter observable behavior.","transferable_lesson":"Exercise the call with a recording dependency and verify its order."}`
 	nested := `{"mechanism":"The suggestion changes one call site.","why_it_matters_here":"The proposed edit is scoped to Process.","tradeoff_or_failure_mode":"A different call can change the returned result.","transferable_lesson":"Run the focused behavior test after the edit."}`
 	response := func(location string, includeNested bool, value string) string {
-		base := `{"purpose":"Processes one item.","responsibilities":[],"dependencies":[],"side_effects":[],"symbol_explanations":{},"engineering_insight":` + topLevel
+		base := `{"purpose":"Processes one item.","responsibilities":[],"dependencies":[],"side_effects":[],"engineering_insight":` + topLevel
 		switch location {
 		case "risk":
 			if !includeNested {
@@ -213,8 +213,8 @@ func TestFileAnalysisNestedInsightSchemaPreservesParentAndCompleteness(t *testin
 
 func TestFileAnalysisInsightAllowsSourceBoundedUnlockBeforeWaitGuidance(t *testing.T) {
 	source := "package fixture\n\nimport (\n\t\"context\"\n\t\"sync\"\n)\n\ntype Gate struct { mu sync.Mutex }\n\nfunc (g *Gate) Wait(ctx context.Context) {\n\tg.mu.Lock()\n\tg.mu.Unlock()\n\t<-ctx.Done()\n}\n"
-	target := project.IndexFile{Path: "gate.go", Language: "Go", Symbols: []project.SymbolInfo{{Name: "Gate.Wait", Signature: "func (g *Gate) Wait(ctx context.Context)", Confidence: "exact", AtomicTarget: true}}}
-	response := `{"purpose":"Waits for cancellation after releasing a mutex.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{},"engineering_insight":{"mechanism":"Gate.Wait releases g.mu before blocking on <-ctx.Done(), so the source does not show a mutex held during the cancellation wait.","why_it_matters_here":"g.mu.Unlock() appears before <-ctx.Done() and this function has no later state publication or ownership transition.","tradeoff_or_failure_mode":"Adding a revalidation step here would invent a state transition that this source does not show.","transferable_lesson":"When reviewing lock scope, trace each Lock and Unlock around the blocking operation before proposing a concurrency test."}}`
+	target := project.IndexFile{Path: "gate.go", Language: "Go"}
+	response := `{"purpose":"Waits for cancellation after releasing a mutex.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"engineering_insight":{"mechanism":"Gate.Wait releases g.mu before blocking on <-ctx.Done(), so the source does not show a mutex held during the cancellation wait.","why_it_matters_here":"g.mu.Unlock() appears before <-ctx.Done() and this function has no later state publication or ownership transition.","tradeoff_or_failure_mode":"Adding a revalidation step here would invent a state transition that this source does not show.","transferable_lesson":"When reviewing lock scope, trace each Lock and Unlock around the blocking operation before proposing a concurrency test."}}`
 	parsed, err := parseSemanticReviewResponse(response, target, source)
 	if err != nil {
 		t.Fatal(err)

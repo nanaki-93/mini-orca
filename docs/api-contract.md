@@ -54,7 +54,7 @@ untrusted networks.
 | GET | `/health` | Liveness and daemon version. |
 | GET | `/status` | Daemon status and `shared_proposals` workflow identifier. |
 | GET | `/ui` | Self-contained local Web UI and side-by-side/unified diff inspector. |
-| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
+| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog. |
 | GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
@@ -129,10 +129,9 @@ untrusted networks.
 | GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
 | POST | `/api/projects/current/bootstrap/exec` | Run `mise trust && mise install` and `lefthook install` in the active project root under explicit local execution trust. |
-| GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |
+| GET | `/api/projects/current/index` | Read deterministic eligible-file facts. |
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
-| GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |
-| GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file or symbol. |
+| GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file. |
 | GET | `/api/projects/current/git/workspace` | Read local branches, worktrees and committed fix history. |
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
@@ -147,8 +146,8 @@ untrusted networks.
 | GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
 | POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
 | POST | `/api/projects/current/files/security-scan` | Scan one selected eligible Go file with deterministic source-only rules; no provider request or subprocess execution occurs. Matches require syntactic review and do not prove exploitability. At most five source-order matches are returned; a `partial` report says when that limit truncates coverage. |
-| POST | `/api/projects/current/files/explanation` | Explicitly explain one exact indexed Go declaration using transient Function-scope context. |
-| POST | `/api/projects/current/security-review` | Explicitly perform one passive, source-free AI Security review for one current eligible file, optionally one exact declaration. |
+| POST | `/api/projects/current/files/explanation` | Explicitly explain one selected Go file using transient Code-scope context. |
+| POST | `/api/projects/current/security-review` | Explicitly perform one passive, source-free AI Security review for one current eligible file. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
 | POST | `/api/projects/current/plans/investigate` | Investigate captured read/write scope and return validated citations and model suggestions for explicit acceptance. |
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
@@ -189,11 +188,11 @@ replies cannot become fresh reports, even when their content parses as JSON.
 Failed descriptions retain the factual inventory and persist a source-free failure
 reason; restore reads that outcome without contacting the provider.
 
-Declaration explanation requests bind `project_id`, `project_revision`, `base_file_hash`, `target_path`, and `target_symbol`. The target must resolve to one exact atomic declaration in an eligible indexed Go file. A non-loopback HTTP or CLI Function provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
+File explanation requests bind `project_id`, `project_revision`, `base_file_hash`, and `target_path`. The target must resolve to an eligible indexed Go file. A non-loopback HTTP or CLI Code provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
 
 Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
 
-Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB of target source plus up to 32 KiB of applicable project instructions, and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v4` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
+Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB of target source plus up to 32 KiB of applicable project instructions, and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path and line bounds. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v4` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
 
 ## Trusted local execution
 
@@ -203,10 +202,10 @@ Import, restore, navigation, indexing, parsing, and `gofmt`/`go vet` source anal
 
 Import and reindex build deterministic metadata; neither starts a verified scan
 or unified analysis. Indexing streams hashes and line counts for large files, while
-symbol extraction is limited to text files within the 1 MiB source-view limit.
+import extraction is limited to text files within the 1 MiB source-view limit.
 Larger text files retain full size, hash and line-count facts with a diagnostic
-that symbol extraction is unavailable. Index schema version 3 rebuilds older
-cached entries under this bounded extraction policy.
+that source inspection is unavailable. Index schema version 4 rebuilds older
+cached entries under this file-level extraction policy.
 Go scans and semantic analysis are always user-started. A scan
 prepares a bounded temporary copied workspace before parser, vet, and test phases;
 a resource failure is returned as a failed `workspace` phase with sanitized evidence.
@@ -215,7 +214,7 @@ and freshness separate so a model suggestion is never presented as a verified
 tool result.
 
 Shared proposals support captured Go and Markdown files. Go changes require
-parse and format checks; other languages retain conservative symbol extraction
+parse and format checks; other languages retain import extraction
 and analysis without source editing.
 
 ## Privacy, configuration, and errors
@@ -224,7 +223,7 @@ The daemon binds to loopback by default. It filters ignored, generated,
 configuration, and secret-like paths before assembling model context. Each
 prompt request checks the effective scope shown by `/api/models/current`: project
 import and explicit source-based Performance reviews use `analyze`, selected-file analysis uses `bug`, and
-declaration proposals use `function`. A non-loopback HTTP or CLI scope requires
+code proposals use `code`. A non-loopback HTTP or CLI scope requires
 `confirm_remote_provider: true` for that request only; confirmation for one
 scope never authorizes another. Restore, reindex, scans, validation, checks,
 Apply, and Undo never require provider confirmation.
@@ -730,7 +729,7 @@ The optional `worktree_path` query selects an existing worktree without creating
 one. Investigation creates private run evidence but no change session, execution
 trust, source mutation or worktree.
 
-The Function profile performs bounded read-only investigation with admitted
+The Code profile performs bounded read-only investigation with admitted
 repository tools when supported; completion-only profiles receive captured
 source instead. Remote profiles require explicit confirmation. Source, absence,
 revision, policy and applicable instructions are checked before dispatch and
@@ -744,7 +743,7 @@ The result contains `version: "v1"`, project identity, `input_hash`,
 are validated against captured source; observations and assumptions remain model
 suggestions. Response limits are 32 KiB, eight citations, eight assumptions, eight
 suggested paths, sixteen criteria (512 bytes each), and a 4096-byte approach.
-Captured source is capped at 256 KiB; the Function profile's context limit also
+Captured source is capped at 256 KiB; the Code profile's context limit also
 applies. Suggested paths never extend admitted scope. Accepting suggestions in
 the TUI updates the draft only; explicit plan approval is still required before
 generation.
@@ -2031,7 +2030,7 @@ mutation persists version 4 and no allocation is reset.
 ### Explicit mission decomposition
 
 `POST /api/projects/current/missions/plan` runs a cancelable native ADK planning
-invocation using the Function profile. It requires `project_id`,
+invocation using the Code profile. It requires `project_id`,
 `project_revision`, current `catalog_revision`, `goal`, captured `sources`,
 mission execution `limits`, separate `planning_limits`, and
 `confirm_remote_provider` when required by that profile. The optional worktree
@@ -2043,15 +2042,15 @@ Both budgets must fit effective operator/project limits. Planning additionally
 permits at most eight model calls, 24 tool calls, 1,048,576 input tokens,
 8,388,608 output tokens and 300 seconds, with `concurrent_calls: 1` and
 `repairs: 0`. Every limit field is required. Provider retries and tool turns
-share that planning budget; the Function timeout can shorten it. Planning cost
+share that planning budget; the Code timeout can shorten it. Planning cost
 is separate from the future execution allocation and does not authorize child
 execution. Unknown provider usage retains conservative reservation accounting.
 
 For tool-capable profiles, the native agent can use only the captured repository
-read tools: `read_snippet`, `search_repository`, `inspect_symbols`,
+read tools: `read_snippet`, `search_repository`,
 `inspect_imports` and `inspect_impact`. Completion-only profiles receive the
 bounded captured source through their existing adapter. Applicable instruction
-text accompanies either path. Initial prompt text must fit both the Function
+text accompanies either path. Initial prompt text must fit both the Code
 context ceiling and 128 KiB; the captured source inventory retains its 256 KiB
 bound. Planning never invokes project checks or external integration tools.
 
@@ -2198,11 +2197,11 @@ Apply and merge keep their separate explicit admission paths.
 shared `limits`, fixed live bounds and `sessions`. Availability is `available`,
 `disabled`, `unsupported_profile` or `stale_settings`. The optional
 `agent_runtime.live_model` defaults to empty; the conformed combination is Gemini
-API `gemini-3.8-live` using the Function profile's explicit API key/destination.
+API `gemini-3.8-live` using the Code profile's explicit API key/destination.
 No provider calls occur during list/detail or artifact disclosure.
 
 `POST /api/projects/current/live-sessions` accepts that exact binding plus
-`confirm_connect: true` and `confirm_remote_provider` (true for a remote Function
+`confirm_connect: true` and `confirm_remote_provider` (true for a remote Code
 profile). It creates a durable, source-free receipt before opening an owned ADK
 live runner. It grants no project tools, code execution or source changes.
 Request cancellation during connection closes and joins its owner.
@@ -2272,7 +2271,7 @@ The same routes are isolated through the existing `worktree_path` selector.
 `GET /api/projects/current/attachments` requires current `project_id` and
 `project_revision`, with the usual optional registered `worktree_path`. This
 passive, no-store overview returns `state: available|unsupported_profile|stale_settings`,
-the configured Function `model`, `configuration`, `settings_version`, effective
+the configured Code `model`, `configuration`, `settings_version`, effective
 run `limits`, and at most 128 newest imported `attachments`. `truncated` means
 older versions remain accessible through the paginated artifact library. Prior
 revision imports remain visible as stale and cannot be sent as current context.
@@ -2311,7 +2310,7 @@ The model and origin must match the overview; the configuration fingerprint bind
 its full configured destination and credentials without disclosing them. The
 question is bounded to 2048 UTF-8 bytes. Select one to four distinct explicitly
 imported versions, at most 1 MiB combined. Source-sharing confirmation is always
-required; remote-provider confirmation follows the configured Function profile.
+required; remote-provider confirmation follows the configured Code profile.
 Foreign, deleted, protected, stale, non-imported or altered artifacts are rejected.
 Raw PCM imports cannot be used for completion advice; use WAV audio. Unsupported
 profiles or MIME fail before provider work.

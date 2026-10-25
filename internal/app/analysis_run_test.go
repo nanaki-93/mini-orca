@@ -839,7 +839,7 @@ func TestAnalysisRunSectionReadsPreserveCategoriesTriageAndDoNotDispatch(t *test
 		_ = json.NewDecoder(r.Body).Decode(&request)
 		reply := `{"findings":[]}`
 		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
-			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"high","summary":"Error handling needs review."},{"category":"performance","severity":"low","summary":"Repeated work needs review."},{"category":"security","severity":"medium","summary":"Input trust needs review."}],"suggestions":[],"symbol_explanations":{}}`
+			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"high","summary":"Error handling needs review."},{"category":"performance","severity":"low","summary":"Repeated work needs review."},{"category":"security","severity":"medium","summary":"Input trust needs review."}],"suggestions":[]}`
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
 	}))

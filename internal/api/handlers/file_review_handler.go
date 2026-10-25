@@ -25,7 +25,6 @@ type declarationExplanationRequest struct {
 	ProjectRevision       string `json:"project_revision"`
 	BaseFileHash          string `json:"base_file_hash"`
 	TargetPath            string `json:"target_path"`
-	TargetSymbol          string `json:"target_symbol"`
 	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
 }
 
@@ -34,7 +33,6 @@ type securityReviewRequest struct {
 	ProjectRevision       string `json:"project_revision"`
 	BaseFileHash          string `json:"base_file_hash"`
 	Path                  string `json:"path"`
-	Symbol                string `json:"symbol,omitempty"`
 	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
 }
 
@@ -86,21 +84,21 @@ func (h *ProjectHandler) ScanSecurityFile(w http.ResponseWriter, r *http.Request
 	api.WriteJSON(w, http.StatusOK, report)
 }
 
-// ExplainDeclaration performs one transient, read-only Function-scope request.
+// ExplainDeclaration performs one transient, read-only Code-scope request.
 func (h *ProjectHandler) ExplainDeclaration(w http.ResponseWriter, r *http.Request) {
 	var request declarationExplanationRequest
 	if err := api.DecodeJSON(w, r, &request); err != nil {
-		api.WriteRequestError(w, err, "invalid declaration explanation request", "Provide the current project, file, and exact declaration identity.")
+		api.WriteRequestError(w, err, "invalid declaration explanation request", "Provide the current project and file identity.")
 		return
 	}
 	if request.ConfirmRemoteProvider == nil {
-		api.WriteRequestError(w, errors.New("confirm_remote_provider is required"), "invalid declaration explanation request", "Confirm whether the Function provider may receive this declaration context.")
+		api.WriteRequestError(w, errors.New("confirm_remote_provider is required"), "invalid declaration explanation request", "Confirm whether the Code provider may receive this file context.")
 		return
 	}
 	result, err := h.service.ExplainDeclaration(r.Context(), app.DeclarationExplanationRequest{
 		ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
 		BaseFileHash: request.BaseFileHash, TargetPath: request.TargetPath,
-		TargetSymbol: request.TargetSymbol, ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
+		ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
 	})
 	if err != nil {
 		if writeContextError(w, "declaration explanation", err) {
@@ -125,7 +123,7 @@ func (h *ProjectHandler) ReviewSecurityFile(w http.ResponseWriter, r *http.Reque
 	}
 	report, err := h.service.ReviewSecurityFile(r.Context(), app.SecurityReviewRequest{
 		ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision, BaseFileHash: request.BaseFileHash,
-		Path: request.Path, Symbol: request.Symbol, ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
+		Path: request.Path, ConfirmRemoteProvider: *request.ConfirmRemoteProvider,
 	})
 	if err != nil {
 		if writeContextError(w, "security review", err) {

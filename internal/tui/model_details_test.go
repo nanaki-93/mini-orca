@@ -17,7 +17,7 @@ func TestModelAndPresetDetailsRemainReachableWithoutDispatch(t *testing.T) {
 				Model: "inspect-model", ProviderOrigin: "cli://inspect-provider", RemoteProvider: true,
 				ContextMaxTokens: 131072, Timeout: "7m0s", MaxRetries: 3,
 			}}}
-			s.CustomPresets = []ModelPreset{{ID: "inspect", Name: "Inspect routing", Analyze: "analyze-choice", Bug: "bug-choice", Function: "code-choice"}}
+			s.CustomPresets = []ModelPreset{{ID: "inspect", Name: "Inspect routing", Analyze: "analyze-choice", Bug: "bug-choice", Code: "code-choice"}}
 			originalPreset := s.ActivePresetID
 			s.Navigate(PageModels)
 			for _, selection := range []struct {

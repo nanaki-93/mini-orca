@@ -62,7 +62,7 @@ const (
 	recoveryV2Model                          = "./models/qwen38-v13-recovery-1"
 	recoveryV2PromptVersion                  = "file-analysis-v13"
 	recoveryV2CorpusID                       = "engineering-insight-v2"
-	recoveryV2DevelopmentDigest              = "2370397f665af4aefa0ab8db0dab7e0a0e961930b63594e0fc894fabed6a2431"
+	recoveryV2DevelopmentDigest              = "c85fc3c5855da261047dccd63498787efcbdec9186ab0cd9b1dfee364c6afc3f"
 	recoveryV2QualificationDigest            = "7cb16ac34b337e172e97a14aa639ef00bec77fbc77085028c01e6e1fe4183229"
 	recoveryV2DevelopmentRunID               = "rcv07-qwen38-v13-dev-1"
 	recoveryV2QualificationRunID             = "rcv08-qwen38-v13-qual-1"
@@ -137,7 +137,6 @@ type engineeringInsightOptionalDiagnostics struct {
 	AttemptID                   string                              `json:"attempt_id"`
 	ResponseDigest              string                              `json:"response_digest"`
 	Insights                    []app.FileAnalysisInsightDiagnostic `json:"insights"`
-	SymbolExplanationsDegraded  bool                                `json:"symbol_explanations_degraded"`
 	TaskSpecDegradedRiskIndices []int                               `json:"task_spec_degraded_risk_indices"`
 }
 

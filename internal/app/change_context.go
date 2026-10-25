@@ -16,7 +16,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
-	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
 func changeContextByteLimit(runtime modelRuntime) int {
@@ -24,7 +23,7 @@ func changeContextByteLimit(runtime modelRuntime) int {
 		return 0
 	}
 	limit := runtime.effective.ContextMaxTokens * 4
-	if runtime.effective.Scope == string(config.FunctionModelScope) && runtime.effective.ContextMaxTokens >= 4000 && limit < maxChangeBytes {
+	if runtime.effective.Scope == string(config.CodeModelScope) && runtime.effective.ContextMaxTokens >= 4000 && limit < maxChangeBytes {
 		return maxChangeBytes
 	}
 	return limit
@@ -157,9 +156,6 @@ func samePackageGoDecls(root string, session *ChangeSession) string {
 		appendDirGoDecls(root, dir, captured, policy, &out)
 	}
 	appendImportedLocalGoDecls(root, session.Targets, captured, policy, &out)
-	for _, dir := range collectPolyglotTargetDirs(session.Targets) {
-		appendDirPolyglotDecls(root, dir, captured, policy, &out)
-	}
 	return out.String()
 }
 
@@ -177,23 +173,6 @@ func appendImportedLocalGoDecls(root string, targets []ChangeTarget, captured ma
 	for _, dir := range changes.LocalImportedGoDirs(root, modPath, contents) {
 		appendDirGoDecls(root, dir, captured, policy, out)
 	}
-}
-
-func collectPolyglotTargetDirs(targets []ChangeTarget) []string {
-	var dirs []string
-	seen := map[string]bool{}
-	for _, target := range targets {
-		ext := strings.ToLower(filepath.Ext(target.Path))
-		if ext == "" || ext == ".go" || ext == ".md" || ext == ".txt" || ext == ".json" || ext == ".yaml" || ext == ".yml" {
-			continue
-		}
-		dir := filepath.ToSlash(filepath.Dir(target.Path))
-		if !seen[dir] {
-			seen[dir] = true
-			dirs = append(dirs, dir)
-		}
-	}
-	return dirs
 }
 
 type siblingDirFile struct {
@@ -230,36 +209,6 @@ func listSiblingDirFiles(root, dir string, captured map[string]bool, policy *pro
 		})
 	}
 	return out
-}
-
-func appendDirPolyglotDecls(root, dir string, captured map[string]bool, policy *project.ContextPolicy, out *strings.Builder) {
-	for _, f := range listSiblingDirFiles(root, dir, captured, policy) {
-		if isTestFilePath(f.name) {
-			continue
-		}
-		decls := extractPolyglotFileDecls(f.relPath, f.absPath)
-		if len(decls) > 0 && out.Len() < 2048 {
-			if !strings.Contains(out.String(), "Sibling module declarations") {
-				out.WriteString("\nSibling module declarations (already defined in directory; do not redeclare or emit in changes):\n")
-			}
-			out.WriteString("// " + f.relPath + "\n" + strings.Join(decls, "\n") + "\n")
-		}
-	}
-}
-
-func extractPolyglotFileDecls(relPath, absPath string) []string {
-	data, err := os.ReadFile(absPath)
-	if err != nil || len(data) > 32768 {
-		return nil
-	}
-	_, _, syms := symbols.ExtractFileFacts(relPath, data)
-	var decls []string
-	for _, sym := range syms {
-		if strings.TrimSpace(sym.Signature) != "" {
-			decls = append(decls, "  "+sym.Signature)
-		}
-	}
-	return decls
 }
 
 func collectGoTargetDirs(targets []ChangeTarget) (map[string]bool, []string) {

@@ -23,28 +23,16 @@ type Project struct {
 	AnalyzedAt      string         `json:"analyzed_at"`
 }
 
-// SymbolInfo describes an indexed symbol declaration in a source file.
-type SymbolInfo struct {
-	Name         string `json:"name"`
-	Kind         string `json:"kind"`
-	Signature    string `json:"signature"`
-	StartLine    int    `json:"start_line"`
-	EndLine      int    `json:"end_line"`
-	Confidence   string `json:"confidence"`
-	AtomicTarget bool   `json:"atomic_target"`
-}
-
 // IndexedFile holds indexed metadata for a single repository file.
 type IndexedFile struct {
-	Path           string       `json:"path"`
-	ContentHash    string       `json:"content_hash"`
-	Language       string       `json:"language"`
-	Binary         bool         `json:"binary"`
-	SizeBytes      int          `json:"size_bytes"`
-	LineCount      int          `json:"line_count"`
-	Imports        []string     `json:"imports"`
-	Symbols        []SymbolInfo `json:"symbols"`
-	AnalysisStatus string       `json:"analysis_status"`
+	Path           string   `json:"path"`
+	ContentHash    string   `json:"content_hash"`
+	Language       string   `json:"language"`
+	Binary         bool     `json:"binary"`
+	SizeBytes      int      `json:"size_bytes"`
+	LineCount      int      `json:"line_count"`
+	Imports        []string `json:"imports"`
+	AnalysisStatus string   `json:"analysis_status"`
 }
 
 // ProjectIndex holds the repository's indexed file list.
@@ -201,7 +189,7 @@ type ModelCapabilities struct {
 	LiveSessions bool `json:"live_sessions"`
 }
 
-// ModelCatalog maps model scopes (analyze, bug, function) to configured models.
+// ModelCatalog maps model scopes (analyze, bug, code) to configured models.
 type ModelCatalog struct {
 	Scopes map[string]Model `json:"scopes"`
 }
@@ -232,11 +220,11 @@ type AvailableModels struct {
 
 // ModelPreset represents a named 3-scope model configuration preset in the TUI.
 type ModelPreset struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Analyze  string `json:"analyze"`
-	Bug      string `json:"bug"`
-	Function string `json:"function"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Analyze string `json:"analyze"`
+	Bug     string `json:"bug"`
+	Code    string `json:"code"`
 }
 
 // EngineeringInsight holds optional model-derived mechanism, impact, tradeoff, and verification guidance.
@@ -251,16 +239,13 @@ type EngineeringInsight struct {
 type TaskSpec struct {
 	SchemaVersion      string   `json:"schema_version"`
 	TargetPath         string   `json:"target_path"`
-	TargetSymbol       string   `json:"target_symbol"`
-	TargetSignature    string   `json:"target_signature"`
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
 	NonGoals           []string `json:"non_goals"`
 }
 
-// SourceAnchor locates a finding within a file and symbol range.
+// SourceAnchor locates a finding within a file and line range.
 type SourceAnchor struct {
 	Path      string `json:"path"`
-	Symbol    string `json:"symbol"`
 	StartLine int    `json:"start_line"`
 	EndLine   int    `json:"end_line"`
 }
@@ -428,7 +413,6 @@ type PerformanceFinding struct {
 	VerificationPlan string `json:"verification_plan,omitempty"`
 	StartLine        int    `json:"start_line"`
 	EndLine          int    `json:"end_line"`
-	Symbol           string `json:"symbol"`
 }
 
 // PerformanceReport holds performance findings for a single repository file.

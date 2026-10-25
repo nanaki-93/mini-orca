@@ -33,7 +33,7 @@ func TestAgentWorkflowStreamingOutputIsOptInAndPrivate(t *testing.T) {
 	}))
 	defer provider.Close()
 	cfg := scopedTestConfig(provider.URL)
-	cfg.ModelScopes.Bug.Model, cfg.ModelScopes.Analyze.Model, cfg.ModelScopes.Function.Model = "creator", "tester", "reviewer"
+	cfg.ModelScopes.Bug.Model, cfg.ModelScopes.Analyze.Model, cfg.ModelScopes.Code.Model = "creator", "tester", "reviewer"
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)

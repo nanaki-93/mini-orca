@@ -88,11 +88,11 @@ func settingsTestState() *State {
 	s := NewState()
 	s.Project = &Project{ProjectIdentity: ProjectIdentity{ProjectID: "main", ProjectRevision: "r"}, Path: "/repo"}
 	limits := client.AgentLimits{ModelCalls: 12, ToolCalls: 24, InputTokens: 60000, OutputTokens: 8000, ElapsedSeconds: 600, ConcurrentCalls: 3, Repairs: 2}
-	s.AgentSettings = &agentSettingsView{Parent: s.Project.ProjectIdentity, Scope: client.AgentSettingsScope{ProjectIdentity: s.Project.ProjectIdentity}, Path: "/repo", Status: "current", Data: &client.AgentSettings{ProjectIdentity: s.Project.ProjectIdentity, Version: 4, Configuration: "configuration", State: "overridden", Limits: limits, Ceilings: limits, Roles: client.AgentRoles{Creation: "function", Testing: "analyze", Review: "bug"}, Skills: []client.AgentSkillSetting{{Directory: "skills/review", Enabled: true}, {Directory: "skills/test", Enabled: false}}}}
+	s.AgentSettings = &agentSettingsView{Parent: s.Project.ProjectIdentity, Scope: client.AgentSettingsScope{ProjectIdentity: s.Project.ProjectIdentity}, Path: "/repo", Status: "current", Data: &client.AgentSettings{ProjectIdentity: s.Project.ProjectIdentity, Version: 4, Configuration: "configuration", State: "overridden", Limits: limits, Ceilings: limits, Roles: client.AgentRoles{Creation: "code", Testing: "analyze", Review: "bug"}, Skills: []client.AgentSkillSetting{{Directory: "skills/review", Enabled: true}, {Directory: "skills/test", Enabled: false}}}}
 	s.Models = &ModelCatalog{Scopes: map[string]Model{
-		"analyze":  {Scope: "analyze", Model: "review-local", ProviderOrigin: "http://127.0.0.1:11434"},
-		"bug":      {Scope: "bug", Model: "bug-local", ProviderOrigin: "http://127.0.0.1:11434"},
-		"function": {Scope: "function", Model: "code-local", ProviderOrigin: "http://127.0.0.1:11434"},
+		"analyze": {Scope: "analyze", Model: "review-local", ProviderOrigin: "http://127.0.0.1:11434"},
+		"bug":     {Scope: "bug", Model: "bug-local", ProviderOrigin: "http://127.0.0.1:11434"},
+		"code":    {Scope: "code", Model: "code-local", ProviderOrigin: "http://127.0.0.1:11434"},
 	}}
 	return s
 }

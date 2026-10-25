@@ -102,7 +102,7 @@ func TestFindingStoreReconcilesTriageSanitizationAndFreshness(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := FindingInput{ProjectID: "project", ProjectRevision: "revision-one", FileHashes: map[string]string{"main.go": "hash-one"}}
-	reported := []UnifiedFinding{{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: "medium", Title: "Risk", Message: "password: should-not-persist", Evidence: "api_key: should-not-persist", FileHash: "hash-one", Location: FindingLocation{Path: "main.go", Symbol: "Run"}, OriginatingAnalysis: "file", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func()", AcceptanceCriteria: []string{"password: should-not-persist"}, NonGoals: []string{}}}}
+	reported := []UnifiedFinding{{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: "medium", Title: "Risk", Message: "password: should-not-persist", Evidence: "api_key: should-not-persist", FileHash: "hash-one", Location: FindingLocation{Path: "main.go"}, OriginatingAnalysis: "file", TaskSpec: &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", AcceptanceCriteria: []string{"password: should-not-persist"}, NonGoals: []string{}}}}
 	stored, err := store.ReconcileSource(input, FindingSourceAI, reported)
 	if err != nil {
 		t.Fatal(err)
@@ -149,16 +149,15 @@ func TestFindingStoreRecoversCorruptStorageAndAdaptsFreshAIRisks(t *testing.T) {
 		t.Fatalf("corrupt recovery = %v, %v", corrupt, err)
 	}
 	projectFindings := SuggestedFindingsForProject(ProjectAnalysisReport{Status: ProjectAnalysisStatusFresh, Risks: []ProjectAnalysisRisk{{Severity: "low", Summary: "Add tests"}}})
-	task := &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: "func Run()", AcceptanceCriteria: []string{"Return errors."}}
+	task := &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", AcceptanceCriteria: []string{"Return errors."}}
 	fileFindings := SuggestedFindingsForFile(FileAnalysis{
 		Status:      AnalysisStatusFresh,
 		Path:        "main.go",
 		ContentHash: "hash",
-		Symbols:     []SymbolInfo{{Name: "Run", StartLine: 4, EndLine: 6}},
 		Risks:       []Finding{{Severity: "high", Summary: "Check errors in Run", TaskSpec: task}},
-		Suggestions: []Suggestion{{Title: "Propagate Run error", Summary: "Return error to caller", TargetSymbol: "Run", Action: "Wrap and return the error from Run instead of ignoring it."}},
+		Suggestions: []Suggestion{{Title: "Propagate Run error", Summary: "Return error to caller", Action: "Wrap and return the error from Run instead of ignoring it."}},
 	})
-	if projectFindings[0].Confidence != FindingConfidenceSuggested || projectFindings[0].Source != FindingSourceAI || fileFindings[0].Location.Path != "main.go" || fileFindings[0].FileHash != "hash" || fileFindings[0].TaskSpec == nil || fileFindings[0].Location.Symbol != "Run" {
+	if projectFindings[0].Confidence != FindingConfidenceSuggested || projectFindings[0].Source != FindingSourceAI || fileFindings[0].Location.Path != "main.go" || fileFindings[0].FileHash != "hash" || fileFindings[0].TaskSpec == nil {
 		t.Fatalf("adapted findings = %+v %+v", projectFindings, fileFindings)
 	}
 	if fileFindings[0].EngineeringInsight == nil || !strings.Contains(fileFindings[0].EngineeringInsight.TransferableLesson, "Wrap and return the error") {
