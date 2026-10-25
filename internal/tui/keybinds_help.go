@@ -324,6 +324,12 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"w", "External Work"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":connection-scope", "Select main or task checkout"}, {":connection-use", "Toggle selected plan tool grant"}, {":connections-clear", "Clear plan tool selections"}},
 	},
+	PageMedia: {
+		title:     "[2] WORK · MEDIA & LIVE ADVICE",
+		primary:   []keyDesc{{"Enter", "Inspect selected record"}, {"Space", "Select imported attachment"}, {"n / q", "Import / ask with confirmation"}},
+		secondary: []keyDesc{{"a / l / o", "Attachments / live / outputs"}, {"s", "Edit live input"}, {"e", "Confirm private export"}, {"r", "Refresh metadata"}, {"x", "Cancel local request"}, {"Esc", "Hide private text"}},
+		commands:  []keyDesc{{":live-open", "Confirm a new connection"}, {":live-close", "Close the selected session"}, {":live-reconnect", "Confirm fresh connection without replay"}, {":media-scope", "Choose main or task checkout"}},
+	},
 	PageArtifacts: {
 		title:     "[3] CODE · ARTIFACTS & EVIDENCE",
 		primary:   []keyDesc{{"Enter", "Preview retained text"}, {"e", "Confirm private export"}, {"d", "Confirm exact version deletion"}},

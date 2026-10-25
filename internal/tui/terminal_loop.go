@@ -163,6 +163,7 @@ type agentConnectionResultMsg struct{ result agentConnectionResult }
 type agentExternalResultMsg struct{ result agentExternalResult }
 
 type agentLibraryResultMsg struct{ result agentLibraryResult }
+type agentMediaResultMsg struct{ result agentMediaResult }
 
 func pollTickCmd() tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(t time.Time) tea.Msg {
@@ -172,6 +173,7 @@ func pollTickCmd() tea.Cmd {
 
 // BubbleModel adapts State to the Charmbracelet Bubble Tea tea.Model architecture.
 type BubbleModel struct {
+	mediaStream       *mediaStream
 	agentStream       *agentRunStream
 	missionStream     *missionExecutionStream
 	nativeStreams     bool
@@ -202,6 +204,7 @@ func NewBubbleModel(ctx context.Context, state *State, client *Client, width, he
 func (m *BubbleModel) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	m.syncMissionExecutionStream(&cmds)
+	m.syncMediaStream(&cmds)
 	if m.client != nil && m.state.hasActiveBackgroundJob() {
 		m.pollScheduled = true
 		cmds = append(cmds, pollTickCmd())
@@ -231,7 +234,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
+	case agentMediaResultMsg, mediaStreamUpdate, missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -245,13 +248,17 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state.applyPollResult(ev.res)
 	}
 	m.state.reconcileMissionScope()
+	m.state.reconcileMediaScope()
 	if m.state.Quitting {
 		m.state.cancelMissionRequest()
+		m.state.cancelMediaRequest()
 		m.stopAgentStream()
 		m.stopMissionExecutionStream()
+		m.stopMediaStream()
 		return m, tea.Quit
 	}
 	m.syncAgentStream(&cmds)
+	m.syncMediaStream(&cmds)
 	m.syncMissionExecutionStream(&cmds)
 	m.maybeSchedulePollTick(&cmds)
 	return m, batchTeaCmds(cmds)
@@ -259,6 +266,10 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case agentMediaResultMsg:
+		m.state.applyMediaResult(ev.result)
+	case mediaStreamUpdate:
+		return m.applyMediaStreamUpdate(ev)
 	case missionResultMsg:
 		m.state.applyMissionResult(ev.result)
 	case missionExecutionUpdate:
@@ -326,7 +337,7 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
-	case "mission", "agent-library", "agent-external":
+	case "agent-media", "mission", "agent-library", "agent-external":
 		return m.prepareScopedWorkCmd(act), true
 	case "agent-connection":
 		if !m.state.acceptsConnectionAction(act.AgentConnection) {
@@ -382,6 +393,8 @@ func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (te
 
 func (m *BubbleModel) prepareScopedWorkCmd(act ActionRequest) tea.Cmd {
 	switch act.Kind {
+	case "agent-media":
+		return m.prepareMediaCmd(act.AgentMedia)
 	case "mission":
 		return m.prepareMissionCmd(act.Mission)
 	case "agent-library":
@@ -453,6 +466,7 @@ func (s *State) RunSession(ctx context.Context, client *Client, in io.Reader, ou
 	defer cancel()
 	model := NewBubbleModel(ctx, s, client, width, height)
 	defer model.stopAgentStream()
+	defer model.stopMediaStream()
 	if _, isTTY := isCharDevice(in); isTTY {
 		prog := tea.NewProgram(model, tea.WithInput(in), tea.WithOutput(out), tea.WithAltScreen(), tea.WithContext(ctx))
 		_, err := prog.Run()

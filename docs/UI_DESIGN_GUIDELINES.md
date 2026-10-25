@@ -320,6 +320,42 @@ ID. Canceled or failed mutations require refresh before another action; exported
 copies may already exist if transport lost the receipt. Hide private previews on
 request, and never claim an unavailable inventory is empty.
 
+Work / Media (`:media`) groups Attachments, Live sessions and Outputs without
+adding a workspace. `:media-scope main|task` selects the checkout; `a/l/o` changes
+the section. Refresh (`r`) reads local metadata. It neither contacts a provider
+nor reads files from a guessed path. An unavailable catalog stays unavailable;
+retained rows are labeled as the last known state.
+
+Import (`n` / `:media-import <path>`) captures at most 512 KiB from an explicitly
+selected regular file inside that checkout, rejecting symlinks and path escapes.
+Review the captured name, MIME, byte count and hash before private local import.
+PNG, JPEG, PDF, supported WAV and raw 16 kHz PCM have no implicit conversion.
+Space selects up to four immutable imported versions totaling at most 1 MiB.
+Ask (`q` / `:media-ask <question>`) separately confirms the exact question,
+versions, checkout, settings and Function provider destination. Answers remain
+advisory. Enter explicitly discloses private retained text; Esc hides it.
+Binary/audio outputs expose metadata and a confirmed private export (`e`), with
+no automatic playback. Older outputs remain available in Code / Artifacts.
+
+`:live-open` confirms the configured live destination, conservative budget and
+bounded lifetime. Missing `agent_runtime.live_model` or an unsupported Function
+profile explains the configuration required. Inspect a session with Enter before
+acting. `s` / `:live-send <text>` confirms each text input; `:live-send-media`
+confirms exactly one selected JPEG or raw PCM version of at most 64 KiB.
+`:live-interrupt` and `:live-close` are explicit controls. Reconnect is a separate
+confirmation using the remaining lifetime and budget; it never replays input.
+Show acknowledged progress, reported partial usage and conservative charges as
+distinct values. Transcript/audio artifacts appear after a connection ends.
+
+The visible session uses a cancelable passive metadata watcher. Leaving Media
+stops that watcher while the daemon retains its bounded session owner; other
+pages show a reminder to return to Media and explicitly close it. Cancel (`x`)
+stops the pending local request, retaining its draft. A failed or canceled
+operation may have a retained outcome and requires refresh before another
+mutation; close remains available. Confirmation and dispatch bind the exact
+checkout, selection, settings and control revision. Replaced or late responses
+cannot update a different view or authorize another request.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

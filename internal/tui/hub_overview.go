@@ -9,6 +9,14 @@ import (
 )
 
 func (s *State) renderActivePage(th ansiTheme, width int) []string {
+	lines := s.renderActiveContent(th, width)
+	if notice := s.mediaActiveNotice(); notice != "" && s.Page != PageMedia {
+		lines = append([]string{"  " + th.cyan + theme.TruncatePlain(notice, max(1, width-4)) + th.reset, ""}, lines...)
+	}
+	return lines
+}
+
+func (s *State) renderActiveContent(th ansiTheme, width int) []string {
 	switch s.Page {
 	case PageSummary:
 		return s.renderSummaryPage(th, width)
@@ -47,6 +55,8 @@ func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 		return s.renderWorktreeDetail(th, width)
 	case PageHistory:
 		return s.renderHistoryPage(th, width)
+	case PageMedia:
+		return s.renderMedia(th, width)
 	case PageArtifacts:
 		return s.renderLibrary(th, width)
 	case PageDocs:

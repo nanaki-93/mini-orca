@@ -104,7 +104,7 @@ func (s *State) dispatchPrivateAction(ctx context.Context, cl *Client, act Actio
 		}
 		return true
 	}
-	return s.dispatchLibraryAction(ctx, cl, act) || s.dispatchGovernanceAction(ctx, cl, act)
+	return s.dispatchMediaAction(ctx, cl, act) || s.dispatchLibraryAction(ctx, cl, act) || s.dispatchGovernanceAction(ctx, cl, act)
 }
 
 func (s *State) dispatchReindex(ctx context.Context, cl *Client, reqID string) error {

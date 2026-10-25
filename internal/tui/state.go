@@ -32,6 +32,7 @@ const (
 	PageWorktreeDetail Page = "worktree-detail"
 	PageHistory        Page = "history"
 	PageArtifacts      Page = "artifacts"
+	PageMedia          Page = "media"
 	PageDocs           Page = "docs"
 	PageDocsComponents Page = "docs-components"
 	PageDocsDecisions  Page = "docs-decisions"
@@ -82,6 +83,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	AgentMedia           *agentMediaAction
 	Mission              *missionAction
 	AgentLibrary         *agentLibraryAction
 	AgentExternal        *agentExternalAction
@@ -106,6 +108,7 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentMedia          *agentMediaView
 	Mission             *missionView
 	PlanView            string
 	AgentLibrary        *agentLibraryView
@@ -219,6 +222,7 @@ func HubTabs() []HubTab {
 				{Page: PagePlan, Label: "Task Plan"},
 				{Page: PageAnalysisRun, Label: "Analysis"},
 				{Page: PageAnalysisFiles, Label: "File Scope"},
+				{Page: PageMedia, Label: "Media"},
 			},
 		},
 		{
@@ -1091,6 +1095,8 @@ func (s *State) secondaryListLength() int {
 		return 0
 	case PageHistory:
 		return len(s.ChangeHistory)
+	case PageMedia:
+		return len(s.mediaRows())
 	case PageArtifacts:
 		return len(s.libraryRows())
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:

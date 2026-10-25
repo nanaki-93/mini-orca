@@ -55,7 +55,7 @@ func (s *State) HandleKey(ev KeyEvent) {
 	if s.handleOverlayKey(ev) {
 		return
 	}
-	if s.handleFocusedPageKey(ev) {
+	if s.handleMediaPageKey(ev) || s.handleFocusedPageKey(ev) {
 		return
 	}
 	if s.handleDetailScrollKey(ev) {

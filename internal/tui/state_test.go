@@ -613,9 +613,9 @@ func TestAgentStartFailureClearsPreviewAndSurfacesDetail(t *testing.T) {
 func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	s := NewState()
 
-	// Section 2: Tab cycles cleanly across the 5 sidebar submenu items without getting stuck on PageIssueDetail
+	// Work cycles through every sidebar view, skipping the issue-detail disclosure.
 	s.HandleKey(KeyEvent{Key: "2"})
-	wantSec2 := []Page{PageBugs, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageAgents}
+	wantSec2 := []Page{PageBugs, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageMedia, PageAgents}
 	for _, want := range wantSec2 {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != want {

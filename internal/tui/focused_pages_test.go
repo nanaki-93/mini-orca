@@ -14,6 +14,7 @@ func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
 		{PagePlan, PageAnalysisRun, PageFeatures},
 		{PageIssueDetail, PageFeatures, PageAgents},
 		{PageFeatureDetail, PagePlan, PageBugs},
+		{PageMedia, PageAgents, PageAnalysisFiles},
 	} {
 		for _, reverse := range []bool{false, true} {
 			s := NewState()
@@ -34,10 +35,13 @@ func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
 
 	s := NewState()
 	s.openTaskPlan(&ChangeSeed{Title: "Keep draft", Paths: []string{"main.go"}})
-	for _, page := range []Page{PageAnalysisRun, PageAnalysisFiles, PageAgents, PageBugs, PageFeatures, PagePlan} {
+	for _, page := range []Page{PageAnalysisRun, PageAnalysisFiles, PageMedia, PageAgents, PageBugs, PageFeatures, PagePlan} {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != page {
 			t.Fatalf("sidebar cycle stopped at %s, want %s", s.Page, page)
+		}
+		if len(s.PendingActions) != 0 {
+			t.Fatalf("sidebar navigation dispatched work on %s", page)
 		}
 	}
 }

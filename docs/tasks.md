@@ -1173,7 +1173,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 31C — Present attachments and live sessions in the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_media.go`, `internal/tui/agent_media_actions.go`, `internal/tui/agent_media_view.go`, `internal/tui/agent_media_test.go`, `internal/tui/agent_media_stream.go`, `internal/tui/agent_media_stream_test.go` — **new**, focused media/session surface and owned passive updates.
