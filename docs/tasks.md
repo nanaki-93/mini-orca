@@ -1111,7 +1111,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 31A — Import explicit attachments and request multimodal advice
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/llm/attachments.go`, `internal/llm/attachments_test.go` — **new**, bounded media types and content validation.

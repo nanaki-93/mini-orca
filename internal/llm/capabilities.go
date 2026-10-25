@@ -19,9 +19,22 @@ func ProviderCapabilities(profile config.ModelProfile) Capabilities {
 		return Capabilities{Completion: true, JSONSchema: true}
 	}
 	if profile.Provider == "" || profile.Provider == config.OpenAIProvider || profile.IsGoogle() {
-		return Capabilities{Completion: true, JSONSchema: true, Tools: true, Streaming: true, Grounding: SupportsGoogleSearch(profile)}
+		return Capabilities{Completion: true, JSONSchema: true, Tools: true, Streaming: true, Grounding: SupportsGoogleSearch(profile), Attachments: SupportsAttachments(profile)}
 	}
 	return Capabilities{}
+}
+
+// Inline media is enabled only for native general-purpose multimodal models.
+func SupportsAttachments(profile config.ModelProfile) bool {
+	if !profile.IsGoogle() {
+		return false
+	}
+	switch profile.Model {
+	case "gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite":
+		return true
+	default:
+		return false
+	}
 }
 
 // Search support is deliberately narrower than generic native completion.

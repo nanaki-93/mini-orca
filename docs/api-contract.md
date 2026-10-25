@@ -83,6 +83,9 @@ untrusted networks.
 | POST | `/api/projects/current/missions/{missionID}/execution` | Prepare, start, stop, integrate or reconcile a bounded mission execution. |
 | GET | `/api/projects/current/memory` | Read bounded memory metadata without private text or provider work. |
 | GET | `/api/projects/current/artifacts` | Read project-owned artifact versions with snapshot-bound pagination and no payloads. |
+| GET | `/api/projects/current/attachments` | Inspect imported media versions and Function-profile availability without dispatch. |
+| POST | `/api/projects/current/attachments` | Explicitly import bounded supplied media bytes into a private artifact. |
+| POST | `/api/projects/current/attachments/advice` | Send exact imported versions for one consented native multimodal advisory response. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
 | POST | `/api/projects/current/artifacts/{artifactID}/control` | Export a new private metadata file or delete an exact unprotected artifact version. |
 | GET | `/api/projects/current/integrations` | Read passive configured MCP connections and current schema grants. |
@@ -2049,3 +2052,75 @@ replace an existing draft. Invalid or incomplete decomposition returns 400 with
 `mission planning incomplete`; stale catalog or captured identities return 409.
 Provider/transport failures and request cancellation retain the normal error
 contract. Retrying is a new explicit planning request against current captures.
+
+### Explicit multimodal attachments
+
+`GET /api/projects/current/attachments` requires current `project_id` and
+`project_revision`, with the usual optional registered `worktree_path`. This
+passive, no-store overview returns `state: available|unsupported_profile|stale_settings`,
+the configured Function `model`, `configuration`, `settings_version`, effective
+run `limits`, and at most 128 newest imported `attachments`. `truncated` means
+older versions remain accessible through the paginated artifact library. Prior
+revision imports remain visible as stale and cannot be sent as current context.
+
+`POST /api/projects/current/attachments` imports supplied bytes only. Its strict
+JSON body is `{project_id, project_revision, name, mime, data, confirm_import}`;
+`data` is base64 and `confirm_import` must be true. Names are plain display names,
+not paths. No URL or daemon filesystem path is accepted. The 1 MiB HTTP body
+limit remains in force. Decoded content is limited to 512 KiB. Supported MIME
+values are `image/png`, `image/jpeg`, `application/pdf`, `audio/wav`, and
+`audio/pcm;rate=16000`. Images must fully decode within 4096 pixels per side and
+4 megapixels. PDFs require a supported header and complete EOF envelope; this
+is not a semantic PDF validator. WAV must have complete RIFF chunks containing
+16 kHz mono signed 16-bit PCM. Raw PCM must contain complete little-endian samples.
+The receipt is an `AgentArtifact` with immutable ID/version/hash and project,
+revision and context-policy provenance. Import performs no provider request.
+
+`POST /api/projects/current/attachments/advice` accepts only:
+
+```json
+{
+  "project_id": "current-project-id",
+  "project_revision": "current-revision",
+  "configuration": "configuration-from-overview",
+  "settings_version": 0,
+  "model": "gemini-2.5-flash",
+  "provider_origin": "https://generativelanguage.googleapis.com",
+  "question": "Explain the attached diagram.",
+  "attachments": [{"id": "exact-artifact-id", "version": 1, "hash": "exact-sha256"}],
+  "confirm_source_sharing": true,
+  "confirm_remote_provider": true
+}
+```
+
+The model and origin must match the overview; the configuration fingerprint binds
+its full configured destination and credentials without disclosing them. The
+question is bounded to 2048 UTF-8 bytes. Select one to four distinct explicitly
+imported versions, at most 1 MiB combined. Source-sharing confirmation is always
+required; remote-provider confirmation follows the configured Function profile.
+Foreign, deleted, protected, stale, non-imported or altered artifacts are rejected.
+Raw PCM imports cannot be used for completion advice; use WAV audio. Unsupported
+profiles or MIME fail before provider work.
+
+The daemon checks project/revision, context policy, settings version and exact
+artifact ownership/hash before dispatch and before publishing. It makes one
+native ADK completion with inline bytes and the shared run budget, without tools,
+retries, memory, skills, compaction, provider caching, source writes or Files API
+uploads. Reindex, project replacement, request cancellation and shutdown stop
+owned work. The private journal uses `multimodal-v1` and hashes a media manifest;
+binary payloads remain in artifacts and are omitted from progress metadata.
+
+The receipt is `{state: "advisory", artifact: AgentArtifact, model, usage,
+usage_known}`. `usage` contains `prompt_tokens`, `completion_tokens`, `total_tokens`
+and optional cache-token details. Zero values with `usage_known: false` are not
+measured zero usage. The answer and question are absent from the receipt. Explicit
+artifact detail discloses bounded private text with selected-version provenance;
+ordinary export retrieves the full private answer. This is model advice, never
+verified evidence or an approved source change. Existing artifact deletion and
+export apply; local deletion cannot retract already transmitted provider bytes.
+
+Invalid input is 400, oversized HTTP bodies 413, missing/foreign versions 404,
+changed identities 409, unavailable storage 500, and provider exchange failure 502.
+Failed and canceled requests do not publish an advisory receipt. Private invocation
+history may retain the actual earlier provider exchange for diagnosis. Reads,
+inspection and export never reconnect, resubmit media or regenerate an answer.

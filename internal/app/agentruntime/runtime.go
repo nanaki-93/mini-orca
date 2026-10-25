@@ -21,7 +21,8 @@ import (
 
 // Request is an admitted completion. The caller owns retries and scope checks.
 type Request struct {
-	grounding        bool // Only the explicit search-only entry point may set this.
+	grounding        bool             // Only the explicit search-only entry point may set this.
+	attachments      []llm.Attachment // Only the admitted multimodal entry point may set this.
 	Messages         []llm.ChatMessage
 	Schema           *llm.JSONSchema
 	Stream           bool
@@ -190,6 +191,7 @@ func consumePartialText(ctx context.Context, event *session.Event, onText func(s
 
 func snapshotRequest(request Request) Request {
 	request.Messages = append([]llm.ChatMessage(nil), request.Messages...)
+	request.attachments = cloneAttachments(request.attachments)
 	if request.Schema != nil {
 		schema := *request.Schema
 		schema.Schema = append([]byte(nil), schema.Schema...)

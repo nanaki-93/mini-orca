@@ -31,3 +31,16 @@ func TestGoogleSearchCapabilitiesRequireKnownNativeTextProfiles(t *testing.T) {
 		}
 	}
 }
+
+func TestAttachmentCapabilitiesRequireKnownNativeMultimodalProfiles(t *testing.T) {
+	for _, provider := range []config.ModelProvider{config.GeminiProvider, config.VertexProvider} {
+		if !ProviderCapabilities(config.ModelProfile{Provider: provider, Model: "gemini-3.8-flash"}).Attachments {
+			t.Fatal("native attachment capability unavailable")
+		}
+	}
+	for _, profile := range []config.ModelProfile{{Provider: config.OpenAIProvider, Model: "gemini-3.8-flash"}, {Provider: config.GeminiProvider, Model: "gemini-3.8-live"}, {Provider: config.GeminiProvider, Model: "unknown"}, {Provider: config.PiProvider, Model: "gemini-2.5-flash"}} {
+		if ProviderCapabilities(profile).Attachments {
+			t.Fatal("unsupported attachment protocol advertised")
+		}
+	}
+}

@@ -110,8 +110,8 @@ Policy messages must precede the conversation for native Google requests.
 
 Model metadata includes adapter capabilities for completion, JSON Schema,
 typed tools, and streaming. This describes implemented protocols, not account
-entitlements or model availability. Attachments, grounding, and live sessions
-remain unavailable until their guarded workflows are implemented. Reading
+entitlements or model availability. Additional capability flags describe
+separately admitted attachment, grounding and live workflows. Reading
 configured metadata is passive; only explicit CLI catalog refresh performs
 discovery. Native models are selected by their configured identifier.
 
@@ -119,6 +119,35 @@ The native provider paths are covered with fake HTTP providers, including Vertex
 authentication, cancellation and tool-signature round trips. No live Google
 account or model has been used for this validation. See the
 [Google ADK model documentation](https://adk.dev/agents/models/google-gemini/).
+
+### Explicit media attachments
+
+The attachment advice API uses the configured **Function** profile. Native Gemini
+and Vertex general-purpose multimodal models advertise `attachments: true`;
+compatible HTTP and CLI profiles do not. Model entitlement and availability are
+still determined by the provider response. Local import and library inspection
+work even when the Function profile cannot process attachments.
+
+Import is an explicit local write of supplied bytes, up to 512 KiB per file.
+Supported imports are PNG/JPEG (up to 4096 pixels per side and 4 megapixels), PDF
+with a supported header/EOF envelope, uncompressed 16 kHz mono 16-bit PCM WAV,
+and raw little-endian PCM with MIME `audio/pcm;rate=16000`. Raw PCM is retained for
+live input; completion advice requires WAV for audio. There is no automatic
+conversion, microphone/camera capture, provider URL fetch, or file upload service.
+
+Advice requires a question and one to four exact imported versions, at most
+1 MiB combined, plus current settings/model/destination and explicit media-sharing
+and applicable remote-provider consent. It makes one ADK model attempt under the
+normal run budget and Function timeout, with no tools, retries, memory retrieval,
+compaction or provider caching. Selected byte content contributes to conservative
+input reservations; unavailable usage remains explicitly unknown. Responses are
+private advisory text, never checked project findings or proposals.
+
+See the [attachment API contract](docs/api-contract.md#explicit-multimodal-attachments)
+for routes and guard fields. Imported media and answers use the existing private
+artifact library's inspection, export and deletion controls. Provider-side
+retention follows the operator's chosen service; deleting a local artifact cannot
+retract bytes already sent. Conformance uses fake providers, not a live account.
 
 ## CLI providers
 

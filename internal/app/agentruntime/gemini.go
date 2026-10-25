@@ -22,8 +22,9 @@ import (
 )
 
 type googleModel struct {
-	client    *ProviderClient
-	grounding bool
+	client     *ProviderClient
+	grounding  bool
+	multimodal bool
 }
 
 var _ model.LLM = (*googleModel)(nil)
@@ -44,9 +45,7 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			return
 		}
 		fullInput := input
-		if !m.grounding {
-			input, err = m.cachedRequest(ctx, input)
-		}
+		input, err = m.cacheCompletionInput(ctx, input)
 		if err != nil {
 			yield(nil, err)
 			return
@@ -95,6 +94,13 @@ func (m *googleModel) GenerateContent(ctx context.Context, request *model.LLMReq
 			yield(nil, fmt.Errorf("%w: native generation ended without a complete result", llm.ErrUnusableResponse))
 		}
 	}
+}
+
+func (m *googleModel) cacheCompletionInput(ctx context.Context, input *model.LLMRequest) (*model.LLMRequest, error) {
+	if m.grounding || m.multimodal {
+		return input, nil
+	}
+	return m.cachedRequest(ctx, input)
 }
 
 func googleResponseError(ctx context.Context, reservation *modelReservation, response *model.LLMResponse, providerErr error, structured bool) error {
@@ -186,7 +192,10 @@ func (m *googleModel) prepare(request *model.LLMRequest) (*model.LLMRequest, err
 	if googleSearchConfigured(request.Config) != m.grounding {
 		return nil, fmt.Errorf("%w: Google Search requires the explicit research entry point", llm.ErrRequestRejected)
 	}
-	if err := validateGoogleContent(request.Contents); err != nil {
+	if m.multimodal && !llm.SupportsAttachments(m.client.profile) {
+		return nil, fmt.Errorf("%w: native profile does not support admitted attachments", llm.ErrRequestRejected)
+	}
+	if err := validateNativeContent(request.Contents, m.multimodal); err != nil {
 		return nil, err
 	}
 	configuration, err := googleGenerationConfig(m.client.profile, request.Config)
@@ -239,6 +248,10 @@ func googleGenerationConfig(profile config.ModelProfile, configured *genai.Gener
 }
 
 func validateGoogleContent(contents []*genai.Content) error {
+	return validateNativeContent(contents, false)
+}
+
+func validateNativeContent(contents []*genai.Content, multimodal bool) error {
 	if len(contents) == 0 {
 		return fmt.Errorf("%w: native request requires content", llm.ErrRequestRejected)
 	}
@@ -247,6 +260,12 @@ func validateGoogleContent(contents []*genai.Content) error {
 			return fmt.Errorf("%w: missing native content", llm.ErrRequestRejected)
 		}
 		for _, part := range content.Parts {
+			if multimodal && part != nil && part.InlineData != nil {
+				if err := validateNativeAttachment(content.Role, part); err != nil {
+					return err
+				}
+				continue
+			}
 			if part == nil || onlyModelFields(part, "text", "thought", "thoughtSignature", "functionCall", "functionResponse") != nil {
 				return fmt.Errorf("%w: unsupported native content part", llm.ErrRequestRejected)
 			}
@@ -286,7 +305,7 @@ func newGeminiCompletionAgent(client *ProviderClient, request Request) (agent.Ag
 				yield(nil, err)
 				return
 			}
-			for response, err := range (&googleModel{client: client}).GenerateContent(ctx, input, request.Stream) {
+			for response, err := range (&googleModel{client: client, multimodal: len(request.attachments) != 0}).GenerateContent(ctx, input, request.Stream) {
 				if err != nil {
 					yield(nil, err)
 					return
@@ -331,6 +350,9 @@ func googleCompletionRequest(request Request) (*model.LLMRequest, error) {
 	if request.Schema != nil {
 		input.Config.ResponseMIMEType = "application/json"
 		input.Config.ResponseJsonSchema = request.Schema.Schema
+	}
+	if err := addNativeAttachments(input, request.attachments); err != nil {
+		return nil, err
 	}
 	return input, nil
 }
