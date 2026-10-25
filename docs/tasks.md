@@ -1253,7 +1253,7 @@ This is an implementation specification, not a claim that the features below alr
 - `internal/config/cloud.go`, `internal/config/cloud_test.go`, `internal/app/agentstate/cloud.go`, `internal/app/agentstate/cloud_test.go` — **new**, validated destinations and private transfer receipts.
 - `internal/app/agentruntime/cloud_services.go`, `internal/app/agentruntime/cloud_services_test.go`, `internal/app/agent_data_policy.go`, `internal/app/agent_data_policy_test.go`, `internal/app/agent_cloud.go`, `internal/app/agent_cloud_test.go` — **new**, pinned SDK conformance, explicit export and remote reconciliation/deletion.
 - `internal/api/handlers/agent_cloud_handler.go`, `internal/api/handlers/agent_cloud_handler_test.go`, `internal/tui/client/cloud_models.go` — **new**, SDK-independent contracts.
-- `go.mod`, `go.sum`, `internal/config/integrations.go`, `internal/app/service.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
+- `go.mod`, `go.sum`, `internal/config/config.go`, `internal/config/integrations.go`, `internal/app/service.go`, `cmd/daemon/main.go`, `CONFIG.md`, `config.example.yaml`, `docs/api-contract.md`, `docs/openapi.yaml`.
 
 **Inputs / dependencies**
 - Task 32B. Operator-provided Google Cloud resources and a configured service-account identity; offline tests use SDK transports and fake services. The pinned Memory Bank adapter has no deletion or credential-injection API; do not advertise it as conforming.
