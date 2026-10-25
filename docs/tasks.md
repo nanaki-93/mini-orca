@@ -1225,7 +1225,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 32B — Review and control ambient analysis in the TUI
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/agent_triggers.go`, `internal/tui/agent_trigger_actions.go`, `internal/tui/agent_trigger_view.go`, `internal/tui/agent_triggers_test.go`, `internal/tui/client/triggers.go`, `internal/tui/client/triggers_test.go` — **new**, explicit watch/grant controls and passive status.

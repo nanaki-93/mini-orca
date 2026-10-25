@@ -692,6 +692,14 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	if s.Page != PageMemory || s.RulesSection != "memory" {
 		t.Fatalf("Section 5 memory: page=%s section=%s", s.Page, s.RulesSection)
 	}
+	ambientActions := len(s.PendingActions)
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageAmbient || s.RulesSection != "ambient" {
+		t.Fatalf("Section 5 ambient: page=%s section=%s", s.Page, s.RulesSection)
+	}
+	if len(s.PendingActions) != ambientActions {
+		t.Fatal("ambient navigation dispatched work")
+	}
 	s.HandleKey(KeyEvent{Key: "3"})
 	for _, want := range []Page{PageGit, PageHistory, PageArtifacts, PageEditor} {
 		s.HandleKey(KeyEvent{Key: "Tab"})
@@ -706,7 +714,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		PageAgents, PageBugs, PageFeatures, PageAnalysisRun, PageAnalysisFiles,
 		PageEditor, PageGit, PageHistory, PageArtifacts,
 		PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageBootstrap, PageLessons, PageMemory,
+		PageInstructions, PageModels, PageBootstrap, PageLessons, PageMemory, PageAmbient,
 	}
 	for _, p := range nonSubmenuArrowPages {
 		s.Navigate(p)

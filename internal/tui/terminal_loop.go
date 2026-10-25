@@ -234,7 +234,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planInvestigationResultMsg:
 		m.activeAgentStarts = max(0, m.activeAgentStarts-1)
 		m.state.applyPlanInvestigation(ev.result)
-	case agentMediaResultMsg, mediaStreamUpdate, missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
+	case agentTriggerResultMsg, agentMediaResultMsg, mediaStreamUpdate, missionResultMsg, missionExecutionUpdate, agentRunActionResultMsg, agentStreamUpdate, agentSettingsResultMsg, agentConnectionResultMsg, agentExternalResultMsg, agentLibraryResultMsg:
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -247,9 +247,11 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pollInFlight = false
 		m.state.applyPollResult(ev.res)
 	}
+	m.state.reconcileTriggerScope()
 	m.state.reconcileMissionScope()
 	m.state.reconcileMediaScope()
 	if m.state.Quitting {
+		m.state.cancelTriggerRequest()
 		m.state.cancelMissionRequest()
 		m.state.cancelMediaRequest()
 		m.stopAgentStream()
@@ -266,6 +268,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 	switch ev := msg.(type) {
+	case agentTriggerResultMsg:
+		m.state.applyTriggerResult(ev.result)
 	case agentMediaResultMsg:
 		m.state.applyMediaResult(ev.result)
 	case mediaStreamUpdate:
@@ -337,6 +341,8 @@ func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {
 	switch act.Kind {
+	case "agent-triggers":
+		return m.prepareTriggerCmd(act.AgentTriggers), true
 	case "agent-media", "mission", "agent-library", "agent-external":
 		return m.prepareScopedWorkCmd(act), true
 	case "agent-connection":

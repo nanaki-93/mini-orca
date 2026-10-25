@@ -356,6 +356,29 @@ mutation; close remains available. Confirmation and dispatch bind the exact
 checkout, selection, settings and control revision. Replaced or late responses
 cannot update a different view or authorize another request.
 
+Settings / Ambient (`:ambient`) shows the main-checkout watch, provider permission,
+expiry, next eligibility, last attempt and conservative window consumption.
+Refresh (`r`) reads the current index and local receipt without provider calls;
+it may adopt a newer revision of the same project. Enter discloses paths, exact
+destination, limits and receipt details; Page Up/Down keeps them accessible in
+compact terminals. Retained data is labeled last known when refresh fails.
+
+Watch (`w` / `:ambient-watch changes <path; path>` or `:ambient-watch interval
+<seconds> <path; path>`) edits a retained draft and confirms one to eight indexed
+sources. This permits only detection. Grant (`g` / `:ambient-grant [seconds]`)
+separately confirms selected source and filtered-context sharing, the actual
+model/destination, expiry and fixed per-attempt/window budgets. Bind confirmation
+and queued dispatch to the current checkout, draft, settings, scope and control
+revision. Changing a draft or scope invalidates pending confirmation.
+
+Revoke (`v`) and Disable (`d`) explicitly stop daemon work; charges and receipts
+remain. Cancel (`x`) only stops the local request. An unavailable control receipt
+may have a retained outcome and requires refresh before another control. Preserve
+the draft and healthy last-known metadata through failure or cancellation. Cancel
+local transport on navigation, project replacement and quit, reject late results,
+and never replay missed controls. Navigation, inspection and command completion
+cannot grant provider permission or start project commands.
+
 Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
 with their check errors, even when the worktree has no new commits. Equal Git HEADs
 alone must not label such a task integrated. Starting a second task in an occupied

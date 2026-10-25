@@ -15,6 +15,7 @@ func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
 		{PageIssueDetail, PageFeatures, PageAgents},
 		{PageFeatureDetail, PagePlan, PageBugs},
 		{PageMedia, PageAgents, PageAnalysisFiles},
+		{PageAmbient, PageInstructions, PageMemory},
 	} {
 		for _, reverse := range []bool{false, true} {
 			s := NewState()

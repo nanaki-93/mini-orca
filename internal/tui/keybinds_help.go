@@ -312,6 +312,12 @@ var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 		secondary: []keyDesc{{"o", "Select checkout"}, {"x", "Cancel request; refresh outcome"}},
 		commands:  []keyDesc{{":agent-role", "Assign model scope"}, {":agent-budget", "Reduce a budget"}, {":settings-reset", "Confirm restore defaults"}},
 	},
+	PageAmbient: {
+		title:     "[5] SETTINGS · AMBIENT ANALYSIS",
+		primary:   []keyDesc{{"w", "Set watch"}, {"g", "Grant provider permission"}, {"v", "Revoke permission"}, {"d", "Disable watch"}},
+		secondary: []keyDesc{{"r", "Refresh local state"}, {"Enter", "Show or hide details"}, {"x", "Cancel local request"}},
+		commands:  []keyDesc{{":ambient-watch", "Choose paths and timing"}, {":ambient-grant", "Confirm expiry and limits"}, {":ambient-disable", "Stop automatic work"}},
+	},
 	PageSkills: {
 		title:     "[5] SETTINGS · SKILLS",
 		primary:   []keyDesc{{"Enter / v", "Validate selected skill"}, {"e", "Confirm enable or disable"}},

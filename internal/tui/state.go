@@ -39,6 +39,7 @@ const (
 	PageDiagrams       Page = "diagrams"
 	PageInstructions   Page = "instructions"
 	PageModels         Page = "models"
+	PageAmbient        Page = "ambient"
 	PageRoles          Page = "roles"
 	PageSkills         Page = "skills"
 	PageConnections    Page = "connections"
@@ -83,6 +84,7 @@ type Confirmation struct {
 
 // ActionRequest represents an asynchronous daemon operation queued by a user action.
 type ActionRequest struct {
+	AgentTriggers        *agentTriggerAction
 	AgentMedia           *agentMediaAction
 	Mission              *missionAction
 	AgentLibrary         *agentLibraryAction
@@ -108,6 +110,7 @@ type ActionRequest struct {
 
 // State holds the complete deterministic state of the Mini-Orca Terminal UI.
 type State struct {
+	AgentTriggers       *agentTriggerView
 	AgentMedia          *agentMediaView
 	Mission             *missionView
 	PlanView            string
@@ -261,6 +264,7 @@ func HubTabs() []HubTab {
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
 				{Page: PageMemory, Label: "Memory"},
+				{Page: PageAmbient, Label: "Ambient"},
 			},
 		},
 	}
@@ -504,6 +508,10 @@ func (s *State) ActiveHub() HubTab {
 
 // Navigate switches the active page, synchronizes section state, and resets selection when switching lists.
 func (s *State) Navigate(page Page) {
+	if page != PageAmbient {
+		s.cancelTriggerRequest()
+	}
+	s.reconcileTriggerScope()
 	if s.Page != page {
 		s.viewport.followSelection = true
 		s.DetailScroll = 0
@@ -535,7 +543,7 @@ func (s *State) Navigate(page Page) {
 		s.RulesSection = "trust"
 	case PageModels:
 		s.RulesSection = "models"
-	case PageRoles, PageSkills, PageConnections, PageExternalWork, PageMemory:
+	case PageRoles, PageSkills, PageConnections, PageExternalWork, PageMemory, PageAmbient:
 		s.RulesSection = string(page)
 	case PageBootstrap:
 		s.RulesSection = "bootstrap"
@@ -572,6 +580,8 @@ func (s *State) EffectivePage() Page {
 			return PageLessons
 		case "memory":
 			return PageMemory
+		case "ambient":
+			return PageAmbient
 		}
 	}
 	return s.Page
@@ -1101,7 +1111,7 @@ func (s *State) secondaryListLength() int {
 		return len(s.libraryRows())
 	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
 		return s.docsListLength()
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory:
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory, PageAmbient:
 		return s.instructionsListLength()
 	default:
 		return 1
@@ -1167,6 +1177,8 @@ func (s *State) docsListLength() int {
 
 func (s *State) instructionsListLength() int {
 	switch s.EffectivePage() {
+	case PageAmbient:
+		return 1
 	case PageMemory:
 		return len(s.libraryRows())
 	case PageExternalWork:
