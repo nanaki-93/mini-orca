@@ -50,7 +50,10 @@ route. Opening a project and planning a custom task have visible prompt shortcut
 
 Use Page Up/Down for overflowing pages, diagnostics, help and dialogs; Home/End
 reaches the beginning/end. Keep confirmation actions visible while its message
-scrolls. Error overlays expose recovery and command access and consume shortcuts
+scrolls. Resizing preserves an explicit reading position; moving selection or
+navigating restores focus tracking. Compact task stages retain workflow state
+and fresh-consent recovery guidance, reachable by paging even when space is tight.
+Error overlays expose recovery and command access and consume shortcuts
 that would otherwise act on the obscured page. Source views support paging and
 horizontal panning without exposing diff-review actions.
 
@@ -395,8 +398,11 @@ revocation available and report failures to save or restore trust.
 
 Use deterministic Go tests (`go test -race ./internal/tui/... ./cmd/tui/...`)
 across all 5 hubs, sub-views, palettes and terminal dimensions. Exercise
-loading, empty, populated and failure states, keyboard navigation, colon
-commands, action reachability and late-response identity guards.
+loading, empty, populated, pending-input, disconnected, failed, partial, stale
+and canceled states, keyboard navigation, colon commands, action reachability
+and late-response identity guards. Check compact and wide layouts, full approval
+paths and hashes, manual scrolling across resize, and that inspection never
+submits approval, calls a provider, executes checks or changes source.
 
 ## Cloud copies
 

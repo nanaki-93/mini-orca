@@ -10,6 +10,7 @@ import (
 type viewportMemory struct {
 	width, height   int
 	followSelection bool
+	manualScroll    bool
 	dialogScroll    int
 	dialogKey       string
 }
@@ -36,6 +37,7 @@ func (s *State) handleDetailScrollKey(ev KeyEvent) bool {
 		return false
 	}
 	s.viewport.followSelection = false
+	s.viewport.manualScroll = true
 	return true
 }
 
@@ -45,6 +47,7 @@ func (s *State) scrollDetails(th ansiTheme, body []string, rows int) []string {
 	}
 	if s.viewport.followSelection {
 		s.viewport.followSelection = false
+		s.viewport.manualScroll = false
 		marker := "  " + th.renderCursorPrefix(true)
 		for i, line := range body {
 			if strings.HasPrefix(line, marker) {

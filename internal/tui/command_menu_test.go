@@ -37,6 +37,25 @@ func TestCommandMenuSearchAndNavigationArePassive(t *testing.T) {
 	}
 }
 
+func TestEveryCommandCanBeBrowsedAndCompletedWithoutEffects(t *testing.T) {
+	for _, item := range commandCatalog() {
+		t.Run(item.command, func(t *testing.T) {
+			s, _ := executionState()
+			pendingInputFixture(s)
+			for _, dims := range [][2]int{{52, 16}, {120, 36}} {
+				s.HandleKey(keyEventFromTea(tea.KeyMsg{Type: tea.KeyCtrlK}))
+				s.HandleKey(KeyEvent{Text: item.command})
+				s.HandleKey(KeyEvent{Key: "Tab"})
+				assertFrameSize(t, s.Render(dims[0], dims[1]), dims[0], dims[1])
+				s.HandleKey(KeyEvent{Key: "Escape"})
+				if s.CmdActive || len(s.PendingActions) != 0 || s.Confirmation != nil || s.AgentDisclosure != nil || currentAgentInput(s.Change) == nil {
+					t.Fatal("command inspection changed a decision, disclosed output or submitted work")
+				}
+			}
+		})
+	}
+}
+
 func TestCommandQuitAliasDoesNotSelectSettingsRequest(t *testing.T) {
 	for _, alias := range []string{"q", "exit", "quit"} {
 		s := NewState()

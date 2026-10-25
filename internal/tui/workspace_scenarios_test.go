@@ -139,6 +139,33 @@ func TestLongProjectInformationAndCheckLogsRemainReachable(t *testing.T) {
 	}
 }
 
+func TestManualReadingPositionSurvivesTerminalResize(t *testing.T) {
+	s, _ := executionState()
+	s.Change.Workflow.Reason = strings.Repeat("Recorded diagnostic with recovery context. ", 150)
+	s.Render(80, 24)
+	s.HandleKey(KeyEvent{Key: "End"})
+	s.Render(80, 24)
+	end := s.DetailScroll
+	if end == 0 {
+		t.Fatal("fixture did not overflow")
+	}
+	s.Render(80, 20)
+	if s.DetailScroll != end {
+		t.Fatal("resizing jumped away from manually scrolled evidence")
+	}
+	// A deliberate selection change follows focus again, even after reading.
+	s.HandleKey(KeyEvent{Key: "ArrowDown"})
+	frame := s.Render(80, 20)
+	if s.DetailScroll >= end || !strings.Contains(ansi.Strip(frame), "▸") {
+		t.Fatal("selection did not restore focus tracking")
+	}
+	s.HandleKey(KeyEvent{Key: "Home"})
+	s.Render(80, 24)
+	if s.DetailScroll != 0 || len(s.PendingActions) != 0 {
+		t.Fatal("home/resize moved the reading position or dispatched work")
+	}
+}
+
 func TestLongDialogsKeepActionsAndDiagnosticsReachable(t *testing.T) {
 	s := NewState()
 	s.Error = strings.Repeat("Long failure explanation. ", 100) + "LAST_ERROR"

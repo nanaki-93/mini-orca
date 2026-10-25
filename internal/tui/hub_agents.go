@@ -126,6 +126,7 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	stages := s.currentAgentStages()
 	if s.viewportBodyRows > 0 && s.viewportBodyRows < 14 {
 		lines = []string{"  " + th.bold + "TASK · STAGES" + th.reset, "  " + theme.TruncatePlain(chg.Title, max(10, width-4))}
+		lines = appendWrappedText(lines, workflowTimingSummary(chg), width)
 	} else {
 		for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
 			lines = append(lines, "  "+row)

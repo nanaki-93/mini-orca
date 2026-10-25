@@ -1343,7 +1343,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 36 — Complete TUI accessibility and interaction verification
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/tui/view.go`, `internal/tui/theme_styles.go`, `internal/tui/theme/graphics.go`, `internal/tui/viewport.go`, `internal/tui/hub_agents.go`, `internal/tui/hub_settings.go`, `internal/tui/agent_run_view.go`, `internal/tui/agent_library.go`, `internal/tui/command_menu.go`, `internal/tui/keybinds_help.go`.

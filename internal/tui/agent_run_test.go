@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -13,6 +14,70 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
+
+func TestExecutionRecoveryIsReachableAcrossStatesAndSizes(t *testing.T) {
+	for _, status := range []string{"failed", "partial", "stale", "canceled", "interrupted", "pending-input", "disconnected"} {
+		for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
+			for _, dims := range [][2]int{{52, 16}, {120, 36}} {
+				t.Run(fmt.Sprintf("%s/%s/%dx%d", status, palette, dims[0], dims[1]), func(t *testing.T) {
+					s := workspaceAgentState(status)
+					s.Palette = palette
+					s.AgentDetailOpen = true
+					s.AgentRunSection = 4
+					if status == "pending-input" {
+						detail := *s.currentAgentDetail()
+						s.Change.WorktreePath = "/workspace/" + strings.Repeat("nested/", 40) + "DESTINATION_END"
+						s.Change.Workflow.Input.Scope[0].Path = strings.Repeat("directory/", 20) + "SOURCE_END.go"
+						s.applyAgentProgress(&agentProgressView{Request: *s.agentProgressRequest(), Detail: &detail, Status: "current"})
+					}
+					text := readAgentView(t, s, dims)
+					want := status
+					if status == "pending-input" {
+						want = "Recording a decision does not apply files."
+						for _, tail := range []string{"DESTINATION_END", "SOURCE_END.go", "proposal", "before", "after"} {
+							if !strings.Contains(text, tail) {
+								t.Fatalf("approval scope clipped: %s", tail)
+							}
+						}
+					}
+					if !strings.Contains(text, want) || len(s.PendingActions) != 0 || s.Confirmation != nil {
+						t.Fatalf("recovery state hidden or browsing caused an effect: %s", want)
+					}
+				})
+			}
+		}
+	}
+}
+
+func readAgentView(t *testing.T, s *State, dims [2]int) string {
+	t.Helper()
+	s.HandleKey(KeyEvent{Key: "Home"})
+	var pages strings.Builder
+	for range 128 {
+		frame := s.Render(dims[0], dims[1])
+		assertFrameSize(t, frame, dims[0], dims[1])
+		pages.WriteString(ansi.Strip(frame))
+		pages.WriteByte('\n')
+		before := s.DetailScroll
+		s.HandleKey(KeyEvent{Key: "PageDown"})
+		s.Render(dims[0], dims[1])
+		if s.DetailScroll == before {
+			return pages.String()
+		}
+	}
+	t.Fatal("reading never reached the end of bounded details")
+	return ""
+}
+
+func TestCompactStagesRetainFreshAdmissionGuidance(t *testing.T) {
+	for _, status := range []string{"interrupted", "outdated", "stale"} {
+		s, _ := executionState()
+		s.Change.Workflow.Status = status
+		if text := readAgentView(t, s, [2]int{52, 16}); !strings.Contains(text, "fresh consent and checks") {
+			t.Fatal("compact stage history hid recovery requirements", status)
+		}
+	}
+}
 
 func executionState() (*State, AgentRunDetail) {
 	s, detail := progressState()

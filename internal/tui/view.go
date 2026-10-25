@@ -16,7 +16,11 @@ func (s *State) Render(width, height int) string {
 	th := themeForPalette(s.Palette)
 	if s.viewport.width != width || s.viewport.height != height {
 		s.viewport.width, s.viewport.height = width, height
-		s.viewport.followSelection = true
+		// A resize must not discard an explicit reading position. Navigation or
+		// a selection change independently restores focus tracking.
+		if !s.viewport.manualScroll {
+			s.viewport.followSelection = true
+		}
 	}
 	if width < 52 || height < 16 {
 		return s.renderSmallTerminal(th, width, height)
