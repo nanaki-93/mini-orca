@@ -15,6 +15,9 @@ type Capabilities struct {
 }
 
 func ProviderCapabilities(profile config.ModelProfile) Capabilities {
+	if SupportsLiveSessions(profile) {
+		return Capabilities{LiveSessions: true}
+	}
 	if profile.IsCLI() {
 		return Capabilities{Completion: true, JSONSchema: true}
 	}
@@ -22,6 +25,11 @@ func ProviderCapabilities(profile config.ModelProfile) Capabilities {
 		return Capabilities{Completion: true, JSONSchema: true, Tools: true, Streaming: true, Grounding: SupportsGoogleSearch(profile), Attachments: SupportsAttachments(profile)}
 	}
 	return Capabilities{}
+}
+
+// Live models use their dedicated protocol; they are not completion models.
+func SupportsLiveSessions(profile config.ModelProfile) bool {
+	return profile.Provider == config.GeminiProvider && profile.Model == "gemini-3.8-live"
 }
 
 // Inline media is enabled only for native general-purpose multimodal models.

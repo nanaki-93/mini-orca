@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.13.1
 	github.com/charmbracelet/x/ansi v0.3.2
 	github.com/google/jsonschema-go v0.4.3
+	github.com/gorilla/websocket v1.5.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/muesli/termenv v0.15.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -39,7 +40,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.22 // indirect
 	github.com/googleapis/gax-go/v2 v2.26.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

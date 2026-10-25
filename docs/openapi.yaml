@@ -355,6 +355,65 @@ paths:
         '413': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
         '502': {$ref: '#/components/responses/Error'}
+  /api/projects/current/live-sessions:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Inspect live availability and retained session metadata without connecting
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Passive no-store metadata, content: {application/json: {schema: {$ref: '#/components/schemas/LiveOverview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      summary: Explicitly open a bounded owned live advisory session
+      description: Gemini API with explicit key only. No source mutation, tools, implicit context, capture or playback. Cancellation during connection joins the owner. Failed attempts remain charged; no automatic retry or replay.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/LiveOpenRequest'}}}}
+      responses:
+        '200': {description: Connected session metadata, content: {application/json: {schema: {$ref: '#/components/schemas/LiveSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+  /api/projects/current/live-sessions/{liveID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {name: liveID, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    get:
+      tags: [Projects]
+      summary: Inspect retained live state and private output artifact metadata
+      parameters:
+        - {$ref: '#/components/parameters/AgentProjectID'}
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200': {description: Passive no-store detail without transcript or audio bytes, content: {application/json: {schema: {$ref: '#/components/schemas/LiveSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/live-sessions/{liveID}/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {name: liveID, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    post:
+      tags: [Projects]
+      summary: Explicitly send, interrupt, reconnect or close using the current control revision
+      description: Send requires separate sharing consent; reconnect requires fresh connection consent and preserves cumulative budget/lifetime without replay. Close joins the owner. No adoption of sessions after restart. Only send accepts text or an imported attachment reference.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/LiveControl'}}}}
+      responses:
+        '200': {description: Updated no-store session metadata, content: {application/json: {schema: {$ref: '#/components/schemas/LiveSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
   /api/projects/current/artifacts:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2059,6 +2118,92 @@ components:
               type: object
               properties:
                 cached_tokens: {type: integer, minimum: 0}
+    LiveOpenRequest:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, configuration, settings_version, model, provider_origin, confirm_connect, confirm_remote_provider]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        model: {type: string}
+        provider_origin: {type: string}
+        confirm_connect: {type: boolean, enum: [true]}
+        confirm_remote_provider: {type: boolean, description: Must be true for a remote Function profile.}
+    LiveControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, configuration, settings_version, model, provider_origin, control_revision, action]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        model: {type: string}
+        provider_origin: {type: string}
+        control_revision: {type: integer, format: int64, minimum: 1}
+        action: {type: string, enum: [send, interrupt, reconnect, close]}
+        text: {type: string, minLength: 1, maxLength: 2048, description: Send only; at most 2048 UTF-8 bytes and exclusive with attachment.}
+        attachment: {$ref: '#/components/schemas/AttachmentReference'}
+        confirm_connect: {type: boolean, description: Must be true for reconnect.}
+        confirm_source_sharing: {type: boolean, description: Must be true for every send.}
+        confirm_remote_provider: {type: boolean, description: Must be true for send or reconnect with a remote Function profile.}
+    LiveOverview:
+      type: object
+      required: [project_id, project_revision, configuration, settings_version, model, provider_origin, state, destination, limits, lifetime_seconds, max_connections, max_turns_per_connection, max_input_bytes, max_output_bytes, sessions]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        model: {type: string}
+        provider_origin: {type: string}
+        state: {type: string, enum: [available, disabled, unsupported_profile, stale_settings]}
+        destination: {$ref: '#/components/schemas/ScopedModel'}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+        lifetime_seconds: {type: integer, enum: [300]}
+        max_connections: {type: integer, enum: [2]}
+        max_turns_per_connection: {type: integer, enum: [8]}
+        max_input_bytes: {type: integer, enum: [131072], description: Per connection payload ceiling; shared budget may reduce it.}
+        max_output_bytes: {type: integer, enum: [524288], description: Per connection payload ceiling; shared budget may reduce it.}
+        sessions: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/LiveSession'}}
+    LiveSession:
+      type: object
+      description: Source-free local receipt. Partial reported usage is separate from conservative cumulative charges. Private transcript and audio artifacts become available after each connection ends. No resume handles or automatic replay.
+      required: [project_id, project_revision, configuration, settings_version, model, provider_origin, id, version, control_revision, policy, state, connections, turns, completed_turns, sent_bytes, received_bytes, reported_input_tokens, reported_output_tokens, usage_reported, usage, run_ids, artifacts, created_at, updated_at, expires_at, owned, stale, can_reconnect, retention_failed, output_artifacts, missing_artifacts]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        configuration: {type: string}
+        settings_version: {type: integer, format: int64, minimum: 0}
+        model: {type: string}
+        provider_origin: {type: string}
+        id: {type: string}
+        version: {type: integer, format: int64, minimum: 1}
+        control_revision: {type: integer, format: int64, minimum: 1}
+        policy: {type: string}
+        state: {type: string, enum: [connecting, connected, disconnected, go_away, closed, interrupted, limit_reached, failed]}
+        connections: {type: integer, minimum: 1, maximum: 2}
+        turns: {type: integer, minimum: 0, maximum: 16, description: Attempted send and interrupt controls.}
+        completed_turns: {type: integer, minimum: 0, maximum: 512, description: Provider turn-completion signals; advisory only.}
+        sent_bytes: {type: integer, format: int64, minimum: 0, description: Attempted payload bytes including setup.}
+        received_bytes: {type: integer, format: int64, minimum: 0}
+        reported_input_tokens: {type: integer, format: int64, minimum: 0}
+        reported_output_tokens: {type: integer, format: int64, minimum: 0}
+        usage_reported: {type: boolean, description: Partial provider observations exist; this is not a final billing receipt.}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+        run_ids: {type: array, maxItems: 2, items: {type: string}}
+        artifacts: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/AgentArtifactReference'}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        owned: {type: boolean}
+        stale: {type: boolean}
+        can_reconnect: {type: boolean}
+        retention_failed: {type: boolean}
+        output_artifacts: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/AgentArtifact'}}
+        missing_artifacts: {type: integer, minimum: 0, maximum: 4}
     ArtifactList:
       type: object
       required: [project_id, project_revision, snapshot, artifacts]

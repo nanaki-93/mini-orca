@@ -160,6 +160,7 @@ func (s *Service) ControlAgentSettings(ctx context.Context, request AgentSetting
 	if err != nil {
 		return nil, err
 	}
+	s.cancelLiveSessions()
 	s.notifyEvent("agent_settings")
 	return s.settingsView(query, record)
 }

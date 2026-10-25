@@ -86,6 +86,10 @@ untrusted networks.
 | GET | `/api/projects/current/attachments` | Inspect imported media versions and Function-profile availability without dispatch. |
 | POST | `/api/projects/current/attachments` | Explicitly import bounded supplied media bytes into a private artifact. |
 | POST | `/api/projects/current/attachments/advice` | Send exact imported versions for one consented native multimodal advisory response. |
+| GET | `/api/projects/current/live-sessions` | Inspect live availability and retained metadata without connecting. |
+| POST | `/api/projects/current/live-sessions` | Explicitly open one bounded, owned live advisory session. |
+| GET | `/api/projects/current/live-sessions/{liveID}` | Inspect session state and private output artifact references. |
+| POST | `/api/projects/current/live-sessions/{liveID}/control` | Explicitly send, interrupt, reconnect or close with current control revision. |
 | GET | `/api/projects/current/artifacts/{artifactID}` | Explicitly disclose a bounded text preview or binary/research-report metadata. |
 | POST | `/api/projects/current/artifacts/{artifactID}/control` | Export a new private metadata file or delete an exact unprotected artifact version. |
 | GET | `/api/projects/current/integrations` | Read passive configured MCP connections and current schema grants. |
@@ -243,8 +247,10 @@ Configured model metadata includes `capabilities`: boolean `completion`,
 `json_schema`, `tools`, `streaming`, `attachments`, `grounding`, and `live_sessions`.
 These describe implemented adapter protocols, not an account's model entitlements.
 CLI adapters support completion and locally validated JSON Schema only. HTTP
-adapters also support tools and text streaming. Attachments, grounding and live
-sessions are currently false. Historical metadata may omit the object; clients
+adapters also support tools and text streaming. Conformed native Google models
+advertise attachments and grounding; the dedicated Gemini API live model
+advertises live sessions through its separate protocol. Unsupported combinations
+remain false. Historical metadata may omit the object; clients
 must treat missing capabilities as unavailable. `/api/models/current` remains
 passive and sends no provider request. Native model names are configured explicitly;
 available-model discovery remains the existing explicit Agy/Pi catalog operation.
@@ -2052,6 +2058,83 @@ replace an existing draft. Invalid or incomplete decomposition returns 400 with
 `mission planning incomplete`; stale catalog or captured identities return 409.
 Provider/transport failures and request cancellation retain the normal error
 contract. Retrying is a new explicit planning request against current captures.
+
+### Explicit live sessions
+
+`GET /api/projects/current/live-sessions` requires current `project_id` and
+`project_revision`. It returns an exact binding (`project_id`, `project_revision`,
+`configuration`, `settings_version`, `model`, `provider_origin`), `destination`,
+shared `limits`, fixed live bounds and `sessions`. Availability is `available`,
+`disabled`, `unsupported_profile` or `stale_settings`. The optional
+`agent_runtime.live_model` defaults to empty; the conformed combination is Gemini
+API `gemini-3.8-live` using the Function profile's explicit API key/destination.
+No provider calls occur during list/detail or artifact disclosure.
+
+`POST /api/projects/current/live-sessions` accepts that exact binding plus
+`confirm_connect: true` and `confirm_remote_provider` (true for a remote Function
+profile). It creates a durable, source-free receipt before opening an owned ADK
+live runner. It grants no project tools, code execution or source changes.
+Request cancellation during connection closes and joins its owner.
+
+`POST /api/projects/current/live-sessions/{liveID}/control` accepts the exact
+binding plus current `control_revision` and `action`:
+
+- `send`: supply `text` or one `attachment: {id, version, hash}`, with
+  `confirm_source_sharing: true` and applicable `confirm_remote_provider`.
+  Text is 1–2048 UTF-8 bytes. Media is a current imported JPEG or raw little-endian
+  16-bit mono PCM (`audio/pcm;rate=16000`), at most 64 KiB; no URLs, paths or implicit
+  format conversion are accepted. Admission is repeated before each media frame.
+- `interrupt`: explicitly interrupt the provider turn; it consumes one control
+  turn and sends no conversation history.
+- `reconnect`: requires `confirm_connect: true` and applicable remote confirmation,
+  a still-owned `failed`, `disconnected` or `go_away` session and remaining budget.
+  It creates a fresh connection without replay, resumption handles or refreshed
+  lifetime/token limits. It does not resend the previous input.
+- `close`: close and join the owner. No text or attachment is accepted for
+  interrupt, reconnect or close. A repeated/stale control must refresh first.
+
+Every accepted control claims its revision durably before its effect. A stale
+checkout/settings/model/origin/revision or context policy is rejected. History
+marks a changed binding or policy as `stale`; close remains available for an owned
+session in the current checkout. Controls return the updated
+session metadata. `GET /api/projects/current/live-sessions/{liveID}` adds
+`output_artifacts` and `missing_artifacts` for explicit library disclosure.
+Both reads and successful controls use `Cache-Control: no-store`.
+
+Session metadata includes `id`, journal `version`, `control_revision`, immutable
+binding and context `policy`, `state`, `owned`, `stale`, `can_reconnect`,
+`retention_failed`, `connections`, attempted `turns`, provider `completed_turns`,
+attempted `sent_bytes`, received payload bytes, cumulative `usage`, separately
+reported partial token counts, ADK `run_ids`, artifact references and timestamps.
+States are `connecting`, `connected`, `disconnected`, `go_away`, `closed`,
+`interrupted`, `limit_reached` or `failed`. Output is advisory; a provider turn
+completion does not establish verified project evidence.
+
+The owner permits five minutes and two connections, shortened by shared run
+limits. Per connection: eight send/interrupt controls, 128 KiB outgoing payload,
+512 KiB incoming payload, 128 KiB per incoming frame, 256 incoming messages and
+64 KiB retained text. Conservative byte-based input/output token reservations
+include 16 KiB of transport allowance per direction and are charged as unknown
+usage without a final receipt. `usage_reported` and `reported_*_tokens` are partial
+provider observations, not final billable totals. A failed attempt still consumes
+its reserved budget. Up to four sessions can be owned simultaneously per checkout.
+
+Connection end saves private transcript and raw 24 kHz mono PCM output artifacts;
+metadata never contains transcript, audio, credentials or provider resume handles.
+Audio requires explicit local export, with no capture or playback. Output errors
+retain failure state; successful input dispatch does not imply successful output
+retention. Reindex, checkout replacement, settings changes, shutdown, policy/budget
+failure and receipt persistence failure cancel the owner. Restarted active or
+disconnected history is `interrupted`, unowned and never automatically resumed.
+Only same-process owned sessions can explicitly reconnect. Up to 128 receipts are
+retained locally; reaching capacity rejects new sessions without silently evicting
+evidence.
+
+Strict bodies reject unknown fields, duplicate keys, trailing JSON and bodies over
+1 MiB. Invalid controls/consent return 400, missing detail 404, stale identity or
+unowned control 409, oversized body 413, unavailable persistence 500 and transport
+or malformed provider exchange 502. Failed requests never automatically retry.
+The same routes are isolated through the existing `worktree_path` selector.
 
 ### Explicit multimodal attachments
 

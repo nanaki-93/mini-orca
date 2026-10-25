@@ -149,6 +149,42 @@ artifact library's inspection, export and deletion controls. Provider-side
 retention follows the operator's chosen service; deleting a local artifact cannot
 retract bytes already sent. Conformance uses fake providers, not a live account.
 
+### Explicit live sessions
+
+Live advice is disabled by default. Set `agent_runtime.live_model: gemini-3.8-live`
+to enable the conformed Gemini API combination. It uses the Function profile's
+explicit API key and destination, preserving its ordinary completion model.
+Vertex, CLI, compatible HTTP, bearer tokens and ephemeral live credentials are
+not supported for this path. HTTPS and explicit loopback HTTP test/proxy endpoints
+are accepted; ambient proxy configuration, redirects and automatic retries are
+not used. Account access is determined by the provider response.
+
+Opening and reconnecting require explicit connection and applicable remote-provider
+consent. Each send separately confirms sharing either 1–2048 UTF-8 bytes of text
+or one current imported JPEG/raw 16 kHz mono PCM artifact of at most 64 KiB.
+Live input does not convert PNG, PDF or WAV. Interruption and close are explicit
+controls. There is no microphone/camera capture, playback, tool execution, implicit
+project context, source mutation, background reconnect, input replay or provider
+resumption handle.
+
+A session lasts at most five minutes and two connections. Each connection admits
+at most eight send/interrupt controls, 128 KiB outgoing payload, 512 KiB incoming
+payload and 256 received messages. Frames are limited to 128 KiB and retained
+transcript text to 64 KiB. The shared run limits can shorten these bounds.
+Conservative token reservations charge one token per permitted byte plus 16 KiB
+of framing allowance in each direction. Reported partial usage is displayed
+separately; without a final receipt, the reservation remains charged as unknown
+usage. Reconnection retains elapsed time and cumulative charges.
+
+Metadata inspection is passive. Private transcript and raw 24 kHz PCM output
+artifacts become available when a connection ends; inspect/export them through
+the artifact library. A failed output write remains a failure. Reindex, checkout
+replacement, settings changes, cancellation and daemon shutdown close the owned
+session. After a restart, retained active history is interrupted and cannot be
+resumed: a new connection requires a new explicit session. Conformance tests use
+fake WebSockets; live account access and audio quality have not been evaluated.
+See the [live-session contract](docs/api-contract.md#explicit-live-sessions).
+
 ## CLI providers
 
 Install and sign in to [Antigravity CLI](https://www.antigravity.google/docs/cli/install/)

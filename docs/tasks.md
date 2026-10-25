@@ -1141,7 +1141,7 @@ This is an implementation specification, not a claim that the features below alr
 
 ## Task 31B — Own bounded ADK live session lifecycles
 
-- [ ] Complete
+- [x] Complete
 
 **Target files**
 - `internal/app/agentruntime/live.go`, `internal/app/agentruntime/live_transport.go`, `internal/app/agentruntime/live_input.go`, `internal/app/agentruntime/live_events.go`, `internal/app/agentruntime/live_test.go`, `internal/app/agentruntime/live_transport_test.go`, `internal/app/agentruntime/live_events_test.go` — **new**, ADK runner/session bridge, explicit input validation, private output recording and bounded provider transport.

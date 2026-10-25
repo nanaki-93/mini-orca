@@ -1,11 +1,41 @@
 package config
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
+
+func TestLiveModelIsExplicitAndEmptyDoesNotChangeRuntimeIdentity(t *testing.T) {
+	disabled, err := ResolveAgentRuntime(AgentRuntimeConfig{})
+	if err != nil || disabled.LiveModel != "" {
+		t.Fatalf("default: %+v %v", disabled, err)
+	}
+	data, err := json.Marshal(disabled)
+	if err != nil || strings.Contains(string(data), "LiveModel") {
+		t.Fatal("disabled live changed configuration identity")
+	}
+	yamlData := []byte("agent_runtime:\n  live_model: gemini-3.8-live\n")
+	if err := rejectUnknownFields(yamlData); err != nil {
+		t.Fatal(err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(yamlData, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := ResolveAgentRuntime(cfg.AgentRuntime)
+	if err != nil || enabled.LiveModel != "gemini-3.8-live" {
+		t.Fatalf("live model: %+v %v", enabled, err)
+	}
+	for _, name := range []string{"gemini-2.5-flash", "gemini-3.8-live-extended-thinking", " gemini-3.8-live", "unknown"} {
+		if _, err := ResolveAgentRuntime(AgentRuntimeConfig{LiveModel: name}); err == nil {
+			t.Fatalf("accepted %q", name)
+		}
+	}
+}
 
 func TestAgentSkillsAreExplicitBoundedAndImmutable(t *testing.T) {
 	if resolved, err := ResolveAgentRuntime(AgentRuntimeConfig{}); err != nil || len(resolved.Skills) != 0 {

@@ -56,6 +56,7 @@ type Service struct {
 	agentRuns                       *agentRunController
 	missions                        *missionController
 	integrations                    *integrationRegistry
+	live                            *liveRegistry
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
@@ -122,6 +123,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	service := &Service{
 		config:            cfg,
 		integrations:      integrations,
+		live:              &liveRegistry{sessions: make(map[string]*liveSessionOwner)},
 		agentRuntime:      agentConfig,
 		worktrees:         make(map[string]*Service),
 		discoverPiModels:  llm.DiscoverPiModels,

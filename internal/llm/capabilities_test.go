@@ -6,6 +6,19 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
+func TestLiveCapabilitiesRequireConformedNativeModel(t *testing.T) {
+	for _, provider := range []config.ModelProvider{config.GeminiProvider, config.VertexProvider, config.OpenAIProvider} {
+		for _, model := range []string{"gemini-3.8-live", "gemini-2.5-flash", "unknown"} {
+			profile := config.ModelProfile{Provider: provider, Model: model}
+			want := provider == config.GeminiProvider && model == "gemini-3.8-live"
+			capabilities := ProviderCapabilities(profile)
+			if capabilities.LiveSessions != want || want && (capabilities.Completion || capabilities.Tools || capabilities.Attachments) {
+				t.Fatalf("capabilities: %+v", capabilities)
+			}
+		}
+	}
+}
+
 func TestProviderCapabilitiesDescribeImplementedProtocols(t *testing.T) {
 	for _, provider := range []config.ModelProvider{config.OpenAIProvider, config.GeminiProvider, config.VertexProvider, config.PiProvider, config.AgyProvider} {
 		profile := config.ModelProfile{Provider: provider}
