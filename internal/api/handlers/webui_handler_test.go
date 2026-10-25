@@ -34,6 +34,7 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 	body := res.Body.String()
 	for _, needle := range []string{
 		"Mini-Orca · Web UI &amp; Diff Inspector",
+		"left-dock",
 		"1 · Understand",
 		"2 · Build &amp; Fix",
 		"3 · Review &amp; Apply",
@@ -42,12 +43,27 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		"/api/projects/current/overview",
 		"/api/projects/current/files/explanation",
 		"/api/projects/current/changes",
+		`data-theme="tokyo"`,
+		`data-set-theme="obsidian"`,
+		`data-set-theme="catppuccin"`,
+		`data-set-theme="nord"`,
+		`data-set-theme="dracula"`,
+		`data-set-theme="crt"`,
+		`data-set-theme="amber"`,
+		`data-set-theme="paper"`,
+		"cmd-modal-backdrop",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)
 		}
 	}
-	if strings.Contains(body, "/api/projects/current/files/symbols") {
-		t.Fatalf("embedded webui.html still references removed symbols endpoint")
+	for _, retired := range []string{
+		"/api/projects/current/files/symbols",
+		`<header class="topbar">`,
+		`<nav class="nav-tabs">`,
+	} {
+		if strings.Contains(body, retired) {
+			t.Fatalf("embedded webui.html still contains retired markup or endpoint %q", retired)
+		}
 	}
 }
