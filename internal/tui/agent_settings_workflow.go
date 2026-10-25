@@ -152,6 +152,9 @@ func (s *State) queueWorkflowRetry(action ActionRequest, approved *workflowChoic
 		s.Error = "Task changed. Select the proposal again before retrying."
 		return
 	}
+	if approved == nil && s.prepareWorkflowRetrySettings(action) {
+		return
+	}
 	choice, ok := s.approveWorkflowChoice(nil, s.Change, approved, func(state *State, choice *workflowChoice) { state.queueWorkflowRetry(action, choice) })
 	if !ok {
 		return

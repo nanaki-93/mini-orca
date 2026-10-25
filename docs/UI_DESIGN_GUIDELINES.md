@@ -83,6 +83,10 @@ from scope; replanning against the current base clears captured citations so
 old source evidence cannot block a fresh investigation.
 Automatic repair is opt-in. Failed checks may suggest additional scope, but cannot
 silently expand an approved plan. Stage retries must state which work is reused.
+Retrying failed creation retains the saved task and worktree even when no proposal
+changes exist. Explicit retry loads that checkout's local settings when needed
+before fresh provider consent; it does not require a manual settings-scope command.
+Failed settings reads and changed or canceled requests cannot start generation.
 Stage details show the model budget alongside elapsed time. Testing generates
 test files before verification; missing check results must not imply tests have
 run. Busy stages do not advertise a duplicate retry. Timeout recovery identifies

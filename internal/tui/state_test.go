@@ -1492,12 +1492,14 @@ func TestBatchTwoHighIssuesFixAndRetryAfterTimeout(t *testing.T) {
 		}
 	}
 
-	// 2. Review the retry plan after Stage 1 times out, then generate without calling /checks.
+	// 2. Retry the same task after Stage 1 times out without creating another plan or calling /checks.
 	s.HandleKey(KeyEvent{Key: "r"})
-	approveTaskPlanForTest(t, s)
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "repair-change" || s.PendingActions[0].Target != "chg-batch" {
+		t.Fatalf("expected Stage 1 retry to retain the saved batch task, got %+v", s.PendingActions)
+	}
 	s.FlushActions(context.Background(), cli)
-	if checksCalled || s.Error != "" {
-		t.Fatalf("expected 'r' after Stage 1 timeout to retry workflow without calling /checks, checksCalled=%v err=%q", checksCalled, s.Error)
+	if checksCalled || s.Error != "" || len(openCriteria) != 1 {
+		t.Fatalf("expected Stage 1 retry without checks or another task, checksCalled=%v tasks=%d err=%q", checksCalled, len(openCriteria), s.Error)
 	}
 	if len(workflowMessages) != 2 || !strings.Contains(workflowMessages[1], "Unvalidated derived key length") || !strings.Contains(workflowMessages[1], "Per-iteration HMAC allocation in PBKDF2") {
 		t.Fatalf("expected retry workflow message to preserve both findings' full details, got:\n%v", workflowMessages)
@@ -2144,17 +2146,16 @@ func TestAgentRepairInWorktreeDoesNotDuplicateWorktreeRow(t *testing.T) {
 		t.Fatalf("expected a single agent row without duplicate WORKTREE row after 'r', got %+v", items)
 	}
 
-	// 2. Even when 'r' restarts a rejected/empty worktree session, WorktreePath is preserved and no WORKTREE row appears
+	// 2. Retrying failed creation retains the same empty session and worktree.
 	s.PendingActions = nil
 	s.Change.Changes = nil
 	s.HandleKey(KeyEvent{Key: "r"})
-	approveTaskPlanForTest(t, s)
-	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "start-agent" || s.PendingActions[0].Seed == nil || s.PendingActions[0].Seed.WorktreePath != wtPath {
-		t.Fatalf("expected restart seed to preserve WorktreePath %q, got %+v", wtPath, s.PendingActions)
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "repair-change" || s.PendingActions[0].Target != "chg-wt-1" || s.Change.WorktreePath != wtPath {
+		t.Fatalf("expected repair to preserve the task and WorktreePath %q, got %+v", wtPath, s.PendingActions)
 	}
-	itemsAfterRestart := s.AgentItems()
-	if len(itemsAfterRestart) != 1 || itemsAfterRestart[0].ScopeBadge == "WORKTREE" || strings.HasPrefix(itemsAfterRestart[0].Title, "Worktree ") {
-		t.Fatalf("expected a single agent row without duplicate WORKTREE row after restart, got %+v", itemsAfterRestart)
+	itemsAfterRetry := s.AgentItems()
+	if len(itemsAfterRetry) != 1 || itemsAfterRetry[0].ScopeBadge == "WORKTREE" || strings.HasPrefix(itemsAfterRetry[0].Title, "Worktree ") {
+		t.Fatalf("expected a single agent row without duplicate WORKTREE row after retry, got %+v", itemsAfterRetry)
 	}
 	frame := s.Render(120, 36)
 	if strings.Contains(frame, "Worktree orca/") || strings.Contains(frame, "WORKTREE") {

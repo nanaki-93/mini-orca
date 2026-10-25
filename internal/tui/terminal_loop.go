@@ -290,6 +290,7 @@ func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
 		m.state.applyConnectionResult(ev.result)
 	case agentSettingsResultMsg:
 		m.state.applyAgentSettings(ev.result)
+		return batchTeaCmds(m.flushActionsAsync())
 	case agentRunActionResultMsg:
 		m.state.applyAgentRunAction(ev.result)
 	case agentStreamUpdate:
@@ -323,6 +324,10 @@ func (m *BubbleModel) applyKeyEvent(ev KeyEvent) {
 
 func (m *BubbleModel) applyKeyEventAsync(ev KeyEvent) []tea.Cmd {
 	m.state.HandleKey(ev)
+	return m.flushActionsAsync()
+}
+
+func (m *BubbleModel) flushActionsAsync() []tea.Cmd {
 	if m.client == nil || len(m.state.PendingActions) == 0 {
 		m.state.PendingActions = nil
 		return nil

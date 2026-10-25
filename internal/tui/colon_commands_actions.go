@@ -399,7 +399,7 @@ func (s *State) triggerAgentRecheckOrRepair() {
 		s.openCurrentPlan()
 		return
 	}
-	if s.isChangeStale() || len(s.Change.Changes) == 0 {
+	if s.isChangeStale() || len(s.Change.Changes) == 0 && !s.isWorkflowFailedOrInterrupted() {
 		s.restartAgentFromCurrentChange()
 		return
 	}

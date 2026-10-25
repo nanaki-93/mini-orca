@@ -19,9 +19,11 @@ func (s *State) FlushActions(ctx context.Context, cl *Client) {
 		s.PendingActions = nil
 		return
 	}
-	actions := s.PendingActions
-	s.PendingActions = nil
-	s.flushActionBatch(ctx, cl, actions)
+	for len(s.PendingActions) > 0 {
+		actions := s.PendingActions
+		s.PendingActions = nil
+		s.flushActionBatch(ctx, cl, actions)
+	}
 }
 
 func (s *State) flushActionBatch(ctx context.Context, cl *Client, actions []ActionRequest) {

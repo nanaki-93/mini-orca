@@ -20,6 +20,7 @@ type agentSettingsView struct {
 }
 
 type agentSettingsAction struct {
+	Retry         *workflowRetrySettings
 	ID, Operation string
 	Parent        ProjectIdentity
 	Scope         client.AgentSettingsScope
@@ -158,7 +159,7 @@ func (s *State) applyAgentSettings(result agentSettingsResult) {
 		if result.Action.Operation != "validate" {
 			v.Data, v.Validations = nil, nil
 		}
-		if result.Action.Operation != "read" {
+		if result.Action.Operation != "read" || result.Action.Retry != nil {
 			s.Error = "Agent settings: " + v.Failure
 		}
 		return
@@ -177,6 +178,9 @@ func (s *State) applyAgentSettings(result agentSettingsResult) {
 	}
 	if result.Action.Operation == "control" {
 		s.CmdOutput = "Agent settings saved for future runs in " + settingsText(v.Path) + ". Active runs retain their captured settings."
+	}
+	if result.Action.Retry != nil {
+		s.resumeWorkflowRetrySettings(result.Action.Retry)
 	}
 }
 
