@@ -6,138 +6,175 @@
 <meta name="color-scheme" content="dark light">
 <title>Mini-Orca · UI directions</title>
 <style>
-:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #dce1ed; background: #10131b; font-synthesis: none; }
+:root { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; color: #dce1ed; background: #0b0f19; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
-button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--accent, #b5a6f5); outline-offset: 4px; }
+button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--accent, #8b9dff); outline-offset: 2px; }
 button:disabled { cursor: default; opacity: .5; }
 [hidden] { display: none !important; }
 .gallery { max-width: 1600px; padding: 28px 36px 24px; margin: auto; }
 .gallery-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
-.gallery-heading h1 { margin: 0; font-size: 20px; font-weight: 550; letter-spacing: -.5px; }
-.gallery-heading p { margin: 6px 0 0; font-size: 12px; color: #a0a9bb; }
-.demo-label { font-size: 11px; color: #aeb6c9; white-space: nowrap; }
+.gallery-heading h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.4px; }
+.gallery-heading p { margin: 6px 0 0; font-size: 12px; color: #9ba6bc; }
+.demo-label { font-size: 11px; color: #9ba6bc; white-space: nowrap; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
 .directions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.direction { padding: 14px 16px; border: 1px solid #30384b; border-radius: 10px; background: transparent; color: #b3bbcb; text-align: left; display: flex; align-items: center; gap: 12px; }
-.direction[aria-pressed="true"] { border-color: #ab9be0; background: #242335; color: #f1ecff; }
-.direction strong { display: block; font-size: 13px; font-weight: 550; }
-.direction small { display: block; font-size: 11px; color: #a7afc0; margin-top: 4px; }
-.swatch { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; font-size: 11px; }
-.swatch-orbit { color: #c5b6fc; background: #242a43; }
+.direction { padding: 14px 16px; border: 1px solid #263147; border-radius: 10px; background: #101625; color: #b3bbcb; text-align: left; display: flex; align-items: center; gap: 12px; transition: border-color .15s, background .15s; }
+.direction:hover { border-color: #384766; }
+.direction[aria-pressed="true"] { border-color: #7c93ff; background: #161f35; color: #f0f4ff; box-shadow: inset 0 0 0 1px rgba(124, 147, 255, .25); }
+.direction strong { display: block; font-size: 13px; font-weight: 600; }
+.direction small { display: block; font-size: 11px; color: #96a2b8; margin-top: 4px; }
+.swatch { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; font-size: 11px; font-weight: 600; font-family: "SFMono-Regular", Consolas, monospace; }
+.swatch-orbit { color: #9db0ff; background: #1d2846; border: 1px solid #334675; }
 .swatch-paper { color: #4e574b; background: #eae7df; }
 .swatch-pulse { color: #8ed9c6; background: #17352f; }
 .swatch-focus { color: #a9c6ff; background: #213757; }
 .direction-note { font-size: 13px; color: #b9c0d0; margin: 18px 0; min-height: 20px; }
-.preview-frame { border: 1px solid #30384b; border-radius: 14px; overflow: hidden; }
+.preview-frame { border: 1px solid #263147; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 50px rgba(3, 7, 18, .55); }
 .preview-caption { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0 0; color: #9ca6b9; font-size: 11px; }
-.preview-caption a { color: #c4b7f3; text-decoration: none; }
+.preview-caption a { color: #9db0ff; text-decoration: none; }
 /* The examples share content and behavior, but own their layout and visual system. */
-.prototype { --bg: #0c1120; --surface: #121a2b; --surface-2: #1a2438; --line: #263248; --text: #e5eaf5; --muted: #9ba9c0; --accent: #baa8f5; --on-accent: #171226; --tint: #baa8f51a; --good: #93d9bb; --added: #18312d; --removed: #36242e; --code: #d2dcec; --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace; background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5; min-height: 700px; }
-.prototype button { font-size: 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; color: inherit; padding: 9px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.prototype { --bg: #0b101d; --surface: #111829; --surface-2: #182238; --line: #23304a; --text: #e6ecf7; --muted: #94a3b8; --accent: #8da2ff; --on-accent: #0b1120; --tint: rgba(141, 162, 255, .13); --good: #4ade80; --added: rgba(34, 197, 94, .14); --removed: rgba(244, 63, 94, .14); --code: #dbe4f3; --mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace; background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5; min-height: 720px; }
+.prototype button { font-size: 12px; background: transparent; border: 1px solid transparent; border-radius: 6px; color: inherit; padding: 8px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: background .12s, border-color .12s, color .12s; }
 .prototype button:hover:not(:disabled) { background: var(--surface-2); }
-.prototype button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 550; }
+.prototype button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 .prototype button.primary:hover:not(:disabled) { filter: brightness(1.06); }
-.prototype button.secondary { border-color: var(--line); }
+.prototype button.secondary { border-color: var(--line); background: rgba(255, 255, 255, .02); }
 .prototype button.subtle { color: var(--muted); }
 .prototype button.selected, .prototype button[aria-pressed="true"] { color: var(--accent); background: var(--tint); }
 .prototype h2, .prototype h3, .prototype p { margin: 0; }
-.prototype h2 { font-size: 23px; line-height: 1.3; font-weight: 550; letter-spacing: -.6px; }
-.prototype h3 { font-size: 14px; font-weight: 550; }
+.prototype h2 { font-size: 22px; line-height: 1.3; font-weight: 600; letter-spacing: -.5px; }
+.prototype h3 { font-size: 14px; font-weight: 600; }
 .prototype .muted { color: var(--muted); }
 .prototype .mono { font-family: var(--mono); }
-.prototype .eyebrow { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: var(--muted); }
-.prototype .row { display: flex; align-items: center; gap: 12px; }
+.prototype .eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
+.prototype .row { display: flex; align-items: center; gap: 10px; }
 .prototype .spread { justify-content: space-between; }
-.prototype .brand { font-size: 15px; font-weight: 650; letter-spacing: -.5px; display: flex; align-items: center; gap: 10px; }
-.logo { width: 24px; height: 24px; display: grid; place-items: center; color: var(--accent); }
-.icon { width: 18px; height: 18px; flex-shrink: 0; }
-.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 5px; background: var(--surface-2); color: var(--muted); font-size: 10px; white-space: nowrap; }
-.pill.good { color: var(--good); }
-.context-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line); padding: 14px 22px; }
-.context-header .project { font-size: 12px; color: var(--muted); }
-.context-header .project strong { color: var(--text); font-weight: 450; }
-.context-header .project span { margin: 0 12px; opacity: .6; }
+.prototype .brand { font-size: 14px; font-weight: 650; letter-spacing: -.3px; display: flex; align-items: center; gap: 9px; }
+.logo { width: 22px; height: 22px; display: grid; place-items: center; color: var(--accent); }
+.icon { width: 16px; height: 16px; flex-shrink: 0; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 500; white-space: nowrap; }
+.pill.good { color: var(--good); border-color: rgba(74, 222, 128, .28); background: rgba(74, 222, 128, .08); }
+.pill.accent { color: var(--accent); border-color: rgba(141, 162, 255, .3); background: var(--tint); }
+.context-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line); padding: 12px 20px; }
+.context-header .project { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.context-header .project strong { color: var(--text); font-weight: 500; }
+.context-header .project span { opacity: .55; }
 .workspace-content { min-width: 0; }
 .task-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.task-heading .eyebrow { margin-bottom: 8px; }
-.task-heading p:not(.eyebrow) { margin-top: 10px; color: var(--muted); font-size: 12px; }
+.task-heading .eyebrow { margin-bottom: 6px; }
+.task-heading p:not(.eyebrow) { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .page-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .page-tabs button { color: var(--muted); }
 .file-selector { display: flex; flex-wrap: wrap; gap: 6px; }
-.file-selector button { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 10px 14px; }
-.code-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
-.code-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; font-size: 11px; border-bottom: 1px solid var(--line); }
+.file-selector button { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 9px 12px; }
+.code-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.code-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; font-size: 11px; border-bottom: 1px solid var(--line); background: rgba(15, 23, 42, .55); }
 .code-heading .mono { overflow-wrap: anywhere; }
-.diff-summary { color: var(--good); font-family: var(--mono); font-size: 11px; }
-.diff { font-family: var(--mono); color: var(--code); font-size: 12px; padding: 16px 0; overflow: auto; }
-.code-line { display: grid; grid-template-columns: 36px 22px minmax(max-content, 1fr); min-height: 26px; line-height: 26px; padding: 0 20px 0 8px; }
-.code-line .number { color: var(--muted); text-align: right; padding-right: 12px; font-size: 10px; user-select: none; }
+.diff-summary { color: var(--good); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.diff-summary .del { color: #fb7185; margin-left: 4px; }
+.diff-hunk-bar { font-family: var(--mono); font-size: 11px; color: var(--muted); background: rgba(24, 34, 56, .65); padding: 5px 16px; border-bottom: 1px solid var(--line); }
+.diff { font-family: var(--mono); color: var(--code); font-size: 12px; padding: 8px 0; overflow: auto; }
+.code-line { display: grid; grid-template-columns: 34px 34px 20px minmax(max-content, 1fr); min-height: 24px; line-height: 24px; padding: 0 18px 0 6px; }
+.code-line:hover { filter: brightness(1.07); }
+.code-line .number { color: #64748b; text-align: right; padding-right: 10px; font-size: 10px; user-select: none; }
+.code-line .sign { user-select: none; font-weight: 600; }
 .code-line code { white-space: pre; font: inherit; }
 .code-line.add { background: var(--added); }
 .code-line.remove { background: var(--removed); }
 .code-line.add .sign { color: var(--good); }
-.code-line.remove .sign { color: #df9eab; }
+.code-line.remove .sign { color: #fb7185; }
 .code-line .keyword { color: var(--accent); }
-.review-action { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 0 0; }
+.diff-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); font-family: var(--mono); font-size: 11.5px; overflow: auto; }
+.diff-split-pane { min-width: 0; padding: 8px 0; }
+.diff-split-pane + .diff-split-pane { border-left: 1px solid var(--line); }
+.diff-split-header { padding: 4px 14px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.diff-split .code-line { grid-template-columns: 32px 18px minmax(max-content, 1fr); padding: 0 12px 0 4px; }
+.review-action { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 0 0; }
 .review-action .muted { font-size: 11px; }
-.context-disclosure { border-top: 1px solid var(--line); padding: 17px 0; color: var(--muted); font-size: 12px; }
-.context-disclosure summary { cursor: pointer; }
-.context-disclosure[open] summary { margin-bottom: 14px; }
-.context-disclosure p { line-height: 1.8; }
-.screen-message { color: var(--muted); font-size: 12px; min-height: 20px; margin-top: 14px !important; }
-.checks-list { margin: 24px 0; }
-.check-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); }
-.check-row span:last-child { color: var(--good); font-size: 12px; }
-.overview-copy { max-width: 65ch; color: var(--muted); line-height: 1.9; }
-.overview-copy h3 { margin: 26px 0 10px; color: var(--text); }
-/* 01 / Orbit: dashboard by default; the explorer belongs only to code review. */
-.orbit { display: grid; grid-template-columns: 72px minmax(0, 1fr); grid-template-rows: 53px 1fr 30px; }
-.orbit.is-review { grid-template-columns: 72px 218px minmax(0, 1fr); }
-.orbit .orbit-header { grid-column: 1 / -1; background: #101729; padding: 0 20px; }
+.context-disclosure { border-top: 1px solid var(--line); padding: 15px 0; color: var(--muted); font-size: 12px; }
+.context-disclosure summary { cursor: pointer; font-weight: 500; color: var(--text); }
+.context-disclosure[open] summary { margin-bottom: 10px; }
+.context-disclosure p { line-height: 1.7; }
+.screen-message { color: var(--good); font-size: 11.5px; min-height: 18px; margin-top: 10px !important; font-family: var(--mono); }
+.checks-list { margin: 18px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.check-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.check-row:last-child { border-bottom: 0; }
+.check-row span:last-child { color: var(--good); font-size: 11px; font-family: var(--mono); }
+.overview-copy { max-width: 68ch; color: var(--muted); line-height: 1.75; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 24px; margin-top: 14px; }
+.overview-copy h3 { margin: 18px 0 6px; color: var(--text); font-size: 13px; }
+.overview-copy h3:first-child { margin-top: 0; }
+
+/* 01 / Orbit: developer-friendly Lite IDE + calm workspace dashboard. */
+.orbit { display: grid; grid-template-columns: 64px minmax(0, 1fr); grid-template-rows: 46px 1fr 28px; }
+.orbit.is-review { grid-template-columns: 64px 236px minmax(0, 1fr); }
+.orbit .orbit-header { grid-column: 1 / -1; background: #0d1322; padding: 0 16px; }
 .orbit .orbit-header .brand { font-size: 13px; }
-.orbit .activity { grid-row: 2; background: #0d1423; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 17px 6px; }
-.orbit .activity button { width: 56px; min-height: 56px; padding: 8px 4px; flex-direction: column; gap: 5px; font-size: 10px; color: var(--muted); }
-.orbit .activity button[aria-pressed="true"] { color: var(--accent); }
+.orbit .branch-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); padding: 2px 8px; border-radius: 5px; }
+.orbit .header-task-btn { font-size: 11px; padding: 4px 10px; border-color: var(--line); background: var(--surface); color: var(--muted); font-family: var(--mono); }
+.orbit .header-task-btn strong { color: var(--text); font-weight: 500; }
+.orbit .activity { grid-row: 2; background: #090e1a; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; }
+.orbit .activity button { width: 52px; min-height: 48px; padding: 6px 4px; flex-direction: column; gap: 4px; font-size: 10px; color: var(--muted); border-radius: 7px; position: relative; }
+.orbit .activity button[aria-pressed="true"] { color: var(--text); background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
 .orbit .activity .bottom { margin-top: auto; }
-.orbit .explorer { background: #101829; border-right: 1px solid var(--line); padding: 24px 12px; }
-.orbit .explorer-heading { padding: 0 10px 20px; }
-.orbit .explorer-heading p:last-child { margin-top: 6px; font-size: 12px; }
-.orbit .explorer-folder { display: flex; align-items: center; gap: 8px; padding: 0 10px 12px; color: var(--muted); font-size: 11px; }
-.orbit .explorer .file-selector { flex-direction: column; }
-.orbit .explorer .file-selector button { justify-content: flex-start; min-width: 0; width: 100%; gap: 8px; padding: 11px 10px; }
-.orbit .explorer .file-selector button span:first-child { font-size: 12px; font-family: inherit; }
-.orbit .explorer .file-selector button small { font-size: 10px; margin-left: auto; }
-.orbit .workspace-content { padding: 30px 36px; }
-.orbit .page-content { max-width: 960px; margin: 0 auto; }
+.orbit .explorer { background: #0d1424; border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 12px; }
+.orbit .explorer-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 10px; border-bottom: 1px solid var(--line); }
+.orbit .explorer-folder { display: flex; align-items: center; gap: 7px; padding: 2px 8px; color: var(--muted); font-size: 11px; font-family: var(--mono); }
+.orbit .explorer .file-selector { flex-direction: column; gap: 4px; padding-left: 8px; }
+.orbit .explorer .file-selector button { justify-content: flex-start; min-width: 0; width: 100%; gap: 8px; padding: 8px 10px; border-radius: 6px; }
+.orbit .explorer .file-selector button.selected { background: var(--surface-2); color: var(--text); border-color: rgba(141, 162, 255, .35); }
+.orbit .explorer .file-selector button span:nth-child(2) { font-size: 11.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.orbit .explorer .file-selector button small { font-size: 10px; margin-left: auto; font-family: var(--mono); }
+.orbit .explorer-gate { margin-top: auto; padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(17, 24, 41, .75); font-size: 11px; display: flex; flex-direction: column; gap: 6px; }
+.orbit .explorer-gate-row { display: flex; justify-content: space-between; color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.orbit .explorer-gate-row strong { color: var(--text); font-weight: 500; }
+.orbit .workspace-content { padding: 22px 28px; overflow: auto; }
+.orbit .page-content { max-width: 1040px; margin: 0 auto; }
 .orbit.is-review .page-content { max-width: none; }
-.orbit .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; margin-bottom: 24px; }
-.orbit .breadcrumb button { padding: 0; font-size: inherit; color: var(--muted); }
-.orbit .task-heading h2 { font-size: 21px; }
-.orbit .page-tabs { margin: 24px 0 20px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
-.orbit .page-tabs button { min-width: 76px; }
-.orbit .code-panel { border-radius: 5px; }
-.orbit .context-disclosure { margin-top: 26px; }
-.orbit .dashboard-heading { padding: 10px 0 28px; }
-.orbit .dashboard-heading h2 { font-size: 28px; letter-spacing: -.8px; }
-.orbit .dashboard-heading p { color: var(--muted); margin-top: 10px; }
-.orbit .next-task { padding: 30px; border: 1px solid #3b3a5a; border-radius: 12px; background: radial-gradient(ellipse at 100% 0, #8071c11c, transparent 68%), var(--surface); }
+.orbit .breadcrumb { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; margin-bottom: 14px; }
+.orbit .breadcrumb-trail { display: flex; align-items: center; gap: 8px; font-family: var(--mono); }
+.orbit .breadcrumb button { padding: 2px 6px; font-size: inherit; color: var(--muted); }
+.orbit .task-heading h2 { font-size: 19px; }
+.orbit .page-tabs { margin: 14px 0 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px; justify-content: space-between; align-items: center; }
+.orbit .page-tabs-left { display: flex; gap: 4px; }
+.orbit .page-tabs button { min-width: 72px; padding: 6px 11px; font-weight: 500; }
+.orbit .editor-file-tabs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.orbit .editor-file-tab { font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 5px; border: 1px solid transparent; color: var(--muted); }
+.orbit .editor-file-tab.selected { background: var(--surface-2); border-color: var(--line); color: var(--text); }
+.orbit .diff-toolbar-controls { display: flex; align-items: center; gap: 6px; }
+.orbit .mode-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; padding: 1px; background: #0b101d; }
+.orbit .mode-switch button { padding: 3px 8px; font-size: 10.5px; border-radius: 4px; color: var(--muted); }
+.orbit .mode-switch button.selected { background: var(--surface-2); color: var(--text); }
+.orbit .dashboard-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 2px 0 18px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.orbit .dashboard-heading h2 { font-size: 22px; letter-spacing: -.5px; }
+.orbit .dashboard-heading p { color: var(--muted); margin-top: 4px; font-size: 12px; }
+.orbit .telemetry-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.orbit .telemetry-card { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.orbit .telemetry-card strong { font-size: 16px; font-family: var(--mono); color: var(--text); font-weight: 600; }
+.orbit .telemetry-card small { font-size: 11px; color: var(--muted); }
+.orbit .next-task { padding: 22px 24px; border: 1px solid #334368; border-radius: 10px; background: linear-gradient(135deg, rgba(141, 162, 255, .1), rgba(17, 24, 41, .96) 55%), var(--surface); }
 .orbit .next-task .eyebrow { color: var(--accent); }
-.orbit .next-task h3 { font-size: 22px; letter-spacing: -.5px; margin: 20px 0 10px; }
-.orbit .next-task > p { color: var(--muted); max-width: 55ch; }
-.orbit .next-task-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 30px; }
-.orbit .next-task-footer .muted { font-size: 12px; }
-.orbit .dashboard-section { margin-top: 34px; }
-.orbit .dashboard-section > h3 { margin-bottom: 14px; font-size: 12px; color: var(--muted); }
-.orbit .dashboard-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.orbit button.dashboard-link { justify-content: flex-start; gap: 14px; padding: 20px; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: #101829; }
+.orbit .next-task h3 { font-size: 19px; letter-spacing: -.3px; margin: 12px 0 6px; }
+.orbit .next-task > p { color: var(--muted); max-width: 62ch; font-size: 12.5px; }
+.orbit .pipeline-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.orbit .pipeline-step { font-size: 11px; font-family: var(--mono); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: rgba(11, 16, 29, .65); color: var(--muted); }
+.orbit .pipeline-step.ready { color: var(--text); border-color: rgba(141, 162, 255, .4); }
+.orbit .file-jump-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.orbit .file-jump-chip { font-family: var(--mono); font-size: 11px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: #0d1424; color: var(--code); }
+.orbit .next-task-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.orbit .next-task-footer .muted { font-size: 11.5px; font-family: var(--mono); }
+.orbit .dashboard-section { margin-top: 22px; }
+.orbit .dashboard-section > h3 { margin-bottom: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.orbit .dashboard-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.orbit button.dashboard-link { justify-content: flex-start; gap: 12px; padding: 15px 16px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .orbit .dashboard-link > .icon { color: var(--accent); }
-.orbit .dashboard-link strong { display: block; font-size: 13px; font-weight: 500; }
-.orbit .dashboard-link small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.orbit .dashboard-link strong { display: block; font-size: 12.5px; font-weight: 600; }
+.orbit .dashboard-link small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .orbit .dashboard-link .arrow { margin-left: auto; color: var(--muted); }
-.orbit .statusline { grid-column: 1 / -1; padding: 5px 17px; font-size: 10px; color: var(--muted); background: #151d30; border-top: 1px solid var(--line); display: flex; justify-content: space-between; }
+.orbit .statusline { grid-column: 1 / -1; padding: 4px 16px; font-size: 10.5px; font-family: var(--mono); color: var(--muted); background: #090e1a; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+
 /* 02 / Paper: top navigation and an unhurried, document-like center column. */
 .paper { --bg: #f5f4ef; --surface: #fffefa; --surface-2: #e9e8e1; --line: #d9dacf; --text: #28332e; --muted: #646e65; --accent: #49644c; --on-accent: #ffffff; --tint: #e4eade; --good: #3f6c4c; --added: #e7efe2; --removed: #f3e5e0; --code: #364238; }
 .paper .context-header { padding: 18px 40px; background: #fbfaf6; }
@@ -158,6 +195,7 @@ button:disabled { cursor: default; opacity: .5; }
 .paper .review-action { padding-top: 20px; }
 .paper .context-disclosure { margin-top: 24px; }
 .paper .paper-footer { color: var(--muted); font-size: 10px; padding: 0 40px 22px; max-width: 880px; margin: auto; }
+
 /* 03 / Pulse: a task inbox beside the active task; no separate file sidebar. */
 .pulse { --bg: #101819; --surface: #152021; --surface-2: #1e2c2e; --line: #2b3b3c; --text: #e2eeeb; --muted: #9fb4ae; --accent: #91d9c0; --on-accent: #11241d; --tint: #91d9c014; --good: #91d9c0; --added: #1b372d; --removed: #39292d; --code: #d0e1db; display: grid; grid-template-columns: 304px minmax(0, 1fr); grid-template-rows: 60px 1fr; }
 .pulse .context-header { grid-column: 1 / -1; padding: 0 24px; }
@@ -177,6 +215,7 @@ button:disabled { cursor: default; opacity: .5; }
 .pulse .code-heading { padding: 12px 16px; }
 .pulse .review-action { margin-top: 3px; }
 .pulse .context-disclosure { margin-top: 26px; }
+
 /* 04 / Focus: one task and one next action, with navigation disclosed on demand. */
 .focus { --bg: #0c1426; --surface: #121f35; --surface-2: #203149; --line: #2b3d57; --text: #e7eefb; --muted: #9dafca; --accent: #accbff; --on-accent: #11233c; --tint: #accbff12; --good: #a4d9cc; --added: #193832; --removed: #362c3d; --code: #d1def2; background: radial-gradient(ellipse at 80% 0, #1e335f66, transparent 54%), var(--bg); }
 .focus .context-header { border-bottom: 0; padding: 20px 30px; }
@@ -206,8 +245,10 @@ body.capture .preview-frame { border: 0; border-radius: 0; }
 body.capture .prototype { min-height: 100dvh; }
 @media (max-width: 1050px) {
   .gallery { padding: 24px; }
-  .orbit.is-review { grid-template-columns: 72px 185px minmax(0, 1fr); }
-  .orbit .workspace-content { padding: 24px; }
+  .orbit.is-review { grid-template-columns: 64px 195px minmax(0, 1fr); }
+  .orbit .workspace-content { padding: 20px; }
+  .orbit .telemetry-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orbit .dashboard-links { grid-template-columns: 1fr; }
   .pulse { grid-template-columns: 245px minmax(0, 1fr); }
   .pulse .workspace-content { padding: 26px; }
   .paper .top-navigation { gap: 4px; }
@@ -220,32 +261,28 @@ body.capture .prototype { min-height: 100dvh; }
   .swatch { width: 26px; height: 26px; }
   .preview-caption { flex-wrap: wrap; }
   .prototype { min-height: 700px; }
-  .prototype button { min-height: 40px; }
-  .context-header { flex-wrap: wrap; padding: 14px 20px; }
+  .prototype button { min-height: 38px; }
+  .context-header { flex-wrap: wrap; padding: 12px 16px; }
   .task-heading { flex-direction: column; gap: 12px; }
-  .orbit, .orbit.is-review { grid-template-columns: 58px minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
+  .orbit, .orbit.is-review { grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
   .orbit.is-review { grid-template-rows: auto auto 1fr auto; }
-  .orbit .orbit-header { min-height: 58px; padding: 12px 16px; }
-  .orbit .orbit-header .project { display: none; }
-  .orbit .activity { padding: 12px 3px; }
+  .orbit .orbit-header { min-height: 52px; padding: 10px 14px; }
+  .orbit .orbit-header .project, .orbit .header-task-btn { display: none; }
+  .orbit .activity { padding: 10px 3px; }
   .orbit.is-review .activity { grid-row: 2 / 4; }
-  .orbit .activity button { width: 50px; }
-  .orbit .explorer { grid-column: 2; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px; }
-  .orbit .explorer-heading, .orbit .explorer-folder { display: none; }
-  .orbit .explorer .file-selector { flex-direction: row; }
+  .orbit .activity button { width: 48px; }
+  .orbit .explorer { grid-column: 2; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px; }
+  .orbit .explorer-heading, .orbit .explorer-folder, .orbit .explorer-gate { display: none; }
+  .orbit .explorer .file-selector { flex-direction: row; padding-left: 0; }
   .orbit .explorer .file-selector button { width: auto; padding: 8px; }
   .orbit .explorer .file-selector small { display: none; }
-  .orbit .workspace-content { grid-column: 2; padding: 22px 16px; }
-  .orbit .page-tabs { margin: 18px 0; }
-  .orbit .breadcrumb { margin-bottom: 18px; }
-  .orbit .dashboard-heading { padding-top: 0; }
-  .orbit .dashboard-heading h2 { font-size: 25px; }
-  .orbit .next-task { padding: 22px 18px; }
-  .orbit .next-task h3 { font-size: 20px; }
-  .orbit .next-task-footer { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .orbit .dashboard-links { grid-template-columns: 1fr; }
-  .orbit button.dashboard-link { padding: 18px; }
+  .orbit .workspace-content { grid-column: 2; padding: 18px 14px; }
+  .orbit .telemetry-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orbit .next-task { padding: 18px; }
+  .orbit .next-task-footer { align-items: flex-start; flex-direction: column; gap: 12px; }
   .orbit .statusline { flex-wrap: wrap; gap: 8px; }
+  .diff-split { grid-template-columns: 1fr; }
+  .diff-split-pane + .diff-split-pane { border-left: 0; border-top: 1px solid var(--line); }
   .paper .context-header { padding: 18px 22px; }
   .paper .top-navigation { width: 100%; justify-content: space-between; }
   .paper .workspace-content { padding: 28px 22px; }
@@ -279,14 +316,14 @@ body.capture .prototype { min-height: 100dvh; }
 <main class="gallery">
   <header class="gallery-heading"><div><h1>Four ways to work.</h1><p>Same task. Different styles and structures.</p></div><span class="demo-label">Mini-Orca / Design concepts / Sample data</span></header>
   <nav class="directions" aria-label="Design directions">
-    <button class="direction" data-direction="orbit" aria-pressed="true"><span class="swatch swatch-orbit">01</span><span><strong>Orbit</strong><small>Dashboard + light IDE</small></span></button>
+    <button class="direction" data-direction="orbit" aria-pressed="true"><span class="swatch swatch-orbit">01</span><span><strong>Orbit</strong><small>Lite IDE + workspace dashboard</small></span></button>
     <button class="direction" data-direction="paper" aria-pressed="false"><span class="swatch swatch-paper">02</span><span><strong>Paper</strong><small>Document workspace</small></span></button>
     <button class="direction" data-direction="pulse" aria-pressed="false"><span class="swatch swatch-pulse">03</span><span><strong>Pulse</strong><small>Task inbox</small></span></button>
     <button class="direction" data-direction="focus" aria-pressed="false"><span class="swatch swatch-focus">04</span><span><strong>Focus</strong><small>Guided flow</small></span></button>
   </nav>
   <p id="direction-note" class="direction-note" aria-live="polite"></p>
   <div class="preview-frame"><div id="prototype" class="prototype orbit"></div></div>
-  <footer class="preview-caption"><span>Interactive examples. File selection, review, and navigation are local to this preview.</span><a href="ui-directions.md">Compare the directions ↗</a></footer>
+  <footer class="preview-caption"><span>Interactive examples. File selection, diff mode, review, and navigation are local to this preview.</span><a href="ui-directions.md">Compare the directions ↗</a></footer>
 </main>
 <dialog id="preview-dialog" aria-labelledby="dialog-title"><h2 id="dialog-title">Concept preview</h2><p>This example is not connected to a project. Reviewing a file here only changes this preview. The real workspace keeps its explicit approval, Apply, and Undo safeguards.</p><form method="dialog"><button>Got it</button></form></dialog>
 <script>
@@ -296,7 +333,7 @@ body.capture .prototype { min-height: 100dvh; }
   const note = document.getElementById('direction-note');
   const dialog = document.getElementById('preview-dialog');
   const directions = {
-    orbit: { name: 'Orbit', note: 'A calm dashboard for the big picture. A focused IDE when you review. The explorer appears only in Review.' },
+    orbit: { name: 'Orbit', note: 'A professional Lite IDE paired with a calm developer dashboard. Jump straight into any changed file, toggle Unified or Split diffs, and track guarded review readiness.' },
     paper: { name: 'Paper', note: 'A calmer reading experience. Top navigation and one centered document keep the interface out of the way.' },
     pulse: { name: 'Pulse', note: 'Move through a queue of work. Tasks stay on the left; only the selected task appears on the right.' },
     focus: { name: 'Focus', note: 'One task, one next action. A guided sequence reveals the right controls at the right time.' }
@@ -306,9 +343,17 @@ body.capture .prototype { min-height: 100dvh; }
   const direction = Object.hasOwn(directions, initial) ? initial : 'orbit';
   const initialView = params.get('view');
   const views = direction === 'orbit' ? ['dashboard', 'overview', 'changes', 'checks'] : ['overview', 'changes', 'checks'];
-  const state = { direction, view: views.includes(initialView) ? initialView : direction === 'orbit' ? 'dashboard' : 'changes', file: 'server.go', reviewed: new Set(), menu: false };
+  const state = {
+    direction,
+    view: views.includes(initialView) ? initialView : direction === 'orbit' ? 'dashboard' : 'changes',
+    file: 'server.go',
+    diffMode: 'unified',
+    reviewed: new Set(),
+    menu: false
+  };
   if (params.get('capture') === '1') document.body.classList.add('capture');
   const paths = { 'server.go': 'internal/server.go', 'server_test.go': 'internal/server_test.go' };
+  const fileStats = { 'server.go': { add: '+3', del: '−1' }, 'server_test.go': { add: '+4', del: '' } };
   const icons = {
     home: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     files: '<path d="M3 6h7l2 3h9v11H3Z"/>',
@@ -316,26 +361,71 @@ body.capture .prototype { min-height: 100dvh; }
     docs: '<path d="M5 3h10l4 4v14H5Z"/><path d="M14 3v5h5M8 12h8m-8 4h6"/>',
     checks: '<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
     settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/>',
+    branch: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7M8.5 6H13a3 3 0 0 1 3 3v.5"/>',
     logo: '<path d="m12 2 9 5v10l-9 5-9-5V7Z"/><path d="m7 15 5-7 5 7M9 12h6"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'
   };
-  function icon(name) { return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icons[name] + '</svg>'; }
+  function icon(name) { return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icons[name] + '</svg>'; }
   function esc(value) { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function brand() { return '<div class="brand"><span class="logo">' + icon('logo') + '</span>mini-orca</div>'; }
   function navButton(view, text) { return '<button data-view="' + view + '" class="' + (state.view === view ? 'selected' : '') + '" aria-pressed="' + (state.view === view) + '">' + text + '</button>'; }
-  function tabs() { return '<nav class="page-tabs" aria-label="Task sections">' + navButton('overview', state.direction === 'orbit' ? 'Brief' : 'Overview') + navButton('changes', state.direction === 'orbit' ? 'Review' : 'Changes') + navButton('checks', 'Checks') + '</nav>'; }
+  function tabs() {
+    const left = '<div class="page-tabs-left">' + navButton('overview', state.direction === 'orbit' ? 'Brief' : 'Overview') + navButton('changes', state.direction === 'orbit' ? 'Review (2)' : 'Changes') + navButton('checks', 'Checks (3/3)') + '</div>';
+    const right = state.direction === 'orbit' ? '<span class="pill ' + (state.reviewed.size === 2 ? 'good' : 'accent') + '">' + state.reviewed.size + '/2 files reviewed</span>' : '';
+    return '<nav class="page-tabs" aria-label="Task sections">' + left + right + '</nav>';
+  }
   function files(compact) {
-    return '<nav class="file-selector" aria-label="Changed files">' + Object.keys(paths).map(file => '<button data-file="' + file + '" class="' + (state.file === file ? 'selected' : '') + '" aria-pressed="' + (state.file === file) + '"><span>' + (compact ? icon('docs') : '') + '</span><span>' + file + '</span>' + (compact ? '<small>' + (state.reviewed.has(file) ? '✓' : file === 'server_test.go' ? '+4' : '+3') + '</small>' : '') + '</button>').join('') + '</nav>';
+    return '<nav class="file-selector" aria-label="Changed files">' + Object.keys(paths).map(file => {
+      const st = fileStats[file];
+      const badge = state.reviewed.has(file) ? '✓' : (st.add + (st.del ? ' ' + st.del : ''));
+      return '<button data-file="' + file + '" class="' + (state.file === file ? 'selected' : '') + '" aria-pressed="' + (state.file === file) + '"><span>' + (compact ? icon('docs') : '') + '</span><span>' + file + '</span>' + (compact ? '<small>' + badge + '</small>' : '') + '</button>';
+    }).join('') + '</nav>';
   }
   function taskHeading(focus) {
-    return '<div class="task-heading"><div><p class="eyebrow">' + (focus ? ({ overview: 'Step 1 / Describe', changes: 'Step 2 / Review', checks: 'Step 3 / Checks' })[state.view] : state.direction === 'orbit' ? 'Task 024' : 'TASK 024 / Code review') + '</p><h2>Validate incoming requests</h2><p>' + (focus ? ({ overview: 'Start with a small, clearly defined change.', changes: 'Read the change, then mark this file reviewed.', checks: 'Inspect the results before approving a change.' })[state.view] : 'Reject empty input before it reaches the processor.') + '</p></div>' + (focus ? '' : '<span class="pill">In review</span>') + '</div>';
+    const allReviewed = state.reviewed.size === 2;
+    return '<div class="task-heading"><div><p class="eyebrow">' + (focus ? ({ overview: 'Step 1 / Describe', changes: 'Step 2 / Review', checks: 'Step 3 / Checks' })[state.view] : state.direction === 'orbit' ? 'Task 024 · Guarded Change Session' : 'TASK 024 / Code review') + '</p><h2>Validate incoming requests</h2><p>' + (focus ? ({ overview: 'Start with a small, clearly defined change.', changes: 'Read the change, then mark this file reviewed.', checks: 'Inspect the results before approving a change.' })[state.view] : 'Reject empty input before it reaches the processor.') + '</p></div>' + (focus ? '' : '<span class="pill ' + (allReviewed ? 'good' : 'accent') + '">' + (allReviewed ? 'Ready to approve' : 'In review') + '</span>') + '</div>';
   }
-  function codeLine(number, text, kind) {
-    return '<div class="code-line ' + (kind || '') + '"><span class="number">' + number + '</span><span class="sign">' + (kind === 'add' ? '+' : kind === 'remove' ? '−' : '') + '</span><code>' + esc(text) + '</code></div>';
+  function codeLine(oldNum, newNum, text, kind) {
+    return '<div class="code-line ' + (kind || '') + '"><span class="number">' + (oldNum || '') + '</span><span class="number">' + (newNum || '') + '</span><span class="sign">' + (kind === 'add' ? '+' : kind === 'remove' ? '−' : ' ') + '</span><code>' + esc(text) + '</code></div>';
+  }
+  function splitLine(num, text, kind) {
+    return '<div class="code-line ' + (kind || '') + '"><span class="number">' + (num || '') + '</span><span class="sign">' + (kind === 'add' ? '+' : kind === 'remove' ? '−' : ' ') + '</span><code>' + esc(text) + '</code></div>';
   }
   function code() {
     const test = state.file === 'server_test.go';
-    const lines = test ? [
+    const hunkHeader = test ? '@@ -12,2 +12,6 @@ func TestEmptyRequest(t *testing.T)' : '@@ -24,3 +24,6 @@ func handleRequest(value string) error';
+    const unifiedLines = test ? [
+      [12, 12, 'func TestEmptyRequest(t *testing.T) {'],
+      ['', 13, '    err := handleRequest("")', 'add'],
+      ['', 14, '    if err == nil {', 'add'],
+      ['', 15, '        t.Fatal("expected validation error")', 'add'],
+      ['', 16, '    }', 'add'],
+      [13, 17, '}']
+    ] : [
+      [24, 24, 'func handleRequest(value string) error {'],
+      [25, '', '    return process(value)', 'remove'],
+      ['', 25, '    if value == "" {', 'add'],
+      ['', 26, '        return errors.New("request is empty")', 'add'],
+      ['', 27, '    }', 'add'],
+      [26, 28, '    return process(value)'],
+      [27, 29, '}']
+    ];
+    const splitLeft = test ? [
+      [12, 'func TestEmptyRequest(t *testing.T) {'],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      ['', ''],
+      [13, '}']
+    ] : [
+      [24, 'func handleRequest(value string) error {'],
+      [25, '    return process(value)', 'remove'],
+      ['', ''],
+      ['', ''],
+      [26, '    return process(value)'],
+      [27, '}']
+    ];
+    const splitRight = test ? [
       [12, 'func TestEmptyRequest(t *testing.T) {'],
       [13, '    err := handleRequest("")', 'add'],
       [14, '    if err == nil {', 'add'],
@@ -344,34 +434,66 @@ body.capture .prototype { min-height: 100dvh; }
       [17, '}']
     ] : [
       [24, 'func handleRequest(value string) error {'],
-      [25, '    return process(value)', 'remove'],
       [25, '    if value == "" {', 'add'],
       [26, '        return errors.New("request is empty")', 'add'],
       [27, '    }', 'add'],
       [28, '    return process(value)'],
       [29, '}']
     ];
-    return '<div class="code-panel"><div class="code-heading"><span class="mono">' + paths[state.file] + '</span><span class="diff-summary">' + (test ? '+4' : '+3 −1') + '</span></div><div class="diff" tabindex="0" role="region" aria-label="Read-only sample diff">' + lines.map(line => codeLine(...line)).join('') + '</div></div>';
+    const isOrbit = state.direction === 'orbit';
+    const isSplit = isOrbit && state.diffMode === 'split';
+    const st = fileStats[state.file];
+    const fileReviewed = state.reviewed.has(state.file);
+    const headingLeft = isOrbit
+      ? '<div class="editor-file-tabs">' + Object.keys(paths).map(f => '<button data-file="' + f + '" class="editor-file-tab ' + (state.file === f ? 'selected' : '') + '">' + paths[f] + (state.reviewed.has(f) ? ' ✓' : '') + '</button>').join('') + '</div>'
+      : '<span class="mono">' + paths[state.file] + '</span>';
+    const headingRight = isOrbit
+      ? '<div class="diff-toolbar-controls"><span class="diff-summary">' + st.add + (st.del ? '<span class="del">' + st.del + '</span>' : '') + '</span><span class="pill ' + (fileReviewed ? 'good' : '') + '">' + (fileReviewed ? 'Reviewed ✓' : 'Needs review') + '</span><div class="mode-switch" role="group" aria-label="Diff layout"><button data-diff-mode="unified" class="' + (!isSplit ? 'selected' : '') + '">Unified</button><button data-diff-mode="split" class="' + (isSplit ? 'selected' : '') + '">Split</button></div></div>'
+      : '<span class="diff-summary">' + (test ? '+4' : '+3 −1') + '</span>';
+    const body = isSplit
+      ? '<div class="diff-split" tabindex="0" role="region" aria-label="Read-only sample split diff"><div class="diff-split-pane"><div class="diff-split-header">HEAD · ' + paths[state.file] + '</div>' + splitLeft.map(l => splitLine(...l)).join('') + '</div><div class="diff-split-pane"><div class="diff-split-header">Proposed · ' + paths[state.file] + '</div>' + splitRight.map(l => splitLine(...l)).join('') + '</div></div>'
+      : '<div class="diff" tabindex="0" role="region" aria-label="Read-only sample diff">' + unifiedLines.map(line => codeLine(...line)).join('') + '</div>';
+    return '<div class="code-panel"><div class="code-heading">' + headingLeft + headingRight + '</div><div class="diff-hunk-bar">' + hunkHeader + '</div>' + body + '</div>';
   }
   function details() { return '<details class="context-disclosure"><summary>Why this change?</summary><p>The sample task adds input validation and a companion regression test. The goal is to return a useful error for an empty request while preserving existing behavior.</p></details>'; }
   function content() {
-    if (state.view === 'overview') return '<div class="overview-copy"><h3>What should change</h3><p>Return a clear validation error when a request has no value. Valid requests should continue through the existing processor.</p><h3>Scope</h3><p class="mono">internal/server.go<br>internal/server_test.go</p><h3>Acceptance criteria</h3><p>Empty input returns an error. Valid input keeps its existing behavior. Add a test for the empty input case.</p></div><div class="review-action"><span class="muted">2 files in this sample task</span><button class="primary" data-view="changes">Review changes →</button></div>';
-    if (state.view === 'checks') return '<div class="checks-list"><div class="check-row"><span>Parse and format</span><span>Passed · sample</span></div><div class="check-row"><span>Architecture</span><span>Passed · sample</span></div><div class="check-row"><span>Unit tests</span><span>Passed · sample</span></div></div><p class="muted">These are example results. No checks were executed.</p><div class="review-action"><button class="subtle" data-view="changes">← Back to changes</button><button class="primary" data-info>Preview approval →</button></div>';
-    return (state.direction === 'orbit' ? '' : files(false)) + code() + '<div class="review-action"><span class="muted">' + state.reviewed.size + ' of 2 files reviewed</span>' + (state.reviewed.has(state.file) ? '<button class="primary" data-next>' + (state.reviewed.size === 2 ? 'Continue to checks →' : 'Review next file →') + '</button>' : '<button class="primary" data-review>Mark file reviewed</button>') + '</div><p class="screen-message" role="status" aria-live="polite">' + (state.reviewed.has(state.file) ? 'Reviewed in this preview. Your project is unchanged.' : '') + '</p>' + details();
+    if (state.view === 'overview') return '<div class="overview-copy"><h3>What should change</h3><p>Return a clear validation error when a request has no value. Valid requests should continue through the existing processor.</p><h3>Scope</h3><p class="mono">internal/server.go<br>internal/server_test.go</p><h3>Acceptance criteria</h3><p>Empty input returns an error. Valid input keeps its existing behavior. Add a test for the empty input case.</p></div><div class="review-action"><span class="muted">2 files in this sample task · +7 −1 lines</span><button class="primary" data-view="changes">Review changes →</button></div>';
+    if (state.view === 'checks') return '<div class="checks-list"><div class="check-row"><span>Parse and format (gofmt / ast)</span><span>Passed · sample</span></div><div class="check-row"><span>Architecture &amp; boundary gate</span><span>Passed · sample</span></div><div class="check-row"><span>Unit tests (go test ./internal/...)</span><span>Passed · sample</span></div></div><p class="muted">These are example results. No checks were executed.</p><div class="review-action"><button class="subtle" data-view="changes">← Back to changes</button><button class="primary" data-info>Preview approval →</button></div>';
+    return (state.direction === 'orbit' ? '' : files(false)) + code() + '<div class="review-action"><span class="muted">' + state.reviewed.size + ' of 2 files reviewed · Read-only diff</span>' + (state.reviewed.has(state.file) ? '<button class="primary" data-next>' + (state.reviewed.size === 2 ? 'Continue to checks →' : 'Review next file →') + '</button>' : '<button class="primary" data-review>Mark file reviewed</button>') + '</div><p class="screen-message" role="status" aria-live="polite">' + (state.reviewed.has(state.file) ? '✓ Marked ' + paths[state.file] + ' reviewed in this preview. Your project is unchanged.' : '') + '</p>' + details();
   }
   function dashboard() {
-    return '<div class="dashboard-heading"><h2>Workspace</h2><p>One task is ready for your review.</p></div>' +
-      '<article class="next-task"><div class="row spread"><span class="eyebrow">Continue your work</span><span class="pill">Task 024</span></div><h3>Validate incoming requests</h3><p>Reject empty input before it reaches the processor.</p><div class="next-task-footer"><span class="muted">2 changed files · ' + state.reviewed.size + ' of 2 reviewed</span><button class="primary" data-view="changes">Open review →</button></div></article>' +
-      '<section class="dashboard-section" aria-labelledby="dashboard-context"><h3 id="dashboard-context">Task context</h3><div class="dashboard-links"><button class="dashboard-link" data-view="overview">' + icon('tasks') + '<span><strong>Task brief</strong><small>Goal, scope, and acceptance criteria</small></span><span class="arrow" aria-hidden="true">↗</span></button><button class="dashboard-link" data-view="checks">' + icon('checks') + '<span><strong>Checks</strong><small>3 example results to inspect</small></span><span class="arrow" aria-hidden="true">↗</span></button></div></section>';
+    return '<div class="dashboard-heading"><div><p class="eyebrow">Orbit Workspace</p><h2>sample-workspace</h2><p>Clean working tree on <span class="mono">main</span> · 1 active change proposal ready for review.</p></div><button class="secondary" data-view="changes">Open Lite IDE Review →</button></div>' +
+      '<div class="telemetry-strip">' +
+        '<button class="telemetry-card" data-view="changes"><strong>2 files</strong><small>Changed in Task 024 (+7 −1)</small></button>' +
+        '<button class="telemetry-card" data-view="changes"><strong>' + state.reviewed.size + ' / 2</strong><small>Files marked reviewed</small></button>' +
+        '<button class="telemetry-card" data-view="checks"><strong>3 / 3</strong><small>Sample checks passing</small></button>' +
+        '<button class="telemetry-card" data-info><strong>Guarded</strong><small>Apply requires review &amp; approval</small></button>' +
+      '</div>' +
+      '<article class="next-task"><div class="row spread"><span class="eyebrow">Active task · Task 024</span><span class="pill ' + (state.reviewed.size === 2 ? 'good' : 'accent') + '">' + (state.reviewed.size === 2 ? 'Reviewed · Ready for checks' : 'Needs file review') + '</span></div><h3>Validate incoming requests</h3><p>Reject empty input before it reaches the processor, and add a regression test covering empty string input.</p>' +
+      '<div class="pipeline-strip" aria-label="Task pipeline">' +
+        '<button class="pipeline-step ready" data-view="overview">1. Brief</button>' +
+        '<button class="pipeline-step ready" data-view="changes">2. Review (' + state.reviewed.size + '/2)</button>' +
+        '<button class="pipeline-step ready" data-view="checks">3. Checks (3/3)</button>' +
+        '<button class="pipeline-step" data-info>4. Guarded Apply</button>' +
+      '</div>' +
+      '<div class="file-jump-row"><span class="muted" style="font-size:11px">Jump to file:</span>' +
+        Object.keys(paths).map(f => '<button class="file-jump-chip" data-file="' + f + '">' + paths[f] + ' (' + fileStats[f].add + (fileStats[f].del ? ' ' + fileStats[f].del : '') + ')' + (state.reviewed.has(f) ? ' ✓' : '') + '</button>').join('') +
+      '</div>' +
+      '<div class="next-task-footer"><span class="muted">2 changed files · ' + state.reviewed.size + ' of 2 reviewed</span><button class="primary" data-view="changes">Open review →</button></div></article>' +
+      '<section class="dashboard-section" aria-labelledby="dashboard-context"><h3 id="dashboard-context">Workspace shortcuts</h3><div class="dashboard-links">' +
+        '<button class="dashboard-link" data-view="overview">' + icon('tasks') + '<span><strong>Task brief</strong><small>Goal, scope, and acceptance criteria</small></span><span class="arrow" aria-hidden="true">→</span></button>' +
+        '<button class="dashboard-link" data-view="changes">' + icon('files') + '<span><strong>Diff explorer</strong><small>Inspect hunks in Unified or Split view</small></span><span class="arrow" aria-hidden="true">→</span></button>' +
+        '<button class="dashboard-link" data-view="checks">' + icon('checks') + '<span><strong>Verification checks</strong><small>3 sample check results to inspect</small></span><span class="arrow" aria-hidden="true">→</span></button>' +
+      '</div></section>';
   }
   function orbit() {
     const reviewing = state.view === 'changes';
     const home = state.view === 'dashboard';
-    const explorer = reviewing ? '<aside class="explorer" aria-label="Review explorer"><div class="explorer-heading"><p class="eyebrow">Explorer</p><p>2 changed files</p></div><div class="explorer-folder">' + icon('files') + 'internal</div>' + files(true) + '</aside>' : '';
-    const page = home ? dashboard() : '<div class="breadcrumb"><button data-view="dashboard">Workspace</button><span aria-hidden="true">/</span><span>Current task</span></div>' + taskHeading(false) + tabs() + content();
-    return '<header class="context-header orbit-header">' + brand() + '<div class="project"><strong>sample-workspace</strong><span>/</span>main</div><span class="pill">Concept 01</span></header>' +
-      '<nav class="activity" aria-label="Workspace pages"><button data-view="dashboard" aria-pressed="' + home + '">' + icon('home') + '<span>Home</span></button><button data-view="overview" aria-pressed="' + !home + '">' + icon('tasks') + '<span>Task</span></button><button data-info class="bottom" aria-label="About this preview">' + icon('settings') + '<span>About</span></button></nav>' +
-      explorer + '<section class="workspace-content"><div class="page-content">' + page + '</div></section><footer class="statusline"><span>Concept preview · Sample data</span><span>' + (reviewing ? 'Read-only diff' : 'sample-workspace / main') + '</span></footer>';
+    const explorer = reviewing ? '<aside class="explorer" aria-label="Review explorer"><div class="explorer-heading"><span class="eyebrow">Explorer</span><span class="pill">' + state.reviewed.size + '/2 ✓</span></div><div class="explorer-folder">' + icon('files') + 'internal/</div>' + files(true) + '<div class="explorer-gate"><div class="explorer-gate-row"><span>Reviewed</span><strong>' + state.reviewed.size + ' / 2 files</strong></div><div class="explorer-gate-row"><span>Checks</span><strong>3 / 3 sample</strong></div><div class="explorer-gate-row"><span>Apply gate</span><strong>' + (state.reviewed.size === 2 ? 'Ready' : 'Pending') + '</strong></div></div></aside>' : '';
+    const page = home ? dashboard() : '<div class="breadcrumb"><div class="breadcrumb-trail"><button data-view="dashboard">sample-workspace</button><span aria-hidden="true">/</span><span>task-024</span><span aria-hidden="true">/</span><span>' + state.view + '</span></div><button class="subtle" data-view="dashboard">← Dashboard</button></div>' + taskHeading(false) + tabs() + content();
+    return '<header class="context-header orbit-header">' + brand() + '<div class="project"><strong>sample-workspace</strong><span>/</span><span class="branch-badge">' + icon('branch') + 'main</span></div><button class="header-task-btn" data-view="changes"><strong>Task 024</strong> · ' + paths[state.file] + '</button><span class="pill accent">Concept 01 · Orbit IDE</span></header>' +
+      '<nav class="activity" aria-label="Workspace pages"><button data-view="dashboard" aria-pressed="' + home + '">' + icon('home') + '<span>Home</span></button><button data-view="changes" aria-pressed="' + reviewing + '">' + icon('files') + '<span>Review</span></button><button data-view="overview" aria-pressed="' + (state.view === 'overview') + '">' + icon('tasks') + '<span>Brief</span></button><button data-view="checks" aria-pressed="' + (state.view === 'checks') + '">' + icon('checks') + '<span>Checks</span></button><button data-info class="bottom" aria-label="About this preview">' + icon('settings') + '<span>About</span></button></nav>' +
+      explorer + '<section class="workspace-content"><div class="page-content">' + page + '</div></section><footer class="statusline"><span>⎇ main · Clean · ' + (reviewing ? 'Read-only diff (' + state.diffMode + ')' : 'Workspace dashboard') + '</span><span>Review: ' + state.reviewed.size + '/2 · Checks: 3/3 sample · Guarded Apply</span></footer>';
   }
   function paper() {
     return '<header class="context-header">' + brand() + '<nav class="top-navigation" aria-label="Workspace pages">' + navButton('overview', 'Project') + navButton('changes', 'Review') + navButton('checks', 'Checks') + '<button class="subtle" data-info>About</button></nav><span class="pill">Concept 02</span></header>' +
@@ -401,6 +523,7 @@ body.capture .prototype { min-height: 100dvh; }
     let focusSelector = '';
     if (button.hasAttribute('data-info')) { dialog.showModal(); return; }
     if (button.hasAttribute('data-menu')) { state.menu = !state.menu; focusSelector = '[data-menu]'; }
+    if (button.dataset.diffMode) { state.diffMode = button.dataset.diffMode; focusSelector = '[data-diff-mode="' + state.diffMode + '"]'; }
     if (button.dataset.view) {
       state.view = button.dataset.view;
       const navigation = button.closest('.page-tabs') ? '.page-tabs ' : button.closest('.activity') ? '.activity ' : '';

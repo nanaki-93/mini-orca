@@ -261,6 +261,9 @@ func (s *State) statusBarActivity() string {
 		return activity
 	}
 	if count := len(s.AgentItems()); count > 0 {
+		if reviewed, total := s.activeProposalReviewCount(); total > 0 {
+			return fmt.Sprintf("⚡ %d active task(s) · %d/%d reviewed", count, reviewed, total)
+		}
 		return fmt.Sprintf("⚡ %d active task(s)", count)
 	}
 	if s.Project != nil {

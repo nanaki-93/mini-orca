@@ -59,7 +59,7 @@ function harness() {
     loadAll = async function() {};
     globalThis.testUI = { state, proposalReadiness, applyActiveProposal, approveProposalReview,
       runAction, renderReviewActions, loadChangeSession, submitSpecTask, effectiveEdits, reviewSingleFile,
-      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage, setTaskStep, setDiffSubTab, renderPhaseGroupsHTML, restoreRoute, openProposal, toggleSidebar };
+      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage, setTaskStep, setDiffSubTab, renderPhaseGroupsHTML, restoreRoute, openProposal, openProposalFile, renderHome, selectNextUnreviewedFile, toggleSidebar };
   `);
   const context = {
     document, URLSearchParams,
@@ -343,5 +343,51 @@ test('recent tasks cannot replace the proposal while an action is pending', () =
   ui.state.sessionId = 'current';
   ui.openProposal('other');
   assert.equal(ui.state.sessionId, 'current');
+  assert.equal(ui.requests.length, 0);
+});
+
+test('Orbit dashboard renders telemetry, active proposal pipeline, and file jumps passively', () => {
+  const ui = harness();
+  ui.state.project = { name: 'mini-orca', path: '/workspace/mini-orca' };
+  ui.state.index = { files: [{ path: 'internal/server.go' }, { path: 'internal/server_test.go' }] };
+  ui.state.findings = [{ id: 'f1', status: 'open' }, { id: 'f2', status: 'dismissed' }];
+  ui.state.scan = { status: 'passed' };
+  ui.state.activeSession = readySession({
+    id: 'task-24',
+    title: 'Validate incoming requests',
+    changes: [{ path: 'internal/server.go' }, { path: 'internal/server_test.go' }],
+    reviewed_files: ['internal/server.go']
+  });
+  ui.state.changes = [ui.state.activeSession];
+  ui.renderHome();
+  assert.equal(ui.elements.get('home-stat-files').textContent, '2');
+  assert.equal(ui.elements.get('home-stat-tasks').textContent, '1');
+  assert.equal(ui.elements.get('home-stat-issues').textContent, '1');
+  assert.equal(ui.elements.get('home-stat-checks').textContent, 'passed');
+  assert.match(ui.elements.get('home-active-task').innerHTML, /Validate incoming requests/);
+  assert.match(ui.elements.get('home-active-task').innerHTML, /2\. Review \(1\/2\)/);
+  assert.match(ui.elements.get('home-active-task').innerHTML, /internal\/server_test\.go/);
+  assert.equal(ui.requests.length, 0);
+});
+
+test('Lite IDE next-unreviewed navigation steps through files passively without marking reviewed', () => {
+  const ui = harness();
+  ui.state.activeSession = readySession({
+    changes: [{ path: 'a.go' }, { path: 'b.go' }, { path: 'c.go' }],
+    reviewed_files: ['a.go'],
+    reviewed_hash: ''
+  });
+  ui.state.selectedFile = 'a.go';
+  ui.renderReviewActions();
+  assert.equal(ui.elements.get('gate-reviewed-val').textContent, '1 / 3 files');
+  assert.equal(ui.elements.get('diff-readiness-pill').textContent, '1/3 reviewed');
+  ui.selectNextUnreviewedFile();
+  assert.equal(ui.state.selectedFile, 'b.go');
+  ui.selectNextUnreviewedFile();
+  assert.equal(ui.state.selectedFile, 'c.go');
+  assert.deepEqual(ui.state.activeSession.reviewed_files, ['a.go']);
+  ui.state.activeSession.reviewed_files = ['a.go', 'b.go', 'c.go'];
+  ui.selectNextUnreviewedFile();
+  assert.equal(ui.state.diffSubTab, 'checks');
   assert.equal(ui.requests.length, 0);
 });

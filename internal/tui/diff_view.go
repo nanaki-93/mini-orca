@@ -136,6 +136,9 @@ func (s *State) renderChangeDiffLines(th ansiTheme, width int) []string {
 	meta = append(meta, s.diffReviewOverview(th, active, width)...)
 	stateTag := strings.ToUpper(client.FirstNonEmpty(s.Change.State, "draft"))
 	rightTag := fmt.Sprintf("%s · +%d / -%d", stateTag, added, removed)
+	if checksTag := s.activeProposalChecksSummary(); checksTag != "" && width >= 96 {
+		rightTag = fmt.Sprintf("%s · %s · +%d / -%d", stateTag, checksTag, added, removed)
+	}
 	lines := s.diffMetadataWindow(meta, panelW)
 	if s.viewportBodyRows > 0 && s.viewportBodyRows < 14 {
 		for i := range lines {

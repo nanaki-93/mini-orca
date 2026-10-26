@@ -259,26 +259,27 @@
 
 [data-theme="navy"] {
   color-scheme: dark;
-  --bg: #0c1020; --bg-elevated: #101527; --surface: #131a2e;
-  --surface-alt: #192138; --surface-hover: #222b46;
-  --border: #2b3551; --border-subtle: #1d2740;
-  --fg: #c0c8dc; --fg-bright: #edf0fa; --fg-muted: #909bb6;
-  --accent: #b4a1fa; --accent-fg: #161129;
-  --accent-dim: rgba(180,161,250,.10); --accent-glow: rgba(180,161,250,.18);
-  --cyan: #9bbdec; --green: #88d3b4; --green-bg: rgba(136,211,180,.10);
-  --green-line: rgba(136,211,180,.12); --green-gutter: rgba(136,211,180,.18);
-  --red: #f0a2b0; --red-bg: rgba(240,162,176,.10);
-  --red-line: rgba(240,162,176,.12); --red-gutter: rgba(240,162,176,.18);
-  --amber: #e8c38b; --amber-bg: rgba(232,195,139,.10); --purple: #b4a1fa;
-  --shadow: 0 24px 80px #05081699;
+  --theme-label: "Orbit Midnight";
+  --bg: #0b0f1b; --bg-elevated: #0e1424; --surface: #121a2d;
+  --surface-alt: #18223a; --surface-hover: #212e4b;
+  --border: #253352; --border-subtle: #1b253d;
+  --fg: #d2dcef; --fg-bright: #f0f4fc; --fg-muted: #8b9bb8;
+  --accent: #8da2ff; --accent-fg: #0b1020;
+  --accent-dim: rgba(141,162,255,.13); --accent-glow: rgba(141,162,255,.24);
+  --cyan: #7dd3fc; --green: #4ade80; --green-bg: rgba(74,222,128,.12);
+  --green-line: rgba(74,222,128,.13); --green-gutter: rgba(74,222,128,.22);
+  --red: #fb7185; --red-bg: rgba(251,113,133,.12);
+  --red-line: rgba(251,113,133,.13); --red-gutter: rgba(251,113,133,.22);
+  --amber: #fbbf24; --amber-bg: rgba(251,191,36,.12); --purple: #a78bfa;
+  --shadow: 0 20px 60px rgba(3, 7, 18, 0.65);
 }
 /* ==================== RESET & TYPOGRAPHY ==================== */
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
-  --radius-sm: 7px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 * { box-sizing: border-box; }
@@ -520,189 +521,214 @@ button.btn-ghost:hover:not(:disabled) {
 .nav-backdrop { display:none; }
 .workspace:focus { outline:none; }
 .app-shell { display:flex; width:100%; height:100dvh; overflow:hidden; }
-.left-dock { width:208px; flex-shrink:0; display:flex; flex-direction:column; padding:28px 16px 18px; background:var(--bg-elevated); border-right:1px solid var(--border-subtle); }
-.brand-logo { display:flex; align-items:center; gap:10px; padding:0 10px; color:var(--fg-bright); font-size:16px; font-weight:650; letter-spacing:-.5px; }
-.brand-mark { width:26px; height:26px; color:var(--accent); }
-.project-identity { padding:28px 10px 22px; min-width:0; }
-.project-identity .eyebrow { font-size:10px; margin-bottom:4px; }
-#project-name { display:block; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dock-nav { display:flex; flex-direction:column; gap:6px; }
-.nav-btn { padding:10px 12px; width:100%; background:transparent; border-color:transparent; color:var(--fg-muted); gap:12px; font-size:13px; }
-.nav-btn.active { color:var(--accent); background:var(--accent-dim); }
-.nav-icon { width:18px; height:18px; flex-shrink:0; }
-.nav-icon svg { display:block; width:18px; height:18px; }
-.dock-footer { margin-top:auto; padding-top:28px; }
-.connection { padding:14px 12px 0; font-size:11px; }
-.connection .badge { background:transparent; padding:0; border:0; font-size:10px; font-weight:400; }
+.left-dock { width:196px; flex-shrink:0; display:flex; flex-direction:column; padding:18px 12px 14px; background:var(--bg-elevated); border-right:1px solid var(--border-subtle); }
+.brand-logo { display:flex; align-items:center; gap:9px; padding:0 10px; color:var(--fg-bright); font-size:15px; font-weight:650; letter-spacing:-.4px; }
+.brand-mark { width:24px; height:24px; color:var(--accent); }
+.project-identity { padding:18px 10px 16px; min-width:0; border-bottom:1px solid var(--border-subtle); margin-bottom:12px; }
+.project-identity .eyebrow { font-size:9.5px; margin-bottom:3px; letter-spacing:.12em; }
+#project-name { display:block; font-size:12px; font-weight:600; color:var(--fg-bright); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dock-nav { display:flex; flex-direction:column; gap:3px; }
+.nav-btn { padding:8px 10px; width:100%; background:transparent; border-color:transparent; color:var(--fg-muted); gap:10px; font-size:12.5px; border-radius:var(--radius-sm); }
+.nav-btn.active { color:var(--fg-bright); background:var(--surface-alt); box-shadow:inset 2px 0 0 var(--accent); }
+.nav-icon { width:16px; height:16px; flex-shrink:0; }
+.nav-icon svg { display:block; width:16px; height:16px; }
+.nav-kbd { margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--fg-muted); opacity:.65; }
+.dock-footer { margin-top:auto; padding-top:16px; border-top:1px solid var(--border-subtle); }
+.connection { padding:10px 10px 0; font-size:11px; }
+.connection .badge { background:transparent; padding:0; border:0; font-size:10.5px; font-weight:500; font-family:var(--font-mono); }
 .canvas-area { flex:1; min-width:0; display:flex; flex-direction:column; }
-.titlebar { height:64px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 32px; border-bottom:1px solid var(--border-subtle); gap:16px; }
-.breadcrumb { display:flex; align-items:center; gap:12px; color:var(--fg-muted); font-size:12px; }
-#page-label { color:var(--fg); }
-.command-trigger { color:var(--fg-muted); background:transparent; border:0; font-size:12px; gap:32px; }
-.sidebar-collapsed .left-dock { width:72px; padding-left:12px; padding-right:12px; }
-.sidebar-collapsed .dock-hide-when-collapsed, .sidebar-collapsed .nav-btn-label { display:none; }
-.sidebar-collapsed .nav-btn { justify-content:center; padding:12px; }
-.sidebar-collapsed .brand-logo { padding:0 10px; margin-bottom:30px; }
+.titlebar { height:48px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border-subtle); background:var(--bg-elevated); gap:14px; }
+.breadcrumb { display:flex; align-items:center; gap:9px; color:var(--fg-muted); font-size:12px; min-width:0; }
+.breadcrumb-branch { display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11px; padding:2px 7px; border-radius:5px; background:var(--surface-alt); border:1px solid var(--border-subtle); color:var(--fg); }
+#page-label { color:var(--fg-bright); font-weight:550; }
+.titlebar-actions { display:flex; align-items:center; gap:10px; }
+.titlebar-proposal-btn { font-family:var(--font-mono); font-size:11px; padding:4px 10px; background:var(--surface); border-color:var(--border-subtle); color:var(--fg-muted); max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+.titlebar-proposal-btn strong { color:var(--fg-bright); font-weight:550; }
+.command-trigger { color:var(--fg-muted); background:var(--surface); border:1px solid var(--border-subtle); padding:5px 10px; font-size:11.5px; gap:18px; }
+.sidebar-collapsed .left-dock { width:64px; padding-left:10px; padding-right:10px; }
+.sidebar-collapsed .dock-hide-when-collapsed, .sidebar-collapsed .nav-btn-label, .sidebar-collapsed .nav-kbd { display:none; }
+.sidebar-collapsed .nav-btn { justify-content:center; padding:10px; }
+.sidebar-collapsed .brand-logo { padding:0 8px; margin-bottom:22px; }
 .workspace { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
 .workspace.page-split { flex-direction:row; }
 .main-pane { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-.content-scroll { flex:1; min-height:0; min-width:0; overflow:auto; padding:32px; }
-.page-inner { width:100%; max-width:1040px; margin:0 auto; }
+.content-scroll { flex:1; min-height:0; min-width:0; overflow:auto; padding:26px 30px; }
+.page-inner { width:100%; max-width:1060px; margin:0 auto; }
 .page-narrow { max-width:760px; }
-.page-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:8px 0 32px; }
-h1 { font-size:28px; line-height:1.25; letter-spacing:-.8px; font-weight:600; color:var(--fg-bright); margin:0 0 8px; overflow-wrap:anywhere; }
-h2 { color:var(--fg-bright); font-size:16px; font-weight:550; margin:0; }
-p { margin:0 0 16px; }
-.page-heading p, .muted { color:var(--fg-muted); font-size:13px; margin:0; }
-.eyebrow { text-transform:uppercase; color:var(--fg-muted); font-size:10px; letter-spacing:.14em; margin:0 0 16px; }
-.home-hero { margin:24px 0 48px; padding:40px; border:1px solid var(--border-subtle); border-radius:16px; background:radial-gradient(ellipse at 90% 0,var(--accent-dim),transparent 65%),var(--bg-elevated); position:relative; overflow:hidden; }
-.home-hero h1 { font-size:40px; letter-spacing:-1.5px; margin-bottom:14px; }
-.home-hero p:not(.eyebrow) { color:var(--fg-muted); max-width:50ch; margin-bottom:28px; }
-.home-hero .eyebrow { color:var(--accent); }
-.section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px; }
-.home-shortcuts { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:32px; }
-.shortcut { text-align:left; padding:24px; background:transparent; border-color:var(--border-subtle); justify-content:space-between; white-space:normal; }
-.shortcut strong { display:block; font-size:14px; color:var(--fg-bright); font-weight:500; margin-bottom:4px; }
-.shortcut small { color:var(--fg-muted); font-weight:400; }
-.action-bar { padding:20px 24px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-.action-group { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
-.pane-heading { font-size:14px; color:var(--fg-bright); font-weight:550; overflow-wrap:anywhere; }
-.local-explorer { width:230px; flex-shrink:0; display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--border-subtle); background:var(--bg-elevated); }
-.sidebar-section { padding:18px 16px; }
-.sidebar-section input { width:100%; min-width:0; }
-.sidebar-title { display:flex; align-items:center; justify-content:space-between; color:var(--fg-muted); font-size:11px; margin-bottom:12px; }
-.sidebar-list { flex:1; min-height:0; overflow:auto; padding:0 8px 16px; }
-.list-item { padding:12px; cursor:pointer; border-radius:7px; display:flex; flex-direction:column; gap:4px; }
+.page-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:4px 0 24px; }
+h1 { font-size:24px; line-height:1.25; letter-spacing:-.6px; font-weight:600; color:var(--fg-bright); margin:0 0 6px; overflow-wrap:anywhere; }
+h2 { color:var(--fg-bright); font-size:15px; font-weight:600; margin:0; }
+p { margin:0 0 14px; }
+.page-heading p, .muted { color:var(--fg-muted); font-size:12.5px; margin:0; }
+.eyebrow { text-transform:uppercase; color:var(--fg-muted); font-size:10px; font-weight:600; letter-spacing:.12em; margin:0 0 10px; }
+.orbit-dashboard-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; padding-bottom:18px; margin-bottom:20px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap; }
+.orbit-dashboard-head h1 { font-size:23px; margin-bottom:4px; }
+.orbit-dashboard-head .eyebrow { color:var(--accent); margin-bottom:4px; }
+.telemetry-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+.telemetry-card { padding:14px 16px; border:1px solid var(--border-subtle); border-radius:var(--radius-md); background:var(--surface); text-align:left; display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.telemetry-card:hover:not(:disabled) { border-color:var(--accent); background:var(--surface-alt); }
+.telemetry-val { font-family:var(--font-mono); font-size:17px; font-weight:600; color:var(--fg-bright); }
+.telemetry-lbl { font-size:11.5px; color:var(--fg-muted); font-weight:450; }
+.active-task-card { margin:0 0 26px; padding:22px 24px; border:1px solid var(--border); border-radius:var(--radius-lg); background:linear-gradient(135deg,var(--accent-dim),transparent 58%),var(--surface); }
+.active-task-card h2 { font-size:19px; letter-spacing:-.4px; margin:10px 0 6px; }
+.active-task-card > p { color:var(--fg-muted); font-size:12.5px; margin-bottom:14px; max-width:68ch; }
+.pipeline-strip { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-top:14px; border-top:1px solid var(--border-subtle); margin-top:12px; }
+.pipeline-pill { font-family:var(--font-mono); font-size:11px; padding:5px 10px; border-radius:var(--radius-sm); background:var(--bg-elevated); border:1px solid var(--border-subtle); color:var(--fg-muted); }
+.pipeline-pill.done { color:var(--green); border-color:var(--green-gutter); background:var(--green-bg); }
+.pipeline-pill.current { color:var(--accent); border-color:var(--accent); background:var(--accent-dim); }
+.active-task-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--border-subtle); }
+.section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:12px; }
+.home-shortcuts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:24px; }
+.shortcut { text-align:left; padding:16px 18px; background:var(--surface); border:1px solid var(--border-subtle); border-radius:var(--radius-md); justify-content:space-between; white-space:normal; }
+.shortcut strong { display:block; font-size:13px; color:var(--fg-bright); font-weight:600; margin-bottom:3px; }
+.shortcut small { color:var(--fg-muted); font-weight:400; font-size:11.5px; }
+.action-bar { padding:12px 22px; border-bottom:1px solid var(--border-subtle); background:var(--bg-elevated); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.action-group { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.pane-heading { font-size:13.5px; color:var(--fg-bright); font-weight:600; overflow-wrap:anywhere; }
+.local-explorer { width:236px; flex-shrink:0; display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--border-subtle); background:var(--bg-elevated); }
+.sidebar-section { padding:14px 14px 10px; }
+.sidebar-section input { width:100%; min-width:0; padding:6px 10px; font-size:11.5px; }
+.sidebar-title { display:flex; align-items:center; justify-content:space-between; color:var(--fg-muted); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+.sidebar-list { flex:1; min-height:0; overflow:auto; padding:0 8px 12px; }
+.explorer-gate { margin:8px 10px 12px; padding:10px 12px; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); background:var(--surface); font-size:11px; display:flex; flex-direction:column; gap:5px; }
+.explorer-gate-row { display:flex; justify-content:space-between; align-items:center; color:var(--fg-muted); font-family:var(--font-mono); font-size:10.5px; }
+.explorer-gate-row strong { color:var(--fg-bright); font-weight:550; }
+.list-item { padding:9px 10px; cursor:pointer; border-radius:var(--radius-sm); display:flex; flex-direction:column; gap:3px; }
 .list-item:hover { background:var(--surface-alt); }
-.list-item.active { background:var(--accent-dim); }
-.list-item-row { display:flex; justify-content:space-between; align-items:center; gap:16px; }
-.list-item-title { color:var(--fg-bright); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.list-item-sub { font-size:11px; color:var(--fg-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.task-list { border:1px solid var(--border-subtle); border-radius:10px; overflow:hidden; }
-.task-list .list-item { padding:20px 24px; border-radius:0; border-bottom:1px solid var(--border-subtle); }
+.list-item.active { background:var(--accent-dim); box-shadow:inset 2px 0 0 var(--accent); }
+.list-item-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.list-item-title { color:var(--fg-bright); font-size:12px; font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.list-item-sub { font-size:10.5px; color:var(--fg-muted); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.task-list { border:1px solid var(--border-subtle); border-radius:var(--radius-md); background:var(--surface); overflow:hidden; }
+.task-list .list-item { padding:14px 18px; border-radius:0; border-bottom:1px solid var(--border-subtle); }
 .task-list .list-item:last-child { border:0; }
-.task-list .list-item-title { font-size:14px; }
-.task-list .list-item.active { background:transparent; }
-.task-list .list-item:hover { background:var(--surface); }
-.filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+.task-list .list-item-title { font-size:13.5px; font-family:var(--font-sans); font-weight:550; }
+.task-list .list-item.active { background:var(--accent-dim); }
+.task-list .list-item:hover { background:var(--surface-alt); }
+.filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
 .filters input { flex:1; min-width:160px; }
-.issue-row { border-bottom:1px solid var(--border-subtle); padding:20px 4px; }
-.issue-row > summary { cursor:pointer; display:flex; gap:16px; align-items:center; }
+.issue-row { border-bottom:1px solid var(--border-subtle); padding:16px 4px; }
+.issue-row > summary { cursor:pointer; display:flex; gap:14px; align-items:center; }
 .issue-row > summary::after { content:'+'; margin-left:auto; color:var(--fg-muted); }
 .issue-row[open] > summary::after { content:'−'; }
-.issue-row .issue-details { padding:24px 0 0; max-width:80ch; }
-.issue-row h3 { font-size:14px; font-weight:500; color:var(--fg-bright); margin:0 0 4px; }
-.status-banner { display:none; justify-content:space-between; align-items:center; gap:12px; padding:12px 32px; border-bottom:1px solid var(--border-subtle); font-size:12px; }
+.issue-row .issue-details { padding:18px 0 0; max-width:80ch; }
+.issue-row h3 { font-size:13.5px; font-weight:550; color:var(--fg-bright); margin:0 0 4px; }
+.status-banner { display:none; justify-content:space-between; align-items:center; gap:12px; padding:8px 24px; border-bottom:1px solid var(--border-subtle); font-size:12px; }
 .status-banner.show { display:flex; }
 .status-banner.error { background:var(--red-bg); color:var(--red); }
 .status-banner.info { background:var(--accent-dim); color:var(--accent); }
 .status-banner.ok { background:var(--green-bg); color:var(--green); }
-.settings-section { margin-bottom:36px; }
-.settings-section h2 { margin-bottom:16px; }
-.setting-row { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 0; border-bottom:1px solid var(--border-subtle); }
+.settings-section { margin-bottom:32px; }
+.settings-section h2 { margin-bottom:12px; }
+.setting-row { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; border-bottom:1px solid var(--border-subtle); }
 .setting-row label, .setting-row strong { display:block; font-size:13px; color:var(--fg-bright); font-weight:500; }
 .setting-row p { font-size:12px; color:var(--fg-muted); margin:4px 0 0; }
 .setting-row select { max-width:55%; }
 .settings-section .project-path { overflow-wrap:anywhere; }
-.task-form { max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:26px; }
+.task-form { max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:22px; }
 .task-title-row { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; }
-.task-form input, .task-form textarea { width:100%; font-size:14px; padding:12px 14px; }
+.task-form input, .task-form textarea { width:100%; font-size:13.5px; padding:10px 12px; }
 .task-form textarea { resize:vertical; }
 .field-hint { color:var(--fg-muted); font-size:11px; font-weight:400; margin-left:8px; }
-.disclosure { border-top:1px solid var(--border-subtle); padding:16px 0; }
+.disclosure { border-top:1px solid var(--border-subtle); padding:14px 0; }
 .disclosure summary { cursor:pointer; color:var(--fg-muted); font-size:12px; }
-.disclosure[open] > summary { margin-bottom:16px; }
-.diff-explanation { padding:12px 16px; }
+.disclosure[open] > summary { margin-bottom:14px; }
+.diff-explanation { padding:10px 16px; }
 .file-chip { white-space:normal; overflow-wrap:anywhere; text-align:left; }
 .review-next-step { padding:12px 24px; color:var(--fg-muted); border-bottom:1px solid var(--border-subtle); font-size:12px; }
 .overview-page { max-width:760px; }
-.overview-summary { font-size:15px; line-height:1.85; }
+.overview-summary { font-size:14.5px; line-height:1.8; }
 .badge:empty { display:none; }
-.badge { font-weight:450; border-color:transparent; }
+.badge { font-weight:500; border-color:transparent; font-family:var(--font-mono); font-size:10.5px; }
 .badge.blue { border-color:transparent; }
-.card-title { font-family:var(--font-sans); flex-wrap:wrap; overflow-wrap:anywhere; }
-.card-header { background:transparent; padding:16px 20px; }
-.card-body { padding:20px; }
-.empty-state { border:0; background:transparent; padding:64px 24px; }
-.empty-state h3 { font-size:18px; font-weight:500; margin-bottom:12px; }
-.subtab-nav { background:transparent; border:0; padding:0; gap:8px; }
-.subtab-btn { padding:9px 14px; }
-.subtab-btn.active { background:var(--accent-dim); }
-.subtab-bar { padding:12px 24px; background:transparent; border-color:var(--border-subtle); }
-.doc-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:28px; }
-.doc-tabs .list-item { padding:8px 14px; }
-.form-row label { font-size:13px; }
-.form-row { gap:10px; }
-.cmd-help { padding:12px 16px; border-top:1px solid var(--border-subtle); font-size:11px; color:var(--fg-muted); }
+.card-title { font-family:var(--font-mono); flex-wrap:wrap; overflow-wrap:anywhere; }
+.card-header { background:var(--surface-alt); padding:10px 16px; }
+.card-body { padding:16px; }
+.empty-state { border:1px dashed var(--border-subtle); background:rgba(15,23,42,.22); padding:44px 24px; }
+.empty-state h3 { font-size:16px; font-weight:550; margin-bottom:8px; }
+.subtab-nav { background:transparent; border:0; padding:0; gap:6px; }
+.subtab-btn { padding:6px 12px; font-size:12px; }
+.subtab-btn.active { background:var(--accent-dim); color:var(--fg-bright); border-color:rgba(141,162,255,.3); }
+.subtab-bar { padding:8px 22px; background:var(--bg-elevated); border-color:var(--border-subtle); }
+.doc-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:22px; }
+.doc-tabs .list-item { padding:7px 13px; }
+.form-row label { font-size:12.5px; }
+.form-row { gap:8px; }
+.cmd-help { padding:10px 16px; border-top:1px solid var(--border-subtle); font-size:11px; color:var(--fg-muted); font-family:var(--font-mono); }
+.workspace-statusline { height:26px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 18px; background:var(--bg-elevated); border-top:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:10.5px; color:var(--fg-muted); }
+.statusline-group { display:flex; align-items:center; gap:14px; min-width:0; overflow:hidden; white-space:nowrap; }
+.statusline-item { display:inline-flex; align-items:center; gap:5px; }
+.statusline-item strong { color:var(--fg); font-weight:500; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
 [hidden] { display:none !important; }
-button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
-@media (max-width:1000px) { .left-dock { width:180px; } .content-scroll { padding:24px; } .local-explorer { width:200px; } .home-hero { padding:32px; } }
+button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media (max-width:1000px) { .left-dock { width:176px; } .content-scroll { padding:20px; } .local-explorer { width:200px; } .telemetry-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .home-shortcuts { grid-template-columns:1fr; } }
 @media (max-width:700px) {
-  button { min-height:40px; }
-  .nav-backdrop { position:absolute; inset:64px 0 0; border:0; border-radius:0; background:#05081688; z-index:90; }
+  button { min-height:38px; }
+  .nav-backdrop { position:absolute; inset:48px 0 0; border:0; border-radius:0; background:#05081688; z-index:90; }
   .app-shell:not(.sidebar-collapsed) .nav-backdrop { display:block; }
-  .left-dock { position:absolute; top:64px; bottom:0; left:0; width:240px; z-index:100; box-shadow:var(--shadow); }
+  .left-dock { position:absolute; top:48px; bottom:0; left:0; width:232px; z-index:100; box-shadow:var(--shadow); }
   .sidebar-collapsed .left-dock { display:none; }
-  .titlebar { padding:0 16px; }
-  .breadcrumb > span:first-of-type { display:none; }
-  .command-trigger { gap:12px; padding:8px; }
-  .content-scroll { padding:20px; }
-  .home-hero { padding:28px 24px; margin:0 0 32px; }
-  .home-hero h1 { font-size:32px; }
+  .titlebar { padding:0 14px; }
+  .breadcrumb > span:first-of-type, .titlebar-proposal-btn, #statusline-shortcuts { display:none; }
+  .command-trigger { gap:10px; padding:6px 8px; }
+  .content-scroll { padding:18px; }
+  .telemetry-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .home-shortcuts { grid-template-columns:1fr; }
-  .page-heading { align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:24px; }
+  .page-heading { align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
   .task-title-row { grid-template-columns:1fr; }
   .workspace.page-split { flex-direction:column; }
   .local-explorer { width:100%; max-height:200px; border-right:0; border-bottom:1px solid var(--border-subtle); }
-  .sidebar-section { padding:12px 16px; }
-  .sidebar-title { margin-bottom:8px; }
-  .sidebar-list { padding-bottom:8px; }
-  .action-bar, .subtab-bar { padding:14px 20px; }
+  .explorer-gate { display:none; }
+  .sidebar-section { padding:10px 14px; }
+  .sidebar-title { margin-bottom:6px; }
+  .sidebar-list { padding-bottom:6px; }
+  .action-bar, .subtab-bar { padding:10px 16px; }
   .setting-row { flex-wrap:wrap; gap:12px; }
   .setting-row select { max-width:100%; }
-  .task-list .list-item { padding:16px; }
+  .task-list .list-item { padding:14px; }
   .list-item-title { white-space:normal; }
 }
 @media (prefers-reduced-motion:reduce) { *, *::before, *::after { transition:none !important; scroll-behavior:auto !important; } }
 
-.wizard-steps { display:flex; gap:16px; margin-bottom:36px; padding-bottom:24px; border-bottom:1px solid var(--border-subtle); }
+.wizard-steps { display:flex; gap:16px; margin-bottom:28px; padding-bottom:18px; border-bottom:1px solid var(--border-subtle); }
 .wizard-steps button { border:0; background:transparent; color:var(--fg-muted); padding:4px 0; gap:10px; flex:1; }
-.wizard-steps button span { border:1px solid var(--border); border-radius:50%; width:26px; height:26px; display:grid; place-items:center; font-size:11px; }
+.wizard-steps button span { border:1px solid var(--border); border-radius:50%; width:24px; height:24px; display:grid; place-items:center; font-size:11px; font-family:var(--font-mono); }
 .wizard-steps button.active { color:var(--fg-bright); }
 .wizard-steps button.active span { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
-.task-step-panel { display:flex; flex-direction:column; gap:24px; }
-.wizard-footer { display:flex; justify-content:space-between; gap:16px; margin:32px auto 0; max-width:720px; padding-top:24px; border-top:1px solid var(--border-subtle); }
+.task-step-panel { display:flex; flex-direction:column; gap:20px; }
+.wizard-footer { display:flex; justify-content:space-between; gap:16px; margin:26px auto 0; max-width:720px; padding-top:20px; border-top:1px solid var(--border-subtle); }
 .wizard-footer > .action-group { margin-left:auto; }
-.field-error { color:var(--red); font-size:13px; background:var(--red-bg); padding:12px 16px; border-radius:8px; }
+.field-error { color:var(--red); font-size:12.5px; background:var(--red-bg); padding:10px 14px; border-radius:var(--radius-sm); }
 .file-picker { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:240px; overflow:auto; }
-.file-picker .file-chip { padding:12px; min-height:40px; }
-.task-confirm-summary { border:1px solid var(--border-subtle); border-radius:10px; padding:24px; }
-.task-confirm-summary h2 { font-size:20px; margin-bottom:12px; }
+.file-picker .file-chip { padding:10px 12px; min-height:38px; }
+.task-confirm-summary { border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:20px; background:var(--surface); }
+.task-confirm-summary h2 { font-size:18px; margin-bottom:10px; }
 .task-confirm-summary p { white-space:pre-wrap; overflow-wrap:anywhere; }
-.task-confirm-summary ul { margin:12px 0 0; padding-left:20px; font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+.task-confirm-summary ul { margin:10px 0 0; padding-left:20px; font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
 .review-body { display:flex; flex:1; min-height:0; }
-.diff-toolbar { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 24px; border-bottom:1px solid var(--border-subtle); }
-.diff-toolbar button { font-size:11px; padding:6px 10px; }
-.apply-checklist { border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; margin-bottom:24px; }
-.apply-requirement { display:flex; justify-content:space-between; width:100%; border:0; border-radius:0; border-bottom:1px solid var(--border-subtle); background:transparent; padding:20px; }
+.diff-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:8px 22px; border-bottom:1px solid var(--border-subtle); background:var(--surface); }
+.diff-toolbar button { font-size:11px; padding:5px 10px; }
+.diff-split-head th { text-align:left; font-family:var(--font-mono); font-size:10.5px; font-weight:600; color:var(--fg-muted); background:var(--surface-alt); padding:5px 10px; border-bottom:1px solid var(--border-subtle); }
+.apply-checklist { border:1px solid var(--border-subtle); border-radius:var(--radius-md); background:var(--surface); overflow:hidden; margin-bottom:20px; }
+.apply-requirement { display:flex; justify-content:space-between; width:100%; border:0; border-radius:0; border-bottom:1px solid var(--border-subtle); background:transparent; padding:16px 18px; }
 .apply-requirement:last-child { border:0; }
-.apply-destination { margin-bottom:20px; font-size:12px; color:var(--fg-muted); overflow-wrap:anywhere; }
-.review-next-step { padding:0; border:0; margin:0 0 24px; }
-.phase-summary-bar { border:0; padding:0; background:transparent; margin-bottom:24px; }
-.phase-group { border-color:var(--border-subtle); }
-.phase-group-header { background:transparent; padding:20px; }
-.phase-group-title { text-transform:none; letter-spacing:0; font-size:14px; font-weight:500; }
-.phase-detail { padding:14px 20px; border-top:1px solid var(--border-subtle); }
-.phase-detail summary { display:flex; align-items:center; gap:16px; cursor:pointer; font-size:13px; }
+.apply-destination { margin-bottom:16px; font-size:12px; font-family:var(--font-mono); color:var(--fg-muted); overflow-wrap:anywhere; }
+.review-next-step { padding:0; border:0; margin:0 0 20px; }
+.phase-summary-bar { border:0; padding:0; background:transparent; margin-bottom:20px; }
+.phase-group { border-color:var(--border-subtle); background:var(--surface); }
+.phase-group-header { background:var(--surface-alt); padding:14px 18px; }
+.phase-group-title { text-transform:none; letter-spacing:0; font-size:13.5px; font-weight:600; }
+.phase-detail { padding:12px 18px; border-top:1px solid var(--border-subtle); }
+.phase-detail summary { display:flex; align-items:center; gap:14px; cursor:pointer; font-size:12.5px; font-family:var(--font-mono); }
 .phase-detail summary .badge { margin-left:auto; }
 .phase-detail summary::after { content:'+'; color:var(--fg-muted); }
 .phase-detail[open] summary::after { content:'−'; }
-.phase-detail-body { margin-top:20px; }
-.phase-detail-body .project-path { margin-bottom:12px; overflow-wrap:anywhere; }
-.phase-detail .phase-log-pre { max-height:320px; margin-top:12px; }
-.checks-trust { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 20px; margin-bottom:24px; background:var(--amber-bg); border-radius:8px; color:var(--amber); font-size:12px; }
-@media(max-width:700px) { .review-body { flex-direction:column; } .wizard-steps { gap:8px; } .wizard-steps button { font-size:11px; gap:6px; } .file-picker { grid-template-columns:1fr; } .diff-toolbar { padding:12px 20px; } .wizard-footer { flex-wrap:wrap; } .wizard-footer > .action-group { gap:8px; } .subtab-nav { max-width:100%; overflow:auto; } }
+.phase-detail-body { margin-top:14px; }
+.phase-detail-body .project-path { margin-bottom:10px; overflow-wrap:anywhere; }
+.phase-detail .phase-log-pre { max-height:320px; margin-top:10px; }
+.checks-trust { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:10px 16px; margin-bottom:20px; background:var(--amber-bg); border-radius:var(--radius-sm); color:var(--amber); font-size:12px; }
+@media(max-width:700px) { .review-body { flex-direction:column; } .wizard-steps { gap:8px; } .wizard-steps button { font-size:11px; gap:6px; } .file-picker { grid-template-columns:1fr; } .diff-toolbar { padding:10px 16px; } .wizard-footer { flex-wrap:wrap; } .wizard-footer > .action-group { gap:8px; } .subtab-nav { max-width:100%; overflow:auto; } }
 </style>
 </head>
 <body>
@@ -710,17 +736,24 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   <button id="nav-backdrop" class="nav-backdrop" aria-label="Close navigation" tabindex="-1"></button>
   <aside id="workspace-nav" class="left-dock" aria-label="Workspace navigation">
     <div class="brand-logo"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 2 13 8v12l-13 8L3 22V10Z" stroke="currentColor" stroke-width="1.5"/><path d="m9 19 7-9 7 9M12 16h8" stroke="currentColor" stroke-width="1.5"/></svg><span class="dock-hide-when-collapsed">mini-orca</span></div>
-    <div class="project-identity dock-hide-when-collapsed"><p class="eyebrow">Workspace</p><span id="project-name">Loading project…</span></div>
-    <nav class="dock-nav" aria-label="Main pages"><button class="nav-btn tab-btn" data-tab="home" title="Home"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg></span><span class="nav-btn-label">Home</span></button><button class="nav-btn tab-btn" data-tab="files" title="Files"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6l2 3h8v12H4Z"/></svg></span><span class="nav-btn-label">Files</span></button><button class="nav-btn tab-btn" data-tab="tasks" title="Tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="m8 12 2 2 5-5M9 4V2h6v2"/></svg></span><span class="nav-btn-label">Tasks</span></button><button class="nav-btn tab-btn" data-tab="issues" title="Issues"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2Z"/><path d="M12 9v5m0 3v1"/></svg></span><span class="nav-btn-label">Issues</span></button><button class="nav-btn tab-btn" data-tab="docs" title="Docs"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v13H4Z"/><path d="M15 4v5h5M8 13h8m-8 4h6"/></svg></span><span class="nav-btn-label">Docs</span></button><button class="nav-btn tab-btn" data-tab="checks" title="Checks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/></svg></span><span class="nav-btn-label">Checks</span></button></nav>
-    <div class="dock-footer"><button class="nav-btn tab-btn" data-tab="settings" title="Settings"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg></span><span class="nav-btn-label">Settings</span></button><div class="connection dock-hide-when-collapsed"><span id="live-status" class="badge">Connecting…</span></div></div>
+    <div class="project-identity dock-hide-when-collapsed"><p class="eyebrow">Orbit Workspace</p><span id="project-name">Loading project…</span></div>
+    <nav class="dock-nav" aria-label="Main pages"><button class="nav-btn tab-btn" data-tab="home" title="Home (1)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="nav-btn-label">Home</span><span class="nav-kbd">1</span></button><button class="nav-btn tab-btn" data-tab="files" title="Files (2)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6l2 3h8v12H4Z"/></svg></span><span class="nav-btn-label">Files</span><span class="nav-kbd">2</span></button><button class="nav-btn tab-btn" data-tab="tasks" title="Tasks (3)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="m8 12 2 2 5-5M9 4V2h6v2"/></svg></span><span class="nav-btn-label">Tasks</span><span class="nav-kbd">3</span></button><button class="nav-btn tab-btn" data-tab="diff" title="Review diff (R)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4 8h5m-5 8h5m6-8h5m-3-2v4m-2 6h5"/></svg></span><span class="nav-btn-label">Review</span><span class="nav-kbd">R</span></button><button class="nav-btn tab-btn" data-tab="issues" title="Issues (4)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2Z"/><path d="M12 9v5m0 3v1"/></svg></span><span class="nav-btn-label">Issues</span><span class="nav-kbd">4</span></button><button class="nav-btn tab-btn" data-tab="docs" title="Docs (5)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v13H4Z"/><path d="M15 4v5h5M8 13h8m-8 4h6"/></svg></span><span class="nav-btn-label">Docs</span><span class="nav-kbd">5</span></button><button class="nav-btn tab-btn" data-tab="checks" title="Checks (6)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/></svg></span><span class="nav-btn-label">Checks</span><span class="nav-kbd">6</span></button></nav>
+    <div class="dock-footer"><button class="nav-btn tab-btn" data-tab="settings" title="Settings (7)"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg></span><span class="nav-btn-label">Settings</span><span class="nav-kbd">7</span></button><div class="connection dock-hide-when-collapsed"><span id="live-status" class="badge">Connecting…</span></div></div>
   </aside>
   <div class="canvas-area">
-    <header class="titlebar"><div class="breadcrumb"><button id="sidebar-collapse-btn" class="btn-ghost" aria-label="Toggle navigation" aria-expanded="true" aria-controls="workspace-nav" title="Toggle navigation ([)">☰</button><span>Workspace</span><span aria-hidden="true">/</span><span id="page-label">Home</span></div><button id="cmd-palette-btn" class="command-trigger"><span>Search anything</span><kbd class="kbd">⌘K</kbd></button></header>
+    <header class="titlebar"><div class="breadcrumb"><button id="sidebar-collapse-btn" class="btn-ghost" aria-label="Toggle navigation" aria-expanded="true" aria-controls="workspace-nav" title="Toggle navigation ([)">☰</button><span id="titlebar-project">Workspace</span><span aria-hidden="true">/</span><span id="titlebar-branch" class="breadcrumb-branch">⎇ main</span><span aria-hidden="true">/</span><span id="page-label">Home</span></div><div class="titlebar-actions"><button id="titlebar-proposal-btn" class="titlebar-proposal-btn page-link" data-page="diff" title="Open active change proposal in Lite IDE Review"><strong>Review</strong> · <span id="titlebar-proposal-label">No active proposal</span></button><button id="cmd-palette-btn" class="command-trigger"><span>Search files &amp; commands</span><kbd class="kbd">⌘K</kbd></button></div></header>
     <div id="status-banner" class="status-banner" role="status" aria-live="polite"><span id="status-banner-text"></span><button id="status-banner-close" class="btn-ghost" aria-label="Dismiss notification">×</button></div>
     <main id="view-home" class="workspace"><div class="content-scroll"><div class="page-inner">
-      <section class="home-hero"><p class="eyebrow">Your space to build</p><h1>A clear path from idea<br>to better code.</h1><p>Explore your project, shape a task, and review every change.</p><div class="action-group"><button class="btn-primary page-link" data-page="new-task">New task <span aria-hidden="true">↗</span></button><button class="btn-ghost page-link" data-page="files">Explore files →</button></div></section>
+      <header class="orbit-dashboard-head"><div><p class="eyebrow">Orbit Lite IDE · Workspace</p><h1 id="home-workspace-title">Workspace Overview</h1><p id="home-workspace-sub" class="muted">Explore source files, shape a bounded task, and review every diff before applying.</p></div><div class="action-group"><button class="btn-primary page-link" data-page="new-task">New task <span aria-hidden="true">↗</span></button><button class="page-link" data-page="diff">Open Review →</button><button class="btn-ghost page-link" data-page="files">Explore files →</button></div></header>
+      <section class="telemetry-grid" aria-label="Workspace telemetry">
+        <button class="telemetry-card page-link" data-page="files"><span id="home-stat-files" class="telemetry-val">0</span><span class="telemetry-lbl">Indexed source files</span></button>
+        <button class="telemetry-card page-link" data-page="tasks"><span id="home-stat-tasks" class="telemetry-val">0</span><span class="telemetry-lbl">Change tasks &amp; proposals</span></button>
+        <button class="telemetry-card page-link" data-page="issues"><span id="home-stat-issues" class="telemetry-val">0</span><span class="telemetry-lbl">Open findings</span></button>
+        <button class="telemetry-card page-link" data-page="checks"><span id="home-stat-checks" class="telemetry-val">Idle</span><span class="telemetry-lbl">Verification &amp; Go scan</span></button>
+      </section>
+      <section id="home-active-task" class="active-task-card" aria-label="Active task"></section>
       <section><div class="section-heading"><h2>Recent tasks</h2><button class="btn-ghost page-link" data-page="tasks">View all →</button></div><div id="home-tasks" class="task-list"></div></section>
-      <div class="home-shortcuts"><button class="shortcut page-link" data-page="docs"><span><strong>Understand the project</strong><small>Architecture, components, and decisions</small></span><span aria-hidden="true">↗</span></button><button class="shortcut page-link" data-page="issues"><span><strong>Find your next improvement</strong><small>Review issues and plan a focused fix</small></span><span aria-hidden="true">↗</span></button></div>
+      <div class="home-shortcuts"><button class="shortcut page-link" data-page="docs"><span><strong>Project architecture &amp; docs</strong><small>System topology, components, and ADRs</small></span><span aria-hidden="true">→</span></button><button class="shortcut page-link" data-page="issues"><span><strong>Triage findings &amp; fixes</strong><small>Inspect static and model findings</small></span><span aria-hidden="true">→</span></button><button class="shortcut page-link" data-page="checks"><span><strong>Sandbox checks &amp; Go scan</strong><small>Parser, vet, architecture gate, and tests</small></span><span aria-hidden="true">→</span></button></div>
     </div></div></main>
     <section id="view-files" class="workspace page-split" hidden><aside class="local-explorer" aria-label="Source files"><div class="sidebar-section"><div class="sidebar-title"><span>Explorer</span><span id="indexed-files-count">0</span></div><input id="file-filter-input" aria-label="Filter source files" placeholder="Find a file…" type="search"></div><div id="indexed-file-list" class="sidebar-list"></div></aside>      <main id="understand-files-main" class="main-pane">
         <div class="action-bar">
@@ -771,13 +804,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     <main id="view-issues" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Issues</h1><p>Open a finding to inspect the evidence and plan a fix.</p></div><button class="page-link" data-page="checks">View checks →</button></div><div class="filters"><input id="issue-search" type="search" aria-label="Search issues" placeholder="Search issues…"><select id="issue-cat-filter" aria-label="Issue category"><option value="all">All categories</option><option value="bugs">Bugs</option><option value="security">Security</option><option value="performance">Performance</option></select><select id="issue-status-filter" aria-label="Issue status"><option value="open">Open</option><option value="all">All statuses</option><option value="dismissed">Dismissed</option></select></div><div id="issues-content"></div></div></div></main>
     <main id="view-docs" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Docs</h1><p>A guide to how this project works.</p></div><div class="action-group"><span id="docs-status-badge" class="badge"></span><button id="run-analysis-btn">Generate docs</button></div></div><nav id="understand-docs-sidebar" class="doc-tabs" aria-label="Documentation sections"><button class="list-item active" data-doc-sec="overview">Overview</button><button class="list-item" data-doc-sec="architecture">Architecture</button><button class="list-item" data-doc-sec="components">Components</button><button class="list-item" data-doc-sec="scenarios">Scenarios</button><button class="list-item" data-doc-sec="decisions">Decisions</button></nav><div id="docs-content"></div></div></div></main>
     <main id="view-checks" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Checks</h1><p>Workspace scan results and project analysis.</p></div><button id="run-scan-btn" class="btn-primary">Run Go scan</button></div><div id="checks-content"></div></div></div></main>
-    <main id="view-settings" class="workspace" hidden><div class="content-scroll"><div class="page-inner page-narrow"><div class="page-heading"><div><h1>Settings</h1><p>Make this workspace yours.</p></div></div><section class="settings-section"><h2>Appearance</h2><div class="setting-row"><div><label for="theme-select">Color theme</label><p>A quieter canvas for focused work.</p></div><select id="theme-select"><option value="navy">Midnight · Navy & violet</option><option value="tokyo">Tokyo Night</option><option value="obsidian">Obsidian</option><option value="catppuccin">Catppuccin</option><option value="nord">Nordic Frost</option><option value="dracula">Dracula</option><option value="crt">CRT Phosphor</option><option value="amber">Amber CRT</option><option value="paper">Paper Light</option></select></div></section>
+    <main id="view-settings" class="workspace" hidden><div class="content-scroll"><div class="page-inner page-narrow"><div class="page-heading"><div><h1>Settings</h1><p>Make this workspace yours.</p></div></div><section class="settings-section"><h2>Appearance</h2><div class="setting-row"><div><label for="theme-select">Color theme</label><p>A quieter canvas for focused work.</p></div><select id="theme-select"><option value="navy">Orbit Midnight · Navy &amp; Indigo</option><option value="tokyo">Tokyo Night</option><option value="obsidian">Obsidian</option><option value="catppuccin">Catppuccin</option><option value="nord">Nordic Frost</option><option value="dracula">Dracula</option><option value="crt">CRT Phosphor</option><option value="amber">Amber CRT</option><option value="paper">Paper Light</option></select></div></section>
       <section class="settings-section"><h2>Project</h2><div class="setting-row"><div><label for="worktree-select">Active checkout</label><p>Choose where you explore and create tasks.</p></div><select id="worktree-select"></select></div><div class="setting-row"><div><strong>Location</strong><p id="project-path" class="project-path"></p></div><button id="switch-project-btn">Switch project</button></div><div class="setting-row"><strong>Revision</strong><span id="revision-badge" class="project-path"></span></div></section>
       <section class="settings-section"><h2>Execution</h2><div class="setting-row"><div><strong>Local code checks <span id="trust-status-pill" class="badge"></span></strong><p>Allow project code to run in an isolated check workspace.</p></div><button id="trust-btn">Grant trust</button></div></section>
       <details class="disclosure"><summary>Workspace maintenance</summary><div class="action-group"><button id="reindex-btn">Reindex files</button><button id="refresh-btn">Refresh workspace</button><span id="daemon-version" class="project-path"></span></div></details>
     </div></div></main>
     <section id="view-diff" class="workspace" hidden>
-      <div class="action-bar"><div class="action-group"><button class="btn-ghost page-link" data-page="tasks" aria-label="Back to tasks">←</button><span id="active-proposal-title" class="pane-heading">Select a task</span><span id="active-proposal-state" class="badge"></span><span id="active-proposal-freshness" class="badge"></span></div></div>
+      <div class="action-bar"><div class="action-group"><button class="btn-ghost page-link" data-page="tasks" aria-label="Back to tasks">← Tasks</button><span id="active-proposal-title" class="pane-heading">Select a task</span><span id="active-proposal-state" class="badge"></span><span id="active-proposal-freshness" class="badge"></span></div><div class="action-group"><span id="diff-readiness-pill" class="badge">0/0 reviewed</span></div></div>
       <div id="diff-subtab-bar" class="subtab-bar">
         <nav class="subtab-nav" aria-label="Proposal review sections">
           <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
@@ -788,9 +821,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         <div id="proposal-check-actions" class="action-group" hidden><button id="run-checks-btn" class="btn-primary">Run checks</button><button data-review-go="apply">Continue →</button></div>
       </div>
       <div class="review-body">
-        <aside id="explorer-diff" class="local-explorer" aria-label="Changed files"><div class="sidebar-section"><div class="sidebar-title"><span>Changed files</span><span id="changed-files-count">0</span></div></div><div id="diff-file-list" class="sidebar-list"></div></aside>
+        <aside id="explorer-diff" class="local-explorer" aria-label="Changed files"><div class="sidebar-section"><div class="sidebar-title"><span>Changed files</span><span id="changed-files-count">0</span></div></div><div id="diff-file-list" class="sidebar-list"></div><div id="diff-explorer-gate" class="explorer-gate"><div class="explorer-gate-row"><span>Reviewed</span><strong id="gate-reviewed-val">0 / 0</strong></div><div class="explorer-gate-row"><span>Checks</span><strong id="gate-checks-val">Not run</strong></div><div class="explorer-gate-row"><span>Apply gate</span><strong id="gate-apply-val">Pending</strong></div></div></aside>
         <main class="main-pane">
-          <div id="diff-view-controls" class="diff-toolbar"><div class="action-group"><button id="mode-split-btn" class="btn-primary" aria-pressed="true">Split</button><button id="mode-unified-btn" aria-pressed="false">Unified</button><button id="scope-delta-btn">Full diff</button></div><button class="btn-ghost" data-review-go="checks">Next: Checks →</button></div>
+          <div id="diff-view-controls" class="diff-toolbar"><div class="action-group"><button id="mode-split-btn" class="btn-primary" aria-pressed="true">Split</button><button id="mode-unified-btn" aria-pressed="false">Unified</button><button id="scope-delta-btn">Full diff</button></div><div class="action-group"><button id="next-unreviewed-file-btn" class="btn-ghost">Next unreviewed file →</button><button class="btn-ghost" data-review-go="checks">Next: Checks →</button></div></div>
           <div id="diff-content" class="content-scroll"></div>
           <div id="diff-spec-pane" class="content-scroll" hidden><div class="page-inner page-narrow">
             <div class="page-heading"><div><h1>Refine the change</h1><p>Give the model a focused instruction.</p></div></div>
@@ -811,6 +844,16 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         </main>
       </div>
     </section>
+    <footer id="workspace-statusline" class="workspace-statusline" aria-label="Workspace status">
+      <div class="statusline-group">
+        <span id="statusline-checkout" class="statusline-item">⎇ <strong>main</strong></span>
+        <span id="statusline-trust" class="statusline-item">Checks: <strong>Untrusted</strong></span>
+      </div>
+      <div class="statusline-group">
+        <span id="statusline-review" class="statusline-item">Proposal: <strong>None</strong></span>
+        <span id="statusline-shortcuts" class="statusline-item">⌘K Palette · [ Rail · 1-7 Views</span>
+      </div>
+    </footer>
   </div>
 </div>
 <!-- COMMAND PALETTE MODAL (Ctrl+K / Cmd+K) -->
@@ -836,7 +879,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   const pages = { home: 'Home', files: 'Files', tasks: 'Tasks', 'new-task': 'New task', issues: 'Issues', docs: 'Docs', checks: 'Checks', settings: 'Settings', diff: 'Review' };
   function normalizePage(page) {
-    return page === 'understand' ? 'docs' : page === 'build' ? 'new-task' : Object.keys(pages).indexOf(page) >= 0 ? page : 'home';
+    return page === 'dashboard' ? 'home' : page === 'review' ? 'diff' : page === 'understand' ? 'docs' : page === 'build' ? 'new-task' : Object.keys(pages).indexOf(page) >= 0 ? page : 'home';
   }
   const initialWorkspace = normalizePage(rawTab || (initialSessionId ? 'diff' : initialFile ? 'files' : 'home'));
 
@@ -1026,7 +1069,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     document.getElementById('page-label').textContent = pages[state.tab];
     document.title = pages[state.tab] + ' · Mini-Orca';
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      const active = btn.getAttribute('data-tab') === (['new-task', 'diff'].indexOf(state.tab) >= 0 ? 'tasks' : state.tab);
+      const active = btn.getAttribute('data-tab') === (state.tab === 'new-task' ? 'tasks' : state.tab);
       btn.classList.toggle('active', active);
       if (active) btn.setAttribute('aria-current', 'page');
       else btn.removeAttribute('aria-current');
@@ -1359,21 +1402,37 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     if (analysisBtn) analysisBtn.addEventListener('click', function() { document.getElementById('run-analysis-btn').click(); });
   }
 
+  function activeBranchLabel() {
+    if (state.gitWorkspace && Array.isArray(state.gitWorkspace.worktrees)) {
+      const match = state.gitWorkspace.worktrees.find(function(wt) {
+        return state.worktreePath ? wt.path === state.worktreePath : Boolean(wt.current);
+      });
+      if (match && match.branch) return match.branch;
+    }
+    return state.worktreePath ? state.worktreePath.split('/').pop() : 'main';
+  }
+
   function renderHeader() {
     if (!state.project) return;
-    document.getElementById('project-name').textContent = state.project.name || 'Project';
+    const projName = state.project.name || 'Project';
+    document.getElementById('project-name').textContent = projName;
+    document.getElementById('titlebar-project').textContent = projName;
     document.getElementById('project-path').textContent = state.project.path || '';
-    document.getElementById('revision-badge').textContent =
-      state.project.project_revision ? state.project.project_revision.slice(0, 10) : '';
+    const shortRev = state.project.project_revision ? state.project.project_revision.slice(0, 10) : '';
+    document.getElementById('revision-badge').textContent = shortRev;
+
+    const branch = activeBranchLabel();
+    document.getElementById('titlebar-branch').textContent = '⎇ ' + branch;
+    document.getElementById('statusline-checkout').innerHTML = '⎇ <strong>' + esc(branch) + '</strong>' + (shortRev ? ' · #' + esc(shortRev.slice(0, 7)) : '');
 
     const trusted = Boolean(state.trust && state.trust.trusted);
     const pill = document.getElementById('trust-status-pill');
     pill.textContent = trusted ? '✓ Trusted' : '⚠ Untrusted';
     pill.className = 'badge ' + (trusted ? 'green' : 'amber');
+    document.getElementById('statusline-trust').innerHTML = 'Checks: <strong>' + (trusted ? 'Trusted' : 'Untrusted') + '</strong>';
 
     const trustBtn = document.getElementById('trust-btn');
     trustBtn.textContent = trusted ? 'Revoke trust' : 'Grant trust';
-
   }
 
   function renderWorktreeSelect() {
@@ -2111,20 +2170,94 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
   }
 
-  function openProposal(id) {
+  function openProposalFile(id, filePath, subTab) {
     if (state.pendingAction) return;
-    state.selectedFile = '';
+    state.selectedFile = filePath || '';
     state.sessionId = id;
-    state.diffSubTab = 'changes';
+    state.diffSubTab = ['changes', 'checks', 'spec', 'apply'].indexOf(subTab) >= 0 ? subTab : 'changes';
     state.sinceLastReview = false;
     setTab('diff');
-    loadChangeSession(id);
+    if (state.activeSession && state.activeSession.id === id) {
+      syncURL('push');
+      renderDiffTab();
+    } else {
+      loadChangeSession(id);
+    }
+  }
+
+  function openProposal(id) {
+    openProposalFile(id, '', 'changes');
   }
 
   function renderHome() {
+    const filesCount = (state.index && Array.isArray(state.index.files)) ? state.index.files.length : 0;
+    const tasksCount = Array.isArray(state.changes) ? state.changes.length : 0;
+    const openIssues = (state.findings || []).filter(function(f) {
+      return (f.status || 'open').toLowerCase() !== 'dismissed';
+    }).length;
+    const scanState = (state.scan && state.scan.status) ? state.scan.status : 'Idle';
+
+    document.getElementById('home-workspace-title').textContent = (state.project && state.project.name) || 'Workspace Overview';
+    document.getElementById('home-workspace-sub').textContent = (state.project && state.project.path)
+      ? (state.project.path + ' · ' + filesCount + ' indexed files · ' + activeBranchLabel())
+      : 'Explore source files, shape a bounded task, and review every diff before applying.';
+    document.getElementById('home-stat-files').textContent = String(filesCount);
+    document.getElementById('home-stat-tasks').textContent = String(tasksCount);
+    document.getElementById('home-stat-issues').textContent = String(openIssues);
+    document.getElementById('home-stat-checks').textContent = scanState;
+
+    const activeTaskEl = document.getElementById('home-active-task');
+    const featured = state.activeSession || (state.changes && state.changes[0]) || null;
+    if (!featured) {
+      activeTaskEl.innerHTML = '<p class="eyebrow" style="color:var(--accent);">Active Proposal</p>' +
+        '<h2>Ready for your next focused change</h2>' +
+        '<p>Shape a task across 1–8 target files, inspect the generated Unified or Split diff, and run sandboxed verification checks before applying.</p>' +
+        '<div class="active-task-footer"><span class="muted">No active proposal in this checkout</span>' +
+        '<div class="action-group"><button class="btn-primary home-nav-btn" data-page="new-task">New task ↗</button><button class="home-nav-btn" data-page="files">Explore files →</button></div></div>';
+    } else {
+      const edits = Array.isArray(featured.changes) ? featured.changes : [];
+      const paths = edits.length
+        ? edits.map(function(e) { return e.path; })
+        : (Array.isArray(featured.paths) ? featured.paths : []);
+      const reviewed = edits.filter(function(e) { return isFileReviewed(featured, e.path); }).length;
+      const ready = proposalReadiness(featured);
+      const stColor = featured.state === 'applied' || featured.state === 'reviewed' || featured.state === 'checked' ? 'green' : (featured.state === 'failed' ? 'red' : 'blue');
+      activeTaskEl.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
+        '<span class="eyebrow" style="margin:0;color:var(--accent);">Active Proposal · ' + esc(featured.id) + '</span>' +
+        '<span class="badge ' + stColor + '">' + esc(featured.state || 'draft') + '</span></div>' +
+        '<h2>' + esc(featured.title || featured.id) + '</h2>' +
+        '<p>' + esc(ready.message) + '</p>' +
+        '<div class="pipeline-strip" aria-label="Proposal workflow stages">' +
+          '<button class="pipeline-pill ' + (edits.length ? 'done' : 'current') + ' home-stage-btn" data-id="' + esc(featured.id) + '" data-subtab="spec">1. Refine</button>' +
+          '<button class="pipeline-pill ' + (ready.filesReviewed ? 'done' : (edits.length ? 'current' : '')) + ' home-stage-btn" data-id="' + esc(featured.id) + '" data-subtab="changes">2. Review (' + reviewed + '/' + paths.length + ')</button>' +
+          '<button class="pipeline-pill ' + (ready.checksPassed ? 'done' : (ready.filesReviewed ? 'current' : '')) + ' home-stage-btn" data-id="' + esc(featured.id) + '" data-subtab="checks">3. Checks</button>' +
+          '<button class="pipeline-pill ' + (featured.state === 'applied' ? 'done' : (ready.canApprove ? 'current' : '')) + ' home-stage-btn" data-id="' + esc(featured.id) + '" data-subtab="apply">4. Guarded Apply</button>' +
+        '</div>' +
+        (paths.length ? '<div class="chip-list" style="margin-top:12px;">' + paths.slice(0, 6).map(function(p) {
+          const isRev = isFileReviewed(featured, p);
+          return '<button class="file-chip home-file-jump" data-id="' + esc(featured.id) + '" data-file="' + esc(p) + '">' + (isRev ? '✓ ' : '📄 ') + esc(p) + '</button>';
+        }).join('') + '</div>' : '') +
+        '<div class="active-task-footer"><span class="project-path">' + paths.length + ' target file' + (paths.length === 1 ? '' : 's') + ' · ' + reviewed + '/' + paths.length + ' reviewed</span>' +
+        '<button class="btn-primary home-open-featured" data-id="' + esc(featured.id) + '">Open Lite IDE Review →</button></div>';
+    }
+
+    activeTaskEl.querySelectorAll('.home-nav-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { setTab(btn.getAttribute('data-page')); });
+    });
+    activeTaskEl.querySelectorAll('.home-open-featured').forEach(function(btn) {
+      btn.addEventListener('click', function() { openProposal(btn.getAttribute('data-id')); });
+    });
+    activeTaskEl.querySelectorAll('.home-stage-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { openProposalFile(btn.getAttribute('data-id'), '', btn.getAttribute('data-subtab')); });
+    });
+    activeTaskEl.querySelectorAll('.home-file-jump').forEach(function(btn) {
+      btn.addEventListener('click', function() { openProposalFile(btn.getAttribute('data-id'), btn.getAttribute('data-file'), 'changes'); });
+    });
+
     const container = document.getElementById('home-tasks');
-    container.innerHTML = state.changes.slice(0, 3).map(function(c) {
-      return '<button class="home-task shortcut" style="width:100%;border:0;border-radius:0;" data-id="' + esc(c.id) + '"><span><strong>' + esc(c.title || c.id) + '</strong><small>' + esc(c.state || 'draft') + '</small></span><span aria-hidden="true">→</span></button>';
+    container.innerHTML = state.changes.slice(0, 4).map(function(c) {
+      const scope = (c.paths || []).slice(0, 3).join(', ');
+      return '<button class="home-task shortcut" style="width:100%;border:0;border-bottom:1px solid var(--border-subtle);border-radius:0;" data-id="' + esc(c.id) + '"><span><strong>' + esc(c.title || c.id) + '</strong><small>' + esc(c.state || 'draft') + (scope ? ' · ' + esc(scope) : '') + '</small></span><span aria-hidden="true">→</span></button>';
     }).join('') || '<div class="empty-state"><h3>Your next idea starts here</h3><p>Create a task to turn it into a reviewable change.</p></div>';
     container.querySelectorAll('.home-task').forEach(function(btn) {
       btn.addEventListener('click', function() { openProposal(btn.getAttribute('data-id')); });
@@ -2212,6 +2345,61 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     return result;
   }
 
+  function renderStatuslineProposal() {
+    const s = state.activeSession || (state.changes && state.changes[0]) || null;
+    const titleLabel = document.getElementById('titlebar-proposal-label');
+    const statusReview = document.getElementById('statusline-review');
+    const readinessPill = document.getElementById('diff-readiness-pill');
+    const gateReviewed = document.getElementById('gate-reviewed-val');
+    const gateChecks = document.getElementById('gate-checks-val');
+    const gateApply = document.getElementById('gate-apply-val');
+
+    if (!s) {
+      titleLabel.textContent = 'No active proposal';
+      statusReview.innerHTML = 'Proposal: <strong>None</strong>';
+      readinessPill.textContent = '0/0 reviewed';
+      readinessPill.className = 'badge';
+      gateReviewed.textContent = '0 / 0';
+      gateChecks.textContent = 'Not run';
+      gateApply.textContent = 'Pending';
+      return;
+    }
+
+    const edits = Array.isArray(s.changes) ? s.changes : [];
+    const totalFiles = edits.length || (Array.isArray(s.paths) ? s.paths.length : 0);
+    const reviewedFiles = edits.filter(function(e) { return isFileReviewed(s, e.path); }).length;
+    const checks = Array.isArray(s.checks) ? s.checks : [];
+    const passedChecks = checks.filter(function(c) { return normalizePhaseState(c.state) === 'passed'; }).length;
+    const failedChecks = checks.filter(function(c) { return normalizePhaseState(c.state) === 'failed'; }).length;
+    const ready = proposalReadiness(s);
+
+    titleLabel.textContent = (s.title || s.id) + ' (' + reviewedFiles + '/' + totalFiles + ')';
+    statusReview.innerHTML = 'Proposal: <strong>' + esc(s.title || s.id) + '</strong> · ' + reviewedFiles + '/' + totalFiles + ' reviewed';
+    readinessPill.textContent = reviewedFiles + '/' + totalFiles + ' reviewed';
+    readinessPill.className = 'badge ' + (ready.filesReviewed ? 'green' : 'blue');
+    gateReviewed.textContent = reviewedFiles + ' / ' + totalFiles + ' files';
+    gateChecks.textContent = failedChecks > 0 ? (failedChecks + ' failed') : (checks.length > 0 ? (passedChecks + '/' + checks.length + ' passed') : 'Not run');
+    gateApply.textContent = s.state === 'applied' ? 'Applied' : (ready.canApply ? 'Ready to apply' : (ready.canApprove ? 'Ready to approve' : 'Needs review'));
+  }
+
+  function selectNextUnreviewedFile() {
+    const s = state.activeSession;
+    if (!s) return;
+    const edits = effectiveEdits(s);
+    if (!edits.length) return;
+    const currentIdx = edits.findIndex(function(e) { return e.path === state.selectedFile; });
+    for (let offset = 1; offset <= edits.length; offset++) {
+      const candidate = edits[(currentIdx + offset + edits.length) % edits.length];
+      if (candidate && !isFileReviewed(s, candidate.path)) {
+        state.selectedFile = candidate.path;
+        syncURL('push');
+        renderDiffTab();
+        return;
+      }
+    }
+    setDiffSubTab('checks');
+  }
+
   function renderReviewActions() {
     const ready = proposalReadiness(state.activeSession);
     const busy = state.pendingAction;
@@ -2227,6 +2415,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     delta.textContent = state.sinceLastReview ? 'Since review' : 'Full diff';
     delta.className = state.sinceLastReview ? 'btn-primary' : '';
     delta.title = delta.disabled ? 'Review all files to establish a comparison.' : 'Compare with the last complete review';
+    const nextFileBtn = document.getElementById('next-unreviewed-file-btn');
+    const hasEdits = Boolean(state.activeSession && (state.activeSession.changes || []).length > 0);
+    nextFileBtn.disabled = !hasEdits;
+    nextFileBtn.textContent = ready.filesReviewed ? 'All reviewed · Checks →' : 'Next unreviewed file →';
     document.getElementById('undo-btn').hidden = !ready.canUndo;
     document.getElementById('apply-btn').hidden = !ready.canApply;
     document.getElementById('review-all-btn').hidden = ready.canApply || ready.canUndo;
@@ -2237,6 +2429,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       button.disabled = Boolean(busy) || state.sinceLastReview || !ready.editable || !editablePath || isFileReviewed(state.activeSession, path);
       button.title = state.sinceLastReview ? 'Switch to Full diff to review this file.' : button.textContent;
     });
+    renderStatuslineProposal();
   }
 
   async function runAction(button, action, label) {
@@ -2568,6 +2761,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
               (reviewed ? '<span class="badge green">✓ Reviewed</span>' : '<span class="badge amber">Not reviewed</span>') +
             '</div>' +
             '<div class="action-group">' +
+              '<button class="btn-ghost diff-open-source-btn" data-path="' + esc(edit.path) + '" title="Open source file in Files explorer">Source ↗</button>' +
               '<button class="review-file-btn ' + (reviewed ? '' : 'btn-success') + '" data-path="' + esc(edit.path) + '">' +
                 (reviewed ? '✓ Reviewed' : 'Mark reviewed') +
               '</button>' +
@@ -2583,6 +2777,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
     contentEl.innerHTML = html;
     renderReviewActions();
+    contentEl.querySelectorAll('.diff-open-source-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const p = btn.getAttribute('data-path');
+        setTab('files');
+        openSourceFile(p);
+      });
+    });
     contentEl.querySelectorAll('.review-file-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         runAction(btn, function() { return reviewSingleFile(btn.getAttribute('data-path')); }, 'Saving…');
@@ -2654,7 +2855,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         '<td class="diff-split-col ' + rClass + '">' + rText + '</td>' +
       '</tr>';
     }).join('');
-    return '<table class="diff-table"><tbody>' + rows + '</tbody></table>';
+    return '<table class="diff-table"><thead><tr class="diff-split-head"><th colspan="2">Current (HEAD)</th><th colspan="2">Proposed change</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function preserveSessionMeta(prev, next) {
@@ -2914,6 +3115,15 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     if (e.key === '1') setTab('home');
     else if (e.key === '2') setTab('files');
     else if (e.key === '3') setTab('tasks');
+    else if (e.key === '4') setTab('issues');
+    else if (e.key === '5') setTab('docs');
+    else if (e.key === '6') setTab('checks');
+    else if (e.key === '7') setTab('settings');
+    else if (e.key === 'r' || e.key === 'R') setTab('diff');
+    else if ((e.key === 'n' || e.key === 'N') && state.tab === 'diff') selectNextUnreviewedFile();
+    else if ((e.key === 'v' || e.key === 'V') && state.tab === 'diff') {
+      document.getElementById(state.diffMode === 'split' ? 'mode-unified-btn' : 'mode-split-btn').click();
+    }
     else if (e.key === 't' || e.key === 'T') cycleTheme();
     else if (e.key === '[') toggleSidebar();
   });
@@ -3019,6 +3229,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     btn.className = state.sinceLastReview ? 'btn-primary' : '';
     renderDiffTab();
   });
+
+  document.getElementById('next-unreviewed-file-btn').addEventListener('click', selectNextUnreviewedFile);
 
   bindAction('review-all-btn', approveProposalReview, 'Approving…');
   bindAction('run-checks-btn', runProposalChecks, 'Checking…');

@@ -131,6 +131,10 @@ func (s *State) renderDashboardPipelineSection(th ansiTheme, width int) []string
 		top := items[0]
 		meta := fmt.Sprintf("  %s %s · %s", th.statusBadge(top.Status), th.bold+th.fg+theme.TruncatePlain(top.Title, max(12, width-28))+th.reset, th.purple+top.Stage+th.reset)
 		out = append(out, theme.TruncateVisible(meta, max(20, width-2)))
+		if reviewed, total := s.activeProposalReviewCount(); total > 0 {
+			gate := fmt.Sprintf("  %sReview gate:%s %d/%d files reviewed · :diff / :web", th.muted, th.reset, reviewed, total)
+			out = append(out, theme.TruncateVisible(gate, max(20, width-2)))
+		}
 	} else {
 		out = append(out, "  "+th.muted+"No active tasks · [n] Create a plan"+th.reset)
 	}
@@ -166,6 +170,7 @@ func (s *State) renderDashboardRightColumn(th ansiTheme, summary domain.IssueSum
 		"  "+th.keyPill("n", "New task"),
 		"  "+th.keyPill("r", "Analyze"),
 		"  "+th.keyPill("o", "Switch project"),
+		"  "+th.keyPill(":web", "Web IDE"),
 		"  "+th.keyPill("Ctrl+K", "Commands"),
 	)
 	return right

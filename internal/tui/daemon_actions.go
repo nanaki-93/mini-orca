@@ -119,6 +119,10 @@ func (s *State) dispatchOpenWebUI(ctx context.Context, cl *Client, tab string) e
 	}
 	if s.File != nil && s.File.Path != "" {
 		filePath = s.File.Path
+	} else if s.Page == PageEditor && s.isViewingDiff() {
+		if active, _, ok := s.activeDiffHunk(); ok {
+			filePath = active.Path
+		}
 	}
 	if err := openWebUI(ctx, cl, tab, sessionID, filePath, worktreePath); err != nil {
 		return err

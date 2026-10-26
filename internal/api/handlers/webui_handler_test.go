@@ -58,6 +58,10 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		"What should change?",
 		"Target files",
 		"Acceptance criteria",
+		`id="home-active-task"`,
+		`id="diff-explorer-gate"`,
+		`id="next-unreviewed-file-btn"`,
+		`id="workspace-statusline"`,
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)

@@ -111,4 +111,25 @@ func TestColonWebCommandQueuesDeepLinkedBrowserOpen(t *testing.T) {
 	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "open-web" || s.PendingActions[0].Target != "diff" {
 		t.Fatalf("expected open-web action for diff tab, got %+v", s.PendingActions)
 	}
+
+	for _, tc := range []struct {
+		page Page
+		cmd  string
+		want string
+	}{
+		{PageSummary, ":web", "home"},
+		{PageDocs, ":web", "docs"},
+		{PageProject, ":web", "checks"},
+		{PageInstructions, ":web", "settings"},
+		{PageSummary, ":web review", "diff"},
+		{PageBugs, ":web dashboard", "home"},
+	} {
+		s.PendingActions = nil
+		s.Change = nil
+		s.Page = tc.page
+		s.ExecuteCommand(tc.cmd)
+		if len(s.PendingActions) != 1 || s.PendingActions[0].Target != tc.want {
+			t.Fatalf("page %s cmd %q: got %+v, want %q", tc.page, tc.cmd, s.PendingActions, tc.want)
+		}
+	}
 }

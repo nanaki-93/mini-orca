@@ -31,6 +31,8 @@ func (s *State) handleDiffReviewKey(ev KeyEvent) bool {
 		s.DiffOffset = 0
 	case "w":
 		s.reviewCurrentDiffFile()
+	case "W":
+		s.stepNextUnreviewedDiffFile()
 	case "z":
 		if s.Change == nil || s.Change.LastReviewedHash == "" {
 			s.CmdOutput = "No complete file review recorded yet. Mark each file with [w]."
@@ -49,6 +51,62 @@ func (s *State) handleDiffReviewKey(ev KeyEvent) bool {
 func shiftedCode(text string, offset int) string {
 	runes := []rune(theme.SanitizeCodeText(text))
 	return string(runes[min(offset, len(runes)):])
+}
+
+func (s *State) stepNextUnreviewedDiffFile() {
+	active, allHunks, ok := s.activeDiffHunk()
+	if !ok || s.Change == nil {
+		return
+	}
+	changes := domain.EffectiveSessionChanges(s.Change)
+	if len(changes) == 0 {
+		return
+	}
+	for step := 1; step <= len(changes); step++ {
+		idx := (active.FileIndex + step) % len(changes)
+		path := changes[idx].Path
+		if s.Change.FileReviewHash == s.Change.Hash && domain.ContainsString(s.Change.ReviewedFiles, path) {
+			continue
+		}
+		for _, fh := range allHunks {
+			if fh.FileIndex == idx {
+				s.syncDiffSelectionToHunk(fh.GlobalIndex)
+				s.CmdOutput = fmt.Sprintf("Next unreviewed file (%d/%d): %s", idx+1, len(changes), path)
+				return
+			}
+		}
+	}
+	s.CmdOutput = fmt.Sprintf("All %d changed files are marked reviewed.", len(changes))
+}
+
+func (s *State) activeProposalReviewCount() (reviewed, total int) {
+	if s.Change == nil {
+		return 0, 0
+	}
+	changes := domain.EffectiveSessionChanges(s.Change)
+	total = len(changes)
+	if total == 0 || s.Change.FileReviewHash != s.Change.Hash {
+		return 0, total
+	}
+	for _, file := range changes {
+		if domain.ContainsString(s.Change.ReviewedFiles, file.Path) {
+			reviewed++
+		}
+	}
+	return reviewed, total
+}
+
+func (s *State) activeProposalChecksSummary() string {
+	if s.Change == nil || len(s.Change.Checks) == 0 {
+		return ""
+	}
+	passed := 0
+	for _, ch := range s.Change.Checks {
+		if ch.State == "passed" {
+			passed++
+		}
+	}
+	return fmt.Sprintf("Checks %d/%d passed", passed, len(s.Change.Checks))
 }
 
 func (s *State) diffReviewOverview(th ansiTheme, active FileDiffHunk, width int) []string {

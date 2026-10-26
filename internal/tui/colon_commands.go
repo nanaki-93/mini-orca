@@ -271,31 +271,58 @@ func (s *State) execSystemCommand(cmd, arg string) bool {
 }
 
 func (s *State) openWebUIForCurrentView(arg string) {
-	tab := strings.ToLower(strings.TrimSpace(arg))
-	switch tab {
-	case "diff", "issues", "tasks", "files":
-	default:
-		switch s.EffectivePage() {
-		case PageBugs, PageIssueDetail:
-			tab = "issues"
-		case PageEditor:
-			if s.File != nil && !s.isViewingDiff() {
-				tab = "files"
-			} else {
-				tab = "diff"
-			}
-		case PageAgents, PagePlan:
-			if s.Change != nil && s.Change.ID != "" {
-				tab = "diff"
-			} else {
-				tab = "tasks"
-			}
-		default:
-			tab = "diff"
-		}
+	tab := normalizeWebUITab(arg)
+	if tab == "" {
+		tab = s.defaultWebUITab()
 	}
 	s.CmdOutput = "Opening Mini-Orca Web UI & Diff Inspector in your system browser..."
 	s.enqueueAction(ActionRequest{Kind: "open-web", Target: tab})
+}
+
+func normalizeWebUITab(arg string) string {
+	norm := strings.ToLower(strings.TrimSpace(arg))
+	switch norm {
+	case "home", "dashboard", "overview":
+		return "home"
+	case "diff", "review", "changes":
+		return "diff"
+	case "issues", "tasks", "new-task", "files", "docs", "checks", "settings":
+		return norm
+	default:
+		return ""
+	}
+}
+
+func (s *State) defaultWebUITab() string {
+	switch s.EffectivePage() {
+	case PageBugs, PageIssueDetail:
+		return "issues"
+	case PageRepo:
+		return "files"
+	case PageProject, PageAnalysisRun, PageAnalysisFiles:
+		return "checks"
+	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
+		return "docs"
+	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons:
+		return "settings"
+	case PageEditor:
+		if s.File != nil && !s.isViewingDiff() {
+			return "files"
+		}
+		return "diff"
+	case PageAgents, PagePlan:
+		if s.Change != nil && s.Change.ID != "" {
+			return "diff"
+		}
+		return "tasks"
+	case PageSummary:
+		if s.Change == nil || s.Change.ID == "" {
+			return "home"
+		}
+		return "diff"
+	default:
+		return "diff"
+	}
 }
 
 func (s *State) execProjectCommand(arg string) bool {

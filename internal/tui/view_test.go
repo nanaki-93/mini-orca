@@ -516,6 +516,16 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 		t.Fatalf("expected 'f' to cycle back to file 1/2 (server.go), got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
 	}
 
+	// 3b. Press 'W' -> jumps passively to next unreviewed file (server_test.go) without dispatching review mutation
+	s.HandleKey(KeyEvent{Key: "W"})
+	if s.HunkIdx != 1 || !strings.Contains(s.CmdOutput, "Next unreviewed file (2/2): internal/api/server_test.go") || len(s.PendingActions) != 0 {
+		t.Fatalf("expected 'W' to focus next unreviewed file passively, got HunkIdx=%d CmdOutput=%q Pending=%+v", s.HunkIdx, s.CmdOutput, s.PendingActions)
+	}
+	s.HandleKey(KeyEvent{Key: "W"})
+	if s.HunkIdx != 0 || !strings.Contains(s.CmdOutput, "Next unreviewed file (1/2): internal/api/server.go") {
+		t.Fatalf("expected second 'W' to wrap to first unreviewed file, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
+	}
+
 	// 4. Scroll down with 'j' past the end of Hunk #1 -> automatically advances into Hunk #2
 	for range 5 {
 		s.HandleKey(KeyEvent{Key: "j"})
@@ -1116,7 +1126,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageSummary)
 	dashFrame := s.Render(132, 38)
-	for _, token := range []string{"PROJECT OVERVIEW", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "1 task"} {
+	for _, token := range []string{"PROJECT OVERVIEW", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "Review gate:", "0/1 files reviewed", "Web IDE", "1 task"} {
 		if !strings.Contains(dashFrame, token) {
 			t.Fatalf("expected dashboard to contain %q:\n%s", token, dashFrame)
 		}
