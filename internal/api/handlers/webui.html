@@ -592,25 +592,6 @@ button.btn-ghost:hover:not(:disabled) {
 }
 
 /* ==================== METRIC STRIPS, CARDS & GRIDS ==================== */
-.metrics-strip {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
-  gap: 12px; margin-bottom: 16px;
-}
-.metric-tile {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md); padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.metric-label {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--fg-muted);
-}
-.metric-value {
-  font-size: 18px; font-weight: 700; color: var(--fg-bright);
-  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-}
-.metric-sub { font-size: 11px; color: var(--fg-muted); }
-
 .card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-md); margin-bottom: 16px; overflow: hidden;
@@ -660,26 +641,6 @@ button.btn-ghost:hover:not(:disabled) {
 }
 
 /* ==================== PIPELINE STEPPER & DIFF INSPECTOR ==================== */
-.pipeline-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 16px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius-md);
-  margin-bottom: 14px; flex-wrap: wrap;
-}
-.pipeline-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pipeline-step {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
-  background: var(--surface-alt); color: var(--fg-muted); border: 1px solid var(--border);
-}
-.pipeline-step.done {
-  background: var(--green-bg); color: var(--green); border-color: var(--green);
-}
-.pipeline-step.current {
-  background: var(--accent-dim); color: var(--accent); border-color: var(--accent);
-}
-.pipeline-arrow { color: var(--fg-muted); font-size: 11px; }
-
 .diff-table {
   width: 100%; border-collapse: collapse;
   font-family: var(--font-mono); font-size: 12px;
@@ -913,6 +874,30 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   #daemon-version { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+.overview-page { max-width: 860px; padding: 16px 12px; }
+.eyebrow { margin: 0 0 8px; color: var(--fg-muted); font-size: 11px; letter-spacing: .08em; }
+.overview-page h1 { margin: 0 0 16px; color: var(--fg-bright); font-size: 26px; font-weight: 600; overflow-wrap: anywhere; }
+.overview-summary { font-size: 14px; line-height: 1.8; max-width: 72ch; margin: 0 0 22px; }
+.overview-links { margin: 32px 0 20px; border-top: 1px solid var(--border); }
+.overview-links button { display: flex; justify-content: space-between; width: 100%; padding: 16px 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; }
+.overview-links button span:last-child { color: var(--fg-muted); font-weight: 400; }
+.task-form { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.form-intro { color: var(--fg-muted); margin: 2px 0 0; }
+.task-title-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px; gap: 16px; }
+.task-form input, .task-form textarea { width: 100%; font-size: 13px; padding: 10px 12px; }
+.task-form textarea { resize: vertical; min-height: 70px; }
+.field-hint { color: var(--fg-muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+.disclosure { border-top: 1px solid var(--border-subtle); padding: 12px 0; }
+.disclosure summary { cursor: pointer; color: var(--fg-muted); font-size: 12px; }
+.disclosure[open] > summary { margin-bottom: 14px; }
+.diff-explanation { padding: 8px 16px; }
+.diff-explanation p { margin-bottom: 0; max-width: 100ch; }
+.file-chip { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.review-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--fg-muted); padding: 0 0 12px; font-size: 12px; }
+.review-warning { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 12px; margin-bottom: 12px; border-left: 2px solid var(--red); background: var(--red-bg); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 900px) { .task-title-row { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
@@ -1076,16 +1061,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           </div>
         </div>
         <div id="diff-file-list" class="sidebar-list"></div>
-        <div class="sidebar-section" style="border-top:1px solid var(--border);border-bottom:none;background:var(--surface);display:flex;flex-direction:column;gap:6px;">
-          <div class="sidebar-title" style="margin:0;">
-            <span>Verification &amp; Refinement</span>
-            <span id="dock-checks-pill" class="badge">0 checks</span>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <button id="dock-checks-summary-btn" style="justify-content:center;font-size:11px;padding:5px 8px;" title="Inspect sandboxed checks and workflow phases">✔ Phases</button>
-            <button id="open-refine-tab-btn" class="btn-primary" style="justify-content:center;font-size:11px;padding:5px 8px;" title="Open AI refinement composer and acceptance criteria">✦ AI Refine</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1154,11 +1129,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             <span id="open-file-meta" class="badge"></span>
           </div>
           <div class="action-group">
-            <button id="explain-file-btn" title="Generate an AI explanation of this file's behavior, inputs, outputs and risks">✦ Explain File</button>
-            <button id="task-from-file-btn" class="btn-primary" title="Create a new feature or bug-fix spec targeting this file">＋ Create Task for File</button>
+            <button id="explain-file-btn" title="Generate an AI explanation of this file's behavior, inputs, outputs and risks">Explain</button>
+            <button id="task-from-file-btn" class="btn-primary" title="Create a new feature or bug-fix spec targeting this file">New task</button>
           </div>
         </div>
-        <div id="file-viewer-content" class="content-scroll"></div>
+        <div id="file-viewer-content" class="content-scroll"><div class="empty-state"><h3>Choose a file</h3><p>Select a file in the sidebar to read its source.</p></div></div>
       </main>
     </section>
 
@@ -1168,115 +1143,39 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       <main id="build-spec-main" class="main-pane">
         <div class="action-bar">
           <div class="action-group">
-            <span class="pane-heading">Spec-to-Code Studio</span>
-            <span class="project-path">Author a specification across 1–8 target files with automated test pairing</span>
+            <span class="pane-heading">New task</span>
           </div>
           <div class="action-group">
-            <button id="create-task-btn" title="Save proposal session without running the model yet">Save Draft Only</button>
-            <button id="generate-spec-btn" class="btn-primary" title="Create session and generate code changes from this specification">⚡ Generate Code Changes</button>
+            <button id="create-task-btn" title="Save proposal session without running the model yet">Save draft</button>
+            <button id="generate-spec-btn" class="btn-primary" title="Create session and generate code changes from this specification">Generate changes</button>
           </div>
         </div>
         <div class="content-scroll">
-          <!-- Section 1: Task Intent & Specification -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">1 · Task Intent &amp; Specification</span>
-              <span class="badge">Step 1 of 3</span>
+          <div class="task-form">
+            <p class="form-intro">Describe a change. Choose its files. Review the generated diff before applying.</p>
+            <div class="task-title-row">
+              <div class="form-row"><label for="new-task-title">Title</label><input id="new-task-title" type="text" placeholder="e.g. Add request rate limiting" required></div>
+              <div class="form-row"><label for="new-task-kind">Type</label><select id="new-task-kind"><option value="feature">Feature</option><option value="fix">Bug fix</option><option value="refactor">Refactor</option></select></div>
             </div>
-            <div class="card-body">
-              <div class="form-grid" style="max-width:none;">
-                <div style="display:grid;grid-template-columns:1fr 220px;gap:12px;">
-                  <div class="form-row">
-                    <label for="new-task-title">Task Summary / Title</label>
-                    <input id="new-task-title" type="text" placeholder="e.g. Add rate-limiter middleware and unit tests">
-                  </div>
-                  <div class="form-row">
-                    <label for="new-task-kind">Change Kind</label>
-                    <select id="new-task-kind">
-                      <option value="feature">feature · New Function / Feature</option>
-                      <option value="fix">fix · Bug Fix</option>
-                      <option value="refactor">refactor · Refactor</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="form-row">
-                  <label for="new-task-spec">
-                    <span>Detailed Specification &amp; Prompt</span>
-                    <span class="project-path">Signatures, behavior, edge cases &amp; invariants</span>
-                  </label>
-                  <textarea id="new-task-spec" rows="4" placeholder="Describe what functions or changes should be created, expected signatures, error handling, and invariants to preserve…"></textarea>
-                </div>
+            <div class="form-row"><label for="new-task-spec">What should change?</label><textarea id="new-task-spec" rows="5" placeholder="Describe the expected behavior and any constraints…"></textarea></div>
+            <section class="scope-section" aria-label="Target files">
+              <div class="form-row"><label for="new-task-paths"><span>Files <span class="field-hint">1–8 Go or Markdown paths</span></span><span id="spec-selected-count" class="badge">0 / 8</span></label>
+                <textarea id="new-task-paths" rows="2" placeholder="Enter paths, separated by commas or new lines"></textarea>
               </div>
-            </div>
-          </div>
-
-          <div class="section-split-grid">
-            <!-- Section 2: Target File Scope -->
-            <div class="card" style="margin-bottom:0;">
-              <div class="card-header">
-                <span class="card-title">2 · Target File Scope (1–8 Files)</span>
-                <span id="spec-selected-count" class="badge blue">0 / 8 files selected</span>
+              <div id="spec-selected-pills" class="chip-list"></div>
+              <details class="disclosure"><summary>Browse indexed files <span class="field-hint">Includes companion Go tests</span></summary>
+                <label class="sr-only" for="spec-file-search">Find target files</label><input id="spec-file-search" type="search" placeholder="Filter files…">
+                <div id="spec-file-chips" class="chip-list"></div>
+              </details>
+            </section>
+            <details class="disclosure"><summary>Acceptance criteria <span class="field-hint">Optional</span></summary>
+              <div class="form-row"><label for="new-task-criteria">What must pass? <span class="field-hint">One criterion per line</span></label><textarea id="new-task-criteria" rows="3" placeholder="e.g. Reject requests above the limit; cover boundary cases"></textarea></div>
+              <div class="chip-list">
+                <button type="button" class="file-chip criteria-preset-chip" data-criterion="All unit tests and go vet pass">＋ Tests and vet pass</button>
+                <button type="button" class="file-chip criteria-preset-chip" data-criterion="Cover edge cases and error returns in companion *_test.go">＋ Edge case coverage</button>
+                <button type="button" class="file-chip criteria-preset-chip" data-criterion="Zero architecture boundary or complexity regressions">＋ No architecture regressions</button>
               </div>
-              <div class="card-body">
-                <div class="form-grid" style="max-width:none;gap:10px;">
-                  <div id="spec-selected-pills" class="chip-list" style="margin-top:0;"></div>
-                  <div class="form-row">
-                    <label for="new-task-paths">
-                      <span>Target File Paths</span>
-                      <span class="project-path">Auto-pairs *_test.go</span>
-                    </label>
-                    <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, internal/api/local_policy_test.go"></textarea>
-                  </div>
-                  <div class="form-row">
-                    <label for="spec-file-search">
-                      <span>Browse &amp; Toggle Indexed Files</span>
-                      <span class="project-path">.go and .md eligible</span>
-                    </label>
-                    <input id="spec-file-search" type="text" placeholder="Quick-filter indexed Go &amp; Markdown files…">
-                    <div id="spec-file-chips" class="chip-list"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Section 3: Verification & Acceptance Criteria -->
-            <div class="card" style="margin-bottom:0;">
-              <div class="card-header">
-                <span class="card-title">3 · Verification &amp; Acceptance Criteria</span>
-                <span class="badge green">Guarded Pipeline</span>
-              </div>
-              <div class="card-body">
-                <div class="form-grid" style="max-width:none;gap:10px;">
-                  <div>
-                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--fg-muted);margin-bottom:6px;">Quick Criteria Presets</div>
-                    <div class="chip-list" style="margin-top:0;">
-                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="All unit tests and go vet pass">+ Unit tests &amp; go vet pass</button>
-                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="Cover edge cases and error returns in companion *_test.go">+ Edge-case test coverage</button>
-                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="Zero architecture boundary or complexity regressions">+ Zero arch/complexity regressions</button>
-                    </div>
-                  </div>
-                  <div class="form-row">
-                    <label for="new-task-criteria">
-                      <span>Acceptance Criteria</span>
-                      <span class="project-path">One criterion per line</span>
-                    </label>
-                    <textarea id="new-task-criteria" rows="4" placeholder="All unit tests and go vet pass&#10;Edge cases are covered by unit tests"></textarea>
-                  </div>
-                  <div style="border-top:1px solid var(--border-subtle);padding-top:8px;">
-                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--fg-muted);margin-bottom:5px;">Automated Check Phases on Proposal</div>
-                    <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                      <span class="badge">parse</span>
-                      <span class="badge">format</span>
-                      <span class="badge">architecture</span>
-                      <span class="badge">complexity</span>
-                      <span class="badge">secrets</span>
-                      <span class="badge blue">lint (go vet)</span>
-                      <span class="badge blue">tests (go test)</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </details>
           </div>
         </div>
       </main>
@@ -1285,11 +1184,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       <main id="build-issues-main" class="main-pane" style="display:none;">
         <div class="action-bar">
           <div class="action-group">
-            <span class="pane-heading">Triaged Findings &amp; Bug Reports</span>
-            <span class="project-path">Select any issue to pre-fill a targeted bug-fix specification</span>
+            <span class="pane-heading">Issues</span>
           </div>
           <div class="action-group">
-            <button id="run-scan-btn" class="btn-primary" title="Run Go workspace parser, go vet and unit test scan">⚙ Run Go Scan</button>
+            <button id="run-scan-btn" class="btn-primary" title="Run Go workspace parser, go vet and unit test scan">Run Go scan</button>
           </div>
         </div>
         <div id="issues-content" class="content-scroll"></div>
@@ -1306,22 +1204,22 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             <span id="active-proposal-freshness" class="badge"></span>
           </div>
           <div class="action-group">
-            <button id="review-all-btn" class="btn-success" title="Mark all changed files reviewed and approve current proposal hash">✓✓ Review &amp; Approve All</button>
-            <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">⚙ Run Checks</button>
-            <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">🚀 Apply</button>
-            <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">↩ Undo</button>
+            <button id="review-all-btn" class="btn-success" title="Mark all changed files reviewed and approve current proposal hash">Approve review</button>
+            <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">Run checks</button>
+            <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">Apply</button>
+            <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">Undo</button>
           </div>
         </div>
         <div id="diff-subtab-bar" class="subtab-bar">
           <div class="subtab-nav" role="tablist" aria-label="Proposal Review Sections">
-            <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">⇄ Code Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
-            <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">✔ Checks &amp; Phases <span id="diff-subtab-checks-badge" class="badge">0</span></button>
-            <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">✦ Plan &amp; AI Refine <span id="diff-subtab-spec-badge" class="badge">0</span></button>
+            <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
+            <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">Checks <span id="diff-subtab-checks-badge" class="badge">0</span></button>
+            <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">Refine <span id="diff-subtab-spec-badge" class="badge">0</span></button>
           </div>
           <div id="diff-view-controls" class="action-group">
-            <button id="mode-split-btn" class="btn-primary">Split (Side-by-Side)</button>
+            <button id="mode-split-btn" class="btn-primary">Split</button>
             <button id="mode-unified-btn">Unified</button>
-            <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full Diff</button>
+            <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full diff</button>
           </div>
         </div>
         <div id="diff-content" class="content-scroll"></div>
@@ -1824,7 +1722,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       title: 'Go Sandbox Verification Phases (Parser · Vet · Unit Tests)',
       subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Run Go Scan to verify compilation, go vet, and unit tests in an isolated sandbox',
       actionId: 'phase-trigger-scan-btn',
-      actionLabel: '⚙ Run Go Scan',
+      actionLabel: 'Run Go scan',
       items: scanPhases.map(function(ph, i) {
         return {
           id: 'scan-' + i,
@@ -2082,92 +1980,27 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const sec = state.docSection || 'overview';
     let html = '';
 
-    // Always render high-craft summary metric strip at top of overview
     if (sec === 'overview') {
       const ctx = (docs && docs.context) || {};
       const purpose = ctx.system_purpose || analysis.summary || (state.project && state.project.summary) ||
-        'Run Project Analysis to generate a comprehensive architectural handbook for this repository.';
-      const goals = ctx.goal_pursuit || '';
-      const stack = Array.isArray(ctx.tech_stack) && ctx.tech_stack.length
-        ? ctx.tech_stack
-        : Object.keys(metrics.languages || {});
-
-      html += '<div class="metrics-strip">' +
-        '<div class="metric-tile">' +
-          '<span class="metric-label">Indexed Files</span>' +
-          '<span class="metric-value">' + esc(metrics.file_count || 0) + '</span>' +
-          '<span class="metric-sub">' + esc(metrics.source_file_count || 0) + ' source files</span>' +
+        'Browse source files or generate docs to learn how this project works.';
+      const stack = Array.isArray(ctx.tech_stack) && ctx.tech_stack.length ? ctx.tech_stack : Object.keys(metrics.languages || {});
+      const findings = state.findings.filter(function(f) { return (f.status || 'open') !== 'dismissed'; }).length;
+      html = '<div class="overview-page">' +
+        '<p class="eyebrow">PROJECT</p><h1>' + esc(state.project && state.project.name || 'Your workspace') + '</h1>' +
+        '<p class="overview-summary">' + esc(purpose) + '</p>' +
+        '<div class="action-group"><button id="jump-to-files-btn">Browse files</button><button id="jump-to-spec-btn" class="btn-primary">New task</button></div>' +
+        '<div class="overview-links">' +
+          '<button id="jump-to-issues-btn"><span>Open issues</span><span>' + findings + ' recorded →</span></button>' +
+          '<button id="jump-to-review-btn"><span>Proposals</span><span>' + state.changes.length + ' recorded →</span></button>' +
+          '<button id="jump-to-verification-btn"><span>Checks</span><span>Inspect results →</span></button>' +
         '</div>' +
-        '<div class="metric-tile">' +
-          '<span class="metric-label">Lines of Code</span>' +
-          '<span class="metric-value">' + esc((metrics.total_lines || 0).toLocaleString()) + '</span>' +
-          '<span class="metric-sub">' + esc(metrics.type || 'Software Repository') + '</span>' +
-        '</div>' +
-        '<div class="metric-tile">' +
-          '<span class="metric-label">Open Findings</span>' +
-          '<span class="metric-value">' + esc(state.findings.filter(function(f){ return (f.status||'open') !== 'dismissed'; }).length) + '</span>' +
-          '<span class="metric-sub">Static &amp; semantic triage</span>' +
-        '</div>' +
-        '<div class="metric-tile">' +
-          '<span class="metric-label">Active Proposals</span>' +
-          '<span class="metric-value">' + esc(state.changes.length) + '</span>' +
-          '<span class="metric-sub">Guarded review sessions</span>' +
-        '</div>' +
-      '</div>';
-
-      const wsGroups = collectWorkspacePhaseGroups();
-      const wsSum = summarizePhaseGroups(wsGroups);
-      const wsPassPct = wsSum.total > 0 ? Math.round((wsSum.passed / wsSum.total) * 100) : 0;
-      const wsFailPct = wsSum.total > 0 ? Math.round((wsSum.failed / wsSum.total) * 100) : 0;
-
-      html += '<div class="section-split-grid">' +
-        '<div class="card" style="margin-bottom:0;">' +
-          '<div class="card-header"><span class="card-title">System Purpose &amp; Overview</span></div>' +
-          '<div class="card-body">' +
-            '<p style="margin:0 0 10px 0;font-size:13.5px;color:var(--fg-bright);line-height:1.6;">' + esc(purpose) + '</p>' +
-            (goals ? '<p style="margin:0 0 12px 0;color:var(--fg-muted);"><strong>Goal Alignment:</strong> ' + esc(goals) + '</p>' : '') +
-            '<div style="border-top:1px solid var(--border-subtle);padding-top:10px;margin-top:8px;">' +
-              '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--fg-muted);margin-bottom:6px;">Technology Stack &amp; Quick Actions</div>' +
-              '<div class="chip-list" style="margin-top:0;">' +
-                (stack.map(function(s) { return '<span class="badge blue">' + esc(s) + '</span>'; }).join('') || '<span class="project-path">No stack metadata</span>') +
-                '<span class="file-chip" id="jump-to-files-btn">📄 Browse Source Tree →</span>' +
-                '<span class="file-chip" id="jump-to-spec-btn">✦ Author New Spec →</span>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="card" style="margin-bottom:0;">' +
-          '<div class="card-header">' +
-            '<span class="card-title">✔ Verification &amp; Phase Health</span>' +
-            '<button type="button" class="btn-ghost" id="jump-to-verification-btn" style="padding:3px 8px;font-size:11px;">Inspect All Logs →</button>' +
-          '</div>' +
-          '<div class="card-body">' +
-            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
-              '<div class="phase-summary-counts">' +
-                '<span class="badge green">✓ ' + wsSum.passed + ' Passed</span>' +
-                '<span class="badge ' + (wsSum.failed > 0 ? 'red' : '') + '">✕ ' + wsSum.failed + ' Failed</span>' +
-                (wsSum.pending > 0 ? '<span class="badge">○ ' + wsSum.pending + ' Pending</span>' : '') +
-              '</div>' +
-              '<span class="project-path">' + wsSum.total + ' phases tracked</span>' +
-            '</div>' +
-            '<div class="phase-progress-track" style="margin-bottom:12px;">' +
-              '<div class="phase-progress-seg passed" style="width:' + wsPassPct + '%;"></div>' +
-              '<div class="phase-progress-seg failed" style="width:' + wsFailPct + '%;"></div>' +
-            '</div>' +
-            wsGroups.map(function(g) {
-              return '<div style="margin-bottom:8px;">' +
-                '<div style="font-size:10.5px;font-weight:700;color:var(--fg-muted);text-transform:uppercase;margin-bottom:4px;">' + esc(g.title) + '</div>' +
-                '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-                  (g.items || []).map(function(it) {
-                    const spec = phaseBadgeSpec(it.state);
-                    return '<span class="badge ' + spec.cls + '" style="font-family:var(--font-mono);">' + esc(it.name) + ': ' + esc(spec.label) + '</span>';
-                  }).join('') +
-                '</div>' +
-              '</div>';
-            }).join('') +
-          '</div>' +
-        '</div>' +
-      '</div>';
+        '<details class="disclosure"><summary>Repository details</summary>' +
+          '<p>' + esc(metrics.file_count == null ? 'Unknown' : metrics.file_count) + ' indexed files · ' +
+          esc(metrics.total_lines == null ? 'Unknown' : metrics.total_lines.toLocaleString()) + ' lines</p>' +
+          '<p>' + esc(stack.join(' · ') || 'No stack metadata') + '</p>' +
+          (ctx.goal_pursuit ? '<p>' + esc(ctx.goal_pursuit) + '</p>' : '') +
+        '</details></div>';
     } else if (sec === 'verification') {
       html += renderPhaseGroupsHTML(collectWorkspacePhaseGroups(), { filter: state.phaseFilter });
     } else if (sec === 'architecture') {
@@ -2283,6 +2116,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         openSourceFile(p);
       });
     });
+    const jumpIssues = document.getElementById('jump-to-issues-btn');
+    if (jumpIssues) jumpIssues.addEventListener('click', function() { setTab('issues'); });
+    const jumpReview = document.getElementById('jump-to-review-btn');
+    if (jumpReview) jumpReview.addEventListener('click', function() { setTab('diff'); });
     const jumpVer = document.getElementById('jump-to-verification-btn');
     if (jumpVer) {
       jumpVer.addEventListener('click', function() {
@@ -2387,10 +2224,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       const inp = Array.isArray(ex.inputs) ? ex.inputs : [];
       const out = Array.isArray(ex.outputs) ? ex.outputs : [];
       const errB = Array.isArray(ex.error_behavior) ? ex.error_behavior : [];
-      html += '<div class="card">' +
+      html += '<details class="disclosure" open><summary>AI explanation</summary>' +
         '<div class="card-header">' +
           '<span class="card-title">✦ File Intelligence Inspector · ' + esc(info.path) + '</span>' +
-          '<span class="badge blue">AI Verified Context</span>' +
+          '<span class="badge blue">AI explanation</span>' +
         '</div>' +
         '<div class="card-body">' +
           '<p style="margin:0 0 12px 0;font-weight:600;color:var(--fg-bright);font-size:13px;">' + esc(ex.summary || '') + '</p>' +
@@ -2410,11 +2247,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             '</div>' +
           '</div>' +
         '</div>' +
-      '</div>';
+      '</details>';
     } else if (state.openFileAnalysis && state.openFileAnalysis.purpose) {
       const fa = state.openFileAnalysis;
       const resp = Array.isArray(fa.responsibilities) ? fa.responsibilities : [];
-      html += '<div class="card">' +
+      html += '<details class="disclosure"><summary>Cached analysis</summary>' +
         '<div class="card-header">' +
           '<span class="card-title">📘 Cached File Intelligence</span>' +
           '<span class="badge">Indexed Summary</span>' +
@@ -2423,11 +2260,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           '<p style="margin:0 0 8px 0;color:var(--fg-bright);font-weight:500;">' + esc(fa.purpose) + '</p>' +
           (resp.length ? '<div class="chip-list">' + resp.map(function(r) { return '<span class="badge blue">' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
         '</div>' +
-      '</div>';
+      '</details>';
     }
 
     if (fileFindings.length > 0) {
-      html += '<div class="card">' +
+      html += '<details class="disclosure"><summary>' + fileFindings.length + ' open findings</summary>' +
         '<div class="card-header"><span class="card-title">🐛 Open Findings in This File</span><span class="badge amber">' + fileFindings.length + '</span></div>' +
         '<div class="card-body" style="display:flex;flex-direction:column;gap:6px;">' +
           fileFindings.map(function(f) {
@@ -2435,7 +2272,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
               '<div><span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span> ' +
               '<strong>' + esc(f.title || f.id) + '</strong>' + (f.line ? ' <span class="project-path">(L' + f.line + ')</span>' : '') + '</div>' +
               (f.line ? '<button type="button" class="btn-ghost file-jump-line-btn" data-line="' + f.line + '" style="padding:2px 8px;font-size:11px;">Jump to L' + f.line + '</button>' : '') +
-            '</div>';
+            '</details>';
           }).join('') +
         '</div>' +
       '</div>';
@@ -2610,7 +2447,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const selected = parseTargetPathsInput();
     const countBadge = document.getElementById('spec-selected-count');
     if (countBadge) {
-      countBadge.textContent = selected.length + ' / 8 files selected';
+      countBadge.textContent = selected.length + ' / 8';
     }
     const selPillsEl = document.getElementById('spec-selected-pills');
     if (selPillsEl) {
@@ -2618,7 +2455,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         ? selected.map(function(p) {
             return '<span class="file-chip selected" data-remove-path="' + esc(p) + '" title="Click to remove from scope">✕ ' + esc(p) + '</span>';
           }).join('')
-        : '<span class="project-path">No target files selected yet — click files below or enter paths.</span>';
+        : '';
       selPillsEl.querySelectorAll('[data-remove-path]').forEach(function(pill) {
         pill.addEventListener('click', function() {
           const rm = pill.getAttribute('data-remove-path');
@@ -2747,7 +2584,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     setTargetPathsInput(paths);
     document.getElementById('new-task-criteria').value =
       'Resolve "' + (f.title || f.id) + '" without breaking existing callers\nPass unit tests and static checks';
-    showBanner('Pre-filled bug-fix specification from finding. Click "⚡ Generate Code Changes" to produce a fix.', 'info');
+    showBanner('Pre-filled bug-fix specification from finding. Click "Generate changes" to produce a fix.', 'info');
   }
 
   function renderIssuesTab() {
@@ -2988,7 +2825,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           state: 'pending',
           command: 'internal/app/archgate',
           duration_ms: 0,
-          detail: 'Not run yet for current proposal hash — click "⚙ Run Checks"',
+          detail: 'Not run yet for current proposal hash — click "Run checks"',
           output: ''
         });
       });
@@ -2999,7 +2836,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           state: 'pending',
           command: name === 'lint' ? 'go vet ./...' : 'go test ./...',
           duration_ms: 0,
-          detail: 'Requires Local Execution Trust — click "⚙ Run Checks"',
+          detail: 'Requires Local Execution Trust — click "Run checks"',
           output: ''
         });
       });
@@ -3129,19 +2966,15 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const passedChecks = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'passed'; }).length;
     const failedChecks = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'failed'; }).length;
     const checksBadge = document.getElementById('diff-subtab-checks-badge');
-    const dockChecksPill = document.getElementById('dock-checks-pill');
     if (checksList.length === 0) {
       checksBadge.textContent = '0 run';
       checksBadge.className = 'badge';
-      if (dockChecksPill) { dockChecksPill.textContent = 'Not run'; dockChecksPill.className = 'badge'; }
     } else if (failedChecks > 0) {
       checksBadge.textContent = failedChecks + ' failed';
       checksBadge.className = 'badge red';
-      if (dockChecksPill) { dockChecksPill.textContent = failedChecks + ' failed'; dockChecksPill.className = 'badge red'; }
     } else {
       checksBadge.textContent = passedChecks + '/' + checksList.length + ' ✓';
       checksBadge.className = 'badge green';
-      if (dockChecksPill) { dockChecksPill.textContent = passedChecks + '/' + checksList.length + ' ✓'; dockChecksPill.className = 'badge green'; }
     }
 
     const criteriaCount = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria.length : 0;
@@ -3154,7 +2987,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
 
     let fileItemsHTML = '<div class="list-item' + (!state.selectedFile ? ' active' : '') + '" data-file="">' +
-      '<div class="list-item-row"><span class="list-item-title">All Changed Files (' + edits.length + ')</span>' +
+      '<div class="list-item-row"><span class="list-item-title">All files (' + edits.length + ')</span>' +
       '<span class="badge">' + reviewedCount + '/' + edits.length + ' ✓</span></div></div>';
 
     edits.forEach(function(edit) {
@@ -3188,17 +3021,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const checksPassed = checksList.length > 0 && failedChecks === 0 && passedChecks === checksList.length;
     const isApplied = session.state === 'applied';
 
-    const pipelineHTML = '<div class="pipeline-bar">' +
-      '<div class="pipeline-steps">' +
-        '<span class="pipeline-step ' + (hasEdits ? 'done' : 'current') + '" style="cursor:pointer;" data-jump-subtab="changes">1. Diff Generated (' + edits.length + ')</span>' +
-        '<span class="pipeline-arrow">→</span>' +
-        '<span class="pipeline-step ' + (allReviewed ? 'done' : (hasEdits ? 'current' : '')) + '" style="cursor:pointer;" data-jump-subtab="changes">2. Files Reviewed (' + reviewedCount + '/' + edits.length + ')</span>' +
-        '<span class="pipeline-arrow">→</span>' +
-        '<span class="pipeline-step ' + (checksPassed ? 'done' : (failedChecks > 0 ? 'current' : '')) + '" style="cursor:pointer;" data-jump-subtab="checks">3. Sandboxed Checks (' + (checksList.length > 0 ? (passedChecks + '/' + checksList.length) : '0 run') + ')</span>' +
-        '<span class="pipeline-arrow">→</span>' +
-        '<span class="pipeline-step ' + (isApplied ? 'done' : '') + '">' + (isApplied ? '✓ Applied to Disk' : '4. Guarded Apply') + '</span>' +
-      '</div>' +
-      '<span class="project-path">Session ' + esc(session.id) + (session.hash ? ' · #' + esc(session.hash.slice(0, 8)) : '') + '</span>' +
+    const pipelineHTML = '<div class="review-summary">' +
+      '<span>' + reviewedCount + '/' + edits.length + ' files reviewed</span>' +
+      '<span>' + (checksList.length ? passedChecks + '/' + checksList.length + ' checks passed' : 'Checks not run') + '</span>' +
+      '<span>' + (isApplied ? 'Applied' : allReviewed && checksPassed ? 'Ready for Apply' : 'Review and checks required') + '</span>' +
     '</div>';
 
     // Always keep Plan & AI Refine pane updated
@@ -3268,40 +3094,17 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         renderPhaseGroupsHTML(proposalGroups, 'Proposal Verification & Workflow Phases · #' + String(session.hash || '').slice(0, 8));
       contentEl.innerHTML = checksHTML;
       bindPhaseInspectorControls(contentEl, renderDiffTab);
-      contentEl.querySelectorAll('[data-jump-subtab]').forEach(function(el) {
-        el.addEventListener('click', function() {
-          setDiffSubTab(el.getAttribute('data-jump-subtab'));
-        });
-      });
       return;
     }
 
     // Sub-tab 1: Code Changes (Diff)
     let html = pipelineHTML;
 
-    // Compact Verification Phase Summary Banner in Diff view
-    const proposalGroups = collectProposalPhaseGroups(session);
-    const sum = summarizePhaseGroups(proposalGroups);
-    const passPct = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : 0;
-    const failPct = sum.total > 0 ? Math.round((sum.failed / sum.total) * 100) : 0;
-    html += '<div class="phase-summary-bar">' +
-      '<div class="phase-summary-top">' +
-        '<div class="phase-summary-counts">' +
-          '<strong style="font-size:12px;color:var(--fg-bright);">Verification Phases</strong>' +
-          '<span class="badge green">✓ ' + sum.passed + ' Passed</span>' +
-          '<span class="badge ' + (sum.failed > 0 ? 'red' : '') + '">✕ ' + sum.failed + ' Failed</span>' +
-          (sum.pending > 0 ? '<span class="badge">○ ' + sum.pending + ' Pending</span>' : '') +
-        '</div>' +
-        '<div class="action-group">' +
-          (sum.failed > 0 ? '<button type="button" id="repair-failed-checks-btn" class="btn-danger" style="padding:3px 9px;font-size:11px;">⚡ Repair Failed Checks with AI</button>' : '') +
-          '<button type="button" id="inspect-proposal-phases-btn" class="btn-ghost" style="padding:3px 9px;font-size:11px;">Inspect All Phases &amp; Logs →</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="phase-progress-track">' +
-        '<div class="phase-progress-seg passed" style="width:' + passPct + '%;"></div>' +
-        '<div class="phase-progress-seg failed" style="width:' + failPct + '%;"></div>' +
-      '</div>' +
-    '</div>';
+    if (failedChecks > 0) {
+      html += '<div class="review-warning"><span>' + failedChecks + ' checks failed.</span>' +
+        '<button id="inspect-proposal-phases-btn" class="btn-ghost">Inspect checks</button>' +
+        '<button id="repair-failed-checks-btn">Refine proposal</button></div>';
+    }
 
     const visibleEdits = state.selectedFile
       ? edits.filter(function(e) { return e.path === state.selectedFile; })
@@ -3310,7 +3113,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     if (visibleEdits.length === 0) {
       html += '<div class="empty-state"><h3>No file edits generated yet</h3><p>Targets: ' +
         esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') +
-        '</p><p>Switch to <strong>✦ Plan &amp; AI Refine</strong> above to prompt the model and generate code for this session.</p></div>';
+        '</p><p>Switch to <strong>Refine</strong> above to prompt the model and generate code for this session.</p></div>';
     } else {
       visibleEdits.forEach(function(edit) {
         const stats = countDiffStats(edit);
@@ -3321,15 +3124,15 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
               '<span>' + esc(edit.path) + '</span>' +
               '<span style="color:var(--green)">+' + stats.added + '</span>' +
               '<span style="color:var(--red)">-' + stats.removed + '</span>' +
-              (reviewed ? '<span class="badge green">✓ Reviewed</span>' : '<span class="badge amber">Needs Review</span>') +
+              (reviewed ? '<span class="badge green">✓ Reviewed</span>' : '<span class="badge amber">Not reviewed</span>') +
             '</div>' +
             '<div class="action-group">' +
-              (edit.summary ? '<span class="project-path">' + esc(edit.summary) + '</span>' : '') +
               '<button class="review-file-btn ' + (reviewed ? '' : 'btn-success') + '" data-path="' + esc(edit.path) + '">' +
-                (reviewed ? '✓ Reviewed' : 'Mark File Reviewed') +
+                (reviewed ? '✓ Reviewed' : 'Mark reviewed') +
               '</button>' +
             '</div>' +
           '</div>' +
+          (edit.summary ? '<details class="disclosure diff-explanation"><summary>Change explanation <span class="field-hint">AI suggestion</span></summary><p>' + esc(edit.summary) + '</p></details>' : '') +
           '<div style="overflow-x:auto;">' +
             (state.diffMode === 'split' ? renderSplitDiffTable(edit.diff) : renderUnifiedDiffTable(edit.diff)) +
           '</div>' +
@@ -3341,11 +3144,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     contentEl.querySelectorAll('.review-file-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         reviewSingleFile(btn.getAttribute('data-path'));
-      });
-    });
-    contentEl.querySelectorAll('[data-jump-subtab]').forEach(function(el) {
-      el.addEventListener('click', function() {
-        setDiffSubTab(el.getAttribute('data-jump-subtab'));
       });
     });
     const inspectBtn = document.getElementById('inspect-proposal-phases-btn');
@@ -3807,7 +3605,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   document.getElementById('scope-delta-btn').addEventListener('click', function() {
     state.sinceLastReview = !state.sinceLastReview;
     const btn = document.getElementById('scope-delta-btn');
-    btn.textContent = state.sinceLastReview ? 'Since Last Review' : 'Full Diff';
+    btn.textContent = state.sinceLastReview ? 'Since review' : 'Full diff';
     btn.className = state.sinceLastReview ? 'btn-primary' : '';
     renderDiffTab();
   });
@@ -3822,18 +3620,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     btn.addEventListener('click', function() {
       setDiffSubTab(btn.getAttribute('data-diff-subtab'));
     });
-  });
-
-  document.getElementById('dock-checks-summary-btn').addEventListener('click', function() {
-    setDiffSubTab('checks');
-  });
-
-  document.getElementById('open-refine-tab-btn').addEventListener('click', function() {
-    setDiffSubTab('spec');
-    setTimeout(function() {
-      const input = document.getElementById('proposal-message-input');
-      if (input) input.focus();
-    }, 20);
   });
 
   document.querySelectorAll('.refine-preset-chip').forEach(function(chip) {

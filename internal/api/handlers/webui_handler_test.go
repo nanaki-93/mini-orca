@@ -38,7 +38,7 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		`data-tab="understand"`,
 		`data-tab="build"`,
 		`data-tab="diff"`,
-		"Split (Side-by-Side)",
+		`id="mode-split-btn"`,
 		"X-Mini-Orca-Web-UI",
 		"/api/projects/current/overview",
 		"/api/projects/current/files/explanation",
@@ -52,9 +52,9 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		"diff-subtab-bar",
 		"diff-subtab-checks",
 		"diff-subtab-spec",
-		"1 · Task Intent &amp; Specification",
-		"2 · Target File Scope (1–8 Files)",
-		"3 · Verification &amp; Acceptance Criteria",
+		"What should change?",
+		"Target files",
+		"Acceptance criteria",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)
