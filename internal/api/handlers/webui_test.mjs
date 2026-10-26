@@ -36,6 +36,7 @@ function harness() {
     focus() { activeElement = this; }
     scrollIntoView() {}
     querySelectorAll() { return []; }
+    querySelector() { return null; }
     click() { if (!this.disabled) this.listeners.click?.({ target: this }); }
   }
   for (const match of html.split('<script>')[0].matchAll(/<[^>]*\bid="([^"]+)"[^>]*>/g)) {
@@ -58,7 +59,7 @@ function harness() {
     loadAll = async function() {};
     globalThis.testUI = { state, proposalReadiness, applyActiveProposal, approveProposalReview,
       runAction, renderReviewActions, loadChangeSession, submitSpecTask, effectiveEdits, reviewSingleFile,
-      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage };
+      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage, setTaskStep, setDiffSubTab, renderPhaseGroupsHTML };
   `);
   const context = {
     document, URLSearchParams,
@@ -171,7 +172,9 @@ test('over-limit task scope is rejected before any request', async () => {
   ui.elements.get('new-task-paths').value = Array.from({ length: 9 }, (_, i) => `file${i}.go`).join(',');
   await ui.submitSpecTask(true);
   assert.equal(ui.requests.length, 0);
-  assert.match(ui.elements.get('status-banner-text').textContent, /1–8/);
+  assert.match(ui.elements.get('task-step-error').textContent, /1–8/);
+  assert.equal(ui.state.taskStep, 2);
+  assert.equal(ui.elements.get('manual-paths').open, true);
 });
 
 test('command palette supports arrow selection, file search, Escape and focus restoration', () => {
@@ -235,4 +238,64 @@ test('focused pages hide unrelated content and preserve legacy TUI routes', () =
   ui.setTab('unknown');
   assert.equal(ui.state.tab, 'home');
   assert.equal(ui.requests.length, 0);
+});
+
+test('task steps validate required fields without dispatching and preserve drafts when going back', () => {
+  const ui = harness();
+  assert.equal(ui.setTaskStep(3), false);
+  assert.equal(ui.state.taskStep, 1);
+  assert.equal(ui.context.document.activeElement.id, 'new-task-title');
+  ui.elements.get('new-task-title').value = 'Validate requests';
+  ui.elements.get('new-task-spec').value = 'Reject invalid input';
+  assert.equal(ui.setTaskStep(2), true);
+  assert.equal(ui.elements.get('task-panel-1').hidden, true);
+  assert.equal(ui.elements.get('task-panel-2').hidden, false);
+  assert.equal(ui.setTaskStep(3), false);
+  assert.equal(ui.state.taskStep, 2);
+  ui.elements.get('new-task-paths').value = 'main.go,main_test.go';
+  assert.equal(ui.setTaskStep(3), true);
+  assert.equal(ui.elements.get('generate-spec-btn').hidden, false);
+  assert.match(ui.elements.get('task-confirm-summary').innerHTML, /Validate requests/);
+  assert.match(ui.elements.get('task-confirm-summary').innerHTML, /main_test.go/);
+  assert.equal(ui.setTaskStep(1), true);
+  assert.equal(ui.elements.get('new-task-spec').value, 'Reject invalid input');
+  assert.equal(ui.elements.get('new-task-paths').value, 'main.go,main_test.go');
+  assert.equal(ui.elements.get('generate-spec-btn').hidden, true);
+  assert.equal(ui.requests.length, 0);
+});
+
+test('review sections disclose only their controls and never approve or run checks on navigation', () => {
+  const ui = harness();
+  ui.state.activeSession = readySession();
+  for (const sub of ['changes', 'checks', 'spec', 'apply']) {
+    ui.setDiffSubTab(sub);
+    assert.equal(ui.elements.get('explorer-diff').hidden, sub !== 'changes');
+    assert.equal(ui.elements.get('diff-view-controls').hidden, sub !== 'changes');
+    assert.equal(ui.elements.get('proposal-check-actions').hidden, sub !== 'checks');
+    assert.equal(ui.elements.get('diff-spec-pane').hidden, sub !== 'spec');
+    assert.equal(ui.elements.get('diff-apply-pane').hidden, sub !== 'apply');
+  }
+  assert.equal(ui.elements.get('apply-btn').hidden, false);
+  assert.equal(ui.elements.get('review-all-btn').hidden, true);
+  ui.state.activeSession = readySession({ reviewed_hash: 'old' });
+  ui.renderReviewActions();
+  assert.equal(ui.elements.get('apply-btn').hidden, true);
+  assert.equal(ui.elements.get('review-all-btn').hidden, false);
+  assert.equal(ui.requests.length, 0);
+});
+
+test('check disclosures retain failed, canceled and unrun meanings and escape diagnostics', () => {
+  const ui = harness();
+  const rendered = ui.renderPhaseGroupsHTML([{ title: 'Tests', items: [
+    { name: 'unit', state: 'failed', output: '<script>unsafe</script>' },
+    { name: 'race', state: 'canceled' }
+  ] }]);
+  assert.match(rendered, /failed/);
+  assert.match(rendered, /canceled/);
+  assert.match(rendered, /&lt;script&gt;/);
+  assert.doesNotMatch(rendered, /<script>/);
+  assert.doesNotMatch(rendered, /<details[^>]+open/);
+  const unrun = ui.renderPhaseGroupsHTML([{ title: 'Checks', items: [] }]);
+  assert.match(unrun, /No results recorded yet/);
+  assert.doesNotMatch(unrun, /passed/);
 });

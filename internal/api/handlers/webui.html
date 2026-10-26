@@ -450,113 +450,13 @@ button.btn-ghost:hover:not(:disabled) {
   display: flex; align-items: center; gap: 7px;
 }
 
-/* ==================== IDE PHASE & VERIFICATION INSPECTOR ==================== */
-.section-split-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  gap: 16px; margin-bottom: 16px; align-items: start;
-}
-.subtab-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 24px; background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap;
-}
-.subtab-nav {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--bg); padding: 3px; border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-}
-.subtab-btn {
-  border: none; background: transparent; color: var(--fg-muted);
-  padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 500;
-}
-.subtab-btn:hover:not(:disabled) {
-  background: var(--surface-alt); color: var(--fg-bright); border: none;
-}
-.subtab-btn.active {
-  background: var(--accent-dim); color: var(--accent); font-weight: 600;
-}
-
-.phase-summary-bar {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md); padding: 12px 16px;
-  margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;
-}
-.phase-summary-top {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.phase-summary-counts {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-}
-.phase-progress-track {
-  width: 100%; height: 6px; border-radius: 999px;
-  background: var(--bg); border: 1px solid var(--border-subtle);
-  overflow: hidden; display: flex;
-}
-.phase-progress-seg.passed { background: var(--green); }
-.phase-progress-seg.failed { background: var(--red); }
-.phase-progress-seg.running { background: var(--amber); }
-
-.phase-group {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md); margin-bottom: 14px; overflow: hidden;
-}
-.phase-group-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 9px 14px; background: var(--surface-alt);
-  border-bottom: 1px solid var(--border);
-}
-.phase-group-title {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--fg-bright);
-  display: flex; align-items: center; gap: 8px;
-}
-.phase-list {
-  display: flex; flex-direction: column;
-}
-.phase-item {
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface);
-}
-.phase-item:last-child { border-bottom: none; }
-.phase-item.is-failed {
-  background: rgba(247, 118, 142, 0.04);
-}
-.phase-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 9px 14px; flex-wrap: wrap;
-}
-.phase-row-left {
-  display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;
-}
-.phase-status-pill {
-  min-width: 78px; justify-content: center; font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-}
-.phase-name {
-  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
-  color: var(--fg-bright);
-}
-.phase-cmd {
-  font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);
-  background: var(--bg); padding: 1px 7px; border-radius: 4px;
-  border: 1px solid var(--border-subtle);
-}
-.phase-row-right {
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-}
-.phase-log {
-  display: none; padding: 10px 14px 12px 14px;
-  background: var(--bg); border-top: 1px solid var(--border-subtle);
-}
-.phase-log.open { display: block; }
-.phase-log-pre {
-  margin: 0; padding: 10px 12px; border-radius: var(--radius-sm);
-  background: var(--bg-elevated); border: 1px solid var(--border);
-  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
-  color: var(--fg-bright); overflow-x: auto; white-space: pre-wrap;
-  max-height: 260px; overflow-y: auto;
-}
+.subtab-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; border-bottom:1px solid var(--border-subtle); }
+.subtab-nav { display:flex; align-items:center; }
+.subtab-btn { background:transparent; border-color:transparent; color:var(--fg-muted); }
+.subtab-btn.active { color:var(--accent); }
+.phase-group { border:1px solid var(--border-subtle); border-radius:10px; overflow:hidden; margin-bottom:24px; }
+.phase-group-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+.phase-log-pre { font-family:var(--font-mono); font-size:12px; line-height:1.6; white-space:pre-wrap; overflow:auto; padding:16px; background:var(--bg); border-radius:8px; }
 
 .empty-state {
   text-align: center; padding: 48px 24px; color: var(--fg-muted);
@@ -763,6 +663,44 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   .list-item-title { white-space:normal; }
 }
 @media (prefers-reduced-motion:reduce) { *, *::before, *::after { transition:none !important; scroll-behavior:auto !important; } }
+
+.wizard-steps { display:flex; gap:16px; margin-bottom:36px; padding-bottom:24px; border-bottom:1px solid var(--border-subtle); }
+.wizard-steps button { border:0; background:transparent; color:var(--fg-muted); padding:4px 0; gap:10px; flex:1; }
+.wizard-steps button span { border:1px solid var(--border); border-radius:50%; width:26px; height:26px; display:grid; place-items:center; font-size:11px; }
+.wizard-steps button.active { color:var(--fg-bright); }
+.wizard-steps button.active span { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+.task-step-panel { display:flex; flex-direction:column; gap:24px; }
+.wizard-footer { display:flex; justify-content:space-between; gap:16px; margin:32px auto 0; max-width:720px; padding-top:24px; border-top:1px solid var(--border-subtle); }
+.wizard-footer > .action-group { margin-left:auto; }
+.field-error { color:var(--red); font-size:13px; background:var(--red-bg); padding:12px 16px; border-radius:8px; }
+.file-picker { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:240px; overflow:auto; }
+.file-picker .file-chip { padding:12px; min-height:40px; }
+.task-confirm-summary { border:1px solid var(--border-subtle); border-radius:10px; padding:24px; }
+.task-confirm-summary h2 { font-size:20px; margin-bottom:12px; }
+.task-confirm-summary p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.task-confirm-summary ul { margin:12px 0 0; padding-left:20px; font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+.review-body { display:flex; flex:1; min-height:0; }
+.diff-toolbar { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 24px; border-bottom:1px solid var(--border-subtle); }
+.diff-toolbar button { font-size:11px; padding:6px 10px; }
+.apply-checklist { border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; margin-bottom:24px; }
+.apply-requirement { display:flex; justify-content:space-between; width:100%; border:0; border-radius:0; border-bottom:1px solid var(--border-subtle); background:transparent; padding:20px; }
+.apply-requirement:last-child { border:0; }
+.apply-destination { margin-bottom:20px; font-size:12px; color:var(--fg-muted); overflow-wrap:anywhere; }
+.review-next-step { padding:0; border:0; margin:0 0 24px; }
+.phase-summary-bar { border:0; padding:0; background:transparent; margin-bottom:24px; }
+.phase-group { border-color:var(--border-subtle); }
+.phase-group-header { background:transparent; padding:20px; }
+.phase-group-title { text-transform:none; letter-spacing:0; font-size:14px; font-weight:500; }
+.phase-detail { padding:14px 20px; border-top:1px solid var(--border-subtle); }
+.phase-detail summary { display:flex; align-items:center; gap:16px; cursor:pointer; font-size:13px; }
+.phase-detail summary .badge { margin-left:auto; }
+.phase-detail summary::after { content:'+'; color:var(--fg-muted); }
+.phase-detail[open] summary::after { content:'−'; }
+.phase-detail-body { margin-top:20px; }
+.phase-detail-body .project-path { margin-bottom:12px; overflow-wrap:anywhere; }
+.phase-detail .phase-log-pre { max-height:320px; margin-top:12px; }
+.checks-trust { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 20px; margin-bottom:24px; background:var(--amber-bg); border-radius:8px; color:var(--amber); font-size:12px; }
+@media(max-width:700px) { .review-body { flex-direction:column; } .wizard-steps { gap:8px; } .wizard-steps button { font-size:11px; gap:6px; } .file-picker { grid-template-columns:1fr; } .diff-toolbar { padding:12px 20px; } .wizard-footer { flex-wrap:wrap; } .wizard-footer > .action-group { gap:8px; } .subtab-nav { max-width:100%; overflow:auto; } }
 </style>
 </head>
 <body>
@@ -795,33 +733,38 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         <div id="file-viewer-content" class="content-scroll"><div class="empty-state"><h3>Choose a file</h3><p>Select a file in the sidebar to read its source.</p></div></div>
       </main></section>
     <main id="view-tasks" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Tasks</h1><p>Your ideas, drafts, and proposed changes.</p></div><button id="reset-spec-btn" class="btn-primary">New task ↗</button></div><div id="tasks-list-body" class="task-list"></div></div></div></main>
-    <main id="view-new-task" class="workspace" hidden><div class="content-scroll"><div class="page-inner page-narrow"><div class="page-heading"><div><h1>New task</h1><p>Start with a small, clear change.</p></div><button class="btn-ghost page-link" data-page="tasks">← Tasks</button></div>          <div class="task-form">
-            <p class="form-intro">Describe a change. Choose its files. Review the generated diff before applying.</p>
+    <main id="view-new-task" class="workspace" hidden>
+      <div class="content-scroll"><div class="page-inner page-narrow">
+        <div class="page-heading"><div><h1>New task</h1><p>One focused change, one step at a time.</p></div><button class="btn-ghost page-link" data-page="tasks">← Tasks</button></div>
+        <nav class="wizard-steps" aria-label="Task steps">
+          <button id="task-step-1" class="active" data-task-step="1" aria-current="step"><span>1</span> Describe</button>
+          <button id="task-step-2" data-task-step="2"><span>2</span> Choose files</button>
+          <button id="task-step-3" data-task-step="3"><span>3</span> Confirm</button>
+        </nav>
+        <p id="task-step-error" class="field-error" role="alert" hidden></p>
+        <div class="task-form">
+          <section id="task-panel-1" class="task-step-panel" aria-label="Describe your task">
             <div class="task-title-row">
-              <div class="form-row"><label for="new-task-title">Title</label><input id="new-task-title" type="text" placeholder="e.g. Add request rate limiting" required></div>
+              <div class="form-row"><label for="new-task-title">Task title</label><input id="new-task-title" placeholder="e.g. Add request rate limiting" required></div>
               <div class="form-row"><label for="new-task-kind">Type</label><select id="new-task-kind"><option value="feature">Feature</option><option value="fix">Bug fix</option><option value="refactor">Refactor</option></select></div>
             </div>
-            <div class="form-row"><label for="new-task-spec">What should change?</label><textarea id="new-task-spec" rows="5" placeholder="Describe the expected behavior and any constraints…"></textarea></div>
-            <section class="scope-section" aria-label="Target files">
-              <div class="form-row"><label for="new-task-paths"><span>Files <span class="field-hint">1–8 Go or Markdown paths</span></span><span id="spec-selected-count" class="badge">0 / 8</span></label>
-                <textarea id="new-task-paths" rows="2" placeholder="Enter paths, separated by commas or new lines"></textarea>
-              </div>
-              <div id="spec-selected-pills" class="chip-list"></div>
-              <details class="disclosure"><summary>Browse indexed files <span class="field-hint">Includes companion Go tests</span></summary>
-                <label class="sr-only" for="spec-file-search">Find target files</label><input id="spec-file-search" type="search" placeholder="Filter files…">
-                <div id="spec-file-chips" class="chip-list"></div>
-              </details>
-            </section>
-            <details class="disclosure"><summary>Acceptance criteria <span class="field-hint">Optional</span></summary>
-              <div class="form-row"><label for="new-task-criteria">What must pass? <span class="field-hint">One criterion per line</span></label><textarea id="new-task-criteria" rows="3" placeholder="e.g. Reject requests above the limit; cover boundary cases"></textarea></div>
-              <div class="chip-list">
-                <button type="button" class="file-chip criteria-preset-chip" data-criterion="All unit tests and go vet pass">＋ Tests and vet pass</button>
-                <button type="button" class="file-chip criteria-preset-chip" data-criterion="Cover edge cases and error returns in companion *_test.go">＋ Edge case coverage</button>
-                <button type="button" class="file-chip criteria-preset-chip" data-criterion="Zero architecture boundary or complexity regressions">＋ No architecture regressions</button>
-              </div>
-            </details>
-          </div>
-<div class="action-group task-submit" style="justify-content:flex-end;margin-top:32px;"><button id="create-task-btn">Save draft</button><button id="generate-spec-btn" class="btn-primary">Generate changes</button></div></div></div></main>
+            <div class="form-row"><label for="new-task-spec">What should change?</label><textarea id="new-task-spec" rows="6" placeholder="Describe the outcome you want and any constraints…"></textarea><p class="muted">Be specific about behavior. You’ll review the code before applying it.</p></div>
+          </section>
+          <section id="task-panel-2" class="task-step-panel" aria-label="Target files" hidden>
+            <div class="section-heading"><div><h2>Keep the scope focused</h2><p class="muted">Choose 1–8 Go or Markdown files. Companion Go tests are included.</p></div><span id="spec-selected-count" class="badge">0 / 8</span></div>
+            <div id="spec-selected-pills" class="chip-list"></div>
+            <div class="form-row"><label for="spec-file-search">Find target files</label><input id="spec-file-search" type="search" placeholder="Search by name or path…"><div id="spec-file-chips" class="file-picker"></div></div>
+            <details id="manual-paths" class="disclosure"><summary>Enter paths manually or add a new file</summary><div class="form-row"><label for="new-task-paths">File paths</label><textarea id="new-task-paths" rows="2" placeholder="One path per line, or separate with commas"></textarea></div></details>
+          </section>
+          <section id="task-panel-3" class="task-step-panel" aria-label="Confirm your task" hidden>
+            <div id="task-confirm-summary" class="task-confirm-summary"></div>
+            <div class="form-row"><label for="new-task-criteria">Acceptance criteria <span class="field-hint">Optional</span></label><textarea id="new-task-criteria" rows="3" placeholder="What must pass? One criterion per line."></textarea><p class="muted">Verification checks are required by default.</p></div>
+            <p class="muted">Generate a proposal to review, or save a draft for later.</p>
+          </section>
+        </div>
+        <div class="wizard-footer"><button id="task-back-btn" class="btn-ghost" hidden>← Back</button><div class="action-group"><button id="create-task-btn" hidden>Save draft</button><button id="generate-spec-btn" class="btn-primary" hidden>Generate changes</button><button id="task-next-btn" class="btn-primary">Choose files →</button></div></div>
+      </div></div>
+    </main>
     <main id="view-issues" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Issues</h1><p>Open a finding to inspect the evidence and plan a fix.</p></div><button class="page-link" data-page="checks">View checks →</button></div><div class="filters"><input id="issue-search" type="search" aria-label="Search issues" placeholder="Search issues…"><select id="issue-cat-filter" aria-label="Issue category"><option value="all">All categories</option><option value="bugs">Bugs</option><option value="security">Security</option><option value="performance">Performance</option></select><select id="issue-status-filter" aria-label="Issue status"><option value="open">Open</option><option value="all">All statuses</option><option value="dismissed">Dismissed</option></select></div><div id="issues-content"></div></div></div></main>
     <main id="view-docs" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Docs</h1><p>A guide to how this project works.</p></div><div class="action-group"><span id="docs-status-badge" class="badge"></span><button id="run-analysis-btn">Generate docs</button></div></div><nav id="understand-docs-sidebar" class="doc-tabs" aria-label="Documentation sections"><button class="list-item active" data-doc-sec="overview">Overview</button><button class="list-item" data-doc-sec="architecture">Architecture</button><button class="list-item" data-doc-sec="components">Components</button><button class="list-item" data-doc-sec="scenarios">Scenarios</button><button class="list-item" data-doc-sec="decisions">Decisions</button></nav><div id="docs-content"></div></div></div></main>
     <main id="view-checks" class="workspace" hidden><div class="content-scroll"><div class="page-inner"><div class="page-heading"><div><h1>Checks</h1><p>Workspace scan results and project analysis.</p></div><button id="run-scan-btn" class="btn-primary">Run Go scan</button></div><div id="checks-content"></div></div></div></main>
@@ -830,67 +773,41 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       <section class="settings-section"><h2>Execution</h2><div class="setting-row"><div><strong>Local code checks <span id="trust-status-pill" class="badge"></span></strong><p>Allow project code to run in an isolated check workspace.</p></div><button id="trust-btn">Grant trust</button></div></section>
       <details class="disclosure"><summary>Workspace maintenance</summary><div class="action-group"><button id="reindex-btn">Reindex files</button><button id="refresh-btn">Refresh workspace</button><span id="daemon-version" class="project-path"></span></div></details>
     </div></div></main>
-    <section id="view-diff" class="workspace page-split" hidden><aside id="explorer-diff" class="local-explorer" aria-label="Proposal files"><div class="sidebar-section"><div class="sidebar-title"><span>Proposals</span><span id="proposal-count">0</span></div><select id="proposal-select" aria-label="Proposal" style="width:100%;"></select></div><div class="sidebar-section"><div class="sidebar-title"><span>Changed files</span><span id="changed-files-count">0</span></div></div><div id="diff-file-list" class="sidebar-list"></div></aside>      <main class="main-pane">
-        <div class="action-bar">
-          <div class="action-group">
-            <span id="active-proposal-title" class="pane-heading">Select or create a proposal</span>
-            <span id="active-proposal-state" class="badge"></span>
-            <span id="active-proposal-freshness" class="badge"></span>
-          </div>
-          <div class="action-group">
-            <button id="review-all-btn" class="btn-success" title="Approve the current proposal after reviewing each file and running checks">Approve review</button>
-            <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">Run checks</button>
-            <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">Apply</button>
-            <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">Undo</button>
-          </div>
-        </div>
-        <div id="review-next-step" class="review-next-step" role="status"></div>
-        <div id="diff-subtab-bar" class="subtab-bar">
-          <div class="subtab-nav" role="group" aria-label="Proposal Review Sections">
-            <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
-            <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">Checks <span id="diff-subtab-checks-badge" class="badge">0</span></button>
-            <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">Refine <span id="diff-subtab-spec-badge" class="badge">0</span></button>
-          </div>
-          <div id="diff-view-controls" class="action-group">
-            <button id="mode-split-btn" class="btn-primary">Split</button>
-            <button id="mode-unified-btn">Unified</button>
-            <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full diff</button>
-          </div>
-        </div>
-        <div id="diff-content" class="content-scroll"></div>
-        <div id="diff-spec-pane" class="content-scroll" style="display:none;">
-          <div id="diff-spec-pipeline"></div>
-          <div class="section-split-grid">
-            <div id="proposal-spec-details"></div>
-            <div>
-              <div class="card">
-                <div class="card-header">
-                  <span class="card-title">Refine proposal</span>
-                </div>
-                <div class="card-body">
-                  <div class="form-grid" style="gap:10px;">
-                    <div class="chip-list" style="margin-top:0;">
-                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Fix any failing checks or static analysis warnings while preserving existing behavior.">Fix failed checks</button>
-                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Add or expand unit test coverage for edge cases and failure paths.">Expand unit tests</button>
-                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Simplify control flow and reduce function complexity while keeping all tests green.">Simplify code</button>
-                    </div>
-                    <div class="form-row">
-                      <label for="proposal-message-input">
-                        <span>What should change?</span>
-                      </label>
-                      <textarea id="proposal-message-input" rows="4" placeholder="Ask the model to refine this proposal, address a review comment, or repair a failed check…"></textarea>
-                    </div>
-                    <div style="display:flex;justify-content:flex-end;gap:8px;">
-                      <button id="send-message-btn" class="btn-primary">Update diff</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div id="proposal-messages-list"></div>
+    <section id="view-diff" class="workspace" hidden>
+      <div class="action-bar"><div class="action-group"><button class="btn-ghost page-link" data-page="tasks" aria-label="Back to tasks">←</button><span id="active-proposal-title" class="pane-heading">Select a task</span><span id="active-proposal-state" class="badge"></span><span id="active-proposal-freshness" class="badge"></span></div></div>
+      <div id="diff-subtab-bar" class="subtab-bar">
+        <nav class="subtab-nav" aria-label="Proposal review sections">
+          <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
+          <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">Checks <span id="diff-subtab-checks-badge" class="badge"></span></button>
+          <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">Refine</button>
+          <button id="diff-subtab-apply" class="subtab-btn" data-diff-subtab="apply">Apply</button>
+        </nav>
+        <div id="proposal-check-actions" class="action-group" hidden><button id="run-checks-btn" class="btn-primary">Run checks</button><button data-review-go="apply">Continue →</button></div>
+      </div>
+      <div class="review-body">
+        <aside id="explorer-diff" class="local-explorer" aria-label="Changed files"><div class="sidebar-section"><div class="sidebar-title"><span>Changed files</span><span id="changed-files-count">0</span></div></div><div id="diff-file-list" class="sidebar-list"></div></aside>
+        <main class="main-pane">
+          <div id="diff-view-controls" class="diff-toolbar"><div class="action-group"><button id="mode-split-btn" class="btn-primary" aria-pressed="true">Split</button><button id="mode-unified-btn" aria-pressed="false">Unified</button><button id="scope-delta-btn">Full diff</button></div><button class="btn-ghost" data-review-go="checks">Next: Checks →</button></div>
+          <div id="diff-content" class="content-scroll"></div>
+          <div id="diff-spec-pane" class="content-scroll" hidden><div class="page-inner page-narrow">
+            <div class="page-heading"><div><h1>Refine the change</h1><p>Give the model a focused instruction.</p></div></div>
+            <div class="task-form"><div class="form-row"><label for="proposal-message-input">What should change?</label><textarea id="proposal-message-input" rows="5" placeholder="Describe what to improve or repair…"></textarea></div>
+              <div class="chip-list"><button class="file-chip refine-preset-chip" data-prompt="Fix failing checks while preserving existing behavior.">Fix failed checks</button><button class="file-chip refine-preset-chip" data-prompt="Add unit tests for edge cases and failure paths.">Expand tests</button><button class="file-chip refine-preset-chip" data-prompt="Simplify control flow while preserving behavior and passing tests.">Simplify code</button></div>
+              <div class="action-group" style="justify-content:flex-end;"><button id="send-message-btn" class="btn-primary">Update diff</button></div>
+              <details class="disclosure"><summary>Task details</summary><div id="proposal-spec-details"></div></details>
+              <details class="disclosure"><summary>Conversation history</summary><div id="proposal-messages-list"></div></details>
             </div>
-          </div>
-        </div>
-      </main></section>
+          </div></div>
+          <div id="diff-apply-pane" class="content-scroll" hidden><div class="page-inner page-narrow">
+            <div class="page-heading"><div><h1>Ready to apply?</h1><p>Review the requirements before writing to your checkout.</p></div></div>
+            <div id="apply-checklist" class="apply-checklist"></div>
+            <div id="apply-destination" class="apply-destination"></div>
+            <p id="review-next-step" class="review-next-step" role="status"></p>
+            <div class="action-group"><button id="review-all-btn" class="btn-primary">Approve review</button><button id="apply-btn" class="btn-primary">Apply changes</button><button id="undo-btn" class="btn-danger">Undo changes</button></div>
+          </div></div>
+        </main>
+      </div>
+    </section>
   </div>
 </div>
 <!-- COMMAND PALETTE MODAL (Ctrl+K / Cmd+K) -->
@@ -923,6 +840,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   const state = {
     tab: initialWorkspace,
     docSection: 'overview',
+    taskStep: 1,
     worktreePath: params.get('worktree_path') || '',
     sessionId: initialSessionId,
     selectedFile: initialFile,
@@ -1277,7 +1195,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     groups.push({
       id: 'go-scan',
       title: 'Go checks',
-      subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Run Go Scan to verify compilation, go vet, and unit tests in an isolated sandbox',
+      subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Parser, vet, and tests in an isolated workspace',
       actionId: 'phase-trigger-scan-btn',
       actionLabel: 'Run Go scan',
       items: scanPhases.map(function(ph, i) {
@@ -1326,9 +1244,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     groups.push({
       id: 'analysis-sections',
       title: 'Project analysis',
-      subtitle: run ? ('Run #' + (run.id || (run.identity && run.identity.id) || 'current') + ' · status: ' + (run.status || 'recorded')) : 'Run Project Analysis to execute multi-phase semantic, security, and performance checks',
+      subtitle: run ? ('Run #' + (run.id || (run.identity && run.identity.id) || 'current') + ' · status: ' + (run.status || 'recorded')) : 'Model analysis of bugs, security, and performance',
       actionId: 'phase-trigger-analysis-btn',
-      actionLabel: '✦ Run Project Analysis',
+      actionLabel: 'Run analysis',
       items: analysisItems
     });
 
@@ -1351,127 +1269,42 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   }
 
   function renderPhaseGroupsHTML(groups, options) {
-    const opts = options || {};
-    const filter = opts.filter || state.phaseFilter || 'all';
-    const summary = summarizePhaseGroups(groups);
-    const total = Math.max(1, summary.total);
-    const passPct = Math.round((summary.passed / total) * 100);
-    const failPct = Math.round((summary.failed / total) * 100);
-    const runPct = Math.round((summary.running / total) * 100);
-
-    let overallBadge = '<span class="badge">○ NO PHASES RECORDED</span>';
-    if (summary.total > 0) {
-      if (summary.failed > 0) {
-        overallBadge = '<span class="badge red">✕ ' + summary.failed + ' PHASE' + (summary.failed > 1 ? 'S' : '') + ' FAILED</span>';
-      } else if (summary.running > 0) {
-        overallBadge = '<span class="badge amber">● ' + summary.running + ' RUNNING</span>';
-      } else if (summary.passed > 0) {
-        overallBadge = '<span class="badge green">✓ ALL ' + summary.passed + ' PASSED</span>';
-      }
-    }
-
-    let html = '<div class="phase-summary-bar">' +
-      '<div class="phase-summary-top">' +
-        '<div class="phase-summary-counts">' +
-          overallBadge +
-          '<span class="badge green">✓ ' + summary.passed + ' Passed</span>' +
-          '<span class="badge ' + (summary.failed > 0 ? 'red' : '') + '">✕ ' + summary.failed + ' Failed</span>' +
-          (summary.running > 0 ? '<span class="badge amber">● ' + summary.running + ' Running</span>' : '') +
-          (summary.skipped > 0 ? '<span class="badge">○ ' + summary.skipped + ' Pending/Skipped</span>' : '') +
-        '</div>' +
-        '<div class="subtab-nav" role="group" aria-label="Filter Phases">' +
-          '<button class="subtab-btn phase-filter-btn' + (filter === 'all' ? ' active' : '') + '" data-phase-filter="all">All (' + summary.total + ')</button>' +
-          '<button class="subtab-btn phase-filter-btn' + (filter === 'failed' ? ' active' : '') + '" data-phase-filter="failed">Failed (' + summary.failed + ')</button>' +
-          '<button class="subtab-btn phase-filter-btn' + (filter === 'passed' ? ' active' : '') + '" data-phase-filter="passed">Passed (' + summary.passed + ')</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="phase-progress-track" title="Passed: ' + summary.passed + ' · Failed: ' + summary.failed + '">' +
-        '<div class="phase-progress-seg passed" style="width:' + passPct + '%;"></div>' +
-        '<div class="phase-progress-seg failed" style="width:' + failPct + '%;"></div>' +
-        '<div class="phase-progress-seg running" style="width:' + runPct + '%;"></div>' +
-      '</div>' +
-    '</div>';
-
-    (groups || []).forEach(function(g) {
-      const items = (g.items || []).filter(function(it) {
-        if (filter === 'all') return true;
-        return normalizePhaseState(it.state) === filter;
+    const filter = (options && options.filter) || state.phaseFilter || 'all';
+    const total = summarizePhaseGroups(groups).total;
+    let html = total ? '<div class="phase-summary-bar"><div class="subtab-nav" role="group" aria-label="Filter checks">' +
+      ['all', 'failed', 'passed'].map(function(value) {
+        return '<button class="subtab-btn phase-filter-btn' + (filter === value ? ' active' : '') + '" data-phase-filter="' + value + '" aria-pressed="' + (filter === value) + '">' + value.charAt(0).toUpperCase() + value.slice(1) + '</button>';
+      }).join('') + '</div></div>' : '';
+    (groups || []).forEach(function(group) {
+      const items = group.items || [];
+      const filtered = items.filter(function(item) { return filter === 'all' || normalizePhaseState(item.state) === filter; });
+      html += '<section class="phase-group"><div class="phase-group-header"><div><h2 class="phase-group-title">' + esc(group.title) + '</h2>' +
+        (group.subtitle || group.meta ? '<p class="muted" style="margin-top:6px;">' + esc(group.subtitle || group.meta) + '</p>' : '') + '</div>' +
+        (group.actionId ? '<button id="' + esc(group.actionId) + '">' + esc(group.actionLabel) + '</button>' : '') + '</div>';
+      if (!items.length) html += '<div class="card-body muted">No results recorded yet.</div>';
+      else if (!filtered.length) html += '<div class="card-body muted">No checks match this filter.</div>';
+      else filtered.forEach(function(item) {
+        const badge = phaseBadgeSpec(item.state);
+        html += '<details class="phase-detail"><summary><span>' + esc(item.name) + '</span><span class="badge ' + badge.cls + '">' + esc(item.state || 'pending') + '</span></summary>' +
+          '<div class="phase-detail-body">' +
+          (item.command ? '<p class="project-path">' + esc(item.command) + '</p>' : '') +
+          (item.meta || item.detail ? '<p class="muted">' + esc(item.meta || item.detail) + '</p>' : '') +
+          (item.output ? '<pre class="phase-log-pre">' + esc(item.output) + '</pre>' : '<p class="muted">No diagnostic output recorded.</p>') + '</div></details>';
       });
-      const gSum = summarizePhaseGroups([g]);
-      html += '<div class="phase-group">' +
-        '<div class="phase-group-header">' +
-          '<div>' +
-            '<div class="phase-group-title">' +
-              '<span>' + esc(g.title) + '</span>' +
-              '<span class="badge green">' + gSum.passed + ' passed</span>' +
-              (gSum.failed > 0 ? '<span class="badge red">' + gSum.failed + ' failed</span>' : '') +
-            '</div>' +
-            (g.subtitle ? '<div class="project-path" style="margin-top:2px;">' + esc(g.subtitle) + '</div>' : '') +
-          '</div>' +
-          (g.actionId ? '<button id="' + esc(g.actionId) + '" class="btn-primary">' + esc(g.actionLabel) + '</button>' : '') +
-        '</div>';
-
-      if ((g.items || []).length === 0) {
-        html += '<div class="card-body project-path">No phases recorded in this section yet.</div>';
-      } else if (items.length === 0) {
-        html += '<div class="card-body project-path">No phases in this section match the "' + esc(filter) + '" filter.</div>';
-      } else {
-        html += '<div class="phase-list">';
-        items.forEach(function(it) {
-          const b = phaseBadgeSpec(it.state);
-          const hasOut = Boolean(it.output && String(it.output).trim());
-          const autoOpen = b.norm === 'failed' && hasOut;
-          html += '<div class="phase-item' + (b.norm === 'failed' ? ' is-failed' : '') + '">' +
-            '<div class="phase-row">' +
-              '<div class="phase-row-left">' +
-                '<span class="badge ' + b.cls + ' phase-status-pill">' + b.icon + ' ' + esc(b.text) + '</span>' +
-                '<span class="phase-name">' + esc(it.name) + '</span>' +
-                (it.category ? '<span class="badge">' + esc(it.category) + '</span>' : '') +
-                (it.command ? '<span class="phase-cmd">' + esc(it.command) + '</span>' : '') +
-              '</div>' +
-              '<div class="phase-row-right">' +
-                (it.meta ? '<span class="project-path">' + esc(it.meta) + '</span>' : '') +
-                (hasOut ? '<button class="btn-ghost phase-log-toggle" data-target="log-' + esc(it.id) + '" style="padding:3px 8px;font-size:11px;">' + (autoOpen ? '▴ Hide Output' : '▾ Diagnostic Output') + '</button>' : '') +
-              '</div>' +
-            '</div>' +
-            (hasOut ? '<div id="log-' + esc(it.id) + '" class="phase-log' + (autoOpen ? ' open' : '') + '"><pre class="phase-log-pre">' + esc(it.output) + '</pre></div>' : '') +
-          '</div>';
-        });
-        html += '</div>';
-      }
-      html += '</div>';
+      html += '</section>';
     });
-
     return html;
   }
 
   function bindPhaseInspectorControls(container, onFilterChange) {
-    if (!container) return;
-    container.querySelectorAll('.phase-log-toggle').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const targetId = btn.getAttribute('data-target');
-        const logEl = document.getElementById(targetId);
-        if (!logEl) return;
-        const isOpen = logEl.classList.toggle('open');
-        btn.textContent = isOpen ? '▴ Hide Output' : '▾ Diagnostic Output';
-      });
-    });
     container.querySelectorAll('.phase-filter-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        state.phaseFilter = btn.getAttribute('data-phase-filter') || 'all';
-        if (typeof onFilterChange === 'function') onFilterChange();
+        state.phaseFilter = btn.getAttribute('data-phase-filter');
+        onFilterChange();
       });
     });
-    const scanBtn = container.querySelector('#phase-trigger-scan-btn');
-    if (scanBtn) {
-      scanBtn.addEventListener('click', function() {
-        document.getElementById('run-scan-btn').click();
-      });
-    }
     const analysisBtn = container.querySelector('#phase-trigger-analysis-btn');
-    if (analysisBtn) {
-      analysisBtn.addEventListener('click', function() { document.getElementById('run-analysis-btn').click(); });
-    }
+    if (analysisBtn) analysisBtn.addEventListener('click', function() { document.getElementById('run-analysis-btn').click(); });
   }
 
   function renderHeader() {
@@ -1992,6 +1825,58 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
   }
 
+  function taskStepError(message, fieldId, step) {
+    state.taskStep = step;
+    renderTaskStep();
+    const error = document.getElementById('task-step-error');
+    error.textContent = message;
+    error.hidden = false;
+    const field = document.getElementById(fieldId);
+    field.setAttribute('aria-invalid', 'true');
+    field.setAttribute('aria-describedby', 'task-step-error');
+    if (fieldId === 'new-task-paths') document.getElementById('manual-paths').open = true;
+    field.focus();
+    return false;
+  }
+
+  function setTaskStep(step) {
+    if (step > 1 && !document.getElementById('new-task-title').value.trim()) {
+      return taskStepError('Give your task a short title.', 'new-task-title', 1);
+    }
+    const paths = parseTargetPathsInput();
+    if (step > 2 && (paths.length < 1 || paths.length > 8)) {
+      return taskStepError('Choose between 1 and 8 files to continue.', 'new-task-paths', 2);
+    }
+    state.taskStep = Math.max(1, Math.min(3, step));
+    document.getElementById('task-step-error').hidden = true;
+    ['new-task-title', 'new-task-paths'].forEach(function(id) {
+      document.getElementById(id).removeAttribute('aria-invalid');
+      document.getElementById(id).removeAttribute('aria-describedby');
+    });
+    renderTaskStep();
+    document.getElementById('task-step-' + state.taskStep).focus();
+    return true;
+  }
+
+  function renderTaskStep() {
+    [1, 2, 3].forEach(function(step) {
+      document.getElementById('task-panel-' + step).hidden = state.taskStep !== step;
+      const btn = document.getElementById('task-step-' + step);
+      btn.classList.toggle('active', state.taskStep === step);
+      if (state.taskStep === step) btn.setAttribute('aria-current', 'step');
+      else btn.removeAttribute('aria-current');
+    });
+    document.getElementById('task-back-btn').hidden = state.taskStep === 1;
+    document.getElementById('task-next-btn').hidden = state.taskStep === 3;
+    document.getElementById('task-next-btn').textContent = state.taskStep === 1 ? 'Choose files →' : 'Confirm task →';
+    document.getElementById('create-task-btn').hidden = state.taskStep !== 3;
+    document.getElementById('generate-spec-btn').hidden = state.taskStep !== 3;
+    document.getElementById('task-confirm-summary').innerHTML = '<p class="eyebrow">' + esc(document.getElementById('new-task-kind').value || 'feature') + '</p>' +
+      '<h2>' + esc(document.getElementById('new-task-title').value) + '</h2>' +
+      '<p>' + esc(document.getElementById('new-task-spec').value || 'No additional instructions.') + '</p>' +
+      '<ul>' + parseTargetPathsInput().map(function(path) { return '<li>' + esc(path) + '</li>'; }).join('') + '</ul>';
+  }
+
   async function submitSpecTask(runGeneration) {
     if (!state.project) return;
     const title = (document.getElementById('new-task-title').value || '').trim();
@@ -2004,8 +1889,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       .filter(Boolean);
 
     if (!title || paths.length === 0 || paths.length > 8) {
-      showBanner('Add a title and select 1–8 Go or Markdown paths.', 'error');
-      document.getElementById(!title ? 'new-task-title' : 'new-task-paths').focus();
+      taskStepError('Add a title and select 1–8 Go or Markdown paths.', !title ? 'new-task-title' : 'new-task-paths', !title ? 1 : 2);
       return;
     }
 
@@ -2089,7 +1973,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     setTargetPathsInput(paths);
     document.getElementById('new-task-criteria').value =
       'Resolve "' + (f.title || f.id) + '" without breaking existing callers\nPass unit tests and static checks';
-    showBanner('Pre-filled bug-fix specification from finding. Click "Generate changes" to produce a fix.', 'info');
+    setTaskStep(1);
   }
 
   function renderIssuesTab() {
@@ -2283,7 +2167,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     delta.className = state.sinceLastReview ? 'btn-primary' : '';
     delta.title = delta.disabled ? 'Review all files to establish a comparison.' : 'Compare with the last complete review';
     document.getElementById('undo-btn').hidden = !ready.canUndo;
-    document.getElementById('apply-btn').hidden = ready.canUndo;
+    document.getElementById('apply-btn').hidden = !ready.canApply;
+    document.getElementById('review-all-btn').hidden = ready.canApply || ready.canUndo;
     document.getElementById('review-next-step').textContent = busy ? 'Working…' : ready.message;
     document.querySelectorAll('.review-file-btn').forEach(function(button) {
       const path = button.getAttribute('data-path');
@@ -2297,7 +2182,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     if (state.pendingAction) return;
     state.pendingAction = true;
     const original = button.textContent;
-    const controls = Array.from(document.querySelectorAll('[data-mutation], #worktree-select, #proposal-select, #switch-project-btn'));
+    const controls = Array.from(document.querySelectorAll('[data-mutation], #worktree-select, #switch-project-btn'));
     const disabled = controls.map(function(control) { return control.disabled; });
     controls.forEach(function(control) { control.disabled = true; });
     const busyText = label || 'Working…';
@@ -2336,45 +2221,20 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const staticItems = [];
     const sandboxItems = [];
 
-    if (checks.length === 0) {
-      ['parse', 'format', 'architecture', 'complexity', 'secrets'].forEach(function(name, idx) {
-        staticItems.push({
-          id: 'prop-static-' + idx,
-          name: name,
-          state: 'pending',
-          command: 'internal/app/archgate',
-          duration_ms: 0,
-          detail: 'Not run yet for current proposal hash — click "Run checks"',
-          output: ''
-        });
-      });
-      ['lint', 'tests'].forEach(function(name, idx) {
-        sandboxItems.push({
-          id: 'prop-sandbox-' + idx,
-          name: name,
-          state: 'pending',
-          command: name === 'lint' ? 'go vet ./...' : 'go test ./...',
-          duration_ms: 0,
-          detail: 'Requires Local Execution Trust — click "Run checks"',
-          output: ''
-        });
-      });
-    } else {
-      checks.forEach(function(chk, idx) {
-        const key = String(chk.name || '').toLowerCase();
-        const item = {
-          id: 'prop-chk-' + idx,
-          name: chk.name || ('check-' + (idx + 1)),
-          state: chk.state || 'pending',
-          command: chk.command || '',
-          duration_ms: chk.duration_ms || 0,
-          detail: chk.state === 'passed' ? 'Verification check passed' : (chk.state === 'failed' ? 'Verification check failed — inspect diagnostic log below' : ''),
-          output: chk.output || ''
-        };
-        if (sandboxNames[key]) sandboxItems.push(item);
-        else staticItems.push(item);
-      });
-    }
+    checks.forEach(function(chk, idx) {
+      const key = String(chk.name || '').toLowerCase();
+      const item = {
+        id: 'prop-chk-' + idx,
+        name: chk.name || ('check-' + (idx + 1)),
+        state: chk.state || 'pending',
+        command: chk.command || '',
+        duration_ms: chk.duration_ms || 0,
+        detail: chk.state === 'passed' ? 'Verification check passed' : (chk.state === 'failed' ? 'Verification check failed — inspect diagnostic log below' : ''),
+        output: chk.output || ''
+      };
+      if (sandboxNames[key]) sandboxItems.push(item);
+      else staticItems.push(item);
+    });
 
     const groups = [
       {
@@ -2416,37 +2276,52 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   }
 
   function setDiffSubTab(subTab) {
-    state.diffSubTab = subTab || 'changes';
-    document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
-      const active = btn.getAttribute('data-diff-subtab') === state.diffSubTab;
-      btn.classList.toggle('active', active);
-      btn.setAttribute('aria-pressed', String(active));
-    });
-    const viewControls = document.getElementById('diff-view-controls');
-    if (viewControls) {
-      viewControls.style.display = state.diffSubTab === 'changes' ? 'flex' : 'none';
-    }
-    const contentEl = document.getElementById('diff-content');
-    const specPaneEl = document.getElementById('diff-spec-pane');
-    if (contentEl && specPaneEl) {
-      contentEl.style.display = state.diffSubTab === 'spec' ? 'none' : 'block';
-      specPaneEl.style.display = state.diffSubTab === 'spec' ? 'block' : 'none';
-    }
+    state.diffSubTab = ['changes', 'checks', 'spec', 'apply'].indexOf(subTab) >= 0 ? subTab : 'changes';
     renderDiffTab();
   }
 
-  function renderDiffTab() {
-    document.getElementById('proposal-count').textContent = String(state.changes.length);
-    const propSelect = document.getElementById('proposal-select');
-    if (state.changes.length === 0) {
-      propSelect.innerHTML = '<option value="">No proposals yet</option>';
-    } else {
-      propSelect.innerHTML = state.changes.map(function(c) {
-        const sel = c.id === state.sessionId ? ' selected' : '';
-        return '<option value="' + esc(c.id) + '"' + sel + '>[' + esc(c.state) + '] ' + esc(c.title || c.id) + '</option>';
-      }).join('');
-    }
+  function renderReviewLayout() {
+    const sub = state.diffSubTab;
+    document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
+      const active = btn.getAttribute('data-diff-subtab') === sub;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    document.getElementById('explorer-diff').hidden = sub !== 'changes';
+    document.getElementById('diff-view-controls').hidden = sub !== 'changes';
+    document.getElementById('proposal-check-actions').hidden = sub !== 'checks';
+    document.getElementById('diff-content').hidden = sub === 'spec' || sub === 'apply';
+    document.getElementById('diff-spec-pane').hidden = sub !== 'spec';
+    document.getElementById('diff-apply-pane').hidden = sub !== 'apply';
+  }
 
+  function renderApplySummary() {
+    const s = state.activeSession;
+    const ready = proposalReadiness(s);
+    const files = s && s.changes || [];
+    const reviewed = files.filter(function(edit) { return isFileReviewed(s, edit.path); }).length;
+    const checks = s && s.checks || [];
+    const failed = checks.filter(function(check) { return check.state === 'failed'; }).length;
+    const steps = [
+      { title: 'Review each file', target: 'changes', done: ready.filesReviewed, detail: reviewed + '/' + files.length + ' reviewed' },
+      { title: 'Verify the changes', target: 'checks', done: ready.checksPassed, detail: failed ? failed + ' failed' : ready.checksPassed ? 'Required checks passed' : checks.length ? 'Checks incomplete' : 'Not run' },
+      { title: 'Approve this version', target: '', done: ready.canApply, detail: ready.canApply ? 'Approved' : 'Approval required' }
+    ];
+    const el = document.getElementById('apply-checklist');
+    el.hidden = ready.canUndo;
+    el.innerHTML = steps.map(function(step) {
+      const tag = step.target ? 'button' : 'div';
+      return '<' + tag + ' class="apply-requirement"' + (step.target ? ' data-apply-step="' + step.target + '"' : '') + '><span>' + esc(step.title) + '</span><span class="badge ' + (step.done ? 'green' : step.target === 'checks' && failed ? 'red' : '') + '">' + esc(step.detail) + '</span></' + tag + '>';
+    }).join('');
+    el.querySelectorAll('[data-apply-step]').forEach(function(btn) {
+      btn.addEventListener('click', function() { setDiffSubTab(btn.getAttribute('data-apply-step')); });
+    });
+    document.getElementById('apply-destination').textContent = s ? 'Checkout: ' + (s._worktreePath || (state.project && state.project.path) || 'current project') : '';
+  }
+
+  function renderDiffTab() {
+    renderReviewLayout();
+    renderApplySummary();
     const session = state.activeSession;
     renderReviewActions();
     const fileListEl = document.getElementById('diff-file-list');
@@ -2460,11 +2335,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       document.getElementById('changed-files-count').textContent = '0';
       document.getElementById('diff-subtab-changes-badge').textContent = '0';
       document.getElementById('diff-subtab-checks-badge').textContent = '0';
-      document.getElementById('diff-subtab-spec-badge').textContent = '0';
-      fileListEl.innerHTML = '<div class="empty-state">Create a spec in "Work" to inspect diffs.</div>';
-      contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a proposal from the left sidebar or create a new one in <strong>Work</strong>.</p></div>';
+      fileListEl.innerHTML = '<div class="empty-state">No changed files.</div>';
+      contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a task from Tasks, or create a new one.</p></div>';
       if (specPaneEl) {
-        document.getElementById('diff-spec-pipeline').innerHTML = '';
         document.getElementById('proposal-spec-details').innerHTML = '<div class="empty-state">Select a proposal first.</div>';
         document.getElementById('proposal-messages-list').innerHTML = '';
       }
@@ -2477,7 +2350,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     stBadge.className = 'badge ' + (session.state === 'applied' || session.state === 'reviewed' || session.state === 'checked' ? 'green' : (session.state === 'failed' ? 'red' : 'amber'));
 
     const frBadge = document.getElementById('active-proposal-freshness');
-    frBadge.textContent = session.freshness || 'unavailable';
+    frBadge.textContent = session.freshness === 'current' ? '' : (session.freshness || 'unavailable');
     frBadge.className = 'badge ' + (session.freshness === 'current' ? 'blue' : 'amber');
 
     const edits = effectiveEdits(session);
@@ -2499,10 +2372,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       checksBadge.textContent = passedChecks + '/' + checksList.length + ' ✓';
       checksBadge.className = passedChecks === checksList.length ? 'badge green' : 'badge';
     }
-
-    const criteriaCount = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria.length : 0;
-    const messagesCount = Array.isArray(session.messages) ? session.messages.length : 0;
-    document.getElementById('diff-subtab-spec-badge').textContent = String(criteriaCount + messagesCount);
 
     let reviewedCount = 0;
     edits.forEach(function(e) {
@@ -2539,17 +2408,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       });
     });
 
-    // Review progress always refers to the full proposal.
-    const reviewFiles = session.changes || [];
-    const fullReviewedCount = reviewFiles.filter(function(edit) { return isFileReviewed(session, edit.path); }).length;
-    const pipelineHTML = '<div class="review-summary">' +
-      '<span>' + fullReviewedCount + '/' + reviewFiles.length + ' files reviewed</span>' +
-      '<span>' + (checksList.length ? passedChecks + '/' + checksList.length + ' checks passed' : 'Checks not run') + '</span>' +
-    '</div>';
-
-    // Always keep Plan & AI Refine pane updated
+    // Metadata is disclosed on Refine, away from the code under review.
     if (specPaneEl) {
-      document.getElementById('diff-spec-pipeline').innerHTML = pipelineHTML;
       const targets = Array.isArray(session.targets) ? session.targets : [];
       const criteria = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria : [];
       const suggestions = Array.isArray(session.scope_suggestions) ? session.scope_suggestions : [];
@@ -2610,21 +2470,17 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     // Sub-tab 2: Checks & Workflow Phases Inspector
     if (state.diffSubTab === 'checks') {
       const proposalGroups = collectProposalPhaseGroups(session);
-      let checksHTML = pipelineHTML +
-        renderPhaseGroupsHTML(proposalGroups, { filter: state.phaseFilter });
+      let checksHTML = renderPhaseGroupsHTML(proposalGroups, { filter: state.phaseFilter });
+      if (!(state.trust && state.trust.trusted)) checksHTML = '<div class="checks-trust"><span>Local code checks require execution trust.</span><button id="checks-trust-settings" class="btn-ghost">Open Settings →</button></div>' + checksHTML;
       contentEl.innerHTML = checksHTML;
       bindPhaseInspectorControls(contentEl, renderDiffTab);
+      const trustLink = document.getElementById('checks-trust-settings');
+      if (trustLink) trustLink.addEventListener('click', function() { setTab('settings'); });
       return;
     }
 
     // Sub-tab 1: Code Changes (Diff)
-    let html = pipelineHTML;
-
-    if (failedChecks > 0) {
-      html += '<div class="review-warning"><span>' + failedChecks + (failedChecks === 1 ? ' check failed.</span>' : ' checks failed.</span>') +
-        '<button id="inspect-proposal-phases-btn" class="btn-ghost">Inspect checks</button>' +
-        '<button id="repair-failed-checks-btn">Refine proposal</button></div>';
-    }
+    let html = '';
 
     const visibleEdits = selectedDiffFile
       ? edits.filter(function(e) { return e.path === selectedDiffFile; })
@@ -2669,24 +2525,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         runAction(btn, function() { return reviewSingleFile(btn.getAttribute('data-path')); }, 'Saving…');
       });
     });
-    const inspectBtn = document.getElementById('inspect-proposal-phases-btn');
-    if (inspectBtn) {
-      inspectBtn.addEventListener('click', function() {
-        setDiffSubTab('checks');
-      });
-    }
-    const repairBtn = document.getElementById('repair-failed-checks-btn');
-    if (repairBtn) {
-      repairBtn.addEventListener('click', function() {
-        const failedNames = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'failed'; }).map(function(c) { return c.name; });
-        setDiffSubTab('spec');
-        const input = document.getElementById('proposal-message-input');
-        if (input) {
-          input.value = 'Repair the failing verification checks (' + failedNames.join(', ') + ') while preserving acceptance criteria.';
-          input.focus();
-        }
-      });
-    }
   }
 
   function renderUnifiedDiffTable(diff) {
@@ -3054,27 +2892,23 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     document.getElementById('new-task-spec').value = '';
     document.getElementById('new-task-paths').value = '';
     document.getElementById('new-task-criteria').value = '';
+    document.getElementById('new-task-kind').value = 'feature';
     renderSpecFileChips();
+    setTaskStep(1);
   });
 
-  document.querySelectorAll('.criteria-preset-chip').forEach(function(chip) {
-    chip.addEventListener('click', function() {
-      const crit = (chip.getAttribute('data-criterion') || '').trim();
-      if (!crit) return;
-      const box = document.getElementById('new-task-criteria');
-      const existing = (box.value || '').split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
-      if (existing.indexOf(crit) < 0) {
-        existing.push(crit);
-        box.value = existing.join('\n');
-      }
-    });
+  document.querySelectorAll('[data-task-step]').forEach(function(btn) {
+    btn.addEventListener('click', function() { setTaskStep(Number(btn.getAttribute('data-task-step'))); });
   });
+  document.getElementById('task-next-btn').addEventListener('click', function() { setTaskStep(state.taskStep + 1); });
+  document.getElementById('task-back-btn').addEventListener('click', function() { setTaskStep(state.taskStep - 1); });
 
   bindAction('run-analysis-btn', runProjectDocsAnalysis, 'Generating…');
   bindAction('explain-file-btn', explainCurrentFile, 'Explaining…');
   document.getElementById('task-from-file-btn').addEventListener('click', function() {
     const p = state.selectedFile || (state.openFileInfo && state.openFileInfo.path) || '';
     setTab('new-task');
+    setTaskStep(1);
     if (p) {
       setTargetPathsInput([p]);
       if (p.endsWith('.go') && !p.endsWith('_test.go')) {
@@ -3082,11 +2916,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         toggleTargetPathWithCompanionTest(p);
       }
     }
-  });
-
-  document.getElementById('proposal-select').addEventListener('change', function(e) {
-    state.selectedFile = '';
-    loadChangeSession(e.target.value);
   });
 
   document.getElementById('worktree-select').addEventListener('change', function(e) {
@@ -3104,6 +2933,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     state.diffMode = 'split';
     document.getElementById('mode-split-btn').className = 'btn-primary';
     document.getElementById('mode-unified-btn').className = '';
+    document.getElementById('mode-split-btn').setAttribute('aria-pressed', 'true');
+    document.getElementById('mode-unified-btn').setAttribute('aria-pressed', 'false');
     renderDiffTab();
   });
 
@@ -3111,6 +2942,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     state.diffMode = 'unified';
     document.getElementById('mode-unified-btn').className = 'btn-primary';
     document.getElementById('mode-split-btn').className = '';
+    document.getElementById('mode-split-btn').setAttribute('aria-pressed', 'false');
+    document.getElementById('mode-unified-btn').setAttribute('aria-pressed', 'true');
     renderDiffTab();
   });
 
@@ -3132,6 +2965,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     btn.addEventListener('click', function() {
       setDiffSubTab(btn.getAttribute('data-diff-subtab'));
     });
+  });
+
+  document.querySelectorAll('[data-review-go]').forEach(function(btn) {
+    btn.addEventListener('click', function() { setDiffSubTab(btn.getAttribute('data-review-go')); });
   });
 
   document.querySelectorAll('.refine-preset-chip').forEach(function(chip) {
