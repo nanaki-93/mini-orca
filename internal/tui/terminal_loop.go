@@ -319,6 +319,7 @@ func (m *BubbleModel) update(msg tea.Msg) tea.Cmd {
 
 // settle reconciles scoped work, streams and timers after a state change.
 func (m *BubbleModel) settle(cmds []tea.Cmd) tea.Cmd {
+	m.state.recordFeedback()
 	m.state.reconcileCloudScope()
 	m.state.reconcileTriggerScope()
 	m.state.reconcileMissionScope()
@@ -621,6 +622,7 @@ var teaNavigationKeys = map[tea.KeyType]KeyEvent{
 	tea.KeyCtrlP:     {Key: "p", Ctrl: true},
 	tea.KeyCtrlN:     {Key: "n", Ctrl: true},
 	tea.KeyCtrlK:     {Key: "k", Ctrl: true},
+	tea.KeyCtrlO:     {Key: "o", Ctrl: true},
 }
 
 func keyEventFromTea(msg tea.KeyMsg) KeyEvent {

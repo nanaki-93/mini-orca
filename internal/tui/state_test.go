@@ -655,6 +655,10 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		t.Fatalf("Section 5 initial state: page=%s section=%s", s.Page, s.RulesSection)
 	}
 	s.HandleKey(KeyEvent{Key: "ArrowRight"})
+	if s.Confirmation == nil || s.WorkspaceTrust {
+		t.Fatal("granting execution trust from the keyboard must ask first")
+	}
+	s.HandleKey(KeyEvent{Key: "y"})
 	if s.Page != PageInstructions || !s.WorkspaceTrust {
 		t.Fatalf("expected ArrowRight on PageInstructions to toggle WorkspaceTrust to true without navigating away, got page=%s trust=%v", s.Page, s.WorkspaceTrust)
 	}
@@ -726,6 +730,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 		s.Navigate(p)
 		for _, key := range []string{"ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"} {
 			s.HandleKey(KeyEvent{Key: key})
+			s.Confirmation = nil // a trust prompt may open; this loop only checks the page stays put
 			if s.Page != p {
 				t.Fatalf("expected %s on %s to stay on %s, got %s", key, p, p, s.Page)
 			}

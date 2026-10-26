@@ -67,7 +67,7 @@ func (s *State) activateIssueRow() {
 
 func (s *State) activateEditorFileRow() {
 	if s.isViewingDiff() {
-		s.applyAndCommitProposal("")
+		s.confirmApplyFromDiff()
 		return
 	}
 	if s.Index == nil {
@@ -192,7 +192,7 @@ func (s *State) activateInstructionsRow() {
 	case PageLessons:
 		s.graduateSelectedLesson()
 	default:
-		s.toggleWorkspaceTrust()
+		s.requestTrustChange()
 	}
 }
 
@@ -246,6 +246,12 @@ func (s *State) execSystemCommand(cmd, arg string) bool {
 	case "help", "?", "keys", "keybinds", "keybind", "shortcuts":
 		s.ShowKeybindsModal = true
 		s.CmdOutput = "Opened Keybindings Reference ([?] or Esc to close). Commands: keys | analyze | resume | reanalyze | test | fix | debug | agent <prompt> | open <file> | project <path> | models | apply | undo | quit"
+		return true
+	case "messages", "log", "notifications":
+		s.openMessageLog()
+		return true
+	case "back":
+		s.NavigateBack()
 		return true
 	case "palette", "theme":
 		s.CyclePalette()

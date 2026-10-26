@@ -138,6 +138,7 @@ type State struct {
 	Busy                string
 	spinnerFrame        int
 	busyDetail          string
+	nav                 navigation
 	asyncWork           int
 	Error               string
 	Notice              string
@@ -523,13 +524,14 @@ func (s *State) Navigate(page Page) {
 	}
 	s.reconcileTriggerScope()
 	if s.Page != page {
+		s.rememberLeaving(page)
 		s.viewport.followSelection = true
 		s.DetailScroll = 0
 		s.DetailSection = 0
 		s.Error = ""
 		preserveIssueIdx := parentPage(s.Page) == parentPage(page)
 		if !preserveIssueIdx {
-			s.SelectedIdx = 0
+			s.SelectedIdx = s.rememberedSelection(page)
 		}
 	}
 	if page != PageAgents {

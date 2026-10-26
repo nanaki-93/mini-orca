@@ -25,6 +25,8 @@ func commandCatalog() []commandItem {
 		{command: "test", title: "Run project checks", hint: "Execute configured checks in an isolated workspace. Requires project trust."},
 		{command: "reindex", title: "Update project index", hint: "Read current files and invalidate outdated checks and workflows."},
 		{command: "reconnect", title: "Reconnect to daemon", hint: "Reconnect and reload local workspace information."},
+		{command: "messages", title: "Show recent messages", hint: "Status updates and errors from this session, newest first."},
+		{command: "back", title: "Go back", hint: "Return to the previous view and its selection (Backspace or Ctrl+O)."},
 		{command: "web", title: "Open Web UI & Diff Viewer", hint: "Open the local browser UI for side-by-side diffs, files, issues and guarded Apply/Undo."},
 	}
 	for _, hub := range HubTabs() {

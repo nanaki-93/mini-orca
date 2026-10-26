@@ -662,6 +662,10 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 	}
 	s.PendingActions = nil
 	s.HandleKey(KeyEvent{Key: "Enter"})
+	if len(s.PendingActions) != 0 || s.Confirmation == nil {
+		t.Fatalf("Enter in the diff must ask before applying, got %+v", s.PendingActions)
+	}
+	s.HandleKey(KeyEvent{Key: "y"})
 	if len(s.PendingActions) == 0 || s.PendingActions[len(s.PendingActions)-1].Kind != "apply-commit" {
 		t.Fatalf("expected 'Enter' on diff page to enqueue apply-commit, got %+v", s.PendingActions)
 	}

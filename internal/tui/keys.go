@@ -95,6 +95,10 @@ func (s *State) handleOverlayKey(ev KeyEvent) bool {
 		s.handleCommandInputKey(ev)
 		return true
 	}
+	if s.nav.showLog {
+		s.handleMessageLogKey(ev)
+		return true
+	}
 	if !s.ShowKeybindsModal && s.handleDialogScrollKey(ev) {
 		return true
 	}
@@ -208,6 +212,10 @@ func (s *State) stepInspectedIssue(delta int) {
 }
 
 func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
+	if ev.Ctrl && strings.EqualFold(ev.Key, "o") {
+		s.NavigateBack()
+		return true
+	}
 	switch ev.Key {
 	case "?":
 		s.ShowKeybindsModal = !s.ShowKeybindsModal
@@ -271,6 +279,9 @@ func (s *State) handleEscapeOrBackKey(key string) bool {
 		s.CmdOutput = "Browsing repository files (press [d] for proposal diff)"
 		return true
 	}
+	if key == "Backspace" && len(s.nav.history) > 0 {
+		return s.NavigateBack()
+	}
 	return false
 }
 
@@ -300,7 +311,9 @@ func (s *State) handleArrowOptionKey(forward, shift bool) bool {
 	case PageEditor:
 		s.handleEditorArrowOption(forward)
 	case PageInstructions:
-		s.toggleWorkspaceTrust()
+		if forward != s.WorkspaceTrust {
+			s.requestTrustChange()
+		}
 	case PageModels:
 		if s.ClampedIdx() < len(domain.CanonicalModelScopes()) {
 			s.cycleSelectedScopeModel(forward)
@@ -973,7 +986,7 @@ func (s *State) handleGovernanceFallbackKey(key string) bool {
 		s.enqueueAction(ActionRequest{Kind: "bootstrap"})
 		return true
 	case "t":
-		s.toggleWorkspaceTrust()
+		s.requestTrustChange()
 		return true
 	case "g":
 		s.Navigate(PageLessons)

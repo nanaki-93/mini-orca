@@ -121,6 +121,8 @@ func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
 		body = s.renderCommandMenu(th, width, rows-1)
 	case s.Confirmation != nil:
 		body = s.renderDialog(th, width, rows-1)
+	case s.nav.showLog:
+		body = s.renderMessageLog(th, width, rows-1)
 	case s.ShowKeybindsModal:
 		body = s.renderKeybindsModal(th, width)
 	case s.Error != "":
@@ -144,7 +146,7 @@ func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
 // renderBreadcrumb shows where the user is: workspace › view › focused item.
 // Overlays (commands, dialogs, help, errors) keep the line empty.
 func (s *State) renderBreadcrumb(th ansiTheme, width int) string {
-	if s.CmdActive || s.Confirmation != nil || s.ShowKeybindsModal || s.Error != "" || width < 60 {
+	if s.CmdActive || s.Confirmation != nil || s.ShowKeybindsModal || s.nav.showLog || s.Error != "" || width < 60 {
 		return ""
 	}
 	hub := s.ActiveHub()
@@ -405,7 +407,7 @@ func (s *State) renderActionBar(th ansiTheme, width int) string {
 		right = th.keyPill("Esc", "Cancel") + " "
 	} else if s.Error != "" && !s.ShowKeybindsModal {
 		items = []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}
-	} else if s.ShowKeybindsModal {
+	} else if s.ShowKeybindsModal || s.nav.showLog {
 		items = []keyDesc{{"↑/↓", "Scroll"}, {"PgUp/PgDn", "Page"}}
 		right = th.keyPill("Esc", "Close") + " "
 	}
