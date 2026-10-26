@@ -197,7 +197,7 @@ func TestEscCancelsReadOnlyActionsButNotMutations(t *testing.T) {
 	}
 
 	release := make(chan struct{})
-	s, m, done = startBlockedDispatch(t, ActionRequest{Kind: "reindex"}, func(w http.ResponseWriter, r *http.Request) {
+	_, m, done = startBlockedDispatch(t, ActionRequest{Kind: "reindex"}, func(w http.ResponseWriter, r *http.Request) {
 		<-release
 		_ = json.NewEncoder(w).Encode(map[string]any{"project_id": "fixture", "project_revision": "rev-1"})
 	})
