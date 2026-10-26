@@ -12,15 +12,22 @@ import (
 
 type browserRunner func(context.Context, string, ...string) error
 
+// runBrowserCommand launches the system opener without holding the TUI state
+// lock, so a slow opener never freezes the terminal.
+func runBrowserCommand(ctx context.Context, command string, args ...string) error {
+	defer client.EnterIO(ctx)()
+	return exec.CommandContext(ctx, command, args...).Run()
+}
+
 func openResearchReport(ctx context.Context, cl *Client, scope client.AgentSettingsScope, id string) error {
 	return launchResearchReport(ctx, cl, scope, id, runtime.GOOS, func(ctx context.Context, command string, args ...string) error {
-		return exec.CommandContext(ctx, command, args...).Run()
+		return runBrowserCommand(ctx, command, args...)
 	})
 }
 
 func openWebUI(ctx context.Context, cl *Client, tab, sessionID, filePath, worktreePath string) error {
 	return launchWebUI(ctx, cl, tab, sessionID, filePath, worktreePath, runtime.GOOS, func(ctx context.Context, command string, args ...string) error {
-		return exec.CommandContext(ctx, command, args...).Run()
+		return runBrowserCommand(ctx, command, args...)
 	})
 }
 

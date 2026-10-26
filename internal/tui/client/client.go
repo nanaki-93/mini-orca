@@ -185,6 +185,7 @@ func (c *Client) send(ctx context.Context, method, target, body string) (Respons
 		req.Header.Set("Content-Type", "application/json")
 	}
 	httpClient := c.clientForRoute(method, req.URL.Path)
+	defer EnterIO(ctx)()
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return Response{}, fmt.Errorf("daemon request failed: %w", err)

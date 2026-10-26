@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -197,9 +198,9 @@ type agentExternalResultMsg struct{ result agentExternalResult }
 
 type agentLibraryResultMsg struct{ result agentLibraryResult }
 
-// syncActionsMsg carries daemon actions that still run inside Update. They are
-// deferred by one message so the busy status renders before the request blocks.
-type syncActionsMsg struct{ actions []queuedAction }
+// syncActionsMsg carries blocking daemon actions. They start one message after
+// they are queued so the busy status renders before the requests begin.
+type syncActionsMsg struct{}
 
 type queuedAction struct {
 	reqID string
@@ -238,6 +239,10 @@ type BubbleModel struct {
 	pollInFlight      bool
 	spinnerScheduled  bool
 	activeAgentStarts int
+	// mu guards state while blocking daemon actions run off the UI goroutine.
+	mu       sync.Mutex
+	dispatch *dispatchRun
+	frame    string
 }
 
 // NewBubbleModel constructs a Bubble Tea model wrapping State and Client.
@@ -266,7 +271,22 @@ func (m *BubbleModel) Init() tea.Cmd {
 }
 
 // Update implements tea.Model, handling tea.WindowSizeMsg, tea.KeyMsg, KeyEvent, and poll ticks.
+// While a blocking daemon action runs in the background, input is queued
+// instead of mutating state, so the frame keeps rendering and the action sees
+// the state it was started from.
 func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if done, ok := msg.(dispatchDoneMsg); ok {
+		return m, m.finishDispatch(done)
+	}
+	if m.dispatch != nil {
+		return m, m.updateDuringDispatch(msg)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m, m.update(msg)
+}
+
+func (m *BubbleModel) update(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	switch ev := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -291,9 +311,14 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case pollTickMsg, pollResultMsg, syncActionsMsg, spinnerTickMsg:
+	case pollTickMsg, pollResultMsg, spinnerTickMsg:
 		cmds = append(cmds, m.applyBackgroundMessage(ev)...)
 	}
+	return m.settle(cmds)
+}
+
+// settle reconciles scoped work, streams and timers after a state change.
+func (m *BubbleModel) settle(cmds []tea.Cmd) tea.Cmd {
 	m.state.reconcileCloudScope()
 	m.state.reconcileTriggerScope()
 	m.state.reconcileMissionScope()
@@ -306,7 +331,7 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stopAgentStream()
 		m.stopMissionExecutionStream()
 		m.stopMediaStream()
-		return m, tea.Quit
+		return tea.Quit
 	}
 	m.syncAgentStream(&cmds)
 	m.syncMediaStream(&cmds)
@@ -314,7 +339,11 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.maybeSchedulePollTick(&cmds)
 	m.state.asyncWork = m.activeAgentStarts
 	m.maybeScheduleSpinner(&cmds)
-	return m, batchTeaCmds(cmds)
+	if m.dispatch != nil {
+		// Render the busy frame now: once the action starts it owns the state.
+		m.frame = m.state.Render(m.width, m.height)
+	}
+	return batchTeaCmds(cmds)
 }
 
 // applyBackgroundMessage handles polling, deferred actions and spinner ticks.
@@ -328,8 +357,6 @@ func (m *BubbleModel) applyBackgroundMessage(msg tea.Msg) []tea.Cmd {
 	case pollResultMsg:
 		m.pollInFlight = false
 		m.state.applyPollResult(ev.res)
-	case syncActionsMsg:
-		return m.runSyncActions(ev.actions)
 	case spinnerTickMsg:
 		m.spinnerScheduled = false
 		m.state.spinnerFrame++
@@ -345,21 +372,6 @@ func (m *BubbleModel) maybeScheduleSpinner(cmds *[]tea.Cmd) {
 	}
 	m.spinnerScheduled = true
 	*cmds = append(*cmds, spinnerTickCmd())
-}
-
-// runSyncActions dispatches deferred actions in their original order, then
-// clears the busy status and flushes anything those actions queued.
-func (m *BubbleModel) runSyncActions(actions []queuedAction) []tea.Cmd {
-	for _, queued := range actions {
-		if m.client == nil {
-			break
-		}
-		if err := m.state.dispatchAction(m.ctx, m.client, queued.reqID, queued.act); err != nil {
-			m.state.Error = err.Error()
-		}
-	}
-	m.state.Busy = ""
-	return m.flushActionsAsync()
 }
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
@@ -438,9 +450,8 @@ func (m *BubbleModel) flushActionsAsync() []tea.Cmd {
 		}
 		deferred = append(deferred, queuedAction{reqID: reqID, act: act})
 	}
-	if len(deferred) > 0 {
-		m.state.Busy = busyLabel(deferred[0].act.Kind)
-		cmds = append(cmds, func() tea.Msg { return syncActionsMsg{actions: deferred} })
+	if len(deferred) > 0 && m.beginDispatch(deferred) {
+		cmds = append(cmds, func() tea.Msg { return syncActionsMsg{} })
 	}
 	return cmds
 }
@@ -574,8 +585,16 @@ func (m *BubbleModel) startAsyncPollCmd() tea.Cmd {
 }
 
 // View implements tea.Model, rendering the full-screen Lip Gloss / Bubbles frame.
+// When a background action is between network calls the frame is re-rendered;
+// otherwise the last frame is kept so the UI goroutine never waits on it.
 func (m *BubbleModel) View() string {
-	return m.state.Render(m.width, m.height)
+	if !m.mu.TryLock() {
+		return m.frame
+	}
+	defer m.mu.Unlock()
+	m.state.busyDetail = m.dispatchDetail()
+	m.frame = m.state.Render(m.width, m.height)
+	return m.frame
 }
 
 var teaNavigationKeys = map[tea.KeyType]KeyEvent{

@@ -468,6 +468,9 @@ func (s *State) renderCommandBar(th ansiTheme, width int) string {
 		return " " + th.red + "Error · " + th.reset + theme.TruncatePlain(s.Error, max(1, width-24)) + th.muted + "  [Esc] Dismiss" + th.reset
 	}
 	message := client.FirstNonEmpty(s.Busy, s.CmdOutput)
+	if s.Busy != "" && s.busyDetail != "" {
+		message = s.Busy + " · " + s.busyDetail
+	}
 	if message == "Workspace ready" {
 		message = "1–5: workspace · Tab: view · Ctrl+K: commands"
 		if width >= 76 {

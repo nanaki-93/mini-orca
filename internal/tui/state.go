@@ -137,6 +137,7 @@ type State struct {
 	Version             string
 	Busy                string
 	spinnerFrame        int
+	busyDetail          string
 	asyncWork           int
 	Error               string
 	Notice              string
