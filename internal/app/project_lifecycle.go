@@ -7,10 +7,12 @@ import (
 func (s *Service) Reindex() (*project.ProjectIndex, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
-	return s.reindexActiveProject()
+	return s.reindexActiveProject(stopReasonReindex)
 }
 
-func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
+// reindexActiveProject stops work bound to the old source; reason tells the
+// stopped tasks why.
+func (s *Service) reindexActiveProject(reason string) (*project.ProjectIndex, error) {
 	if err := s.stopTriggersForLifecycle(); err != nil {
 		return nil, err
 	}
@@ -21,7 +23,7 @@ func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
 	// must preserve its cancellation context through observation and cleanup.
 	s.cancelMissionWaves()
 	s.cancelIntegrations()
-	s.CancelChangeWorkflows()
+	s.cancelChangeWorkflowsBecause(reason)
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
@@ -58,7 +60,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 	if err := s.stopLiveSessions(); err != nil {
 		return err
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonProjectSwitch)
 	if err := activate(); err != nil {
 		return err
 	}
@@ -66,10 +68,10 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 	return nil
 }
 
-func (s *Service) invalidateJobsForProjectChange() {
+func (s *Service) invalidateJobsForProjectChange(reason string) {
 	s.cancelMissionJobs()
 	s.cancelIntegrations()
-	s.CancelChangeWorkflows()
+	s.cancelChangeWorkflowsBecause(reason)
 	s.interruptAnalysisRunForProjectChange()
 	s.cancelGoScan()
 	s.clearExecutionTrust()

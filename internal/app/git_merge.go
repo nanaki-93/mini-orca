@@ -42,7 +42,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonGit)
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
 	result := s.completeGitMutation(repository.Root, "merged", err)
 	if result.State == "merged" {
@@ -83,7 +83,7 @@ func (s *Service) CleanupMergedWorktree(ctx context.Context, request GitMutation
 	if err != nil {
 		return nil, err
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonGit)
 	result := s.completeGitMutation(repository.Root, "merged", nil)
 	s.completeMergedWorktree(ctx, repository.Root, source, completed, result)
 	return result, nil
@@ -130,7 +130,7 @@ func (s *Service) AbortGitMerge(ctx context.Context, request GitMutationRequest)
 	if repository.MergeHead == "" || repository.MergeHead != request.MergeHead {
 		return nil, project.ErrRevisionConflict
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonGit)
 	_, err = gitRead(ctx, repository.Root, "merge", "--abort")
 	return s.completeGitMutation(repository.Root, "aborted", err), nil
 }

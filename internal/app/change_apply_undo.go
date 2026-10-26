@@ -283,7 +283,7 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 	result := &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: journal.Session.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: append([]string{}, warnings...)}
 	result.Commit, journal.Session.Commit = journal.Commit, journal.Commit
 	s.clearExecutionTrust()
-	index, err := s.reindexActiveProject()
+	index, err := s.reindexActiveProject(stopReasonApply)
 	if err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; refresh the index: "+err.Error())
 	} else {

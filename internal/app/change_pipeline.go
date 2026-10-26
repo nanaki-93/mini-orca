@@ -87,11 +87,12 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	budget := s.changeWorkflowTimeout(agentCtx, request.Models, startStage, request.AutoRepair)
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := linkMissionWorkflowCancellation(agentCtx, func() { cancelTimeout(); release() })
+	workCtx, interrupt := context.WithCancelCause(workCtx)
 	workCtx = context.WithValue(workCtx, changeWorkflowContextKey{}, w.ID)
 	if request.StreamOutput {
 		workCtx = agentruntime.WithStreaming(workCtx)
 	}
-	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, interrupt: interrupt, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
@@ -249,8 +250,26 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	return session.Workflow.Review != nil && session.Workflow.Review.ProposalHash == session.Hash && session.Workflow.Review.Verdict == "changes_requested" && specialistsComplete(session.Workflow, session.Hash), nil
 }
 
-// A missing or interrupted check is not evidence that a model should change code.
+// existingTestBaselineCheck runs the project's tests on the unmodified copy.
+const existingTestBaselineCheck = "existing test baseline"
+
+// existingTestsFail reports a failure that predates the proposal: repairing
+// the proposal cannot fix it, so automatic repair would only spend budget.
+func existingTestsFail(checks []CheckResult) bool {
+	for _, check := range checks {
+		if check.Name == existingTestBaselineCheck && check.State == CheckFailed {
+			return true
+		}
+	}
+	return false
+}
+
+// A missing or interrupted check is not evidence that a model should change
+// code, and neither is a test that already failed before the change.
 func workflowChecksRepairable(checks []CheckResult) bool {
+	if existingTestsFail(checks) {
+		return false
+	}
 	failed := false
 	for _, check := range checks {
 		if !check.Required || check.State == CheckPassed {
@@ -373,7 +392,10 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 
 func workflowFailure(err error, checks []CheckResult) (string, string) {
 	var timeout *workflowTimeoutError
+	var stopped *workflowStopCause
 	switch {
+	case errors.As(err, &stopped):
+		return "canceled", "Stopped because " + stopped.reason + ". No source was applied; run the task again to continue."
 	case errors.Is(err, context.Canceled):
 		return "canceled", "Workflow canceled. No source was applied."
 	case errors.As(err, &timeout):
@@ -384,7 +406,9 @@ func workflowFailure(err error, checks []CheckResult) (string, string) {
 		return "stale", "Project source or instructions changed. Start a fresh conversation."
 	case errors.Is(err, errWorkflowChecksFailed):
 		base := "Tests or source checks failed. Inspect the check evidence before running again."
-		if !workflowChecksRepairable(checks) {
+		if existingTestsFail(checks) {
+			base = "Tests already fail before this change (existing test baseline), so the agent cannot fix them. Fix or skip those tests, then run again."
+		} else if !workflowChecksRepairable(checks) {
 			base = "Required checks did not complete. Inspect the check evidence and retry checks before changing code."
 		}
 		if detail := summarizeFailedChecks(checks); detail != "" {

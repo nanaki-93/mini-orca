@@ -212,7 +212,7 @@ func archiveMissionProposal(ctx context.Context, store *agentstate.Store, record
 
 func (s *Service) executeMissionIntegration(ctx context.Context, root string, store *agentstate.Store, record agentstate.MissionExecution, source *GitWorktree) (*AgentMissionExecution, error) {
 	entry := record.PendingIntegration()
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonIntegration)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	effect := &missionEffect{id: entry.ID, cancel: cancel, done: make(chan struct{})}
 	s.missions.mu.Lock()

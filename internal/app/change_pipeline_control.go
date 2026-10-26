@@ -50,12 +50,20 @@ func (s *Service) CancelChangeWorkflow(ctx context.Context, id string, request C
 
 // CancelChangeWorkflows revokes dispatch on project replacement, reindex and
 // daemon shutdown. The worker owns cleanup and saves a terminal result.
+// CancelChangeWorkflows stops every running workflow because the daemon is
+// shutting down; each stopped task records that reason.
 func (s *Service) CancelChangeWorkflows() {
+	s.cancelChangeWorkflowsBecause(stopReasonShutdown)
+}
+
+// cancelChangeWorkflowsBecause stops running workflows and records why, so a
+// task the daemon stopped does not read like one the user canceled.
+func (s *Service) cancelChangeWorkflowsBecause(reason string) {
 	s.changeWorkflow.mu.Lock()
 	defer s.changeWorkflow.mu.Unlock()
 	for _, job := range s.changeWorkflow.allJobs() {
 		if !job.finished {
-			job.cancel()
+			job.stop(reason)
 		}
 	}
 }
@@ -73,14 +81,14 @@ func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 	}
 	children := s.worktreeServices()
 	for _, child := range children {
-		child.invalidateJobsForProjectChange()
+		child.invalidateJobsForProjectChange(stopReasonShutdown)
 	}
 	for _, child := range children {
 		if err := child.ShutdownChangeWorkflows(ctx); err != nil {
 			return err
 		}
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonShutdown)
 	if err := s.waitIntegrations(ctx); err != nil {
 		return err
 	}

@@ -22,6 +22,33 @@ func (e *workflowTimeoutError) Error() string {
 func (e *workflowTimeoutError) Unwrap() error { return context.DeadlineExceeded }
 
 // Preserve a more specific owner deadline when a child returns the context sentinel.
+// workflowStopCause records why the daemon, not the user, stopped a workflow.
+type workflowStopCause struct{ reason string }
+
+func (c *workflowStopCause) Error() string { return "workflow stopped because " + c.reason }
+func (c *workflowStopCause) Unwrap() error { return context.Canceled }
+
+// Reasons name the event in the user's terms; they complete "Stopped because …".
+const (
+	stopReasonProjectChanged  = "the project changed"
+	stopReasonReindex         = "the project was reindexed"
+	stopReasonApply           = "changes were applied or undone in this checkout"
+	stopReasonGit             = "a Git merge, branch switch or worktree change touched this checkout"
+	stopReasonIntegration     = "a mission child was integrated into this checkout"
+	stopReasonProjectSwitch   = "another project was opened"
+	stopReasonFileChanged     = "a watched file changed on disk"
+	stopReasonShutdown        = "the daemon is shutting down"
+	stopReasonWorktreeRemoved = "its worktree is being removed"
+)
+
+// stop cancels the job and records reason as its cancellation cause.
+func (job *changeWorkflowJob) stop(reason string) {
+	if job.interrupt != nil {
+		job.interrupt(&workflowStopCause{reason: reason})
+	}
+	job.cancel()
+}
+
 func workflowDeadlineCause(ctx context.Context, err error) error {
 	if (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) && ctx.Err() != nil {
 		return context.Cause(ctx)

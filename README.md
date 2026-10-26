@@ -9,7 +9,7 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 - **Analyze projects to find Issues**: Coordinates deterministic static/security rules alongside scoped semantic, performance, and advisory security analysis.
 - **Create structured Docs**: Synthesizes a language-agnostic engineering specification covering project purpose, how it pursues its goal, layered architecture, main dependencies, runtime scenarios, ADRs, and operational runbooks.
 - **Suggest Features**: Generates goal-aware feature ideas grounded in the repository's indexed architecture and user-defined project goals.
-- **Plan and review guarded changes**: Investigates repository evidence, prepares an editable plan, and runs a native ADK workflow across up to eight captured Go/Markdown paths per task. Generation, test generation, verification, specialist review and human input retain separate outcomes. Source changes require explicit diff Apply and guarded Undo.
+- **Plan and review guarded changes**: Investigates repository evidence, prepares an editable plan, and runs a native ADK workflow across the captured text files of a task (up to eight write paths for a planned task). Generation, test generation, verification, specialist review and human input retain separate outcomes. Source changes require explicit diff Apply and guarded Undo.
 
 ## How It Pursues the Goal
 

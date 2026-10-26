@@ -104,7 +104,7 @@ func (s *Service) closeWorktreeServices() error {
 	}
 	s.worktreesMu.Unlock()
 	for _, child := range entries {
-		child.invalidateJobsForProjectChange()
+		child.invalidateJobsForProjectChange(stopReasonProjectSwitch)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

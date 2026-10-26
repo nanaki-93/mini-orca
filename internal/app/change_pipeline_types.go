@@ -102,6 +102,7 @@ type changeWorkflowJob struct {
 	specialists         []string
 	autoRepair          bool
 	cancel              context.CancelFunc
+	interrupt           context.CancelCauseFunc
 	done                chan struct{}
 	finished            bool
 	failure             string

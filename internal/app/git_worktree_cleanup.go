@@ -61,7 +61,7 @@ func (s *Service) stopWorktreeJobs(ctx context.Context) error {
 	if err := s.stopLiveSessions(); err != nil {
 		return err
 	}
-	s.invalidateJobsForProjectChange()
+	s.invalidateJobsForProjectChange(stopReasonWorktreeRemoved)
 	if err := s.ShutdownChangeWorkflows(ctx); err != nil {
 		return err
 	}

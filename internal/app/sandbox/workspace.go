@@ -182,9 +182,13 @@ func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Read
 	}
 }
 
+// skipCheckWorkspaceDirectory leaves out generated output and editor state.
+// Neither the check copy nor the workspace fingerprint includes them, so an
+// IDE saving its own settings does not make running agent work stale.
 func skipCheckWorkspaceDirectory(relative string) bool {
 	switch filepath.Base(relative) {
-	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "build", "dist", "target":
+	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "build", "dist", "target",
+		".idea", ".vscode", ".fleet", ".zed", ".vs":
 		return !checkWorkspaceFixturePath(relative)
 	default:
 		return false

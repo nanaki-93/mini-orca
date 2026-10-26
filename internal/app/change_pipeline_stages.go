@@ -40,11 +40,26 @@ func workflowRetryMessage(message string, workflow *ChangeWorkflow, checks []Che
 	if extra == "" {
 		return message
 	}
-	combined := message + extra
-	if len(combined) > 8192 {
-		return combined[:8192]
+	if len(message)+len(extra) <= maxWorkflowRetryMessage {
+		return message + extra
 	}
-	return combined
+	// The feedback is what the repair acts on, so the request gives way first;
+	// each keeps at least half of the budget.
+	message = truncateUTF8(message, max(maxWorkflowRetryMessage-len(extra), maxWorkflowRetryMessage/2))
+	return message + truncateUTF8(extra, maxWorkflowRetryMessage-len(message))
+}
+
+const maxWorkflowRetryMessage = 8192
+
+// truncateUTF8 shortens s to at most n bytes without splitting a character.
+func truncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func harnessProbeRetryDirective(message string, workflow *ChangeWorkflow, checks []CheckResult) string {

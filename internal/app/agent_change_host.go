@@ -109,7 +109,7 @@ func (s *Service) runChangeGraphVerification(ctx context.Context, job *changeWor
 	if err != nil {
 		return agentruntime.ChangeNodeResult{}, err
 	}
-	session, err := s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: graphChangeIdentity(input.Snapshot), CheckOptions: CheckOptions{RunTests: true}})
+	session, err := s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: graphChangeIdentity(input.Snapshot), CheckOptions: CheckOptions{RunTests: true, RunLint: true}})
 	if err != nil {
 		return agentruntime.ChangeNodeResult{}, err
 	}

@@ -283,7 +283,7 @@ func TestAttachmentAdviceLifecycleCancellationJoinsProviderWork(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "replace":
-				s.invalidateJobsForProjectChange()
+				s.invalidateJobsForProjectChange(stopReasonProjectChanged)
 			case "shutdown":
 				stop, release := context.WithTimeout(t.Context(), 5*time.Second)
 				defer release()

@@ -362,7 +362,7 @@ func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string
 	if !runTests || len(newTests) == 0 {
 		return checks, nil
 	}
-	checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "existing test baseline", true, []string{"go", "test", "./..."}, false, true))
+	checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, existingTestBaselineCheck, true, []string{"go", "test", "./..."}, false, true))
 	if err := stageChangeEdits(workspace, newTests); err != nil {
 		return nil, err
 	}

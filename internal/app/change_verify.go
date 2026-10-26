@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -91,6 +92,18 @@ func matchesAppliedChange(journal *changeJournal, id string, identity ChangeIden
 	return journal != nil && journal.State == "applied" && journal.Session.ID == id && journal.Session.ProjectID == identity.ProjectID && journal.Session.Hash == identity.Hash && journal.Session.Revision == identity.Revision && journal.PostWorkspaceHash != ""
 }
 
+// changeHasCode reports whether any edit is more than documentation text.
+func changeHasCode(edits []ChangeEdit) bool {
+	for _, edit := range edits {
+		switch strings.ToLower(filepath.Ext(edit.Path)) {
+		case ".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc":
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 func changeHasGo(edits []ChangeEdit) bool {
 	for _, edit := range edits {
 		if filepath.Ext(edit.Path) == ".go" {
@@ -102,7 +115,9 @@ func changeHasGo(edits []ChangeEdit) bool {
 
 func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journal *changeJournal, revision string) ([]CheckResult, error) {
 	checks := changeSourceChecks(root, journal.Session.Changes)
-	if !changeHasGo(journal.Session.Changes) || !requiredChecksPassed(checks) {
+	// Documentation-only changes have nothing to execute: their source checks
+	// are the verification.
+	if !requiredChecksPassed(checks) || !changeHasCode(journal.Session.Changes) {
 		return checks, ctx.Err()
 	}
 	workspace, err := os.MkdirTemp("", "mini-orca-change-verify-")
@@ -120,9 +135,28 @@ func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journ
 	if fingerprint != journal.PostWorkspaceHash {
 		return checks, project.ErrRevisionConflict
 	}
+	if !workspaceHasGo(workspace, journal.Session.Changes) {
+		return append(checks, s.verifyAppliedTaskRunner(ctx, workspace, revision)...), ctx.Err()
+	}
 	checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply tests", true, []string{"go", "test", "./..."}, false, true))
 	checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply vet", true, []string{"go", "vet", "./..."}, false, false))
 	return checks, ctx.Err()
+}
+
+// verifyAppliedTaskRunner runs the project's declared test and check targets
+// for non-Go workspaces. Without a runner nothing executes, and the result says
+// so instead of reporting source checks alone as a verification.
+func (s *Service) verifyAppliedTaskRunner(ctx context.Context, workspace, revision string) []CheckResult {
+	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
+	if runner == "" || testTarget == "" {
+		return []CheckResult{{Name: "post-Apply tests", Required: true, State: CheckUnavailable, Outcome: "could_not_execute",
+			Output: "No executable test runner is configured or available for this workspace; no tests ran."}}
+	}
+	checks := []CheckResult{s.runCheck(ctx, workspace, revision, "post-Apply tests", true, buildTaskRunnerArgv(runner, testTarget), false, true)}
+	if checkTarget != "" {
+		checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
+	}
+	return checks
 }
 
 func verificationOutcome(checks []CheckResult, err error) (string, string) {
@@ -141,9 +175,23 @@ func verificationOutcome(checks []CheckResult, err error) (string, string) {
 		}
 	}
 	if !requiredChecksPassed(checks) {
+		if onlyUnavailableRequiredChecks(checks) {
+			return "unavailable", "Nothing could run to verify the applied files; they remain in place. Configure a test runner to verify this project."
+		}
 		return "failed", "Applied files remain in place; one or more verification checks failed."
 	}
 	return "verified", ""
+}
+
+// onlyUnavailableRequiredChecks reports whether every unmet required check
+// could not execute, as opposed to having run and failed.
+func onlyUnavailableRequiredChecks(checks []CheckResult) bool {
+	for _, check := range checks {
+		if check.Required && check.State != CheckPassed && check.State != CheckUnavailable {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) currentChangeVerification(ctx context.Context, root string, journal *changeJournal, index *project.ProjectIndex) (*ChangeVerification, error) {

@@ -75,7 +75,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 
 func validateChangeCreateRequest(request ChangeCreateRequest) error {
 	if len(request.Paths) == 0 || len(request.Paths) > maxChangePaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
-		return fmt.Errorf("provide a task title, kind and one to eight paths")
+		return fmt.Errorf("provide a task title, kind and one to %d paths", maxChangePaths)
 	}
 	return validateChangeCriteria(request.AcceptanceCriteria)
 }

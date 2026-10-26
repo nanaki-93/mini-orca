@@ -5,7 +5,7 @@
 **Content type:** `application/json`
 
 Mini-Orca uses a pure Go TUI client and loopback daemon for one active project.
-The shared change workflow captures up to eight explicit Go/Markdown paths,
+The shared change workflow captures explicit text paths (up to eight write paths for a planned task),
 prepares versioned proposals, checks them, records diff review and explicitly
 applies them with guarded recovery/Undo.
 Native ADK execution records generation, test generation, verification,
@@ -152,7 +152,7 @@ untrusted networks.
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
 | POST | `/api/projects/current/plans/investigate` | Investigate captured read/write scope and return validated citations and model suggestions for explicit acceptance. |
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
-| POST | `/api/projects/current/changes` | Capture a task and one to eight explicit Go/Markdown paths. |
+| POST | `/api/projects/current/changes` | Capture a task and 1–64 explicit text paths (planned tasks: 1–8). |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
 | GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck source freshness. |
 | POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
@@ -787,7 +787,10 @@ passing candidate tests stay pinned through repair. For new Go tests, the
 optional baseline observation reports `outcome: failed_before_change`,
 `already_passes`, or `could_not_execute`. A build failure is not evidence of bug
 reproduction. Existing baseline and candidate tests remain required; the new-test
-observation does not replace them. Executed checks include `duration_ms`. Passing parser checks alone
+observation does not replace them. A failing existing baseline predates the
+proposal, so the workflow stops without automatic repair and says so. The
+workflow's own verification runs tests and lint (`go vet` or the declared check
+target), matching an explicit check with both options. Executed checks include `duration_ms`. Passing parser checks alone
 does not establish runtime correctness. Apply and Undo require `confirm: true`.
 
 Apply optionally accepts `commit_message` (non-empty, at most 4096 UTF-8 bytes),
@@ -1219,7 +1222,9 @@ current `project_id`/`project_revision` plus applied proposal `revision`/`hash`.
 It requires the latest journal to be applied and every post-Apply target and
 workspace hash to match. Go verification requires fresh execution trust, then
 checks source parse/format and runs fixed `go test ./...` and `go vet ./...` in
-an isolated copy. Markdown-only verification checks text/file identities without
+an isolated copy. Other code runs the project's declared task-runner test and
+check targets; without a runner the status is `unavailable` because nothing
+executed. Documentation-only verification checks text/file identities without
 executing code. It sends no model request and never changes source. Results carry
 `session_id`, project identity, `proposal_hash`, `workspace_hash`, `status`, optional
 `reason`, checks and timestamp. Status distinguishes `verified`, `failed`,

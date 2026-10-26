@@ -105,7 +105,7 @@ func (s *Service) reindexForTrigger(owner *triggerOwner, path, hash string) (*pr
 	if file.ContentHash != "sha256:"+hash {
 		s.cancelMissionWaves()
 		s.cancelIntegrations()
-		s.CancelChangeWorkflows()
+		s.cancelChangeWorkflowsBecause(stopReasonFileChanged)
 		s.cancelGoScan()
 		if _, err := s.manager.Reindex(); err != nil {
 			return nil, err
