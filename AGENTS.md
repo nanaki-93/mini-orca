@@ -73,6 +73,7 @@ Current behavior is documented in the README, TUI design guidelines and API cont
 | --- | --- |
 | Go code (`cmd/`, `internal/`) | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
 | Go TUI (`cmd/tui`, `internal/tui`) | `make tui-test` (`go test -race ./internal/tui/... ./cmd/tui/...`) |
+| Web UI (`internal/api/handlers/webui`) | `make webui-test`, `go test ./internal/api/handlers ./cmd/daemon`, and a browser check of changed pages |
 | Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
 | Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
 | Cross-stack changes or full validation request | `./scripts/validate.sh` (or `just check`) |

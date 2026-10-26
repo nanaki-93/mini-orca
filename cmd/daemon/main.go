@@ -204,6 +204,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 
 	webUIHandler := handlers.NewWebUIHandler()
 	mux.HandleFunc("GET /ui", webUIHandler.Serve)
+	mux.HandleFunc("GET /ui/assets/{path...}", webUIHandler.ServeAsset)
 
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)

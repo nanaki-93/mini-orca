@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 .PHONY: build-agents build-agents-linux
 
 # ─── Default Target ────────────────────────────────────────────────────────────
@@ -113,6 +113,9 @@ quality: ## Run Go static, reachability, complexity and clone checks
 tui-test: ## Run Go TUI workflow, state and renderer tests
 	@$(GO) test -race ./internal/tui/... ./cmd/tui/...
 
+webui-test: ## Run the browser workspace module tests with Node's built-in runner
+	@if command -v node >/dev/null 2>&1; then node --test internal/api/handlers/webui/test/*.test.mjs; else echo "SKIP webui-test: node is not installed"; fi
+
 tui-build: ## Build the Go TUI binary
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
@@ -120,7 +123,7 @@ tui-build: ## Build the Go TUI binary
 tui-run: ## Launch the Go TUI client
 	@$(GO) run ./cmd/tui
 
-check: fmt-check test test-race vet agent-dispatcher tui-test ## Run the complete supported validation path
+check: fmt-check test test-race vet agent-dispatcher tui-test webui-test ## Run the complete supported validation path
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image

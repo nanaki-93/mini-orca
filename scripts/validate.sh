@@ -52,6 +52,11 @@ run_stage daemon-contracts go test ./cmd/daemon -run 'Test(ReleaseDocumentationU
 run_stage agent-dispatcher python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 run_stage go-quality ./scripts/quality.sh --go-only
 run_stage tui-test go test -race ./internal/tui/... ./cmd/tui/...
+if command -v node >/dev/null 2>&1; then
+  run_stage webui-test make webui-test
+else
+  printf '\n==> webui-test\nSKIP webui-test (node is not installed)\n'
+fi
 
 if [ -n "$failed_stages" ]; then
   printf '\nValidation failed: %s\n' "$failed_stages" >&2

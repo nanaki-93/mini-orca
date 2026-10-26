@@ -63,31 +63,44 @@ in smaller terminals. Frames fit the actual terminal size, with a resize prompt 
 ## Browser workspace
 
 Run `:web` in the TUI to open the local browser workspace with the selected
-checkout, proposal and file. Use `:web files`, `:web tasks`, `:web issues` or
-`:web diff` to choose a view directly.
+checkout, proposal and file. Use `:web files`, `:web tasks`, `:web issues`,
+`:web git` or `:web diff` to choose a view directly.
 
-The Midnight theme uses deep navy surfaces and subtle violet accents. The main
-pages are **Home**, **Files**, **Tasks**, **Issues**, **Docs**, **Checks**, and
-**Settings**. File explorers appear only beside source or diffs; diagnostics and
-issue details expand when needed.
+The browser workspace is a lightweight IDE served by the daemon at `/ui`:
 
-Create a task in three steps: **Describe → Choose files → Confirm**. Select 1–8
-Go/Markdown paths, then save a draft or generate a proposal. Opening a saved task
-shows **Changes**, **Checks**, **Refine**, and **Apply**. Mark each changed file
-reviewed, run checks, and approve the current version before Apply becomes
-available. Guarded Undo lives on the Apply page after application.
+| Key | Page | What it is for |
+| --- | --- | --- |
+| `1` | **Home** | The single next step, workspace counts, the active task pipeline and recent tasks. |
+| `2` | **Explorer** | Folder tree with fuzzy filter, tabbed read-only source, issue markers, Explain and New task. |
+| `3` | **Tasks** | Tasks grouped by what needs attention; the three-step **Describe → Choose files → Confirm** wizard. |
+| `4` | **Review** | Changed-file tree with review state, split/unified diff with collapsed context, and the steps **Changes · Checks · Agents · Refine · Apply**. |
+| `5` | **Issues** | Filters by status, category and severity; detail pane with evidence, insight and Create fix task. |
+| `6` | **Docs** | The generated handbook: overview, architecture, components, scenarios, decisions, dependencies, runbook, glossary. |
+| `7` | **Checks** | Go scan phases and project analysis coverage, with run, pause and cancel. |
+| `8` | **Git** | Current checkout, agent worktrees, merge preview (incoming commits and diff) and guarded merge. |
+| `9` | **Settings** | Theme, density, diff layout, checkout scope, execution trust and models. |
 
-`Ctrl+K` / `Cmd+K` searches commands and indexed files. Use arrow keys and Enter
-to select, Escape to close, `1–3` for Home/Files/Tasks, and `[` to toggle navigation.
-Browser Back/Forward restores pages and review sections. Themes, checkout
-selection, execution trust, and project tools live in Settings. Existing theme
-preferences are retained; choose **Midnight · Navy & violet** for the new palette.
-The daemon remains the authority for provider consent, check trust and source
-identity. Reading files, opening details and navigating never starts model work.
+The **Agents** step starts the native ADK workflow (create → tests → specialist
+reviews) after an explicit confirmation that lists every remote destination,
+follows each stage live and records your approval for the exact proposal hash.
+**Apply** can also commit the reviewed files through a private index. Apply,
+Undo, trust, merge and remote model requests always ask for confirmation; Review
+navigation, previews and filters never start model work, checks or writes.
 
-Browser interaction regression tests use Node's built-in runner:
-`node --test internal/api/handlers/webui_test.mjs`. They exercise action and
-keyboard logic with a minimal DOM; browser inspection is still needed for layout.
+`Ctrl+K` / `Cmd+K` searches commands, tasks and files (`>` commands only, `#`
+tasks only); `Cmd+P` opens files; `Cmd+B` toggles the side panel; `c` starts a
+new task; `?` lists every shortcut. In Review, `j`/`k` move between files, `n`
+jumps to the next unreviewed file, `m` marks the current file reviewed, `v`
+switches split/unified and `[`/`]` move between steps. Browser Back/Forward
+restores pages, review steps and the selected file. Themes are System, Midnight,
+Light, Tokyo Night and High contrast.
+
+The UI is a set of embedded, no-build ES modules under
+`internal/api/handlers/webui/` served with a strict Content-Security-Policy (no
+inline scripts or styles). Run its tests with Node's built-in runner:
+`make webui-test` (or `node --test internal/api/handlers/webui/test/*.test.mjs`).
+They cover review authority, diff shaping, routing, fuzzy search and every
+action boundary (what each operation may send, and when it must send nothing).
 
 ## Reviewing a task in the TUI
 

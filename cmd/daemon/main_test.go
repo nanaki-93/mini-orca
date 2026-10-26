@@ -141,6 +141,40 @@ func TestLocalAPIPolicyAllowsSameOriginWebUIFetchWithCustomHeader(t *testing.T) 
 	}
 }
 
+// Browsers attach Origin to ES module script fetches. Only same-origin GET/HEAD
+// requests for the Web UI shell and static assets may omit the Web UI header.
+func TestLocalAPIPolicyAllowsSameOriginModuleAssetsOnly(t *testing.T) {
+	mux := daemonTestMux(t)
+	tests := []struct {
+		name, method, path, origin, webUIHeader string
+		want                                    int
+	}{
+		{name: "module script", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://127.0.0.1:9090", want: http.StatusOK},
+		{name: "stylesheet head", method: http.MethodHead, path: "/ui/assets/app.css", origin: "http://127.0.0.1:9090", want: http.StatusOK},
+		{name: "shell", method: http.MethodGet, path: "/ui", origin: "http://127.0.0.1:9090", want: http.StatusOK},
+		{name: "cross-origin asset", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://evil.example", want: http.StatusForbidden},
+		{name: "other loopback port", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://127.0.0.1:3000", want: http.StatusForbidden},
+		{name: "https origin", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "https://127.0.0.1:9090", want: http.StatusForbidden},
+		{name: "api read without header", method: http.MethodGet, path: "/api/projects/current", origin: "http://127.0.0.1:9090", want: http.StatusForbidden},
+		{name: "asset-like prefix outside assets", method: http.MethodGet, path: "/ui/assetsx/main.js", origin: "http://127.0.0.1:9090", want: http.StatusForbidden},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(test.method, test.path, nil)
+			req.Host = "127.0.0.1:9090"
+			req.Header.Set("Origin", test.origin)
+			if test.webUIHeader != "" {
+				req.Header.Set("X-Mini-Orca-Web-UI", test.webUIHeader)
+			}
+			res := httptest.NewRecorder()
+			mux.ServeHTTP(res, req)
+			if res.Code != test.want {
+				t.Fatalf("%s %s with Origin %s = %d, want %d", test.method, test.path, test.origin, res.Code, test.want)
+			}
+		})
+	}
+}
+
 func TestWebUIRouteAcceptsDeepLinkWorktreeQueryParameter(t *testing.T) {
 	mux := daemonTestMux(t)
 	req := httptest.NewRequest(http.MethodGet, "/ui?session_id=chg-1&worktree_path=/tmp/task-wt&file=main.go", nil)
@@ -338,6 +372,8 @@ func requestPathForDocumentedRoute(path string) string {
 		return path + "?path=missing.go"
 	case "/api/projects/current/overview", "/api/projects/current/findings", "/api/projects/current/scan":
 		return path + "?project_revision=sha256:missing"
+	case "/ui/assets/{path}":
+		return "/ui/assets/app.css"
 	default:
 		return path
 	}

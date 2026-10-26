@@ -22,7 +22,7 @@ func LocalOnly(next http.Handler, allowExternalHosts bool) http.Handler {
 			WriteAppError(w, Forbidden("browser preflight requests are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
-		if r.Header.Get("Origin") != "" && !isAllowedWebUIOrigin(r, allowExternalHosts) {
+		if r.Header.Get("Origin") != "" && !isAllowedWebUIOrigin(r, allowExternalHosts) && !isSameOriginWebUIAsset(r, allowExternalHosts) {
 			WriteAppError(w, Forbidden("browser Origin headers are not supported", "Use the local Mini-Orca client.", nil))
 			return
 		}
@@ -39,6 +39,23 @@ func isAllowedWebUIOrigin(r *http.Request, allowExternalHosts bool) bool {
 	if r.Header.Get("X-Mini-Orca-Web-UI") != "1" {
 		return false
 	}
+	return isSameDaemonOrigin(r, allowExternalHosts)
+}
+
+// isSameOriginWebUIAsset admits the Origin header browsers attach to ES module
+// script fetches. Only side-effect-free GET/HEAD requests for the embedded Web UI
+// shell and its static assets qualify, and only from the daemon's own origin.
+func isSameOriginWebUIAsset(r *http.Request, allowExternalHosts bool) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	if r.URL.Path != "/ui" && !strings.HasPrefix(r.URL.Path, "/ui/assets/") {
+		return false
+	}
+	return isSameDaemonOrigin(r, allowExternalHosts)
+}
+
+func isSameDaemonOrigin(r *http.Request, allowExternalHosts bool) bool {
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	if err != nil || origin == nil || origin.Scheme != "http" || origin.Host == "" {
 		return false

@@ -1265,13 +1265,33 @@ paths:
   /ui:
     get:
       tags: [Daemon]
-      summary: Embedded local Web UI and side-by-side diff viewer
+      summary: Embedded local Web UI (lite IDE)
       responses:
         '200':
-          description: Self-contained HTML application for diff review, issues, tasks, and files
+          description: HTML shell for the dashboard, explorer, guarded review, agent workflow, issues, docs, checks and Git merge review
           content:
             text/html:
               schema: {type: string}
+  /ui/assets/{path}:
+    get:
+      tags: [Daemon]
+      summary: Embedded Web UI stylesheet or ES module
+      parameters:
+        - name: path
+          in: path
+          required: true
+          description: Clean relative asset path ending in .css or .js
+          schema: {type: string}
+      responses:
+        '200':
+          description: Static asset served with the Web UI Content-Security-Policy
+          content:
+            text/css:
+              schema: {type: string}
+            text/javascript:
+              schema: {type: string}
+        '404':
+          description: Unknown, unsafe or non-asset path
   /api/models/current:
     get:
       tags: [Daemon]

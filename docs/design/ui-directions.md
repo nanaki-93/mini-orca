@@ -47,4 +47,5 @@ parameter opens `overview`, `changes`, or `checks` directly (`dashboard` is also
 available for Orbit). For example,
 [Orbit review](ui-directions.html?style=orbit&view=changes) opens the Lite IDE
 explorer directly. `capture=1` hides the comparison controls for inspecting a
-single concept. The production UI lives in `internal/api/handlers/webui.html`.
+single concept. The production UI lives in `internal/api/handlers/webui/` as
+embedded ES modules (`index.html`, `app.css`, `js/`).
