@@ -2095,27 +2095,56 @@ button.btn-ghost:hover:not(:disabled) {
         '</div>' +
       '</div>';
 
-      html += '<div class="card">' +
-        '<div class="card-header"><span class="card-title">System Purpose &amp; Overview</span></div>' +
-        '<div class="card-body">' +
-          '<p style="margin:0 0 10px 0;font-size:13.5px;color:var(--fg-bright);line-height:1.6;">' + esc(purpose) + '</p>' +
-          (goals ? '<p style="margin:0;color:var(--fg-muted);"><strong>Goal Alignment:</strong> ' + esc(goals) + '</p>' : '') +
-        '</div>' +
-      '</div>';
+      const wsGroups = collectWorkspacePhaseGroups();
+      const wsSum = summarizePhaseGroups(wsGroups);
+      const wsPassPct = wsSum.total > 0 ? Math.round((wsSum.passed / wsSum.total) * 100) : 0;
+      const wsFailPct = wsSum.total > 0 ? Math.round((wsSum.failed / wsSum.total) * 100) : 0;
 
-      html += '<div class="doc-grid">' +
-        '<div class="doc-block">' +
-          '<h4>Technology Stack</h4>' +
-          '<div class="chip-list">' +
-            (stack.map(function(s) { return '<span class="badge blue">' + esc(s) + '</span>'; }).join('') || '<span class="project-path">No stack metadata</span>') +
+      html += '<div class="section-split-grid">' +
+        '<div class="card" style="margin-bottom:0;">' +
+          '<div class="card-header"><span class="card-title">System Purpose &amp; Overview</span></div>' +
+          '<div class="card-body">' +
+            '<p style="margin:0 0 10px 0;font-size:13.5px;color:var(--fg-bright);line-height:1.6;">' + esc(purpose) + '</p>' +
+            (goals ? '<p style="margin:0 0 12px 0;color:var(--fg-muted);"><strong>Goal Alignment:</strong> ' + esc(goals) + '</p>' : '') +
+            '<div style="border-top:1px solid var(--border-subtle);padding-top:10px;margin-top:8px;">' +
+              '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--fg-muted);margin-bottom:6px;">Technology Stack &amp; Quick Actions</div>' +
+              '<div class="chip-list" style="margin-top:0;">' +
+                (stack.map(function(s) { return '<span class="badge blue">' + esc(s) + '</span>'; }).join('') || '<span class="project-path">No stack metadata</span>') +
+                '<span class="file-chip" id="jump-to-files-btn">📄 Browse Source Tree →</span>' +
+                '<span class="file-chip" id="jump-to-spec-btn">✦ Author New Spec →</span>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="doc-block">' +
-          '<h4>Quick Navigation</h4>' +
-          '<div class="chip-list">' +
-            '<span class="file-chip" id="jump-to-verification-btn">✔ Verification &amp; Phases →</span>' +
-            '<span class="file-chip" id="jump-to-files-btn">📄 Browse Source Tree →</span>' +
-            '<span class="file-chip" id="jump-to-spec-btn">✦ Author New Spec →</span>' +
+        '<div class="card" style="margin-bottom:0;">' +
+          '<div class="card-header">' +
+            '<span class="card-title">✔ Verification &amp; Phase Health</span>' +
+            '<button type="button" class="btn-ghost" id="jump-to-verification-btn" style="padding:3px 8px;font-size:11px;">Inspect All Logs →</button>' +
+          '</div>' +
+          '<div class="card-body">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+              '<div class="phase-summary-counts">' +
+                '<span class="badge green">✓ ' + wsSum.passed + ' Passed</span>' +
+                '<span class="badge ' + (wsSum.failed > 0 ? 'red' : '') + '">✕ ' + wsSum.failed + ' Failed</span>' +
+                (wsSum.pending > 0 ? '<span class="badge">○ ' + wsSum.pending + ' Pending</span>' : '') +
+              '</div>' +
+              '<span class="project-path">' + wsSum.total + ' phases tracked</span>' +
+            '</div>' +
+            '<div class="phase-progress-track" style="margin-bottom:12px;">' +
+              '<div class="phase-progress-seg passed" style="width:' + wsPassPct + '%;"></div>' +
+              '<div class="phase-progress-seg failed" style="width:' + wsFailPct + '%;"></div>' +
+            '</div>' +
+            wsGroups.map(function(g) {
+              return '<div style="margin-bottom:8px;">' +
+                '<div style="font-size:10.5px;font-weight:700;color:var(--fg-muted);text-transform:uppercase;margin-bottom:4px;">' + esc(g.title) + '</div>' +
+                '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+                  (g.items || []).map(function(it) {
+                    const spec = phaseBadgeSpec(it.state);
+                    return '<span class="badge ' + spec.cls + '" style="font-family:var(--font-mono);">' + esc(it.name) + ': ' + esc(spec.label) + '</span>';
+                  }).join('') +
+                '</div>' +
+              '</div>';
+            }).join('') +
           '</div>' +
         '</div>' +
       '</div>';
@@ -2196,28 +2225,28 @@ button.btn-ghost:hover:not(:disabled) {
       const ops = (docs && Array.isArray(docs.operational_notes)) ? docs.operational_notes : [];
 
       if (decisions.length > 0) {
-        html += decisions.map(function(d) {
-          return '<div class="card">' +
-            '<div class="card-header"><span class="card-title">' + esc(d.title) + '</span></div>' +
+        html += '<div class="section-split-grid">' + decisions.map(function(d, idx) {
+          return '<div class="card" style="margin-bottom:0;">' +
+            '<div class="card-header"><span class="card-title">ADR-' + (idx + 1) + ' · ' + esc(d.title) + '</span></div>' +
             '<div class="card-body">' +
               '<p style="margin:0 0 6px 0;"><strong>Decision:</strong> ' + esc(d.decision) + '</p>' +
               '<p style="margin:0 0 6px 0;color:var(--fg-muted);"><strong>Rationale:</strong> ' + esc(d.rationale) + '</p>' +
               (d.consequences ? '<div class="project-path">Consequences: ' + esc(d.consequences) + '</div>' : '') +
             '</div>' +
           '</div>';
-        }).join('');
+        }).join('') + '</div>';
       }
-      if (deps.length > 0) {
-        html += '<div class="card"><div class="card-header"><span class="card-title">Key Dependencies</span></div><div class="card-body">' +
-          deps.map(function(dep) {
-            return '<div style="margin-bottom:6px;"><strong>' + esc(dep.name) + '</strong> <span class="badge">' + esc(dep.kind || 'module') + '</span> — ' + esc(dep.purpose || '') + '</div>';
-          }).join('') +
-        '</div></div>';
-      }
-      if (ops.length > 0) {
-        html += '<div class="card"><div class="card-header"><span class="card-title">Operational Runbook</span></div><div class="card-body">' +
-          ops.map(function(note) { return '<div style="margin-bottom:6px;">• ' + esc(note) + '</div>'; }).join('') +
-        '</div></div>';
+      if (deps.length > 0 || ops.length > 0) {
+        html += '<div class="section-split-grid">' +
+          '<div class="card" style="margin-bottom:0;"><div class="card-header"><span class="card-title">Key Dependencies</span><span class="badge">' + deps.length + '</span></div><div class="card-body">' +
+            (deps.length > 0 ? deps.map(function(dep) {
+              return '<div style="margin-bottom:6px;"><strong>' + esc(dep.name) + '</strong> <span class="badge">' + esc(dep.kind || 'module') + '</span> — ' + esc(dep.purpose || '') + '</div>';
+            }).join('') : '<span class="project-path">No external module dependencies cataloged.</span>') +
+          '</div></div>' +
+          '<div class="card" style="margin-bottom:0;"><div class="card-header"><span class="card-title">Operational Runbook</span><span class="badge">' + ops.length + '</span></div><div class="card-body">' +
+            (ops.length > 0 ? ops.map(function(note) { return '<div style="margin-bottom:6px;">• ' + esc(note) + '</div>'; }).join('') : '<span class="project-path">No operational runbook notes recorded.</span>') +
+          '</div></div>' +
+        '</div>';
       }
       if (!decisions.length && !deps.length && !ops.length) {
         html += '<div class="empty-state"><h3>No Architectural Decisions or Runbook Notes</h3><p>Click "Generate / Refresh Project Docs" to populate ADRs and operational notes.</p></div>';
@@ -2328,25 +2357,66 @@ button.btn-ghost:hover:not(:disabled) {
     if (!info) return;
     let html = '';
 
+    const fileFindings = state.findings.filter(function(f) {
+      return f.path === info.path && (f.status || 'open').toLowerCase() !== 'dismissed';
+    });
+
     if (state.openFileExplanation) {
       const ex = state.openFileExplanation;
+      const beh = Array.isArray(ex.behavior) ? ex.behavior : [];
+      const inp = Array.isArray(ex.inputs) ? ex.inputs : [];
+      const out = Array.isArray(ex.outputs) ? ex.outputs : [];
+      const errB = Array.isArray(ex.error_behavior) ? ex.error_behavior : [];
       html += '<div class="card">' +
-        '<div class="card-header"><span class="card-title">✦ File Explanation · ' + esc(info.path) + '</span></div>' +
+        '<div class="card-header">' +
+          '<span class="card-title">✦ File Intelligence Inspector · ' + esc(info.path) + '</span>' +
+          '<span class="badge blue">AI Verified Context</span>' +
+        '</div>' +
         '<div class="card-body">' +
-          '<p style="margin:0 0 8px 0;font-weight:600;color:var(--fg-bright);">' + esc(ex.summary || '') + '</p>' +
-          (Array.isArray(ex.behavior) && ex.behavior.length ? '<div style="margin-bottom:6px;"><strong>Behavior:</strong> ' + ex.behavior.map(esc).join(' · ') + '</div>' : '') +
-          (Array.isArray(ex.inputs) && ex.inputs.length ? '<div style="margin-bottom:6px;"><strong>Inputs:</strong> ' + ex.inputs.map(esc).join(', ') + '</div>' : '') +
-          (Array.isArray(ex.outputs) && ex.outputs.length ? '<div style="margin-bottom:6px;"><strong>Outputs:</strong> ' + ex.outputs.map(esc).join(', ') + '</div>' : '') +
-          (Array.isArray(ex.error_behavior) && ex.error_behavior.length ? '<div><strong>Error Handling:</strong> ' + ex.error_behavior.map(esc).join(' · ') + '</div>' : '') +
+          '<p style="margin:0 0 12px 0;font-weight:600;color:var(--fg-bright);font-size:13px;">' + esc(ex.summary || '') + '</p>' +
+          '<div class="doc-grid">' +
+            '<div class="doc-block">' +
+              '<h4>Core Behavior</h4>' +
+              (beh.length ? '<ul style="margin:0;padding-left:16px;font-size:12px;">' + beh.map(function(b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>' : '<span class="project-path">None listed</span>') +
+            '</div>' +
+            '<div class="doc-block">' +
+              '<h4>Inputs &amp; Outputs</h4>' +
+              '<div style="font-size:12px;margin-bottom:6px;"><strong>Inputs:</strong> ' + (inp.length ? inp.map(esc).join(', ') : '—') + '</div>' +
+              '<div style="font-size:12px;"><strong>Outputs:</strong> ' + (out.length ? out.map(esc).join(', ') : '—') + '</div>' +
+            '</div>' +
+            '<div class="doc-block">' +
+              '<h4>Error &amp; Boundary Handling</h4>' +
+              (errB.length ? '<ul style="margin:0;padding-left:16px;font-size:12px;">' + errB.map(function(eb) { return '<li>' + esc(eb) + '</li>'; }).join('') + '</ul>' : '<span class="project-path">Standard error propagation</span>') +
+            '</div>' +
+          '</div>' +
         '</div>' +
       '</div>';
     } else if (state.openFileAnalysis && state.openFileAnalysis.purpose) {
       const fa = state.openFileAnalysis;
+      const resp = Array.isArray(fa.responsibilities) ? fa.responsibilities : [];
       html += '<div class="card">' +
-        '<div class="card-header"><span class="card-title">📘 Cached File Summary</span></div>' +
+        '<div class="card-header">' +
+          '<span class="card-title">📘 Cached File Intelligence</span>' +
+          '<span class="badge">Indexed Summary</span>' +
+        '</div>' +
         '<div class="card-body">' +
-          '<p style="margin:0 0 6px 0;">' + esc(fa.purpose) + '</p>' +
-          (Array.isArray(fa.responsibilities) && fa.responsibilities.length ? '<div class="project-path">Responsibilities: ' + fa.responsibilities.map(esc).join(' · ') + '</div>' : '') +
+          '<p style="margin:0 0 8px 0;color:var(--fg-bright);font-weight:500;">' + esc(fa.purpose) + '</p>' +
+          (resp.length ? '<div class="chip-list">' + resp.map(function(r) { return '<span class="badge blue">' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }
+
+    if (fileFindings.length > 0) {
+      html += '<div class="card">' +
+        '<div class="card-header"><span class="card-title">🐛 Open Findings in This File</span><span class="badge amber">' + fileFindings.length + '</span></div>' +
+        '<div class="card-body" style="display:flex;flex-direction:column;gap:6px;">' +
+          fileFindings.map(function(f) {
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+              '<div><span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span> ' +
+              '<strong>' + esc(f.title || f.id) + '</strong>' + (f.line ? ' <span class="project-path">(L' + f.line + ')</span>' : '') + '</div>' +
+              (f.line ? '<button type="button" class="btn-ghost file-jump-line-btn" data-line="' + f.line + '" style="padding:2px 8px;font-size:11px;">Jump to L' + f.line + '</button>' : '') +
+            '</div>';
+          }).join('') +
         '</div>' +
       '</div>';
     }
@@ -2356,8 +2426,46 @@ button.btn-ghost:hover:not(:disabled) {
       const n = idx + 1;
       return '<tr id="src-L' + n + '"><td class="diff-ln">' + n + '</td><td>' + esc(line) + '</td></tr>';
     }).join('');
-    html += '<div class="card"><div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div></div>';
-    document.getElementById('file-viewer-content').innerHTML = html;
+    html += '<div class="card">' +
+      '<div class="card-header">' +
+        '<div class="card-title">' +
+          '<span style="font-family:var(--font-mono);">' + esc(info.path) + '</span>' +
+          '<span class="badge">' + rawLines.length + ' lines</span>' +
+          (info.content_hash ? '<span class="project-path">#' + esc(String(info.content_hash).slice(0, 8)) + '</span>' : '') +
+        '</div>' +
+        '<div class="action-group">' +
+          '<input id="file-line-jump-input" type="number" min="1" max="' + rawLines.length + '" placeholder="Go to line…" style="width:110px;padding:3px 8px;font-size:11px;">' +
+        '</div>' +
+      '</div>' +
+      '<div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div>' +
+    '</div>';
+    const container = document.getElementById('file-viewer-content');
+    container.innerHTML = html;
+
+    function scrollToSourceLine(lineNum) {
+      const row = document.getElementById('src-L' + lineNum);
+      if (row) {
+        container.querySelectorAll('.highlight-line').forEach(function(el) { el.classList.remove('highlight-line'); });
+        row.classList.add('highlight-line');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    const jumpInput = document.getElementById('file-line-jump-input');
+    if (jumpInput) {
+      jumpInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          const ln = parseInt(jumpInput.value, 10);
+          if (ln > 0) scrollToSourceLine(ln);
+        }
+      });
+    }
+    container.querySelectorAll('.file-jump-line-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const ln = parseInt(btn.getAttribute('data-line'), 10);
+        if (ln > 0) scrollToSourceLine(ln);
+      });
+    });
   }
 
   async function explainCurrentFile() {
