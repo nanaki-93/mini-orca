@@ -248,8 +248,8 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
 		title:     "FILES & DIFF",
-		primary:   []keyDesc{{"Enter / a", "Apply & commit"}, {"x", "Reject hunk"}},
-		secondary: []keyDesc{{"h/l", "Scroll long lines"}, {"w / z", "Reviewed / compare"}},
+		primary:   []keyDesc{{"w / W", "Reviewed / next"}, {"Enter / a", "Apply & commit"}},
+		secondary: []keyDesc{{"x", "Reject hunk"}, {"n / f / v", "Hunk/file/layout"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
 	},
 	PageGit: {

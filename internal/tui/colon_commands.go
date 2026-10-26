@@ -286,8 +286,10 @@ func normalizeWebUITab(arg string) string {
 		return "home"
 	case "diff", "review", "changes":
 		return "diff"
-	case "issues", "tasks", "new-task", "files", "docs", "checks", "settings":
+	case "issues", "tasks", "new-task", "files", "docs", "checks", "settings", "git":
 		return norm
+	case "worktrees", "branches", "merge":
+		return "git"
 	default:
 		return ""
 	}
@@ -305,6 +307,8 @@ func (s *State) defaultWebUITab() string {
 		return "docs"
 	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons:
 		return "settings"
+	case PageGit, PageWorktreeDetail:
+		return "git"
 	case PageEditor:
 		if s.File != nil && !s.isViewingDiff() {
 			return "files"

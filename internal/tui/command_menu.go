@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -187,25 +188,95 @@ func (s *State) commandMatches() []commandItem {
 	case "help":
 		query = "keys"
 	}
-	var items []commandItem
-	for _, item := range commandCatalog() {
-		text := strings.ToLower(item.command + " " + item.title)
-		matches := true
-		for _, word := range strings.Fields(query) {
-			if !strings.Contains(text, word) {
-				matches = false
-				break
-			}
+	catalog := commandCatalog()
+	recent := s.recentCommandRanks()
+	type ranked struct {
+		item  commandItem
+		score int
+		order int
+	}
+	var matches []ranked
+	for order, item := range catalog {
+		if score, ok := commandScore(item, query); ok {
+			matches = append(matches, ranked{item: item, score: score + recent[item.command], order: order})
 		}
-		if matches {
-			if item.command == query {
-				items = append([]commandItem{item}, items...)
-			} else {
-				items = append(items, item)
+	}
+	if len(matches) == 0 && query != "" {
+		// Tolerate typos and abbreviations ("aply", "wt") with a subsequence match.
+		for order, item := range catalog {
+			if isSubsequence(strings.ReplaceAll(query, " ", ""), item.command) {
+				matches = append(matches, ranked{item: item, score: recent[item.command], order: order})
 			}
 		}
 	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].score != matches[j].score {
+			return matches[i].score > matches[j].score
+		}
+		return matches[i].order < matches[j].order
+	})
+	items := make([]commandItem, len(matches))
+	for i, match := range matches {
+		items[i] = match.item
+	}
 	return items
+}
+
+// commandScore keeps the existing every-word-matches rule and ranks exact
+// commands, command prefixes and word starts ahead of mid-word hits.
+func commandScore(item commandItem, query string) (int, bool) {
+	if query == "" {
+		return 0, true
+	}
+	command := strings.ToLower(item.command)
+	title := strings.ToLower(item.title)
+	text := command + " " + title
+	score := 0
+	for _, word := range strings.Fields(query) {
+		index := strings.Index(text, word)
+		if index < 0 {
+			return 0, false
+		}
+		if index == 0 || text[index-1] == ' ' || text[index-1] == '-' {
+			score += 40
+		}
+	}
+	switch {
+	case command == query:
+		score += 1000
+	case strings.HasPrefix(command, query):
+		score += 500
+	case strings.HasPrefix(title, query):
+		score += 200
+	}
+	return score, true
+}
+
+func isSubsequence(query, text string) bool {
+	if query == "" {
+		return false
+	}
+	runes := []rune(query)
+	index := 0
+	for _, r := range strings.ToLower(text) {
+		if index < len(runes) && r == runes[index] {
+			index++
+		}
+	}
+	return index == len(runes)
+}
+
+// recentCommandRanks boosts commands from this session's history, newest first.
+func (s *State) recentCommandRanks() map[string]int {
+	ranks := map[string]int{}
+	for i := len(s.CmdHistory) - 1; i >= 0 && len(ranks) < 8; i-- {
+		name, _, _ := strings.Cut(strings.TrimSpace(s.CmdHistory[i]), " ")
+		name = strings.ToLower(strings.TrimPrefix(name, ":"))
+		if _, seen := ranks[name]; !seen && name != "" {
+			ranks[name] = 30 - len(ranks)*3
+		}
+	}
+	return ranks
 }
 
 func (s *State) commandArgumentContext() *commandItem {

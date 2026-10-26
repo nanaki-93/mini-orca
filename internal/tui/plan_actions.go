@@ -94,7 +94,21 @@ func (s *State) dispatchReviewFile(ctx context.Context, cl *Client, reqID string
 	result.WorktreePath = old.WorktreePath
 	s.Change = &result
 	s.upsertActiveChange(&result)
-	s.CmdOutput = fmt.Sprintf("Reviewed %s · %d/%d files. [f] Next file · [a] Apply when all files are reviewed", act.Target, len(result.ReviewedFiles), len(domain.EffectiveSessionChanges(&result)))
+	reviewed, total := len(result.ReviewedFiles), len(domain.EffectiveSessionChanges(&result))
+	if allProposalFilesReviewed(&result) {
+		s.CmdOutput = fmt.Sprintf("Reviewed %s · all %d files reviewed. [a] Apply when checks pass", act.Target, total)
+		return nil
+	}
+	// Keep the review loop moving: jump to the next unreviewed file when the
+	// reviewer is still looking at the diff they just marked.
+	if s.Page == PageEditor && s.isViewingDiff() {
+		if active, _, ok := s.activeDiffHunk(); ok && active.Path == act.Target {
+			s.stepNextUnreviewedDiffFile()
+			s.CmdOutput = fmt.Sprintf("Reviewed %s · %d/%d files · %s", act.Target, reviewed, total, s.CmdOutput)
+			return nil
+		}
+	}
+	s.CmdOutput = fmt.Sprintf("Reviewed %s · %d/%d files. [W] Next unreviewed · [a] Apply when all files are reviewed", act.Target, reviewed, total)
 	return nil
 }
 

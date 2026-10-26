@@ -138,7 +138,58 @@ func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
 			body[i] = theme.PaintLine(th.selection, th.fg, line, width-2)
 		}
 	}
-	return append([]string{""}, body...)
+	return append([]string{s.renderBreadcrumb(th, width)}, body...)
+}
+
+// renderBreadcrumb shows where the user is: workspace › view › focused item.
+// Overlays (commands, dialogs, help, errors) keep the line empty.
+func (s *State) renderBreadcrumb(th ansiTheme, width int) string {
+	if s.CmdActive || s.Confirmation != nil || s.ShowKeybindsModal || s.Error != "" || width < 60 {
+		return ""
+	}
+	hub := s.ActiveHub()
+	page := s.EffectivePage()
+	parent := parentPage(page)
+	parts := []string{th.hubColor(hub.Key) + hub.Label + th.reset}
+	for _, sp := range hub.SubPages {
+		if sp.Page == parent {
+			parts = append(parts, th.fg+sp.Label+th.reset)
+			break
+		}
+	}
+	if detail := s.breadcrumbDetail(page); detail != "" {
+		parts = append(parts, th.bold+th.fg+theme.TruncatePlain(theme.SanitizeSingleLine(detail), max(12, width/3))+th.reset)
+	}
+	line := "  " + strings.Join(parts, th.muted+" › "+th.reset)
+	if theme.VisibleRuneCount(line) > width-2 {
+		return theme.TruncateVisible(line, width-2)
+	}
+	return line
+}
+
+func (s *State) breadcrumbDetail(page Page) string {
+	switch page {
+	case PageIssueDetail:
+		return "Issue"
+	case PageFeatureDetail:
+		return "Feature"
+	case PageWorktreeDetail:
+		return "Worktree"
+	case PageEditor:
+		if s.File != nil && s.File.Path != "" && !s.isViewingDiff() {
+			return s.File.Path
+		}
+		if s.isViewingDiff() {
+			if active, _, ok := s.activeDiffHunk(); ok {
+				return active.Path
+			}
+		}
+	case PageAgents:
+		if s.AgentDetailOpen && s.Change != nil {
+			return client.FirstNonEmpty(s.Change.Title, s.Change.ID)
+		}
+	}
+	return ""
 }
 
 func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
@@ -248,13 +299,30 @@ func (s *State) renderStatusBar(th ansiTheme, width int) string {
 	return alignBar(left, th.cyan+theme.TruncatePlain(activity, maxRight)+th.reset+" ", width)
 }
 
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func (s *State) spinner() string {
+	return spinnerFrames[s.spinnerFrame%len(spinnerFrames)]
+}
+
+// showsActivity reports whether the status bar has live work to animate.
+func (s *State) showsActivity() bool {
+	return s.Busy != "" || s.asyncWork > 0 || s.hasActiveBackgroundJob()
+}
+
 func (s *State) statusBarActivity() string {
 	if s.Busy != "" {
-		return "⟳ Working · " + s.Busy
+		return s.spinner() + " " + s.Busy
+	}
+	if s.asyncWork > 0 {
+		return s.spinner() + " Working in the background…"
 	}
 	if s.Run != nil && s.Run.Status != "" {
 		done, total := runAggregateCoverage(s.Run)
 		activity := "◈ Analysis " + s.Run.Status
+		if s.Run.Status == "running" {
+			activity = s.spinner() + " Analysis running"
+		}
 		if total > 0 {
 			activity += fmt.Sprintf(" · %d/%d", done, total)
 		}
@@ -348,10 +416,18 @@ func (s *State) renderActionBar(th ansiTheme, width int) string {
 		if i == 0 {
 			hint = th.accentBg + "[" + item.key + "]" + th.reset + " " + th.fg + item.desc + th.reset
 		}
-		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "  ")) > available {
+		// Reserve room for the overflow marker so hidden actions stay discoverable.
+		reserve := 0
+		if i < len(items)-1 {
+			reserve = len(" +9 more")
+		}
+		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "  "))+reserve > available {
 			break
 		}
 		hints = append(hints, hint)
+	}
+	if hidden := len(items) - len(hints); hidden > 0 && len(hints) > 0 {
+		hints = append(hints, th.muted+fmt.Sprintf("+%d more", hidden)+th.reset)
 	}
 	return alignBar(" "+strings.Join(hints, "  "), right, width)
 }

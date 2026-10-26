@@ -212,6 +212,7 @@ func TestEditorDiffHunkAndGuardedApplyUndo(t *testing.T) {
 	// Reject current hunk with 'x' -> clears stale review/checks and enqueues update-proposal
 	s.Change.ReviewedHash = "h-old"
 	s.HandleKey(KeyEvent{Key: "x"})
+	s.HandleKey(KeyEvent{Key: "y"}) // Rejecting a hunk asks for confirmation first.
 	if !strings.Contains(s.Change.Changes[0].Content, "var timeout = 5") {
 		t.Fatalf("expected hunk rejection to restore old line, got %q", s.Change.Changes[0].Content)
 	}
@@ -572,6 +573,7 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 	}
 	s.Navigate(PageEditor)
 	s.HandleKey(KeyEvent{Key: "x"})
+	s.HandleKey(KeyEvent{Key: "y"})
 	s.FlushActions(context.Background(), cli)
 	if !strings.Contains(updatedProposal, "package app") || strings.Contains(updatedProposal, "Bad") || s.Change.Revision != 3 || s.Change.Hash != "h-3" {
 		t.Fatalf("expected hunk rejection to sync proposal with daemon, got content=%q rev=%d hash=%q", updatedProposal, s.Change.Revision, s.Change.Hash)

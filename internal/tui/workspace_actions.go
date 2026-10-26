@@ -25,7 +25,7 @@ func (s *State) pageActions() []keyDesc {
 		return []keyDesc{{"Enter", "Details"}, {"f", "Plan"}, {"r", "Analyze"}}
 	case PageEditor:
 		if s.isViewingDiff() {
-			return []keyDesc{{"w", "Reviewed"}, {"a", "Apply"}, {"f", "Next file"}, {"e", "Details"}}
+			return []keyDesc{{"w", "Reviewed"}, {"W", "Next unreviewed"}, {"n/N", "Hunk"}, {"f", "Next file"}, {"v", "Layout"}, {"a", "Apply"}, {"e", "Details"}}
 		}
 		if s.File != nil && !s.BrowseFiles {
 			return []keyDesc{{"Esc", "Files"}, {"h/l", "Pan"}, {"PgUp/PgDn", "Scroll"}}

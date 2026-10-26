@@ -557,6 +557,23 @@ func (s *State) matchIssuesForTargets(targets []FindingTarget) []IssueRow {
 	return matched
 }
 
+// confirmRejectDiffHunk asks before discarding a hunk: rejecting rewrites the
+// proposal and clears every review mark and check result for it.
+func (s *State) confirmRejectDiffHunk() {
+	active, _, ok := s.activeDiffHunk()
+	if !ok || s.Change == nil {
+		s.CmdOutput = "No modifiable diff hunk selected to reject."
+		return
+	}
+	s.Confirmation = &Confirmation{
+		Title:       "Reject this hunk?",
+		Message:     fmt.Sprintf("Remove the selected hunk from %s. Review marks and check results for this proposal are cleared.", active.Path),
+		AcceptLabel: "Reject hunk",
+		Destructive: true,
+		OnConfirm:   func(state *State) { state.rejectCurrentDiffHunk() },
+	}
+}
+
 func (s *State) rejectCurrentDiffHunk() {
 	if s.DiffSinceReview {
 		s.Error = "Switch to the complete proposal with [z] before rejecting a hunk."

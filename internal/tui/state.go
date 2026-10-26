@@ -136,6 +136,8 @@ type State struct {
 	Connected           bool
 	Version             string
 	Busy                string
+	spinnerFrame        int
+	asyncWork           int
 	Error               string
 	Notice              string
 	SelectedIdx         int

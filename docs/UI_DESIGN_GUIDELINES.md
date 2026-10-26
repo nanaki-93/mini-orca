@@ -25,7 +25,15 @@ Keep actions, current state, errors and recovery paths clear. Use consistent
 keybindings, visible selection indicators (`▸`) and explicit focus in tables and
 command prompts. Color supplements text labels and badges (`[CRITICAL]`,
 `[TRUSTED]`, `[SURGICAL]`); never rely on color alone. Show progress while
-requests or jobs run and prevent duplicate submission.
+requests or jobs run and prevent duplicate submission. A daemon action that still
+blocks the event loop sets a named busy status (for example "Applying reviewed
+changes…") that renders before the request starts; the status bar spinner animates
+only while work is in flight. The first content row is a breadcrumb
+(`Workspace › View › Item`) so the current location is always visible.
+
+Destructive keys ask first: rejecting a diff hunk opens a confirmation because it
+rewrites the proposal and clears its review marks and checks. Backspace means
+"back" and never deletes or dismisses anything.
 
 Preserve access to findings, explanations and diagnostics. Long paths and narrow
 terminal viewports must not hide actions or corrupt layout. Model-authored text
@@ -42,7 +50,9 @@ own backgrounds so the Paper palette remains readable in dark terminals too.
 The command menu opens with `:` or `Ctrl+K` and supports search, completion,
 editable arguments and session command history. Keep its input above the results
 and the selected command's explanation visible, including in compact terminals.
-Browsing or completing a command is passive. Enter explicitly runs the
+Results rank exact commands, then command prefixes, then word starts, with this
+session's recent commands first on an empty query and a subsequence fallback for
+typos. Browsing or completing a command is passive. Enter explicitly runs the
 chosen command; commands requiring arguments stay in the editor until supplied.
 Show a missing-argument message and usage guidance, and label Enter as needing
 arguments until a value is supplied. Checkout choices explain their scope and
@@ -223,7 +233,8 @@ Apply authority, and no export retries automatically.
 
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
-Mark changed files individually, invalidate progress when the proposal changes,
+Mark changed files individually (`w` moves to the next unreviewed file; `W` jumps
+there without marking), invalidate progress when the proposal changes,
 and show Apply's commit destination. Worktree Apply commits the reviewed proposal
 and moves it from Tasks to Worktrees as `TO_MERGE`; it never merges automatically.
 Withhold linked issues from the issue lists while awaiting that decision. Explicit

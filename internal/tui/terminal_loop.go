@@ -196,6 +196,25 @@ type agentConnectionResultMsg struct{ result agentConnectionResult }
 type agentExternalResultMsg struct{ result agentExternalResult }
 
 type agentLibraryResultMsg struct{ result agentLibraryResult }
+
+// syncActionsMsg carries daemon actions that still run inside Update. They are
+// deferred by one message so the busy status renders before the request blocks.
+type syncActionsMsg struct{ actions []queuedAction }
+
+type queuedAction struct {
+	reqID string
+	act   ActionRequest
+}
+
+// spinnerTickMsg advances the status-bar spinner while work is in flight.
+type spinnerTickMsg time.Time
+
+const spinnerInterval = 120 * time.Millisecond
+
+func spinnerTickCmd() tea.Cmd {
+	return tea.Tick(spinnerInterval, func(t time.Time) tea.Msg { return spinnerTickMsg(t) })
+}
+
 type agentMediaResultMsg struct{ result agentMediaResult }
 
 func pollTickCmd() tea.Cmd {
@@ -217,6 +236,7 @@ type BubbleModel struct {
 	height            int
 	pollScheduled     bool
 	pollInFlight      bool
+	spinnerScheduled  bool
 	activeAgentStarts int
 }
 
@@ -279,6 +299,11 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pollResultMsg:
 		m.pollInFlight = false
 		m.state.applyPollResult(ev.res)
+	case syncActionsMsg:
+		cmds = append(cmds, m.runSyncActions(ev.actions)...)
+	case spinnerTickMsg:
+		m.spinnerScheduled = false
+		m.state.spinnerFrame++
 	}
 	m.state.reconcileCloudScope()
 	m.state.reconcileTriggerScope()
@@ -298,7 +323,34 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.syncMediaStream(&cmds)
 	m.syncMissionExecutionStream(&cmds)
 	m.maybeSchedulePollTick(&cmds)
+	m.state.asyncWork = m.activeAgentStarts
+	m.maybeScheduleSpinner(&cmds)
 	return m, batchTeaCmds(cmds)
+}
+
+// maybeScheduleSpinner animates the status bar only while something runs, so an
+// idle TUI stays quiet.
+func (m *BubbleModel) maybeScheduleSpinner(cmds *[]tea.Cmd) {
+	if m.spinnerScheduled || !m.state.showsActivity() {
+		return
+	}
+	m.spinnerScheduled = true
+	*cmds = append(*cmds, spinnerTickCmd())
+}
+
+// runSyncActions dispatches deferred actions in their original order, then
+// clears the busy status and flushes anything those actions queued.
+func (m *BubbleModel) runSyncActions(actions []queuedAction) []tea.Cmd {
+	for _, queued := range actions {
+		if m.client == nil {
+			break
+		}
+		if err := m.state.dispatchAction(m.ctx, m.client, queued.reqID, queued.act); err != nil {
+			m.state.Error = err.Error()
+		}
+	}
+	m.state.Busy = ""
+	return m.flushActionsAsync()
 }
 
 func (m *BubbleModel) applyAgentRunMessage(msg tea.Msg) tea.Cmd {
@@ -368,17 +420,72 @@ func (m *BubbleModel) flushActionsAsync() []tea.Cmd {
 	actions := m.state.PendingActions
 	m.state.PendingActions = nil
 	var cmds []tea.Cmd
+	var deferred []queuedAction
 	for _, act := range actions {
 		reqID := nextTUIReqID("act-" + act.Kind)
 		if cmd, ok := m.prepareAsyncActionCmd(reqID, act); ok {
 			cmds = append(cmds, cmd)
 			continue
 		}
-		if err := m.state.dispatchAction(m.ctx, m.client, reqID, act); err != nil {
-			m.state.Error = err.Error()
-		}
+		deferred = append(deferred, queuedAction{reqID: reqID, act: act})
+	}
+	if len(deferred) > 0 {
+		m.state.Busy = busyLabel(deferred[0].act.Kind)
+		cmds = append(cmds, func() tea.Msg { return syncActionsMsg{actions: deferred} })
 	}
 	return cmds
+}
+
+// busyLabel names a blocking daemon action for the status bar.
+func busyLabel(kind string) string {
+	switch kind {
+	case "scan":
+		return "Starting Go scan…"
+	case "apply-commit":
+		return "Applying reviewed changes…"
+	case "merge-worktree":
+		return "Merging worktree…"
+	case "review-file":
+		return "Recording file review…"
+	case "open-file", "issue-source":
+		return "Opening file…"
+	case "load-change":
+		return "Loading task…"
+	case "reindex", "reindex-worktrees":
+		return "Reindexing project…"
+	case "reconnect", "open-project":
+		return "Connecting to the daemon…"
+	case "refresh-worktrees":
+		return "Refreshing worktrees…"
+	case "open-web":
+		return "Opening the Web UI…"
+	case "run-analysis", "reanalyze", "repair-analysis":
+		return "Preparing analysis…"
+	case "pause-analysis":
+		return "Pausing analysis…"
+	case "resume-analysis":
+		return "Resuming analysis…"
+	case "undo":
+		return "Undoing applied changes…"
+	case "set-trust":
+		return "Saving execution trust…"
+	case "reject-change":
+		return "Rejecting task…"
+	case "cancel-workflow":
+		return "Canceling workflow…"
+	case "cleanup-merged":
+		return "Cleaning up merged worktree…"
+	case "dismiss-finding", "dismiss-feature":
+		return "Updating triage…"
+	case "refresh-models":
+		return "Refreshing models…"
+	case "save-selection":
+		return "Saving file scope…"
+	case "bootstrap":
+		return "Running bootstrap…"
+	default:
+		return "Working…"
+	}
 }
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {

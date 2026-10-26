@@ -524,7 +524,8 @@ func (s *State) handleIssueListKey(key string) bool {
 	case "x", " ":
 		s.toggleSelectedIssue()
 		return true
-	case "d", "D", "Delete", "Backspace":
+	case "d", "D", "Delete":
+		// Backspace means "back" everywhere else, so it never dismisses an issue.
 		s.dismissSelectedIssue()
 		return true
 	}
@@ -755,7 +756,7 @@ func (s *State) handleEditorKey(key string) bool {
 		s.requestGuardedUndo()
 		return true
 	case "x":
-		s.rejectCurrentDiffHunk()
+		s.confirmRejectDiffHunk()
 		return true
 	case "o":
 		s.toggleEditorFileBrowser()

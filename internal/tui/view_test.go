@@ -558,6 +558,15 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 	s.ExecuteCommand(":diff hunk")
 	s.HunkIdx = 1
 	s.HandleKey(KeyEvent{Key: "x"})
+	if s.Confirmation == nil || !s.Confirmation.Destructive || !strings.Contains(s.Change.Changes[1].Content, "TestTimeout") {
+		t.Fatalf("rejecting a hunk must ask first and change nothing until confirmed: confirmation=%+v", s.Confirmation)
+	}
+	s.HandleKey(KeyEvent{Key: "Escape"})
+	if s.Confirmation != nil || !strings.Contains(s.Change.Changes[1].Content, "TestTimeout") {
+		t.Fatal("canceling the hunk rejection must keep the proposal unchanged")
+	}
+	s.HandleKey(KeyEvent{Key: "x"})
+	s.HandleKey(KeyEvent{Key: "y"})
 	if strings.Contains(s.Change.Changes[1].Content, "TestTimeout") {
 		t.Fatalf("expected rejecting hunk in file 2 to remove TestTimeout from file 2 content, got %q", s.Change.Changes[1].Content)
 	}
