@@ -291,19 +291,8 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.applyAgentRunMessage(ev); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case pollTickMsg:
-		m.pollScheduled = false
-		if cmd := m.startAsyncPollCmd(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	case pollResultMsg:
-		m.pollInFlight = false
-		m.state.applyPollResult(ev.res)
-	case syncActionsMsg:
-		cmds = append(cmds, m.runSyncActions(ev.actions)...)
-	case spinnerTickMsg:
-		m.spinnerScheduled = false
-		m.state.spinnerFrame++
+	case pollTickMsg, pollResultMsg, syncActionsMsg, spinnerTickMsg:
+		cmds = append(cmds, m.applyBackgroundMessage(ev)...)
 	}
 	m.state.reconcileCloudScope()
 	m.state.reconcileTriggerScope()
@@ -326,6 +315,26 @@ func (m *BubbleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.state.asyncWork = m.activeAgentStarts
 	m.maybeScheduleSpinner(&cmds)
 	return m, batchTeaCmds(cmds)
+}
+
+// applyBackgroundMessage handles polling, deferred actions and spinner ticks.
+func (m *BubbleModel) applyBackgroundMessage(msg tea.Msg) []tea.Cmd {
+	switch ev := msg.(type) {
+	case pollTickMsg:
+		m.pollScheduled = false
+		if cmd := m.startAsyncPollCmd(); cmd != nil {
+			return []tea.Cmd{cmd}
+		}
+	case pollResultMsg:
+		m.pollInFlight = false
+		m.state.applyPollResult(ev.res)
+	case syncActionsMsg:
+		return m.runSyncActions(ev.actions)
+	case spinnerTickMsg:
+		m.spinnerScheduled = false
+		m.state.spinnerFrame++
+	}
+	return nil
 }
 
 // maybeScheduleSpinner animates the status bar only while something runs, so an
@@ -436,56 +445,43 @@ func (m *BubbleModel) flushActionsAsync() []tea.Cmd {
 	return cmds
 }
 
-// busyLabel names a blocking daemon action for the status bar.
+// busyLabels name blocking daemon actions for the status bar.
+var busyLabels = map[string]string{
+	"scan":              "Starting Go scan…",
+	"apply-commit":      "Applying reviewed changes…",
+	"merge-worktree":    "Merging worktree…",
+	"review-file":       "Recording file review…",
+	"open-file":         "Opening file…",
+	"issue-source":      "Opening file…",
+	"load-change":       "Loading task…",
+	"reindex":           "Reindexing project…",
+	"reindex-worktrees": "Reindexing project…",
+	"reconnect":         "Connecting to the daemon…",
+	"open-project":      "Connecting to the daemon…",
+	"refresh-worktrees": "Refreshing worktrees…",
+	"open-web":          "Opening the Web UI…",
+	"run-analysis":      "Preparing analysis…",
+	"reanalyze":         "Preparing analysis…",
+	"repair-analysis":   "Preparing analysis…",
+	"pause-analysis":    "Pausing analysis…",
+	"resume-analysis":   "Resuming analysis…",
+	"undo":              "Undoing applied changes…",
+	"set-trust":         "Saving execution trust…",
+	"reject-change":     "Rejecting task…",
+	"cancel-workflow":   "Canceling workflow…",
+	"cleanup-merged":    "Cleaning up merged worktree…",
+	"dismiss-finding":   "Updating triage…",
+	"dismiss-feature":   "Updating triage…",
+	"refresh-models":    "Refreshing models…",
+	"save-selection":    "Saving file scope…",
+	"bootstrap":         "Running bootstrap…",
+}
+
 func busyLabel(kind string) string {
-	switch kind {
-	case "scan":
-		return "Starting Go scan…"
-	case "apply-commit":
-		return "Applying reviewed changes…"
-	case "merge-worktree":
-		return "Merging worktree…"
-	case "review-file":
-		return "Recording file review…"
-	case "open-file", "issue-source":
-		return "Opening file…"
-	case "load-change":
-		return "Loading task…"
-	case "reindex", "reindex-worktrees":
-		return "Reindexing project…"
-	case "reconnect", "open-project":
-		return "Connecting to the daemon…"
-	case "refresh-worktrees":
-		return "Refreshing worktrees…"
-	case "open-web":
-		return "Opening the Web UI…"
-	case "run-analysis", "reanalyze", "repair-analysis":
-		return "Preparing analysis…"
-	case "pause-analysis":
-		return "Pausing analysis…"
-	case "resume-analysis":
-		return "Resuming analysis…"
-	case "undo":
-		return "Undoing applied changes…"
-	case "set-trust":
-		return "Saving execution trust…"
-	case "reject-change":
-		return "Rejecting task…"
-	case "cancel-workflow":
-		return "Canceling workflow…"
-	case "cleanup-merged":
-		return "Cleaning up merged worktree…"
-	case "dismiss-finding", "dismiss-feature":
-		return "Updating triage…"
-	case "refresh-models":
-		return "Refreshing models…"
-	case "save-selection":
-		return "Saving file scope…"
-	case "bootstrap":
-		return "Running bootstrap…"
-	default:
-		return "Working…"
+	if label, ok := busyLabels[kind]; ok {
+		return label
 	}
+	return "Working…"
 }
 
 func (m *BubbleModel) prepareAsyncActionCmd(reqID string, act ActionRequest) (tea.Cmd, bool) {

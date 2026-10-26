@@ -295,38 +295,38 @@ func normalizeWebUITab(arg string) string {
 	}
 }
 
+// webUITabForPage maps views with a fixed Web UI counterpart.
+var webUITabForPage = map[Page]string{
+	PageBugs: "issues", PageIssueDetail: "issues",
+	PageRepo:    "files",
+	PageProject: "checks", PageAnalysisRun: "checks", PageAnalysisFiles: "checks",
+	PageDocs: "docs", PageDocsComponents: "docs", PageDocsDecisions: "docs", PageDiagrams: "docs",
+	PageInstructions: "settings", PageModels: "settings", PageRoles: "settings", PageSkills: "settings",
+	PageConnections: "settings", PageExternalWork: "settings", PageBootstrap: "settings", PageLessons: "settings",
+	PageGit: "git", PageWorktreeDetail: "git",
+}
+
 func (s *State) defaultWebUITab() string {
-	switch s.EffectivePage() {
-	case PageBugs, PageIssueDetail:
-		return "issues"
-	case PageRepo:
-		return "files"
-	case PageProject, PageAnalysisRun, PageAnalysisFiles:
-		return "checks"
-	case PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams:
-		return "docs"
-	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons:
-		return "settings"
-	case PageGit, PageWorktreeDetail:
-		return "git"
+	page := s.EffectivePage()
+	if tab, ok := webUITabForPage[page]; ok {
+		return tab
+	}
+	hasTask := s.Change != nil && s.Change.ID != ""
+	switch page {
 	case PageEditor:
 		if s.File != nil && !s.isViewingDiff() {
 			return "files"
 		}
-		return "diff"
 	case PageAgents, PagePlan:
-		if s.Change != nil && s.Change.ID != "" {
-			return "diff"
+		if !hasTask {
+			return "tasks"
 		}
-		return "tasks"
 	case PageSummary:
-		if s.Change == nil || s.Change.ID == "" {
+		if !hasTask {
 			return "home"
 		}
-		return "diff"
-	default:
-		return "diff"
 	}
+	return "diff"
 }
 
 func (s *State) execProjectCommand(arg string) bool {
