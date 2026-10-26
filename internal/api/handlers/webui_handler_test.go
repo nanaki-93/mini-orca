@@ -59,6 +59,9 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		"diff-subtab-bar",
 		"diff-subtab-checks",
 		"diff-subtab-spec",
+		"1 · Task Intent &amp; Specification",
+		"2 · Target File Scope (1–8 Files)",
+		"3 · Verification &amp; Acceptance Criteria",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)

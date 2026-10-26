@@ -1177,14 +1177,15 @@ button.btn-ghost:hover:not(:disabled) {
           </div>
         </div>
         <div class="content-scroll">
+          <!-- Section 1: Task Intent & Specification -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title">✦ Task Specification &amp; Target Scope</span>
-              <span id="spec-selected-count" class="badge blue">0 / 8 files selected</span>
+              <span class="card-title">1 · Task Intent &amp; Specification</span>
+              <span class="badge">Step 1 of 3</span>
             </div>
             <div class="card-body">
-              <div class="form-grid">
-                <div style="display:grid;grid-template-columns:1fr 210px;gap:12px;">
+              <div class="form-grid" style="max-width:none;">
+                <div style="display:grid;grid-template-columns:1fr 220px;gap:12px;">
                   <div class="form-row">
                     <label for="new-task-title">Task Summary / Title</label>
                     <input id="new-task-title" type="text" placeholder="e.g. Add rate-limiter middleware and unit tests">
@@ -1203,25 +1204,76 @@ button.btn-ghost:hover:not(:disabled) {
                     <span>Detailed Specification &amp; Prompt</span>
                     <span class="project-path">Signatures, behavior, edge cases &amp; invariants</span>
                   </label>
-                  <textarea id="new-task-spec" rows="5" placeholder="Describe what functions or changes should be created, expected signatures, error handling, and invariants to preserve…"></textarea>
+                  <textarea id="new-task-spec" rows="4" placeholder="Describe what functions or changes should be created, expected signatures, error handling, and invariants to preserve…"></textarea>
                 </div>
-                <div class="form-row">
-                  <label for="new-task-paths">
-                    <span>Target File Paths (1–8 Go or Markdown files)</span>
-                    <span class="project-path">Companion *_test.go files are auto-suggested</span>
-                  </label>
-                  <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, internal/api/local_policy_test.go"></textarea>
-                  <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
-                    <input id="spec-file-search" type="text" placeholder="Quick-filter indexed Go &amp; Markdown files…" style="flex:1;">
+              </div>
+            </div>
+          </div>
+
+          <div class="section-split-grid">
+            <!-- Section 2: Target File Scope -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="card-header">
+                <span class="card-title">2 · Target File Scope (1–8 Files)</span>
+                <span id="spec-selected-count" class="badge blue">0 / 8 files selected</span>
+              </div>
+              <div class="card-body">
+                <div class="form-grid" style="max-width:none;gap:10px;">
+                  <div id="spec-selected-pills" class="chip-list" style="margin-top:0;"></div>
+                  <div class="form-row">
+                    <label for="new-task-paths">
+                      <span>Target File Paths</span>
+                      <span class="project-path">Auto-pairs *_test.go</span>
+                    </label>
+                    <textarea id="new-task-paths" rows="2" placeholder="e.g. internal/api/local_policy.go, internal/api/local_policy_test.go"></textarea>
                   </div>
-                  <div id="spec-file-chips" class="chip-list"></div>
+                  <div class="form-row">
+                    <label for="spec-file-search">
+                      <span>Browse &amp; Toggle Indexed Files</span>
+                      <span class="project-path">.go and .md eligible</span>
+                    </label>
+                    <input id="spec-file-search" type="text" placeholder="Quick-filter indexed Go &amp; Markdown files…">
+                    <div id="spec-file-chips" class="chip-list"></div>
+                  </div>
                 </div>
-                <div class="form-row">
-                  <label for="new-task-criteria">
-                    <span>Acceptance Criteria</span>
-                    <span class="project-path">One criterion per line</span>
-                  </label>
-                  <textarea id="new-task-criteria" rows="3" placeholder="All unit tests and go vet pass&#10;Edge cases are covered by unit tests"></textarea>
+              </div>
+            </div>
+
+            <!-- Section 3: Verification & Acceptance Criteria -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="card-header">
+                <span class="card-title">3 · Verification &amp; Acceptance Criteria</span>
+                <span class="badge green">Guarded Pipeline</span>
+              </div>
+              <div class="card-body">
+                <div class="form-grid" style="max-width:none;gap:10px;">
+                  <div>
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--fg-muted);margin-bottom:6px;">Quick Criteria Presets</div>
+                    <div class="chip-list" style="margin-top:0;">
+                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="All unit tests and go vet pass">+ Unit tests &amp; go vet pass</button>
+                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="Cover edge cases and error returns in companion *_test.go">+ Edge-case test coverage</button>
+                      <button type="button" class="file-chip criteria-preset-chip" data-criterion="Zero architecture boundary or complexity regressions">+ Zero arch/complexity regressions</button>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <label for="new-task-criteria">
+                      <span>Acceptance Criteria</span>
+                      <span class="project-path">One criterion per line</span>
+                    </label>
+                    <textarea id="new-task-criteria" rows="4" placeholder="All unit tests and go vet pass&#10;Edge cases are covered by unit tests"></textarea>
+                  </div>
+                  <div style="border-top:1px solid var(--border-subtle);padding-top:8px;">
+                    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--fg-muted);margin-bottom:5px;">Automated Check Phases on Proposal</div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                      <span class="badge">parse</span>
+                      <span class="badge">format</span>
+                      <span class="badge">architecture</span>
+                      <span class="badge">complexity</span>
+                      <span class="badge">secrets</span>
+                      <span class="badge blue">lint (go vet)</span>
+                      <span class="badge blue">tests (go test)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2592,6 +2644,20 @@ button.btn-ghost:hover:not(:disabled) {
     if (countBadge) {
       countBadge.textContent = selected.length + ' / 8 files selected';
     }
+    const selPillsEl = document.getElementById('spec-selected-pills');
+    if (selPillsEl) {
+      selPillsEl.innerHTML = selected.length > 0
+        ? selected.map(function(p) {
+            return '<span class="file-chip selected" data-remove-path="' + esc(p) + '" title="Click to remove from scope">✕ ' + esc(p) + '</span>';
+          }).join('')
+        : '<span class="project-path">No target files selected yet — click files below or enter paths.</span>';
+      selPillsEl.querySelectorAll('[data-remove-path]').forEach(function(pill) {
+        pill.addEventListener('click', function() {
+          const rm = pill.getAttribute('data-remove-path');
+          setTargetPathsInput(selected.filter(function(item) { return item !== rm; }));
+        });
+      });
+    }
     const q = (document.getElementById('spec-file-search').value || '').toLowerCase().trim();
     const eligible = files.filter(function(f) {
       const p = f.path || '';
@@ -2764,19 +2830,51 @@ button.btn-ghost:hover:not(:disabled) {
       '</div>';
     }).join('') || '<div class="empty-state">No matching findings.</div>';
 
+    listEl.querySelectorAll('.list-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        listEl.querySelectorAll('.list-item').forEach(function(el) { el.classList.remove('active'); });
+        item.classList.add('active');
+        const idx = item.getAttribute('data-idx');
+        const card = document.getElementById('finding-card-' + idx);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    });
+
+    const wsGroups = collectWorkspacePhaseGroups();
+    const wsSum = summarizePhaseGroups(wsGroups);
+    let phaseStripHTML = '<div class="phase-summary-bar">' +
+      '<div class="phase-summary-top">' +
+        '<div class="phase-summary-counts">' +
+          '<strong style="font-size:12px;color:var(--fg-bright);">Scan &amp; Analysis Phases</strong>' +
+          '<span class="badge green">✓ ' + wsSum.passed + ' Passed</span>' +
+          '<span class="badge ' + (wsSum.failed > 0 ? 'red' : '') + '">✕ ' + wsSum.failed + ' Failed</span>' +
+          wsGroups.reduce(function(acc, g) { return acc.concat(g.items || []); }, []).map(function(it) {
+            const spec = phaseBadgeSpec(it.state);
+            return '<span class="badge ' + spec.cls + '" style="font-family:var(--font-mono);">' + esc(it.name) + ': ' + esc(spec.label) + '</span>';
+          }).join('') +
+        '</div>' +
+        '<button type="button" id="issues-open-verification-btn" class="btn-ghost" style="padding:3px 9px;font-size:11px;">Inspect Phase Logs →</button>' +
+      '</div>' +
+    '</div>';
+
     if (filtered.length === 0) {
-      contentEl.innerHTML = '<div class="empty-state"><h3>No matching findings</h3><p>Run a Go Scan or Project Analysis, or adjust the category/status filter.</p></div>';
+      contentEl.innerHTML = phaseStripHTML + '<div class="empty-state"><h3>No matching findings</h3><p>Run a Go Scan or Project Analysis, or adjust the category/status filter.</p></div>';
+      const openVerBtn = document.getElementById('issues-open-verification-btn');
+      if (openVerBtn) openVerBtn.addEventListener('click', function() { openDocSection('verification'); });
       return;
     }
 
-    contentEl.innerHTML = filtered.map(function(f, idx) {
+    contentEl.innerHTML = phaseStripHTML + filtered.map(function(f, idx) {
       const dismissed = (f.status || '').toLowerCase() === 'dismissed';
-      return '<div class="card">' +
+      return '<div id="finding-card-' + idx + '" class="card">' +
         '<div class="card-header">' +
           '<div class="card-title">' +
             '<span class="badge ' + (f.severity === 'high' || f.severity === 'critical' ? 'red' : 'amber') + '">' + esc(f.severity || 'medium') + '</span>' +
             '<span>' + esc(f.title || f.id) + '</span>' +
             '<span class="badge">' + esc(f.kind || f.source || 'finding') + '</span>' +
+            (f.source ? '<span class="project-path">source: ' + esc(f.source) + '</span>' : '') +
           '</div>' +
           '<div class="action-group">' +
             (f.path ? '<button class="jump-file-btn btn-ghost" data-path="' + esc(f.path) + '">📄 ' + esc(f.path) + (f.line ? ':' + f.line : '') + '</button>' : '') +
@@ -2787,11 +2885,24 @@ button.btn-ghost:hover:not(:disabled) {
           '</div>' +
         '</div>' +
         '<div class="card-body">' +
-          '<p style="margin:0 0 6px 0;">' + esc(f.description || f.message || '') + '</p>' +
-          (f.suggestion ? '<div class="project-path">Remediation: ' + esc(f.suggestion) + '</div>' : '') +
+          '<div style="margin-bottom:' + (f.suggestion ? '10px' : '0') + ';">' +
+            '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--fg-muted);margin-bottom:3px;">Problem &amp; Diagnostic Evidence</div>' +
+            '<p style="margin:0;color:var(--fg-bright);">' + esc(f.description || f.message || '') + '</p>' +
+          '</div>' +
+          (f.suggestion ? '<div style="padding:8px 12px;border-radius:var(--radius-sm);background:var(--surface-alt);border:1px solid var(--border-subtle);">' +
+            '<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:2px;">Recommended Remediation</div>' +
+            '<div style="font-size:12px;">' + esc(f.suggestion) + '</div>' +
+          '</div>' : '') +
         '</div>' +
       '</div>';
     }).join('');
+
+    const openVerBtn = document.getElementById('issues-open-verification-btn');
+    if (openVerBtn) {
+      openVerBtn.addEventListener('click', function() {
+        openDocSection('verification');
+      });
+    }
 
     contentEl.querySelectorAll('.jump-file-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -3530,10 +3641,12 @@ button.btn-ghost:hover:not(:disabled) {
   function getCommandItems() {
     const items = [
       { label: 'Workspace: 1 · Understand (Project Handbook)', hint: '1', run: function() { setTab('docs'); } },
+      { label: 'Workspace: 1 · Understand (Verification & Phases)', hint: 'Phases', run: function() { openDocSection('verification'); } },
       { label: 'Workspace: 1 · Understand (Source Files)', hint: 'F', run: function() { setTab('files'); } },
       { label: 'Workspace: 2 · Build & Fix (Spec Studio)', hint: '2', run: function() { setTab('tasks'); } },
       { label: 'Workspace: 2 · Build & Fix (Triaged Issues)', hint: 'I', run: function() { setTab('issues'); } },
-      { label: 'Workspace: 3 · Review & Apply (Diff Inspector)', hint: '3', run: function() { setTab('diff'); } },
+      { label: 'Workspace: 3 · Review & Apply (Diff Inspector)', hint: '3', run: function() { setTab('diff'); setDiffSubTab('changes'); } },
+      { label: 'Workspace: 3 · Review & Apply (Checks & Workflow Phases)', hint: 'Checks', run: function() { setTab('diff'); setDiffSubTab('checks'); } },
       { label: 'Action: Generate / Refresh Project Docs', hint: 'Docs', run: runProjectDocsAnalysis },
       { label: 'Action: Run Go Static Scan', hint: 'Scan', run: function() { document.getElementById('run-scan-btn').click(); } },
       { label: 'Action: Reindex Repository Files', hint: 'Reindex', run: function() { document.getElementById('reindex-btn').click(); } },
@@ -3663,6 +3776,19 @@ button.btn-ghost:hover:not(:disabled) {
     document.getElementById('new-task-paths').value = '';
     document.getElementById('new-task-criteria').value = '';
     renderSpecFileChips();
+  });
+
+  document.querySelectorAll('.criteria-preset-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      const crit = (chip.getAttribute('data-criterion') || '').trim();
+      if (!crit) return;
+      const box = document.getElementById('new-task-criteria');
+      const existing = (box.value || '').split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+      if (existing.indexOf(crit) < 0) {
+        existing.push(crit);
+        box.value = existing.join('\n');
+      }
+    });
   });
 
   document.getElementById('run-analysis-btn').addEventListener('click', runProjectDocsAnalysis);
