@@ -898,6 +898,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 .review-warning { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 12px; margin-bottom: 12px; border-left: 2px solid var(--red); background: var(--red-bg); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 900px) { .task-title-row { grid-template-columns: minmax(0, 1fr); } }
+
+[hidden] { display: none !important; }
+.review-next-step { padding: 7px 20px; color: var(--fg-muted); background: var(--bg-elevated); border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+.cmd-help { padding: 8px 14px; border-top: 1px solid var(--border); color: var(--fg-muted); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -940,7 +944,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           <span class="kbd">1</span>
         </span>
       </button>
-      <button class="nav-btn tab-btn" data-tab="build" title="Work (Spec Studio &amp; Bug Triage)">
+      <button class="nav-btn tab-btn" data-tab="build" title="Work (Tasks and issues)">
         <span class="nav-btn-left">
           <span class="nav-icon" aria-hidden="true">＋</span>
           <span class="nav-btn-label">Work</span>
@@ -999,7 +1003,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
         <div id="understand-files-sidebar" style="display:none;flex-direction:column;flex:1;min-height:0;">
           <div class="sidebar-section">
-            <input id="file-filter-input" type="text" placeholder="Filter files by path or name…" style="width:100%;">
+            <input id="file-filter-input" aria-label="Filter source files" type="text" placeholder="Filter files by path or name…" style="width:100%;">
           </div>
           <div id="indexed-file-list" class="sidebar-list"></div>
         </div>
@@ -1026,19 +1030,19 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           <div class="sidebar-section">
             <div class="form-grid" style="gap:7px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <select id="issue-cat-filter" title="Filter by category">
+                <select id="issue-cat-filter" aria-label="Issue category" title="Filter by category">
                   <option value="all">All Categories</option>
                   <option value="bugs">Bugs</option>
                   <option value="security">Security</option>
                   <option value="performance">Performance</option>
                 </select>
-                <select id="issue-status-filter" title="Filter by status">
+                <select id="issue-status-filter" aria-label="Issue status" title="Filter by status">
                   <option value="open">Open Only</option>
                   <option value="all">All Status</option>
                   <option value="dismissed">Dismissed</option>
                 </select>
               </div>
-              <input id="issue-search" type="text" placeholder="Search findings by file or title…">
+              <input id="issue-search" aria-label="Search issues" type="text" placeholder="Search findings by file or title…">
             </div>
           </div>
           <div id="issues-summary-list" class="sidebar-list"></div>
@@ -1052,7 +1056,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             <span>Active Proposal</span>
             <span id="proposal-count" class="badge">0</span>
           </div>
-          <select id="proposal-select" style="width:100%;"></select>
+          <select id="proposal-select" aria-label="Proposal" style="width:100%;"></select>
         </div>
         <div class="sidebar-section" style="padding-bottom:6px;">
           <div class="sidebar-title" style="margin:0;">
@@ -1068,13 +1072,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     <div class="dock-footer dock-hide-when-collapsed">
       <div class="dock-footer-actions">
         <div class="menu-wrap" style="flex:1;">
-          <button id="workspace-menu-btn" style="width:100%;justify-content:space-between;" title="Workspace actions and settings">
+          <button id="workspace-menu-btn" aria-expanded="false" aria-controls="workspace-menu" style="width:100%;justify-content:space-between;" title="Workspace actions and settings">
             <span>Settings</span>
             <span>▴</span>
           </button>
           <div id="workspace-menu" class="dropdown-menu">
             <button id="trust-btn" title="Toggle local execution trust for running checks">Trust: …</button>
-            <button id="reindex-btn" title="Reindex repository files"><span>↻ Reindex Files</span><span class="kbd">R</span></button>
+            <button id="reindex-btn" title="Reindex repository files"><span>↻ Reindex Files</span></button>
             <button id="switch-project-btn" title="Restore or import a local project"><span>📁 Switch Project</span></button>
             <button id="refresh-btn" title="Refresh all current workspace state"><span>⟳ Refresh Workspace</span></button>
             <div class="dropdown-divider"></div>
@@ -1204,14 +1208,15 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             <span id="active-proposal-freshness" class="badge"></span>
           </div>
           <div class="action-group">
-            <button id="review-all-btn" class="btn-success" title="Mark all changed files reviewed and approve current proposal hash">Approve review</button>
+            <button id="review-all-btn" class="btn-success" title="Approve the current proposal after reviewing each file and running checks">Approve review</button>
             <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">Run checks</button>
             <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">Apply</button>
             <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">Undo</button>
           </div>
         </div>
+        <div id="review-next-step" class="review-next-step" role="status"></div>
         <div id="diff-subtab-bar" class="subtab-bar">
-          <div class="subtab-nav" role="tablist" aria-label="Proposal Review Sections">
+          <div class="subtab-nav" role="group" aria-label="Proposal Review Sections">
             <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
             <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">Checks <span id="diff-subtab-checks-badge" class="badge">0</span></button>
             <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">Refine <span id="diff-subtab-spec-badge" class="badge">0</span></button>
@@ -1230,25 +1235,23 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
             <div>
               <div class="card">
                 <div class="card-header">
-                  <span class="card-title">✦ Iterate / Refine with AI</span>
-                  <span class="badge blue">Code Profile</span>
+                  <span class="card-title">Refine proposal</span>
                 </div>
                 <div class="card-body">
                   <div class="form-grid" style="gap:10px;">
                     <div class="chip-list" style="margin-top:0;">
                       <button type="button" class="file-chip refine-preset-chip" data-prompt="Fix any failing checks or static analysis warnings while preserving existing behavior.">Fix failed checks</button>
                       <button type="button" class="file-chip refine-preset-chip" data-prompt="Add or expand unit test coverage for edge cases and failure paths.">Expand unit tests</button>
-                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Simplify control flow and reduce function complexity while keeping all tests green.">Simplify &amp; reduce complexity</button>
+                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Simplify control flow and reduce function complexity while keeping all tests green.">Simplify code</button>
                     </div>
                     <div class="form-row">
                       <label for="proposal-message-input">
-                        <span>Refinement Prompt / Follow-up Instruction</span>
-                        <span class="project-path">Generates an updated diff for this session</span>
+                        <span>What should change?</span>
                       </label>
                       <textarea id="proposal-message-input" rows="4" placeholder="Ask the model to refine this proposal, address a review comment, or repair a failed check…"></textarea>
                     </div>
                     <div style="display:flex;justify-content:flex-end;gap:8px;">
-                      <button id="send-message-btn" class="btn-primary">⚡ Generate Updated Diff</button>
+                      <button id="send-message-btn" class="btn-primary">Update diff</button>
                     </div>
                   </div>
                 </div>
@@ -1278,7 +1281,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       <span class="status-bar-divider"></span>
       <button id="trust-status-pill" class="badge" style="cursor:pointer;padding:1px 7px;" title="Click to toggle Local Execution Trust for sandbox checks">Trust: …</button>
       <span class="status-bar-divider"></span>
-      <button id="status-bar-scan-pill" class="badge" style="cursor:pointer;padding:1px 7px;" title="Click to inspect Verification &amp; Scan Phases">Phases: Idle</button>
+      <button id="status-bar-scan-pill" class="badge" style="cursor:pointer;padding:1px 7px;" title="Inspect workspace checks">Checks: not run</button>
     </div>
 
     <div class="status-bar-group">
@@ -1292,10 +1295,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   <div class="cmd-modal">
     <div class="cmd-input-wrap">
       <span style="color:var(--accent);font-weight:700;">❯</span>
-      <input id="cmd-input" type="text" placeholder="Type a command, theme, or file name… (Esc to close)">
+      <input id="cmd-input" type="text" role="combobox" aria-label="Search commands and files" aria-autocomplete="list" aria-expanded="false" aria-controls="cmd-list" placeholder="Search commands and files…">
       <span class="kbd">ESC</span>
     </div>
-    <div id="cmd-list" class="cmd-list"></div>
+    <div id="cmd-list" class="cmd-list" role="listbox" aria-label="Commands"></div>
+    <div class="cmd-help">↑ ↓ Navigate · Enter Open · Esc Close</div>
   </div>
 </div>
 
@@ -1353,6 +1357,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     findings: [],
     openFileInfo: null,
     openFileAnalysis: null,
+    pendingAction: false,
+    sessionRequest: 0,
     openFileExplanation: null
   };
 
@@ -1414,10 +1420,20 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   const menuEl = document.getElementById('workspace-menu');
   menuBtn.addEventListener('click', function(e) {
     e.stopPropagation();
-    menuEl.classList.toggle('open');
+    const open = menuEl.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', String(open));
   });
-  document.addEventListener('click', function() {
+  document.addEventListener('click', function(event) {
+    if (menuEl.contains(event.target)) return;
     menuEl.classList.remove('open');
+    menuBtn.setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && menuEl.classList.contains('open')) {
+      menuEl.classList.remove('open');
+      menuBtn.setAttribute('aria-expanded', 'false');
+      menuBtn.focus();
+    }
   });
 
   function syncURL() {
@@ -1518,6 +1534,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       if (exp) exp.style.display = (id === state.tab) ? 'flex' : 'none';
     });
     syncSubModes();
+  }
+
+  function revealCanvas() {
+    if (window.matchMedia('(max-width: 640px)').matches && !document.getElementById('app-shell').classList.contains('sidebar-collapsed')) toggleSidebar();
   }
 
   function syncSubModes() {
@@ -1665,6 +1685,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   }
 
   async function loadChangeSession(sessionId) {
+    const request = ++state.sessionRequest;
+    state.activeSession = null;
+    renderReviewActions();
     if (!sessionId || !state.project) {
       state.activeSession = null;
       renderDiffTab();
@@ -1679,14 +1702,18 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       const loaded = await apiFetch(
         withExplicitWorktree('/api/projects/current/changes/' + encodeURIComponent(sessionId) + idQuery, wtPath)
       );
+      if (request !== state.sessionRequest) return;
       loaded._worktreePath = wtPath;
       loaded._checkoutProjectId = ident.project_id;
       loaded._checkoutProjectRevision = ident.project_revision;
       state.activeSession = loaded;
+      if (!loaded.last_reviewed_hash) state.sinceLastReview = false;
       state.sessionId = sessionId;
       syncURL();
       renderDiffTab();
     } catch (err) {
+      if (request !== state.sessionRequest) return;
+      renderDiffTab();
       showBanner('Could not load proposal ' + sessionId + ': ' + err.message, 'error');
     }
   }
@@ -1719,7 +1746,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const scanPhases = (state.scan && Array.isArray(state.scan.phases)) ? state.scan.phases : [];
     groups.push({
       id: 'go-scan',
-      title: 'Go Sandbox Verification Phases (Parser · Vet · Unit Tests)',
+      title: 'Go checks',
       subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Run Go Scan to verify compilation, go vet, and unit tests in an isolated sandbox',
       actionId: 'phase-trigger-scan-btn',
       actionLabel: 'Run Go scan',
@@ -1768,7 +1795,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
     groups.push({
       id: 'analysis-sections',
-      title: 'Project Analysis & Discovery Phases (Bugs · Security · Performance · Features)',
+      title: 'Project analysis',
       subtitle: run ? ('Run #' + (run.id || (run.identity && run.identity.id) || 'current') + ' · status: ' + (run.status || 'recorded')) : 'Run Project Analysis to execute multi-phase semantic, security, and performance checks',
       actionId: 'phase-trigger-analysis-btn',
       actionLabel: '✦ Run Project Analysis',
@@ -1913,7 +1940,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
     const analysisBtn = container.querySelector('#phase-trigger-analysis-btn');
     if (analysisBtn) {
-      analysisBtn.addEventListener('click', runProjectDocsAnalysis);
+      analysisBtn.addEventListener('click', function() { document.getElementById('run-analysis-btn').click(); });
     }
   }
 
@@ -1936,13 +1963,17 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const scanPill = document.getElementById('status-bar-scan-pill');
     const sideVerBadge = document.getElementById('sidebar-verification-badge');
     if (wsSum.total === 0) {
-      if (scanPill) { scanPill.textContent = 'Phases: Idle'; scanPill.className = 'badge'; }
+      if (scanPill) { scanPill.textContent = 'Checks: not run'; scanPill.className = 'badge'; }
       if (sideVerBadge) { sideVerBadge.textContent = 'Idle'; sideVerBadge.className = 'badge'; }
     } else if (wsSum.failed > 0) {
-      if (scanPill) { scanPill.textContent = 'Phases: ' + wsSum.passed + '✓ ' + wsSum.failed + '✕'; scanPill.className = 'badge red'; }
+      if (scanPill) { scanPill.textContent = 'Checks: ' + wsSum.passed + '✓ ' + wsSum.failed + '✕'; scanPill.className = 'badge red'; }
       if (sideVerBadge) { sideVerBadge.textContent = wsSum.failed + ' failed'; sideVerBadge.className = 'badge red'; }
+    } else if (wsSum.passed !== wsSum.total) {
+      const label = wsSum.passed + '/' + wsSum.total + ' passed';
+      if (scanPill) { scanPill.textContent = 'Checks: ' + label; scanPill.className = 'badge'; }
+      if (sideVerBadge) { sideVerBadge.textContent = label; sideVerBadge.className = 'badge'; }
     } else {
-      if (scanPill) { scanPill.textContent = 'Phases: ' + wsSum.passed + '/' + wsSum.total + ' ✓'; scanPill.className = 'badge green'; }
+      if (scanPill) { scanPill.textContent = 'Checks: ' + wsSum.passed + '/' + wsSum.total + ' ✓'; scanPill.className = 'badge green'; }
       if (sideVerBadge) { sideVerBadge.textContent = wsSum.passed + '/' + wsSum.total + ' ✓'; sideVerBadge.className = 'badge green'; }
     }
   }
@@ -1972,7 +2003,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const metrics = ov.metrics || state.project || {};
 
     const badge = document.getElementById('docs-status-badge');
-    const statusText = (docs && docs.status) || analysis.ai_status || 'deterministic';
+    const statusText = (docs && docs.status) || analysis.ai_status || 'Not generated';
     badge.textContent = statusText;
     badge.className = 'badge ' + (statusText === 'completed' || statusText === 'fresh' ? 'green' : 'blue');
 
@@ -2182,6 +2213,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   async function openSourceFile(filePath) {
     if (!filePath) return;
+    revealCanvas();
     try {
       state.selectedFile = filePath;
       state.openFileExplanation = null;
@@ -2291,7 +2323,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           (info.content_hash ? '<span class="project-path">#' + esc(String(info.content_hash).slice(0, 8)) + '</span>' : '') +
         '</div>' +
         '<div class="action-group">' +
-          '<input id="file-line-jump-input" type="number" min="1" max="' + rawLines.length + '" placeholder="Go to line…" style="width:110px;padding:3px 8px;font-size:11px;">' +
+          '<input id="file-line-jump-input" aria-label="Go to source line" type="number" min="1" max="' + rawLines.length + '" placeholder="Go to line…" style="width:110px;padding:3px 8px;font-size:11px;">' +
         '</div>' +
       '</div>' +
       '<div style="overflow-x:auto;"><table class="code-viewer"><tbody>' + rows + '</tbody></table></div>' +
@@ -2496,8 +2528,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       .map(function(s) { return s.trim(); })
       .filter(Boolean);
 
-    if (!title || paths.length === 0) {
-      showBanner('Provide a task title and 1–8 eligible file paths.', 'error');
+    if (!title || paths.length === 0 || paths.length > 8) {
+      showBanner('Add a title and select 1–8 Go or Markdown paths.', 'error');
+      document.getElementById(!title ? 'new-task-title' : 'new-task-paths').focus();
       return;
     }
 
@@ -2657,7 +2690,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           '<span class="badge ' + (wsSum.failed > 0 ? 'red' : '') + '">✕ ' + wsSum.failed + ' Failed</span>' +
           wsGroups.reduce(function(acc, g) { return acc.concat(g.items || []); }, []).map(function(it) {
             const spec = phaseBadgeSpec(it.state);
-            return '<span class="badge ' + spec.cls + '" style="font-family:var(--font-mono);">' + esc(it.name) + ': ' + esc(spec.label) + '</span>';
+            return '<span class="badge ' + spec.cls + '" style="font-family:var(--font-mono);">' + esc(it.name) + ': ' + esc(spec.text) + '</span>';
           }).join('') +
         '</div>' +
         '<button type="button" id="issues-open-verification-btn" class="btn-ghost" style="padding:3px 9px;font-size:11px;">Inspect Phase Logs →</button>' +
@@ -2768,9 +2801,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
     el.querySelectorAll('.open-proposal-item').forEach(function(item) {
       item.addEventListener('click', function() {
+        if (state.pendingAction) return;
         const id = item.getAttribute('data-id');
         state.selectedFile = '';
         setTab('diff');
+        revealCanvas();
         loadChangeSession(id);
       });
     });
@@ -2780,8 +2815,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   function effectiveEdits(session) {
     if (!session) return [];
-    if (state.sinceLastReview && Array.isArray(session.review_diff) && session.review_diff.length > 0) {
-      return session.review_diff;
+    if (state.sinceLastReview) {
+      return Array.isArray(session.review_diff) ? session.review_diff : [];
     }
     const main = Array.isArray(session.changes) ? session.changes : [];
     const pinned = Array.isArray(session.pinned_tests) ? session.pinned_tests : [];
@@ -2797,8 +2832,93 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   }
 
   function isFileReviewed(session, path) {
-    if (!session || session.file_review_hash !== session.hash) return false;
+    if (!session || !session.hash || session.file_review_hash !== session.hash) return false;
     return Array.isArray(session.reviewed_files) && session.reviewed_files.indexOf(path) >= 0;
+  }
+
+  function proposalReadiness(session) {
+    const result = { editable: false, filesReviewed: false, checksPassed: false, canApprove: false, canApply: false, canUndo: false, message: 'Select a proposal to review.' };
+    if (!session) return result;
+    if (session.state === 'applied') {
+      result.canUndo = true;
+      result.message = 'Applied. Undo verifies the current source before restoring it.';
+      return result;
+    }
+    if (session.freshness !== 'current') {
+      result.message = 'Proposal is stale or unavailable. Refresh before continuing.';
+      return result;
+    }
+    if (['undone', 'reverted', 'recovery_required'].indexOf(session.state) >= 0) {
+      result.message = 'Proposal is ' + session.state + '. Inspect its recovery state in the TUI.';
+      return result;
+    }
+    result.editable = true;
+    const edits = Array.isArray(session.changes) ? session.changes : [];
+    result.filesReviewed = edits.length > 0 && edits.every(function(edit) { return isFileReviewed(session, edit.path); });
+    const checks = Array.isArray(session.checks) ? session.checks : [];
+    result.checksPassed = checks.length > 0 && checks.every(function(check) { return !check.required || check.state === 'passed'; });
+    const workflowReady = !session.workflow || session.workflow.status === 'awaiting_human_review';
+    result.canApprove = result.filesReviewed && result.checksPassed && workflowReady;
+    result.canApply = result.canApprove && Boolean(session.hash) && session.reviewed_hash === session.hash;
+    result.message = !edits.length ? 'Generate changes in Refine to begin.' :
+      !result.filesReviewed ? 'Review each changed file, then mark it reviewed.' :
+      !result.checksPassed ? 'Run checks and resolve required failures before approval.' :
+      !workflowReady ? 'Workflow is not ready for human approval. Inspect Checks.' :
+      !result.canApply ? 'Approve your review to enable Apply.' : 'Review approved. Apply writes these changes to the selected checkout.';
+    return result;
+  }
+
+  function renderReviewActions() {
+    const ready = proposalReadiness(state.activeSession);
+    const busy = state.pendingAction;
+    const controls = { 'review-all-btn': ready.canApprove && !ready.canApply, 'run-checks-btn': ready.editable && (state.activeSession.changes || []).length > 0,
+      'apply-btn': ready.canApply, 'undo-btn': ready.canUndo, 'send-message-btn': ready.editable };
+    Object.keys(controls).forEach(function(id) {
+      const button = document.getElementById(id);
+      button.disabled = Boolean(busy) || !controls[id];
+      button.title = controls[id] ? button.textContent : ready.message;
+    });
+    const delta = document.getElementById('scope-delta-btn');
+    delta.disabled = !state.activeSession || !state.activeSession.last_reviewed_hash;
+    delta.textContent = state.sinceLastReview ? 'Since review' : 'Full diff';
+    delta.className = state.sinceLastReview ? 'btn-primary' : '';
+    delta.title = delta.disabled ? 'Review all files to establish a comparison.' : 'Compare with the last complete review';
+    document.getElementById('undo-btn').hidden = !ready.canUndo;
+    document.getElementById('apply-btn').hidden = ready.canUndo;
+    document.getElementById('review-next-step').textContent = busy ? 'Working…' : ready.message;
+    document.querySelectorAll('.review-file-btn').forEach(function(button) {
+      const path = button.getAttribute('data-path');
+      const editablePath = state.activeSession && (state.activeSession.changes || []).some(function(edit) { return edit.path === path; });
+      button.disabled = Boolean(busy) || state.sinceLastReview || !ready.editable || !editablePath || isFileReviewed(state.activeSession, path);
+      button.title = state.sinceLastReview ? 'Switch to Full diff to review this file.' : button.textContent;
+    });
+  }
+
+  async function runAction(button, action, label) {
+    if (state.pendingAction) return;
+    state.pendingAction = true;
+    const original = button.textContent;
+    const controls = Array.from(document.querySelectorAll('[data-mutation], #worktree-select, #proposal-select, #switch-project-btn'));
+    const disabled = controls.map(function(control) { return control.disabled; });
+    controls.forEach(function(control) { control.disabled = true; });
+    const busyText = label || 'Working…';
+    button.textContent = busyText;
+    button.setAttribute('aria-busy', 'true');
+    renderReviewActions();
+    try { await action(); }
+    finally {
+      state.pendingAction = false;
+      controls.forEach(function(control, index) { control.disabled = disabled[index]; });
+      if (button.textContent === busyText) button.textContent = original;
+      button.removeAttribute('aria-busy');
+      renderReviewActions();
+    }
+  }
+
+  function bindAction(id, action, label) {
+    const button = document.getElementById(id);
+    button.setAttribute('data-mutation', '');
+    button.addEventListener('click', function() { runAction(button, action, label); });
   }
 
   function countDiffStats(edit) {
@@ -2859,12 +2979,12 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
     const groups = [
       {
-        title: '1. Guarded Static & Architecture Phases (parse, format, arch, complexity, secrets)',
+        title: 'Static checks',
         meta: checks.length > 0 ? ('Hash #' + String(session.hash || '').slice(0, 8)) : 'Not executed yet',
         items: staticItems
       },
       {
-        title: '2. Sandboxed Execution & Test Phases (lint, unit tests, baselines)',
+        title: 'Sandbox checks',
         meta: (state.trust && state.trust.trusted) ? 'Trust: Granted' : 'Trust: Locked',
         items: sandboxItems
       }
@@ -2887,7 +3007,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         };
       });
       groups.push({
-        title: '3. Multi-Stage Agent Workflow Pipeline',
+        title: 'Workflow',
         meta: 'Workflow ' + (session.workflow.status || 'idle'),
         items: wfItems
       });
@@ -2899,7 +3019,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   function setDiffSubTab(subTab) {
     state.diffSubTab = subTab || 'changes';
     document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-diff-subtab') === state.diffSubTab);
+      const active = btn.getAttribute('data-diff-subtab') === state.diffSubTab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
     });
     const viewControls = document.getElementById('diff-view-controls');
     if (viewControls) {
@@ -2927,6 +3049,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
 
     const session = state.activeSession;
+    renderReviewActions();
     const fileListEl = document.getElementById('diff-file-list');
     const contentEl = document.getElementById('diff-content');
     const specPaneEl = document.getElementById('diff-spec-pane');
@@ -2955,10 +3078,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     stBadge.className = 'badge ' + (session.state === 'applied' || session.state === 'reviewed' || session.state === 'checked' ? 'green' : (session.state === 'failed' ? 'red' : 'amber'));
 
     const frBadge = document.getElementById('active-proposal-freshness');
-    frBadge.textContent = session.freshness || 'current';
-    frBadge.className = 'badge ' + (session.freshness === 'stale' ? 'red' : 'blue');
+    frBadge.textContent = session.freshness || 'unavailable';
+    frBadge.className = 'badge ' + (session.freshness === 'current' ? 'blue' : 'amber');
 
     const edits = effectiveEdits(session);
+    const selectedDiffFile = edits.some(function(edit) { return edit.path === state.selectedFile; }) ? state.selectedFile : '';
     document.getElementById('changed-files-count').textContent = String(edits.length);
     document.getElementById('diff-subtab-changes-badge').textContent = String(edits.length);
 
@@ -2974,7 +3098,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       checksBadge.className = 'badge red';
     } else {
       checksBadge.textContent = passedChecks + '/' + checksList.length + ' ✓';
-      checksBadge.className = 'badge green';
+      checksBadge.className = passedChecks === checksList.length ? 'badge green' : 'badge';
     }
 
     const criteriaCount = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria.length : 0;
@@ -2986,14 +3110,14 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       if (isFileReviewed(session, e.path)) reviewedCount++;
     });
 
-    let fileItemsHTML = '<div class="list-item' + (!state.selectedFile ? ' active' : '') + '" data-file="">' +
+    let fileItemsHTML = '<div class="list-item' + (!selectedDiffFile ? ' active' : '') + '" data-file="">' +
       '<div class="list-item-row"><span class="list-item-title">All files (' + edits.length + ')</span>' +
       '<span class="badge">' + reviewedCount + '/' + edits.length + ' ✓</span></div></div>';
 
     edits.forEach(function(edit) {
       const stats = countDiffStats(edit);
       const reviewed = isFileReviewed(session, edit.path);
-      const active = state.selectedFile === edit.path ? ' active' : '';
+      const active = selectedDiffFile === edit.path ? ' active' : '';
       fileItemsHTML += '<div class="list-item' + active + '" data-file="' + esc(edit.path) + '">' +
         '<div class="list-item-row">' +
           '<span class="list-item-title">' + (reviewed ? '✓ ' : '') + esc(edit.path.split('/').pop()) + '</span>' +
@@ -3006,6 +3130,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     fileListEl.querySelectorAll('.list-item').forEach(function(el) {
       el.addEventListener('click', function() {
         state.selectedFile = el.getAttribute('data-file') || '';
+        revealCanvas();
         if (state.diffSubTab !== 'changes') {
           setDiffSubTab('changes');
           return;
@@ -3015,16 +3140,12 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       });
     });
 
-    // Visual Pipeline Readiness Bar
-    const hasEdits = edits.length > 0;
-    const allReviewed = hasEdits && reviewedCount === edits.length && session.reviewed_hash === session.hash;
-    const checksPassed = checksList.length > 0 && failedChecks === 0 && passedChecks === checksList.length;
-    const isApplied = session.state === 'applied';
-
+    // Review progress always refers to the full proposal.
+    const reviewFiles = session.changes || [];
+    const fullReviewedCount = reviewFiles.filter(function(edit) { return isFileReviewed(session, edit.path); }).length;
     const pipelineHTML = '<div class="review-summary">' +
-      '<span>' + reviewedCount + '/' + edits.length + ' files reviewed</span>' +
+      '<span>' + fullReviewedCount + '/' + reviewFiles.length + ' files reviewed</span>' +
       '<span>' + (checksList.length ? passedChecks + '/' + checksList.length + ' checks passed' : 'Checks not run') + '</span>' +
-      '<span>' + (isApplied ? 'Applied' : allReviewed && checksPassed ? 'Ready for Apply' : 'Review and checks required') + '</span>' +
     '</div>';
 
     // Always keep Plan & AI Refine pane updated
@@ -3034,7 +3155,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       const criteria = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria : [];
       const suggestions = Array.isArray(session.scope_suggestions) ? session.scope_suggestions : [];
       let specDetailsHTML = '<div class="card">' +
-        '<div class="card-header"><span class="card-title">✔ Acceptance Criteria &amp; Verification Goals</span><span class="badge">' + criteria.length + '</span></div>' +
+        '<div class="card-header"><span class="card-title">Acceptance criteria</span><span class="badge">' + criteria.length + '</span></div>' +
         '<div class="card-body">' +
           (criteria.length > 0
             ? '<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;">' + criteria.map(function(c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
@@ -3042,7 +3163,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         '</div>' +
       '</div>' +
       '<div class="card">' +
-        '<div class="card-header"><span class="card-title">📁 Captured Target Scope</span><span class="badge blue">' + targets.length + ' files</span></div>' +
+        '<div class="card-header"><span class="card-title">Target files</span><span class="badge blue">' + targets.length + ' files</span></div>' +
         '<div class="card-body">' +
           (targets.length > 0
             ? '<div class="chip-list" style="margin-top:0;">' + targets.map(function(t) {
@@ -3058,7 +3179,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       if (session.workflow && session.workflow.review) {
         const rev = session.workflow.review;
         specDetailsHTML += '<div class="card">' +
-          '<div class="card-header"><span class="card-title">🔎 Critic Review Verdict</span><span class="badge ' + (rev.verdict === 'pass' || rev.verdict === 'approved' ? 'green' : 'amber') + '">' + esc(rev.verdict || 'review') + '</span></div>' +
+          '<div class="card-header"><span class="card-title">Model review</span><span class="badge ' + (rev.verdict === 'pass' || rev.verdict === 'approved' ? 'green' : 'amber') + '">' + esc(rev.verdict || 'review') + '</span></div>' +
           '<div class="card-body">' +
             '<p style="margin:0 0 8px 0;">' + esc(rev.summary || '') + '</p>' +
             (Array.isArray(rev.findings) && rev.findings.length > 0
@@ -3071,7 +3192,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
       const msgs = Array.isArray(session.messages) ? session.messages : [];
       document.getElementById('proposal-messages-list').innerHTML = msgs.length > 0
-        ? '<div class="card"><div class="card-header"><span class="card-title">💬 Session Refinement History</span><span class="badge">' + msgs.length + '</span></div>' +
+        ? '<div class="card"><div class="card-header"><span class="card-title">Conversation</span><span class="badge">' + msgs.length + '</span></div>' +
           '<div class="card-body" style="display:flex;flex-direction:column;gap:10px;">' +
           msgs.map(function(m) {
             const isUser = (m.role || '').toLowerCase() === 'user';
@@ -3091,7 +3212,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     if (state.diffSubTab === 'checks') {
       const proposalGroups = collectProposalPhaseGroups(session);
       let checksHTML = pipelineHTML +
-        renderPhaseGroupsHTML(proposalGroups, 'Proposal Verification & Workflow Phases · #' + String(session.hash || '').slice(0, 8));
+        renderPhaseGroupsHTML(proposalGroups, { filter: state.phaseFilter });
       contentEl.innerHTML = checksHTML;
       bindPhaseInspectorControls(contentEl, renderDiffTab);
       return;
@@ -3101,16 +3222,18 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     let html = pipelineHTML;
 
     if (failedChecks > 0) {
-      html += '<div class="review-warning"><span>' + failedChecks + ' checks failed.</span>' +
+      html += '<div class="review-warning"><span>' + failedChecks + (failedChecks === 1 ? ' check failed.</span>' : ' checks failed.</span>') +
         '<button id="inspect-proposal-phases-btn" class="btn-ghost">Inspect checks</button>' +
         '<button id="repair-failed-checks-btn">Refine proposal</button></div>';
     }
 
-    const visibleEdits = state.selectedFile
-      ? edits.filter(function(e) { return e.path === state.selectedFile; })
+    const visibleEdits = selectedDiffFile
+      ? edits.filter(function(e) { return e.path === selectedDiffFile; })
       : edits;
 
-    if (visibleEdits.length === 0) {
+    if (state.sinceLastReview && visibleEdits.length === 0) {
+      html += '<div class="empty-state"><h3>No changes since your last review</h3><p>Switch to Full diff to inspect the complete proposal.</p></div>';
+    } else if (visibleEdits.length === 0) {
       html += '<div class="empty-state"><h3>No file edits generated yet</h3><p>Targets: ' +
         esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') +
         '</p><p>Switch to <strong>Refine</strong> above to prompt the model and generate code for this session.</p></div>';
@@ -3141,9 +3264,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
 
     contentEl.innerHTML = html;
+    renderReviewActions();
     contentEl.querySelectorAll('.review-file-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        reviewSingleFile(btn.getAttribute('data-path'));
+        runAction(btn, function() { return reviewSingleFile(btn.getAttribute('data-path')); }, 'Saving…');
       });
     });
     const inspectBtn = document.getElementById('inspect-proposal-phases-btn');
@@ -3252,7 +3376,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   async function reviewSingleFile(filePath) {
     const s = state.activeSession;
-    if (!s || !filePath) return;
+    if (!s || !filePath || state.sinceLastReview || !proposalReadiness(s).editable) return;
     try {
       const body = Object.assign(changeIdentityPayload(s), { path: filePath });
       const updated = await apiFetch(
@@ -3267,28 +3391,16 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
   }
 
-  async function reviewAndApproveAll() {
-    let s = state.activeSession;
-    if (!s) return;
+  async function approveProposalReview() {
+    const s = state.activeSession;
+    if (!proposalReadiness(s).canApprove) return;
     try {
-      const changes = Array.isArray(s.changes) ? s.changes : [];
-      for (let i = 0; i < changes.length; i++) {
-        const path = changes[i].path;
-        if (!isFileReviewed(s, path)) {
-          const body = Object.assign(changeIdentityPayload(s), { path: path });
-          const next = await apiFetch(
-            withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
-            { method: 'POST', body: body }
-          );
-          s = preserveSessionMeta(s, next);
-        }
-      }
       const next = await apiFetch(
         withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
         { method: 'POST', body: changeIdentityPayload(s) }
       );
       state.activeSession = preserveSessionMeta(s, next);
-      showBanner('All files marked reviewed and proposal hash approved.', 'ok');
+      showBanner('Review approved. Ready to apply.', 'ok');
       await loadAll();
     } catch (err) {
       showBanner('Proposal review approval failed: ' + err.message, 'error');
@@ -3315,27 +3427,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   }
 
   async function applyActiveProposal() {
-    let s = state.activeSession;
-    if (!s) return;
-    if (!window.confirm('Apply reviewed proposal "' + (s.title || s.id) + '" to workspace source files?')) {
+    const s = state.activeSession;
+    if (!proposalReadiness(s).canApply) return;
+    const destination = s._worktreePath || (state.project && state.project.path) || 'the current checkout';
+    if (!window.confirm('Apply reviewed proposal "' + (s.title || s.id) + '" to ' + destination + '?')) {
       return;
     }
     try {
-      const changes = Array.isArray(s.changes) ? s.changes : [];
-      for (let i = 0; i < changes.length; i++) {
-        if (!isFileReviewed(s, changes[i].path)) {
-          const next = await apiFetch(
-            withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review-file'),
-            { method: 'POST', body: Object.assign(changeIdentityPayload(s), { path: changes[i].path }) }
-          );
-          s = preserveSessionMeta(s, next);
-        }
-      }
-      const reviewed = await apiFetch(
-        withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/review'),
-        { method: 'POST', body: changeIdentityPayload(s) }
-      );
-      s = preserveSessionMeta(s, reviewed);
       const body = Object.assign(changeIdentityPayload(s), { confirm: true });
       const res = await apiFetch(
         withSessionWorktree(s, '/api/projects/current/changes/' + encodeURIComponent(s.id) + '/apply'),
@@ -3350,7 +3448,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   async function undoActiveProposal() {
     const s = state.activeSession;
-    if (!s) return;
+    if (!proposalReadiness(s).canUndo) return;
     if (!window.confirm('Undo applied changes for "' + (s.title || s.id) + '"? This verifies current file hashes match the applied revision.')) {
       return;
     }
@@ -3406,14 +3504,14 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   function getCommandItems() {
     const items = [
-      { label: 'Workspace: Project (Project Handbook)', hint: '1', run: function() { setTab('docs'); } },
-      { label: 'Workspace: Project (Verification & Phases)', hint: 'Phases', run: function() { openDocSection('verification'); } },
-      { label: 'Workspace: Project (Source Files)', hint: 'F', run: function() { setTab('files'); } },
-      { label: 'Workspace: Work (Spec Studio)', hint: '2', run: function() { setTab('tasks'); } },
-      { label: 'Workspace: Work (Triaged Issues)', hint: 'I', run: function() { setTab('issues'); } },
-      { label: 'Workspace: Review (Diff Inspector)', hint: '3', run: function() { setTab('diff'); setDiffSubTab('changes'); } },
-      { label: 'Workspace: Review (Checks & Workflow Phases)', hint: 'Checks', run: function() { setTab('diff'); setDiffSubTab('checks'); } },
-      { label: 'Action: Generate docs', hint: 'Docs', run: runProjectDocsAnalysis },
+      { label: 'Project: Overview', hint: '1', run: function() { setTab('docs'); } },
+      { label: 'Project: Checks', hint: 'View', run: function() { openDocSection('verification'); } },
+      { label: 'Project: Files', hint: 'View', run: function() { setTab('files'); } },
+      { label: 'Work: New task', hint: '2', run: function() { setTab('tasks'); } },
+      { label: 'Work: Issues', hint: 'View', run: function() { setTab('issues'); } },
+      { label: 'Review: Changes', hint: '3', run: function() { setTab('diff'); setDiffSubTab('changes'); } },
+      { label: 'Review: Checks', hint: 'Checks', run: function() { setTab('diff'); setDiffSubTab('checks'); } },
+      { label: 'Action: Generate docs', hint: 'Docs', run: function() { document.getElementById('run-analysis-btn').click(); } },
       { label: 'Action: Run Go Static Scan', hint: 'Scan', run: function() { document.getElementById('run-scan-btn').click(); } },
       { label: 'Action: Reindex Repository Files', hint: 'Reindex', run: function() { document.getElementById('reindex-btn').click(); } },
       { label: 'Action: Refresh Workspace State', hint: 'Refresh', run: loadAll },
@@ -3429,50 +3527,71 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     return items;
   }
 
+  let commandItems = [];
+  let commandIndex = 0;
+  let commandPreviousFocus = null;
+
+  function selectCommand(index) {
+    commandIndex = commandItems.length ? (index + commandItems.length) % commandItems.length : 0;
+    cmdList.querySelectorAll('.cmd-item').forEach(function(item, i) {
+      item.classList.toggle('selected', i === commandIndex);
+      item.setAttribute('aria-selected', String(i === commandIndex));
+      if (i === commandIndex) item.scrollIntoView({ block: 'nearest' });
+    });
+    if (commandItems.length) cmdInput.setAttribute('aria-activedescendant', 'command-' + commandIndex);
+    else cmdInput.removeAttribute('aria-activedescendant');
+  }
+
   function renderCommandPalette() {
     const q = (cmdInput.value || '').toLowerCase().trim();
-    const all = getCommandItems().filter(function(it) {
-      return !q || it.label.toLowerCase().indexOf(q) >= 0;
+    const files = ((state.index && state.index.files) || []).map(function(file) {
+      return { label: 'Open file: ' + file.path, hint: 'File', run: function() { setTab('files'); openSourceFile(file.path); } };
     });
-    cmdList.innerHTML = all.map(function(it, idx) {
-      return '<div class="cmd-item' + (idx === 0 ? ' selected' : '') + '" data-cmd-idx="' + idx + '">' +
-        '<span>' + esc(it.label) + '</span>' +
-        '<span class="kbd">' + esc(it.hint) + '</span>' +
-      '</div>';
-    }).join('') || '<div class="empty-state" style="padding:20px;">No matching commands.</div>';
+    commandItems = getCommandItems().concat(files).filter(function(item) { return !q || item.label.toLowerCase().includes(q); }).slice(0, 100);
+    cmdList.innerHTML = commandItems.map(function(item, index) {
+      return '<div class="cmd-item" role="option" id="command-' + index + '" data-cmd-idx="' + index + '"><span>' + esc(item.label) + '</span><span class="kbd">' + esc(item.hint) + '</span></div>';
+    }).join('') || '<div class="empty-state" role="status">No matching commands or files.</div>';
+    cmdList.querySelectorAll('.cmd-item').forEach(function(item, index) {
+      item.addEventListener('click', function() { executeCommand(index); });
+    });
+    selectCommand(0);
+  }
 
-    cmdList.querySelectorAll('.cmd-item').forEach(function(el) {
-      el.addEventListener('click', function() {
-        const idx = Number(el.getAttribute('data-cmd-idx'));
-        closeCommandPalette();
-        if (all[idx]) all[idx].run();
-      });
-    });
+  function executeCommand(index) {
+    const item = commandItems[index];
+    if (!item) return;
+    closeCommandPalette();
+    item.run();
+    revealCanvas();
   }
 
   function openCommandPalette() {
+    commandPreviousFocus = document.activeElement;
+    document.getElementById('app-shell').inert = true;
     cmdBackdrop.classList.add('open');
+    cmdInput.setAttribute('aria-expanded', 'true');
     cmdInput.value = '';
     renderCommandPalette();
-    setTimeout(function() { cmdInput.focus(); }, 20);
+    cmdInput.focus();
   }
 
   function closeCommandPalette() {
     cmdBackdrop.classList.remove('open');
+    cmdInput.setAttribute('aria-expanded', 'false');
+    document.getElementById('app-shell').inert = false;
+    if (commandPreviousFocus && commandPreviousFocus.isConnected) commandPreviousFocus.focus();
   }
 
   document.getElementById('cmd-palette-btn').addEventListener('click', openCommandPalette);
-  cmdBackdrop.addEventListener('click', function(e) {
-    if (e.target === cmdBackdrop) closeCommandPalette();
-  });
+  cmdBackdrop.addEventListener('click', function(e) { if (e.target === cmdBackdrop) closeCommandPalette(); });
   cmdInput.addEventListener('input', renderCommandPalette);
   cmdInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      closeCommandPalette();
-    } else if (e.key === 'Enter') {
-      const first = cmdList.querySelector('.cmd-item');
-      if (first) first.click();
-    }
+    if (['Escape', 'Enter', 'ArrowDown', 'ArrowUp', 'Tab'].indexOf(e.key) < 0) return;
+    e.preventDefault();
+    if (e.key === 'Escape') closeCommandPalette();
+    else if (e.key === 'Enter') executeCommand(commandIndex);
+    else if (e.key === 'ArrowDown') selectCommand(commandIndex + 1);
+    else if (e.key === 'ArrowUp') selectCommand(commandIndex - 1);
   });
 
   // Global keyboard shortcuts (when not typing in an input/textarea)
@@ -3483,6 +3602,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       else openCommandPalette();
       return;
     }
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.isContentEditable) return;
     const tag = (e.target && e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || cmdBackdrop.classList.contains('open')) {
       return;
@@ -3492,6 +3612,22 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     else if (e.key === '3') setTab('diff');
     else if (e.key === 't' || e.key === 'T') cycleTheme();
     else if (e.key === '[') toggleSidebar();
+  });
+
+  const keyboardItems = '.list-item, .doc-file-jump, .file-chip[data-path], [data-remove-path]';
+  function prepareKeyboardItems() {
+    document.querySelectorAll(keyboardItems).forEach(function(item) {
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+    });
+  }
+  new MutationObserver(prepareKeyboardItems).observe(document.getElementById('app-shell'), { childList: true, subtree: true });
+  prepareKeyboardItems();
+  document.addEventListener('keydown', function(event) {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches(keyboardItems)) {
+      event.preventDefault();
+      event.target.click();
+    }
   });
 
   // ==================== EVENT BINDINGS ====================
@@ -3521,11 +3657,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       });
       item.classList.add('active');
       state.docSection = item.getAttribute('data-doc-sec') || 'overview';
+      revealCanvas();
       renderUnderstandDocs();
     });
   });
 
   document.getElementById('build-mode-spec').addEventListener('click', function() {
+    revealCanvas();
     state.buildMode = 'spec';
     syncURL();
     syncSubModes();
@@ -3537,6 +3675,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   });
 
   document.getElementById('reset-spec-btn').addEventListener('click', function() {
+    revealCanvas();
     document.getElementById('new-task-title').value = '';
     document.getElementById('new-task-spec').value = '';
     document.getElementById('new-task-paths').value = '';
@@ -3557,8 +3696,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
   });
 
-  document.getElementById('run-analysis-btn').addEventListener('click', runProjectDocsAnalysis);
-  document.getElementById('explain-file-btn').addEventListener('click', explainCurrentFile);
+  bindAction('run-analysis-btn', runProjectDocsAnalysis, 'Generating…');
+  bindAction('explain-file-btn', explainCurrentFile, 'Explaining…');
   document.getElementById('task-from-file-btn').addEventListener('click', function() {
     const p = state.selectedFile || (state.openFileInfo && state.openFileInfo.path) || '';
     state.tab = 'build';
@@ -3581,6 +3720,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   });
 
   document.getElementById('worktree-select').addEventListener('change', function(e) {
+    state.sessionRequest++;
+    state.activeSession = null;
+    renderReviewActions();
     state.worktreePath = e.target.value;
     state.sessionId = '';
     state.selectedFile = '';
@@ -3610,11 +3752,11 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     renderDiffTab();
   });
 
-  document.getElementById('review-all-btn').addEventListener('click', reviewAndApproveAll);
-  document.getElementById('run-checks-btn').addEventListener('click', runProposalChecks);
-  document.getElementById('apply-btn').addEventListener('click', applyActiveProposal);
-  document.getElementById('undo-btn').addEventListener('click', undoActiveProposal);
-  document.getElementById('send-message-btn').addEventListener('click', sendProposalRefinement);
+  bindAction('review-all-btn', approveProposalReview, 'Approving…');
+  bindAction('run-checks-btn', runProposalChecks, 'Checking…');
+  bindAction('apply-btn', applyActiveProposal, 'Applying…');
+  bindAction('undo-btn', undoActiveProposal, 'Undoing…');
+  bindAction('send-message-btn', sendProposalRefinement, 'Generating…');
 
   document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -3647,13 +3789,13 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
   }
 
-  document.getElementById('trust-btn').addEventListener('click', toggleExecutionTrust);
-  document.getElementById('trust-status-pill').addEventListener('click', toggleExecutionTrust);
+  bindAction('trust-btn', toggleExecutionTrust);
+  bindAction('trust-status-pill', toggleExecutionTrust);
   document.getElementById('status-bar-scan-pill').addEventListener('click', function() {
     openDocSection('verification');
   });
 
-  document.getElementById('reindex-btn').addEventListener('click', async function() {
+  bindAction('reindex-btn', async function() {
     if (!state.project) return;
     try {
       await apiFetch(withWorktree('/api/projects/current/reindex'), {
@@ -3667,7 +3809,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     }
   });
 
-  document.getElementById('run-scan-btn').addEventListener('click', async function() {
+  bindAction('run-scan-btn', async function() {
     if (!state.project) return;
     try {
       showBanner('Running Go static scan (parser, vet, tests)…', 'info');
@@ -3720,30 +3862,27 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   document.getElementById('spec-file-search').addEventListener('input', renderSpecFileChips);
   document.getElementById('new-task-paths').addEventListener('input', renderSpecFileChips);
 
-  document.getElementById('create-task-btn').addEventListener('click', function() {
-    submitSpecTask(false);
-  });
-  document.getElementById('generate-spec-btn').addEventListener('click', function() {
-    submitSpecTask(true);
-  });
+  bindAction('create-task-btn', function() { return submitSpecTask(false); }, 'Saving…');
+  bindAction('generate-spec-btn', function() { return submitSpecTask(true); }, 'Generating…');
 
   function connectSSE() {
     if (typeof EventSource === 'undefined') return;
     const es = new EventSource('/api/projects/current/events');
     const badge = document.getElementById('live-status');
     es.addEventListener('open', function() {
-      badge.textContent = '● LIVE';
+      badge.textContent = 'Connected';
       badge.className = 'badge green';
     });
     es.addEventListener('update', function() {
-      loadAll();
+      if (!state.pendingAction) loadAll();
     });
     es.addEventListener('error', function() {
-      badge.textContent = '○ RECONNECTING';
+      badge.textContent = 'Reconnecting…';
       badge.className = 'badge amber';
     });
   }
 
+  renderReviewActions();
   setTab(state.tab);
   loadAll();
   connectSSE();

@@ -60,6 +60,27 @@ cards and a next-step panel when space permits, prioritizing activity navigation
 in smaller terminals. Frames fit the actual terminal size, with a resize prompt below
 52 columns or 16 rows. A larger terminal is recommended for reviewing diffs.
 
+## Browser workspace
+
+Run `:web` in the TUI to open the local browser workspace with the selected
+checkout, proposal and file. Use `:web files`, `:web tasks`, `:web issues` or
+`:web diff` to choose a view directly.
+
+- **Project**: read source files and generated docs; inspect recorded checks.
+- **Work**: describe a task, select 1–8 Go/Markdown paths, and save or generate a proposal.
+- **Review**: inspect full or comparison diffs, mark each changed file reviewed,
+  run checks, approve the review, then explicitly Apply. Undo is available after Apply.
+
+`Ctrl+K` / `Cmd+K` searches commands and indexed files. Use arrow keys and Enter
+to select, Escape to close, `1–3` to switch areas, and `[` to toggle the sidebar.
+Supporting details expand on demand; themes and project tools live in Settings.
+The daemon remains the authority for provider consent, check trust and source
+identity. Reading files, opening details and navigating never starts model work.
+
+Browser interaction regression tests use Node's built-in runner:
+`node --test internal/api/handlers/webui_test.mjs`. They exercise action and
+keyboard logic with a minimal DOM; browser inspection is still needed for layout.
+
 ## Reviewing a task in the TUI
 
 Selecting a fix opens **Task Plan**. In Features, `Enter` opens its details and
