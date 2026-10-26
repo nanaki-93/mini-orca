@@ -8,7 +8,7 @@
 
 import { withWorktree, query } from './api.js';
 import { asArray, companionTestPath, isTestPath, plural, unique } from '../core/util.js';
-import { changeIdentity, effectiveEdits, isFileReviewed, nextUnreviewedPath, proposalReadiness, workflowActive } from '../core/readiness.js';
+import { changeIdentity, effectiveEdits, isFileReviewed, nextUnreviewedPath, proposalReadiness, undoFromRecovery, workflowActive } from '../core/readiness.js';
 import { mergeRequest, workflowDestinations, workflowRequest } from '../core/workflow.js';
 import { parseGitDiff } from '../core/diff.js';
 
@@ -158,6 +158,17 @@ export function createActions({ state, api, ui, notify }) {
     return { project_id: project.project_id, project_revision: project.project_revision };
   }
 
+  // Undo restores only the latest grouped Apply in a checkout, so ask the
+  // daemon's recovery journal instead of assuming every applied task can undo.
+  async function undoAvailability(session, worktreePath) {
+    try {
+      const recovery = await api.get(withWorktree('/api/projects/current/changes/recovery', worktreePath));
+      return undoFromRecovery(session, recovery);
+    } catch (err) {
+      return { available: false, reason: 'The undo journal could not be read: ' + (err && err.message ? err.message : String(err)) };
+    }
+  }
+
   async function loadSession(sessionId) {
     const request = ++state.sessionRequest;
     // Reloading the same proposal keeps it visible; selecting another one
@@ -177,6 +188,8 @@ export function createActions({ state, api, ui, notify }) {
       loaded._worktreePath = worktreePath;
       loaded._checkoutProjectId = ident.project_id;
       loaded._checkoutProjectRevision = ident.project_revision;
+      if (loaded.state === 'applied') loaded._undo = await undoAvailability(loaded, worktreePath);
+      if (request !== state.sessionRequest) return;
       state.activeSession = loaded;
       if (!loaded.last_reviewed_hash) state.review.sinceLastReview = false;
       state.route.sessionId = sessionId;
@@ -262,7 +275,7 @@ export function createActions({ state, api, ui, notify }) {
     }
     const ok = await ui.confirm({
       title: commit ? 'Apply and commit?' : 'Apply reviewed changes?',
-      body: 'Write “' + (session.title || session.id) + '” to ' + destination + (commit ? ' and commit it on ' + (session.git.branch || 'the current branch') + '.' : '.') + ' Undo stays available while the files are unchanged.',
+      body: 'Write “' + (session.title || session.id) + '” to ' + destination + (commit ? ' and commit it on ' + (session.git.branch || 'the current branch') + '.' : '.') + ' Undo stays available for the latest Apply while the files are unchanged' + (commit ? '; it restores the files but keeps the commit.' : '.') + runningTasksNote(session),
       confirmLabel: commit ? 'Apply & commit' : 'Apply changes'
     });
     if (!ok) return;
@@ -281,12 +294,20 @@ export function createActions({ state, api, ui, notify }) {
     });
   }
 
+  // Apply and Undo reindex the checkout, which stops every running task there.
+  function runningTasksNote(session) {
+    const others = asArray(state.changes).filter(change => change.id !== session.id && (change._worktreePath || '') === (session._worktreePath || '') && ['running', 'canceling'].includes(change.workflow_status));
+    if (!others.length) return '';
+    const names = others.slice(0, 3).map(change => '“' + (change.title || change.id) + '”').join(', ');
+    return ' This stops ' + plural(others.length, 'running task') + ' in this checkout: ' + names + (others.length > 3 ? ', …' : '') + '.';
+  }
+
   async function undoProposal() {
     const session = state.activeSession;
     if (!proposalReadiness(session).canUndo) return;
     const ok = await ui.confirm({
       title: 'Undo applied changes?',
-      body: 'Restore the files changed by “' + (session.title || session.id) + '”. The daemon verifies they still match the applied version first.',
+      body: 'Restore the files changed by “' + (session.title || session.id) + '”. The daemon verifies they still match the applied version first.' + (session.commit && session.commit.state === 'committed' ? ' The commit stays in history; revert it with Git if needed.' : '') + runningTasksNote(session),
       confirmLabel: 'Undo changes',
       danger: true
     });

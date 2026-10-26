@@ -124,7 +124,7 @@ func (s *State) worktreeByPath(path string) *GitWorktree {
 func (s *State) confirmWorktreeMerge(wt *GitWorktree, path, destination string) {
 	s.Confirmation = &Confirmation{
 		Title:       "Merge into " + destination + "?",
-		Message:     worktreeMergePreview(wt, path, destination),
+		Message:     strings.TrimSpace(worktreeMergePreview(wt, path, destination) + " " + s.stoppedTasksNote(&ChangeSession{})),
 		AcceptLabel: "Merge",
 		OnConfirm: func(state *State) {
 			state.CmdOutput = fmt.Sprintf("Merging %s into %s...", path, destination)

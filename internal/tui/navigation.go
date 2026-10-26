@@ -209,15 +209,21 @@ func (s *State) requestTrustChange() {
 // confirmApplyFromDiff guards Enter in the diff view: Apply writes source and
 // commits, so a stray Enter while reading a diff must not trigger it.
 func (s *State) confirmApplyFromDiff() {
-	if s.Change == nil {
-		s.CmdOutput = "No active proposal diff to apply."
+	if !s.applyAllowed() {
 		return
 	}
-	title := s.Change.Title
+	message := fmt.Sprintf("Write and commit %q in the current checkout. Undo stays available for the latest Apply while the source is unchanged.", s.Change.Title)
+	if note := s.stoppedTasksNote(s.Change); note != "" {
+		message += " " + note
+	}
 	s.Confirmation = &Confirmation{
 		Title:       "Apply reviewed changes?",
-		Message:     fmt.Sprintf("Write and commit %q in the current checkout. Undo stays available while the source is unchanged.", title),
+		Message:     message,
 		AcceptLabel: "Apply & commit",
-		OnConfirm:   func(s *State) { s.applyAndCommitProposal("") },
+		OnConfirm: func(state *State) {
+			if state.applyAllowed() {
+				state.queueApply("")
+			}
+		},
 	}
 }

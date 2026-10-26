@@ -87,7 +87,7 @@ function stepTab(id, index, session, ready, current) {
 function primaryAction(state, ready, section) {
   const session = state.activeSession;
   const busy = Boolean(state.pending);
-  if (session.state === 'applied') return section === 'apply' ? '' : button('Undo…', { variant: 'danger', icon: 'undo', disabled: busy, data: { action: 'review-section', section: 'apply' } });
+  if (session.state === 'applied') return section === 'apply' || !ready.canUndo ? '' : button('Undo…', { variant: 'danger', icon: 'undo', disabled: busy, data: { action: 'review-section', section: 'apply' } });
   if (workflowActive(session)) return button('View agents', { icon: 'agent', data: { action: 'review-section', section: 'pipeline' } });
   if (!asArray(session.changes).length) return button('Generate', { variant: 'primary', icon: 'sparkle', data: { action: 'review-section', section: 'pipeline' } });
   if (!ready.filesReviewed && section === 'changes') {
@@ -289,9 +289,10 @@ function applySection(state, session, ready) {
   const destination = session._worktreePath || (state.project && state.project.path) || 'current checkout';
   let html = '<div class="page-inner page-narrow stack-lg">';
   if (session.state === 'applied') {
-    html += '<div><h2>Applied</h2><p class="muted small">These changes are in ' + esc(destination) + '. Undo restores the previous files after verifying nothing else changed them.</p></div>';
+    const undo = proposalReadiness(session);
+    html += '<div><h2>Applied</h2><p class="muted small">These changes are in ' + esc(destination) + '. ' + (undo.canUndo ? 'Undo restores the previous files after verifying nothing else changed them.' : esc(undo.message.replace(/^Applied\. /, ''))) + '</p></div>';
     if (session.commit) html += commitInfo(session.commit);
-    html += '<div class="row">' + button('Undo changes', { variant: 'danger', icon: 'undo', disabled: busy, busy: state.pending === 'Undoing…', data: { action: 'undo', mutation: '' } }) + (session._worktreePath ? button('Merge from Git', { icon: 'merge', data: { action: 'open-page', page: 'git' } }) : '') + '</div>';
+    html += '<div class="row">' + (undo.canUndo ? button('Undo changes', { variant: 'danger', icon: 'undo', disabled: busy, busy: state.pending === 'Undoing…', data: { action: 'undo', mutation: '' } }) : '') + (session._worktreePath ? button('Merge from Git', { icon: 'merge', data: { action: 'open-page', page: 'git' } }) : '') + '</div>';
     return html + '</div>';
   }
   html += '<div><h2>Ready to apply?</h2><p class="muted small">Apply writes the reviewed version to <span class="path">' + esc(destination) + '</span> with a recovery journal.</p></div>';

@@ -146,7 +146,7 @@ func (s *State) diffReviewOverview(th ansiTheme, active FileDiffHunk, width int)
 			}
 		}
 		if s.ShowInlineWhy && len(criteria) > 0 {
-			rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Acceptance:", th.purple, th.fg, criteria, contentW)...)
+			rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Model says this meets:", th.purple, th.fg, criteria, contentW)...)
 		}
 	}
 	return append(rows, s.diffApplyDestination())

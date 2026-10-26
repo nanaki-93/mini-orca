@@ -298,33 +298,78 @@ func (s *State) toggleCurrentFileExclusion() {
 }
 
 func (s *State) applyAndCommitProposal(commitMsg string) {
+	if !s.applyAllowed() {
+		return
+	}
+	if note := s.stoppedTasksNote(s.Change); note != "" {
+		title := s.Change.Title
+		s.Confirmation = &Confirmation{
+			Title:       "Apply and stop running tasks?",
+			Message:     fmt.Sprintf("Applying %q reindexes this checkout. %s", title, note),
+			AcceptLabel: "Apply & commit",
+			OnConfirm: func(state *State) {
+				if state.applyAllowed() {
+					state.queueApply(commitMsg)
+				}
+			},
+		}
+		return
+	}
+	s.queueApply(commitMsg)
+}
+
+func (s *State) queueApply(commitMsg string) {
+	s.CmdOutput = "Applying and committing verified proposal..."
+	s.enqueueAction(ActionRequest{Kind: "apply-commit", Target: s.Change.ID, Message: commitMsg})
+}
+
+// stoppedTasksNote names the running tasks an Apply in change's checkout will
+// stop: the daemon reindexes after Apply and cancels work bound to old source.
+func (s *State) stoppedTasksNote(change *ChangeSession) string {
+	var names []string
+	for _, other := range s.runningWorkflowSessions() {
+		if other.ID != change.ID && other.WorktreePath == change.WorktreePath {
+			names = append(names, fmt.Sprintf("%q", client.FirstNonEmpty(other.Title, other.ID)))
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	list := strings.Join(names[:min(3, len(names))], ", ")
+	if len(names) > 3 {
+		list += ", …"
+	}
+	return fmt.Sprintf("This stops %d running task(s): %s. Run them again afterwards.", len(names), list)
+}
+
+// applyAllowed checks the local preconditions for Apply and explains a refusal.
+func (s *State) applyAllowed() bool {
 	if s.Page == PageAgents {
 		s.syncSelectedAgentSession()
 	}
 	if s.Change == nil {
 		s.CmdOutput = "No active proposal diff to apply."
-		return
+		return false
 	}
 	if s.Change.Plan != nil && !allProposalFilesReviewed(s.Change) {
 		s.openAgentDiffInspector()
 		s.CmdOutput = "Inspect each changed file and press [w] to mark it reviewed before Apply."
-		return
+		return false
 	}
 	if s.Change.State == "applied" {
 		s.CmdOutput = fmt.Sprintf("Proposal %q is already applied and committed (press [u] for Undo).", s.Change.Title)
-		return
+		return false
 	}
 	if s.hasRunningWorkflow() {
 		s.CmdOutput = "Wait for the active agent workflow to finish verification before applying."
-		return
+		return false
 	}
 	passed, total := domain.CountPassedChecks(s.Change.Checks)
 	if total == 0 || passed < total {
 		s.CmdOutput = "Cannot apply proposal before required verification checks pass."
-		return
+		return false
 	}
-	s.CmdOutput = "Applying and committing verified proposal..."
-	s.enqueueAction(ActionRequest{Kind: "apply-commit", Target: s.Change.ID, Message: commitMsg})
+	return true
 }
 
 func (s *State) requestGuardedUndo() {

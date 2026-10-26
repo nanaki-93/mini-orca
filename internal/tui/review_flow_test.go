@@ -56,3 +56,27 @@ func TestMergingAWorktreeShowsAPreviewFirst(t *testing.T) {
 		t.Fatalf("confirmed merge not queued: %+v", s.PendingActions)
 	}
 }
+
+func TestApplyWarnsWhichRunningTasksItStops(t *testing.T) {
+	s := twoFileReviewState()
+	s.Change.Checks = []Check{{Name: "tests", Required: true, State: "passed"}}
+	s.ActiveChanges = []*ChangeSession{{ID: "chg-other", Title: "Speed up indexing", Workflow: &ChangeWorkflow{Status: "running"}}}
+	s.HandleKey(KeyEvent{Key: "a"})
+	if s.Confirmation == nil || len(s.PendingActions) != 0 {
+		t.Fatal("Apply must warn before it stops another running task")
+	}
+	if !strings.Contains(s.Confirmation.Message, "Speed up indexing") {
+		t.Fatalf("the warning must name the task it stops: %s", s.Confirmation.Message)
+	}
+	s.HandleKey(KeyEvent{Key: "y"})
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "apply-commit" {
+		t.Fatalf("confirmed Apply not queued: %+v", s.PendingActions)
+	}
+
+	quiet := twoFileReviewState()
+	quiet.Change.Checks = s.Change.Checks
+	quiet.HandleKey(KeyEvent{Key: "a"})
+	if quiet.Confirmation != nil || len(quiet.PendingActions) != 1 {
+		t.Fatal("with nothing else running, [a] applies directly")
+	}
+}

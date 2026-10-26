@@ -67,9 +67,10 @@ export function proposalReadiness(session) {
   const result = { editable: false, filesReviewed: false, checksPassed: false, canApprove: false, canApply: false, canUndo: false, step: 'none', message: 'Select a proposal to review.' };
   if (!session) return result;
   if (session.state === 'applied') {
-    result.canUndo = true;
+    const undo = session._undo || { available: true };
+    result.canUndo = Boolean(undo.available);
     result.step = 'applied';
-    result.message = 'Applied. Undo verifies the current source before restoring it.';
+    result.message = undo.available ? 'Applied. Undo verifies the current source before restoring it.' : 'Applied. ' + (undo.reason || 'Undo is not available for this task.');
     return result;
   }
   if (session.freshness !== 'current') {
@@ -110,6 +111,17 @@ export function proposalReadiness(session) {
     result.message = 'Review approved. Apply writes these changes to the selected checkout.';
   }
   return result;
+}
+
+/**
+ * Undo restores only the most recent grouped Apply in a checkout and needs its
+ * recovery journal; older applied tasks are reverted with Git instead.
+ */
+export function undoFromRecovery(session, recovery) {
+  if (!recovery || !recovery.session_id) return { available: false, reason: 'No undo record exists for this checkout. Revert the change with Git.' };
+  if (recovery.session_id !== session.id) return { available: false, reason: 'Undo covers only the latest Apply in this checkout. Revert this change with Git.' };
+  if (!recovery.undo_available || recovery.state === 'undone') return { available: false, reason: 'This Apply was already undone.' };
+  return { available: true, reason: '' };
 }
 
 /** Returns the path of the next unreviewed edit after `current`, wrapping around, or ''. */

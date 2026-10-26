@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkSummary, effectiveEdits, isFileReviewed, nextAction, nextUnreviewedPath, normalizePhaseState, proposalReadiness, reviewProgress } from '../js/core/readiness.js';
+import { checkSummary, effectiveEdits, isFileReviewed, nextAction, nextUnreviewedPath, normalizePhaseState, proposalReadiness, reviewProgress, undoFromRecovery } from '../js/core/readiness.js';
 import { buildSegments, diffStats, hunkStarts, parseGitDiff, splitRows } from '../js/core/diff.js';
 import { fuzzyScore, highlight, rankItems } from '../js/core/fuzzy.js';
 import { ancestors, buildTree, visibleRows } from '../js/core/tree.js';
@@ -176,4 +176,17 @@ test('workflow consent lists only remote destinations and blocks unsafe starts',
 test('merge requests carry both checkout identities and explicit confirmation', () => {
   const body = mergeRequest({ head: 'h1', branch: 'main' }, { path: '/wt', head: 'h2', branch: 'task' }, { project_id: 'p', project_revision: 'r' });
   assert.deepEqual(body, { project_id: 'p', project_revision: 'r', head: 'h1', branch: 'main', path: '/wt', source_head: 'h2', source_branch: 'task', confirm: true, confirm_execution: true });
+});
+
+test('undo is offered only for the latest Apply recorded in the journal', () => {
+  const applied = { id: 'chg-2', state: 'applied' };
+  assert.equal(undoFromRecovery(applied, { session_id: 'chg-2', state: 'applied', undo_available: true }).available, true);
+  const older = undoFromRecovery(applied, { session_id: 'chg-3', state: 'applied', undo_available: true });
+  assert.equal(older.available, false);
+  assert.match(older.reason, /latest Apply/);
+  assert.equal(undoFromRecovery(applied, null).available, false);
+  assert.equal(undoFromRecovery(applied, { session_id: 'chg-2', state: 'undone', undo_available: false }).available, false);
+  const ready = proposalReadiness(Object.assign({}, applied, { _undo: older }));
+  assert.equal(ready.canUndo, false);
+  assert.match(ready.message, /Revert this change with Git/);
 });
