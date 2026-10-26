@@ -66,14 +66,22 @@ Run `:web` in the TUI to open the local browser workspace with the selected
 checkout, proposal and file. Use `:web files`, `:web tasks`, `:web issues` or
 `:web diff` to choose a view directly.
 
-- **Project**: read source files and generated docs; inspect recorded checks.
-- **Work**: describe a task, select 1–8 Go/Markdown paths, and save or generate a proposal.
-- **Review**: inspect full or comparison diffs, mark each changed file reviewed,
-  run checks, approve the review, then explicitly Apply. Undo is available after Apply.
+The Midnight theme uses deep navy surfaces and subtle violet accents. The main
+pages are **Home**, **Files**, **Tasks**, **Issues**, **Docs**, **Checks**, and
+**Settings**. File explorers appear only beside source or diffs; diagnostics and
+issue details expand when needed.
+
+Create a task in three steps: **Describe → Choose files → Confirm**. Select 1–8
+Go/Markdown paths, then save a draft or generate a proposal. Opening a saved task
+shows **Changes**, **Checks**, **Refine**, and **Apply**. Mark each changed file
+reviewed, run checks, and approve the current version before Apply becomes
+available. Guarded Undo lives on the Apply page after application.
 
 `Ctrl+K` / `Cmd+K` searches commands and indexed files. Use arrow keys and Enter
-to select, Escape to close, `1–3` to switch areas, and `[` to toggle the sidebar.
-Supporting details expand on demand; themes and project tools live in Settings.
+to select, Escape to close, `1–3` for Home/Files/Tasks, and `[` to toggle navigation.
+Browser Back/Forward restores pages and review sections. Themes, checkout
+selection, execution trust, and project tools live in Settings. Existing theme
+preferences are retained; choose **Midnight · Navy & violet** for the new palette.
 The daemon remains the authority for provider consent, check trust and source
 identity. Reading files, opening details and navigating never starts model work.
 

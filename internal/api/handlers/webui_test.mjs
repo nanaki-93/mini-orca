@@ -59,11 +59,11 @@ function harness() {
     loadAll = async function() {};
     globalThis.testUI = { state, proposalReadiness, applyActiveProposal, approveProposalReview,
       runAction, renderReviewActions, loadChangeSession, submitSpecTask, effectiveEdits, reviewSingleFile,
-      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage, setTaskStep, setDiffSubTab, renderPhaseGroupsHTML };
+      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage, setTaskStep, setDiffSubTab, renderPhaseGroupsHTML, restoreRoute, openProposal, toggleSidebar };
   `);
   const context = {
     document, URLSearchParams,
-    window: { location: { search: '' }, history: { replaceState() {} }, matchMedia: () => ({ matches: false }), confirm: () => true },
+    window: { location: { search: '' }, addEventListener() {}, history: { replaceState() {}, pushState() {} }, matchMedia: () => ({ matches: false }), confirm: () => true },
     localStorage: { getItem: () => null, setItem() {} },
     MutationObserver: class { observe() {} },
     setTimeout,
@@ -235,8 +235,10 @@ test('focused pages hide unrelated content and preserve legacy TUI routes', () =
   assert.equal(ui.state.tab, 'docs');
   ui.setTab('build');
   assert.equal(ui.state.tab, 'new-task');
-  ui.setTab('unknown');
-  assert.equal(ui.state.tab, 'home');
+  for (const unknown of ['unknown', 'constructor', 'toString']) {
+    ui.setTab(unknown);
+    assert.equal(ui.state.tab, 'home');
+  }
   assert.equal(ui.requests.length, 0);
 });
 
@@ -298,4 +300,48 @@ test('check disclosures retain failed, canceled and unrun meanings and escape di
   const unrun = ui.renderPhaseGroupsHTML([{ title: 'Checks', items: [] }]);
   assert.match(unrun, /No results recorded yet/);
   assert.doesNotMatch(unrun, /passed/);
+});
+
+test('browser history restores pages and review sections without discarding the task draft', async () => {
+  const ui = harness();
+  const visited = [];
+  ui.context.window.history.pushState = (_, __, url) => { visited.push(url); ui.context.window.location.search = url.slice(3); };
+  ui.context.window.history.replaceState = (_, __, url) => { ui.context.window.location.search = url.slice(3); };
+  ui.setTab('home');
+  ui.elements.get('new-task-title').value = 'Keep this draft';
+  ui.setTab('tasks');
+  ui.setTab('checks');
+  assert.equal(visited.length, 2);
+  ui.context.window.location.search = '?tab=tasks';
+  await ui.restoreRoute();
+  assert.equal(ui.state.tab, 'tasks');
+  assert.equal(ui.elements.get('new-task-title').value, 'Keep this draft');
+  ui.context.window.location.search = '?tab=diff&section=apply';
+  await ui.restoreRoute();
+  assert.equal(ui.state.diffSubTab, 'apply');
+  assert.equal(ui.elements.get('diff-apply-pane').hidden, false);
+  assert.equal(ui.context.document.activeElement.id, 'view-diff');
+  assert.equal(ui.requests.length, 0);
+});
+
+test('mobile navigation excludes covered content from keyboard focus and closes on page selection', () => {
+  const ui = harness();
+  ui.context.window.matchMedia = () => ({ matches: true });
+  ui.toggleSidebar(); // Collapse the initially expanded desktop rail.
+  ui.toggleSidebar(); // Open the mobile drawer.
+  assert.equal(ui.elements.get('view-home').inert, true);
+  assert.equal(ui.elements.get('cmd-palette-btn').inert, true);
+  ui.setTab('files');
+  assert.equal(ui.elements.get('view-files').inert, false);
+  assert.equal(ui.elements.get('cmd-palette-btn').inert, false);
+  assert.equal(ui.elements.get('sidebar-collapse-btn').getAttribute('aria-expanded'), 'false');
+});
+
+test('recent tasks cannot replace the proposal while an action is pending', () => {
+  const ui = harness();
+  ui.state.pendingAction = true;
+  ui.state.sessionId = 'current';
+  ui.openProposal('other');
+  assert.equal(ui.state.sessionId, 'current');
+  assert.equal(ui.requests.length, 0);
 });

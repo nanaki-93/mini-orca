@@ -517,6 +517,8 @@ button.btn-ghost:hover:not(:disabled) {
   background: var(--accent-dim); color: var(--accent);
 }
 /* Focused pages share a quiet navigation rail; explorers belong to their page. */
+.nav-backdrop { display:none; }
+.workspace:focus { outline:none; }
 .app-shell { display:flex; width:100%; height:100dvh; overflow:hidden; }
 .left-dock { width:208px; flex-shrink:0; display:flex; flex-direction:column; padding:28px 16px 18px; background:var(--bg-elevated); border-right:1px solid var(--border-subtle); }
 .brand-logo { display:flex; align-items:center; gap:10px; padding:0 10px; color:var(--fg-bright); font-size:16px; font-weight:650; letter-spacing:-.5px; }
@@ -603,7 +605,6 @@ p { margin:0 0 16px; }
 .setting-row select { max-width:55%; }
 .settings-section .project-path { overflow-wrap:anywhere; }
 .task-form { max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:26px; }
-.form-intro { color:var(--fg-muted); }
 .task-title-row { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; }
 .task-form input, .task-form textarea { width:100%; font-size:14px; padding:12px 14px; }
 .task-form textarea { resize:vertical; }
@@ -613,8 +614,6 @@ p { margin:0 0 16px; }
 .disclosure[open] > summary { margin-bottom:16px; }
 .diff-explanation { padding:12px 16px; }
 .file-chip { white-space:normal; overflow-wrap:anywhere; text-align:left; }
-.review-summary { display:flex; flex-wrap:wrap; gap:24px; color:var(--fg-muted); padding:0 0 20px; font-size:12px; }
-.review-warning { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; margin-bottom:20px; border-left:2px solid var(--red); background:var(--red-bg); }
 .review-next-step { padding:12px 24px; color:var(--fg-muted); border-bottom:1px solid var(--border-subtle); font-size:12px; }
 .overview-page { max-width:760px; }
 .overview-summary { font-size:15px; line-height:1.85; }
@@ -640,6 +639,9 @@ p { margin:0 0 16px; }
 button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 @media (max-width:1000px) { .left-dock { width:180px; } .content-scroll { padding:24px; } .local-explorer { width:200px; } .home-hero { padding:32px; } }
 @media (max-width:700px) {
+  button { min-height:40px; }
+  .nav-backdrop { position:absolute; inset:64px 0 0; border:0; border-radius:0; background:#05081688; z-index:90; }
+  .app-shell:not(.sidebar-collapsed) .nav-backdrop { display:block; }
   .left-dock { position:absolute; top:64px; bottom:0; left:0; width:240px; z-index:100; box-shadow:var(--shadow); }
   .sidebar-collapsed .left-dock { display:none; }
   .titlebar { padding:0 16px; }
@@ -705,14 +707,15 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 </head>
 <body>
 <div id="app-shell" class="app-shell">
-  <aside class="left-dock" aria-label="Workspace navigation">
+  <button id="nav-backdrop" class="nav-backdrop" aria-label="Close navigation" tabindex="-1"></button>
+  <aside id="workspace-nav" class="left-dock" aria-label="Workspace navigation">
     <div class="brand-logo"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 2 13 8v12l-13 8L3 22V10Z" stroke="currentColor" stroke-width="1.5"/><path d="m9 19 7-9 7 9M12 16h8" stroke="currentColor" stroke-width="1.5"/></svg><span class="dock-hide-when-collapsed">mini-orca</span></div>
     <div class="project-identity dock-hide-when-collapsed"><p class="eyebrow">Workspace</p><span id="project-name">Loading project…</span></div>
     <nav class="dock-nav" aria-label="Main pages"><button class="nav-btn tab-btn" data-tab="home" title="Home"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg></span><span class="nav-btn-label">Home</span></button><button class="nav-btn tab-btn" data-tab="files" title="Files"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6l2 3h8v12H4Z"/></svg></span><span class="nav-btn-label">Files</span></button><button class="nav-btn tab-btn" data-tab="tasks" title="Tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="m8 12 2 2 5-5M9 4V2h6v2"/></svg></span><span class="nav-btn-label">Tasks</span></button><button class="nav-btn tab-btn" data-tab="issues" title="Issues"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2Z"/><path d="M12 9v5m0 3v1"/></svg></span><span class="nav-btn-label">Issues</span></button><button class="nav-btn tab-btn" data-tab="docs" title="Docs"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v13H4Z"/><path d="M15 4v5h5M8 13h8m-8 4h6"/></svg></span><span class="nav-btn-label">Docs</span></button><button class="nav-btn tab-btn" data-tab="checks" title="Checks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/></svg></span><span class="nav-btn-label">Checks</span></button></nav>
     <div class="dock-footer"><button class="nav-btn tab-btn" data-tab="settings" title="Settings"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg></span><span class="nav-btn-label">Settings</span></button><div class="connection dock-hide-when-collapsed"><span id="live-status" class="badge">Connecting…</span></div></div>
   </aside>
   <div class="canvas-area">
-    <header class="titlebar"><div class="breadcrumb"><button id="sidebar-collapse-btn" class="btn-ghost" aria-label="Toggle navigation" aria-expanded="true" title="Toggle navigation ([)">☰</button><span>Workspace</span><span aria-hidden="true">/</span><span id="page-label">Home</span></div><button id="cmd-palette-btn" class="command-trigger"><span>Search anything</span><kbd class="kbd">⌘K</kbd></button></header>
+    <header class="titlebar"><div class="breadcrumb"><button id="sidebar-collapse-btn" class="btn-ghost" aria-label="Toggle navigation" aria-expanded="true" aria-controls="workspace-nav" title="Toggle navigation ([)">☰</button><span>Workspace</span><span aria-hidden="true">/</span><span id="page-label">Home</span></div><button id="cmd-palette-btn" class="command-trigger"><span>Search anything</span><kbd class="kbd">⌘K</kbd></button></header>
     <div id="status-banner" class="status-banner" role="status" aria-live="polite"><span id="status-banner-text"></span><button id="status-banner-close" class="btn-ghost" aria-label="Dismiss notification">×</button></div>
     <main id="view-home" class="workspace"><div class="content-scroll"><div class="page-inner">
       <section class="home-hero"><p class="eyebrow">Your space to build</p><h1>A clear path from idea<br>to better code.</h1><p>Explore your project, shape a task, and review every change.</p><div class="action-group"><button class="btn-primary page-link" data-page="new-task">New task <span aria-hidden="true">↗</span></button><button class="btn-ghost page-link" data-page="files">Explore files →</button></div></section>
@@ -833,19 +836,19 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   const pages = { home: 'Home', files: 'Files', tasks: 'Tasks', 'new-task': 'New task', issues: 'Issues', docs: 'Docs', checks: 'Checks', settings: 'Settings', diff: 'Review' };
   function normalizePage(page) {
-    return page === 'understand' ? 'docs' : page === 'build' ? 'new-task' : pages[page] ? page : 'home';
+    return page === 'understand' ? 'docs' : page === 'build' ? 'new-task' : Object.keys(pages).indexOf(page) >= 0 ? page : 'home';
   }
   const initialWorkspace = normalizePage(rawTab || (initialSessionId ? 'diff' : initialFile ? 'files' : 'home'));
 
   const state = {
     tab: initialWorkspace,
-    docSection: 'overview',
+    docSection: ['overview', 'architecture', 'components', 'scenarios', 'decisions'].indexOf(params.get('section')) >= 0 ? params.get('section') : 'overview',
     taskStep: 1,
     worktreePath: params.get('worktree_path') || '',
     sessionId: initialSessionId,
     selectedFile: initialFile,
     diffMode: 'split',
-    diffSubTab: 'changes',
+    diffSubTab: ['changes', 'checks', 'spec', 'apply'].indexOf(params.get('section')) >= 0 ? params.get('section') : 'changes',
     sinceLastReview: false,
     phaseFilter: 'all',
     theme: 'navy',
@@ -901,12 +904,43 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     applyTheme(e.target.value);
   });
 
+  function syncSidebarState() {
+    const collapsed = document.getElementById('app-shell').classList.contains('sidebar-collapsed');
+    document.getElementById('sidebar-collapse-btn').setAttribute('aria-expanded', String(!collapsed));
+    const modal = !collapsed && window.matchMedia('(max-width: 700px)').matches;
+    Object.keys(pages).forEach(function(page) { document.getElementById('view-' + page).inert = modal; });
+    document.getElementById('cmd-palette-btn').inert = modal;
+    if (modal) {
+      const first = document.getElementById('workspace-nav').querySelector('.active') || document.getElementById('workspace-nav').querySelector('button');
+      if (first) first.focus();
+    }
+  }
   function toggleSidebar() {
     const collapsed = document.getElementById('app-shell').classList.toggle('sidebar-collapsed');
-    document.getElementById('sidebar-collapse-btn').setAttribute('aria-expanded', String(!collapsed));
+    syncSidebarState();
+    if (collapsed) document.getElementById('sidebar-collapse-btn').focus();
   }
-  if (window.matchMedia('(max-width: 700px)').matches) toggleSidebar();
+  const navigationViewport = window.matchMedia('(max-width: 700px)');
+  if (navigationViewport.matches) toggleSidebar();
+  if (navigationViewport.addEventListener) navigationViewport.addEventListener('change', function(event) {
+    document.getElementById('app-shell').classList.toggle('sidebar-collapsed', event.matches);
+    syncSidebarState();
+  });
   document.getElementById('sidebar-collapse-btn').addEventListener('click', toggleSidebar);
+  document.getElementById('nav-backdrop').addEventListener('click', toggleSidebar);
+  document.addEventListener('keydown', function(event) {
+    const drawerOpen = window.matchMedia('(max-width: 700px)').matches && !document.getElementById('app-shell').classList.contains('sidebar-collapsed');
+    if (event.key === 'Tab' && drawerOpen) {
+      const first = document.getElementById('workspace-nav').querySelector('button');
+      const last = document.getElementById('sidebar-collapse-btn');
+      if (!event.shiftKey && document.activeElement === last && first) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    }
+    if (event.key === 'Escape' && drawerOpen) {
+      toggleSidebar();
+      document.getElementById('sidebar-collapse-btn').focus();
+    }
+  });
 
   function showBanner(msg, kind) {
     const el = document.getElementById('status-banner');
@@ -919,13 +953,17 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     document.getElementById('status-banner').className = 'status-banner';
   });
 
-  function syncURL() {
+  function syncURL(mode) {
     const q = new URLSearchParams();
     q.set('tab', state.tab);
+    if (state.tab === 'docs') q.set('section', state.docSection);
+    if (state.tab === 'diff') q.set('section', state.diffSubTab);
     if (state.worktreePath) q.set('worktree_path', state.worktreePath);
     if (state.sessionId) q.set('session_id', state.sessionId);
     if (state.selectedFile) q.set('file', state.selectedFile);
-    window.history.replaceState(null, '', '/ui?' + q.toString());
+    const search = '?' + q.toString();
+    if (search === window.location.search) return;
+    window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', '/ui' + search);
   }
 
   function withExplicitWorktree(pathAndQuery, wtPath) {
@@ -979,10 +1017,14 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     );
   }
 
-  function setTab(tab) {
+  let navigationReady = false;
+  function setTab(tab, replace) {
+    const previous = state.tab;
     state.tab = normalizePage(tab);
-    syncURL();
+    syncURL(navigationReady && !replace ? 'push' : 'replace');
+    navigationReady = true;
     document.getElementById('page-label').textContent = pages[state.tab];
+    document.title = pages[state.tab] + ' · Mini-Orca';
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
       const active = btn.getAttribute('data-tab') === (['new-task', 'diff'].indexOf(state.tab) >= 0 ? 'tasks' : state.tab);
       btn.classList.toggle('active', active);
@@ -991,16 +1033,51 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
     Object.keys(pages).forEach(function(page) { document.getElementById('view-' + page).hidden = page !== state.tab; });
     revealCanvas();
+    if (previous !== state.tab) {
+      const page = document.getElementById('view-' + state.tab);
+      page.setAttribute('tabindex', '-1');
+      page.setAttribute('aria-label', pages[state.tab]);
+      page.focus({ preventScroll: true });
+    }
   }
 
   function revealCanvas() {
     if (window.matchMedia('(max-width: 700px)').matches && !document.getElementById('app-shell').classList.contains('sidebar-collapsed')) toggleSidebar();
   }
 
+  async function restoreRoute() {
+    if (state.pendingAction) { syncURL(); return; }
+    const route = new URLSearchParams(window.location.search);
+    const worktree = route.get('worktree_path') || '';
+    const session = route.get('session_id') || '';
+    const checkoutChanged = worktree !== state.worktreePath;
+    const sessionChanged = session !== state.sessionId;
+    state.worktreePath = worktree;
+    state.sessionId = session;
+    state.selectedFile = route.get('file') || '';
+    state.docSection = ['overview', 'architecture', 'components', 'scenarios', 'decisions'].indexOf(route.get('section')) >= 0 ? route.get('section') : 'overview';
+    state.diffSubTab = ['changes', 'checks', 'spec', 'apply'].indexOf(route.get('section')) >= 0 ? route.get('section') : 'changes';
+    setTab(route.get('tab') || (session ? 'diff' : 'home'), true);
+    if (checkoutChanged) {
+      state.sessionRequest++;
+      state.activeSession = null;
+      renderReviewActions();
+      await loadAll();
+    } else {
+      if (sessionChanged) await loadChangeSession(session);
+      renderUnderstandDocs();
+      renderDiffTab();
+      if (state.tab === 'files' && state.selectedFile) await openSourceFile(state.selectedFile);
+    }
+    const page = document.getElementById('view-' + state.tab);
+    page.setAttribute('tabindex', '-1');
+    page.focus({ preventScroll: true });
+  }
+  window.addEventListener('popstate', restoreRoute);
+
   function renderWorkspaceChecks() {
     const container = document.getElementById('checks-content');
     const groups = collectWorkspacePhaseGroups();
-    groups[0].actionId = '';
     container.innerHTML = renderPhaseGroupsHTML(groups, { filter: state.phaseFilter });
     bindPhaseInspectorControls(container, renderWorkspaceChecks);
   }
@@ -1180,15 +1257,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     return 'skipped';
   }
 
-  function phaseBadgeSpec(rawState) {
-    const norm = normalizePhaseState(rawState);
-    const label = String(rawState || norm || 'idle').toUpperCase();
-    if (norm === 'passed') return { cls: 'green', icon: '✓', text: label, norm: norm };
-    if (norm === 'failed') return { cls: 'red', icon: '✕', text: label, norm: norm };
-    if (norm === 'running') return { cls: 'amber', icon: '●', text: label, norm: norm };
-    return { cls: '', icon: '○', text: label, norm: norm };
-  }
-
   function collectWorkspacePhaseGroups() {
     const groups = [];
     const scanPhases = (state.scan && Array.isArray(state.scan.phases)) ? state.scan.phases : [];
@@ -1196,8 +1264,6 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       id: 'go-scan',
       title: 'Go checks',
       subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Parser, vet, and tests in an isolated workspace',
-      actionId: 'phase-trigger-scan-btn',
-      actionLabel: 'Run Go scan',
       items: scanPhases.map(function(ph, i) {
         return {
           id: 'scan-' + i,
@@ -1244,7 +1310,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     groups.push({
       id: 'analysis-sections',
       title: 'Project analysis',
-      subtitle: run ? ('Run #' + (run.id || (run.identity && run.identity.id) || 'current') + ' · status: ' + (run.status || 'recorded')) : 'Model analysis of bugs, security, and performance',
+      subtitle: run ? ('Status: ' + (run.status || 'recorded')) : 'Model analysis of bugs, security, and performance',
       actionId: 'phase-trigger-analysis-btn',
       actionLabel: 'Run analysis',
       items: analysisItems
@@ -1253,24 +1319,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     return groups;
   }
 
-  function summarizePhaseGroups(groups) {
-    let passed = 0, failed = 0, running = 0, skipped = 0, total = 0;
-    (groups || []).forEach(function(g) {
-      (g.items || []).forEach(function(it) {
-        total++;
-        const n = normalizePhaseState(it.state);
-        if (n === 'passed') passed++;
-        else if (n === 'failed') failed++;
-        else if (n === 'running') running++;
-        else skipped++;
-      });
-    });
-    return { passed: passed, failed: failed, running: running, skipped: skipped, total: total };
-  }
-
   function renderPhaseGroupsHTML(groups, options) {
     const filter = (options && options.filter) || state.phaseFilter || 'all';
-    const total = summarizePhaseGroups(groups).total;
+    const total = (groups || []).reduce(function(count, group) { return count + (group.items || []).length; }, 0);
     let html = total ? '<div class="phase-summary-bar"><div class="subtab-nav" role="group" aria-label="Filter checks">' +
       ['all', 'failed', 'passed'].map(function(value) {
         return '<button class="subtab-btn phase-filter-btn' + (filter === value ? ' active' : '') + '" data-phase-filter="' + value + '" aria-pressed="' + (filter === value) + '">' + value.charAt(0).toUpperCase() + value.slice(1) + '</button>';
@@ -1284,8 +1335,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       if (!items.length) html += '<div class="card-body muted">No results recorded yet.</div>';
       else if (!filtered.length) html += '<div class="card-body muted">No checks match this filter.</div>';
       else filtered.forEach(function(item) {
-        const badge = phaseBadgeSpec(item.state);
-        html += '<details class="phase-detail"><summary><span>' + esc(item.name) + '</span><span class="badge ' + badge.cls + '">' + esc(item.state || 'pending') + '</span></summary>' +
+        const status = normalizePhaseState(item.state);
+        const color = status === 'passed' ? 'green' : status === 'failed' ? 'red' : status === 'running' ? 'amber' : '';
+        html += '<details class="phase-detail"><summary><span>' + esc(item.name) + '</span><span class="badge ' + color + '">' + esc(item.state || 'pending') + '</span></summary>' +
           '<div class="phase-detail-body">' +
           (item.command ? '<p class="project-path">' + esc(item.command) + '</p>' : '') +
           (item.meta || item.detail ? '<p class="muted">' + esc(item.meta || item.detail) + '</p>' : '') +
@@ -1355,6 +1407,10 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
     const container = document.getElementById('docs-content');
     const sec = state.docSection || 'overview';
+    document.querySelectorAll('[data-doc-sec]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-doc-sec') === sec);
+      btn.setAttribute('aria-pressed', String(btn.getAttribute('data-doc-sec') === sec));
+    });
     let html = '';
 
     if (sec === 'overview') {
@@ -1374,7 +1430,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
         '<div class="card-header"><span class="card-title">Architecture &amp; System Topology</span></div>' +
         '<div class="card-body">' +
           (topo ? '<p style="margin-top:0;line-height:1.6;">' + esc(topo) + '</p>' : '') +
-          (archDiagram ? '<div class="doc-pre">' + esc(archDiagram) + '</div>' : '<div class="empty-state"><h3>No Architecture Diagram Yet</h3><p>Click "Generate docs" above to synthesize topology diagrams.</p></div>') +
+          (archDiagram ? '<div class="doc-pre">' + esc(archDiagram) + '</div>' : '<div class="empty-state"><h3>No Architecture Diagram Yet</h3><p>Click "Generate docs" above to generate an architecture overview.</p></div>') +
         '</div>' +
       '</div>';
     } else if (sec === 'components') {
@@ -1403,7 +1459,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
           fallbackComps.map(function(line) { return '<div style="margin-bottom:6px;">• ' + esc(line) + '</div>'; }).join('') +
         '</div></div>';
       } else {
-        html += '<div class="empty-state"><h3>No Component Breakdown Yet</h3><p>Click "Generate docs" to synthesize the C4 component catalog.</p></div>';
+        html += '<div class="empty-state"><h3>No Component Breakdown Yet</h3><p>Click "Generate docs" to synthesize the component guide.</p></div>';
       }
     } else if (sec === 'scenarios') {
       const scenarios = (docs && Array.isArray(docs.scenarios)) ? docs.scenarios : [];
@@ -1566,7 +1622,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       const errB = Array.isArray(ex.error_behavior) ? ex.error_behavior : [];
       html += '<details class="disclosure" open><summary>AI explanation</summary>' +
         '<div class="card-header">' +
-          '<span class="card-title">✦ File Intelligence Inspector · ' + esc(info.path) + '</span>' +
+          '<span class="card-title">File explanation · ' + esc(info.path) + '</span>' +
           '<span class="badge blue">AI explanation</span>' +
         '</div>' +
         '<div class="card-body">' +
@@ -1593,7 +1649,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
       const resp = Array.isArray(fa.responsibilities) ? fa.responsibilities : [];
       html += '<details class="disclosure"><summary>Cached analysis</summary>' +
         '<div class="card-header">' +
-          '<span class="card-title">📘 Cached File Intelligence</span>' +
+          '<span class="card-title">Cached file analysis</span>' +
           '<span class="badge">Indexed Summary</span>' +
         '</div>' +
         '<div class="card-body">' +
@@ -2055,13 +2111,23 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     });
   }
 
+  function openProposal(id) {
+    if (state.pendingAction) return;
+    state.selectedFile = '';
+    state.sessionId = id;
+    state.diffSubTab = 'changes';
+    state.sinceLastReview = false;
+    setTab('diff');
+    loadChangeSession(id);
+  }
+
   function renderHome() {
     const container = document.getElementById('home-tasks');
     container.innerHTML = state.changes.slice(0, 3).map(function(c) {
       return '<button class="home-task shortcut" style="width:100%;border:0;border-radius:0;" data-id="' + esc(c.id) + '"><span><strong>' + esc(c.title || c.id) + '</strong><small>' + esc(c.state || 'draft') + '</small></span><span aria-hidden="true">→</span></button>';
     }).join('') || '<div class="empty-state"><h3>Your next idea starts here</h3><p>Create a task to turn it into a reviewable change.</p></div>';
     container.querySelectorAll('.home-task').forEach(function(btn) {
-      btn.addEventListener('click', function() { setTab('diff'); loadChangeSession(btn.getAttribute('data-id')); });
+      btn.addEventListener('click', function() { openProposal(btn.getAttribute('data-id')); });
     });
   }
 
@@ -2084,12 +2150,7 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
     el.querySelectorAll('.open-proposal-item').forEach(function(item) {
       item.addEventListener('click', function() {
-        if (state.pendingAction) return;
-        const id = item.getAttribute('data-id');
-        state.selectedFile = '';
-        setTab('diff');
-        revealCanvas();
-        loadChangeSession(id);
+        openProposal(item.getAttribute('data-id'));
       });
     });
   }
@@ -2239,12 +2300,12 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
     const groups = [
       {
         title: 'Static checks',
-        meta: checks.length > 0 ? ('Hash #' + String(session.hash || '').slice(0, 8)) : 'Not executed yet',
+        meta: checks.length > 0 ? '' : 'Not executed yet',
         items: staticItems
       },
       {
         title: 'Sandbox checks',
-        meta: (state.trust && state.trust.trusted) ? 'Trust: Granted' : 'Trust: Locked',
+        meta: '',
         items: sandboxItems
       }
     ];
@@ -2277,7 +2338,9 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   function setDiffSubTab(subTab) {
     state.diffSubTab = ['changes', 'checks', 'spec', 'apply'].indexOf(subTab) >= 0 ? subTab : 'changes';
+    syncURL('push');
     renderDiffTab();
+    document.getElementById('diff-subtab-' + state.diffSubTab).focus();
   }
 
   function renderReviewLayout() {
@@ -2741,12 +2804,12 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
 
   function getCommandItems() {
     const items = [
-      { label: 'Project: Overview', hint: '1', run: function() { setTab('docs'); } },
+      { label: 'Docs: Overview', hint: 'View', run: function() { setTab('docs'); } },
       { label: 'Project: Checks', hint: 'View', run: function() { openDocSection('verification'); } },
-      { label: 'Project: Files', hint: 'View', run: function() { setTab('files'); } },
+      { label: 'Files', hint: '2', run: function() { setTab('files'); } },
       { label: 'Tasks: New task', hint: 'New', run: function() { setTab('new-task'); } },
-      { label: 'Work: Issues', hint: 'View', run: function() { setTab('issues'); } },
-      { label: 'Review: Changes', hint: '3', run: function() { setTab('diff'); setDiffSubTab('changes'); } },
+      { label: 'Issues', hint: 'View', run: function() { setTab('issues'); } },
+      { label: 'Review: Changes', hint: 'View', run: function() { setTab('diff'); setDiffSubTab('changes'); } },
       { label: 'Review: Checks', hint: 'Checks', run: function() { setTab('diff'); setDiffSubTab('checks'); } },
       { label: 'Action: Generate docs', hint: 'Docs', run: function() { document.getElementById('run-analysis-btn').click(); } },
       { label: 'Action: Run Go Static Scan', hint: 'Scan', run: function() { document.getElementById('run-scan-btn').click(); } },
@@ -2887,6 +2950,8 @@ button:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline:
   });
 
   document.getElementById('reset-spec-btn').addEventListener('click', function() {
+    const hasDraft = ['new-task-title', 'new-task-spec', 'new-task-paths', 'new-task-criteria'].some(function(id) { return document.getElementById(id).value.trim(); });
+    if (hasDraft && !window.confirm('Discard the unsaved task and start a new one?')) { setTab('new-task'); return; }
     setTab('new-task');
     document.getElementById('new-task-title').value = '';
     document.getElementById('new-task-spec').value = '';
