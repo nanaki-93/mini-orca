@@ -27,7 +27,7 @@ func newAgentHTTPServer(application *app.Service) (*agentHTTPServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	server := &http.Server{Addr: cfg.Bind, Handler: api.LocalOnly(agent, false), ReadTimeout: 10 * time.Second,
+	server := &http.Server{Addr: cfg.Bind, Handler: api.LocalOnly(agent, api.HostPolicy{}), ReadTimeout: 10 * time.Second,
 		WriteTimeout: time.Duration(cfg.TimeoutSeconds+10) * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8 << 10}
 	return &agentHTTPServer{server: server, closeAgent: agent.Close, done: make(chan error, 1)}, nil
 }

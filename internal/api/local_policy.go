@@ -8,14 +8,54 @@ import (
 	"strings"
 )
 
+// HostPolicy decides which Host headers may reach the API.
+type HostPolicy struct {
+	// External is set when the daemon was deliberately bound beyond loopback.
+	External bool
+	// Names are extra host names accepted when External. IP literals are always
+	// accepted then: DNS rebinding needs a name, so an address cannot be
+	// rebound to the daemon by a web page.
+	Names []string
+}
+
+// allows reports whether a request for host may reach the API.
+func (p HostPolicy) allows(host string) bool {
+	if isLoopbackHost(host) {
+		return true
+	}
+	if !p.External {
+		return false
+	}
+	hostname := host
+	if parsed, _, err := net.SplitHostPort(host); err == nil {
+		hostname = parsed
+	}
+	hostname = strings.Trim(hostname, "[]")
+	if net.ParseIP(hostname) != nil {
+		return true
+	}
+	for _, name := range p.Names {
+		if strings.EqualFold(strings.TrimSpace(name), hostname) {
+			return true
+		}
+	}
+	return false
+}
+
 // LocalOnly protects the daemon's native-client API boundary before route
-// handlers can observe a request. External hosts are accepted only when the
-// daemon was deliberately bound beyond loopback; that does not authenticate
-// those requests.
-func LocalOnly(next http.Handler, allowExternalHosts bool) http.Handler {
+// handlers can observe a request. Other hosts are accepted only when the daemon
+// was deliberately bound beyond loopback, and host names only when listed, so
+// a web page cannot reach the API by rebinding its own name to the daemon.
+// Accepted hosts are not authenticated.
+func LocalOnly(next http.Handler, hosts HostPolicy) http.Handler {
+	allowExternalHosts := hosts.External
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !allowExternalHosts && !isLoopbackHost(r.Host) {
-			WriteAppError(w, Forbidden("unexpected Host header", "Use the local Mini-Orca daemon address.", nil))
+		if !hosts.allows(r.Host) {
+			hint := "Use the local Mini-Orca daemon address."
+			if allowExternalHosts {
+				hint = "Use an IP address or a host name listed in MINI_ORCA_ALLOWED_HOSTS."
+			}
+			WriteAppError(w, Forbidden("unexpected Host header", hint, nil))
 			return
 		}
 		if isCORSPreflight(r) {

@@ -135,7 +135,7 @@ func TestLocalAPIPolicyAllowsSameOriginWebUIFetchWithCustomHeader(t *testing.T) 
 	api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		handlerCalled = true
 		w.WriteHeader(http.StatusNoContent)
-	}), false).ServeHTTP(res, req)
+	}), api.HostPolicy{}).ServeHTTP(res, req)
 	if res.Code != http.StatusNoContent || !handlerCalled {
 		t.Fatalf("same-origin web UI request status = %d, handler called = %t", res.Code, handlerCalled)
 	}
@@ -218,7 +218,7 @@ func TestLocalAPIPolicyAllowsNativeDesktopCallsAndHealth(t *testing.T) {
 			api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				handlerCalled = true
 				w.WriteHeader(http.StatusNoContent)
-			}), false).ServeHTTP(response, nativeRequest)
+			}), api.HostPolicy{}).ServeHTTP(response, nativeRequest)
 			if response.Code != http.StatusNoContent || !handlerCalled {
 				t.Fatalf("native request status = %d, handler called = %t", response.Code, handlerCalled)
 			}
@@ -226,17 +226,27 @@ func TestLocalAPIPolicyAllowsNativeDesktopCallsAndHealth(t *testing.T) {
 	}
 }
 
-func TestExplicitExternalBindAllowsExternalHost(t *testing.T) {
+func TestExplicitExternalBindAllowsAddressesAndListedHostNames(t *testing.T) {
 	for _, bindAddress := range []string{"0.0.0.0:9090", ":9090"} {
 		t.Run(bindAddress, func(t *testing.T) {
 			t.Setenv("MINI_ORCA_BIND_ADDRESS", bindAddress)
+			t.Setenv("MINI_ORCA_ALLOWED_HOSTS", "desktop.example, other.example")
 			mux := daemonTestMux(t)
-			request := httptest.NewRequest(http.MethodGet, "/health", nil)
-			request.Host = "desktop.example:9090"
-			response := httptest.NewRecorder()
-			mux.ServeHTTP(response, request)
-			if response.Code != http.StatusOK {
-				t.Fatalf("external bind response = %d: %s", response.Code, response.Body.String())
+			for host, want := range map[string]int{
+				"desktop.example:9090":      http.StatusOK,
+				"192.168.1.20:9090":         http.StatusOK,
+				"[fd00::20]:9090":           http.StatusOK,
+				"localhost:9090":            http.StatusOK,
+				"rebound.example:9090":      http.StatusForbidden,
+				"desktop.example.evil:9090": http.StatusForbidden,
+			} {
+				request := httptest.NewRequest(http.MethodGet, "/health", nil)
+				request.Host = host
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				if response.Code != want {
+					t.Fatalf("external bind Host %s = %d, want %d: %s", host, response.Code, want, response.Body.String())
+				}
 			}
 		})
 	}

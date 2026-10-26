@@ -207,7 +207,21 @@ func writeFileAuthorized(path string, data []byte, mode os.FileMode, authorize f
 	if err := operations.replace(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace metadata: %w", err)
 	}
+	// Persist the rename itself: without a directory sync a crash can keep the
+	// source edits a journal describes while losing the journal.
+	if err := syncDirectory(directory); err != nil {
+		return fmt.Errorf("sync metadata directory: %w", err)
+	}
 	return nil
+}
+
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func writeAndSyncTemp(temporary *os.File, data []byte, mode os.FileMode, operations atomicFileOperations) error {

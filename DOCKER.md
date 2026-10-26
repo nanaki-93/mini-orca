@@ -37,8 +37,12 @@ outside Git.
 
 To publish beyond the host deliberately, change the port mapping yourself, for
 example `-p 0.0.0.0:9090:9090`, and set `MINI_ORCA_BIND_ADDRESS` to a
-non-loopback address if it is not already set by the container command. This
-is an unauthenticated API: provide network isolation and access controls
+non-loopback address if it is not already set by the container command. With a
+non-loopback bind the daemon accepts requests addressed to loopback names and
+IP addresses; list any other host names you use in `MINI_ORCA_ALLOWED_HOSTS`
+(comma-separated, for example `MINI_ORCA_ALLOWED_HOSTS=devbox.lan`). Unlisted
+names are rejected so a web page cannot reach the API by DNS rebinding. This
+is still an unauthenticated API: provide network isolation and access controls
 outside Mini-Orca. Do not use a public or untrusted network for this service.
 
 ## Compose

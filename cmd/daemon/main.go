@@ -75,16 +75,19 @@ func main() {
 	logging.Info("Daemon stopping", "reason", quit)
 	application.CancelChangeWorkflows()
 
-	// Shutdown HTTP server
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := agentServer.shutdown(shutdownCtx); err != nil {
+	// Each phase gets its own budget: an HTTP drain that runs out of time
+	// must not leave running jobs and their check processes uncanceled.
+	httpCtx, cancelHTTP := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelHTTP()
+	if err := agentServer.shutdown(httpCtx); err != nil {
 		logging.Error("Local A2A service shutdown error", "error", err)
 	}
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err := server.Shutdown(httpCtx); err != nil {
 		logging.Error("HTTP server shutdown error", "error", err)
 	}
-	if err := application.ShutdownChangeWorkflows(shutdownCtx); err != nil {
+	jobsCtx, cancelJobs := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelJobs()
+	if err := application.ShutdownChangeWorkflows(jobsCtx); err != nil {
 		logging.Error("Change workflow shutdown error", "error", err)
 	}
 
@@ -105,6 +108,11 @@ func startHTTPServer(
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
+	// Event streams end only when their request context does; close them at
+	// shutdown so Shutdown can drain instead of waiting out its deadline.
+	streams, closeStreams := context.WithCancel(context.Background())
+	server.BaseContext = func(net.Listener) context.Context { return streams }
+	server.RegisterOnShutdown(closeStreams)
 
 	// Start server in a goroutine
 	go func() {
@@ -174,7 +182,7 @@ func newHTTPMux(
 		scopedRequest := r.Clone(r.Context())
 		scopedRequest.URL.RawQuery = query.Encode()
 		worktrees.handler(service, manager).ServeHTTP(w, scopedRequest)
-	}), daemonAllowsExternalHosts())
+	}), daemonHostPolicy())
 }
 
 func newProjectHTTPMux(application *app.Service, projectManager *project.Manager) http.Handler {
@@ -349,6 +357,18 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("GET /api/projects/current/events", projectHandler.Events)
 
 	return mux
+}
+
+// daemonHostPolicy accepts other hosts only for an explicit non-loopback bind;
+// host names must additionally be listed in MINI_ORCA_ALLOWED_HOSTS.
+func daemonHostPolicy() api.HostPolicy {
+	policy := api.HostPolicy{External: daemonAllowsExternalHosts()}
+	for _, name := range strings.Split(os.Getenv("MINI_ORCA_ALLOWED_HOSTS"), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			policy.Names = append(policy.Names, name)
+		}
+	}
+	return policy
 }
 
 func daemonAllowsExternalHosts() bool {
