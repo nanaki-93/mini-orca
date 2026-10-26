@@ -458,7 +458,7 @@ func (s *State) completeCommand(execute bool) {
 }
 
 func (s *State) renderCommandMenu(th ansiTheme, width, rows int) []string {
-	lines := renderPageHeader(th, "COMMANDS", "")
+	lines := renderPageHeader(th, "Commands", "")
 	input := th.renderCommandInput(s.CmdInput, s.commandCursor, width-4)
 	lines[1] = "  " + theme.PaintLine(th.surface, th.fg, input, width-4)
 	if rows >= 12 {

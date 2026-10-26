@@ -103,7 +103,7 @@ func (s *State) externalRowState(row externalRow) string {
 }
 
 func (s *State) renderExternalWork(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "EXTERNAL WORK", "[Enter] Inspect / open report · [r] Local refresh · [n] Research · [d] Delegate · [x] Stop request")
+	lines := renderPageHeader(th, "External work", "[Enter] Inspect / open report · [r] Local refresh · [n] Research · [d] Delegate · [x] Stop request")
 	if !s.externalCurrent() {
 		return append(lines, "  History unavailable for this checkout.", "  Use :external-scope main or :external-scope task.")
 	}

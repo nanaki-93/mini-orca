@@ -79,9 +79,9 @@ func settingsText(text string) string {
 }
 
 func (s *State) renderAgentSettings(th ansiTheme, width int) []string {
-	title, keys := "ROLES & BUDGETS", "[Enter] Edit · [r] Refresh · [o] Checkout · [x] Cancel"
+	title, keys := "Roles & budgets", "[Enter] Edit · [r] Refresh · [o] Checkout · [x] Cancel"
 	if s.EffectivePage() == PageSkills {
-		title, keys = "SKILLS", "[Enter / v] Validate · [e] Enable/disable · [r] Refresh · [o] Checkout"
+		title, keys = "Skills", "[Enter / v] Validate · [e] Enable/disable · [r] Refresh · [o] Checkout"
 	}
 	lines := renderPageHeader(th, title, keys)
 	v := s.AgentSettings

@@ -119,7 +119,7 @@ func (s *State) selectedConnection() (*agentConnectionRow, error) {
 }
 
 func (s *State) renderConnections(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "CONNECTIONS", "[Enter / c] Discover · [d] Revoke · [s] Use in plan · [w] External work · [r] Refresh")
+	lines := renderPageHeader(th, "Connections", "[Enter / c] Discover · [d] Revoke · [s] Use in plan · [w] External work · [r] Refresh")
 	if !s.connectionsCurrent() {
 		return append(lines, "  Inventory unavailable for this checkout.", "  Use :connection-scope main or :connection-scope task.")
 	}

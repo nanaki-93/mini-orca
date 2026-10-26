@@ -292,7 +292,7 @@ func TestAmbientUILayoutPalettesAndPassiveDisclosure(t *testing.T) {
 			s.DetailScroll = 0
 			s.AgentTriggers.Details = false
 			frame := s.Render(size[0], size[1])
-			if !strings.Contains(frame, "AMBIENT") || !strings.Contains(frame, "disabled") || strings.Contains(frame, "PRIVATE_ESCAPE\x1b[31m") {
+			if !strings.Contains(frame, "Ambient analysis") || !strings.Contains(frame, "disabled") || strings.Contains(frame, "PRIVATE_ESCAPE\x1b[31m") {
 				t.Fatalf("ambient state inaccessible at %v", size)
 			}
 			for _, row := range strings.Split(frame, "\n") {

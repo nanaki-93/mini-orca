@@ -172,7 +172,7 @@ func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID str
 }
 
 func (s *State) renderWorktreeDetail(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WORKTREE", "[r] Refresh · [R] Update index · [m] Merge · [x] Reject · [c] Cleanup · [Esc] Back")
+	lines := renderPageHeader(th, "Worktree", "[r] Refresh · [R] Update index · [m] Merge · [x] Reject · [c] Cleanup · [Esc] Back")
 	wt := s.selectedWorktree()
 	if wt == nil {
 		return append(lines, "  No worktree selected.")

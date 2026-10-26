@@ -123,7 +123,7 @@ func (s *State) renderPlanDraftSection(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderFeatureDetailPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "FEATURE", "[f] Plan implementation · [Esc] Back")
+	lines := renderPageHeader(th, "Feature", "[f] Plan implementation · [Esc] Back")
 	features := s.activeFeatures()
 	if len(features) == 0 {
 		return append(lines, "  No feature selected.")

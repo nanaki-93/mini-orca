@@ -17,7 +17,7 @@ func TestCommandMenuSearchAndNavigationArePassive(t *testing.T) {
 		s.HandleKey(KeyEvent{Key: ":"})
 		s.HandleKey(KeyEvent{Text: item.command})
 		frame := s.Render(80, 24)
-		if !strings.Contains(frame, "COMMANDS") || len(s.PendingActions) != 0 {
+		if !strings.Contains(frame, "Commands") || len(s.PendingActions) != 0 {
 			t.Fatalf("searching %s dispatched an action or hid the menu", item.command)
 		}
 		s.HandleKey(KeyEvent{Key: "Enter"})

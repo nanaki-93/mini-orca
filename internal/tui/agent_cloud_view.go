@@ -56,7 +56,7 @@ func cloudDestinationText(target client.CloudTarget) string {
 }
 
 func (s *State) renderCloudCopies(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "CLOUD COPIES", "[e] Preview · [c] Copy · [i] Check · [d] Delete")
+	lines := renderPageHeader(th, "Cloud copies", "[e] Preview · [c] Copy · [i] Check · [d] Delete")
 	if !s.cloudCurrent() {
 		return append(lines, "  Main checkout only · [r] Read local receipts.", "  Nothing is uploaded by opening this view.")
 	}

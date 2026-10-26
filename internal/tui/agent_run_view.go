@@ -22,7 +22,7 @@ func (s *State) stepAgentRunSection(forward bool) {
 
 func (s *State) renderAgentRunPage(th ansiTheme, width int) []string {
 	section := agentRunSections[s.AgentRunSection]
-	lines := renderPageHeader(th, "TASK · "+strings.ToUpper(section), "←/→ Section · ↑/↓ Stage · Esc Back")
+	lines := renderPageHeader(th, "Task · "+section, "←/→ Section · ↑/↓ Stage · Esc Back")
 	lines = append(lines, "  "+s.agentStageSelectionLabel())
 	detail := s.currentAgentDetail()
 	if detail == nil {

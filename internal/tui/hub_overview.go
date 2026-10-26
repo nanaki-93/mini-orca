@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
@@ -78,17 +79,34 @@ func adaptivePanelWidth(width int) int {
 	return max(42, width-6)
 }
 
+// pageHeaderInlineLimit keeps title and subtitle on one line when they fit the
+// narrowest supported layout; longer subtitles get their own line.
+const pageHeaderInlineLimit = 68
+
+// renderPageHeader draws a page title in the accent color with its purpose in
+// a quieter tone. The breadcrumb above already says where the page lives, so
+// the header stays short and leaves the rows to content.
 func renderPageHeader(th ansiTheme, title, subtitle string) []string {
-	if strings.TrimSpace(subtitle) == "" {
-		return []string{
-			fmt.Sprintf("  %s◆ %s%s", th.accent, title, th.reset),
-			"",
-		}
+	head := fmt.Sprintf("  %s%s◆ %s%s", th.bold, th.accent, title, th.reset)
+	subtitle = strings.TrimSpace(subtitle)
+	switch {
+	case subtitle == "":
+		return []string{head, ""}
+	case utf8.RuneCountInString(title)+utf8.RuneCountInString(subtitle) <= pageHeaderInlineLimit:
+		return []string{head + "   " + th.muted + subtitle + th.reset}
+	default:
+		return []string{head, fmt.Sprintf("  %s%s%s", th.muted, subtitle, th.reset)}
 	}
-	return []string{
-		fmt.Sprintf("  %s◆ %s%s", th.accent, title, th.reset),
-		fmt.Sprintf("  %s%s%s", th.muted, subtitle, th.reset),
+}
+
+// renderEmptyState explains why a view is empty and what to do next, instead
+// of leaving a bare "nothing here" line above blank rows.
+func renderEmptyState(th ansiTheme, title string, hints ...string) []string {
+	lines := []string{"", "  " + th.bold + th.fg + "○ " + title + th.reset}
+	for _, hint := range hints {
+		lines = append(lines, "    "+th.muted+hint+th.reset)
 	}
+	return lines
 }
 
 func rowTitleStyle(th ansiTheme, selected bool) string {
@@ -120,7 +138,7 @@ func appendWindowFooter(th ansiTheme, lines []string, start, end, total int) []s
 
 func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "REPOSITORY · TOPOLOGY & INDEX", "Project identity and indexed files")
+	lines := renderPageHeader(th, "Repository", "Project identity and indexed files")
 	if s.Project == nil {
 		return append(lines, "", "  No project loaded. [o] Open project")
 	}
@@ -150,7 +168,7 @@ func (s *State) renderRepoPage(th ansiTheme, width int) []string {
 }
 
 func (s *State) renderProjectPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "CHECKS · SANDBOX VERIFICATION", "Verification results and diagnostic output")
+	lines := renderPageHeader(th, "Tests & checks", "Verification results and diagnostics")
 	if s.Scan == nil || len(s.Scan.Phases) == 0 {
 		return append(lines, "", "  No verification checks recorded.", "  [t] Run checks · :trust to manage execution permission")
 	}

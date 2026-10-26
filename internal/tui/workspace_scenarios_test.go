@@ -56,7 +56,7 @@ func TestDashboardKeepsActivitiesVisibleAtCompactSizes(t *testing.T) {
 			s.Run, s.Scan = nil, nil
 			frame := s.Render(dims[0], dims[1])
 			assertFrameSize(t, frame, dims[0], dims[1])
-			for _, label := range []string{"DASHBOARD", "Issues", "Tasks", "Analysis", "Checks"} {
+			for _, label := range []string{"Dashboard", "Issues", "Tasks", "Analysis", "Checks"} {
 				if !strings.Contains(frame, label) {
 					t.Fatalf("%s missing at %v in %s", label, dims, palette)
 				}

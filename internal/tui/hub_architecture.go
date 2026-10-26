@@ -16,7 +16,7 @@ func (s *State) renderDocsPage(th ansiTheme, width int) []string {
 	}
 	panelW := adaptivePanelWidth(width)
 	docs := domain.ResolveProjectDocs(s.Overview, s.Project)
-	lines := renderPageHeader(th, "CONTEXT & DEPENDENCIES", "Specification & subsystem boundaries")
+	lines := renderPageHeader(th, "Context & dependencies", "Purpose, topology and subsystem boundaries")
 	ctxLines := []string{
 		fmt.Sprintf("%sPurpose:%s  %s%s%s", th.bold+th.cyan, th.reset, th.fg, docs.Context.Purpose, th.reset),
 		fmt.Sprintf("%sTopology:%s %s%s%s", th.bold+th.purple, th.reset, th.fg, docs.Context.Topology, th.reset),
@@ -33,7 +33,7 @@ func (s *State) renderDocsPage(th ansiTheme, width int) []string {
 
 func (s *State) renderDocsComponentsPage(th ansiTheme, width int) []string {
 	docs := domain.ResolveProjectDocs(s.Overview, s.Project)
-	lines := renderPageHeader(th, "COMPONENTS", "Package ownership & responsibility layers")
+	lines := renderPageHeader(th, "Components", "Package ownership by layer")
 	lines = append(lines, th.renderTableHeader("   LAYER          COMPONENT                 PATH                        SUMMARY", width)...)
 	for _, c := range docs.Components {
 		lines = append(lines, fmt.Sprintf("  %s•%s %s[%s]%s %s%s%s %s(%s)%s — %s",
@@ -45,7 +45,7 @@ func (s *State) renderDocsComponentsPage(th ansiTheme, width int) []string {
 func (s *State) renderDocsDecisionsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	docs := domain.ResolveProjectDocs(s.Overview, s.Project)
-	lines := renderPageHeader(th, "SCENARIOS & DECISIONS", "Runtime invariants & ADRs")
+	lines := renderPageHeader(th, "Scenarios & decisions", "Runtime invariants and ADRs")
 	var scenBody []string
 	for _, sc := range docs.Scenarios {
 		scenBody = append(scenBody, fmt.Sprintf("%s• %s:%s %s", th.bold+th.cyan, sc.Title, th.reset, sc.Summary))
@@ -63,7 +63,7 @@ func (s *State) renderDocsDecisionsPage(th ansiTheme, width int) []string {
 func (s *State) renderDiagramsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	docs := domain.ResolveProjectDocs(s.Overview, s.Project)
-	lines := renderPageHeader(th, "ARCHITECTURE DIAGRAM", "Component topology blueprint")
+	lines := renderPageHeader(th, "Architecture", "Component topology")
 	diagramLines := domain.RenderArchitectureASCII(docs)
 	lines = append(lines, th.renderPanelBox("COMPONENT TOPOLOGY BLUEPRINT", docs.Context.Topology, panelW, diagramLines)...)
 	return lines

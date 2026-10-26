@@ -285,7 +285,7 @@ func (s *State) renderPlanPage(th ansiTheme, width int) []string {
 	if s.PlanView == "mission" {
 		return s.renderMissionPage(th, width)
 	}
-	lines := renderPageHeader(th, "TASK PLAN", "[i] Investigate · [s] Save · [g] Approve & generate · [Esc] Back")
+	lines := renderPageHeader(th, "Task plan", "[i] Investigate · [s] Save · [g] Approve & generate · [Esc] Back")
 	if s.PlanDraft == nil {
 		return append(lines, "  Select an issue or feature, or use :agent <request> to prepare a plan.")
 	}

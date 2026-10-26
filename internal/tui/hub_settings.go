@@ -11,23 +11,14 @@ import (
 
 func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "ANALYSIS", "Section coverage, execution telemetry & run parameters")
+	lines := renderPageHeader(th, "Analysis", "Coverage, telemetry and run parameters")
 	selected := s.ClampedIdx()
 	if s.Run == nil {
 		lines = append(lines, fmt.Sprintf("  %sNo analysis run recorded yet — press [r] or run :analyze to start.%s", th.muted, th.reset), "")
 		return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
 	}
 	done, total := runAggregateCoverage(s.Run)
-	telemetry := []string{
-		fmt.Sprintf(
-			"%sRun ID:%s %s%s%s · %sStatus:%s %s · %sElapsed:%s %ds · %sFiles:%s %d · %sCoverage:%s %s",
-			th.muted, th.reset, th.bold+th.fg, s.Run.Identity.ID, th.reset,
-			th.muted, th.reset, th.statusBadge(s.Run.Status),
-			th.muted, th.reset, s.Run.ElapsedSeconds,
-			th.muted, th.reset, s.Run.WindowFilesCompleted,
-			th.muted, th.reset, th.renderProgressBar(done, total, 12),
-		),
-	}
+	telemetry := []string{s.analysisTelemetryLine(th, done, total), th.renderProgressBar(done, total, max(12, min(48, panelW-14)))}
 	if strings.TrimSpace(s.Run.Reason) != "" {
 		telemetry = append(telemetry, fmt.Sprintf("%sReason:%s %s%s%s",
 			th.muted, th.reset, th.amber, s.Run.Reason, th.reset))
@@ -46,17 +37,47 @@ func (s *State) renderAnalysisRunPage(th ansiTheme, width int) []string {
 	return append(lines, s.renderAnalysisConfigSection(th, width, panelW, selected)...)
 }
 
+// analysisTelemetryLine summarizes a run, leaving out facts the daemon has not
+// reported rather than printing empty labels.
+func (s *State) analysisTelemetryLine(th ansiTheme, done, total int) string {
+	field := func(label, value string) string { return th.muted + label + th.reset + " " + value }
+	parts := []string{field("Status", th.statusBadge(s.Run.Status))}
+	if total > 0 {
+		parts = append(parts, field("Coverage", fmt.Sprintf("%s%d/%d%s files", th.bold+th.fg, done, total, th.reset)))
+	}
+	parts = append(parts, field("Elapsed", formatElapsed(s.Run.ElapsedSeconds)))
+	if s.Run.Status == "running" && s.Run.WindowFilesCompleted > 0 {
+		parts = append(parts, field("This window", fmt.Sprintf("%d files", s.Run.WindowFilesCompleted)))
+	}
+	if id := strings.TrimSpace(s.Run.Identity.ID); id != "" {
+		parts = append(parts, field("Run", theme.TruncatePlain(id, 14)))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// formatElapsed renders seconds as 45s, 3m 05s or 1h 02m.
+func formatElapsed(seconds int) string {
+	switch {
+	case seconds < 60:
+		return fmt.Sprintf("%ds", max(0, seconds))
+	case seconds < 3600:
+		return fmt.Sprintf("%dm %02ds", seconds/60, seconds%60)
+	default:
+		return fmt.Sprintf("%dh %02dm", seconds/3600, (seconds%3600)/60)
+	}
+}
+
 func (s *State) renderAnalysisSectionsTable(th ansiTheme, width, selected int) []string {
 	lines := th.renderTableHeader("    SECTION         STATUS        PROGRESS       SUCCEEDED       FAILED", width)
 	for idx, sec := range s.Run.Sections {
 		cursor := th.renderCursorPrefix(idx == selected)
 		bar := th.renderProgressBar(sec.Coverage.Succeeded, sec.Coverage.Total, 10)
-		failStr := fmt.Sprintf("%sfailed:%d%s", th.muted, sec.Coverage.Failed, th.reset)
+		failStr := fmt.Sprintf("%s%d%s", th.muted, sec.Coverage.Failed, th.reset)
 		if sec.Coverage.Failed > 0 {
-			failStr = th.critBg + fmt.Sprintf(" failed:%d ", sec.Coverage.Failed) + th.reset
+			failStr = th.critBg + fmt.Sprintf(" %d ", sec.Coverage.Failed) + th.reset
 		}
 		tStyle := rowTitleStyle(th, idx == selected)
-		succCol := theme.PadVisibleRight(fmt.Sprintf("%ssucceeded:%d/%d%s", th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset), 14)
+		succCol := theme.PadVisibleRight(fmt.Sprintf("%s%d/%d%s", th.green, sec.Coverage.Succeeded, sec.Coverage.Total, th.reset), 14)
 		lines = append(lines, fmt.Sprintf(
 			"  %s%s%-14s%s  %s  %s   %s  %s",
 			cursor, tStyle, strings.ToUpper(sec.Category), th.reset,
@@ -117,40 +138,52 @@ func (s *State) renderAnalysisConfigSection(th ansiTheme, width, panelW, selecte
 	cfg := s.EffectiveAnalysisConfig()
 	rows := domain.BuildAnalysisConfigRows(cfg)
 	secCount := s.analysisRunSectionCount()
-	lines := th.renderTableHeader("    KEY     ANALYSIS RUN PARAMETER    ACTIVE VALUE                      DESCRIPTION", width)
+	// Fixed columns use 72 cells; the description gets whatever is left and is
+	// truncated so each parameter stays on one row.
+	descWidth := width - 76
+	header := "    KEY     PARAMETER                 VALUE"
+	if descWidth >= 16 {
+		header += strings.Repeat(" ", 29) + "DESCRIPTION"
+	}
+	lines := th.renderTableHeader(header, width)
 	for cIdx, row := range rows {
 		rowIdx := secCount + cIdx
 		cursor := th.renderCursorPrefix(rowIdx == selected)
 		tStyle := rowTitleStyle(th, rowIdx == selected)
-		lines = append(lines, fmt.Sprintf(
-			"  %s%s%-7s%s %s%-24s%s  %s%-32s%s  %s%s%s",
+		line := fmt.Sprintf(
+			"  %s%s%-7s%s %s%-24s%s  %s%-32s%s",
 			cursor, th.cyan, row.Key, th.reset,
 			tStyle, row.Label, th.reset,
 			th.bold+th.green, row.Value, th.reset,
-			th.muted, row.Description, th.reset,
-		))
+		)
+		if descWidth >= 16 {
+			line += "  " + th.muted + theme.TruncatePlain(row.Description, descWidth) + th.reset
+		}
+		lines = append(lines, line)
+		if rowIdx == selected && row.Description != "" {
+			lines = append(lines, "      "+th.muted+"↳ "+row.Description+th.reset)
+		}
 	}
 	codeMod := s.EffectiveScopeModel("bug")
 	analyzeMod := s.EffectiveScopeModel("analyze")
 	planLines := []string{
-		fmt.Sprintf("%sDispatch Limits:%s %s%d files/batch%s · %sBudget:%s %s%ds%s · %sMax Attempts:%s %s%d/stage%s · %sFeatures:%s %s",
+		fmt.Sprintf("%sDispatch%s  %s%d%s files/batch · %s%s%s budget · %s%d%s attempts/stage",
 			th.muted, th.reset, th.bold+th.fg, cfg.BatchFiles, th.reset,
-			th.muted, th.reset, th.bold+th.fg, cfg.BudgetSeconds, th.reset,
-			th.muted, th.reset, th.bold+th.fg, cfg.MaxAttemptsPerStage, th.reset,
-			th.muted, th.reset, th.statusBadge(rows[3].Badge)),
-		fmt.Sprintf("%sStage Models:%s   %scode:%s%s · %sperf/sec/features:%s%s · %sCache:%s %s  %s([m] Model Routing · [x] Reset)%s",
+			th.bold+th.fg, formatElapsed(cfg.BudgetSeconds), th.reset,
+			th.bold+th.fg, cfg.MaxAttemptsPerStage, th.reset),
+		fmt.Sprintf("%sOptions%s   Features %s · Cache %s", th.muted, th.reset, th.statusBadge(rows[3].Badge), th.statusBadge(rows[4].Badge)),
+		fmt.Sprintf("%sModels%s    code %s%s%s · perf/sec/features %s%s%s",
 			th.muted, th.reset,
 			th.cyan, client.FirstNonEmpty(codeMod.Model, "bug"), th.reset,
-			th.cyan, client.FirstNonEmpty(analyzeMod.Model, "analyze"), th.reset,
-			th.muted, th.reset, th.statusBadge(rows[4].Badge),
-			th.muted, th.reset),
+			th.cyan, client.FirstNonEmpty(analyzeMod.Model, "analyze"), th.reset),
+		th.muted + "[m] Model routing · [x] Reset to defaults" + th.reset,
 	}
 	lines = append(lines, "")
-	return append(lines, th.renderPanelBox("ANALYSIS RUN CONFIGURATION & EXECUTION PLAN", "DISPATCH POLICY", panelW, planLines)...)
+	return append(lines, th.renderPanelBox("RUN PLAN", "DISPATCH POLICY", panelW, planLines)...)
 }
 
 func (s *State) renderAnalysisFilesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "FILE SCOPE", "Captured path inclusion & per-file analysis stage diagnostics")
+	lines := renderPageHeader(th, "File scope", "Included paths and per-file analysis stages")
 	if s.Index == nil || len(s.Index.Files) == 0 {
 		return append(lines, fmt.Sprintf("  %sNo indexed files available.%s", th.muted, th.reset))
 	}
@@ -291,7 +324,7 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 	if !s.WorkspaceTrust {
 		trustBadge = th.statusBadge("UNTRUSTED")
 	}
-	lines := renderPageHeader(th, "PROJECT TRUST", "[Enter / :trust] Grant or revoke")
+	lines := renderPageHeader(th, "Project trust", "Allow checks to run project commands")
 	body := []string{
 		fmt.Sprintf("%sExecution:%s %s", th.bold+th.fg, th.reset, trustBadge),
 		"Trust is remembered for this project path until you revoke it.",
@@ -303,7 +336,7 @@ func (s *State) renderTrustPage(th ansiTheme, width int) []string {
 func (s *State) renderModelsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	modelWidth := max(8, min(26, width-32))
-	lines := renderPageHeader(th, "MODELS", "[↑/↓] Select · [←/→] Change model · [Enter] Apply preset")
+	lines := renderPageHeader(th, "Models", "Model per scope and saved presets")
 	lines = append(lines, th.renderTableHeader(fmt.Sprintf("   %-12s  %-*s  ACCESS", "SCOPE", modelWidth, "MODEL"), width)...)
 	selected := s.ClampedIdx()
 	scopes := domain.CanonicalModelScopes()
@@ -391,7 +424,7 @@ func renderModelPresetInspector(th ansiTheme, panelW int, preset ModelPreset) []
 func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 	pillars := domain.EvaluateBootstrapChecklist(s.Index, s.Instructions)
 	readyCount := countReadyPillars(pillars)
-	lines := renderPageHeader(th, "PROJECT SETUP", "Repository readiness & AGENTS.md pillars")
+	lines := renderPageHeader(th, "Project setup", "Repository readiness and AGENTS.md pillars")
 	lines = append(lines, fmt.Sprintf("  %sGovernance Readiness:%s %s %s(%d/%d pillars active)%s",
 		th.muted, th.reset, th.renderProgressBar(readyCount, len(pillars), 14), th.bold+th.fg, readyCount, len(pillars), th.reset), "")
 	lines = append(lines, th.renderTableHeader("    STATUS      GOVERNANCE PILLAR             DESCRIPTION", width)...)
@@ -411,7 +444,7 @@ func (s *State) renderBootstrapPage(th ansiTheme, width int) []string {
 
 func (s *State) renderLessonsPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "LESSONS", "Graduated engineering guardrails & AGENTS.md rules")
+	lines := renderPageHeader(th, "Lessons", "Engineering guardrails graduated into AGENTS.md")
 	lines = append(lines, th.renderTableHeader("    STATUS        HARNESS² GUARDRAIL LESSON", width)...)
 	lessons := s.AllHarnessLessons()
 	selected := s.ClampedIdx()

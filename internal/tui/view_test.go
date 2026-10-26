@@ -159,7 +159,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	for _, sec := range []string{"trust", "models", "bootstrap", "lessons"} {
 		s.RulesSection = sec
 		govFrame := s.Render(110, 34)
-		if !strings.Contains(govFrame, "PROJECT SETUP") && !strings.Contains(govFrame, "LESSONS") && !(sec == "trust" && strings.Contains(govFrame, "PROJECT TRUST")) && !(sec == "models" && strings.Contains(govFrame, "MODEL DETAILS")) {
+		if !strings.Contains(govFrame, "Project setup") && !strings.Contains(govFrame, "Lessons") && !(sec == "trust" && strings.Contains(govFrame, "Project trust")) && !(sec == "models" && strings.Contains(govFrame, "MODEL DETAILS")) {
 			t.Fatalf("expected governance header for section %s", sec)
 		}
 	}
@@ -764,7 +764,7 @@ func TestPausedAnalysisReasonAndAgentDebugInspectorView(t *testing.T) {
 	}
 	dbgFrame := s.Render(120, 44)
 	for _, token := range []string{
-		"TASK · STAGES",
+		"Task · stages",
 		"Selected: 3/5",
 		"VERIFICATION CHECKS",
 		"nonce_uniqueness",
@@ -1139,7 +1139,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageSummary)
 	dashFrame := s.Render(132, 38)
-	for _, token := range []string{"PROJECT OVERVIEW", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "Review gate:", "0/1 files reviewed", "Web IDE", "1 task"} {
+	for _, token := range []string{"Dashboard", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "Review gate:", "0/1 files reviewed", "Web IDE", "1 task"} {
 		if !strings.Contains(dashFrame, token) {
 			t.Fatalf("expected dashboard to contain %q:\n%s", token, dashFrame)
 		}
@@ -1147,7 +1147,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageAgents)
 	agentsFrame := s.Render(132, 38)
-	for _, token := range []string{"TASKS", "SELECTED TASK", "internal/app/service.go"} {
+	for _, token := range []string{"Tasks", "SELECTED TASK", "internal/app/service.go"} {
 		if !strings.Contains(agentsFrame, token) {
 			t.Fatalf("expected populated Agents page to contain %q:\n%s", token, agentsFrame)
 		}
@@ -1155,7 +1155,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageGit)
 	gitFrame := s.Render(132, 38)
-	for _, token := range []string{"WORKTREES · AGENT ISOLATION & MERGE QUEUE", "SELECTED WORKTREE INTEGRATION", "orca/agent-orch"} {
+	for _, token := range []string{"Worktrees", "SELECTED WORKTREE INTEGRATION", "orca/agent-orch"} {
 		if !strings.Contains(gitFrame, token) {
 			t.Fatalf("expected Worktrees page to contain %q:\n%s", token, gitFrame)
 		}
@@ -1163,7 +1163,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 
 	s.Navigate(PageFeatures)
 	featFrame := s.Render(132, 38)
-	for _, token := range []string{"FEATURES · AI DISCOVERY & ROADMAP", "SELECTED IDEA", "Improves multi-agent observability."} {
+	for _, token := range []string{"Feature ideas", "SELECTED IDEA", "Improves multi-agent observability."} {
 		if !strings.Contains(featFrame, token) {
 			t.Fatalf("expected Features page to contain %q:\n%s", token, featFrame)
 		}

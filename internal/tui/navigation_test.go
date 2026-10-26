@@ -7,6 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 func TestBackReturnsToThePreviousViewAndSelection(t *testing.T) {
@@ -104,5 +106,21 @@ func TestGrantingTrustAsksButRevokingDoesNot(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "ArrowLeft"})
 	if s.Confirmation != nil || s.WorkspaceTrust || len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "set-trust" {
 		t.Fatalf("revoking trust must happen immediately: %+v", s.PendingActions)
+	}
+}
+
+func TestNoColorRendersWithoutColorEscapes(t *testing.T) {
+	previous := theme.NoColor
+	theme.NoColor = true
+	t.Cleanup(func() { theme.NoColor = previous })
+	for _, s := range []*State{workspaceSampleState(), twoFileReviewState()} {
+		frame := s.Render(120, 30)
+		if strings.Contains(frame, "38;5;") || strings.Contains(frame, "48;5;") || strings.Contains(frame, "38;2;") {
+			t.Fatalf("NO_COLOR frame still carries color escapes:\n%q", frame[:min(400, len(frame))])
+		}
+		if !strings.Contains(frame, "\033[7m") {
+			t.Fatal("the selection must stay visible with reverse video")
+		}
+		assertFrameSize(t, frame, 120, 30)
 	}
 }

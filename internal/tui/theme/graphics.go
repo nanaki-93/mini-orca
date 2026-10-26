@@ -2,6 +2,7 @@ package theme
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -12,7 +13,15 @@ import (
 	"github.com/muesli/termenv"
 )
 
+// NoColor reports whether the user asked for monochrome output with the
+// NO_COLOR convention (https://no-color.org). It is read once at startup.
+var NoColor = os.Getenv("NO_COLOR") != ""
+
 func init() {
+	if NoColor {
+		lipgloss.SetColorProfile(termenv.Ascii)
+		return
+	}
 	lipgloss.SetColorProfile(termenv.ANSI256)
 }
 
@@ -415,8 +424,8 @@ func RenderMetrics(mutedStyle lipgloss.Style, surface, foreground string, cards 
 		rows := []string{"  ", "  ", "  "}
 		for i, item := range cards[start:min(start+columns, len(cards))] {
 			cells := []string{
-				" ◈ " + item[1],
-				"   " + mutedStyle.Render(item[0]),
+				" " + mutedStyle.Render(item[0]),
+				" " + item[1],
 				" " + rule,
 			}
 			for row, content := range cells {

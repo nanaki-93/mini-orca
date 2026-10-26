@@ -1267,7 +1267,7 @@ func TestAnalysisRunConfigKeysCommandsAndDispatch(t *testing.T) {
 
 	// Render PageAnalysisRun and verify config table + execution plan panel appear
 	frame := s.Render(120, 36)
-	for _, tok := range []string{"ANALYSIS RUN CONFIGURATION", "128 files / batch", "600s (10m 0s)", "3 attempts / stage", "CLEAN"} {
+	for _, tok := range []string{"RUN PLAN", "128 files / batch", "600s (10m 0s)", "3 attempts / stage", "CLEAN"} {
 		if !strings.Contains(frame, tok) {
 			t.Fatalf("expected PageAnalysisRun frame to contain %q:\n%s", tok, frame)
 		}
@@ -1726,7 +1726,7 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	s.HandleKey(KeyEvent{Key: "ArrowUp"})
 	debugFrame = s.Render(120, 44)
 	for _, want := range []string{
-		"TASK · STAGES",
+		"Task · stages",
 		"qwen2.5-coder",
 		"Stage reason:",
 		"go test failed with exit code 1",

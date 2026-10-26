@@ -36,6 +36,9 @@ type ansiTheme struct {
 }
 
 func themeForPalette(p Palette) ansiTheme {
+	if theme.NoColor {
+		return monochromeTheme()
+	}
 	c := theme.ColorsForPalette(p)
 	accentCol := lipgloss.Color(c.AccentCode)
 	mutedCol := lipgloss.Color(c.MutedCode)
@@ -77,6 +80,31 @@ func themeForPalette(p Palette) ansiTheme {
 			Padding(0, 1),
 		progStartHex: c.ProgStart,
 		progEndHex:   c.ProgEnd,
+	}
+}
+
+// monochromeTheme honors NO_COLOR: hierarchy comes from bold, faint and
+// reverse video, so selection, status and emphasis stay distinguishable
+// without any color.
+func monochromeTheme() ansiTheme {
+	const (
+		bold    = "\033[1m"
+		faint   = "\033[2m"
+		reverse = "\033[7m"
+	)
+	plain := lipgloss.NewStyle()
+	return ansiTheme{
+		accent: bold, accentBg: bold + reverse, selection: reverse,
+		muted: faint, border: faint,
+		critBg: bold + reverse, warnBg: bold + reverse, okBg: bold + reverse,
+		green: bold, amber: bold, red: bold, purple: bold, cyan: bold,
+		bold: bold, reset: "\033[0m",
+		cardStyle:     plain.Border(lipgloss.RoundedBorder()).Padding(0, 1),
+		titleStyle:    plain.Bold(true),
+		mutedStyle:    plain.Faint(true),
+		errorBoxStyle: plain.Border(lipgloss.ThickBorder()).Padding(0, 1),
+		progStartHex:  "#ffffff",
+		progEndHex:    "#ffffff",
 	}
 }
 

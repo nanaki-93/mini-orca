@@ -117,7 +117,7 @@ func FindingName(title, summary string) string {
 	return strings.TrimRight(name, trailingPunct) + "…"
 }
 
-// IssueRow represents a unified finding row in the TUI Overview and Agent Studio hubs.
+// IssueRow represents a unified finding row in the TUI Project and Work hubs.
 type IssueRow struct {
 	ID                 string
 	Title              string
@@ -383,7 +383,7 @@ func worktreeSpecCollides(existing []client.GitWorktree, branch, relPath string)
 	return false
 }
 
-// CollectAllAgentItems derives Agent Studio items from all tracked change sessions.
+// CollectAllAgentItems derives Work › Tasks items from all tracked change sessions.
 func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
 	items, seenIDs := collectSessionAgentItems(change, activeChanges, receipt, gitWS)
 	if shouldAppendPrimaryChange(change, len(items), seenIDs) {

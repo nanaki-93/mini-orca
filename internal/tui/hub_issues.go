@@ -11,7 +11,7 @@ import (
 
 func (s *State) renderBugsPage(th ansiTheme, width int) []string {
 	open, active, done := s.IssueStatusCounts()
-	lines := renderPageHeader(th, "ISSUES · FINDINGS & AGENT DISPATCH", "Investigate findings, select batches and prepare a fix plan")
+	lines := renderPageHeader(th, "Issues", "Investigate findings, select a batch and plan a fix")
 	lines = append(lines, "", "  "+s.renderIssueStatusFilterStrip(th, open, active, done))
 	lines = append(lines, fmt.Sprintf("  %s[t] Category: %s · [s] Status · %d selected%s", th.muted, s.IssueCategory, len(s.SelectedIssueIDs), th.reset), "")
 	filtered := s.FilteredIssues()
@@ -94,7 +94,7 @@ func (s *State) renderIssueStatusFilterStrip(th ansiTheme, openCount, inProgCoun
 }
 
 func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "ISSUE", fmt.Sprintf("Issue %d of %d · [f] Plan fix · [j/k] Next/prev · [Esc] Back", s.ClampedIdx()+1, len(s.FilteredIssues())))
+	lines := renderPageHeader(th, "Issue", fmt.Sprintf("Issue %d of %d · [f] Plan fix · [j/k] Next/prev · [Esc] Back", s.ClampedIdx()+1, len(s.FilteredIssues())))
 	cur := s.SelectedIssue()
 	if cur == nil {
 		return append(lines, "  No finding selected.")
@@ -295,7 +295,7 @@ func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, conte
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "FEATURES · AI DISCOVERY & ROADMAP", "Model suggestions · Inspect evidence before planning")
+	lines := renderPageHeader(th, "Feature ideas", "Model suggestions · inspect the evidence before planning")
 	features := s.activeFeatures()
 	if len(features) == 0 {
 		return append(lines, "", "  No feature ideas saved yet.", "  [r] Analyze for ideas · :agent <request> to plan your own")

@@ -25,7 +25,7 @@ func triggerWindowSummary(w client.TriggerWindow) string {
 }
 
 func (s *State) renderTriggers(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "AMBIENT ANALYSIS", "[w] Watch · [g] Grant · [v] Revoke · [d] Disable")
+	lines := renderPageHeader(th, "Ambient analysis", "[w] Watch · [g] Grant · [v] Revoke · [d] Disable")
 	if !s.triggersCurrent() {
 		return append(lines, "  Main checkout only. Press [r] to inspect state.", "  Watching and provider permission are separate.")
 	}

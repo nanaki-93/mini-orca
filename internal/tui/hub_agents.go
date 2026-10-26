@@ -13,7 +13,7 @@ func (s *State) renderAgentsPage(th ansiTheme, width int) []string {
 	if s.AgentDetailOpen && s.Change != nil {
 		return s.renderAgentDebugPage(th, width)
 	}
-	lines := renderPageHeader(th, "TASKS", "Plans, checked proposals and human review")
+	lines := renderPageHeader(th, "Tasks", "Plans, checked proposals and human review")
 	lines = append(lines, s.renderAgentFleetStrip(th))
 	items := s.AgentItems()
 	if len(items) == 0 {
@@ -121,11 +121,11 @@ func (s *State) renderAgentDebugPage(th ansiTheme, width int) []string {
 	if chg.MissionOrigin != nil {
 		actions = "[←/→] Execution detail · [d] Diff · :mission-execution for owner controls"
 	}
-	lines := renderPageHeader(th, "TASK · STAGES", actions)
+	lines := renderPageHeader(th, "Task · stages", actions)
 	selectedStage := s.effectiveAgentDetailStage()
 	stages := s.currentAgentStages()
 	if s.viewportBodyRows > 0 && s.viewportBodyRows < 14 {
-		lines = []string{"  " + th.bold + "TASK · STAGES" + th.reset, "  " + theme.TruncatePlain(chg.Title, max(10, width-4))}
+		lines = []string{"  " + th.bold + "Task · stages" + th.reset, "  " + theme.TruncatePlain(chg.Title, max(10, width-4))}
 		lines = appendWrappedText(lines, workflowTimingSummary(chg), width)
 	} else {
 		for _, row := range theme.WrapVisibleLine(chg.Title, max(10, width-4)) {
@@ -351,7 +351,7 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	} else if !s.BrowseFiles && s.File != nil {
 		subRight = theme.SanitizeCodeText(s.File.Path)
 	}
-	lines := renderPageHeader(th, "FILES & DIFF", subRight)
+	lines := renderPageHeader(th, "Files & diff", subRight)
 	if s.isViewingDiff() {
 		lines = append(lines, s.renderChangeDiffLines(th, width)...)
 		return lines
@@ -378,7 +378,10 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 
 func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {
 	if s.Index == nil || len(s.Index.Files) == 0 {
-		return append(lines, fmt.Sprintf("  %sNo file or diff loaded.%s", th.muted, th.reset))
+		return append(lines, renderEmptyState(th, "No file or diff loaded",
+			"Files appear here once the project is indexed: run :reindex.",
+			"Open a file directly with :open <path>, or press [d] for the current proposal diff.",
+			"Tasks with generated changes open their diff here for review.")...)
 	}
 	lines = append(lines, th.renderTableHeader("   REPOSITORY FILE PATH                        LANGUAGE      LINES", width)...)
 	selected := s.ClampedIdx()
@@ -395,9 +398,11 @@ func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []stri
 }
 
 func (s *State) renderGitPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "WORKTREES · AGENT ISOLATION & MERGE QUEUE", s.worktreeRecoveryHint())
+	lines := renderPageHeader(th, "Worktrees", s.worktreeRecoveryHint())
 	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
-		return append(lines, "  No Git worktrees reported.")
+		return append(lines, renderEmptyState(th, "No Git worktrees yet",
+			"Agent tasks that run in isolation get their own worktree and branch.",
+			"They appear here to inspect, merge or clean up. [r] Refresh")...)
 	}
 	lines = append(lines, th.renderTableHeader("    STATUS            BRANCH                           WORKTREE PATH", width)...)
 	selected := s.ClampedIdx()
@@ -426,9 +431,11 @@ func (s *State) renderGitPage(th ansiTheme, width int) []string {
 
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
-	lines := renderPageHeader(th, "PROPOSAL HISTORY", "Guarded change history & audit trail")
+	lines := renderPageHeader(th, "Proposal history", "Applied and rejected proposals with their audit trail")
 	if len(s.ChangeHistory) == 0 {
-		return append(lines, fmt.Sprintf("  %sNo saved proposals in history.%s", th.muted, th.reset))
+		return append(lines, renderEmptyState(th, "No proposals in history",
+			"Applied and rejected proposals are kept here with their commit and audit trail.",
+			"Start one with [2] Work › Tasks or :agent <request>.")...)
 	}
 	lines = append(lines, th.renderTableHeader("    STATE         COMMIT CODE    PROPOSAL TITLE                   REVISION", width)...)
 	selected := s.ClampedIdx()

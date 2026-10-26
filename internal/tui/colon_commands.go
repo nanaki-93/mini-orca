@@ -47,7 +47,7 @@ func (s *State) activateIssueRow() {
 	if issue == nil {
 		if s.Page == PageSummary {
 			s.Navigate(PageBugs)
-			s.CmdOutput = "Switched to [2] Agent Studio · Issues"
+			s.CmdOutput = "Work › Issues"
 		}
 		return
 	}
@@ -101,7 +101,7 @@ func (s *State) openAgentDiffInspector() {
 		return
 	}
 	s.Navigate(PageEditor)
-	s.CmdOutput = "Switched to [3] Code & Diff · Inspector"
+	s.CmdOutput = "Code › Files & Diff"
 }
 
 func (s *State) activateAgentRow() {
@@ -342,7 +342,7 @@ func (s *State) execProjectCommand(arg string) bool {
 		return true
 	}
 	s.Navigate(PageProject)
-	s.CmdOutput = "Switched to [1] Overview · Project & Tests."
+	s.CmdOutput = "Project › Tests & Checks"
 	return true
 }
 
@@ -366,27 +366,27 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 		return true
 	case "scope", "files":
 		s.Navigate(PageAnalysisFiles)
-		s.CmdOutput = "Switched to [2] Agent Studio · File Scope."
+		s.CmdOutput = "Work › File Scope"
 		return true
 	case "proposals", "history":
 		s.Navigate(PageHistory)
-		s.CmdOutput = "Switched to [3] Code & Diff · Saved Proposals."
+		s.CmdOutput = "Code › Proposals"
 		return true
 	case "features":
 		s.Navigate(PageFeatures)
-		s.CmdOutput = "Switched to [2] Agent Studio · Features."
+		s.CmdOutput = "Work › Features"
 		return true
 	case "arch", "diagrams":
 		s.Navigate(PageDiagrams)
-		s.CmdOutput = "Switched to [4] Handbook & Arch · Architecture."
+		s.CmdOutput = "Docs › Architecture"
 		return true
 	case "docs", "handbook":
 		s.Navigate(PageDocs)
-		s.CmdOutput = "Switched to [4] Handbook & Arch · Handbook / Docs."
+		s.CmdOutput = "Docs › Context & Deps"
 		return true
 	case "git":
 		s.Navigate(PageGit)
-		s.CmdOutput = "Switched to [3] Code & Diff · Git & Worktrees."
+		s.CmdOutput = "Code › Worktrees"
 		return true
 	case "open":
 		if arg != "" {
@@ -490,7 +490,7 @@ func (s *State) applyCombinedFilterArg(arg string) bool {
 func (s *State) navigateToIssuesCategory(cmd string) {
 	s.Navigate(PageBugs)
 	if cmd == "issues" {
-		s.CmdOutput = "Switched to [2] Agent Studio · Issues."
+		s.CmdOutput = "Work › Issues"
 		return
 	}
 	cat := cmd
@@ -499,7 +499,7 @@ func (s *State) navigateToIssuesCategory(cmd string) {
 	}
 	s.IssueCategory = cat
 	s.SelectedIdx = 0
-	s.CmdOutput = fmt.Sprintf("Switched to [2] Agent Studio · Issues (%s).", strings.ToUpper(cat))
+	s.CmdOutput = fmt.Sprintf("Work › Issues · %s", strings.ToLower(cat))
 }
 
 func (s *State) execHubMatchCommand(cmd string) bool {

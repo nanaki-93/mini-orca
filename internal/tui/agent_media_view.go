@@ -131,7 +131,7 @@ func (s *State) mediaActiveNotice() string {
 }
 
 func (s *State) renderMedia(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "MEDIA & LIVE ADVICE", "[a] Attachments · [l] Live sessions · [o] Outputs · [r] Refresh")
+	lines := renderPageHeader(th, "Media & live advice", "[a] Attachments · [l] Live sessions · [o] Outputs · [r] Refresh")
 	if !s.mediaCurrent() {
 		return append(lines, "  Select a checkout with :media-scope main or task.", "  Import and provider sharing are separate explicit actions.")
 	}

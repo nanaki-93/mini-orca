@@ -337,7 +337,7 @@ func TestCloudUILayoutAndPassiveKeyboardActions(t *testing.T) {
 			s.DetailScroll = 0
 			s.AgentCloud.Details = false
 			frame := s.Render(size[0], size[1])
-			if !strings.Contains(frame, "CLOUD") || !strings.Contains(frame, "configured") {
+			if !strings.Contains(frame, "Cloud copies") || !strings.Contains(frame, "configured") {
 				t.Fatalf("missing cloud state at %v", size)
 			}
 			for _, line := range strings.Split(frame, "\n") {

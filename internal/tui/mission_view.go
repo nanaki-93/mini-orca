@@ -74,15 +74,15 @@ func (s *State) missionStateText() string {
 
 func (s *State) renderMissionPage(th ansiTheme, width int) []string {
 	if !s.missionCurrent() {
-		lines := renderPageHeader(th, "MISSIONS", ":mission-scope main|task")
+		lines := renderPageHeader(th, "Missions", ":mission-scope main|task")
 		return append(lines, "  Select :mission-scope main or task to read local history.")
 	}
 	v := s.Mission
-	title := "MISSIONS"
+	title := "Missions"
 	if v.Draft != nil && !v.History {
-		title = "MISSION PLAN"
+		title = "Mission plan"
 		if v.ExecutionOpen {
-			title = "MISSION EXECUTION"
+			title = "Mission execution"
 		}
 	}
 	var hints []string

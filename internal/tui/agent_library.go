@@ -104,9 +104,9 @@ func (s *State) libraryMemory(id string) *client.AgentMemory {
 
 func (s *State) renderLibrary(th ansiTheme, width int) []string {
 	kind := s.libraryPageKind()
-	title, subtitle := "ARTIFACTS & EVIDENCE", "[Enter] Preview · [e] Export · [d] Delete · [n] Next page · [r] Refresh"
+	title, subtitle := "Artifacts & evidence", "[Enter] Preview · [e] Export · [d] Delete · [n] Next page · [r] Refresh"
 	if kind == libraryMemory {
-		title, subtitle = "MEMORY", "[Enter] Inspect · [n] Create · [e] Edit · [a] Accept · [d] Reject · [f] Forget"
+		title, subtitle = "Memory", "[Enter] Inspect · [n] Create · [e] Edit · [a] Accept · [d] Reject · [f] Forget"
 	}
 	lines := renderPageHeader(th, title, subtitle)
 	if !s.libraryCurrent() {

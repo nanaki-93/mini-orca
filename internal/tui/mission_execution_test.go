@@ -438,7 +438,7 @@ func TestMissionExecutionTUIViewsFitAllPalettesAndKeepConsentAccessible(t *testi
 					s.HandleKey(KeyEvent{Key: "PageDown"})
 				}
 			}
-			for _, token := range []string{"MISSION EXECUTION", "end-of-receipt", "Current sources:", "Elapsed charged:", "Unstarted limits:"} {
+			for _, token := range []string{"Mission execution", "end-of-receipt", "Current sources:", "Elapsed charged:", "Unstarted limits:"} {
 				if !strings.Contains(visited.String(), token) {
 					t.Fatal("inaccessible execution detail", token, palette, size)
 				}

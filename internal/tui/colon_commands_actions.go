@@ -1099,7 +1099,7 @@ func (s *State) execModelCommand(cmd, arg string) bool {
 	switch cmd {
 	case "models":
 		s.Navigate(PageModels)
-		s.CmdOutput = "Switched to [5] Governance & Rules · Model Routing."
+		s.CmdOutput = "Settings › Models"
 		return true
 	case "model":
 		s.Navigate(PageModels)
@@ -1239,7 +1239,7 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 func (s *State) execAgentMissionCommand(arg string) {
 	s.Navigate(PageAgents)
 	if arg == "" {
-		s.CmdOutput = "Switched to [2] Agent Studio."
+		s.CmdOutput = "Work › Tasks"
 		return
 	}
 	seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}

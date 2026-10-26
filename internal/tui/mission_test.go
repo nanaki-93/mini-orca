@@ -350,7 +350,7 @@ func TestMissionTUIViewsAndConfirmationsFitEveryPalette(t *testing.T) {
 					s.HandleKey(KeyEvent{Key: "PageDown"})
 				}
 			}
-			for _, token := range []string{"MISSION PLAN", "end-of-child", "Captured inventory:", "Planning run:", "Future mission:"} {
+			for _, token := range []string{"Mission plan", "end-of-child", "Captured inventory:", "Planning run:", "Future mission:"} {
 				if !strings.Contains(visited.String(), token) {
 					t.Fatal("mission content inaccessible", token, palette, size)
 				}

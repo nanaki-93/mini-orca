@@ -47,7 +47,7 @@ func InsertGuidelineSection(markdown, heading, bullet string) string {
 	return fmt.Sprintf("%s\n\n%s\n\n%s\n", base, headerLine, trimmedBullet)
 }
 
-// BootstrapPillar represents a repository governance pillar in the Governance & Rules hub.
+// BootstrapPillar represents a repository governance pillar in the Settings hub.
 type BootstrapPillar struct {
 	ID           string
 	Title        string
