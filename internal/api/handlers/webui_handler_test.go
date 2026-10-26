@@ -53,6 +53,9 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		`data-set-theme="paper"`,
 		"cmd-modal-backdrop",
 		"ide-status-bar",
+		"Verification &amp; Phases",
+		"phase-summary-bar",
+		"/api/projects/current/scan",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)

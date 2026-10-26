@@ -743,6 +743,114 @@ button.btn-ghost:hover:not(:disabled) {
   display: flex; align-items: center; gap: 7px;
 }
 
+/* ==================== IDE PHASE & VERIFICATION INSPECTOR ==================== */
+.section-split-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px; margin-bottom: 16px; align-items: start;
+}
+.subtab-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 24px; background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap;
+}
+.subtab-nav {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg); padding: 3px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.subtab-btn {
+  border: none; background: transparent; color: var(--fg-muted);
+  padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 500;
+}
+.subtab-btn:hover:not(:disabled) {
+  background: var(--surface-alt); color: var(--fg-bright); border: none;
+}
+.subtab-btn.active {
+  background: var(--accent-dim); color: var(--accent); font-weight: 600;
+}
+
+.phase-summary-bar {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 16px;
+  margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.phase-summary-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.phase-summary-counts {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.phase-progress-track {
+  width: 100%; height: 6px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border-subtle);
+  overflow: hidden; display: flex;
+}
+.phase-progress-seg.passed { background: var(--green); }
+.phase-progress-seg.failed { background: var(--red); }
+.phase-progress-seg.running { background: var(--amber); }
+
+.phase-group {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); margin-bottom: 14px; overflow: hidden;
+}
+.phase-group-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 14px; background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+}
+.phase-group-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--fg-bright);
+  display: flex; align-items: center; gap: 8px;
+}
+.phase-list {
+  display: flex; flex-direction: column;
+}
+.phase-item {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+.phase-item:last-child { border-bottom: none; }
+.phase-item.is-failed {
+  background: rgba(247, 118, 142, 0.04);
+}
+.phase-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 9px 14px; flex-wrap: wrap;
+}
+.phase-row-left {
+  display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;
+}
+.phase-status-pill {
+  min-width: 78px; justify-content: center; font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+}
+.phase-name {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  color: var(--fg-bright);
+}
+.phase-cmd {
+  font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted);
+  background: var(--bg); padding: 1px 7px; border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+.phase-row-right {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.phase-log {
+  display: none; padding: 10px 14px 12px 14px;
+  background: var(--bg); border-top: 1px solid var(--border-subtle);
+}
+.phase-log.open { display: block; }
+.phase-log-pre {
+  margin: 0; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  color: var(--fg-bright); overflow-x: auto; white-space: pre-wrap;
+  max-height: 260px; overflow-y: auto;
+}
+
 .empty-state {
   text-align: center; padding: 48px 24px; color: var(--fg-muted);
   background: var(--surface); border: 1px dashed var(--border);
@@ -890,6 +998,13 @@ button.btn-ghost:hover:not(:disabled) {
           <div class="list-item active" data-doc-sec="overview">
             <div class="list-item-title">System Purpose &amp; Goals</div>
             <div class="list-item-sub">Executive summary, stack &amp; metrics</div>
+          </div>
+          <div class="list-item" data-doc-sec="verification">
+            <div class="list-item-row">
+              <span class="list-item-title">Verification &amp; Phases</span>
+              <span id="sidebar-verification-badge" class="badge">Idle</span>
+            </div>
+            <div class="list-item-sub">Passed/failed checks, scan &amp; analysis phases</div>
           </div>
           <div class="list-item" data-doc-sec="architecture">
             <div class="list-item-title">Architecture &amp; Topology</div>
@@ -1167,6 +1282,8 @@ button.btn-ghost:hover:not(:disabled) {
       </span>
       <span class="status-bar-divider"></span>
       <button id="trust-status-pill" class="badge" style="cursor:pointer;padding:1px 7px;" title="Click to toggle Local Execution Trust for sandbox checks">Trust: …</button>
+      <span class="status-bar-divider"></span>
+      <button id="status-bar-scan-pill" class="badge" style="cursor:pointer;padding:1px 7px;" title="Click to inspect Verification &amp; Scan Phases">Phases: Idle</button>
     </div>
 
     <div class="status-bar-group">
@@ -1250,10 +1367,12 @@ button.btn-ghost:hover:not(:disabled) {
     selectedFile: initialFile,
     diffMode: 'split',
     sinceLastReview: false,
+    phaseFilter: 'all',
     theme: 'tokyo',
     project: null,
     mainProject: null,
     overview: null,
+    scan: null,
     models: null,
     index: null,
     trust: null,
@@ -1532,7 +1651,8 @@ button.btn-ghost:hover:not(:disabled) {
         apiFetch('/api/projects/current/git/workspace' + mainIdQuery),
         apiFetch(withWorktree('/api/projects/current/changes' + idQuery)),
         apiFetch(withWorktree('/api/projects/current/findings' + revQuery)),
-        apiFetch(withWorktree('/api/projects/current/overview' + revQuery))
+        apiFetch(withWorktree('/api/projects/current/overview' + revQuery)),
+        apiFetch(withWorktree('/api/projects/current/scan' + revQuery))
       ]);
 
       if (results[0].status === 'fulfilled') state.index = results[0].value;
@@ -1545,6 +1665,9 @@ button.btn-ghost:hover:not(:disabled) {
       }
       if (results[5].status === 'fulfilled') {
         state.overview = results[5].value;
+      }
+      if (results[6].status === 'fulfilled') {
+        state.scan = results[6].value;
       }
 
       renderHeader();
@@ -1601,6 +1724,232 @@ button.btn-ghost:hover:not(:disabled) {
     }
   }
 
+  function normalizePhaseState(raw) {
+    const s = String(raw || '').toLowerCase().trim();
+    if (s === 'passed' || s === 'completed' || s === 'completed_empty' || s === 'fresh' || s === 'approve' || s === 'approved' || s === 'checked' || s === 'reviewed' || s === 'applied') {
+      return 'passed';
+    }
+    if (s === 'failed' || s === 'error' || s === 'rejected' || s === 'changes_requested' || s === 'stale') {
+      return 'failed';
+    }
+    if (s === 'running' || s === 'in_progress' || s === 'working' || s === 'queued') {
+      return 'running';
+    }
+    return 'skipped';
+  }
+
+  function phaseBadgeSpec(rawState) {
+    const norm = normalizePhaseState(rawState);
+    const label = String(rawState || norm || 'idle').toUpperCase();
+    if (norm === 'passed') return { cls: 'green', icon: '✓', text: label, norm: norm };
+    if (norm === 'failed') return { cls: 'red', icon: '✕', text: label, norm: norm };
+    if (norm === 'running') return { cls: 'amber', icon: '●', text: label, norm: norm };
+    return { cls: '', icon: '○', text: label, norm: norm };
+  }
+
+  function collectWorkspacePhaseGroups() {
+    const groups = [];
+    const scanPhases = (state.scan && Array.isArray(state.scan.phases)) ? state.scan.phases : [];
+    groups.push({
+      id: 'go-scan',
+      title: 'Go Sandbox Verification Phases (Parser · Vet · Unit Tests)',
+      subtitle: state.scan ? ('Scan status: ' + (state.scan.status || 'recorded')) : 'Run Go Scan to verify compilation, go vet, and unit tests in an isolated sandbox',
+      actionId: 'phase-trigger-scan-btn',
+      actionLabel: '⚙ Run Go Scan',
+      items: scanPhases.map(function(ph, i) {
+        return {
+          id: 'scan-' + i,
+          name: ph.name || ('Phase ' + (i + 1)),
+          state: ph.state || 'idle',
+          category: 'Sandbox Scan',
+          command: Array.isArray(ph.command) ? ph.command.join(' ') : '',
+          meta: (ph.duration_ms ? ph.duration_ms + 'ms' : '') + (typeof ph.exit_code === 'number' ? ' · exit ' + ph.exit_code : ''),
+          output: ph.output || ''
+        };
+      })
+    });
+
+    const ov = state.overview || {};
+    const run = ov.analysis_run || null;
+    const sections = (run && Array.isArray(run.sections)) ? run.sections : [];
+    const analysisItems = sections.map(function(sec, i) {
+      const cov = sec.coverage || {};
+      const total = cov.total || 0;
+      const succ = cov.succeeded || 0;
+      const fail = cov.failed || 0;
+      const st = fail > 0 && sec.status !== 'running' ? 'failed' : (sec.status || 'idle');
+      return {
+        id: 'analysis-sec-' + i,
+        name: String(sec.category || 'section').toUpperCase(),
+        state: st,
+        category: 'Analysis Phase',
+        command: total > 0 ? (succ + '/' + total + ' passed' + (fail > 0 ? ' · ' + fail + ' failed' : '')) : '0 files',
+        meta: sec.status || '',
+        output: sec.reason || ''
+      };
+    });
+    if (run && run.features) {
+      analysisItems.push({
+        id: 'analysis-sec-features',
+        name: 'FEATURES DISCOVERY',
+        state: run.features.status || 'idle',
+        category: 'Analysis Phase',
+        command: 'attempts: ' + (run.features.attempts || 0),
+        meta: run.features.status || '',
+        output: run.features.reason || ''
+      });
+    }
+    groups.push({
+      id: 'analysis-sections',
+      title: 'Project Analysis & Discovery Phases (Bugs · Security · Performance · Features)',
+      subtitle: run ? ('Run #' + (run.id || (run.identity && run.identity.id) || 'current') + ' · status: ' + (run.status || 'recorded')) : 'Run Project Analysis to execute multi-phase semantic, security, and performance checks',
+      actionId: 'phase-trigger-analysis-btn',
+      actionLabel: '✦ Run Project Analysis',
+      items: analysisItems
+    });
+
+    return groups;
+  }
+
+  function summarizePhaseGroups(groups) {
+    let passed = 0, failed = 0, running = 0, skipped = 0, total = 0;
+    (groups || []).forEach(function(g) {
+      (g.items || []).forEach(function(it) {
+        total++;
+        const n = normalizePhaseState(it.state);
+        if (n === 'passed') passed++;
+        else if (n === 'failed') failed++;
+        else if (n === 'running') running++;
+        else skipped++;
+      });
+    });
+    return { passed: passed, failed: failed, running: running, skipped: skipped, total: total };
+  }
+
+  function renderPhaseGroupsHTML(groups, options) {
+    const opts = options || {};
+    const filter = opts.filter || state.phaseFilter || 'all';
+    const summary = summarizePhaseGroups(groups);
+    const total = Math.max(1, summary.total);
+    const passPct = Math.round((summary.passed / total) * 100);
+    const failPct = Math.round((summary.failed / total) * 100);
+    const runPct = Math.round((summary.running / total) * 100);
+
+    let overallBadge = '<span class="badge">○ NO PHASES RECORDED</span>';
+    if (summary.total > 0) {
+      if (summary.failed > 0) {
+        overallBadge = '<span class="badge red">✕ ' + summary.failed + ' PHASE' + (summary.failed > 1 ? 'S' : '') + ' FAILED</span>';
+      } else if (summary.running > 0) {
+        overallBadge = '<span class="badge amber">● ' + summary.running + ' RUNNING</span>';
+      } else if (summary.passed > 0) {
+        overallBadge = '<span class="badge green">✓ ALL ' + summary.passed + ' PASSED</span>';
+      }
+    }
+
+    let html = '<div class="phase-summary-bar">' +
+      '<div class="phase-summary-top">' +
+        '<div class="phase-summary-counts">' +
+          overallBadge +
+          '<span class="badge green">✓ ' + summary.passed + ' Passed</span>' +
+          '<span class="badge ' + (summary.failed > 0 ? 'red' : '') + '">✕ ' + summary.failed + ' Failed</span>' +
+          (summary.running > 0 ? '<span class="badge amber">● ' + summary.running + ' Running</span>' : '') +
+          (summary.skipped > 0 ? '<span class="badge">○ ' + summary.skipped + ' Pending/Skipped</span>' : '') +
+        '</div>' +
+        '<div class="subtab-nav" role="group" aria-label="Filter Phases">' +
+          '<button class="subtab-btn phase-filter-btn' + (filter === 'all' ? ' active' : '') + '" data-phase-filter="all">All (' + summary.total + ')</button>' +
+          '<button class="subtab-btn phase-filter-btn' + (filter === 'failed' ? ' active' : '') + '" data-phase-filter="failed">Failed (' + summary.failed + ')</button>' +
+          '<button class="subtab-btn phase-filter-btn' + (filter === 'passed' ? ' active' : '') + '" data-phase-filter="passed">Passed (' + summary.passed + ')</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="phase-progress-track" title="Passed: ' + summary.passed + ' · Failed: ' + summary.failed + '">' +
+        '<div class="phase-progress-seg passed" style="width:' + passPct + '%;"></div>' +
+        '<div class="phase-progress-seg failed" style="width:' + failPct + '%;"></div>' +
+        '<div class="phase-progress-seg running" style="width:' + runPct + '%;"></div>' +
+      '</div>' +
+    '</div>';
+
+    (groups || []).forEach(function(g) {
+      const items = (g.items || []).filter(function(it) {
+        if (filter === 'all') return true;
+        return normalizePhaseState(it.state) === filter;
+      });
+      const gSum = summarizePhaseGroups([g]);
+      html += '<div class="phase-group">' +
+        '<div class="phase-group-header">' +
+          '<div>' +
+            '<div class="phase-group-title">' +
+              '<span>' + esc(g.title) + '</span>' +
+              '<span class="badge green">' + gSum.passed + ' passed</span>' +
+              (gSum.failed > 0 ? '<span class="badge red">' + gSum.failed + ' failed</span>' : '') +
+            '</div>' +
+            (g.subtitle ? '<div class="project-path" style="margin-top:2px;">' + esc(g.subtitle) + '</div>' : '') +
+          '</div>' +
+          (g.actionId ? '<button id="' + esc(g.actionId) + '" class="btn-primary">' + esc(g.actionLabel) + '</button>' : '') +
+        '</div>';
+
+      if ((g.items || []).length === 0) {
+        html += '<div class="card-body project-path">No phases recorded in this section yet.</div>';
+      } else if (items.length === 0) {
+        html += '<div class="card-body project-path">No phases in this section match the "' + esc(filter) + '" filter.</div>';
+      } else {
+        html += '<div class="phase-list">';
+        items.forEach(function(it) {
+          const b = phaseBadgeSpec(it.state);
+          const hasOut = Boolean(it.output && String(it.output).trim());
+          const autoOpen = b.norm === 'failed' && hasOut;
+          html += '<div class="phase-item' + (b.norm === 'failed' ? ' is-failed' : '') + '">' +
+            '<div class="phase-row">' +
+              '<div class="phase-row-left">' +
+                '<span class="badge ' + b.cls + ' phase-status-pill">' + b.icon + ' ' + esc(b.text) + '</span>' +
+                '<span class="phase-name">' + esc(it.name) + '</span>' +
+                (it.category ? '<span class="badge">' + esc(it.category) + '</span>' : '') +
+                (it.command ? '<span class="phase-cmd">' + esc(it.command) + '</span>' : '') +
+              '</div>' +
+              '<div class="phase-row-right">' +
+                (it.meta ? '<span class="project-path">' + esc(it.meta) + '</span>' : '') +
+                (hasOut ? '<button class="btn-ghost phase-log-toggle" data-target="log-' + esc(it.id) + '" style="padding:3px 8px;font-size:11px;">' + (autoOpen ? '▴ Hide Output' : '▾ Diagnostic Output') + '</button>' : '') +
+              '</div>' +
+            '</div>' +
+            (hasOut ? '<div id="log-' + esc(it.id) + '" class="phase-log' + (autoOpen ? ' open' : '') + '"><pre class="phase-log-pre">' + esc(it.output) + '</pre></div>' : '') +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+
+    return html;
+  }
+
+  function bindPhaseInspectorControls(container, onFilterChange) {
+    if (!container) return;
+    container.querySelectorAll('.phase-log-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const targetId = btn.getAttribute('data-target');
+        const logEl = document.getElementById(targetId);
+        if (!logEl) return;
+        const isOpen = logEl.classList.toggle('open');
+        btn.textContent = isOpen ? '▴ Hide Output' : '▾ Diagnostic Output';
+      });
+    });
+    container.querySelectorAll('.phase-filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        state.phaseFilter = btn.getAttribute('data-phase-filter') || 'all';
+        if (typeof onFilterChange === 'function') onFilterChange();
+      });
+    });
+    const scanBtn = container.querySelector('#phase-trigger-scan-btn');
+    if (scanBtn) {
+      scanBtn.addEventListener('click', function() {
+        document.getElementById('run-scan-btn').click();
+      });
+    }
+    const analysisBtn = container.querySelector('#phase-trigger-analysis-btn');
+    if (analysisBtn) {
+      analysisBtn.addEventListener('click', runProjectDocsAnalysis);
+    }
+  }
+
   function renderHeader() {
     if (!state.project) return;
     document.getElementById('project-name').textContent = state.project.name || 'Project';
@@ -1617,6 +1966,20 @@ button.btn-ghost:hover:not(:disabled) {
 
     const trustBtn = document.getElementById('trust-btn');
     trustBtn.textContent = trusted ? '✓ Execution Trust: GRANTED (Revoke)' : '⚠ Grant Execution Trust for Checks';
+
+    const wsSum = summarizePhaseGroups(collectWorkspacePhaseGroups());
+    const scanPill = document.getElementById('status-bar-scan-pill');
+    const sideVerBadge = document.getElementById('sidebar-verification-badge');
+    if (wsSum.total === 0) {
+      if (scanPill) { scanPill.textContent = 'Phases: Idle'; scanPill.className = 'badge'; }
+      if (sideVerBadge) { sideVerBadge.textContent = 'Idle'; sideVerBadge.className = 'badge'; }
+    } else if (wsSum.failed > 0) {
+      if (scanPill) { scanPill.textContent = 'Phases: ' + wsSum.passed + '✓ ' + wsSum.failed + '✕'; scanPill.className = 'badge red'; }
+      if (sideVerBadge) { sideVerBadge.textContent = wsSum.failed + ' failed'; sideVerBadge.className = 'badge red'; }
+    } else {
+      if (scanPill) { scanPill.textContent = 'Phases: ' + wsSum.passed + '/' + wsSum.total + ' ✓'; scanPill.className = 'badge green'; }
+      if (sideVerBadge) { sideVerBadge.textContent = wsSum.passed + '/' + wsSum.total + ' ✓'; sideVerBadge.className = 'badge green'; }
+    }
   }
 
   function renderWorktreeSelect() {
@@ -1703,11 +2066,14 @@ button.btn-ghost:hover:not(:disabled) {
         '<div class="doc-block">' +
           '<h4>Quick Navigation</h4>' +
           '<div class="chip-list">' +
+            '<span class="file-chip" id="jump-to-verification-btn">✔ Verification &amp; Phases →</span>' +
             '<span class="file-chip" id="jump-to-files-btn">📄 Browse Source Tree →</span>' +
             '<span class="file-chip" id="jump-to-spec-btn">✦ Author New Spec →</span>' +
           '</div>' +
         '</div>' +
       '</div>';
+    } else if (sec === 'verification') {
+      html += renderPhaseGroupsHTML(collectWorkspacePhaseGroups(), { filter: state.phaseFilter });
     } else if (sec === 'architecture') {
       const ctx = (docs && docs.context) || {};
       const topo = ctx.architecture_topology || '';
@@ -1812,6 +2178,7 @@ button.btn-ghost:hover:not(:disabled) {
     }
 
     container.innerHTML = html;
+    bindPhaseInspectorControls(container, renderUnderstandDocs);
     container.querySelectorAll('.doc-file-jump').forEach(function(chip) {
       chip.addEventListener('click', function() {
         const p = chip.getAttribute('data-path');
@@ -1820,6 +2187,12 @@ button.btn-ghost:hover:not(:disabled) {
         openSourceFile(p);
       });
     });
+    const jumpVer = document.getElementById('jump-to-verification-btn');
+    if (jumpVer) {
+      jumpVer.addEventListener('click', function() {
+        openDocSection('verification');
+      });
+    }
     const jumpFiles = document.getElementById('jump-to-files-btn');
     if (jumpFiles) {
       jumpFiles.addEventListener('click', function() {
@@ -1834,6 +2207,17 @@ button.btn-ghost:hover:not(:disabled) {
         setTab('tasks');
       });
     }
+  }
+
+  function openDocSection(secId) {
+    state.tab = 'understand';
+    state.understandMode = 'docs';
+    state.docSection = secId || 'overview';
+    setTab('docs');
+    document.querySelectorAll('#understand-docs-sidebar .list-item').forEach(function(el) {
+      el.classList.toggle('active', el.getAttribute('data-doc-sec') === state.docSection);
+    });
+    renderUnderstandDocs();
   }
 
   function renderFilesTab() {
@@ -2949,6 +3333,9 @@ button.btn-ghost:hover:not(:disabled) {
 
   document.getElementById('trust-btn').addEventListener('click', toggleExecutionTrust);
   document.getElementById('trust-status-pill').addEventListener('click', toggleExecutionTrust);
+  document.getElementById('status-bar-scan-pill').addEventListener('click', function() {
+    openDocSection('verification');
+  });
 
   document.getElementById('reindex-btn').addEventListener('click', async function() {
     if (!state.project) return;
@@ -2968,11 +3355,12 @@ button.btn-ghost:hover:not(:disabled) {
     if (!state.project) return;
     try {
       showBanner('Running Go static scan (parser, vet, tests)…', 'info');
-      await apiFetch(withWorktree('/api/projects/current/scan'), {
+      const report = await apiFetch(withWorktree('/api/projects/current/scan'), {
         method: 'POST',
         body: { project_revision: state.project.project_revision }
       });
-      showBanner('Go static scan completed.', 'ok');
+      if (report) state.scan = report;
+      showBanner('Go static scan started/completed. Inspect phase outcomes in Verification & Phases.', 'ok');
       await loadAll();
     } catch (err) {
       showBanner('Go scan failed: ' + err.message, 'error');
