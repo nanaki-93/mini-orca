@@ -56,6 +56,9 @@ func TestWebUIHandlerServesEmbeddedAppWithSecurityHeaders(t *testing.T) {
 		"Verification &amp; Phases",
 		"phase-summary-bar",
 		"/api/projects/current/scan",
+		"diff-subtab-bar",
+		"diff-subtab-checks",
+		"diff-subtab-spec",
 	} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("embedded webui.html missing %q", needle)

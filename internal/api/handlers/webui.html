@@ -1088,11 +1088,14 @@ button.btn-ghost:hover:not(:disabled) {
           </div>
         </div>
         <div id="diff-file-list" class="sidebar-list"></div>
-        <div class="sidebar-section" style="border-top:1px solid var(--border);border-bottom:none;background:var(--surface);">
-          <div class="sidebar-title"><span>Iterate / Refine with AI</span></div>
-          <div class="form-row">
-            <textarea id="proposal-message-input" rows="2" placeholder="Ask the model to refine this proposal or fix a check…"></textarea>
-            <button id="send-message-btn" class="btn-primary" style="width:100%;justify-content:center;margin-top:4px;">⚡ Generate Update</button>
+        <div class="sidebar-section" style="border-top:1px solid var(--border);border-bottom:none;background:var(--surface);display:flex;flex-direction:column;gap:6px;">
+          <div class="sidebar-title" style="margin:0;">
+            <span>Verification &amp; Refinement</span>
+            <span id="dock-checks-pill" class="badge">0 checks</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <button id="dock-checks-summary-btn" style="justify-content:center;font-size:11px;padding:5px 8px;" title="Inspect sandboxed checks and workflow phases">✔ Phases</button>
+            <button id="open-refine-tab-btn" class="btn-primary" style="justify-content:center;font-size:11px;padding:5px 8px;" title="Open AI refinement composer and acceptance criteria">✦ AI Refine</button>
           </div>
         </div>
       </div>
@@ -1251,16 +1254,59 @@ button.btn-ghost:hover:not(:disabled) {
             <span id="active-proposal-freshness" class="badge"></span>
           </div>
           <div class="action-group">
-            <button id="mode-split-btn" class="btn-primary">Split (Side-by-Side)</button>
-            <button id="mode-unified-btn">Unified</button>
-            <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full Diff</button>
             <button id="review-all-btn" class="btn-success" title="Mark all changed files reviewed and approve current proposal hash">✓✓ Review &amp; Approve All</button>
             <button id="run-checks-btn" title="Run architecture, complexity, lint and test checks">⚙ Run Checks</button>
             <button id="apply-btn" class="btn-primary" title="Explicitly write reviewed and checked changes to disk">🚀 Apply</button>
             <button id="undo-btn" class="btn-danger" title="Guarded Undo of the last applied proposal">↩ Undo</button>
           </div>
         </div>
+        <div id="diff-subtab-bar" class="subtab-bar">
+          <div class="subtab-nav" role="tablist" aria-label="Proposal Review Sections">
+            <button id="diff-subtab-changes" class="subtab-btn active" data-diff-subtab="changes">⇄ Code Changes <span id="diff-subtab-changes-badge" class="badge">0</span></button>
+            <button id="diff-subtab-checks" class="subtab-btn" data-diff-subtab="checks">✔ Checks &amp; Phases <span id="diff-subtab-checks-badge" class="badge">0</span></button>
+            <button id="diff-subtab-spec" class="subtab-btn" data-diff-subtab="spec">✦ Plan &amp; AI Refine <span id="diff-subtab-spec-badge" class="badge">0</span></button>
+          </div>
+          <div id="diff-view-controls" class="action-group">
+            <button id="mode-split-btn" class="btn-primary">Split (Side-by-Side)</button>
+            <button id="mode-unified-btn">Unified</button>
+            <button id="scope-delta-btn" title="Toggle full proposal diff vs changes since last review">Full Diff</button>
+          </div>
+        </div>
         <div id="diff-content" class="content-scroll"></div>
+        <div id="diff-spec-pane" class="content-scroll" style="display:none;">
+          <div id="diff-spec-pipeline"></div>
+          <div class="section-split-grid">
+            <div id="proposal-spec-details"></div>
+            <div>
+              <div class="card">
+                <div class="card-header">
+                  <span class="card-title">✦ Iterate / Refine with AI</span>
+                  <span class="badge blue">Code Profile</span>
+                </div>
+                <div class="card-body">
+                  <div class="form-grid" style="gap:10px;">
+                    <div class="chip-list" style="margin-top:0;">
+                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Fix any failing checks or static analysis warnings while preserving existing behavior.">Fix failed checks</button>
+                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Add or expand unit test coverage for edge cases and failure paths.">Expand unit tests</button>
+                      <button type="button" class="file-chip refine-preset-chip" data-prompt="Simplify control flow and reduce function complexity while keeping all tests green.">Simplify &amp; reduce complexity</button>
+                    </div>
+                    <div class="form-row">
+                      <label for="proposal-message-input">
+                        <span>Refinement Prompt / Follow-up Instruction</span>
+                        <span class="project-path">Generates an updated diff for this session</span>
+                      </label>
+                      <textarea id="proposal-message-input" rows="4" placeholder="Ask the model to refine this proposal, address a review comment, or repair a failed check…"></textarea>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;">
+                      <button id="send-message-btn" class="btn-primary">⚡ Generate Updated Diff</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="proposal-messages-list"></div>
+            </div>
+          </div>
+        </div>
       </main>
     </section>
   </div>
@@ -1366,6 +1412,7 @@ button.btn-ghost:hover:not(:disabled) {
     sessionId: initialSessionId,
     selectedFile: initialFile,
     diffMode: 'split',
+    diffSubTab: 'changes',
     sinceLastReview: false,
     phaseFilter: 'all',
     theme: 'tokyo',
@@ -2740,6 +2787,109 @@ button.btn-ghost:hover:not(:disabled) {
     return { added: added, removed: removed };
   }
 
+  function collectProposalPhaseGroups(session) {
+    const checks = (session && Array.isArray(session.checks)) ? session.checks : [];
+    const sandboxNames = { 'lint': true, 'tests': true, 'existing test baseline': true, 'regression baseline': true };
+    const staticItems = [];
+    const sandboxItems = [];
+
+    if (checks.length === 0) {
+      ['parse', 'format', 'architecture', 'complexity', 'secrets'].forEach(function(name, idx) {
+        staticItems.push({
+          id: 'prop-static-' + idx,
+          name: name,
+          state: 'pending',
+          command: 'internal/app/archgate',
+          duration_ms: 0,
+          detail: 'Not run yet for current proposal hash — click "⚙ Run Checks"',
+          output: ''
+        });
+      });
+      ['lint', 'tests'].forEach(function(name, idx) {
+        sandboxItems.push({
+          id: 'prop-sandbox-' + idx,
+          name: name,
+          state: 'pending',
+          command: name === 'lint' ? 'go vet ./...' : 'go test ./...',
+          duration_ms: 0,
+          detail: 'Requires Local Execution Trust — click "⚙ Run Checks"',
+          output: ''
+        });
+      });
+    } else {
+      checks.forEach(function(chk, idx) {
+        const key = String(chk.name || '').toLowerCase();
+        const item = {
+          id: 'prop-chk-' + idx,
+          name: chk.name || ('check-' + (idx + 1)),
+          state: chk.state || 'pending',
+          command: chk.command || '',
+          duration_ms: chk.duration_ms || 0,
+          detail: chk.state === 'passed' ? 'Verification check passed' : (chk.state === 'failed' ? 'Verification check failed — inspect diagnostic log below' : ''),
+          output: chk.output || ''
+        };
+        if (sandboxNames[key]) sandboxItems.push(item);
+        else staticItems.push(item);
+      });
+    }
+
+    const groups = [
+      {
+        title: '1. Guarded Static & Architecture Phases (parse, format, arch, complexity, secrets)',
+        meta: checks.length > 0 ? ('Hash #' + String(session.hash || '').slice(0, 8)) : 'Not executed yet',
+        items: staticItems
+      },
+      {
+        title: '2. Sandboxed Execution & Test Phases (lint, unit tests, baselines)',
+        meta: (state.trust && state.trust.trusted) ? 'Trust: Granted' : 'Trust: Locked',
+        items: sandboxItems
+      }
+    ];
+
+    if (session && session.workflow && Array.isArray(session.workflow.stages) && session.workflow.stages.length > 0) {
+      const wfItems = session.workflow.stages.map(function(stg, idx) {
+        let dur = 0;
+        if (stg.started_at && stg.finished_at) {
+          dur = Math.max(0, new Date(stg.finished_at).getTime() - new Date(stg.started_at).getTime());
+        }
+        return {
+          id: 'prop-wf-' + idx,
+          name: stg.name || ('stage-' + (idx + 1)),
+          state: stg.status || 'pending',
+          command: (stg.model && stg.model.model) ? (stg.model.provider + '/' + stg.model.model) : '',
+          duration_ms: dur,
+          detail: stg.reason || '',
+          output: ''
+        };
+      });
+      groups.push({
+        title: '3. Multi-Stage Agent Workflow Pipeline',
+        meta: 'Workflow ' + (session.workflow.status || 'idle'),
+        items: wfItems
+      });
+    }
+
+    return groups;
+  }
+
+  function setDiffSubTab(subTab) {
+    state.diffSubTab = subTab || 'changes';
+    document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-diff-subtab') === state.diffSubTab);
+    });
+    const viewControls = document.getElementById('diff-view-controls');
+    if (viewControls) {
+      viewControls.style.display = state.diffSubTab === 'changes' ? 'flex' : 'none';
+    }
+    const contentEl = document.getElementById('diff-content');
+    const specPaneEl = document.getElementById('diff-spec-pane');
+    if (contentEl && specPaneEl) {
+      contentEl.style.display = state.diffSubTab === 'spec' ? 'none' : 'block';
+      specPaneEl.style.display = state.diffSubTab === 'spec' ? 'block' : 'none';
+    }
+    renderDiffTab();
+  }
+
   function renderDiffTab() {
     document.getElementById('proposal-count').textContent = String(state.changes.length);
     const propSelect = document.getElementById('proposal-select');
@@ -2755,14 +2905,23 @@ button.btn-ghost:hover:not(:disabled) {
     const session = state.activeSession;
     const fileListEl = document.getElementById('diff-file-list');
     const contentEl = document.getElementById('diff-content');
+    const specPaneEl = document.getElementById('diff-spec-pane');
 
     if (!session) {
       document.getElementById('active-proposal-title').textContent = 'No active change proposal';
       document.getElementById('active-proposal-state').textContent = 'idle';
       document.getElementById('active-proposal-freshness').textContent = '';
       document.getElementById('changed-files-count').textContent = '0';
+      document.getElementById('diff-subtab-changes-badge').textContent = '0';
+      document.getElementById('diff-subtab-checks-badge').textContent = '0';
+      document.getElementById('diff-subtab-spec-badge').textContent = '0';
       fileListEl.innerHTML = '<div class="empty-state">Create a spec in "2 · Build &amp; Fix" to inspect diffs.</div>';
       contentEl.innerHTML = '<div class="empty-state"><h3>No Diff Selected</h3><p>Open a proposal from the left sidebar or create a new one in <strong>2 · Build &amp; Fix</strong>.</p></div>';
+      if (specPaneEl) {
+        document.getElementById('diff-spec-pipeline').innerHTML = '';
+        document.getElementById('proposal-spec-details').innerHTML = '<div class="empty-state">Select a proposal first.</div>';
+        document.getElementById('proposal-messages-list').innerHTML = '';
+      }
       return;
     }
 
@@ -2777,6 +2936,30 @@ button.btn-ghost:hover:not(:disabled) {
 
     const edits = effectiveEdits(session);
     document.getElementById('changed-files-count').textContent = String(edits.length);
+    document.getElementById('diff-subtab-changes-badge').textContent = String(edits.length);
+
+    const checksList = Array.isArray(session.checks) ? session.checks : [];
+    const passedChecks = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'passed'; }).length;
+    const failedChecks = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'failed'; }).length;
+    const checksBadge = document.getElementById('diff-subtab-checks-badge');
+    const dockChecksPill = document.getElementById('dock-checks-pill');
+    if (checksList.length === 0) {
+      checksBadge.textContent = '0 run';
+      checksBadge.className = 'badge';
+      if (dockChecksPill) { dockChecksPill.textContent = 'Not run'; dockChecksPill.className = 'badge'; }
+    } else if (failedChecks > 0) {
+      checksBadge.textContent = failedChecks + ' failed';
+      checksBadge.className = 'badge red';
+      if (dockChecksPill) { dockChecksPill.textContent = failedChecks + ' failed'; dockChecksPill.className = 'badge red'; }
+    } else {
+      checksBadge.textContent = passedChecks + '/' + checksList.length + ' ✓';
+      checksBadge.className = 'badge green';
+      if (dockChecksPill) { dockChecksPill.textContent = passedChecks + '/' + checksList.length + ' ✓'; dockChecksPill.className = 'badge green'; }
+    }
+
+    const criteriaCount = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria.length : 0;
+    const messagesCount = Array.isArray(session.messages) ? session.messages.length : 0;
+    document.getElementById('diff-subtab-spec-badge').textContent = String(criteriaCount + messagesCount);
 
     let reviewedCount = 0;
     edits.forEach(function(e) {
@@ -2803,6 +2986,10 @@ button.btn-ghost:hover:not(:disabled) {
     fileListEl.querySelectorAll('.list-item').forEach(function(el) {
       el.addEventListener('click', function() {
         state.selectedFile = el.getAttribute('data-file') || '';
+        if (state.diffSubTab !== 'changes') {
+          setDiffSubTab('changes');
+          return;
+        }
         syncURL();
         renderDiffTab();
       });
@@ -2811,34 +2998,123 @@ button.btn-ghost:hover:not(:disabled) {
     // Visual Pipeline Readiness Bar
     const hasEdits = edits.length > 0;
     const allReviewed = hasEdits && reviewedCount === edits.length && session.reviewed_hash === session.hash;
-    const checksPassed = Array.isArray(session.checks) && session.checks.length > 0 && session.checks.every(function(c) { return c.state === 'passed'; });
+    const checksPassed = checksList.length > 0 && failedChecks === 0 && passedChecks === checksList.length;
     const isApplied = session.state === 'applied';
 
-    let html = '<div class="pipeline-bar">' +
+    const pipelineHTML = '<div class="pipeline-bar">' +
       '<div class="pipeline-steps">' +
-        '<span class="pipeline-step ' + (hasEdits ? 'done' : 'current') + '">1. Diff Generated (' + edits.length + ')</span>' +
+        '<span class="pipeline-step ' + (hasEdits ? 'done' : 'current') + '" style="cursor:pointer;" data-jump-subtab="changes">1. Diff Generated (' + edits.length + ')</span>' +
         '<span class="pipeline-arrow">→</span>' +
-        '<span class="pipeline-step ' + (allReviewed ? 'done' : (hasEdits ? 'current' : '')) + '">2. Files Reviewed (' + reviewedCount + '/' + edits.length + ')</span>' +
+        '<span class="pipeline-step ' + (allReviewed ? 'done' : (hasEdits ? 'current' : '')) + '" style="cursor:pointer;" data-jump-subtab="changes">2. Files Reviewed (' + reviewedCount + '/' + edits.length + ')</span>' +
         '<span class="pipeline-arrow">→</span>' +
-        '<span class="pipeline-step ' + (checksPassed ? 'done' : '') + '">3. Sandboxed Checks</span>' +
+        '<span class="pipeline-step ' + (checksPassed ? 'done' : (failedChecks > 0 ? 'current' : '')) + '" style="cursor:pointer;" data-jump-subtab="checks">3. Sandboxed Checks (' + (checksList.length > 0 ? (passedChecks + '/' + checksList.length) : '0 run') + ')</span>' +
         '<span class="pipeline-arrow">→</span>' +
         '<span class="pipeline-step ' + (isApplied ? 'done' : '') + '">' + (isApplied ? '✓ Applied to Disk' : '4. Guarded Apply') + '</span>' +
       '</div>' +
       '<span class="project-path">Session ' + esc(session.id) + (session.hash ? ' · #' + esc(session.hash.slice(0, 8)) : '') + '</span>' +
     '</div>';
 
-    if (Array.isArray(session.checks) && session.checks.length > 0) {
-      html += '<div class="checks-strip">';
-      session.checks.forEach(function(chk) {
-        const cls = chk.state === 'passed' ? 'green' : (chk.state === 'failed' ? 'red' : 'amber');
-        html += '<div class="check-pill">' +
-          '<span class="badge ' + cls + '">' + esc(chk.state) + '</span>' +
-          '<strong>' + esc(chk.name) + '</strong>' +
-          (chk.duration_ms ? '<span class="project-path">' + chk.duration_ms + 'ms</span>' : '') +
+    // Always keep Plan & AI Refine pane updated
+    if (specPaneEl) {
+      document.getElementById('diff-spec-pipeline').innerHTML = pipelineHTML;
+      const targets = Array.isArray(session.targets) ? session.targets : [];
+      const criteria = Array.isArray(session.acceptance_criteria) ? session.acceptance_criteria : [];
+      const suggestions = Array.isArray(session.scope_suggestions) ? session.scope_suggestions : [];
+      let specDetailsHTML = '<div class="card">' +
+        '<div class="card-header"><span class="card-title">✔ Acceptance Criteria &amp; Verification Goals</span><span class="badge">' + criteria.length + '</span></div>' +
+        '<div class="card-body">' +
+          (criteria.length > 0
+            ? '<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;">' + criteria.map(function(c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>'
+            : '<span class="project-path">No explicit acceptance criteria recorded for this session.</span>') +
+        '</div>' +
+      '</div>' +
+      '<div class="card">' +
+        '<div class="card-header"><span class="card-title">📁 Captured Target Scope</span><span class="badge blue">' + targets.length + ' files</span></div>' +
+        '<div class="card-body">' +
+          (targets.length > 0
+            ? '<div class="chip-list" style="margin-top:0;">' + targets.map(function(t) {
+                return '<span class="file-chip selected">' + esc(t.path) + (t.exists === false ? ' (new)' : '') + '</span>';
+              }).join('') + '</div>'
+            : '<span class="project-path">No target paths captured.</span>') +
+          (suggestions.length > 0
+            ? '<div style="margin-top:10px;" class="project-path">Suggested companion scope: ' + esc(suggestions.join(', ')) + '</div>'
+            : '') +
+        '</div>' +
+      '</div>';
+
+      if (session.workflow && session.workflow.review) {
+        const rev = session.workflow.review;
+        specDetailsHTML += '<div class="card">' +
+          '<div class="card-header"><span class="card-title">🔎 Critic Review Verdict</span><span class="badge ' + (rev.verdict === 'pass' || rev.verdict === 'approved' ? 'green' : 'amber') + '">' + esc(rev.verdict || 'review') + '</span></div>' +
+          '<div class="card-body">' +
+            '<p style="margin:0 0 8px 0;">' + esc(rev.summary || '') + '</p>' +
+            (Array.isArray(rev.findings) && rev.findings.length > 0
+              ? '<ul style="margin:0;padding-left:18px;">' + rev.findings.map(function(f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>'
+              : '') +
+          '</div>' +
         '</div>';
-      });
-      html += '</div>';
+      }
+      document.getElementById('proposal-spec-details').innerHTML = specDetailsHTML;
+
+      const msgs = Array.isArray(session.messages) ? session.messages : [];
+      document.getElementById('proposal-messages-list').innerHTML = msgs.length > 0
+        ? '<div class="card"><div class="card-header"><span class="card-title">💬 Session Refinement History</span><span class="badge">' + msgs.length + '</span></div>' +
+          '<div class="card-body" style="display:flex;flex-direction:column;gap:10px;">' +
+          msgs.map(function(m) {
+            const isUser = (m.role || '').toLowerCase() === 'user';
+            return '<div style="padding:9px 12px;border-radius:var(--radius-sm);background:' + (isUser ? 'var(--surface-alt)' : 'var(--bg)') + ';border:1px solid var(--border-subtle);">' +
+              '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
+                '<span class="badge ' + (isUser ? 'blue' : 'green') + '">' + esc(m.role || 'message') + '</span>' +
+                (m.created_at ? '<span class="project-path">' + esc(String(m.created_at).slice(0, 19).replace('T', ' ')) + '</span>' : '') +
+              '</div>' +
+              '<div style="white-space:pre-wrap;font-size:12px;">' + esc(m.content || '') + '</div>' +
+            '</div>';
+          }).join('') +
+          '</div></div>'
+        : '';
     }
+
+    // Sub-tab 2: Checks & Workflow Phases Inspector
+    if (state.diffSubTab === 'checks') {
+      const proposalGroups = collectProposalPhaseGroups(session);
+      let checksHTML = pipelineHTML +
+        renderPhaseGroupsHTML(proposalGroups, 'Proposal Verification & Workflow Phases · #' + String(session.hash || '').slice(0, 8));
+      contentEl.innerHTML = checksHTML;
+      bindPhaseInspectorControls(contentEl, renderDiffTab);
+      contentEl.querySelectorAll('[data-jump-subtab]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          setDiffSubTab(el.getAttribute('data-jump-subtab'));
+        });
+      });
+      return;
+    }
+
+    // Sub-tab 1: Code Changes (Diff)
+    let html = pipelineHTML;
+
+    // Compact Verification Phase Summary Banner in Diff view
+    const proposalGroups = collectProposalPhaseGroups(session);
+    const sum = summarizePhaseGroups(proposalGroups);
+    const passPct = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : 0;
+    const failPct = sum.total > 0 ? Math.round((sum.failed / sum.total) * 100) : 0;
+    html += '<div class="phase-summary-bar">' +
+      '<div class="phase-summary-top">' +
+        '<div class="phase-summary-counts">' +
+          '<strong style="font-size:12px;color:var(--fg-bright);">Verification Phases</strong>' +
+          '<span class="badge green">✓ ' + sum.passed + ' Passed</span>' +
+          '<span class="badge ' + (sum.failed > 0 ? 'red' : '') + '">✕ ' + sum.failed + ' Failed</span>' +
+          (sum.pending > 0 ? '<span class="badge">○ ' + sum.pending + ' Pending</span>' : '') +
+        '</div>' +
+        '<div class="action-group">' +
+          (sum.failed > 0 ? '<button type="button" id="repair-failed-checks-btn" class="btn-danger" style="padding:3px 9px;font-size:11px;">⚡ Repair Failed Checks with AI</button>' : '') +
+          '<button type="button" id="inspect-proposal-phases-btn" class="btn-ghost" style="padding:3px 9px;font-size:11px;">Inspect All Phases &amp; Logs →</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="phase-progress-track">' +
+        '<div class="phase-progress-seg passed" style="width:' + passPct + '%;"></div>' +
+        '<div class="phase-progress-seg failed" style="width:' + failPct + '%;"></div>' +
+      '</div>' +
+    '</div>';
 
     const visibleEdits = state.selectedFile
       ? edits.filter(function(e) { return e.path === state.selectedFile; })
@@ -2847,7 +3123,7 @@ button.btn-ghost:hover:not(:disabled) {
     if (visibleEdits.length === 0) {
       html += '<div class="empty-state"><h3>No file edits generated yet</h3><p>Targets: ' +
         esc((session.targets || []).map(function(t) { return t.path; }).join(', ') || 'none') +
-        '</p><p>Use the "Iterate / Refine with AI" box in the left sidebar to generate code for this session.</p></div>';
+        '</p><p>Switch to <strong>✦ Plan &amp; AI Refine</strong> above to prompt the model and generate code for this session.</p></div>';
     } else {
       visibleEdits.forEach(function(edit) {
         const stats = countDiffStats(edit);
@@ -2880,6 +3156,29 @@ button.btn-ghost:hover:not(:disabled) {
         reviewSingleFile(btn.getAttribute('data-path'));
       });
     });
+    contentEl.querySelectorAll('[data-jump-subtab]').forEach(function(el) {
+      el.addEventListener('click', function() {
+        setDiffSubTab(el.getAttribute('data-jump-subtab'));
+      });
+    });
+    const inspectBtn = document.getElementById('inspect-proposal-phases-btn');
+    if (inspectBtn) {
+      inspectBtn.addEventListener('click', function() {
+        setDiffSubTab('checks');
+      });
+    }
+    const repairBtn = document.getElementById('repair-failed-checks-btn');
+    if (repairBtn) {
+      repairBtn.addEventListener('click', function() {
+        const failedNames = checksList.filter(function(c) { return normalizePhaseState(c.state) === 'failed'; }).map(function(c) { return c.name; });
+        setDiffSubTab('spec');
+        const input = document.getElementById('proposal-message-input');
+        if (input) {
+          input.value = 'Repair the failing verification checks (' + failedNames.join(', ') + ') while preserving acceptance criteria.';
+          input.focus();
+        }
+      });
+    }
   }
 
   function renderUnifiedDiffTable(diff) {
@@ -3022,6 +3321,7 @@ button.btn-ghost:hover:not(:disabled) {
         { method: 'POST', body: body }
       );
       state.activeSession = preserveSessionMeta(s, updated);
+      setDiffSubTab('checks');
       showBanner('Checks completed (state: ' + state.activeSession.state + ').', 'ok');
       await loadAll();
     } catch (err) {
@@ -3315,6 +3615,34 @@ button.btn-ghost:hover:not(:disabled) {
   document.getElementById('apply-btn').addEventListener('click', applyActiveProposal);
   document.getElementById('undo-btn').addEventListener('click', undoActiveProposal);
   document.getElementById('send-message-btn').addEventListener('click', sendProposalRefinement);
+
+  document.querySelectorAll('[data-diff-subtab]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      setDiffSubTab(btn.getAttribute('data-diff-subtab'));
+    });
+  });
+
+  document.getElementById('dock-checks-summary-btn').addEventListener('click', function() {
+    setDiffSubTab('checks');
+  });
+
+  document.getElementById('open-refine-tab-btn').addEventListener('click', function() {
+    setDiffSubTab('spec');
+    setTimeout(function() {
+      const input = document.getElementById('proposal-message-input');
+      if (input) input.focus();
+    }, 20);
+  });
+
+  document.querySelectorAll('.refine-preset-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      const input = document.getElementById('proposal-message-input');
+      if (input) {
+        input.value = chip.getAttribute('data-prompt') || '';
+        input.focus();
+      }
+    });
+  });
 
   async function toggleExecutionTrust() {
     if (!state.project) return;
