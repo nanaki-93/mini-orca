@@ -25,15 +25,29 @@ Keep actions, current state, errors and recovery paths clear. Use consistent
 keybindings, visible selection indicators (`▸`) and explicit focus in tables and
 command prompts. Color supplements text labels and badges (`[CRITICAL]`,
 `[TRUSTED]`, `[SURGICAL]`); never rely on color alone. Show progress while
-requests or jobs run and prevent duplicate submission. A daemon action that still
-blocks the event loop sets a named busy status (for example "Applying reviewed
-changes…") that renders before the request starts; the status bar spinner animates
-only while work is in flight. The first content row is a breadcrumb
-(`Workspace › View › Item`) so the current location is always visible.
+requests or jobs run and prevent duplicate submission. The terminal never freezes:
+blocking daemon actions run off the UI goroutine and set a named busy status (for
+example "Applying reviewed changes…") that renders before the request starts. The
+command bar adds elapsed time and how many keys are queued; typed keys replay in
+order once the action finishes. Esc cancels read-only actions (opening a file or
+task, reconnecting, refreshing worktrees); mutations such as Apply, merge, Undo
+and trust always finish, and Ctrl+C during one quits after it completes. The status
+bar spinner animates only while work is in flight. The first content row is a
+breadcrumb (`Workspace › View › Item`) so the current location is always visible,
+and page headers stay a short title-case name with their purpose on the same line.
 
-Destructive keys ask first: rejecting a diff hunk opens a confirmation because it
-rewrites the proposal and clears its review marks and checks. Backspace means
-"back" and never deletes or dismisses anything.
+Navigation is reversible. Backspace, `Ctrl+O` or `:back` return to the previous
+view with its selection, and each view remembers the row it was left on.
+`:messages` lists recent status updates and errors, newest first. Empty views say
+why they are empty and what to do next.
+
+Destructive or consequential keys ask first: rejecting a diff hunk (it rewrites
+the proposal and clears its review marks and checks), Enter in the diff view
+(Apply & commit; `a` stays direct), granting execution trust (revoking is
+immediate) and merging a worktree, whose confirmation previews the destination,
+linked issues and paths changed on both branches. Backspace means "back" and never
+deletes or dismisses anything. `NO_COLOR` selects a monochrome theme that relies on
+bold, faint and reverse video.
 
 Preserve access to findings, explanations and diagnostics. Long paths and narrow
 terminal viewports must not hide actions or corrupt layout. Model-authored text
@@ -234,7 +248,8 @@ Apply authority, and no export retries automatically.
 Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
 Keep full-proposal review distinct from comparison against the previous review.
 Mark changed files individually (`w` moves to the next unreviewed file; `W` jumps
-there without marking), invalidate progress when the proposal changes,
+there without marking; wide terminals list the changed files beside the diff with
+their review state), invalidate progress when the proposal changes,
 and show Apply's commit destination. Worktree Apply commits the reviewed proposal
 and moves it from Tasks to Worktrees as `TO_MERGE`; it never merges automatically.
 Withhold linked issues from the issue lists while awaiting that decision. Explicit

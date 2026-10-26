@@ -37,8 +37,16 @@ Press `n` on the dashboard or Tasks page to plan a new task. On the dashboard,
 
 `Tab` / `Shift+Tab` cycle views within a workspace. Use `↑/↓` or `j/k` to
 select rows, `PgUp/PgDn` to read long pages, and `Esc` to return from details.
-The bottom bar shows actions for the current view. `?` opens the keyboard
-reference, `p` changes the palette, and `Ctrl+C` quits.
+`Backspace` or `Ctrl+O` goes back to the previous view with its selection, and
+each view remembers the row you left it on. `:messages` shows recent status
+updates and errors. The bottom bar shows actions for the current view. `?` opens
+the keyboard reference, `p` changes the palette, and `Ctrl+C` quits. Set
+`NO_COLOR=1` for a monochrome theme.
+
+Long daemon actions never freeze the terminal: the status bar shows what is
+running and for how long, keys you type are queued and replayed afterwards, and
+`Esc` cancels read-only work such as opening a file. Apply, merge, Undo and trust
+changes always run to completion.
 
 Press `Ctrl+K` or `:` to search commands by name or type a command directly.
 The input sits above the results and the selected command's explanation.
@@ -124,8 +132,8 @@ messages also scroll. Confirmation actions stay in the bottom bar. In the source
 viewer, `PgUp/PgDn` moves through lines, `Home/End` jumps to the first/last line,
 and `h/l` pans long lines (`0` resets the horizontal position).
 
-In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed, `f/F`
-moves between files, `e` shows rationale and criterion references, and `z` compares
+In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed and moves to the next unreviewed one, `f/F`
+moves between files (wide terminals list them beside the diff), `e` shows rationale and criterion references, and `z` compares
 against the last complete review. `P` opens the plan. Apply shows its commit
 destination and requires review of every changed file; changed proposals clear
 review progress. `:retry test` reuses implementation, while `:retry review`

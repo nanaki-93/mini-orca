@@ -353,8 +353,10 @@ func (s *State) renderEditorPage(th ansiTheme, width int) []string {
 	}
 	lines := renderPageHeader(th, "Files & diff", subRight)
 	if s.isViewingDiff() {
-		lines = append(lines, s.renderChangeDiffLines(th, width)...)
-		return lines
+		if width >= diffSidebarMinWidth && len(s.diffChanges()) > 1 {
+			return append(lines, s.renderDiffWithSidebar(th, width)...)
+		}
+		return append(lines, s.renderChangeDiffLines(th, width)...)
 	}
 	if !s.BrowseFiles && s.File != nil {
 		header := fmt.Sprintf("%sFile:%s %s%s%s %s(%s · %d lines)%s",

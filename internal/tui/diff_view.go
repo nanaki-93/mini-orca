@@ -24,11 +24,11 @@ func (s *State) EffectiveDiffMode() string {
 func diffModeDisplayName(mode string) string {
 	switch mode {
 	case "split":
-		return "SIDE-BY-SIDE SPLIT"
+		return "Side-by-side"
 	case "unified":
-		return "UNIFIED STREAM"
+		return "Unified"
 	default:
-		return "FOCUSED HUNK"
+		return "Focused hunk"
 	}
 }
 

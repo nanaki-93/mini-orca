@@ -542,6 +542,7 @@ func TestDaemonWireContractsAndActions(t *testing.T) {
 	s.Navigate(PageGit)
 	s.SelectedIdx = 1
 	s.HandleKey(KeyEvent{Key: "m"})
+	s.HandleKey(KeyEvent{Key: "y"}) // confirm the merge preview
 	s.ExecuteCommand(":bootstrap")
 	s.FlushActions(context.Background(), cli)
 	if mergedWorktree != "/repo/.worktrees/fix" || !bootstrapped {
@@ -1923,6 +1924,7 @@ func TestStandardWorktreeCommitAndMergeLifecycle(t *testing.T) {
 	}
 	// 3. The explicit merge receipt completes issues and removes the worktree and branch.
 	s.HandleKey(KeyEvent{Key: "m"})
+	s.HandleKey(KeyEvent{Key: "y"}) // confirm the merge preview
 	s.FlushActions(context.Background(), cli)
 	if mergedWtPath != createdWtPath || len(s.GitWorkspace.Worktrees) != 1 || len(s.GitWorkspace.Branches) != 0 {
 		t.Fatalf("merge cleanup missing: path=%q workspace=%+v error=%q", mergedWtPath, s.GitWorkspace, s.Error)
@@ -2622,6 +2624,7 @@ func TestFailedMutationsDoNotMarkFindingsDone(t *testing.T) {
 	s.applyAndCommitProposal("")
 	s.FlushActions(context.Background(), cli)
 	s.HandleKey(KeyEvent{Key: "m"})
+	s.HandleKey(KeyEvent{Key: "y"}) // confirm the merge preview
 	s.FlushActions(context.Background(), cli)
 	if len(s.CompletedFindings) != 0 || len(s.AgentItems()) != 0 {
 		t.Fatalf("failed merge completed findings or restored a finished task: %+v", s.CompletedFindings)

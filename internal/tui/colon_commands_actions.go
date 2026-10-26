@@ -348,8 +348,7 @@ func (s *State) mergeSelectedWorktree() {
 				return
 			}
 			_, mainBranch := s.mainGitIdentity()
-			s.CmdOutput = fmt.Sprintf("Merging %s into %s...", s.Change.WorktreePath, client.FirstNonEmpty(mainBranch, "main"))
-			s.enqueueAction(ActionRequest{Kind: "merge-worktree", Target: s.Change.WorktreePath})
+			s.confirmWorktreeMerge(s.worktreeByPath(s.Change.WorktreePath), s.Change.WorktreePath, client.FirstNonEmpty(mainBranch, "main"))
 			return
 		}
 	}
@@ -372,8 +371,7 @@ func (s *State) mergeSelectedWorktree() {
 		s.CmdOutput = "This worktree cannot be merged. Press Enter to inspect its status."
 		return
 	}
-	s.CmdOutput = fmt.Sprintf("Merging %s into %s...", wt.Path, client.FirstNonEmpty(s.GitWorkspace.Branch, "main"))
-	s.enqueueAction(ActionRequest{Kind: "merge-worktree", Target: wt.Path})
+	s.confirmWorktreeMerge(&wt, wt.Path, client.FirstNonEmpty(s.GitWorkspace.Branch, "main"))
 }
 
 func (s *State) triggerAgentRecheckOrRepair() {

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
 
 type WorktreeIntent struct {
@@ -101,6 +104,57 @@ func worktreeHasUnfinishedTasks(wt *GitWorktree) bool {
 		}
 	}
 	return false
+}
+
+// worktreeByPath finds a reported worktree, or nil when it is not listed.
+func (s *State) worktreeByPath(path string) *GitWorktree {
+	if s.GitWorkspace == nil {
+		return nil
+	}
+	for i := range s.GitWorkspace.Worktrees {
+		if s.GitWorkspace.Worktrees[i].Path == path {
+			return &s.GitWorkspace.Worktrees[i]
+		}
+	}
+	return nil
+}
+
+// confirmWorktreeMerge previews what a merge will do before it runs: merging
+// integrates the branch, completes linked issues and removes the worktree.
+func (s *State) confirmWorktreeMerge(wt *GitWorktree, path, destination string) {
+	s.Confirmation = &Confirmation{
+		Title:       "Merge into " + destination + "?",
+		Message:     worktreeMergePreview(wt, path, destination),
+		AcceptLabel: "Merge",
+		OnConfirm: func(state *State) {
+			state.CmdOutput = fmt.Sprintf("Merging %s into %s...", path, destination)
+			state.enqueueAction(ActionRequest{Kind: "merge-worktree", Target: path})
+		},
+	}
+}
+
+func worktreeMergePreview(wt *GitWorktree, path, destination string) string {
+	if wt == nil {
+		return fmt.Sprintf("Merge the committed task in %s into %s, mark its linked issues Done and remove the worktree and branch.", path, destination)
+	}
+	issues := 0
+	for _, entry := range append(append([]ChangeHistoryEntry{}, wt.Completed...), wt.Sessions...) {
+		issues += len(entry.FindingTargets)
+	}
+	tasks := len(wt.Completed) + len(wt.Sessions)
+	preview := fmt.Sprintf("Merge branch %s into %s: %d committed task(s), %d linked issue(s) marked Done. The worktree and branch are removed afterwards.",
+		client.FirstNonEmpty(wt.Branch, path), destination, tasks, issues)
+	if wt.Integration == "behind" {
+		preview += fmt.Sprintf(" %s advanced since this branch started", destination)
+		if n := len(wt.OverlapPaths); n > 0 {
+			preview += fmt.Sprintf("; %d path(s) changed on both sides may conflict: %s", n, strings.Join(wt.OverlapPaths[:min(3, n)], ", "))
+			if n > 3 {
+				preview += ", …"
+			}
+		}
+		preview += ". If Git reports conflicts, resolve and commit them externally, then [R] update the index."
+	}
+	return preview
 }
 
 func (s *State) confirmWorktreeDiscard(wt *GitWorktree, intent *WorktreeIntent) {

@@ -1,0 +1,58 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+)
+
+func TestWideDiffShowsFileListWithReviewState(t *testing.T) {
+	s := twoFileReviewState()
+	s.Change.FileReviewHash, s.Change.ReviewedFiles = s.Change.Hash, []string{"internal/api/server_test.go"}
+	wide := ansi.Strip(s.Render(170, 34))
+	for _, token := range []string{"FILES 1/2 reviewed", "● server.go", "✓ server_test.go", "+1 -0"} {
+		if !strings.Contains(wide, token) {
+			t.Fatalf("wide diff missing %q:\n%s", token, wide)
+		}
+	}
+	assertFrameSize(t, s.Render(170, 34), 170, 34)
+	if narrow := ansi.Strip(s.Render(120, 34)); strings.Contains(narrow, "FILES 1/2 reviewed") {
+		t.Fatalf("a narrow diff must keep the full width for code:\n%s", narrow)
+	}
+}
+
+func TestMergingAWorktreeShowsAPreviewFirst(t *testing.T) {
+	s := workspaceSampleState()
+	s.GitWorkspace = &GitWorkspace{
+		GitRepository: GitRepository{GitIdentity: GitIdentity{Head: "base", Branch: "main"}, Available: true},
+		Worktrees: []GitWorktree{
+			{GitIdentity: GitIdentity{Head: "base", Branch: "main"}, Path: "/repo", Current: true},
+			{
+				GitIdentity: GitIdentity{Head: "c1", Branch: "orca/fix"}, Path: "/repo/.worktrees/fix", Mergeable: true,
+				Integration: "behind", OverlapPaths: []string{"internal/api/server.go"},
+				Completed: []ChangeHistoryEntry{{Title: "Fix", FindingTargets: []FindingTarget{{}}}},
+			},
+		},
+	}
+	s.Navigate(PageGit)
+	s.SelectedIdx = 1
+	s.HandleKey(KeyEvent{Key: "m"})
+	if s.Confirmation == nil || len(s.PendingActions) != 0 {
+		t.Fatal("merge must preview before it runs")
+	}
+	for _, token := range []string{"orca/fix", "main", "1 committed task", "1 linked issue", "internal/api/server.go", "conflict"} {
+		if !strings.Contains(s.Confirmation.Message+s.Confirmation.Title, token) {
+			t.Fatalf("merge preview missing %q: %s", token, s.Confirmation.Message)
+		}
+	}
+	s.HandleKey(KeyEvent{Key: "n"})
+	if len(s.PendingActions) != 0 {
+		t.Fatal("canceling the preview must not merge")
+	}
+	s.HandleKey(KeyEvent{Key: "m"})
+	s.HandleKey(KeyEvent{Key: "y"})
+	if len(s.PendingActions) != 1 || s.PendingActions[0].Kind != "merge-worktree" || s.PendingActions[0].Target != "/repo/.worktrees/fix" {
+		t.Fatalf("confirmed merge not queued: %+v", s.PendingActions)
+	}
+}
