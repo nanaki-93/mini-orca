@@ -58,7 +58,7 @@ function harness() {
     loadAll = async function() {};
     globalThis.testUI = { state, proposalReadiness, applyActiveProposal, approveProposalReview,
       runAction, renderReviewActions, loadChangeSession, submitSpecTask, effectiveEdits, reviewSingleFile,
-      openCommandPalette, closeCommandPalette, selectCommand };
+      openCommandPalette, closeCommandPalette, selectCommand, setTab, normalizePage };
   `);
   const context = {
     document, URLSearchParams,
@@ -217,4 +217,22 @@ test('a late proposal response cannot replace the latest selection', async () =>
   responses[0]({ ok: true, status: 200, text: async () => JSON.stringify(readySession({ id: 'first' })) });
   await first;
   assert.equal(ui.state.activeSession.id, 'second');
+});
+
+// Page changes are passive: selecting a section never runs checks or a model.
+test('focused pages hide unrelated content and preserve legacy TUI routes', () => {
+  const ui = harness();
+  const pages = ['home', 'files', 'tasks', 'new-task', 'issues', 'docs', 'checks', 'settings', 'diff'];
+  for (const page of pages) {
+    ui.setTab(page);
+    assert.equal(ui.state.tab, page);
+    for (const other of pages) assert.equal(ui.elements.get('view-' + other).hidden, page !== other);
+  }
+  ui.setTab('understand');
+  assert.equal(ui.state.tab, 'docs');
+  ui.setTab('build');
+  assert.equal(ui.state.tab, 'new-task');
+  ui.setTab('unknown');
+  assert.equal(ui.state.tab, 'home');
+  assert.equal(ui.requests.length, 0);
 });
