@@ -203,6 +203,13 @@ func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	return ContextDecision{Path: path, Include: true, Reason: "eligible source or text file"}
 }
 
+// Ignored reports whether .gitignore or .mini-orcaignore rules exclude the
+// path. Unlike Decide it ignores the model-context rules for secrets, lock
+// files and generated files.
+func (p *ContextPolicy) Ignored(relative string) bool {
+	return ignoredPath(p.ignores, filepath.ToSlash(filepath.Clean(relative)), false)
+}
+
 func hasSymlinkComponent(root, relative string) bool {
 	current := root
 	for _, part := range strings.Split(relative, "/") {

@@ -237,6 +237,10 @@ export interface ChangeSession extends ProjectIdentity {
   checks: Check[];
   reviewed_hash?: string;
   review_notes?: string;
+  /** Why the proposal is stale: the scope file that changed. */
+  stale_reason?: string;
+  /** The project changed since the checks ran; they must run again. */
+  checks_outdated?: boolean;
   reviewed_files?: string[];
   file_review_hash?: string;
   last_reviewed_hash?: string;

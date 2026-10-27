@@ -39,6 +39,9 @@ type ChangeSession struct {
 	Instructions        map[string]string       `json:"instructions"`
 	PolicyFingerprint   string                  `json:"policy_fingerprint"`
 	WorkspaceHash       string                  `json:"workspace_hash"`
+	ScopeVersion        int                     `json:"scope_version,omitempty"`
+	Scope               []ChangeScopeFile       `json:"scope,omitempty"`
+	StaleReason         string                  `json:"stale_reason,omitempty"` // Set on read; never stored.
 	Git                 *GitIdentity            `json:"git,omitempty"`
 	Commit              *ChangeCommit           `json:"commit,omitempty"`
 	Revision            int64                   `json:"revision"`
@@ -51,6 +54,8 @@ type ChangeSession struct {
 	ContextManifest     project.ContextManifest `json:"context_manifest"`
 	Checks              []CheckResult           `json:"checks"`
 	CheckOptions        CheckOptions            `json:"check_options"`
+	ChecksWorkspaceHash string                  `json:"checks_workspace_hash,omitempty"`
+	ChecksOutdated      bool                    `json:"checks_outdated,omitempty"` // Set on read; never stored.
 	ReviewedHash        string                  `json:"reviewed_hash,omitempty"`
 	ReviewNotes         string                  `json:"review_notes,omitempty"`
 	RepairAttempts      int                     `json:"repair_attempts"`

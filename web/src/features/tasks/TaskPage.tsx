@@ -34,7 +34,7 @@ export function TaskPage({ id, tab }: { id: string; tab: string }) {
     );
   }
   const edits = effectiveEdits(session);
-  const checks = checkSummary(session.checks);
+  const checks = checkSummary(session.checks, session.checks_outdated);
   const current = tab === 'files' || tab === 'checks' ? tab : 'overview';
 
   return (
@@ -159,7 +159,7 @@ function PrimaryAction({ session }: { session: LoadedSession }) {
 function ReviewRail({ session }: { session: LoadedSession }) {
   const ready = proposalReadiness(session);
   const progress = reviewProgress(session);
-  const checks = checkSummary(session.checks);
+  const checks = checkSummary(session.checks, session.checks_outdated);
   const workflow = session.workflow;
   const verdict = reviewVerdict(workflow);
   const overridden = Boolean(activeOverride(workflow, session.hash));

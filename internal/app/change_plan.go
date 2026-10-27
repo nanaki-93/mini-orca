@@ -41,6 +41,9 @@ func (s *Service) UpdateChangePlan(ctx context.Context, id string, request Chang
 	if err := captureChangePlan(root, session, &request.Plan); err != nil {
 		return nil, err
 	}
+	if err := captureFreshnessScope(root, session); err != nil {
+		return nil, err
+	}
 	_, manifest, err := composeChangePromptContext(root, session)
 	if err != nil {
 		return nil, err
@@ -236,6 +239,9 @@ func (s *Service) captureChangePromptSnapshot(ctx context.Context, root string, 
 		return err
 	}
 	if err := captureChangePlan(root, session, plan); err != nil {
+		return err
+	}
+	if err := captureFreshnessScope(root, session); err != nil {
 		return err
 	}
 	_, manifest, err := composeChangePromptContext(root, session)

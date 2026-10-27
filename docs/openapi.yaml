@@ -2788,6 +2788,15 @@ components:
               created_at: {type: string, format: date-time}
         checks: {type: array, items: {$ref: '#/components/schemas/ChangeCheckResult'}}
         check_options: {type: object, properties: {run_tests: {type: boolean}, run_lint: {type: boolean}}}
+        scope_version: {type: integer, enum: [1], description: Present when freshness is scoped to the files the session depends on; absent on older sessions bound to the whole tree.}
+        scope:
+          type: array
+          maxItems: 512
+          description: Sorted dependency files outside the captured targets and read context, with their content hashes.
+          items: {type: object, required: [path, hash], properties: {path: {type: string}, hash: {type: string}}}
+        stale_reason: {type: string, description: Set on read when freshness is stale; names the changed file.}
+        checks_workspace_hash: {type: string, description: Whole-tree fingerprint of the project the checks ran on.}
+        checks_outdated: {type: boolean, description: Set on read when the project changed after the checks ran; they must run again before approval or Apply.}
         reviewed_hash: {type: string}
         review_notes: {type: string, maxLength: 2048, description: Notes given with the approval of reviewed_hash.}
         repair_attempts: {type: integer, maximum: 3}

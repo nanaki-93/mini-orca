@@ -22,7 +22,7 @@ export function ChecksPanel({ session }: { session: LoadedSession }) {
   const trust = useTrust().data;
   const ready = proposalReadiness(session);
   const checks = session.checks ?? [];
-  const summary = checkSummary(checks);
+  const summary = checkSummary(checks, session.checks_outdated);
   const canRun = ready.editable && (session.changes ?? []).length > 0;
 
   return (
@@ -39,6 +39,11 @@ export function ChecksPanel({ session }: { session: LoadedSession }) {
       {!trust?.trusted ? (
         <Callout tone="warning" icon={ShieldOff} title="Checks need your permission to run project code" action={<Button size="sm" onClick={() => navigate('/settings/trust')}>Review trust</Button>}>
           Without trust only source checks (parsing, formatting, boundaries) run.
+        </Callout>
+      ) : null}
+      {checks.length && session.checks_outdated ? (
+        <Callout tone="warning" icon={FlaskConical} title="These checks ran on an earlier version of the project">
+          Files outside this task changed since. The task is still current; run the checks again before approving.
         </Callout>
       ) : null}
       {!checks.length ? (

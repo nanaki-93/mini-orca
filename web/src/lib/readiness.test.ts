@@ -55,6 +55,14 @@ describe('proposalReadiness', () => {
     expect(proposalReadiness(rejected).message).toMatch(/override the reviewers/);
   });
 
+  it('names the changed file of a stale proposal and outdates checks from an earlier tree', () => {
+    expect(proposalReadiness(session({ freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' })).message).toBe('Out of date: go.mod changed since this proposal was made. Start it again to continue.');
+    const outdated = session({ ...reviewed, checks: [check('tests', 'passed')], checks_outdated: true });
+    expect(proposalReadiness(outdated)).toMatchObject({ step: 'checks', checksPassed: false, canApprove: false });
+    expect(proposalReadiness(outdated).message).toMatch(/changed since checks ran/);
+    expect(checkSummary(outdated.checks, true)).toMatchObject({ label: 'Outdated', tone: 'warning' });
+  });
+
   it('blocks stale proposals and reports undo for applied ones', () => {
     expect(proposalReadiness(session({ freshness: 'stale' }))).toMatchObject({ step: 'stale', editable: false });
     expect(proposalReadiness({ ...session({ state: 'applied' }), undo: { available: false, reason: 'Already undone.' } })).toMatchObject({ step: 'applied', canUndo: false });

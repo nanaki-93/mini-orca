@@ -65,6 +65,9 @@ func (s *Service) OverrideChangeReview(ctx context.Context, id string, request C
 	if err := s.overridableReview(session); err != nil {
 		return nil, err
 	}
+	if err := verifyChecksWorkspace(ctx, root, session); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	w.Override = &ChangeWorkflowOverride{ProposalHash: session.Hash, Reason: reason, At: now}
 	w.Status, w.Reason, w.Stages[3].Status = "awaiting_human_review", "", "waiting"

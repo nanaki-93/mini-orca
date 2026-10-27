@@ -22,6 +22,10 @@ interface.
   from advisory notes, a rejected version can be overridden with a reason
   (`POST …/review-override`, bound to its hash and approving nothing), and
   approval accepts notes kept with that approval (`review_notes`).
+- **Freshness:** a task goes stale only when a file it depends on changes (its
+  targets and read context, the rest of the target packages, build manifests
+  above them; `.gitignore`d files never count), and it names that file. Changes
+  elsewhere keep it current and only mark its checks outdated.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

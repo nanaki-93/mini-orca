@@ -57,12 +57,9 @@ func validateStoredChange(session ChangeSession) error {
 	if err := validateChangeFindingTargets(&session); err != nil {
 		return err
 	}
-	seen := map[string]bool{}
-	for _, target := range session.Targets {
-		if seen[target.Path] || len(target.Content) > maxChangeBytes || target.Hash != contentHash([]byte(target.Content)) && target.Exists {
-			return fmt.Errorf("corrupt captured change target")
-		}
-		seen[target.Path] = true
+	seen, err := validateStoredTargets(session.Targets)
+	if err != nil {
+		return err
 	}
 	if err := validateStoredEdits(session.Changes, seen); err != nil {
 		return err
@@ -76,10 +73,25 @@ func validateStoredChange(session ChangeSession) error {
 	if err := validatePinnedChangeTests(&session); err != nil {
 		return err
 	}
+	if err := validateStoredScope(&session); err != nil {
+		return err
+	}
 	if session.ReviewNotes != "" && (session.ReviewedHash == "" || !boundedWorkflowText(session.ReviewNotes, maxApprovalNotes)) {
 		return fmt.Errorf("corrupt approval notes")
 	}
 	return validateStoredWorkflow(session.Workflow)
+}
+
+// validateStoredTargets returns the set of captured target paths.
+func validateStoredTargets(targets []ChangeTarget) (map[string]bool, error) {
+	seen := map[string]bool{}
+	for _, target := range targets {
+		if seen[target.Path] || len(target.Content) > maxChangeBytes || target.Hash != contentHash([]byte(target.Content)) && target.Exists {
+			return nil, fmt.Errorf("corrupt captured change target")
+		}
+		seen[target.Path] = true
+	}
+	return seen, nil
 }
 
 func validateStoredEdits(edits []ChangeEdit, targets map[string]bool) error {
@@ -113,7 +125,9 @@ func storeChangeSession(root string, session *ChangeSession) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(session, "", "  ")
+	stored := *session
+	stored.StaleReason, stored.ChecksOutdated = "", false // Derived on read.
+	data, err := json.MarshalIndent(&stored, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -166,6 +180,12 @@ func saveChangeArtifact(ctx context.Context, store *agentstate.Store, id, name s
 }
 
 func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
+	return listChangeSessionsWith(root, nil)
+}
+
+// listChangeSessionsWith summarizes every session; freshness, when given,
+// reports each draft session's current freshness instead of the stored one.
+func listChangeSessionsWith(root string, freshness func(*ChangeSession) string) ([]ChangeHistoryEntry, error) {
 	path, err := changeMetadataPath(root, "")
 	if err != nil {
 		return nil, err
@@ -188,6 +208,9 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 			return nil, err
 		}
 		entry := ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt}
+		if freshness != nil && session.State == "draft" {
+			entry.Freshness = freshness(session)
+		}
 		entry.Commit = session.Commit
 		entry.FindingTargets = session.FindingTargets
 		if session.Workflow != nil {

@@ -113,7 +113,7 @@ untrusted networks.
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
 | POST | `/api/projects/current/changes` | Capture a task and 1–64 explicit text paths (planned tasks: 1–8). |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
-| GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck source freshness. |
+| GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck its scoped freshness and whether its checks describe the current tree. |
 | POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
 | POST | `/api/projects/current/changes/{sessionID}/messages` | Generate a scoped proposal or explicitly request bounded check-driven repair. |
 | POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
@@ -667,6 +667,29 @@ A change creation body carries `project_id`, `project_revision`, `kind`
 `acceptance_criteria` and `plan`. Source paths must satisfy the context and write
 policies; creation is supported, while deletion is unavailable. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
+
+A session stays current while the files it depends on are unchanged, not the
+whole project. Its freshness scope is the captured write and read paths (by
+content, with their AGENTS.md instructions) plus `scope`: sorted `{path, hash}`
+records of the other Go files in each target package, the non-test Go files of
+local packages the targets import, and the build manifests (`go.mod`, `go.sum`,
+`package.json` and lock files, `Cargo.toml`, `pyproject.toml`, `Makefile` and
+similar) in the target directories and their ancestors. Files that `.gitignore`
+or `.mini-orcaignore` exclude are not part of the scope, and at most 512 files
+are recorded. A scope file that changes, appears or disappears makes the session
+`stale`; GET returns `stale_reason` naming it, and the task list reports the same
+freshness. Edits elsewhere and reindexing leave the session `current`; mutations
+may then carry either the captured `project_revision` or the current one, and
+checks run under the current execution trust. `scope_version: 1` marks such
+sessions. Sessions captured before it have no scope and keep the whole-tree
+fingerprint and their captured revision.
+
+The whole-tree fingerprint still guards checks. Every check copy must equal the
+tree it was copied from and hold the captured sources and scope, and the
+session records `checks_workspace_hash`, the tree its checks describe. When the
+project changes after checks ran, GET returns `checks_outdated: true`, and
+approval, a review override and Apply are refused until checks run again on the
+current tree; the session itself stays current.
 
 The client supplies a `plan` with `problem`, `evidence`, `approach`, `non_goals`
 and optional `read_paths`, plus at least one acceptance criterion. Creation captures

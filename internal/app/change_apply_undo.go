@@ -88,6 +88,9 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 	if !s.changeApproved(session) {
 		return nil, fmt.Errorf("review and check the current proposal before Apply")
 	}
+	if err := verifyChecksWorkspace(ctx, root, session); err != nil {
+		return nil, err
+	}
 	previous, err := readChangeJournal(root)
 	if err != nil {
 		return nil, err

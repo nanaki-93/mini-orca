@@ -49,8 +49,11 @@ export interface CheckSummary {
   tone: Tone;
 }
 
-/** Summarizes checks; only a failed required check blocks Apply, so optional failures read as a warning. */
-export function checkSummary(checks: Check[] | undefined): CheckSummary {
+/**
+ * Summarizes checks; only a failed required check blocks Apply, so optional
+ * failures read as a warning. Outdated checks ran on an earlier project tree.
+ */
+export function checkSummary(checks: Check[] | undefined, outdated = false): CheckSummary {
   const list = checks ?? [];
   const counts = { total: list.length, passed: 0, failed: 0, running: 0, idle: 0 };
   for (const check of list) counts[phaseTone(check.state)]++;
@@ -59,6 +62,7 @@ export function checkSummary(checks: Check[] | undefined): CheckSummary {
   let label: string;
   let tone: Tone;
   if (!list.length) [label, tone] = ['Not run', 'neutral'];
+  else if (outdated) [label, tone] = ['Outdated', 'warning'];
   else if (requiredFailed) [label, tone] = [`${requiredFailed} required failed`, 'danger'];
   else if (counts.running) [label, tone] = ['Running', 'info'];
   else if (optionalFailed) [label, tone] = [`${optionalFailed} optional failed`, 'warning'];
@@ -97,13 +101,13 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     const undo = session.undo ?? { available: true, reason: '' };
     return { ...result, canUndo: undo.available, step: 'applied', message: undo.available ? 'Applied. Undo verifies the files are unchanged before restoring them.' : `Applied. ${undo.reason || 'Undo is not available for this task.'}` };
   }
-  if (session.freshness !== 'current') return { ...result, step: 'stale', message: 'The project changed since this proposal was made. Start it again to continue.' };
+  if (session.freshness !== 'current') return { ...result, step: 'stale', message: session.stale_reason ? `Out of date: ${session.stale_reason}. Start it again to continue.` : 'The project changed since this proposal was made. Start it again to continue.' };
   if (['undone', 'reverted', 'recovery_required'].includes(session.state)) return { ...result, step: 'recovery', message: `This task is ${session.state.replace('_', ' ')}.` };
   result.editable = true;
   const edits = session.changes ?? [];
   result.filesReviewed = edits.length > 0 && edits.every(edit => isFileReviewed(session, edit.path));
   const checks = session.checks ?? [];
-  result.checksPassed = checks.length > 0 && checks.every(check => !check.required || check.state === 'passed');
+  result.checksPassed = checks.length > 0 && !session.checks_outdated && checks.every(check => !check.required || check.state === 'passed');
   const workflowReady = !session.workflow || session.workflow.status === 'awaiting_human_review';
   result.canApprove = result.filesReviewed && result.checksPassed && workflowReady;
   result.canApply = result.canApprove && Boolean(session.hash) && session.reviewed_hash === session.hash;
@@ -118,7 +122,7 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     result.message = 'Review each changed file and mark it viewed.';
   } else if (!result.checksPassed) {
     result.step = 'checks';
-    result.message = 'Run checks; required checks must pass before approval.';
+    result.message = session.checks_outdated ? 'The project changed since checks ran. Run them again before approval.' : 'Run checks; required checks must pass before approval.';
   } else if (!workflowReady) {
     result.step = 'agents';
     const rejectedByModel = session.workflow?.status === 'changes_requested' && !session.workflow.input;

@@ -103,12 +103,15 @@ func validateChangeCriteria(criteria []string) error {
 	return features.ValidateCriteria(criteria)
 }
 
+// verifyChangeTargetsCurrent checks the active project and context policy,
+// then the session's captured sources and freshness scope. Sessions captured
+// before path-scoped freshness stay bound to their project revision.
 func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession) error {
 	index, err := s.manager.Index()
 	if err != nil {
 		return err
 	}
-	if s.manager.Root() != root || index.ProjectID != session.ProjectID || index.ProjectRevision != session.ProjectRevision {
+	if s.manager.Root() != root || index.ProjectID != session.ProjectID || session.ScopeVersion == 0 && index.ProjectRevision != session.ProjectRevision {
 		return project.ErrRevisionConflict
 	}
 	policy, err := project.NewContextPolicy(root)
@@ -116,13 +119,16 @@ func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession
 		return err
 	}
 	if policy.Version() != session.PolicyFingerprint {
-		return project.ErrRevisionConflict
+		return fmt.Errorf("%w: the context policy changed since this proposal was made", project.ErrRevisionConflict)
 	}
-	targets := append([]ChangeTarget(nil), session.Targets...)
-	if session.Plan != nil {
-		targets = append(targets, session.Plan.ReadTargets...)
-	}
-	for _, expected := range targets {
+	return verifyCapturedSources(root, policy, session)
+}
+
+// verifyCapturedSources compares the captured targets, read context, their
+// instructions and the freshness scope with the files under root, which may
+// be the project or a check copy of it.
+func verifyCapturedSources(root string, policy *project.ContextPolicy, session *ChangeSession) error {
+	for _, expected := range capturedSources(session) {
 		current, err := captureChangeTarget(root, expected.Path)
 		if err != nil {
 			return err
@@ -131,11 +137,17 @@ func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession
 		if err != nil {
 			return err
 		}
-		if current.Exists != expected.Exists || current.Hash != expected.Hash || instructions.Fingerprint != session.Instructions[expected.Path] {
-			return project.ErrRevisionConflict
+		if current.Exists != expected.Exists || current.Hash != expected.Hash {
+			return fmt.Errorf("%w: %s changed since this proposal was made", project.ErrRevisionConflict, expected.Path)
+		}
+		if instructions.Fingerprint != session.Instructions[expected.Path] {
+			return fmt.Errorf("%w: the instructions for %s changed since this proposal was made", project.ErrRevisionConflict, expected.Path)
 		}
 	}
-	return nil
+	if session.ScopeVersion == 0 {
+		return nil
+	}
+	return verifyFreshnessScope(root, policy, session)
 }
 
 func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session *ChangeSession) error {
@@ -144,6 +156,9 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 	}
 	if err := verifySessionGitIdentity(ctx, root, session.Git); err != nil {
 		return err
+	}
+	if session.ScopeVersion != 0 {
+		return nil
 	}
 	return (workspaceIdentity{fingerprint: session.WorkspaceHash}).verifyCurrent(ctx, root)
 }
@@ -182,7 +197,9 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 			if !errors.Is(verifyErr, project.ErrRevisionConflict) && !errors.Is(verifyErr, project.ErrExcludedFile) {
 				return nil, verifyErr
 			}
-			session.Freshness = "stale"
+			session.Freshness, session.StaleReason = "stale", staleReason(verifyErr)
+		} else if len(session.Checks) > 0 {
+			session.ChecksOutdated = errors.Is(verifyChecksWorkspace(ctx, root, session), errChecksOutdated)
 		}
 	}
 	s.restoreChangeWorkflow(session)
@@ -233,7 +250,7 @@ func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, erro
 	if _, err := s.manager.Index(); err != nil {
 		return nil, err
 	}
-	history, err := listChangeSessions(s.manager.Root())
+	history, err := listChangeSessionsWith(s.manager.Root(), s.listedFreshness(s.manager.Root()))
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +278,7 @@ func (s *Service) loadChangeForAction(ctx context.Context, id string, identity C
 	if err != nil {
 		return nil, root, err
 	}
-	if session.State != "draft" || identity.ProjectID != session.ProjectID || identity.ProjectRevision != session.ProjectRevision || identity.Revision != session.Revision || identity.Hash != session.Hash {
+	if session.State != "draft" || identity.ProjectID != session.ProjectID || !s.acceptsChangeRevision(session, identity.ProjectRevision) || identity.Revision != session.Revision || identity.Hash != session.Hash {
 		return nil, root, project.ErrRevisionConflict
 	}
 	if isChangePipelineActive(session.Workflow) && ctx.Value(changeWorkflowContextKey{}) != session.Workflow.ID {
@@ -271,6 +288,20 @@ func (s *Service) loadChangeForAction(ctx context.Context, id string, identity C
 		return nil, root, err
 	}
 	return session, root, nil
+}
+
+// acceptsChangeRevision lets a request name the project revision the session
+// was captured at or, for a path-scoped session, the project's current one:
+// the scope check then decides whether the session is still current.
+func (s *Service) acceptsChangeRevision(session *ChangeSession, revision string) bool {
+	if revision == session.ProjectRevision {
+		return true
+	}
+	if session.ScopeVersion == 0 {
+		return false
+	}
+	index, err := s.manager.Index()
+	return err == nil && revision == index.ProjectRevision
 }
 
 func (s *Service) SendChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {

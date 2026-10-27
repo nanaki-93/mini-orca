@@ -96,7 +96,7 @@ func (s *Service) loadChangeGraphSnapshot(ctx context.Context, job *changeWorkfl
 	if root != job.root || session.Workflow == nil || session.Workflow.ID != job.id || session.Workflow.Models != job.models || !slices.Equal(workflowSpecialistIDs(session.Workflow), job.specialists) {
 		return nil, project.ErrRevisionConflict
 	}
-	if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
+	if err := s.requireChangeExecutionTrust(ctx, session); err != nil {
 		return nil, err
 	}
 	return session, nil

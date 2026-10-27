@@ -46,6 +46,9 @@ func (s *Service) runCheck(ctx context.Context, workspace, revision, name string
 	}
 	if err != nil || failOnOutput && check.Output != "" {
 		check.State = CheckFailed
+		if check.Output == "" && err != nil {
+			check.Output = sanitizeCheckOutput(err.Error(), false, workspace, s.manager.Root())
+		}
 		return check
 	}
 	check.State = CheckPassed

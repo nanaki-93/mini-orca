@@ -302,7 +302,7 @@ func (s *Service) requestWorkflowModel(ctx context.Context, root string, session
 		if currentRoot != root || current.Workflow == nil || session.Workflow == nil || current.Workflow.ID != session.Workflow.ID {
 			return fmt.Errorf("workflow identity changed before model dispatch")
 		}
-		return s.requireProjectExecutionTrust(ctx, session.ProjectRevision)
+		return s.requireChangeExecutionTrust(ctx, current)
 	}
 	result, err := s.retryRequestAuthorized(timed, runtime, messages, &schema, authorize)
 	if err == nil {

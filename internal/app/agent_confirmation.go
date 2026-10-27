@@ -222,6 +222,9 @@ func (s *Service) reviewChangeLocked(ctx context.Context, root string, session *
 	if err := s.validateHumanReview(session); err != nil {
 		return nil, err
 	}
+	if err := verifyChecksWorkspace(ctx, root, session); err != nil {
+		return nil, err
+	}
 	if session.Workflow != nil && session.Workflow.Input != nil {
 		if err := s.resolveWorkflowInput(ctx, root, session, "approve"); err != nil {
 			return nil, err

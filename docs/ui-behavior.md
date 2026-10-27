@@ -36,8 +36,11 @@ every guard when the action arrives.
 - **Revise.** A revision request goes to the Code profile (remote consent when
   needed) and creates a new version: earlier view marks, checks and approval no
   longer apply.
-- **Stale.** When the project changed since the proposal, the task reads Stale
-  and offers no Apply; plan it again on the current source.
+- **Stale.** A task is stale only when a file it depends on changed: its
+  targets and read context, the other files of the target packages, or a build
+  manifest above them. The task then reads Stale, names the changed file and
+  offers no Apply; plan it again on the current source. Changes elsewhere keep
+  the task current.
 
 ## Review and apply
 
@@ -45,7 +48,9 @@ every guard when the action arrives.
   hash (`v` marks it and moves to the next unviewed file). "Since last review"
   shows only what changed since the last complete review.
 - **Checks.** Running checks needs execution trust and runs in an isolated copy.
-  Only required checks gate approval; an optional failure is a warning.
+  Only required checks gate approval; an optional failure is a warning. When
+  the project changed after checks ran, they read Outdated and must run again
+  before approval or Apply.
 - **Reviewer findings.** Specialists separate blocking findings from advisory
   notes; only findings request changes, and notes are shown apart from them.
 - **Override reviewers.** When the reviewers rejected the current version and

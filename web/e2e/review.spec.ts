@@ -61,7 +61,7 @@ test('overrides the reviewers with a reason, then approves with notes', async ({
   await page.goto('/#/tasks/chg-1');
   const gate = page.getByRole('complementary', { name: 'Review gate' });
   await expect(gate.getByText('Changes requested')).toBeVisible();
-  await expect(gate.getByRole('button', { name: /approve/i })).toHaveCount(0);
+  await expect(gate.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
 
   // Advisory notes are shown apart from blocking findings.
   await page.getByRole('button', { name: /Correctness/ }).click();
@@ -86,4 +86,23 @@ test('overrides the reviewers with a reason, then approves with notes', async ({
   await expect(gate.getByText('Revisit the package split next sprint.')).toBeVisible();
   expect(daemon.mutations('/review')[0].body).toMatchObject({ hash: 'sha256:9f2c1a7be4', notes: 'Revisit the package split next sprint.' });
   await expect(gate.getByRole('button', { name: 'Apply & commit' })).toBeEnabled();
+});
+
+test('checks from an earlier project tree must run again before approval', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, reviewed_files: session.changes.map(change => change.path), checks_outdated: true });
+  await page.goto('/#/tasks/chg-1');
+  const gate = page.getByRole('complementary', { name: 'Review gate' });
+  await expect(gate.getByText('Outdated')).toBeVisible();
+  await expect(gate.getByText('The project changed since checks ran. Run them again before approval.')).toBeVisible();
+  await expect(gate.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
+  await page.getByRole('tab', { name: /checks/i }).click();
+  await expect(page.getByText('These checks ran on an earlier version of the project')).toBeVisible();
+});
+
+test('a stale task names the file that changed', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' });
+  await page.goto('/#/tasks/chg-1');
+  await expect(page.getByText('Out of date: go.mod changed since this proposal was made. Start it again to continue.')).toBeVisible();
 });

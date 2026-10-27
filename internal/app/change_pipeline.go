@@ -136,7 +136,7 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 			return err
 		}
 	}
-	return s.requireProjectExecutionTrust(ctx, session.ProjectRevision)
+	return s.requireChangeExecutionTrust(ctx, session)
 }
 
 func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) {

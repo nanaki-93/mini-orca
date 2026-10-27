@@ -30,29 +30,32 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 	request.RunTests = request.RunTests || session.CheckOptions.RunTests
 	request.RunLint = request.RunLint || session.CheckOptions.RunLint
 	if request.RunTests || request.RunLint {
-		if err := s.requireProjectExecutionTrust(ctx, session.ProjectRevision); err != nil {
+		if err := s.requireChangeExecutionTrust(ctx, session); err != nil {
 			return nil, err
 		}
 	}
 	checks := changeSourceChecks(root, session.Changes)
+	var checked string // The whole-tree fingerprint the checks describe.
 	if requiredChecksPassed(checks) && (request.RunTests || request.RunLint) {
-		executed, err := s.checkChangeWorkspace(ctx, root, session, request.CheckOptions)
+		executed, fingerprint, err := s.checkChangeWorkspace(ctx, root, session, request.CheckOptions)
 		if err != nil {
 			return nil, err
 		}
-		checks = append(checks, executed...)
+		checks, checked = append(checks, executed...), fingerprint
+	} else if checked, err = workspaceFingerprint(ctx, root); err != nil {
+		return nil, err
 	}
-	return s.publishChangeChecks(ctx, id, request, checks)
+	return s.publishChangeChecks(ctx, id, request, checks, checked)
 }
 
-func (s *Service) publishChangeChecks(ctx context.Context, id string, request ChangeCheckRequest, checks []CheckResult) (*ChangeSession, error) {
+func (s *Service) publishChangeChecks(ctx context.Context, id string, request ChangeCheckRequest, checks []CheckResult, checked string) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	current, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
 	if err != nil {
 		return nil, err
 	}
-	current.Checks, current.UpdatedAt = checks, time.Now().UTC()
+	current.Checks, current.ChecksWorkspaceHash, current.UpdatedAt = checks, checked, time.Now().UTC()
 	revokeApproval(current)
 	current.CheckOptions = request.CheckOptions
 	refreshChangeScopeSuggestions(root, current)
@@ -164,26 +167,66 @@ func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 	return checks
 }
 
-func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+// checkChangeWorkspace runs checks in an isolated copy and returns the
+// whole-tree fingerprint of the project the copy reproduces.
+func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session *ChangeSession, options CheckOptions) ([]CheckResult, string, error) {
 	workspace, err := os.MkdirTemp("", "mini-orca-change-check-")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer os.RemoveAll(workspace)
+	fingerprint, err := s.prepareCheckCopy(ctx, root, workspace, session)
+	if err != nil {
+		return nil, "", err
+	}
+	revision, err := s.changeExecutionRevision(session)
+	if err != nil {
+		return nil, "", err
+	}
+	var checks []CheckResult
+	if workspaceHasGo(workspace, session.Changes) {
+		checks, err = s.checkGoWorkspace(ctx, workspace, revision, session, options)
+	} else {
+		checks, err = s.checkNonGoWorkspace(ctx, workspace, revision, session, options)
+	}
+	return checks, fingerprint, err
+}
+
+// prepareCheckCopy copies the project and validates the copy: it must equal
+// the tree it was copied from and, for a path-scoped session, hold the
+// captured sources and freshness scope. Legacy sessions require the tree they
+// were captured from.
+func (s *Service) prepareCheckCopy(ctx context.Context, root, workspace string, session *ChangeSession) (string, error) {
+	expected := session.WorkspaceHash
+	if session.ScopeVersion != 0 {
+		live, err := workspaceFingerprint(ctx, root)
+		if err != nil {
+			return "", err
+		}
+		expected = live
+	}
 	if err := copyCheckWorkspace(ctx, root, workspace); err != nil {
-		return nil, err
+		return "", err
 	}
 	fingerprint, err := fingerprintCheckWorkspace(ctx, workspace)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if fingerprint != session.WorkspaceHash {
-		return nil, project.ErrRevisionConflict
+	if fingerprint != expected {
+		return "", fmt.Errorf("%w: the project changed while checks were prepared", project.ErrRevisionConflict)
 	}
-	if !workspaceHasGo(workspace, session.Changes) {
-		return s.checkNonGoWorkspace(ctx, workspace, session, options)
+	if session.ScopeVersion == 0 {
+		return fingerprint, nil
 	}
-	checks, err := s.changeRegressionBaseline(ctx, workspace, session, options.RunTests)
+	policy, err := project.NewContextPolicy(root)
+	if err != nil {
+		return "", err
+	}
+	return fingerprint, verifyCapturedSources(workspace, policy, session)
+}
+
+func (s *Service) checkGoWorkspace(ctx context.Context, workspace, revision string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+	checks, err := s.changeRegressionBaseline(ctx, workspace, revision, session, options.RunTests)
 	if err != nil {
 		return nil, err
 	}
@@ -191,18 +234,18 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 		return nil, err
 	}
 	if options.RunLint {
-		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, []string{"go", "vet", "./..."}, false, false))
+		checks = append(checks, s.runCheck(ctx, workspace, revision, "lint", true, []string{"go", "vet", "./..."}, false, false))
 		if archgate.HasOptionalGitleaks(workspace) {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "gitleaks", true, []string{"gitleaks", "detect", "--no-git", "--source", ".", "--redact"}, false, true))
+			checks = append(checks, s.runCheck(ctx, workspace, revision, "gitleaks", true, []string{"gitleaks", "detect", "--no-git", "--source", ".", "--redact"}, false, true))
 		}
 	}
 	if options.RunTests {
-		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, []string{"go", "test", "./..."}, false, true))
+		checks = append(checks, s.runCheck(ctx, workspace, revision, "tests", true, []string{"go", "test", "./..."}, false, true))
 	}
 	return checks, ctx.Err()
 }
 
-func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace, revision string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
 	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
 	checks := []CheckResult{}
 	newTests := newChangeTestEdits(session)
@@ -210,7 +253,7 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 		if err := stageChangeEdits(workspace, newTests); err != nil {
 			return nil, err
 		}
-		baseline := s.runCheck(ctx, workspace, session.ProjectRevision, "regression baseline", false, buildTaskRunnerArgv(runner, testTarget), false, true)
+		baseline := s.runCheck(ctx, workspace, revision, "regression baseline", false, buildTaskRunnerArgv(runner, testTarget), false, true)
 		classifyNonGoRegressionBaseline(&baseline)
 		checks = append(checks, baseline)
 	}
@@ -219,14 +262,14 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace string, ses
 	}
 	if options.RunLint {
 		if runner != "" && checkTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
+			checks = append(checks, s.runCheck(ctx, workspace, revision, "lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
 		} else {
 			checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
 		}
 	}
 	if options.RunTests {
 		if runner != "" && testTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
+			checks = append(checks, s.runCheck(ctx, workspace, revision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
 		} else {
 			msg := "No executable test runner is configured or available for this workspace."
 			if len(newTests) > 0 {
@@ -370,17 +413,17 @@ func workspaceHasGo(workspace string, edits []ChangeEdit) bool {
 	return err == nil && !info.IsDir()
 }
 
-func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string, session *ChangeSession, runTests bool) ([]CheckResult, error) {
+func (s *Service) changeRegressionBaseline(ctx context.Context, workspace, revision string, session *ChangeSession, runTests bool) ([]CheckResult, error) {
 	checks := []CheckResult{}
 	newTests := newChangeTestEdits(session)
 	if !runTests || len(newTests) == 0 {
 		return checks, nil
 	}
-	checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, existingTestBaselineCheck, true, []string{"go", "test", "./..."}, false, true))
+	checks = append(checks, s.runCheck(ctx, workspace, revision, existingTestBaselineCheck, true, []string{"go", "test", "./..."}, false, true))
 	if err := stageChangeEdits(workspace, newTests); err != nil {
 		return nil, err
 	}
-	baseline := s.runTaskTestCheck(ctx, workspace, session.ProjectRevision, "regression baseline", []string{"go", "test", "./..."}, false)
+	baseline := s.runTaskTestCheck(ctx, workspace, revision, "regression baseline", []string{"go", "test", "./..."}, false)
 	classifyRegressionBaseline(&baseline)
 	checks = append(checks, baseline)
 	return checks, nil

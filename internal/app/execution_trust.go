@@ -177,6 +177,30 @@ func (s *Service) requireProjectExecutionTrust(ctx context.Context, revision str
 	return nil
 }
 
+// requireChangeExecutionTrust checks trust for running a change session's
+// checks. A path-scoped session stays current by its own scope, so trust is
+// checked for the project as it is now; a legacy session needs its revision.
+func (s *Service) requireChangeExecutionTrust(ctx context.Context, session *ChangeSession) error {
+	revision, err := s.changeExecutionRevision(session)
+	if err != nil {
+		return err
+	}
+	return s.requireProjectExecutionTrust(ctx, revision)
+}
+
+// changeExecutionRevision is the project revision a session's checks run
+// under: the current one for a path-scoped session, else its captured one.
+func (s *Service) changeExecutionRevision(session *ChangeSession) (string, error) {
+	if session.ScopeVersion == 0 {
+		return session.ProjectRevision, nil
+	}
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return "", err
+	}
+	return analysis.ProjectRevision, nil
+}
+
 func (s *Service) requireWorkspaceExecutionTrust(ctx context.Context, revision, workspaceHash string) error {
 	trust, err := s.ExecutionTrust(ctx, revision, "")
 	if err != nil {
