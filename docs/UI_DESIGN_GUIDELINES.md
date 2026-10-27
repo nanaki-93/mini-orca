@@ -232,6 +232,10 @@ remote model destination for consent first.
   passive browsing, consent and identity guards. `MINI_ORCA_TUI_FRAMES=<dir> go
   test ./internal/tui -run TestWriteFramesForVisualReview` writes ANSI frames of
   every view for visual review.
-- Browser: `make webui-test` (type-check and vitest), `make webui-dist-check`,
-  `go test ./internal/api/handlers ./cmd/daemon`, and a browser check of changed
-  pages in dark and light themes with no console or CSP errors.
+- Browser: `make webui-test` (type-check and vitest), `make webui-e2e`
+  (Playwright: the real UI against the stateful fake daemon in
+  `web/e2e/support`, failing on any console error, in both themes),
+  `make webui-dist-check`, `go test ./internal/api/handlers ./cmd/daemon`, and a
+  look at changed pages in dark and light themes. Keep the fake daemon's data
+  in the daemon's real shapes and states; add a scenario there when a page
+  depends on a state it lacks.

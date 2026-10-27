@@ -25,5 +25,9 @@ jobs:
         with:
           node-version: 22.20.0
 
+      - name: Install the Web UI toolchain and Playwright Chromium
+        working-directory: web
+        run: npm ci && npx playwright install --with-deps chromium
+
       - name: Run maintained local gates
         run: ./scripts/validate.sh

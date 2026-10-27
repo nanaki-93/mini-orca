@@ -54,9 +54,10 @@ run_stage go-quality ./scripts/quality.sh --go-only
 run_stage tui-test go test -race ./internal/tui/... ./cmd/tui/...
 if command -v npm >/dev/null 2>&1; then
   run_stage webui-test make webui-test
+  run_stage webui-e2e make webui-e2e
   run_stage webui-dist make webui-dist-check
 else
-  printf '\n==> webui-test\nSKIP webui-test (npm is not installed)\n'
+  printf '\n==> webui-test\nSKIP webui-test, webui-e2e and webui-dist (npm is not installed)\n'
 fi
 
 if [ -n "$failed_stages" ]; then

@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-install webui-build webui-test webui-dev webui-dist-check tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-install webui-build webui-test webui-e2e webui-dev webui-dist-check tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 .PHONY: build-agents build-agents-linux
 
 # ─── Default Target ────────────────────────────────────────────────────────────
@@ -122,6 +122,9 @@ webui-build: ## Type-check and build the Web UI into the embedded internal/api/h
 webui-test: ## Type-check the Web UI and run its unit and component tests
 	@if command -v npm >/dev/null 2>&1; then cd web && { test -d node_modules || npm ci; } && npm run typecheck && npm test; else echo "SKIP webui-test: npm is not installed"; fi
 
+webui-e2e: ## Run the Playwright browser tests of the Web UI against a fake daemon
+	@cd web && { test -d node_modules || npm ci; } && npm run e2e
+
 webui-dev: ## Serve the Web UI with hot reload on :5173, proxying the API to the daemon on :9090
 	@cd web && npm run dev
 
@@ -135,7 +138,7 @@ tui-build: ## Build the Go TUI binary
 tui-run: ## Launch the Go TUI client
 	@$(GO) run ./cmd/tui
 
-check: fmt-check test test-race vet agent-dispatcher tui-test webui-test ## Run the complete supported validation path
+check: fmt-check test test-race vet agent-dispatcher tui-test webui-test webui-e2e ## Run the complete supported validation path
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image
