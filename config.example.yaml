@@ -40,79 +40,16 @@ model_scopes:
 
 project_path: "."
 
-# Passive configuration. Discovery and each investigation require explicit grants.
-integrations:
-  cloud: [] # Explicit copies only; local journals, approvals and curated memory remain local.
-  # - id: archive
-  #   service: gcs_artifact # Or vertex_session for a completed invocation archive.
-  #   project: "123456789012" # Google Cloud project number, not the local project ID.
-  #   region: us-central1
-  #   resource: mini-orca-archives # Bucket; Vertex uses a reasoning-engine numeric ID.
-  #   principal: archive-agent@example-project.iam.gserviceaccount.com
-  #   credential_file_env: MINI_ORCA_CLOUD_KEY # Environment variable containing a service-account JSON file path.
-  #   retention_days: 30 # Operator cleanup deadline; not an automatic server TTL.
-  a2a_server:
-    enabled: false
-    bind: "127.0.0.1:9091"
-    timeout_seconds: 60
-    max_concurrent: 2
-    principals: []
-    # - id: reviewer
-    #   bearer_token_env: MINI_ORCA_AGENT_TOKEN
-    #   project_id: "replace-with-current-project-id"
-    #   capabilities: [analysis, proposal]
-  mcp: []
-  # - id: docs
-  #   transport: streamable_http
-  #   endpoint: https://docs.example/mcp
-  #   bearer_token_env: DOCS_MCP_TOKEN
-  #   timeout_seconds: 30
-  #   tools: [{name: search, effect: read_external}]
-  # Stdio alternative: transport: stdio, command: /absolute/installed/docs-mcp,
-  # args: [--stdio], environment: {DOCS_TOKEN: PRIVATE_DOCS_TOKEN}.
-  # Arguments must not contain secrets; environment values name credential variables.
-  openapi: []
-  # - id: tickets
-  #   spec_path: integrations/tickets.json # Indexed project-local OpenAPI 3.0 JSON.
-  #   endpoint: https://tickets.example/api
-  #   bearer_token_env: TICKETS_TOKEN
-  #   timeout_seconds: 30
-  #   operations: [{name: getTicket, effect: read_external}, {name: updateTicket, effect: mutate_external}]
-  google_search: false # Requires a supported native Google Code profile and explicit per-request consent.
-  a2a: []
-  # - id: reviewer
-  #   card_url: https://review.example/.well-known/agent-card.json
-  #   endpoint: https://review.example/rpc # Exact same origin as the card.
-  #   bearer_token_env: REVIEW_AGENT_TOKEN
-  #   skills: [code_review] # One to four explicitly allowed advertised skills.
-  #   timeout_seconds: 30 # A2A 1.0 JSON-RPC; plain-text advisory results only.
-
 agent_runtime:
   # ADK budgets and future-run defaults. This section grants no execution,
-  # source-sharing, cloud-copy or source-write permission. See README capability matrix.
-  # Optional explicit live advice; empty disables connections. Gemini API + API key only.
-  # Uses the Code destination/credentials; its ordinary model stays unchanged.
-  live_model: "" # Supported: gemini-3.8-live. See CONFIG.md for limits and consent.
-  # Ceilings only: watching and automatic source sharing require separate controls.
-  # Watches never resume automatically after restart or project replacement.
-  triggers:
-    poll_seconds: 2
-    debounce_seconds: 3
-    quiet_seconds: 60
-    window_seconds: 3600
-    max_runs: 4
-    max_model_calls: 16
-    max_input_tokens: 4194304
-    max_output_tokens: 262144
-    run_seconds: 120
-    grant_seconds: 3600
+  # source-sharing or source-write permission.
   # Explicit project-relative directories containing indexed SKILL.md files.
   # Example: [project-skills/review-code]. Resources load only during admitted investigations.
   skills: []
   # Optional user-maintained token prices; no prices or exporters are inferred.
   # See CONFIG.md for a complete versioned table and the unknown-usage rules.
   telemetry:
-    # Manual OTLP/HTTP JSON only; :run-export reviews and confirms each snapshot.
+    # Manual OTLP/HTTP JSON only; each export reviews and confirms one snapshot.
     # HTTPS or literal loopback HTTP; include the collector's exact /v1/traces path.
     export:
       endpoint: ""

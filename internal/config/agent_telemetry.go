@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/url"
 	"regexp"
 	"slices"
@@ -25,14 +26,14 @@ func (value AgentTelemetryExport) Validate() error {
 	if value.Endpoint == "" && value.BearerEnv == "" {
 		return nil
 	}
-	if err := validateIntegrationEndpoint(value.Endpoint); err != nil {
+	if err := validateExportEndpoint(value.Endpoint); err != nil {
 		return fmt.Errorf("agent telemetry export: %w", err)
 	}
 	u, err := url.Parse(value.Endpoint)
 	if err != nil || u.ForceQuery || strings.Contains(value.Endpoint, "#") || strings.TrimSpace(value.Endpoint) != value.Endpoint || strings.IndexFunc(value.Endpoint, unicode.IsControl) >= 0 {
 		return fmt.Errorf("agent telemetry export requires a URL without query, fragment or control characters")
 	}
-	if value.BearerEnv != "" && !integrationEnvName.MatchString(value.BearerEnv) {
+	if value.BearerEnv != "" && !exportEnvName.MatchString(value.BearerEnv) {
 		return fmt.Errorf("agent telemetry export bearer_env must name an explicit environment variable")
 	}
 	if u.Port() != "" {
@@ -40,6 +41,21 @@ func (value AgentTelemetryExport) Validate() error {
 		if err != nil || port < 1 || port > 65535 {
 			return fmt.Errorf("agent telemetry export port must be between 1 and 65535")
 		}
+	}
+	return nil
+}
+
+var exportEnvName = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+
+// validateExportEndpoint admits HTTPS, or HTTP only to a literal loopback address.
+func validateExportEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil || len(endpoint) > 2048 || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return fmt.Errorf("endpoint must be an absolute HTTP URL without credentials, query or fragment")
+	}
+	ip := net.ParseIP(u.Hostname())
+	if u.Scheme != "https" && !(u.Scheme == "http" && ip != nil && ip.IsLoopback()) {
+		return fmt.Errorf("endpoint requires HTTPS, except literal loopback HTTP")
 	}
 	return nil
 }

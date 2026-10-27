@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
@@ -13,7 +14,6 @@ import (
 
 // Config is the daemon's single YAML configuration schema.
 type Config struct {
-	Integrations IntegrationsConfig `yaml:"integrations"`
 	AgentRuntime AgentRuntimeConfig `yaml:"agent_runtime"`
 	ModelScopes  ModelScopesConfig  `yaml:"model_scopes"`
 	Retry        RetryConfig        `yaml:"retry"`
@@ -186,10 +186,7 @@ func (c *Config) Validate() error {
 	if _, err := ResolveModelProfiles(c); err != nil {
 		return err
 	}
-	if _, err := ResolveAgentRuntime(c.AgentRuntime); err != nil {
-		return err
-	}
-	_, err := ResolveIntegrations(c.Integrations)
+	_, err := ResolveAgentRuntime(c.AgentRuntime)
 	return err
 }
 
@@ -203,40 +200,29 @@ func (c *Config) validateRetryAndTimeouts() error {
 	return nil
 }
 
-var configurationFields = fieldSet{
-	"integrations": {"mcp": {}, "openapi": {}, "a2a": {}, "a2a_server": {}, "google_search": {}, "cloud": {}},
-	"agent_runtime": {
-		"live_model":      {},
-		"triggers":        {"poll_seconds": {}, "debounce_seconds": {}, "quiet_seconds": {}, "window_seconds": {}, "max_runs": {}, "max_model_calls": {}, "max_input_tokens": {}, "max_output_tokens": {}, "run_seconds": {}, "grant_seconds": {}},
-		"telemetry":       {"prices": {"version": {}, "currency": {}, "rates": {}}, "export": {"endpoint": {}, "bearer_env": {}}},
-		"skills":          {},
-		"roles":           {"creation": {}, "testing": {}, "review": {}},
-		"context":         {"compaction": {}, "token_threshold": {}, "retain_events": {}, "summary_max_tokens": {}, "local_cache": {}, "cache_ttl_seconds": {}, "provider_cache": {}, "provider_ttl_seconds": {}},
-		"max_model_calls": {}, "max_tool_calls": {}, "max_input_tokens": {}, "max_output_tokens": {},
-		"max_elapsed_seconds": {}, "max_concurrent_calls": {}, "max_repairs": {},
-	},
-	"model_scopes": {
-		"analyze": modelProfileFields,
-		"bug":     modelProfileFields,
-		"code":    modelProfileFields,
-	},
-	"retry": {
-		"max_retries": {}, "backoff_base": {}, "backoff_max": {},
-	},
-	"timeouts": {
-		"import_seconds": {}, "analysis_seconds": {}, "generation_seconds": {}, "workflow_model_seconds": {}, "focused_check_seconds": {},
-	},
-	"logging": {
-		"level": {}, "format": {}, "filename": {}, "sensitive_keys": {},
-	},
-	"project_path": {},
-}
+// configurationFields mirrors Config's yaml tags, so an unknown key is reported
+// with its full path before strict decoding runs.
+var configurationFields = yamlFields(reflect.TypeFor[Config]())
 
-var modelProfileFields = fieldSet{
-	"provider": {}, "cli_path": {},
-	"api_base_url": {}, "api_key": {}, "model": {}, "reasoning_effort": {},
-	"access_token": {}, "vertex_project": {}, "vertex_location": {},
-	"temperature": {}, "top_p": {}, "top_k": {}, "min_p": {}, "presence_penalty": {}, "repeat_penalty": {}, "max_tokens": {}, "context_max_tokens": {},
+// yamlFields lists the yaml keys of a struct type; nested structs list theirs.
+func yamlFields(structType reflect.Type) fieldSet {
+	fields := fieldSet{}
+	for field := range structType.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		fieldType := field.Type
+		for fieldType.Kind() == reflect.Pointer {
+			fieldType = fieldType.Elem()
+		}
+		if fieldType.Kind() == reflect.Struct {
+			fields[name] = yamlFields(fieldType)
+		} else {
+			fields[name] = nil
+		}
+	}
+	return fields
 }
 
 type fieldSet map[string]fieldSet

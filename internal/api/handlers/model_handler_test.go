@@ -165,7 +165,7 @@ func TestNativeGoogleCatalogIsPassiveAndSourceFree(t *testing.T) {
 	}
 	for _, scope := range []string{"analyze", "bug"} {
 		model := catalog.Scopes[scope]
-		if !model.RemoteProvider || !model.Capabilities.JSONSchema || !model.Capabilities.Streaming || model.Capabilities.Grounding || model.Capabilities.LiveSessions {
+		if !model.RemoteProvider || !model.Capabilities.JSONSchema || !model.Capabilities.Streaming {
 			t.Fatalf("native metadata=%+v", model)
 		}
 	}

@@ -1514,15 +1514,12 @@ components:
     ModelCapabilities:
       type: object
       description: Implemented adapter protocols, not model entitlements. Older metadata may omit this object; missing capabilities are unavailable.
-      required: [completion, json_schema, tools, streaming, attachments, grounding, live_sessions]
+      required: [completion, json_schema, tools, streaming]
       properties:
         completion: {type: boolean}
         json_schema: {type: boolean}
         tools: {type: boolean}
         streaming: {type: boolean}
-        attachments: {type: boolean}
-        grounding: {type: boolean}
-        live_sessions: {type: boolean}
     ModelSelection:
       type: string
       minLength: 1

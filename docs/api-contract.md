@@ -213,13 +213,10 @@ controls. Keys and Vertex access tokens belong only in ignored local config and
 are neither logged nor returned.
 
 Configured model metadata includes `capabilities`: boolean `completion`,
-`json_schema`, `tools`, `streaming`, `attachments`, `grounding`, and `live_sessions`.
-These describe implemented adapter protocols, not an account's model entitlements.
-CLI adapters support completion and locally validated JSON Schema only. HTTP
-adapters also support tools and text streaming. Conformed native Google models
-advertise attachments and grounding; the dedicated Gemini API live model
-advertises live sessions through its separate protocol. Unsupported combinations
-remain false. Historical metadata may omit the object; clients
+`json_schema`, `tools` and `streaming`. These describe implemented adapter
+protocols, not an account's model entitlements. CLI adapters support completion
+and locally validated JSON Schema only. HTTP and native Google adapters also
+support tools and text streaming. Unsupported combinations remain false. Historical metadata may omit the object; clients
 must treat missing capabilities as unavailable. `/api/models/current` remains
 passive and sends no provider request. Native model names are configured explicitly;
 available-model discovery remains the existing explicit Agy/Pi catalog operation.

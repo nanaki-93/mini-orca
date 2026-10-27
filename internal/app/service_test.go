@@ -110,7 +110,7 @@ func TestNativeGoogleRuntimeImportsAndRetainsGuardedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := service.CurrentModelCatalog().Scopes["analyze"]
-	if !metadata.Capabilities.Streaming || !metadata.Capabilities.Tools || metadata.Capabilities.Attachments {
+	if !metadata.Capabilities.Streaming || !metadata.Capabilities.Tools {
 		t.Fatalf("capabilities=%+v", metadata.Capabilities)
 	}
 }

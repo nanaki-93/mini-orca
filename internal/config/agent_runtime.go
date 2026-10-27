@@ -15,8 +15,6 @@ type AgentRoles struct {
 }
 
 type AgentRuntimeConfig struct {
-	LiveModel          string         `yaml:"live_model"`
-	Triggers           AgentTriggers  `yaml:"triggers"`
 	Telemetry          AgentTelemetry `yaml:"telemetry"`
 	Roles              AgentRoles     `yaml:"roles"`
 	Context            AgentContext   `yaml:"context"`
@@ -43,11 +41,9 @@ type AgentLimits struct {
 }
 
 type AgentRuntime struct {
-	LiveModel string `json:",omitempty"`
 	// Passive reporting settings have their own version/destination identity;
 	// they must not invalidate previously admitted execution preferences.
 	Telemetry AgentTelemetry `json:"-"`
-	Triggers  AgentTriggers  `json:"-"`
 	Roles     AgentRoles
 	Limits    AgentLimits
 	Context   AgentContext
@@ -139,9 +135,6 @@ func resolveAgentRoles(roles AgentRoles) (AgentRoles, error) {
 }
 
 func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
-	if configured.LiveModel != "" && configured.LiveModel != "gemini-3.8-live" {
-		return AgentRuntime{}, fmt.Errorf("agent_runtime.live_model must be empty (disabled) or gemini-3.8-live")
-	}
 	roles, err := resolveAgentRoles(configured.Roles)
 	if err != nil {
 		return AgentRuntime{}, err
@@ -181,11 +174,7 @@ func ResolveAgentRuntime(configured AgentRuntimeConfig) (AgentRuntime, error) {
 	if err != nil {
 		return AgentRuntime{}, err
 	}
-	triggers, err := ResolveAgentTriggers(configured.Triggers)
-	if err != nil {
-		return AgentRuntime{}, err
-	}
-	return AgentRuntime{LiveModel: configured.LiveModel, Roles: roles, Limits: limits, Context: context, Skills: skills, Telemetry: telemetry, Triggers: triggers}, nil
+	return AgentRuntime{Roles: roles, Limits: limits, Context: context, Skills: skills, Telemetry: telemetry}, nil
 }
 
 func (limits AgentLimits) Validate() error {

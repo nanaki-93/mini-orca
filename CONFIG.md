@@ -110,8 +110,7 @@ Policy messages must precede the conversation for native Google requests.
 
 Model metadata includes adapter capabilities for completion, JSON Schema,
 typed tools, and streaming. This describes implemented protocols, not account
-entitlements or model availability. Additional capability flags describe
-separately admitted attachment, grounding and live workflows. Reading
+entitlements or model availability. Reading
 configured metadata is passive; only explicit CLI catalog refresh performs
 discovery. Native models are selected by their configured identifier.
 
@@ -119,116 +118,6 @@ The native provider paths are covered with fake HTTP providers, including Vertex
 authentication, cancellation and tool-signature round trips. No live Google
 account or model has been used for this validation. See the
 [Google ADK model documentation](https://adk.dev/agents/models/google-gemini/).
-
-### Explicit media attachments
-
-The attachment advice API uses the configured **Code** profile. Native Gemini
-and Vertex general-purpose multimodal models advertise `attachments: true`;
-compatible HTTP and CLI profiles do not. Model entitlement and availability are
-still determined by the provider response. Local import and library inspection
-work even when the Code profile cannot process attachments.
-
-Import is an explicit local write of supplied bytes, up to 512 KiB per file.
-Supported imports are PNG/JPEG (up to 4096 pixels per side and 4 megapixels), PDF
-with a supported header/EOF envelope, uncompressed 16 kHz mono 16-bit PCM WAV,
-and raw little-endian PCM with MIME `audio/pcm;rate=16000`. Raw PCM is retained for
-live input; completion advice requires WAV for audio. There is no automatic
-conversion, microphone/camera capture, provider URL fetch, or file upload service.
-
-Advice requires a question and one to four exact imported versions, at most
-1 MiB combined, plus current settings/model/destination and explicit media-sharing
-and applicable remote-provider consent. It makes one ADK model attempt under the
-normal run budget and Code timeout, with no tools, retries, memory retrieval,
-compaction or provider caching. Selected byte content contributes to conservative
-input reservations; unavailable usage remains explicitly unknown. Responses are
-private advisory text, never checked project findings or proposals.
-
-See the [attachment API contract](docs/api-contract.md#explicit-multimodal-attachments)
-for routes and guard fields. Imported media and answers use the existing private
-artifact library's inspection, export and deletion controls. Provider-side
-retention follows the operator's chosen service; deleting a local artifact cannot
-retract bytes already sent. Conformance uses fake providers, not a live account.
-
-### Ambient semantic analysis
-
-Ambient analysis is disabled by default. `agent_runtime.triggers` sets ceilings;
-it never enables a watch or permits provider calls. In the main checkout, an
-explicit watch selects one to eight indexed source files for change detection
-or intervals of 60–86400 seconds. Detection alone records suggestions. A separate
-expiring grant confirms sharing the selected sources and filtered project context
-with the current semantic-analysis model and destination. The Bug profile is the
-default; an explicit retained analysis model selection takes precedence.
-
-| Setting | Default | Allowed range |
-| --- | ---: | --- |
-| `poll_seconds` | 2 | 1–60 |
-| `debounce_seconds` | 3 | 1–300 |
-| `quiet_seconds` | 60 | 5–3600 |
-| `window_seconds` | 3600 | 60–86400 |
-| `max_runs` | 4 | 1–16 |
-| `max_model_calls` | 16 | 1–64, at least `max_runs` |
-| `max_input_tokens` | 4194304 | 1024–67108864 |
-| `max_output_tokens` | 262144 | 1024–16777216 |
-| `run_seconds` | 120 | 1–300 |
-| `grant_seconds` | 3600 | 60–86400 |
-
-Run, quiet and debounce durations must fit within the window. Each attempt's
-model/token limits divide the window allowance by `max_runs`, further restricted
-by current agent settings; its duration is capped by `run_seconds`, the grant
-expiry and the remaining window. Each attempt reserves its entire allowance
-durably before dispatch. These conservative charges remain after cache hits,
-failure, cancellation or an uncertain receipt; separately reported usage is not
-a refund. Regranting or restarting never replenishes an open window.
-
-Only future eligible snapshots run, after debounce and quiet periods; unchanged
-sources and missed ticks are not replayed. Active project jobs take priority.
-Disable, revoke, reindex, settings changes, project replacement and shutdown
-cancel and join automatic work. Restart and project replacement leave watches
-inactive until an explicit watch/grant control establishes a fresh baseline.
-Stale destination, configuration, policy or source identity prevents dispatch.
-Persistence failures stop the watcher and require inspection before recovery.
-
-Results use the existing ADK semantic-analysis workflow and remain advisory.
-This feature does not run project commands, Security AI reviews or feature
-generation, and cannot Apply or merge source changes. Task worktrees are excluded.
-See the [ambient API contract](docs/api-contract.md#ambient-semantic-analysis)
-for exact controls, metadata and recovery rules.
-
-### Explicit live sessions
-
-Live advice is disabled by default. Set `agent_runtime.live_model: gemini-3.8-live`
-to enable the conformed Gemini API combination. It uses the Code profile's
-explicit API key and destination, preserving its ordinary completion model.
-Vertex, CLI, compatible HTTP, bearer tokens and ephemeral live credentials are
-not supported for this path. HTTPS and explicit loopback HTTP test/proxy endpoints
-are accepted; ambient proxy configuration, redirects and automatic retries are
-not used. Account access is determined by the provider response.
-
-Opening and reconnecting require explicit connection and applicable remote-provider
-consent. Each send separately confirms sharing either 1–2048 UTF-8 bytes of text
-or one current imported JPEG/raw 16 kHz mono PCM artifact of at most 64 KiB.
-Live input does not convert PNG, PDF or WAV. Interruption and close are explicit
-controls. There is no microphone/camera capture, playback, tool execution, implicit
-project context, source mutation, background reconnect, input replay or provider
-resumption handle.
-
-A session lasts at most five minutes and two connections. Each connection admits
-at most eight send/interrupt controls, 128 KiB outgoing payload, 512 KiB incoming
-payload and 256 received messages. Frames are limited to 128 KiB and retained
-transcript text to 64 KiB. The shared run limits can shorten these bounds.
-Conservative token reservations charge one token per permitted byte plus 16 KiB
-of framing allowance in each direction. Reported partial usage is displayed
-separately; without a final receipt, the reservation remains charged as unknown
-usage. Reconnection retains elapsed time and cumulative charges.
-
-Metadata inspection is passive. Private transcript and raw 24 kHz PCM output
-artifacts become available when a connection ends; inspect/export them through
-the artifact library. A failed output write remains a failure. Reindex, checkout
-replacement, settings changes, cancellation and daemon shutdown close the owned
-session. After a restart, retained active history is interrupted and cannot be
-resumed: a new connection requires a new explicit session. Conformance tests use
-fake WebSockets; live account access and audio quality have not been evaluated.
-See the [live-session contract](docs/api-contract.md#explicit-live-sessions).
 
 ## CLI providers
 
@@ -330,59 +219,6 @@ retain its own conversation records under its normal settings. Application
 retry limits count CLI invocations; upstream retries internal to a CLI or its
 service are outside Mini-Orca's transport accounting.
 
-## Optional cloud copies
-
-`integrations.cloud` defaults to an empty list and accepts up to four explicit
-destinations. Configuration and local previews never authenticate, probe a
-resource or upload history. The running journal, approval checkpoints, curated
-memory and Apply/Undo authority remain local.
-
-Each destination requires `id`, `service` (`vertex_session` or `gcs_artifact`),
-`project` (Google Cloud project number as a string), `region`, `resource`,
-`principal`, `credential_file_env` and `retention_days` (1–365). Vertex resources
-are numeric reasoning-engine IDs; GCS resources are bucket names without paths.
-The region is explicit and regional, such as `us-central1`. Before GCS transfer,
-the adapter checks that the bucket's project number and location match.
-
-The named environment variable contains a path to a service-account JSON file.
-Credentials are read only during an explicitly confirmed operation; its
-`client_email` must match `principal`, and the token endpoint must be Google's.
-User ADC, external-account files and arbitrary token endpoints are not accepted.
-Supply least-privilege permissions for the configured resource. Keep key files
-and local configuration outside version control. Missing or invalid credentials
-produce an uncertain retained receipt; they never trigger credential discovery.
-
-The [cloud-copy API](docs/api-contract.md#cloud-copies) previews selected content
-and requires exact preview identity plus source-sharing consent. Vertex stores a
-completed invocation as a private archive in an ADK session; GCS stores a selected
-immutable artifact as an ADK `copy.json` artifact. Archive envelopes preserve the
-original data and numeric precision. They are not resumable checkpoints. Every
-invocation in the selected workflow must be completed, without approval
-checkpoints. Active or incomplete workflows, in-use artifacts and copies above 4 MiB are
-rejected. Copies include private prompts/tool output or the selected artifact;
-they are distinct from source-free telemetry exports.
-
-Transfers retain local originals and private, source-free receipts. Explicit
-remote Check reconciles a lost outcome; Delete removes the live remote copy.
-Failed or partial operations remain `unknown`, with no automatic upload replay.
-Operations have a one-minute context deadline; GCS permits at most 64 requests
-and Vertex permits at most 16 RPC attempts. SDK background metrics are disabled.
-A receipt lease expires after 90 seconds, allowing explicit crash recovery.
-There are at most 128 retained receipts per checkout. A changed destination must
-be restored to its recorded configuration before remote recovery.
-
-`retention_days` sets the receipt's operator cleanup deadline, not automatic
-deletion or a provider TTL. Inspect and delete expired copies explicitly. Cloud
-soft-delete, object versioning, retention locks, backups and audit retention may
-retain data after a successful live-copy deletion; manage those policies on the
-resource. Remote deletion failure never becomes a successful deletion receipt.
-
-The pinned ADK Go Memory Bank adapter has no deletion or explicit credential
-injection API, so `vertex_memory` is rejected. Curated local memory remains
-available. Vertex-session and GCS paths are covered by fake gRPC/HTTP conformance
-tests; real cloud IAM, resource retention and availability require an operator
-smoke test with their own resources.
-
 ## Agent roles and run limits
 
 `agent_runtime.roles` supplies Creation, Testing and Review profiles when an API
@@ -448,7 +284,8 @@ spans have no measured end time. Browsing reads local data and never exports it;
 ambient `OTEL_*` exporters and resource detection are not enabled.
 
 Optional `agent_runtime.telemetry.export` enables a manual OTLP/HTTP JSON export
-from `:run-export` in task execution. Set `endpoint` to the exact collector URL
+of one invocation's trace through the
+[agent runs API](docs/api-contract.md#agent-invocation-history-and-progress). Set `endpoint` to the exact collector URL
 (normally ending in `/v1/traces`). HTTPS is required except for a literal
 loopback HTTP address. Credentials in URLs, query strings, fragments and
 redirects are rejected. An optional `bearer_env` names one explicit environment
@@ -511,25 +348,15 @@ They are saved privately in the canonical checkout's agent journal and apply to
 future admissions. Budgets can be reduced up to the configured ceilings; role
 choices reference the existing scopes, and skill controls can only disable or
 reenable configured directories. Active runs retain their captured configuration.
-Explicit request model choices and TUI model presets remain authoritative.
+Explicit request model choices remain authoritative.
 Changing operator configuration makes saved overrides stale and requires an
 explicit reset before new work; reset follows current configuration defaults.
-
-In the TUI, Settings has separate Models, Roles & Budgets, and Skills views.
-Use `:agent-settings main` or `:agent-settings task` to explicitly load the main
-checkout or selected task worktree. Opening the views is passive; settings refresh
-reads local metadata without provider discovery. `:agent-role creation code`
-assigns a workflow role; `:agent-budget model_calls 12` reduces a budget within its
-configured ceiling. Both require confirmation before saving. Select a skill and
-press Enter to validate its captured metadata and resource hashes, or `e` to
-confirm enablement/disablement. Validation grants no tools or execution authority.
-Use `:settings-reset` to confirm restoration of configured defaults.
+The Web UI shows the effective roles and budgets in **Settings → Models &
+agents**; skill validation grants no tools or execution authority.
 
 Each checkout has its own settings. New task worktrees use configured budgets and
-skills until explicitly edited. For new tasks, the TUI turns the main checkout's
-role assignments and current model presets into explicit workflow model choices.
-For an existing task worktree, load that task's settings before generating or
-retrying. Remote workflow confirmation lists the selected role destinations and
+skills until explicitly edited. When the Web UI starts agents it turns the
+checkout's role assignments into explicit workflow model choices. Remote workflow confirmation lists the selected role destinations and
 captured paths; changing either invalidates that confirmation. Unknown model
 metadata supplies no remote consent. Canceling a settings request may race a
 completed save: refresh to establish the stored outcome.
@@ -644,7 +471,7 @@ authority are checked before reuse. Cache creation consumes an additional shared
 model-call reservation; cached input still counts toward local context/token
 limits. Failed or uncertain creation is not retried automatically. This does not
 guarantee upstream cost savings or change a provider's implicit caching policy.
-Explicitly cached source and memory may remain remotely retained until the chosen
+Explicitly cached source may remain remotely retained until the chosen
 expiry even after local edits or forgetting; they cannot be reused under stale
 local authority. Adapter behavior is covered by offline HTTP fixtures, not a live
 provider billing benchmark.
@@ -689,8 +516,8 @@ The overall workflow deadline includes the remaining model budgets, check and
 preparation allowances, and up to two repairs when explicitly enabled. It is at
 least 30 minutes and grows with configured limits, subject to the shared
 `agent_runtime.max_elapsed_seconds` cap. To adjust a slow workflow,
-set `workflow_model_seconds`, restart the daemon, and use `:retry test` on the
-saved proposal to reuse Creation. A retry still validates the current source,
+set `workflow_model_seconds`, restart the daemon, and run the agents again on the
+saved task. A retry still validates the current source,
 plan, consent and execution trust.
 
 ## Configuration changes
@@ -736,8 +563,7 @@ uncertain write cannot authorize another provider dispatch or replay Apply.
 After restart, restore a proposal, explicitly trust and rerun its checks, then
 review the current identity before Apply. Existing approval receipts retain
 their identity but do not restore in-memory check authority. An artifact missing
-its original project revision remains locally inspectable/exportable and cannot
-be copied to a cloud destination under an invented current revision.
+its original project revision remains locally inspectable.
 
 Versioned completion results and proposal/check evidence use the adjacent private
 `artifacts.json` catalog. Each version records its SHA-256 hash, byte size, media
@@ -769,202 +595,9 @@ Code profile's context token estimate (four bytes per token), whichever is
 smaller. Source, policy, instructions and project identity are rechecked at
 dispatch and publication; a changed scope stops the investigation.
 
-`integrations.mcp` configures at most eight named MCP servers. Each entry selects
-`streamable_http` with an HTTPS `endpoint` (literal loopback HTTP is permitted),
-or `stdio` with an absolute installed `command` and fixed `args`. HTTP bearer
-authentication uses `bearer_token_env`; stdio `environment` maps child variable
-names to explicit credential variable names. Missing credentials are unavailable,
-never discovered implicitly. Arguments must not contain secrets. Configure one
-to four exact tool names with the operator-owned `effect: read_external`.
-Mutations, filesystem tools and arbitrary command execution are not admitted;
-server annotations cannot change this classification.
-
-Configuration and list views are passive. Explicit discovery approves the exact
-configured endpoint or process and returns an in-memory inventory valid for 15
-minutes. Each plan/declaration investigation separately supplies the current grant,
-schema fingerprint and `confirm_source_sharing: true`. This consent covers that
-investigation's admitted prompt, source, skill and memory context reaching the
-selected server through tool arguments. Provider confirmation is independent.
-At most two integrations can be selected per investigation, within the combined
-16-tool limit for repository, skill and integration tools. Revoke, reindex,
-project replacement and shutdown cancel in-flight connections and discard grants;
-grants are not restored on daemon restart. See the [API contract](docs/api-contract.md)
-for discovery and revocation.
-
-Each discovery/call owns a short-lived native ADK MCP connection, closes it before
-returning, and rechecks the selected inventory before dispatch. Automatic reconnect,
-tool retry, OAuth prompts, roots, sampling and elicitation are disabled. Credential
-changes invalidate grants. Discovery permits four pages, 64 total tools and 64 KiB;
-protocol frames and HTTP responses are capped at 64 KiB. Tool arguments/results use
-the investigation's 16 KiB bounds and shared budgets. Schemas must be inline JSON
-objects without references; results support text or structured objects, not media
-or resource downloads. Incoming schema/result integers must have absolute values
-below 2^53 because the MCP SDK decodes JSON numbers as floating point; represent
-larger identifiers as strings. Validated outbound argument JSON retains its
-original numeric precision. `timeout_seconds` defaults to 30 and accepts 1–60; at most
-16 integration operations may be active in a service.
-
-Stdio runs only the configured installed executable, with no shell interpolation
-or automatic installation. Its private temporary working directory is also HOME
-and TMPDIR; PATH is `/usr/bin:/bin`, and only configured credential references are
-added. Cleanup terminates the owned process group, joins the process and removes
-the directory. This is process ownership, not OS filesystem confinement: approve
-only trusted installed MCP servers and correctly classify their allowed tools.
-External answers remain advisory and cannot supply verified repository citations,
-checks, source writes, Apply or Undo authority.
-
-`integrations.openapi` configures at most eight curated HTTP APIs, with IDs unique
-across MCP, API and A2A entries. Each supplies an indexed project-relative `spec_path`,
-a fixed HTTPS `endpoint` (literal loopback HTTP is permitted), an optional
-`bearer_token_env`, `timeout_seconds` (1–60; default 30), and one to four exact
-`operations: [{name: operationId, effect: read_external}]`. GET operations require
-`read_external`; POST, PUT, PATCH and DELETE require `mutate_external`. Configuration
-owns the destination and credentials; document `servers` and `security` fields
-do not select endpoints or acquire authentication.
-
-API discovery reads the local specification without sending HTTP. It creates a
-15-minute grant using the same explicit discovery/source-sharing controls as MCP.
-The supported subset is OpenAPI 3.0.0–3.0.4 JSON, at most 64 KiB, with inline
-schemas, scalar path/query parameters, optional or required JSON object bodies,
-and one to eight explicit successful JSON object responses or empty 204 responses.
-Path placeholders occupy whole segments. Parameters use `simple` path or `form`
-query serialization; headers, cookies, callbacks, references, polymorphic schemas,
-nullable values, formats, multipart bodies and arbitrary schema extensions are
-rejected for selected operations. Inline schemas support type, object properties,
-required fields, boolean additional-properties policy, array items, enums, patterns
-and numeric/string/collection bounds, with depth 12 and 64 properties per object.
-Schema numeric bounds must be below 2^53 in magnitude; argument JSON preserves
-integer precision. Arguments and results use the shared 16 KiB tool limit.
-
-Mutating tools only save a private candidate containing the exact method, URL and
-body. Explicit approval of its current version/hash claims a durable pending
-receipt before one HTTP attempt. Reads and writes disable redirects, proxies,
-cookies, retries and connection reuse. An uncertain write is recorded as `unknown`;
-pending/unknown receipts block more writes through that operation. Reconciliation
-records the user's externally checked outcome without replaying the request.
-Restart, expiry, changed sources or revocation invalidate candidate authority;
-existing receipts remain readable. Review is bounded to 128 live candidates and
-512 retained receipts per checkout. Receipt and report data is private and may
-contain admitted source text; credentials are excluded.
-
-`integrations.google_search: true` enables a separate explicit research action
-using the Code profile. It requires native Gemini or Vertex and a supported
-text model: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
-`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`,
-`gemini-3.1-pro-preview` or `gemini-3-flash-preview`. Unknown models remain
-unavailable until their capability is verified. Each request separately confirms
-search, source sharing and any remote-provider destination. A question is limited
-to 2048 UTF-8 bytes, with up to eight explicit path/hash selections and a combined
-64 KiB context within the configured Code token estimate. Search never joins
-planning JSON or function tools and does not use provider caching or retries.
-The private report displays validated inline/aggregate citations and the original
-Google Search suggestions in a sandboxed, script-free frame. Search metadata is
-advisory; provider-internal search usage is unknown. One admitted search invocation
-consumes one model-call and one tool-call allowance, independently of unknown
-provider-internal searches. Configuration, report listing and report reads do not
-dispatch provider requests. See the [API contract](docs/api-contract.md).
-
-In the TUI, **Settings / External Work** displays local API action, research and
-delegation history. `:external-scope main` or `:external-scope task` selects the
-checkout; `[r]` refreshes its local receipts. Inspect an API action with Enter,
-then use `:api-approve` to confirm the exact retained request/version/hash once.
-An uncertain outcome requires `:api-reconcile applied|not_applied|other
-<observation>` after checking the external service; it never replays the request.
-
-`:research <question>` captures indexed sources from the current plan (at most
-eight selected read/write paths) and then requests provider/search/source-sharing
-consent. Planned paths with no indexed source are named as unshared in the
-confirmation. Use `:research --question-only <question>` explicitly to send no
-project files. Enter on a retained report, or `:report-open`, opens its guarded
-loopback HTML report in the system browser; listing reports never opens it.
-
-`integrations.a2a` configures up to eight remote agents. Each entry supplies an
-`id`, exact same-origin `card_url` and `endpoint`, optional `bearer_token_env`,
-one to four allowlisted `skills`, and `timeout_seconds` (1–60; default 30).
-URLs require HTTPS or literal loopback HTTP, without query strings, redirects or
-escaped paths. Explicit discovery fetches a bounded card and grants its exact
-fingerprint for 15 minutes. The supported interface is A2A 1.0 JSON-RPC, including
-SSE when advertised. Cards must advertise exactly the configured interface and
-text/plain for selected skills; required extensions are rejected. Icons,
-documentation, extended cards and artifact URLs are never fetched. Credentials
-come only from the configured environment reference. Replacing or revoking a
-grant cancels and joins admitted operations; restart retains no connection grant.
-
-Delegation requires explicit analysis/review intent, a selected advertised skill,
-a question up to 2048 UTF-8 bytes, source-sharing confirmation and up to eight
-current path/hash selections. The combined prompt is bounded by 64 KiB and the
-Code context estimate. Ambient memory, skills and history are excluded.
-Each card/RPC request consumes a tool-call allowance; the total operation uses
-the configured timeout. Remote model/search call counts remain unknown. Optional
-valid ADK token metadata is labelled `remote_reported`, never measured locally.
-
-The private journal saves a message ID and exclusive pending lease before each
-send. Initial sends and input replies are attempted once. A retained task can be
-explicitly refreshed, subscribed to again, or canceled; these never resend a
-message. Input requires unchanged source/card authority and fresh reply consent.
-Cancellation closes local transport and attempts bounded remote cleanup.
-Unknown outcomes and expired pending receipts require explicit recovery; an
-operator can record a user-reported reconciliation without network activity.
-One unfinished delegation per endpoint blocks additional sends, and a checkout
-retains at most 128 receipts. Responses are advisory plain text, at most four
-artifacts and 64 KiB combined. Streams are bounded to 512 KiB and 128 events.
-Partial artifacts, input/auth requests, failure, cancellation and uncertainty
-retain separate states. Remote output cannot grant local permissions, execute
-project code or change source. See the [API contract](docs/api-contract.md).
-
-After discovering a remote connection in the same checkout, use
-`:delegate <remote-id> <analysis|review> <skill> [--question-only] <question>`.
-The TUI captures the selected plan sources before separate destination and sharing
-consent and uses streaming when the reviewed card advertises it. Enter on a remote
-receipt reads its local private detail. Its available controls are
-`:remote-refresh`, `:remote-reconnect`, `:remote-cancel`, `:remote-input <reply>`
-and `:remote-reconcile <observation>`; each requires current receipt review and
-confirmation. Input shares only the explicitly confirmed reply. Reconciliation
-records a user observation locally without requiring a live connection grant.
-`:external-cancel` stops the current local request; refresh history before acting
-again, since a remote task or external effect may still exist.
-
-`integrations.a2a_server` optionally exposes Mini-Orca's native ADK A2A service.
-It is disabled by default. `bind` defaults to `127.0.0.1:9091` and must use a
-literal loopback IP; `timeout_seconds` is 1–120 (default 60), and `max_concurrent`
-is 1–4 (default 2). Configure one to eight `principals`, each with a distinct
-`id`, `bearer_token_env`, fixed `project_id` and `capabilities: [analysis]`,
-`[proposal]` or `[analysis, proposal]`. Tokens must be 32–4096 printable ASCII bytes
-without whitespace; keep them in the referenced environment variables. Reused token
-values across principals are rejected at authentication. No ambient credentials
-or project permissions are inferred from this configuration.
-
-The separate listener publishes only a generic card at
-`/.well-known/agent-card.json` and authenticated JSON-RPC at `/a2a`. Its card
-contains no project IDs, principal configuration, history or source. It reuses
-the daemon's Host/Origin checks and does not expose the development UI or REST
-API. Before any RPC can access a project, explicitly grant its principal access
-through the local `agent-access` controls described in the
-[API contract](docs/api-contract.md). A grant requires source-sharing and the
-applicable provider consent, lasts 15 minutes, and binds the current revision,
-credential and model configuration. Revoke, reindex, replacement and shutdown
-invalidate grants and cancel owned work. Grants belong to the service instance
-owning the listener; a separate worktree service reports it unavailable.
-Opening configuration or a card is passive. TUI access controls are part of the
-planned Settings integration.
-
-Requests carry explicit project/revision identity, a question, one to eight
-current source hashes and applicable per-request provider confirmation. Analysis
-uses the normal investigation workflow; proposal preparation returns a private
-draft identity for local checks and review. Neither operation applies source,
-runs project checks, grants execution trust, or merges work. Payloads are bounded
-to 16 KiB per HTTP request, 8 KiB for the request's text part and 16 KiB of result
-text. At most 16 HTTP requests and the configured number of executions are active
-at once. A process retains at most 128 attempted message IDs/tasks; duplicate
-messages are never dispatched again. A2A task/session history is private and
-process-local. Restart removes it and its grants; normal local run/proposal
-journals remain durable. After an uncertain outcome, inspect those journals
-before issuing any new request. Request disconnection, explicit task cancellation,
-timeout and daemon shutdown terminate owned execution.
-
 Execution trust decisions are private user settings, outside project metadata.
 They are stored in `mini-orca/execution-trust/` under the OS user configuration
 directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`
 can select another absolute, user-controlled directory. Each decision is bound
 to the canonical project path and command scope; copying `.mini-orca/` to another
-checkout does not transfer consent. Use `:trust` to grant or revoke trust.
+checkout does not transfer consent. Grant or revoke trust in **Settings → Trust**.
