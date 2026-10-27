@@ -4,20 +4,21 @@
 import { useState, type ReactNode } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  ArrowLeft, Check, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Upload,
+  ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
 import { useProject, useSession, useTrust } from '@/api/hooks';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
-import { checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
-import { agentRunLabel, reviewVerdict, workflowBlocker } from '@/lib/workflow';
+import { canOverrideReview, checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
+import { activeOverride, agentRunLabel, reviewVerdict, workflowBlocker } from '@/lib/workflow';
 import { basename, isTestPath, plural, shortHash, timeAgo } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Input, Skeleton, Tip, cx } from '@/components/ui';
 import { KindTag, TaskStatusBadge } from '@/components/domain';
 import { FilesChanged } from '@/features/review/FilesChanged';
 import { ChecksPanel } from '@/features/review/ChecksPanel';
 import { TaskOverview } from './TaskOverview';
+import { ApprovalNotes, ApproveWithNotes, OverrideReview } from './ReviewDecision';
 
 export function TaskPage({ id, tab }: { id: string; tab: string }) {
   const route = useRoute();
@@ -77,7 +78,7 @@ function TaskHeader({ session }: { session: LoadedSession }) {
       <div className="grow">
         <h1 className="task-title">{session.title || session.id}</h1>
         <div className="row-wrap task-meta">
-          <TaskStatusBadge entry={session} />
+          <TaskStatusBadge entry={{ ...session, workflow_status: session.workflow?.status }} />
           <KindTag kind={session.kind} />
           {branch ? (
             <span className="chip" title={session.checkout.worktreePath || 'main checkout'}>
@@ -161,9 +162,11 @@ function ReviewRail({ session }: { session: LoadedSession }) {
   const checks = checkSummary(session.checks);
   const workflow = session.workflow;
   const verdict = reviewVerdict(workflow);
+  const overridden = Boolean(activeOverride(workflow, session.hash));
+  const reviewers = overridden ? 'Overridden by you' : verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents';
   const steps: { label: string; done: boolean; active: boolean; detail: ReactNode; onClick?: () => void }[] = [
     { label: 'Agents finished', done: Boolean((session.changes ?? []).length) && !workflowActive(session), active: ready.step === 'agents' || ready.step === 'generate', detail: agentRunLabel(workflow, Boolean((session.changes ?? []).length)) },
-    { label: 'Reviewers', done: verdict === 'approve', active: false, detail: verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents' },
+    { label: 'Reviewers', done: verdict === 'approve' || overridden, active: false, detail: reviewers },
     { label: 'Files viewed', done: ready.filesReviewed, active: ready.step === 'review', detail: `${progress.reviewed} of ${progress.total}`, onClick: () => navigate(`/tasks/${session.id}/files`) },
     { label: 'Checks', done: ready.checksPassed, active: ready.step === 'checks', detail: checks.label, onClick: () => navigate(`/tasks/${session.id}/checks`) },
     { label: 'Your approval', done: Boolean(session.reviewed_hash) && session.reviewed_hash === session.hash, active: ready.step === 'approve', detail: session.reviewed_hash === session.hash && session.hash ? 'This exact version' : 'Not yet' },
@@ -184,7 +187,9 @@ function ReviewRail({ session }: { session: LoadedSession }) {
           ))}
         </ol>
         <p className="xs muted">{ready.message}</p>
+        <ApprovalNotes session={session} />
       </section>
+      {canOverrideReview(session) ? <OverrideReview session={session} /> : null}
       {(session.changes ?? []).length || session.state === 'applied' ? <ApplyBox session={session} /> : null}
       <section className="rail-section">
         <div className="rail-title">Details</div>
@@ -241,9 +246,7 @@ function ApplyBox({ session }: { session: LoadedSession }) {
           </Button>
         </>
       ) : ready.canApprove ? (
-        <Button variant="primary" icon={Check} onClick={() => void actions.approve(session)} disabled={Boolean(busy)} loading={busy === 'Approving…'}>
-          Approve this version
-        </Button>
+        <ApproveWithNotes session={session} />
       ) : (
         <Button variant="primary" icon={Upload} disabled>
           Apply changes

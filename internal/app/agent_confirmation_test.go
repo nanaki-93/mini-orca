@@ -101,7 +101,7 @@ func TestWorkflowInputApprovalAndDuplicateRetainExplicitApplyBoundary(t *testing
 		t.Fatalf("approve: %+v %v", approved, err)
 	}
 	firstReceipt := approved.Workflow.Input.ReceivedAt
-	again, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready))
+	again, err := s.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)})
 	if err != nil || !again.Workflow.Input.ReceivedAt.Equal(firstReceipt) {
 		t.Fatalf("legacy Review duplicated receipt: %+v %v", again, err)
 	}
@@ -141,7 +141,7 @@ func TestWorkflowInputRejectAndCancelStopReviewWithoutDispatch(t *testing.T) {
 			if canHumanReviewProposal(checked) {
 				t.Fatal("rerunning checks bypassed negative human decision")
 			}
-			if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err == nil {
+			if _, err := s.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)}); err == nil {
 				t.Fatal("negative response authorized review")
 			}
 			if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
@@ -185,7 +185,7 @@ func TestWorkflowInputRejectsForgedIdentitySourceAndHistoricalChecks(t *testing.
 
 func TestWorkflowInputRestoreRequiresFreshChecksAndExplicitResponse(t *testing.T) {
 	s, root, ready := readyConfirmation(t)
-	if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err != nil {
+	if _, err := s.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := scopedTestConfig(s.runtimes.bug.profile.APIBaseURL)
@@ -203,7 +203,7 @@ func TestWorkflowInputRestoreRequiresFreshChecksAndExplicitResponse(t *testing.T
 	if _, err := restarted.ApplyChange(t.Context(), ready.ID, ChangeApplyRequest{ChangeIdentity: identityForChange(ready), Confirm: true}); err == nil {
 		t.Fatal("saved receipt restored Apply authority")
 	}
-	if _, err := restarted.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); err == nil {
+	if _, err := restarted.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)}); err == nil {
 		t.Fatal("saved checks restored review authority")
 	}
 	resumed, err := restarted.ResumeChange(t.Context(), ready.ID)
@@ -256,7 +256,7 @@ func TestWorkflowInputJournalStateCannotGrantReview(t *testing.T) {
 	if err := storeChangeSession(root, ready); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ReviewChange(t.Context(), ready.ID, identityForChange(ready)); !errors.Is(err, project.ErrRevisionConflict) {
+	if _, err := s.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)}); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("forged scope accepted: %v", err)
 	}
 }

@@ -80,9 +80,30 @@ export function reviewTask(): ChangeSession {
         { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7) },
         { name: 'human_review', status: 'waiting', started_at: ago(7) },
       ],
-      review: { verdict: 'approve', summary: 'Safe and tested.', findings: [] },
+      review: { proposal_hash: 'sha256:9f2c1a7be4', verdict: 'approve', summary: 'Safe and tested.', findings: [] },
       specialists: [{ id: 'correctness', status: 'completed', evidence: 'model', review: { verdict: 'approve', summary: 'Guard runs first.', findings: [] } }],
       input: { request_id: 'in-1', workflow_id: 'wf-1', status: 'waiting', action: 'approve', expires_at: ago(-60) },
+    },
+  };
+}
+
+/** The same task after the reviewers requested changes: no human input yet. */
+export function rejectedTask(): ChangeSession {
+  const task = reviewTask();
+  const blocking = 'Move the MIME table into its own package.';
+  return {
+    ...task,
+    reviewed_files: task.changes.map(change => change.path),
+    workflow: {
+      ...task.workflow!,
+      status: 'changes_requested',
+      input: undefined,
+      stages: task.workflow!.stages.map(stage => (stage.name === 'human_review' ? { name: stage.name, status: 'blocked' } : stage)),
+      review: { proposal_hash: task.hash, verdict: 'changes_requested', summary: '2 specialist reviews completed; 1 requested changes.', findings: [blocking], notes: ['Consider a table-driven test.'] },
+      specialists: [
+        { id: 'correctness', status: 'completed', evidence: 'model_advice', review: { proposal_hash: task.hash, verdict: 'approve', summary: 'Guard runs first.', findings: [], notes: ['Consider a table-driven test.'] } },
+        { id: 'architecture', status: 'completed', evidence: 'model_advice', review: { proposal_hash: task.hash, verdict: 'changes_requested', summary: 'Package boundary.', findings: [blocking] } },
+      ],
     },
   };
 }

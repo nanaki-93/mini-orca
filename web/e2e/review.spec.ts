@@ -2,6 +2,7 @@
 // apply it, with the review gate tracking each step.
 
 import { expect, test } from './support/daemon';
+import { rejectedTask } from './support/fixtures';
 
 test('reviews, approves and applies a task through the gate', async ({ page, daemon }) => {
   await page.goto('/#/tasks/chg-1');
@@ -53,4 +54,36 @@ test('compares the split and unified diff layouts', async ({ page }) => {
   await expect(diff).toContainText('strings.Contains(name, "/")');
   await page.keyboard.press('s');
   await expect(page.getByRole('button', { name: /unified view/i })).toBeVisible();
+});
+
+test('overrides the reviewers with a reason, then approves with notes', async ({ page, daemon }) => {
+  daemon.sessions.set('chg-1', rejectedTask());
+  await page.goto('/#/tasks/chg-1');
+  const gate = page.getByRole('complementary', { name: 'Review gate' });
+  await expect(gate.getByText('Changes requested')).toBeVisible();
+  await expect(gate.getByRole('button', { name: /approve/i })).toHaveCount(0);
+
+  // Advisory notes are shown apart from blocking findings.
+  await page.getByRole('button', { name: /Correctness/ }).click();
+  await expect(page.getByText('Consider a table-driven test.')).toBeVisible();
+  await expect(page.getByText('1 blocking finding')).toBeVisible();
+
+  await gate.getByRole('button', { name: 'Override reviewers…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Override the reviewers?' });
+  await expect(dialog).toContainText('Move the MIME table into its own package.');
+  await expect(dialog.getByRole('button', { name: 'Override reviewers' })).toBeDisabled();
+  await dialog.getByLabel('Override reason').fill('The MIME table is private to this handler.');
+  await dialog.getByRole('button', { name: 'Override reviewers' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(gate.getByText('Overridden by you')).toBeVisible();
+  await expect(page.getByText('The MIME table is private to this handler.')).toBeVisible();
+  expect(daemon.mutations('/review-override')[0].body).toMatchObject({ revision: 3, hash: 'sha256:9f2c1a7be4', workflow_id: 'wf-1', reason: 'The MIME table is private to this handler.' });
+
+  await gate.getByRole('button', { name: 'Add notes' }).click();
+  await gate.getByLabel('Approval notes').fill('Revisit the package split next sprint.');
+  await gate.getByRole('button', { name: 'Approve with notes' }).click();
+  await expect(page.getByText('Approved this exact version')).toBeVisible();
+  await expect(gate.getByText('Revisit the package split next sprint.')).toBeVisible();
+  expect(daemon.mutations('/review')[0].body).toMatchObject({ hash: 'sha256:9f2c1a7be4', notes: 'Revisit the package split next sprint.' });
+  await expect(gate.getByRole('button', { name: 'Apply & commit' })).toBeEnabled();
 });

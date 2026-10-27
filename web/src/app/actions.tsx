@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
 import type { AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
-import { changeIdentity, proposalReadiness, workflowActive } from '@/lib/readiness';
+import { canOverrideReview, changeIdentity, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
 import { navigate } from '@/lib/router';
 import { plural } from '@/lib/util';
@@ -251,21 +251,37 @@ export function useActions() {
     });
   }
 
-  async function approve(session: LoadedSession) {
-    if (!proposalReadiness(session).canApprove) return;
-    const input = session.workflow?.input;
-    await guarded('Approving…', async () => {
+  /** Approves this exact version; the daemon also answers a waiting workflow input. */
+  async function approve(session: LoadedSession, notes = ''): Promise<boolean> {
+    if (!proposalReadiness(session).canApprove) return false;
+    const result = await guarded('Approving…', async () => {
       try {
-        if (input && input.status === 'waiting') {
-          setSession(await api.post<ChangeSession>(changePath(session, '/workflow/input'), { ...changeIdentity(session), workflow_id: session.workflow!.id, request_id: input.request_id, decision: 'approve' }), session);
-        }
-        const fresh = client.getQueryData<LoadedSession>(keys.session(session.id)) ?? session;
-        setSession(await api.post<ChangeSession>(changePath(fresh, '/review'), changeIdentity(fresh)), fresh);
+        const body = notes.trim() ? { ...changeIdentity(session), notes: notes.trim() } : changeIdentity(session);
+        setSession(await api.post<ChangeSession>(changePath(session, '/review'), body), session);
         toast('Approved this exact version. You can apply it now.', 'success');
+        return true;
       } catch (err) {
         fail('Approval failed', err);
+        return false;
       }
     });
+    return Boolean(result);
+  }
+
+  /** Overrides the reviewers' rejection of this version; it approves nothing. */
+  async function overrideReview(session: LoadedSession, reason: string): Promise<boolean> {
+    if (!canOverrideReview(session) || !reason.trim()) return false;
+    const result = await guarded('Overriding…', async () => {
+      try {
+        setSession(await api.post<ChangeSession>(changePath(session, '/review-override'), { ...changeIdentity(session), workflow_id: session.workflow!.id, reason: reason.trim() }), session);
+        toast('Reviewers overridden. View the files and approve this version to apply it.', 'info');
+        return true;
+      } catch (err) {
+        fail('Could not override the reviewers', err);
+        return false;
+      }
+    });
+    return Boolean(result);
   }
 
   async function reject(session: LoadedSession) {
@@ -483,7 +499,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, approve, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

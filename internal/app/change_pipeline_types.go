@@ -55,11 +55,22 @@ type ChangeWorkflowStage struct {
 	Model      *EffectiveModel `json:"model,omitempty"`
 }
 
+// Findings block approval; notes are advisory and never change the verdict.
 type ChangeWorkflowReview struct {
 	ProposalHash string   `json:"proposal_hash"`
 	Verdict      string   `json:"verdict"`
 	Summary      string   `json:"summary"`
 	Findings     []string `json:"findings"`
+	Notes        []string `json:"notes,omitempty"`
+}
+
+// ChangeWorkflowOverride records a human decision to review a proposal the
+// model reviewers rejected. It binds one proposal hash and grants no approval:
+// the files, checks and explicit approval gates still apply.
+type ChangeWorkflowOverride struct {
+	ProposalHash string    `json:"proposal_hash"`
+	Reason       string    `json:"reason"`
+	At           time.Time `json:"at"`
 }
 
 type ChangeSpecialistReview struct {
@@ -88,6 +99,7 @@ type ChangeWorkflow struct {
 	HarnessLessons     []string                 `json:"harness_lessons,omitempty"`
 	Stages             []ChangeWorkflowStage    `json:"stages"`
 	Review             *ChangeWorkflowReview    `json:"review,omitempty"`
+	Override           *ChangeWorkflowOverride  `json:"override,omitempty"`
 	Specialists        []ChangeSpecialistReview `json:"specialists,omitempty"`
 	StartedAt          time.Time                `json:"started_at"`
 	UpdatedAt          time.Time                `json:"updated_at"`
@@ -157,7 +169,12 @@ func isChangePipelineActive(workflow *ChangeWorkflow) bool {
 
 func canHumanReviewProposal(session *ChangeSession) bool {
 	w := session.Workflow
-	return w == nil || (w.Status == "awaiting_human_review" && inputAllowsReview(w) && w.Review != nil && w.Review.ProposalHash == session.Hash && w.Review.Verdict == "approve" && specialistsComplete(w, session.Hash))
+	return w == nil || (w.Status == "awaiting_human_review" && inputAllowsReview(w) && w.Review != nil && w.Review.ProposalHash == session.Hash && (w.Review.Verdict == "approve" || reviewOverridden(w, session.Hash)) && specialistsComplete(w, session.Hash))
+}
+
+// reviewOverridden reports a human override of the model verdict at hash.
+func reviewOverridden(w *ChangeWorkflow, hash string) bool {
+	return w.Override != nil && w.Override.ProposalHash == hash && w.Review != nil && w.Review.ProposalHash == hash && w.Review.Verdict == "changes_requested"
 }
 
 func invalidateChangeWorkflow(session *ChangeSession, reason string) {
@@ -201,6 +218,22 @@ func validateStoredWorkflow(w *ChangeWorkflow) error {
 	default:
 		return fmt.Errorf("corrupt workflow status")
 	}
+	if err := validateWorkflowStages(w); err != nil {
+		return err
+	}
+	if err := validateWorkflowSpecialists(w); err != nil {
+		return err
+	}
+	if err := validateWorkflowOverride(w); err != nil {
+		return err
+	}
+	if w.Review != nil {
+		return validateWorkflowReview(w.Review)
+	}
+	return nil
+}
+
+func validateWorkflowStages(w *ChangeWorkflow) error {
 	for i, name := range []string{"create", "test", "review", "human_review"} {
 		if w.Stages[i].Name != name {
 			return fmt.Errorf("corrupt workflow stages")
@@ -211,11 +244,18 @@ func validateStoredWorkflow(w *ChangeWorkflow) error {
 			return fmt.Errorf("corrupt workflow model provenance")
 		}
 	}
-	if err := validateWorkflowSpecialists(w); err != nil {
-		return err
+	return nil
+}
+
+// validateWorkflowOverride accepts an override only beside the rejecting
+// review it overrides, at the same proposal hash.
+func validateWorkflowOverride(w *ChangeWorkflow) error {
+	override := w.Override
+	if override == nil {
+		return nil
 	}
-	if w.Review != nil {
-		return validateWorkflowReview(w.Review)
+	if w.Review == nil || w.Review.Verdict != "changes_requested" || override.ProposalHash != w.Review.ProposalHash || !boundedWorkflowText(override.Reason, maxOverrideReason) || override.At.IsZero() {
+		return fmt.Errorf("corrupt workflow review override")
 	}
 	return nil
 }

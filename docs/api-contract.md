@@ -123,6 +123,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/plan` | Save revised task intent and scope before generation. |
 | POST | `/api/projects/current/changes/{sessionID}/review-file` | Record inspection of a changed file for the current hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
+| POST | `/api/projects/current/changes/{sessionID}/review-override` | Override the model reviewers' rejection of the current checked hash with a reason; approves nothing. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
 | POST | `/api/projects/current/changes/{sessionID}/verify` | Explicitly verify the latest applied change with fresh identity and trust. |
@@ -825,9 +826,11 @@ after explicit security intent; performance tasks add performance advice labeled
 Review profile and the same checked proposal, within the shared concurrency and
 call limits. `workflow.specialists` retains each role's state, model provenance,
 evidence label and completed report. Legacy records may omit this field.
-Reports join in canonical role order, deduplicating findings. Each report has at
-most 16 findings; the aggregate has at most 80. A missing, failed or canceled
-reviewer prevents aggregate approval. Parallel cancellation caused by a failed
+Reports join in canonical role order, deduplicating findings and notes. Findings
+are blocking: a report approves exactly when it has none. Optional `notes` are
+advisory suggestions that never change a verdict. Each report has at most 16
+findings and 8 notes; the aggregate has at most 80 and 40. A missing, failed or
+canceled reviewer prevents aggregate approval. Parallel cancellation caused by a failed
 reviewer remains a failed run rather than appearing as a user cancellation.
 
 The testing agent may change only captured test
@@ -843,7 +846,17 @@ check/preparation allowances and enabled automatic repairs. Shared
 stages and retries; exhausted budgets stop dispatch without applying source.
 Failed checks
 stop before review. A reviewer returning `changes_requested` blocks human approval
-until a new run produces a passing proposal and approving review.
+until a new run produces a passing proposal and approving review, or until the
+human overrides that verdict.
+
+`POST /api/projects/current/changes/{sessionID}/review-override` requires
+`ChangeIdentity`, `workflow_id` and a `reason` (1–1024 bytes). It is accepted only
+for a finished workflow in `changes_requested` whose complete specialist verdict
+covers the current hash, with live passing checks and no human input; a human
+rejection cannot be overridden. It records `workflow.override` (`proposal_hash`,
+`reason`, `at`), keeps the model verdict unchanged and moves the workflow to
+`awaiting_human_review`. It approves nothing: viewed files, passing checks and an
+explicit `/review` are still required, and a new proposal or run discards it.
 
 For planned sessions, workflow admission requires `plan_hash` matching the
 captured plan. Approval does not bypass provider consent, execution trust or stale
@@ -897,7 +910,8 @@ may omit `input`.
 or `cancel`). The daemon revalidates captured source, proposal, scope and current
 project/configuration/policy binding. Approval additionally requires live passing
 checks and the existing plan/file review guards. Existing `/review` records the
-same explicit approval receipt. The receipt is durable before native graph resume;
+same explicit approval receipt and accepts optional `notes` (at most 2048 bytes),
+returned as `review_notes`; notes are cleared with the approval. The receipt is durable before native graph resume;
 responses invoke no providers, checks, source writes or Git operations. Apply
 remains a separate explicit action.
 

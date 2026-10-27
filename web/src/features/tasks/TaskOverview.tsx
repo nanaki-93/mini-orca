@@ -2,12 +2,12 @@
 // stage, what reviewers said, and a box to ask for a revision.
 
 import { useState } from 'react';
-import { Bot, CornerDownLeft, FileText, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
+import { Bot, CornerDownLeft, FileText, Gavel, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { proposalReadiness, workflowActive } from '@/lib/readiness';
-import { stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
-import { formatDuration, timeAgo } from '@/lib/util';
+import { activeOverride, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
+import { formatDuration, plural, timeAgo } from '@/lib/util';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { navigate } from '@/lib/router';
@@ -78,6 +78,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
   const actions = useActions();
   const busy = useBusy();
   const ended = ['failed', 'canceled', 'stale', 'outdated', 'interrupted'].includes(workflow.status);
+  const override = activeOverride(workflow, session.hash);
   return (
     <section className="card" aria-label="Agent run">
       <div className="card-head">
@@ -96,6 +97,13 @@ function AgentRun({ session }: { session: LoadedSession }) {
         <div className="card-body">
           <Callout tone={workflow.status === 'canceled' ? 'neutral' : 'danger'} icon={ShieldAlert} title={workflow.status === 'canceled' ? 'Stopped' : 'The run did not finish'}>
             {workflow.reason}
+          </Callout>
+        </div>
+      ) : null}
+      {override ? (
+        <div className="card-body">
+          <Callout tone="info" icon={Gavel} title={`You overrode the reviewers ${timeAgo(override.at)}`}>
+            {override.reason}
           </Callout>
         </div>
       ) : null}
@@ -144,7 +152,8 @@ function Reviewer({ reviewer }: { reviewer: SpecialistView }) {
         <PhaseIcon tone={reviewer.tone} size={14} />
         <span className="strong small">{reviewer.label}</span>
         <Badge tone={verdict.tone}>{verdict.label}</Badge>
-        {reviewer.findings.length ? <span className="xs muted">{reviewer.findings.length} finding{reviewer.findings.length === 1 ? '' : 's'}</span> : null}
+        {reviewer.findings.length ? <span className="xs muted">{plural(reviewer.findings.length, 'blocking finding')}</span> : null}
+        {reviewer.notes.length ? <span className="xs faint">{plural(reviewer.notes.length, 'note')}</span> : null}
         <span className="spacer" />
         <span className="xs faint">{reviewer.evidence === 'unmeasured' ? 'unmeasured advice' : 'model advice'}</span>
       </button>
@@ -158,6 +167,16 @@ function Reviewer({ reviewer }: { reviewer: SpecialistView }) {
                 <li key={i}>{f}</li>
               ))}
             </ul>
+          ) : null}
+          {reviewer.notes.length ? (
+            <>
+              <div className="label-row">Advisory</div>
+              <ul className="findings findings-advisory">
+                {reviewer.notes.map((note, i) => (
+                  <li key={i}>{note}</li>
+                ))}
+              </ul>
+            </>
           ) : null}
         </div>
       ) : null}

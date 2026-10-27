@@ -52,7 +52,8 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	if err != nil {
 		return nil, err
 	}
-	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
+	current.Checks, current.UpdatedAt = checks, time.Now().UTC()
+	revokeApproval(current)
 	current.CheckOptions = request.CheckOptions
 	refreshChangeScopeSuggestions(root, current)
 	if current.Workflow != nil {
@@ -103,10 +104,23 @@ func reconcileManualCheckStages(wf *ChangeWorkflow, hash string, checks []CheckR
 	if len(wf.Stages) > 1 {
 		wf.Stages[1].Status, wf.Stages[1].Reason = "completed", ""
 	}
-	if inputAllowsReview(wf) && wf.Review != nil && wf.Review.ProposalHash == hash && wf.Review.Verdict == "approve" {
-		wf.Status, wf.Reason = "awaiting_human_review", ""
-	}
+	restoreReviewOutcome(wf, hash)
 	return true
+}
+
+// restoreReviewOutcome returns a workflow whose checks pass again to the state
+// its review at hash established: human review after approval or an override,
+// otherwise the reviewers' requested changes that a failed recheck hid.
+func restoreReviewOutcome(wf *ChangeWorkflow, hash string) {
+	if !inputAllowsReview(wf) || wf.Review == nil || wf.Review.ProposalHash != hash {
+		return
+	}
+	switch {
+	case wf.Review.Verdict == "approve" || reviewOverridden(wf, hash):
+		wf.Status, wf.Reason = "awaiting_human_review", ""
+	case wf.Status == "failed" && wf.Input == nil:
+		wf.Status, wf.Reason = "changes_requested", ""
+	}
 }
 
 func markLeadingWorkflowStagesCompleted(wf *ChangeWorkflow) {
@@ -433,16 +447,6 @@ func newChangeTestEdits(session *ChangeSession) []ChangeEdit {
 		}
 	}
 	return result
-}
-
-func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeIdentity) (*ChangeSession, error) {
-	s.changesMu.Lock()
-	defer s.changesMu.Unlock()
-	session, root, err := s.loadChangeForAction(ctx, id, identity)
-	if err != nil {
-		return nil, err
-	}
-	return s.reviewChangeLocked(ctx, root, session)
 }
 
 func (s *Service) RepairChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {

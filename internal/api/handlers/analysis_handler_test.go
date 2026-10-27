@@ -348,7 +348,13 @@ func TestAnalysisHandlerRecoveryRequiresExplicitCompatibleAdmission(t *testing.T
 	if !run.Plan.RecoverIncomplete || run.Features != nil || calls.Load() != 3 {
 		t.Fatalf("recovery run=%+v calls=%d", run, calls.Load())
 	}
-	if recovery := readRecovery(); recovery.State != app.AnalysisRecoveryComplete || recovery.FileCount != 0 || recovery.StageCount != 0 {
+	// The worker publishes the terminal status before it releases the run, and
+	// recovery reports it as running until then.
+	recovery := readRecovery()
+	for deadline := time.Now().Add(10 * time.Second); recovery.State == app.AnalysisRecoveryRunning && time.Now().Before(deadline); recovery = readRecovery() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if recovery.State != app.AnalysisRecoveryComplete || recovery.FileCount != 0 || recovery.StageCount != 0 {
 		t.Fatalf("completed recovery=%+v", recovery)
 	}
 }

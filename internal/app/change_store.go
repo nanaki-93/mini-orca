@@ -76,6 +76,9 @@ func validateStoredChange(session ChangeSession) error {
 	if err := validatePinnedChangeTests(&session); err != nil {
 		return err
 	}
+	if session.ReviewNotes != "" && (session.ReviewedHash == "" || !boundedWorkflowText(session.ReviewNotes, maxApprovalNotes)) {
+		return fmt.Errorf("corrupt approval notes")
+	}
 	return validateStoredWorkflow(session.Workflow)
 }
 

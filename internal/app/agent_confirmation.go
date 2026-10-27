@@ -148,7 +148,7 @@ func (s *Service) respondChangeInputLocked(ctx context.Context, root string, ses
 		return nil, project.ErrRevisionConflict
 	}
 	if request.Decision == "approve" {
-		return s.reviewChangeLocked(ctx, root, session)
+		return s.reviewChangeLocked(ctx, root, session, "")
 	}
 	if request.Decision != "reject" && request.Decision != "cancel" {
 		return nil, fmt.Errorf("decision must be approve, reject or cancel")
@@ -183,7 +183,7 @@ func (s *Service) resolveWorkflowInput(ctx context.Context, root string, session
 	input.ReceivedAt = receipt.ReceivedAt
 	session.Workflow.UpdatedAt, session.UpdatedAt = receipt.ReceivedAt, receipt.ReceivedAt
 	if receipt.Decision != "approve" {
-		session.ReviewedHash = ""
+		revokeApproval(session)
 		delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 		session.Workflow.Stages[3].Status = "blocked"
 		setInputOutcome(session.Workflow, receipt.Decision)
@@ -218,7 +218,7 @@ func (s *Service) validateHumanReview(session *ChangeSession) error {
 	return nil
 }
 
-func (s *Service) reviewChangeLocked(ctx context.Context, root string, session *ChangeSession) (*ChangeSession, error) {
+func (s *Service) reviewChangeLocked(ctx context.Context, root string, session *ChangeSession, notes string) (*ChangeSession, error) {
 	if err := s.validateHumanReview(session); err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (s *Service) reviewChangeLocked(ctx context.Context, root string, session *
 			return nil, fmt.Errorf("review request expired; start a new workflow")
 		}
 	}
-	session.ReviewedHash = session.Hash
+	session.ReviewedHash, session.ReviewNotes = session.Hash, notes
 	if session.Workflow != nil {
 		session.Workflow.Stages[3].Status = "completed"
 	}

@@ -121,7 +121,8 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     result.message = 'Run checks; required checks must pass before approval.';
   } else if (!workflowReady) {
     result.step = 'agents';
-    result.message = session.workflow?.reason || 'The agent workflow has not reached human review.';
+    const rejectedByModel = session.workflow?.status === 'changes_requested' && !session.workflow.input;
+    result.message = session.workflow?.reason || (rejectedByModel ? 'The reviewers requested changes. Run the agents again, or override the reviewers with a reason.' : 'The agent workflow has not reached human review.');
   } else if (!result.canApply) {
     result.step = 'approve';
     result.message = 'Approve this exact version to enable Apply.';
@@ -130,6 +131,17 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     result.message = 'Approved. Apply writes these files to the checkout.';
   }
   return result;
+}
+
+/**
+ * The human may take the last word when the model reviewers rejected the
+ * current version: a finished run, the verdict at this hash, passing checks
+ * and no human decision yet. The daemon re-checks every condition.
+ */
+export function canOverrideReview(session: ChangeSession | null | undefined): boolean {
+  const workflow = session?.workflow;
+  const ready = proposalReadiness(session);
+  return Boolean(workflow) && ready.editable && ready.checksPassed && workflow!.status === 'changes_requested' && !workflow!.input && workflow!.review?.verdict === 'changes_requested' && workflow!.review.proposal_hash === session!.hash;
 }
 
 /** The next unreviewed edit after `current`, wrapping around, or ''. */

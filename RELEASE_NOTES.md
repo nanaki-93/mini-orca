@@ -18,6 +18,10 @@ interface.
   review gate, explained merge availability on Branches, and accurate finding
   source labels. A Playwright suite (`make webui-e2e`) runs the real UI against a
   fake daemon.
+- **Review:** you have the last word. Specialists separate blocking findings
+  from advisory notes, a rejected version can be overridden with a reason
+  (`POST …/review-override`, bound to its hash and approving nothing), and
+  approval accepts notes kept with that approval (`review_notes`).
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

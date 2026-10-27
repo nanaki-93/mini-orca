@@ -110,7 +110,7 @@ func TestPlannedWorkflowResumesCriticAndRequiresCurrentFileReview(t *testing.T) 
 	if ready.Workflow.Stages[2].StartedAt.IsZero() || ready.Workflow.Stages[2].FinishedAt.Before(ready.Workflow.Stages[2].StartedAt) {
 		t.Fatal("missing stage timing")
 	}
-	if _, err := s.ReviewChange(ctx, session.ID, changeIdentity(ready)); err == nil {
+	if _, err := s.ReviewChange(ctx, session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(ready)}); err == nil {
 		t.Fatal("uninspected files authorized apply")
 	}
 	if _, err := s.ReviewChangeFile(ctx, session.ID, ChangeFileReviewRequest{ChangeIdentity: changeIdentity(ready), Path: "main.go"}); err == nil {
@@ -126,7 +126,7 @@ func TestPlannedWorkflowResumesCriticAndRequiresCurrentFileReview(t *testing.T) 
 	if !allChangeFilesReviewed(ready) || ready.LastReviewedHash != ready.Hash {
 		t.Fatal("complete review was not recorded")
 	}
-	if _, err := s.ReviewChange(ctx, session.ID, changeIdentity(ready)); err != nil {
+	if _, err := s.ReviewChange(ctx, session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(ready)}); err != nil {
 		t.Fatal(err)
 	}
 	oldIdentity := changeIdentity(ready)

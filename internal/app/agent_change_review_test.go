@@ -133,7 +133,7 @@ func TestWorkflowSpecialistsShareProposalAndJoinActionableFindings(t *testing.T)
 	if result.Workflow.Status != "changes_requested" || !specialistsComplete(result.Workflow, result.Hash) || len(result.Workflow.Review.Findings) != 1 {
 		t.Fatalf("specialist verdict was lost: %+v", result.Workflow)
 	}
-	if _, err := s.ReviewChange(t.Context(), result.ID, changeIdentity(result)); err == nil {
+	if _, err := s.ReviewChange(t.Context(), result.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(result)}); err == nil {
 		t.Fatal("one approving specialist bypassed a rejecting reviewer")
 	}
 }

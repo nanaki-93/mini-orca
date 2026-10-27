@@ -138,7 +138,17 @@ export interface WorkflowReview {
   proposal_hash?: string;
   verdict: 'approve' | 'changes_requested' | string;
   summary: string;
+  /** Blocking issues: a review approves exactly when there are none. */
   findings: string[];
+  /** Advisory suggestions that never decide the verdict. */
+  notes?: string[];
+}
+
+/** A human override of the reviewers' rejection, bound to one proposal hash. */
+export interface WorkflowOverride {
+  proposal_hash: string;
+  reason: string;
+  at: string;
 }
 
 export interface SpecialistReview {
@@ -167,6 +177,7 @@ export interface ChangeWorkflow {
   auto_repair_attempts?: number;
   stages: WorkflowStage[];
   review?: WorkflowReview;
+  override?: WorkflowOverride;
   specialists?: SpecialistReview[];
   input?: WorkflowInput;
   started_at?: string;
@@ -225,6 +236,7 @@ export interface ChangeSession extends ProjectIdentity {
   messages: ChangeMessage[];
   checks: Check[];
   reviewed_hash?: string;
+  review_notes?: string;
   reviewed_files?: string[];
   file_review_hash?: string;
   last_reviewed_hash?: string;

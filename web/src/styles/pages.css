@@ -881,6 +881,22 @@
   margin-top: 3px;
 }
 
+.findings-advisory {
+  color: var(--muted);
+}
+
+.approval-notes {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.approval-notes .prose {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+
 .messages {
   display: flex;
   flex-direction: column;

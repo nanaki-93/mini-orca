@@ -123,7 +123,7 @@ func (h *ChangeHandler) Checks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ChangeHandler) Review(w http.ResponseWriter, r *http.Request) {
-	var request app.ChangeIdentity
+	var request app.ChangeReviewRequest
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}

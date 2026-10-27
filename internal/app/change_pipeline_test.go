@@ -103,7 +103,7 @@ func TestChangeWorkflowSelectedModelsTestsReviewAndHumanApply(t *testing.T) {
 	if _, err := s.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(session), Confirm: true}); err == nil {
 		t.Fatal("model review authorized Apply without human review")
 	}
-	if _, err := s.ReviewChange(context.Background(), session.ID, changeIdentity(session)); err != nil {
+	if _, err := s.ReviewChange(context.Background(), session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(session)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(session), Confirm: true}); err != nil {
@@ -287,7 +287,7 @@ func TestChangeWorkflowFailuresAndReviewRejectionBlockHumanApply(t *testing.T) {
 					t.Fatal("review dispatched after failed testing")
 				}
 			}
-			if _, err := s.ReviewChange(context.Background(), result.ID, changeIdentity(result)); err == nil {
+			if _, err := s.ReviewChange(context.Background(), result.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(result)}); err == nil {
 				t.Fatal("incomplete/model-rejected workflow allowed human review")
 			}
 			if _, err := s.ApplyChange(context.Background(), result.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(result), Confirm: true}); err == nil {
@@ -562,7 +562,7 @@ func TestChangeWorkflowPassingNewTestBaselineAndDetailedFailureReason(t *testing
 	if err != nil || !requiredChecksPassed(checked.Checks) || checked.Workflow.Stages[1].Status != "completed" || checked.Workflow.Stages[3].Status != "blocked" || checked.Workflow.Review != nil || len(checked.PinnedTests) != 1 {
 		t.Fatalf("repaired workflow checks should complete test stage without fabricating critic review: %+v, err=%v", checked, err)
 	}
-	if _, err := failS.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+	if _, err := failS.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatalf("expected human review to remain blocked until critic review approves the proposal")
 	}
 

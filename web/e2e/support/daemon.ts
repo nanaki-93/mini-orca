@@ -58,7 +58,8 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes$/, body => this.createTask(body)],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/review-file$/, (body, m) => this.update(m[1], body, s => ({ ...s, reviewed_files: [...new Set([...(s.reviewed_files ?? []), String(body.path)])], file_review_hash: s.hash }))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/workflow\/input$/, (body, m) => this.update(m[1], body, s => ({ ...s, workflow: { ...s.workflow!, input: { ...s.workflow!.input!, status: String(body.decision) === 'approve' ? 'answered' : 'rejected' }, status: body.decision === 'approve' ? 'awaiting_human_review' : 'canceled' } }))],
-    [/^\/api\/projects\/current\/changes\/([^/]+)\/review$/, (body, m) => this.update(m[1], body, s => ({ ...s, reviewed_hash: s.hash }))],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/review$/, (body, m) => this.update(m[1], body, s => this.approve(s, body))],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/review-override$/, (body, m) => this.update(m[1], body, s => this.override(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
   ];
@@ -105,6 +106,25 @@ export class FakeDaemon {
     const updated = next(session);
     this.sessions.set(session.id, updated);
     return updated;
+  }
+
+  /** Approval answers a waiting input and keeps the reviewer's notes with this hash. */
+  private approve(s: ChangeSession, body: Record<string, unknown>): ChangeSession {
+    const workflow = s.workflow;
+    if (workflow && workflow.status !== 'awaiting_human_review') throw new Error('The workflow has not reached human review.');
+    const notes = typeof body.notes === 'string' ? body.notes : '';
+    const input = workflow?.input?.status === 'waiting' ? { ...workflow.input, status: 'approved' } : workflow?.input;
+    return { ...s, reviewed_hash: s.hash, review_notes: notes || undefined, workflow: workflow && { ...workflow, input } };
+  }
+
+  /** Only the reviewers' rejection of this exact hash can be overridden, with a reason. */
+  private override(s: ChangeSession, body: Record<string, unknown>): ChangeSession {
+    const workflow = s.workflow;
+    if (!workflow || body.workflow_id !== workflow.id) throw new Error('The workflow changed since it was loaded.');
+    if (workflow.status !== 'changes_requested' || workflow.input || workflow.review?.proposal_hash !== s.hash) throw new Error('Only a proposal the model reviewers rejected can be overridden.');
+    if (typeof body.reason !== 'string' || !body.reason.trim()) throw new Error('Give a reason for overriding the reviewers.');
+    const stages = workflow.stages.map(stage => (stage.name === 'human_review' ? { ...stage, status: 'waiting' } : stage));
+    return { ...s, workflow: { ...workflow, status: 'awaiting_human_review', stages, override: { proposal_hash: s.hash, reason: body.reason.trim(), at: data.ago(0) } } };
   }
 
   private apply(id: string, body: Record<string, unknown>) {

@@ -51,7 +51,8 @@ func (s *Service) UpdateChangePlan(ctx context.Context, id string, request Chang
 	session.LastReviewedChanges, session.ReviewedFiles = nil, nil
 	session.Revision++
 	session.UpdatedAt = time.Now().UTC()
-	session.Workflow, session.Checks, session.ReviewedHash = nil, nil, ""
+	session.Workflow, session.Checks = nil, nil
+	revokeApproval(session)
 	delete(s.changeAuthority, session.ProjectID+"/"+id)
 	return session, storeChangeSession(root, session)
 }

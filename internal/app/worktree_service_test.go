@@ -119,7 +119,7 @@ func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T)
 		}
 	}
 	child, session := children[0], sessions[0]
-	if _, err := child.ReviewChange(context.Background(), session.ID, changeIdentity(session)); err != nil {
+	if _, err := child.ReviewChange(context.Background(), session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(session)}); err != nil {
 		t.Fatal(err)
 	}
 	receipt, err := child.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{

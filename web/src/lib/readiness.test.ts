@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChangeSession, Check, FileChange } from '@/api/types';
-import { checkSummary, effectiveEdits, nextUnreviewedPath, phaseTone, proposalReadiness, reviewProgress, taskStatus, undoFromRecovery } from './readiness';
+import { canOverrideReview, checkSummary, effectiveEdits, nextUnreviewedPath, phaseTone, proposalReadiness, reviewProgress, taskStatus, undoFromRecovery } from './readiness';
 
 function edit(path: string): FileChange {
   return { path, content: '', hash: 'h-' + path, diff: { lines: [] } } as unknown as FileChange;
@@ -41,6 +41,18 @@ describe('proposalReadiness', () => {
     expect(proposalReadiness({ ...base, workflow: { status: 'running' } as ChangeSession['workflow'] }).step).toBe('agents');
     expect(proposalReadiness({ ...base, workflow: { status: 'changes_requested', reason: 'Reviewer asked for tests' } as ChangeSession['workflow'] })).toMatchObject({ step: 'agents', canApply: false, message: 'Reviewer asked for tests' });
     expect(proposalReadiness({ ...base, workflow: { status: 'awaiting_human_review' } as ChangeSession['workflow'] }).canApply).toBe(true);
+  });
+
+  it('offers an override only for the reviewers\' rejection of this exact version', () => {
+    const review = { proposal_hash: 'sha-2', verdict: 'changes_requested', summary: 'No', findings: ['Fix it.'] };
+    const rejected = session({ ...reviewed, checks: [check('tests', 'passed')], workflow: { id: 'w', status: 'changes_requested', stages: [], review } });
+    expect(canOverrideReview(rejected)).toBe(true);
+    expect(canOverrideReview({ ...rejected, hash: 'sha-3' })).toBe(false);
+    expect(canOverrideReview({ ...rejected, checks: [check('tests', 'failed')] })).toBe(false);
+    expect(canOverrideReview({ ...rejected, freshness: 'stale' })).toBe(false);
+    expect(canOverrideReview({ ...rejected, workflow: { ...rejected.workflow!, input: { request_id: 'r', workflow_id: 'w', status: 'rejected', action: 'review_proposal', expires_at: '' } } })).toBe(false);
+    expect(canOverrideReview({ ...rejected, workflow: { ...rejected.workflow!, status: 'awaiting_human_review' } })).toBe(false);
+    expect(proposalReadiness(rejected).message).toMatch(/override the reviewers/);
   });
 
   it('blocks stale proposals and reports undo for applied ones', () => {

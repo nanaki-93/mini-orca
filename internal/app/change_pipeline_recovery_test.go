@@ -45,7 +45,7 @@ func TestChangeWorkflowPersistenceFailureRemainsVisibleAndRestartDoesNotDispatch
 	if err != nil || failed.Workflow.Status != "failed" || !strings.Contains(failed.Workflow.Reason, "could not be saved") {
 		t.Fatalf("storage failure became success: %+v, %v", failed, err)
 	}
-	if _, err := s.ReviewChange(context.Background(), initial.ID, changeIdentity(failed)); err == nil {
+	if _, err := s.ReviewChange(context.Background(), initial.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(failed)}); err == nil {
 		t.Fatal("storage failure authorized review")
 	}
 	// A crash can leave the last admitted record on disk, without an owner.

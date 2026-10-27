@@ -70,7 +70,8 @@ func (s *Service) prepareWorkflowRun(session *ChangeSession, request ChangeWorkf
 	if len(session.Changes) > 0 && (startStage == 2 || !requiredChecksPassed(session.Checks)) {
 		retainedChecks = session.Checks
 	}
-	session.Workflow, session.Checks, session.ReviewedHash, session.PinnedTests = w, retainedChecks, "", nil
+	session.Workflow, session.Checks, session.PinnedTests = w, retainedChecks, nil
+	revokeApproval(session)
 	session.Messages = cleanedMessages
 	session.UpdatedAt = now
 	return w

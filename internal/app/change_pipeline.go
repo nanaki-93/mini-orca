@@ -286,14 +286,15 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	retryMsg := workflowRetryMessage(baseMessage, session.Workflow, session.Checks)
 	session.Messages = stripWorkflowTestMessages(session.Messages)
 	session.Workflow.AutoRepairAttempts = attempt
-	session.Workflow.Review = nil
+	session.Workflow.Review, session.Workflow.Override = nil, nil
 	resetWorkflowSpecialists(session.Workflow)
 	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
 		session.Workflow.Stages[i].Status = "pending"
 		session.Workflow.Stages[i].Reason = ""
 		session.Workflow.Stages[i].StartedAt, session.Workflow.Stages[i].FinishedAt = time.Time{}, time.Time{}
 	}
-	session.ReviewedHash, session.PinnedTests = "", nil
+	session.PinnedTests = nil
+	revokeApproval(session)
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	if err := storeChangeSession(job.root, session); err != nil {
 		return "", err

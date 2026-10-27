@@ -52,6 +52,7 @@ type ChangeSession struct {
 	Checks              []CheckResult           `json:"checks"`
 	CheckOptions        CheckOptions            `json:"check_options"`
 	ReviewedHash        string                  `json:"reviewed_hash,omitempty"`
+	ReviewNotes         string                  `json:"review_notes,omitempty"`
 	RepairAttempts      int                     `json:"repair_attempts"`
 	Workflow            *ChangeWorkflow         `json:"workflow,omitempty"`
 	CreatedAt           time.Time               `json:"created_at"`

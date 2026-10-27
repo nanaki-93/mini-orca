@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -261,7 +262,8 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	}
 	current.Changes = mergeWorkflowTests(current.Changes, testEdits)
 	current.Hash, current.Revision = changeProposalHash(current.Changes), current.Revision+1
-	current.Checks, current.ReviewedHash, current.PinnedTests = []CheckResult{}, "", nil
+	current.Checks, current.PinnedTests = []CheckResult{}, nil
+	revokeApproval(current)
 	now := time.Now().UTC()
 	current.Messages = append(current.Messages, ChangeMessage{Role: "user", Content: message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	current.UpdatedAt = now
@@ -319,16 +321,17 @@ func parseWorkflowReview(output string) (*ChangeWorkflowReview, error) {
 		Verdict  string   `json:"verdict"`
 		Summary  string   `json:"summary"`
 		Findings []string `json:"findings"`
+		Notes    []string `json:"notes"`
 	}
 	decoder := json.NewDecoder(strings.NewReader(output))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&wire); err != nil {
 		return nil, err
 	}
-	if decoder.Decode(new(any)) != io.EOF || wire.Findings == nil || len(wire.Findings) > 16 {
+	if decoder.Decode(new(any)) != io.EOF || wire.Findings == nil || len(wire.Findings) > maxSpecialistFindings || len(wire.Notes) > maxSpecialistNotes {
 		return nil, fmt.Errorf("invalid workflow review response")
 	}
-	review := &ChangeWorkflowReview{Verdict: wire.Verdict, Summary: wire.Summary, Findings: wire.Findings}
+	review := &ChangeWorkflowReview{Verdict: wire.Verdict, Summary: wire.Summary, Findings: wire.Findings, Notes: wire.Notes}
 	return review, validateWorkflowReview(review)
 }
 
@@ -336,19 +339,28 @@ func validateWorkflowReview(review *ChangeWorkflowReview) error {
 	if review.Verdict != "approve" && review.Verdict != "changes_requested" {
 		return fmt.Errorf("invalid workflow review verdict")
 	}
-	if !boundedWorkflowText(review.Summary, 4096) || len(review.Findings) > 80 {
+	limit := len(workflowReviewRoles)
+	if !boundedWorkflowText(review.Summary, 4096) || len(review.Findings) > limit*maxSpecialistFindings || len(review.Notes) > limit*maxSpecialistNotes {
 		return fmt.Errorf("invalid workflow review summary")
 	}
+	// Only blocking findings decide the verdict; advisory notes never do.
 	if (review.Verdict == "approve") != (len(review.Findings) == 0) {
 		return fmt.Errorf("workflow verdict and findings disagree")
 	}
-	for _, finding := range review.Findings {
-		if !boundedWorkflowText(finding, 1024) {
+	for _, item := range slices.Concat(review.Findings, review.Notes) {
+		if !boundedWorkflowText(item, 1024) {
 			return fmt.Errorf("invalid workflow review finding")
 		}
 	}
 	return nil
 }
+
+const (
+	maxSpecialistFindings = 16
+	maxSpecialistNotes    = 8
+	maxOverrideReason     = 1024
+	maxApprovalNotes      = 2048
+)
 
 func boundedWorkflowText(text string, limit int) bool {
 	return strings.TrimSpace(text) != "" && len(text) <= limit && utf8.ValidString(text) && !strings.ContainsRune(text, 0)

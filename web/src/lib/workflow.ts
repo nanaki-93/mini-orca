@@ -64,6 +64,12 @@ export function reviewVerdict(workflow: ChangeWorkflow | undefined): 'approve' |
   return 'pending';
 }
 
+/** The human override of the reviewers' rejection, when it covers this exact hash. */
+export function activeOverride(workflow: ChangeWorkflow | undefined, hash: string | undefined) {
+  const override = workflow?.override;
+  return override && hash && override.proposal_hash === hash && workflow?.review?.proposal_hash === hash ? override : undefined;
+}
+
 const RUN_LABELS: Record<string, string> = {
   queued: 'Queued',
   running: 'Working',
@@ -98,6 +104,7 @@ export interface SpecialistView {
   verdict: string;
   summary: string;
   findings: string[];
+  notes: string[];
   evidence: string;
   reason: string;
   model: string;
@@ -112,6 +119,7 @@ export function workflowSpecialists(workflow: ChangeWorkflow | undefined): Speci
     verdict: item.review?.verdict ?? '',
     summary: item.review?.summary ?? '',
     findings: item.review?.findings ?? [],
+    notes: item.review?.notes ?? [],
     evidence: item.evidence ?? '',
     reason: item.reason ?? '',
     model: item.model?.model ?? '',

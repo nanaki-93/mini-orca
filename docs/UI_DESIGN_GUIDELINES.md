@@ -63,7 +63,8 @@ label everywhere:
 
 Apply is offered only when every condition holds, and the gate lists them in
 this order with their current state: **Agents finished**, **Reviewers** (the
-recorded verdict, else the specialists' verdicts), **Files viewed** (every
+recorded verdict, else the specialists' verdicts; "Overridden by you" after an
+override), **Files viewed** (every
 changed file viewed at the current proposal hash), **Checks** (every required
 check passed) and **Your approval** of this exact version. The gate is derived
 from daemon state; the daemon re-checks every condition when Apply is requested.

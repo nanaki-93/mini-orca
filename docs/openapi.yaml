@@ -329,8 +329,20 @@ paths:
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
-      description: Record diff review for the current checked hash. Planned sessions require each changed file to have been reviewed at this hash.
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
+      description: Record diff review for the current checked hash, with optional reviewer notes kept beside the approval. Planned sessions require each changed file to have been reviewed at this hash. A waiting workflow input is answered as approved.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeReviewRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/review-override:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Override the model reviewers' changes_requested verdict for the current checked hash with a reason. The workflow moves to awaiting_human_review; nothing is approved, and a human rejection cannot be overridden.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeReviewOverride'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
@@ -1255,16 +1267,6 @@ components:
             required_tools: {type: array, items: {type: string, maxLength: 64}}
             manifest: {$ref: '#/components/schemas/AgentSkillFile'}
             resources: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/AgentSkillFile'}}
-    MissionChildOrigin:
-      type: object
-      additionalProperties: false
-      required: [mission_id, execution_id, child_id, plan_hash]
-      properties:
-        mission_id: {type: string}
-        execution_id: {type: string}
-        child_id: {type: string}
-        plan_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
-        revalidation_id: {type: string, description: Exact retained attempt for a fresh candidate; original model history stays in the previous proposal.}
     AgentLimits:
       type: object
       additionalProperties: false
@@ -2435,6 +2437,20 @@ components:
         project_revision: {type: string}
         revision: {type: integer, minimum: 0}
         hash: {type: string}
+    ChangeReviewRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          properties:
+            notes: {type: string, maxLength: 2048, description: Reviewer notes kept with this approval; cleared when the approval is.}
+    ChangeReviewOverride:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [workflow_id, reason]
+          properties:
+            workflow_id: {type: string}
+            reason: {type: string, minLength: 1, maxLength: 1024}
     PlanEvidence:
       type: object
       additionalProperties: false
@@ -2671,7 +2687,8 @@ components:
         proposal_hash: {type: string}
         verdict: {type: string, enum: [approve, changes_requested]}
         summary: {type: string, minLength: 1, maxLength: 4096}
-        findings: {type: array, maxItems: 80, items: {type: string, minLength: 1, maxLength: 1024}}
+        findings: {type: array, maxItems: 80, description: Blocking issues; approve exactly when empty., items: {type: string, minLength: 1, maxLength: 1024}}
+        notes: {type: array, maxItems: 40, description: Advisory suggestions that never decide the verdict., items: {type: string, minLength: 1, maxLength: 1024}}
     ChangeSpecialistReview:
       type: object
       required: [id, status, evidence, model]
@@ -2687,6 +2704,7 @@ components:
             - type: object
               properties:
                 findings: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 1024}}
+                notes: {type: array, maxItems: 8, items: {type: string, minLength: 1, maxLength: 1024}}
     ChangeWorkflow:
       type: object
       required: [id, status, models, stages, started_at, updated_at]
@@ -2718,6 +2736,14 @@ components:
               model: {$ref: '#/components/schemas/ScopedModel'}
         review:
           $ref: '#/components/schemas/ChangeWorkflowReview'
+        override:
+          type: object
+          description: A human override of a changes_requested model verdict, bound to its proposal hash. It grants no approval.
+          required: [proposal_hash, reason, at]
+          properties:
+            proposal_hash: {type: string}
+            reason: {type: string, minLength: 1, maxLength: 1024}
+            at: {type: string, format: date-time}
         specialists:
           type: array
           maxItems: 5
@@ -2729,7 +2755,6 @@ components:
       type: object
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, targets, changes, messages, checks]
       properties:
-        mission_origin: {$ref: '#/components/schemas/MissionChildOrigin'}
         git: {$ref: '#/components/schemas/GitIdentity'}
         commit: {$ref: '#/components/schemas/ChangeCommit'}
         schema_version: {type: integer, enum: [1]}
@@ -2764,6 +2789,7 @@ components:
         checks: {type: array, items: {$ref: '#/components/schemas/ChangeCheckResult'}}
         check_options: {type: object, properties: {run_tests: {type: boolean}, run_lint: {type: boolean}}}
         reviewed_hash: {type: string}
+        review_notes: {type: string, maxLength: 2048, description: Notes given with the approval of reviewed_hash.}
         repair_attempts: {type: integer, maximum: 3}
         workflow: {$ref: '#/components/schemas/ChangeWorkflow'}
         context_manifest: {$ref: '#/components/schemas/ContextManifest'}

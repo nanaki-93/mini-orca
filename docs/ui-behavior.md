@@ -46,10 +46,18 @@ every guard when the action arrives.
   shows only what changed since the last complete review.
 - **Checks.** Running checks needs execution trust and runs in an isolated copy.
   Only required checks gate approval; an optional failure is a warning.
+- **Reviewer findings.** Specialists separate blocking findings from advisory
+  notes; only findings request changes, and notes are shown apart from them.
+- **Override reviewers.** When the reviewers rejected the current version and
+  its checks pass, the human may override them with a reason (up to 1024
+  bytes). The verdict stays on record, the override is shown on the run and
+  binds this exact hash, and the task then waits for the human's own review.
+  Nothing is approved; a human rejection cannot be overridden.
 - **Approve.** Offered when every file is viewed, required checks pass and the
   workflow waits for the human. Approval binds this exact hash and answers a
-  waiting workflow input; it writes nothing. **Reject proposal** ends a waiting
-  workflow after confirmation.
+  waiting workflow input; it writes nothing. Optional notes (up to 2048 bytes)
+  stay with the approval and are cleared with it. **Reject proposal** ends a
+  waiting workflow after confirmation.
 - **Apply.** Writes the approved version to its checkout, optionally followed
   by a commit with the shown message. The confirmation names the destination,
   the branch for a commit, and the running tasks in that checkout that Apply

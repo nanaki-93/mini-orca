@@ -28,7 +28,7 @@ func approveChangeFixture(t *testing.T, service *Service, session *ChangeSession
 	if err != nil || !requiredChecksPassed(checked.Checks) {
 		t.Fatalf("checks: %+v, %v", checked, err)
 	}
-	reviewed, err := service.ReviewChange(context.Background(), session.ID, changeIdentity(checked))
+	reviewed, err := service.ReviewChange(context.Background(), session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestChangeFailedChecksRepairAndApprovalInvalidation(t *testing.T) {
 	if err != nil || requiredChecksPassed(checked.Checks) {
 		t.Fatalf("failed checks lost: %+v, %v", checked, err)
 	}
-	if _, err := service.ReviewChange(context.Background(), session.ID, changeIdentity(checked)); err == nil {
+	if _, err := service.ReviewChange(context.Background(), session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatal("failed checks authorized review")
 	}
 	reply.Store(`{"explanation":"Complete candidate.","changes":[{"path":"new.go","content":"package main\nfunc Ready() {}\n"}]}`)
@@ -118,11 +118,11 @@ func TestReviewChangeAcrossRestartAndDirectHunkEdits(t *testing.T) {
 	if _, err := restarted.ApplyChange(context.Background(), checked.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(checked), Confirm: true}); err == nil {
 		t.Fatal("apply succeeded without review after restart")
 	}
-	reviewed, err := restarted.ReviewChange(context.Background(), checked.ID, changeIdentity(checked))
+	reviewed, err := restarted.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)})
 	if err != nil || reviewed.ReviewedHash != checked.Hash {
 		t.Fatalf("review after restart failed: %+v, %v", reviewed, err)
 	}
-	reviewedAgain, err := restarted.ReviewChange(context.Background(), reviewed.ID, changeIdentity(reviewed))
+	reviewedAgain, err := restarted.ReviewChange(context.Background(), reviewed.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(reviewed)})
 	if err != nil || reviewedAgain.ReviewedHash != reviewed.Hash {
 		t.Fatalf("repeat review failed: %+v, %v", reviewedAgain, err)
 	}
@@ -396,7 +396,7 @@ func TestNonGoRequiredTestsWithoutRunnerAreUnavailableAndBlockVerification(t *te
 	if !testsUnavailable || !baselineUnavailable {
 		t.Fatalf("expected tests and regression baseline checks to be unavailable, got %+v", checked.Checks)
 	}
-	if _, err := service.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+	if _, err := service.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatalf("expected ReviewChange to fail when required tests did not execute")
 	}
 }
@@ -428,7 +428,7 @@ func TestRerunningChecksPreservesCriticRejectionAndBlocksApproval(t *testing.T) 
 	if checked.Workflow.Status != "changes_requested" || checked.Workflow.Review == nil || checked.Workflow.Review.Verdict != "changes_requested" || len(checked.Workflow.Review.Findings) != 1 {
 		t.Fatalf("expected CheckChange to preserve critic rejection and findings, got %+v", checked.Workflow)
 	}
-	if _, err := s.ReviewChange(context.Background(), checked.ID, changeIdentity(checked)); err == nil {
+	if _, err := s.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatalf("expected ReviewChange to remain blocked after rerunning deterministic checks on a critic-rejected proposal")
 	}
 }
