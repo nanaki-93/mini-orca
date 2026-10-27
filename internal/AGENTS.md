@@ -16,8 +16,7 @@ the backend guide for changes to `cmd/`.
   packages (`internal/project/diff`, `internal/project/symbols`, `internal/project/insight`,
   `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`;
   `internal/app/archgate`, `internal/app/sandbox`, `internal/app/changes`,
-  `internal/app/gitops`, `internal/app/features`;
-  `internal/tui/client`, `internal/tui/theme`, `internal/tui/domain`).
+  `internal/app/gitops`, `internal/app/features`).
   Subpackages must respect the acyclic import rules enforced by `internal/app/archgate`.
 - Keep ADK imports in `internal/app/agentruntime`; pass admitted host operations
   into that leaf package. Its parent `app` retains consent, retries, source
@@ -25,9 +24,9 @@ the backend guide for changes to `cmd/`.
   and project facts. Completion compatibility uses one provider call per runner
   invocation, with private session history and no SDK-owned retry loop.
 - For a wire-contract change, update Go request/response types, daemon route
-  registrations, TUI wire models (`internal/tui/client`), `docs/openapi.yaml` and
-  `docs/api-contract.md` as applicable. Cover both successful and rejected requests
-  in handler/client contract tests. Never silently relax guards for convenience.
+  registrations, the Web UI wire types (`web/src/api/types.ts`) and its fake
+  daemon (`web/e2e/support`), `docs/openapi.yaml` and `docs/api-contract.md` as
+  applicable. Cover both successful and rejected requests in handler tests. Never silently relax guards for convenience.
 
 ## Identity, mutation and persistence
 
@@ -75,10 +74,8 @@ the backend guide for changes to `cmd/`.
   production ADK execution and repository tools without opening a checkout.
   Keep negative controls replay-only and independent regression inputs out of
   model prompts. Ordinary validation must never select live evaluation mode.
-- `cmd/agent-worker` explicitly starts authenticated, manifest-bound analysis of
-  request-supplied source. It has no checkout or project-execution authority.
-  `cmd/agent-inspect` reads journal metadata directly; private exports require an
-  exact selection. Neither command constructs the daemon's running service.
+- `cmd/agent-inspect` reads journal metadata directly; private exports require an
+  exact selection. It never constructs the daemon's running service.
 
 ## Verification
 

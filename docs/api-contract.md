@@ -1,17 +1,17 @@
 # Mini-Orca local API contract
 
-**Version:** 4.4.0
+**Version:** 5.0.0
 **Base URL:** `http://localhost:9090`  
 **Content type:** `application/json`
 
-Mini-Orca uses a pure Go TUI client and loopback daemon for one active project.
+Mini-Orca is a loopback daemon serving one active project to its embedded Web UI.
 The shared change workflow captures explicit text paths (up to eight write paths for a planned task),
 prepares versioned proposals, checks them, records diff review and explicitly
 applies them with guarded recovery/Undo.
 Native ADK execution records generation, test generation, verification,
 specialist review and human input separately. Run events, artifacts and model
 verdicts are evidence; they cannot replace current host admission or source
-mutation authority. See [supported capabilities](../README.md#supported-adk-capabilities)
+mutation authority. See [agent capabilities](../README.md#agent-capabilities)
 and [journal migration and recovery](../CONFIG.md#local-metadata-and-manual-cleanup).
 Source and composed diffs stay read-only. The daemon never writes source,
 runs project code, commits or pushes merely because a project or history is opened.
@@ -26,14 +26,16 @@ with the structured error response described below.
 
 ## Local request boundary
 
-The daemon trusts the local TUI client to call its loopback API;
+The daemon trusts local clients of its loopback API;
 it does not provide browser sessions, CORS access, or request authentication.
 With the default loopback bind, requests must use a `Host` of `localhost`,
 `127.0.0.1`, or `::1` (with an optional port). Requests carrying an `Origin`
-header are rejected, and CORS preflight requests receive `403 Forbidden` with
-no CORS response headers. This prevents a web page from treating the daemon as
-a browser API while preserving local TUI requests, which send no
-`Origin` header.
+header are rejected unless that origin is the daemon itself and the request is a
+Web UI call (marker header) or a Web UI asset load; CORS preflight requests
+receive `403 Forbidden` with no CORS response headers. This prevents a web page from treating the daemon as
+a browser API while preserving local tool requests, which send no
+`Origin` header. The embedded Web UI is same-origin and marks every request with
+`X-Mini-Orca-Web-UI: 1`.
 
 `POST` and `PATCH` requests with a body must send `Content-Type:
 application/json` (a charset parameter is permitted); other media types and a
@@ -444,6 +446,14 @@ Their former routes return 404. Use `changes` for checked proposals and grouped
 Apply/Undo, and `analysis/preview`, `analysis/run` and `analysis/run/control` for
 analysis. Read-only declaration explanations remain supported.
 
+Version 5 removed the terminal UI and the features only it exposed: missions,
+live sessions, cloud copies, remote agents and delegations, the inbound agent
+listener, MCP and OpenAPI integrations with their API actions, grounded research,
+ambient triggers, attachments, the artifact library and curated memory. Their
+routes return 404 and their configuration keys fail startup. Agent journals that
+still hold delegation or external-action records open unchanged; those records
+are preserved but no longer used.
+
 Existing shared proposals and unified runs retain their schemas and guards.
 Single-stage journals marked `compatibility_stage` as semantic or performance
 are ignored: opening a project neither resumes them nor grants consent. Their
@@ -657,7 +667,7 @@ A change creation body carries `project_id`, `project_revision`, `kind`
 policies; creation is supported, while deletion is unavailable. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
 
-The TUI supplies a `plan` with `problem`, `evidence`, `approach`, `non_goals`
+The client supplies a `plan` with `problem`, `evidence`, `approach`, `non_goals`
 and optional `read_paths`, plus at least one acceptance criterion. Creation captures
 1–8 write paths and up to 8 distinct existing read-only paths. Read context cannot
 become a write target. `plan.hash` binds the intent, criteria, source, instructions
@@ -700,7 +710,7 @@ suggestions. Response limits are 32 KiB, eight citations, eight assumptions, eig
 suggested paths, sixteen criteria (512 bytes each), and a 4096-byte approach.
 Captured source is capped at 256 KiB; the Code profile's context limit also
 applies. Suggested paths never extend admitted scope. Accepting suggestions in
-the TUI updates the draft only; explicit plan approval is still required before
+the client updates the draft only; explicit plan approval is still required before
 generation.
 
 Legacy API conversations and schema-1 history without `plan` retain their direct
@@ -863,7 +873,7 @@ All selected providers must support streaming at admission; completion-only CLI
 profiles are rejected before dispatch. Partial output remains advisory, bounded
 private detail and cannot become a proposal until the final response validates.
 Attempts, stage `started_at`/`finished_at`, check duration, failure reason and
-repair mode are exposed to the TUI. Timing is diagnostic, not a benchmark.
+repair mode are exposed to clients. Timing is diagnostic, not a benchmark.
 
 Poll the existing guarded session GET for `workflow.status`, ordered `stages`,
 captured model metadata, and the review's `proposal_hash`, `verdict`, `summary`
@@ -924,99 +934,6 @@ project-analysis report schemas remain readable.
 All agent-history reads require the current `project_id` and `project_revision`;
 the existing optional `worktree_path` selects a registered checkout. Unknown or
 duplicate query fields are rejected. Reads are passive and return `no-store`.
-Curated memory uses `/api/projects/current/memory`. GET list/detail require
-`project_id` and `project_revision`; duplicate or unknown query fields are rejected.
-List returns at most 512 records, newest first, with empty `text` and
-`source_status: unchecked`. Detail returns private text and rechecks source hashes
-and context policy (`source_status: current|changed`). `stale` includes revision
-differences and, on detail, changed sources; `expired` remains distinct. These reads
-are passive, use `Cache-Control: no-store`, and never accept or refresh a record.
-
-POST collection requires `action: create`, current project identity, `version: 0`
-and a `draft`. POST detail supports `edit`, `accept`, and `forget`, with the current
-positive `version`. Create/edit require a draft; accept/forget reject a draft.
-A draft contains `kind` (`decision`, `lesson`, `verified_outcome`), `title` (120 UTF-8
-bytes), `text` (2048 UTF-8 bytes), `sources` (1–64 captured path/hash scopes), and
-optional `retention_days` (1–365; default 30). Each scope uses a relative `path`,
-`sha256:` content `hash`, and `start_line`/`end_line` (both zero for the whole file,
-otherwise an inclusive valid range). Excluded paths and changed identities fail.
-Create/edit return a candidate, even when the prior version was accepted. Explicit
-acceptance rechecks current source and provenance and increments the version;
-forget removes the catalog record and returns JSON `null`. Conflicting versions
-return 409, missing/foreign records 404, and unavailable storage 500.
-
-Manual decisions/lessons have `provenance.origin: user`. A retained harness lesson
-instead supplies `session_id`, exact proposal `identity`, and zero-based
-`lesson_index`, with empty text. A verified outcome supplies `session_id` and
-`identity` with empty text and no lesson index; it requires current passing proposal
-check authority. The host derives its text from those check receipts. These records
-retain session/workflow/proposal provenance and must cite captured proposal source.
-Curation never runs checks, sends prompts, changes source, or approves a proposal.
-
-Private atomic storage is limited to 512 records and 8 MiB per checkout. Expired
-records become ineligible immediately and are pruned on a subsequent explicit
-curation write for that project. Forget deletes the catalog entry immediately;
-already produced invocation history and previously sent provider requests are
-separate records. Automatic conversation ingestion is rejected.
-
-ADK memory retrieval returns at most eight relevant accepted records, within the
-workflow's captured file hashes and declaration spans. Partial/inventory-only
-context never grants whole-file advice. Changed source/policy, expired, candidate,
-or out-of-scope records are excluded. Revision-only historical advice is labelled
-stale in model context. Memory is untrusted advisory data, never an instruction,
-permission, or current verification claim. Retrieval consumes a shared tool call;
-its context consumes the model input budget. Selected versions and source authority
-are rechecked immediately before each provider dispatch, including later tool turns.
-Editing or forgetting a selected record blocks further dispatch with the old text.
-
-The artifact library uses `/api/projects/current/artifacts` with the same current
-project/revision and optional registered `worktree_path`. GET lists only artifacts
-with host-recorded project ownership, including retained change evidence and
-research. Arbitrary SDK metadata cannot claim project ownership. Responses include
-`project_id`, current `project_revision`, a catalog `snapshot`, `artifacts`, and
-optional `next_cursor`. `limit` is 1–100 (default 50); cursors are tied to the
-project/revision and exact visible metadata snapshot. A changed snapshot returns
-409 and requires restarting pagination. List/detail reads are passive and no-store.
-
-Each version has an opaque `id`, immutable positive `version`, SHA-256 `hash`
-(64 lowercase hexadecimal characters), name, MIME, byte size, creation time,
-session owner, host provenance, URI and protection flags. `revision_status` is
-`current`, `stale`, or `unknown`; `source_status: unchecked` never claims current
-source validation. `protected` recovery evidence and `in_use` unfinished-run
-references set `can_delete: false`. Arbitrary custom metadata and payloads are
-omitted from the inventory. All versions appear independently.
-
-GET `/{artifactID}` discloses `preview_kind: text|binary|research_report`. Valid
-UTF-8 text and JSON previews contain at most 64 KiB, trimmed at a character boundary
-and labelled `truncated` when needed. Binary payloads remain metadata only.
-Research returns its `report_id` without an answer preview; the explicit research
-HTML route preserves the citations and Search suggestions together.
-
-POST `/{artifactID}/control` requires current `project_id`, `project_revision`,
-`action: export|delete`, exact `version` and `hash`. Unknown fields, including any
-caller-supplied destination, are rejected. Export writes a newly named private
-0600 file under `.mini-orca/exports/artifacts/` in the selected checkout and returns
-`state: exported` with its actual `path`, artifact `id`, version and hash. It never
-targets source or overwrites an earlier export. Delete removes only that catalog
-version and returns `state: deleted` without a path; explicit exported copies
-remain separate. Both serialize against catalog mutations and recheck scope at
-persistence. Deletion also checks recovery protection and unfinished runs under
-the journal lock. Missing/foreign versions return 404, changed selections and
-protected deletion 409, invalid requests 400 and storage failures 500.
-
-The TUI exposes these local APIs through Code / Artifacts and Settings / Memory.
-`:library-scope main|task` selects checkout ownership, and `:library-refresh`
-reloads metadata. Enter explicitly inspects the selected record. Artifact actions
-are `:artifact-export`, `:artifact-delete`, `:artifact-next`, `:artifact-first` and
-`:artifact-report`. Memory actions are `:memory-create` or `:memory-edit` followed
-by `decision|lesson <days> <title> | <text>`, and explicit `:memory-accept`,
-`:memory-reject`, or `:memory-forget`. Reject maps only a candidate to guarded
-forget; forget is exposed separately for accepted advice. `:memory-retain`
-accepts `outcome|lesson:<one-based number> <days> <title>` for the selected exact
-proposal; the daemon derives its text. `:memory-source <one-based number>` opens
-at most 64 KiB of current matching source, with scope/hash checks and an explicit
-truncation label. `:library-hide` closes private previews and `:library-cancel`
-stops owned transport without asserting that an already completed write was undone.
 
 `GET /agent-runs` (under `/api/projects/current`) lists roots newest first, with
 `limit` from 1 to 100 (default 50), an opaque `cursor`, and `next_cursor` when more
@@ -1362,7 +1279,7 @@ Workspace reads add `integration` (`current`, `merged`, `up_to_date`, `behind`,
 `unrelated`) and `overlap_paths` for paths changed on both sides of a divergent
 branch. These are passive comparisons, without merging or running merge drivers.
 Overlap is advisory, not proof of conflict. `merged` includes equal HEADs; it does
-not claim a task was verified. The TUI gives unfinished task states precedence
+not claim a task was verified. The Web UI gives unfinished task states precedence
 over ancestry, so a failed task at the destination's HEAD is shown as `FAILED`.
 Applied, committed work awaiting explicit integration is shown as `TO_MERGE` and
 its linked issues are withheld from the issue lists until merged or rejected.

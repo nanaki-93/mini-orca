@@ -1,7 +1,7 @@
 # Docker deployment
 
-The container runs only the Mini-Orca daemon for the local TUI client. It
-is not a browser IDE or a multi-user service. The daemon is loopback-only by
+The container runs the Mini-Orca daemon, which serves the Web UI at `/ui`. It
+is not a multi-user service. The daemon is loopback-only by
 default. The container binds inside its network namespace so Docker can forward
 the port, while every maintained host mapping is restricted to host loopback.
 
@@ -12,7 +12,7 @@ required model scopes, then build the image:
 
 ```bash
 cp config.example.yaml config.yaml
-docker build -t mini-orca:4.4.0 .
+docker build -t mini-orca:5.0.0 .
 ```
 
 The runtime image contains the static daemon binary plus Alpine's certificate
@@ -27,7 +27,7 @@ docker run --rm --name mini-orca \
   -v "$(pwd)/projects:/app/projects:rw" \
   -e MINI_ORCA_CONFIG=/app/config.yaml \
   -e MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090 \
-  mini-orca:4.4.0
+  mini-orca:5.0.0
 ```
 
 Use a project path inside the mounted `/app/projects` directory. A mounted
@@ -67,7 +67,7 @@ After starting a container, verify both liveness and its runtime contents:
 ```bash
 curl --fail http://localhost:9090/health
 docker inspect --format='{{.State.Health.Status}}' mini-orca
-docker image inspect mini-orca:4.4.0
+docker image inspect mini-orca:5.0.0
 ```
 
 Before release, build the image without cleanup commands and confirm the health

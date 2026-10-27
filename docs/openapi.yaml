@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
   title: Mini-Orca local daemon API
-  version: 4.4.0
+  version: 5.0.0
   description: |
-    Local REST API used by the Mini-Orca TUI client. The daemon is the LLM
+    Local REST API used by the Mini-Orca Web UI. The daemon is the LLM
     boundary. Shared conversations capture up to eight Go/Markdown paths, produce
     checked proposals and require diff review and explicit Apply. Legacy one-file
     declaration APIs remain compatible. Source and diff views are read-only.

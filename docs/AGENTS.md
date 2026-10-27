@@ -7,7 +7,7 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
   and measured evidence from an assumption.
 - Update the existing owner of a fact: root README for setup, `CONFIG.md` and
   `config.example.yaml` for configuration, `api-contract.md`/`openapi.yaml` for the
-  wire contract, [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for the structure and look of both interfaces, and [ui-behavior.md](ui-behavior.md) for TUI workflow behavior. Link instead of duplicating prose.
+  wire contract, [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for the structure and look of the Web UI, and [ui-behavior.md](ui-behavior.md) for workflow behavior. Link instead of duplicating prose.
 - Keep agent instructions short and actionable. Shared rules belong in root
   `AGENTS.md`; area rules belong in the relevant area file and must be linked from
   the root. Update affected instructions when ownership or commands change.
@@ -28,11 +28,11 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
 ## Verification
 
 For prose-only changes, review the diff, run `git diff --check` and verify local
-links, file paths and documented commands. No Go/TUI suite is needed solely
+links, file paths and documented commands. No Go or Web UI suite is needed solely
 for wording changes.
 
 For API route or release-contract documentation changes, run
 `go test ./cmd/daemon -run 'Test(ReleaseDocumentationUsesCanonicalVersion|DocumentedRoutesAreHandledByDaemon)$'`
 and any additional tests for the affected contract. These route tests do not prove
-payload semantics; cover changed fields/errors in handler and TUI client contract tests.
+payload semantics; cover changed fields/errors in handler tests and the Web UI's fake daemon.
 Build-procedure changes require validating the affected procedure when available.
