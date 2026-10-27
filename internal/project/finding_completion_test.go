@@ -142,6 +142,9 @@ func TestFindingCompletionFailurePreservesStoredData(t *testing.T) {
 				t.Fatal(err)
 			}
 			if failure == "write" {
+				if os.Geteuid() == 0 {
+					t.Skip("root ignores directory permissions, so the write failure cannot be induced")
+				}
 				if err := os.Chmod(filepath.Dir(file), 0500); err != nil {
 					t.Fatal(err)
 				}

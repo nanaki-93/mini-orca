@@ -59,9 +59,11 @@ func finishedWorkflow(t *testing.T, s *Service, id string) *ChangeSession {
 	}
 	done := job.done
 	s.changeWorkflow.mu.Unlock()
+	// done is the synchronization; the deadline only guards against a hang and
+	// allows for the race detector's slowdown of real check processes.
 	select {
 	case <-done:
-	case <-time.After(30 * time.Second):
+	case <-time.After(2 * time.Minute):
 		t.Fatal("workflow did not finish")
 	}
 	session, err := s.ChangeSession(context.Background(), id)

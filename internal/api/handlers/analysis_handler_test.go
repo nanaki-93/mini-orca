@@ -475,7 +475,8 @@ func waitHandlerAnalysis(t *testing.T, h *AnalysisHandler, analysis *project.Ana
 	t.Helper()
 	query := url.Values{"project_id": {analysis.ProjectID}, "project_revision": {analysis.ProjectRevision}}
 	var run app.AnalysisRun
-	deadline := time.Now().Add(3 * time.Second)
+	// A hang guard sized for the race detector, not a timing assertion.
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		w := analysisHandlerRequest(t, h.Current, "GET", "/analysis/run?"+query.Encode(), nil)
 		if w.Code != 200 {
