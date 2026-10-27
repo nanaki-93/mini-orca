@@ -76,7 +76,8 @@ untrusted networks.
 | GET | `/api/projects/current/scan` | Read an explicitly started Go scan for `project_revision` from a temporary copied workspace. |
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
-| GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, or change workflows transition state. |
+| GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, reindexing or change workflows change state; workflow events name the task, stage and status and carry the run's usage and estimated cost. |
+| GET | `/api/projects/current/usage` | Total agent model calls, tokens and estimated cost per task in the checkout, plus work not tied to a task. |
 | GET | `/api/projects/current/agent-runs` | Read bounded root invocation history with project/revision guards and pagination. |
 | GET | `/api/projects/current/agent-runs/events` | Replay source-free durable progress or subscribe using SSE and a sequence cursor. |
 | GET | `/api/projects/current/agent-runs/{runID}` | Read invocation hierarchy and retained events; private model text requires `include_text=true`. |
@@ -692,6 +693,23 @@ session records `checks_workspace_hash`, the tree its checks describe. When the
 project changes after checks ran, GET returns `checks_outdated: true`, and
 approval, a review override and Apply are refused until checks run again on the
 current tree; the session itself stays current.
+
+Each `update` event of `/api/projects/current/events` carries a JSON `Event`:
+`kind` (`workflow`, `project_index`, `analysis`, `findings`, `features`,
+`scan`, `agent_settings` or `agent_run`) and, for workflows, `session_id`,
+`workflow_id`, the task `title`, the `stage` that moved (`create`, `test`,
+`review`, `human_review`; empty when the run ended), the workflow `status`, and
+the run's `usage` and `cost` so far. Clients reload only the named task.
+
+A workflow charges what its budget spent to the stage that was running, across
+attempts: each stage of `workflow.stages` has `usage` and, on read, a `cost`
+estimate. `GET /api/projects/current/usage` (with the project guards) totals the
+agent journal per task: runs started for a task, including its manual
+revisions, carry its session ID. Each row has `session_id`, `title`, `kind`,
+`state`, `runs` (top-level runs), `usage` and `cost`; `other` covers analysis,
+explanations and plans, and `total` everything. Costs come from
+`agent_runtime.telemetry.prices`: `status: estimated` with a `total` when every
+rate is known, otherwise `unknown` with the `known_subtotal` and `reasons`.
 
 Line comments are the reviewer's requests on specific lines. `POST
 .../comments` takes `ChangeIdentity`, a changed `path`, `side` (`new` for added

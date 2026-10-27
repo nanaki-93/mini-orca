@@ -33,6 +33,11 @@ every guard when the action arrives.
 - **Watch.** The Conversation shows each stage with its model and duration and
   each specialist's verdict and findings. **Stop agents** asks first and applies
   nothing.
+- **Spend.** Each stage of the agent run shows the tokens it spent and its
+  estimated cost, the task's details show its total, and Settings → Usage
+  lists every task's spend with the total. Estimates come from the daemon's
+  price table; a missing rate shows a lower bound or no cost, never zero. A run
+  that finishes is announced with its spend.
 - **Revise.** A revision request goes to the Code profile (remote consent when
   needed) and creates a new version: earlier view marks, checks and approval no
   longer apply.

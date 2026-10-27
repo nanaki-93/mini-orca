@@ -5,7 +5,9 @@ import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, isTestPath, timeAgo } from './util';
 import { changeOverlaps, parseCommits, workflowBlocker } from './workflow';
-import { parseFrames } from '@/api/events';
+import { applyEvent, finishedRun, parseFrames } from '@/api/events';
+import { QueryClient } from '@tanstack/react-query';
+import { costCaveat, costLabel, formatTokens, usageLabel } from './usage';
 import { createApi, query, withWorktree } from '@/api/client';
 
 describe('fuzzy', () => {
@@ -105,5 +107,38 @@ describe('changeOverlaps', () => {
     expect(changeOverlaps(['web/package.json'], ['web/src/app.tsx'])).toBe(true);
     expect(changeOverlaps(['web/package.json'], ['internal/app/a.go'])).toBe(false);
     expect(changeOverlaps(['README.md'], ['internal/app/a.go'])).toBe(false);
+  });
+});
+
+describe('usage', () => {
+  it('formats tokens, calls and estimated or partial costs', () => {
+    expect([formatTokens(950), formatTokens(1250), formatTokens(20_500), formatTokens(1_250_000)]).toEqual(['950', '1.3k', '21k', '1.3M']);
+    expect(usageLabel({ model_calls: 1, input_tokens: 900, output_tokens: 100 })).toBe('1 call · 1.0k tokens');
+    expect(usageLabel({ model_calls: 0, input_tokens: 0, output_tokens: 0 })).toBe('');
+    expect(costLabel({ status: 'estimated', currency: 'USD', known_subtotal: 0.5, total: 0.5, reasons: [] })).toMatch(/0\.5/);
+    expect(costLabel({ status: 'unknown', currency: 'USD', known_subtotal: 0.25, reasons: ['model_rate_unavailable'] })).toMatch(/^≥ /);
+    expect(costLabel({ status: 'unknown', known_subtotal: 0, reasons: ['price_table_unavailable'] })).toBe('');
+    expect(costCaveat({ status: 'unknown', known_subtotal: 0, reasons: ['price_table_unavailable'] })).toMatch(/telemetry\.prices/);
+  });
+});
+
+describe('daemon events', () => {
+  it('announces finished runs only', () => {
+    expect(finishedRun({ kind: 'workflow', stage: 'test', status: 'running', title: 'T' })).toBeNull();
+    expect(finishedRun({ kind: 'workflow', status: 'canceled', title: 'T' })).toBeNull();
+    expect(finishedRun({ kind: 'workflow', status: 'awaiting_human_review', title: 'T', usage: { model_calls: 2, input_tokens: 1000, output_tokens: 500 } })).toEqual({ message: 'Agents finished “T”. It needs your review.', detail: '2 calls · 1.5k tokens', tone: 'success' });
+  });
+
+  it('reloads only the task a workflow event names', () => {
+    const client = new QueryClient();
+    const invalidated: unknown[] = [];
+    client.invalidateQueries = (filters?: { queryKey?: unknown }) => {
+      invalidated.push(filters?.queryKey);
+      return Promise.resolve();
+    };
+    applyEvent(client, { kind: 'workflow', session_id: 'chg-1' });
+    expect(invalidated).toContainEqual(['session', 'chg-1']);
+    expect(invalidated).not.toContainEqual(['session']);
+    expect(invalidated).toContainEqual(['usage']);
   });
 });

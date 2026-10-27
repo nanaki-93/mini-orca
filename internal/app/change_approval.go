@@ -75,7 +75,7 @@ func (s *Service) OverrideChangeReview(ctx context.Context, id string, request C
 	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
-	s.notifyEvent("workflow")
+	s.notifyWorkflow(ctx, session, "human_review")
 	return session, nil
 }
 

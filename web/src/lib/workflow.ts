@@ -1,7 +1,7 @@
 // Agent workflow presentation and request shaping. Consent is captured per
 // request: every remote destination the run will use is listed and confirmed.
 
-import type { AgentSettings, ChangeWorkflow, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity } from '@/api/types';
+import type { AgentSettings, BudgetUsage, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity } from '@/api/types';
 import { durationBetween } from './util';
 import { phaseTone, type PhaseTone } from './readiness';
 
@@ -37,6 +37,8 @@ export interface StageView {
   model: string;
   durationMs: number;
   startedAt?: string;
+  usage?: BudgetUsage;
+  cost?: CostEstimate;
 }
 
 export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[] {
@@ -50,6 +52,8 @@ export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[
     model: stage.model?.model ?? '',
     durationMs: durationBetween(stage.started_at, stage.finished_at),
     startedAt: stage.started_at,
+    usage: stage.usage,
+    cost: stage.cost,
   }));
 }
 

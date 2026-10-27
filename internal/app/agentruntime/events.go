@@ -206,3 +206,9 @@ func changeNodeMetadata(value any) string {
 func knownProgressNode(name string) bool {
 	return knownAnalysisNode(name) || knownKnowledgeNode(name) || slices.Contains([]string{"create", "generate_tests", "verify", "review", "human_review", "review_correctness", "review_architecture", "review_test_quality", "review_security", "review_performance", "join_reviews", "review_result", "attempt_0", "attempt_1", "attempt_2", "completion", "agent"}, name)
 }
+
+// WithChangeScope attributes the runs started under ctx to a change task, as
+// a workflow does for its own runs; workflowID names the run of that task.
+func WithChangeScope(ctx context.Context, sessionID, workflowID string) context.Context {
+	return context.WithValue(ctx, changeScopeKey{}, changeRunScope{sessionID, workflowID})
+}

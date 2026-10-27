@@ -886,6 +886,17 @@ mark {
   cursor: pointer;
 }
 
+.table .num {
+  width: 92px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table tfoot td {
+  border-bottom: 0;
+  font-weight: 500;
+}
+
 .table-row:hover td {
   background: var(--hover);
 }

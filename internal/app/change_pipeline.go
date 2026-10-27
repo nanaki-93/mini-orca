@@ -313,6 +313,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	retryMsg := workflowRetryMessage(baseMessage, session.Workflow, session.Checks)
 	session.Messages = stripWorkflowTestMessages(session.Messages)
 	session.Workflow.AutoRepairAttempts = attempt
+	chargeWorkflowStage(ctx, job, session.Workflow)
 	session.Workflow.Review, session.Workflow.Override = nil, nil
 	resetWorkflowSpecialists(session.Workflow)
 	for i := 0; i < 3 && i < len(session.Workflow.Stages); i++ {
@@ -326,7 +327,7 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	if err := storeChangeSession(job.root, session); err != nil {
 		return "", err
 	}
-	s.notifyEvent("workflow")
+	s.notifyWorkflow(ctx, session, "create")
 	return retryMsg, nil
 }
 
@@ -344,6 +345,7 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 	if err != nil {
 		return nil, err
 	}
+	chargeWorkflowStage(ctx, job, session.Workflow)
 	if stage > 0 {
 		completeWorkflowStage(&session.Workflow.Stages[stage-1], time.Now().UTC())
 	}
@@ -352,7 +354,7 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 	session.Workflow.Stages[stage].Reason = ""
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 	err = storeChangeSession(job.root, session)
-	s.notifyEvent("workflow")
+	s.notifyWorkflow(ctx, session, session.Workflow.Stages[stage].Name)
 	return session, err
 }
 
@@ -362,6 +364,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 	session, err := loadChangeSession(job.root, job.sessionID)
 	if err == nil && session.Workflow != nil && session.Workflow.ID == job.id {
 		w := session.Workflow
+		chargeWorkflowStage(ctx, job, w)
 		finishWorkflowStageTiming(w, time.Now().UTC())
 		if runErr == nil {
 			runErr = s.verifyChangeCurrent(ctx, job.root, session)
@@ -395,7 +398,11 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 	if err != nil {
 		job.failure = "Workflow progress could not be saved. Restore the conversation and run again."
 	}
-	s.notifyEvent("workflow")
+	if session != nil {
+		s.notifyWorkflow(ctx, session, "")
+	} else {
+		s.notifyEvent("workflow")
+	}
 }
 
 func workflowFailure(err error, checks []CheckResult) (string, string) {

@@ -4,7 +4,7 @@
 // mutation must carry the Web UI header and the current proposal identity.
 
 import { test as base, expect, type Page, type Route } from '@playwright/test';
-import type { ChangeSession } from '../../src/api/types';
+import type { ChangeSession, DaemonEvent } from '../../src/api/types';
 import * as data from './fixtures';
 
 export interface RecordedRequest {
@@ -20,6 +20,15 @@ export class FakeDaemon {
   readonly sessions = new Map<string, ChangeSession>([['chg-1', data.reviewTask()]]);
   private nextId = 100;
   private readonly overrides = new Map<string, () => unknown>();
+  private readonly pending: DaemonEvent[] = [];
+
+  /**
+   * Adds a live update to every event-stream connection: the fake cannot keep
+   * a stream open, and development mode opens the first connection twice.
+   */
+  push(event: DaemonEvent): void {
+    this.pending.push(event);
+  }
 
   /** Replaces a GET route's response for this test. */
   serve(path: string, respond: () => unknown): void {
@@ -51,6 +60,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
     [/^\/api\/projects\/current\/overview$/, () => data.overview],
     [/^\/api\/projects\/current\/agent-settings$/, () => ({ ...data.project, state: 'ready', roles: { creation: 'bug', testing: 'code', review: 'analyze' } })],
+    [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
     [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'go', line_count: 3, content: data.fileSource })],
   ];
 
@@ -75,7 +85,8 @@ export class FakeDaemon {
     this.requests.push({ method, path: url.pathname, body });
 
     if (url.pathname.endsWith('/events')) {
-      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' });
+      const frames = this.pending.map(event => `event: update\ndata: ${JSON.stringify(event)}\n\n`).join('');
+      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\n' + frames });
     }
     if (request.headers()['x-mini-orca-web-ui'] !== '1') {
       return json(route, 403, { user_message: 'Missing the Web UI request marker.' });

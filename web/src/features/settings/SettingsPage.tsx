@@ -1,13 +1,15 @@
 // Settings: project, trust, models and agents, analysis, appearance.
 
-import { Bot, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
-import { useAgentSettings, useModels, useOverview, useProject, useStatus, useTrust } from '@/api/hooks';
+import { Bot, Coins, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
+import { useAgentSettings, useModels, useOverview, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
+import type { UsageTotal } from '@/api/types';
+import { costCaveat, costLabel, formatTokens } from '@/lib/usage';
 import { useActions, useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { setUI, useUI, type Theme } from '@/app/store';
 import { navigate } from '@/lib/router';
 import { plural, timeAgo } from '@/lib/util';
-import { Badge, Button, Segmented, cx } from '@/components/ui';
+import { Badge, Button, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
 import { OpenProject } from './OpenProject';
 
 const SECTIONS = [
@@ -15,6 +17,7 @@ const SECTIONS = [
   { id: 'trust', label: 'Trust', icon: ShieldCheck },
   { id: 'models', label: 'Models & agents', icon: Bot },
   { id: 'analysis', label: 'Analysis', icon: Sparkles },
+  { id: 'usage', label: 'Usage', icon: Coins },
   { id: 'appearance', label: 'Appearance', icon: Palette },
 ];
 
@@ -33,10 +36,85 @@ export function SettingsPage({ section }: { section: string }) {
       </nav>
       <div className="docs-body page-scroll">
         <div className="page-inner page-narrow stack-lg">
-          {current === 'project' ? <ProjectSettings /> : current === 'trust' ? <TrustSettings /> : current === 'models' ? <ModelSettings /> : current === 'analysis' ? <AnalysisSettings /> : <Appearance />}
+          <SettingsSection id={current} />
         </div>
       </div>
     </div>
+  );
+}
+
+function SettingsSection({ id }: { id: string }) {
+  switch (id) {
+    case 'project':
+      return <ProjectSettings />;
+    case 'trust':
+      return <TrustSettings />;
+    case 'models':
+      return <ModelSettings />;
+    case 'analysis':
+      return <AnalysisSettings />;
+    case 'usage':
+      return <UsageSettings />;
+    default:
+      return <Appearance />;
+  }
+}
+
+/** What agents spent per task, with what is not tied to a task and the total. */
+function UsageSettings() {
+  const { data: report, isLoading } = useUsage();
+  const caveat = costCaveat(report?.total.cost);
+  return (
+    <>
+      <h1 className="page-title">Usage</h1>
+      <p className="muted">Model calls and tokens agents spent in this checkout, from the agent journal. Costs are estimates from the price table in the daemon's configuration.</p>
+      {isLoading ? (
+        <Skeleton lines={4} />
+      ) : !report || !report.total.usage.model_calls ? (
+        <EmptyState icon={Coins} title="No agent usage yet">Agent runs, revisions and analysis record what they spend here.</EmptyState>
+      ) : (
+        <div className="card">
+          <table className="table" aria-label="Usage by task">
+            <thead>
+              <tr><th>Task</th><th className="num">Runs</th><th className="num">Calls</th><th className="num">Tokens in</th><th className="num">Tokens out</th><th className="num">Cost</th></tr>
+            </thead>
+            <tbody>
+              {report.tasks.map(task => (
+                <tr key={task.session_id} className="table-row" onClick={() => navigate(`/tasks/${task.session_id}`)}>
+                  <td className="truncate" title={task.title}>{task.title}</td>
+                  <UsageCells total={task} />
+                </tr>
+              ))}
+              {report.other.usage.model_calls ? (
+                <tr>
+                  <td className="muted">Other agent work (analysis, explanations, plans)</td>
+                  <UsageCells total={report.other} />
+                </tr>
+              ) : null}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td className="strong">Total</td>
+                <UsageCells total={report.total} />
+              </tr>
+            </tfoot>
+          </table>
+          {caveat ? <div className="card-foot xs muted">{caveat}</div> : null}
+        </div>
+      )}
+    </>
+  );
+}
+
+function UsageCells({ total }: { total: UsageTotal }) {
+  return (
+    <>
+      <td className="num">{total.runs}</td>
+      <td className="num">{total.usage.model_calls}</td>
+      <td className="num">{formatTokens(total.usage.input_tokens)}</td>
+      <td className="num">{formatTokens(total.usage.output_tokens)}</td>
+      <td className="num">{costLabel(total.cost) || '—'}</td>
+    </>
   );
 }
 

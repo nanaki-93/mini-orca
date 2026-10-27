@@ -32,6 +32,11 @@ interface.
 - **Line comments:** comment on any line of a changed file; open comments go
   to the agents as one structured repair brief with the next revision or run
   (`include_comments`) and stay as history once sent.
+- **Usage:** each workflow stage records what it spent, the task page shows
+  per-stage and per-task tokens and estimated cost, and Settings → Usage lists
+  spend per task (`GET /api/projects/current/usage`). Live events now name
+  the task, stage, status and spend, refresh only that task, announce finished
+  runs, and reindexing is published.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

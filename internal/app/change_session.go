@@ -203,6 +203,7 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 		}
 	}
 	s.restoreChangeWorkflow(session)
+	s.estimateStageCosts(session)
 	return session, nil
 }
 
@@ -416,7 +417,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		return nil, err
 	}
 	stageZeroWorkflow := ctx.Value(changeWorkflowContextKey{}) != nil
-	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
+	timed, cancel := context.WithTimeout(revisionScope(ctx, session), duration(runtime.effective.Timeout))
 	defer cancel()
 	prepared, err := s.prepareChangeContext(timed, root, session, request.Message, runtime, stageZeroWorkflow)
 	if err != nil {

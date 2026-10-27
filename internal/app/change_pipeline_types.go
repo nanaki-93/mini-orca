@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 )
 
 // Workflow choices reference catalog models or configured profiles; credentials
@@ -55,6 +57,9 @@ type ChangeWorkflowStage struct {
 	Status     string          `json:"status"`
 	Reason     string          `json:"reason,omitempty"`
 	Model      *EffectiveModel `json:"model,omitempty"`
+	// Usage is what the stage spent across attempts; Cost is estimated on read.
+	Usage *agentstate.BudgetUsage `json:"usage,omitempty"`
+	Cost  *AgentCostEstimate      `json:"cost,omitempty"`
 }
 
 // Findings block approval; notes are advisory and never change the verdict.
@@ -120,6 +125,8 @@ type changeWorkflowJob struct {
 	done                chan struct{}
 	finished            bool
 	failure             string
+	// spent is the run's budget usage already charged to its stages.
+	spent agentstate.BudgetUsage
 }
 
 // The controller tracks active workflow workers per change session. Session/proposal

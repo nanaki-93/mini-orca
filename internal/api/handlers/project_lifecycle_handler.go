@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -193,8 +194,12 @@ func (h *ProjectHandler) Events(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case kind := <-ch:
-			_, _ = w.Write([]byte("event: update\ndata: {\"kind\":\"" + kind + "\"}\n\n"))
+		case event := <-ch:
+			data, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			_, _ = w.Write([]byte("event: update\ndata: " + string(data) + "\n\n"))
 			flusher.Flush()
 		case <-ticker.C:
 			_, _ = w.Write([]byte(": heartbeat\n\n"))

@@ -1,26 +1,47 @@
 // Live updates. The daemon streams `update` events whose kind names what
-// changed; each kind invalidates the queries that depend on it. The stream is
-// read with fetch so it carries the Web UI header like every other request.
+// changed; each kind invalidates the queries that depend on it, and workflow
+// events name their task so only it reloads. A finished run is announced. The
+// stream is read with fetch so it carries the Web UI header like every request.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import type { DaemonEvent } from './types';
+import { useFeedback } from '@/components/overlays';
+import { costLabel, usageLabel } from '@/lib/usage';
 
 export type Connection = 'connecting' | 'live' | 'offline';
 
 const INVALIDATES: Record<string, string[][]> = {
-  workflow: [['session'], ['changes'], ['git']],
-  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file']],
+  workflow: [['session'], ['changes'], ['git'], ['usage']],
+  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['usage']],
   findings: [['findings'], ['overview']],
-  analysis: [['overview'], ['findings']],
+  analysis: [['overview'], ['findings'], ['usage']],
   features: [['overview']],
   scan: [['scan']],
   agent_settings: [['settings']],
-  missions: [['changes'], ['git']],
-  agent_run: [['session']],
+  agent_run: [['session'], ['usage']],
 };
 
-export function applyEvent(client: QueryClient, kind: string): void {
-  for (const key of INVALIDATES[kind] ?? []) void client.invalidateQueries({ queryKey: key });
+export function applyEvent(client: QueryClient, event: DaemonEvent): void {
+  for (const key of INVALIDATES[event.kind] ?? []) {
+    const scoped = key[0] === 'session' && event.kind === 'workflow' && event.session_id ? ['session', event.session_id] : key;
+    void client.invalidateQueries({ queryKey: scoped });
+  }
+}
+
+const FINISHED: Record<string, { message: string; tone: 'success' | 'warning' | 'danger' | 'info' }> = {
+  awaiting_human_review: { message: 'Agents finished “%”. It needs your review.', tone: 'success' },
+  changes_requested: { message: 'Reviewers requested changes on “%”.', tone: 'warning' },
+  failed: { message: 'The agent run on “%” failed.', tone: 'danger' },
+  stale: { message: '“%” is out of date; its run stopped.', tone: 'warning' },
+};
+
+/** The announcement for a workflow run that just ended, if it deserves one. */
+export function finishedRun(event: DaemonEvent): { message: string; detail: string; tone: 'success' | 'warning' | 'danger' | 'info' } | null {
+  const finished = event.kind === 'workflow' && !event.stage ? FINISHED[event.status ?? ''] : undefined;
+  if (!finished) return null;
+  const detail = [usageLabel(event.usage), costLabel(event.cost)].filter(Boolean).join(' · ');
+  return { message: finished.message.replace('%', event.title || 'a task'), detail, tone: finished.tone };
 }
 
 /** Parses complete SSE frames from `buffer`; returns the unparsed tail. */
@@ -41,6 +62,9 @@ export function parseFrames(buffer: string, onEvent: (event: string, data: strin
 
 export function useDaemonEvents(): Connection {
   const client = useQueryClient();
+  const { toast } = useFeedback();
+  const announce = useRef(toast);
+  announce.current = toast;
   const [connection, setConnection] = useState<Connection>('connecting');
   useEffect(() => {
     let stopped = false;
@@ -65,11 +89,15 @@ export function useDaemonEvents(): Connection {
             if (done) break;
             buffer = parseFrames(buffer + decoder.decode(value, { stream: true }), (event, data) => {
               if (event !== 'update') return;
+              let parsed: DaemonEvent;
               try {
-                applyEvent(client, (JSON.parse(data) as { kind: string }).kind);
+                parsed = JSON.parse(data) as DaemonEvent;
               } catch {
-                // A malformed frame carries no actionable kind.
+                return; // A malformed frame carries no actionable kind.
               }
+              applyEvent(client, parsed);
+              const ended = finishedRun(parsed);
+              if (ended) announce.current(ended.message, ended.tone, ended.detail || undefined);
             });
           }
         } catch {

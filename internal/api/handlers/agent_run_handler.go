@@ -157,7 +157,7 @@ func (h *AgentRunHandler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func drainAgentUpdates(updates <-chan string) {
+func drainAgentUpdates(updates <-chan app.Event) {
 	for range 16 {
 		select {
 		case <-updates:

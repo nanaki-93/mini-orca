@@ -22,6 +22,7 @@ func (s *Service) reindexActiveProject(reason string) (*project.ProjectIndex, er
 		s.refreshAnalysisRunAfterReindex()
 	}
 	s.stopAffectedChangeWorkflows(reason)
+	s.notifyEvent("project_index")
 	return index, err
 }
 

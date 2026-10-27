@@ -42,7 +42,7 @@ this document owns how the interface is organized, looks and responds.
 | **Issues** | `g i` | Findings with status and severity filters; the selected finding's problem, evidence, source and fix. |
 | **Docs** | `g d` | The handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
 | **Branches** | `g b` | The main checkout and agent worktrees with their tasks, integration state, merge preview and merge. |
-| **Settings** | `g s` | Project, trust, models and agents, analysis, appearance. |
+| **Settings** | `g s` | Project, trust, models and agents, analysis, usage, appearance. |
 
 ### Task status
 

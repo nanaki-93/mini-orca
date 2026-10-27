@@ -8,6 +8,7 @@ import { useActions, useBusy } from '@/app/actions';
 import { openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { activeOverride, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
 import { formatDuration, plural, timeAgo } from '@/lib/util';
+import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { navigate } from '@/lib/router';
@@ -128,6 +129,11 @@ function Stage({ stage, specialists }: { stage: StageView; specialists: Speciali
           <span className="xs muted">{stage.actor}</span>
           <span className="spacer" />
           {stage.model ? <span className="xs faint mono">{stage.model}</span> : null}
+          {stage.usage?.model_calls ? (
+            <span className="xs faint nowrap" title={`${usageLabel(stage.usage)}${costCaveat(stage.cost) ? ` — ${costCaveat(stage.cost)}` : ''}`}>
+              {[`${formatTokens(stage.usage.input_tokens + stage.usage.output_tokens)} tokens`, costLabel(stage.cost)].filter(Boolean).join(' · ')}
+            </span>
+          ) : null}
           <span className="xs faint nowrap">{stage.durationMs ? formatDuration(stage.durationMs) : stageStatusLabel(stage)}</span>
         </div>
         {stage.reason ? <p className="small muted">{stage.reason}</p> : null}

@@ -220,7 +220,7 @@ func (s *Service) publishSpecialistReview(ctx context.Context, job *changeWorkfl
 	if err := storeChangeSession(job.root, current); err != nil {
 		return err
 	}
-	s.notifyEvent("workflow")
+	s.notifyWorkflow(ctx, current, "review")
 	return nil
 }
 

@@ -895,14 +895,25 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
-      summary: Stream Server-Sent Events (SSE) for project analysis, scan, and workflow progress
+      summary: Stream Server-Sent Events (SSE) for project analysis, scan, reindex and workflow progress
       responses:
         '200':
-          description: Server-Sent Events stream of ready and update notifications.
+          description: Server-Sent Events stream of ready and update notifications; each update's data is an Event.
           content:
             text/event-stream:
               schema:
                 type: string
+  /api/projects/current/usage:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: query, name: project_id, required: true, schema: {type: string}}
+      - {in: query, name: project_revision, required: true, schema: {type: string}}
+    get:
+      tags: [Chat]
+      summary: Agent usage and estimated cost per task
+      responses:
+        '200': {description: Usage per task, other work and the total, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeUsageReport'}}}}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/execution-trust:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2467,6 +2478,48 @@ components:
         - type: object
           properties:
             notes: {type: string, maxLength: 2048, description: Reviewer notes kept with this approval; cleared when the approval is.}
+    Event:
+      type: object
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [workflow, project_index, analysis, findings, features, scan, agent_settings, agent_run]}
+        session_id: {type: string}
+        workflow_id: {type: string}
+        title: {type: string}
+        stage: {type: string, enum: [create, test, review, human_review, '']}
+        status: {type: string}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+        cost: {$ref: '#/components/schemas/AgentCostEstimate'}
+    UsageTotal:
+      type: object
+      required: [runs, usage, cost]
+      properties:
+        runs: {type: integer}
+        usage: {$ref: '#/components/schemas/AgentUsage'}
+        cost: {$ref: '#/components/schemas/AgentCostEstimate'}
+    ChangeUsageReport:
+      type: object
+      required: [project_id, project_revision, tasks, other, total]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        currency: {type: string}
+        price_version: {type: string}
+        tasks:
+          type: array
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/UsageTotal'}
+              - type: object
+                required: [session_id, title, updated_at]
+                properties:
+                  session_id: {type: string}
+                  title: {type: string}
+                  kind: {type: string}
+                  state: {type: string}
+                  updated_at: {type: string, format: date-time}
+        other: {$ref: '#/components/schemas/UsageTotal'}
+        total: {$ref: '#/components/schemas/UsageTotal'}
     ChangeCommentRequest:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
@@ -2782,6 +2835,8 @@ components:
               name: {type: string, enum: [create, test, review, human_review]}
               status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting]}
               model: {$ref: '#/components/schemas/ScopedModel'}
+              usage: {$ref: '#/components/schemas/AgentUsage'}
+              cost: {$ref: '#/components/schemas/AgentCostEstimate'}
         review:
           $ref: '#/components/schemas/ChangeWorkflowReview'
         override:

@@ -102,3 +102,54 @@ func monotonicProvider(before, after ProviderUsage) bool {
 	}
 	return true
 }
+
+// Plus adds a usage record to u, as when totaling several budgets. Provider
+// accounting stays known only while both records carry it.
+func (u BudgetUsage) Plus(other BudgetUsage) BudgetUsage { return combineUsage(u, other, 1) }
+
+// Minus is the usage a budget recorded since an earlier snapshot of itself.
+func (u BudgetUsage) Minus(earlier BudgetUsage) BudgetUsage { return combineUsage(u, earlier, -1) }
+
+func (u BudgetUsage) empty() bool {
+	return u.ModelCalls == 0 && u.ToolCalls == 0 && u.Repairs == 0 && u.InputTokens == 0 && u.OutputTokens == 0 && u.UnknownUsageCalls == 0 && u.ActiveCalls == 0 && (u.Accounting == nil || len(u.Accounting.Providers) == 0)
+}
+
+func combineUsage(a, b BudgetUsage, sign int) BudgetUsage {
+	if a.empty() && sign > 0 {
+		return b.Clone()
+	}
+	out := BudgetUsage{
+		ModelCalls: a.ModelCalls + sign*b.ModelCalls, ToolCalls: a.ToolCalls + sign*b.ToolCalls, Repairs: a.Repairs + sign*b.Repairs,
+		InputTokens: a.InputTokens + int64(sign)*b.InputTokens, OutputTokens: a.OutputTokens + int64(sign)*b.OutputTokens,
+		UnknownUsageCalls: a.UnknownUsageCalls + sign*b.UnknownUsageCalls, ActiveCalls: a.ActiveCalls + sign*b.ActiveCalls,
+		ElapsedMillis: a.ElapsedMillis + int64(sign)*b.ElapsedMillis,
+	}
+	if a.Accounting == nil || b.Accounting == nil && !b.empty() {
+		return out
+	}
+	providers := slices.Clone(a.Accounting.Providers)
+	if b.Accounting != nil {
+		for _, group := range b.Accounting.Providers {
+			index := slices.IndexFunc(providers, func(p ProviderUsage) bool { return p.ModelKey == group.ModelKey })
+			if index < 0 {
+				providers, index = append(providers, ProviderUsage{ModelKey: group.ModelKey}), len(providers)
+			}
+			providers[index] = combineProvider(providers[index], group, sign)
+		}
+	}
+	providers = slices.DeleteFunc(providers, func(p ProviderUsage) bool { return p.ModelCalls == 0 && p.InputTokens == 0 && p.OutputTokens == 0 })
+	out.Accounting = &UsageAccounting{Version: 1, Providers: providers}
+	return out
+}
+
+func combineProvider(a, b ProviderUsage, sign int) ProviderUsage {
+	s64 := int64(sign)
+	return ProviderUsage{
+		ModelKey: a.ModelKey, ModelCalls: a.ModelCalls + sign*b.ModelCalls, ActiveCalls: a.ActiveCalls + sign*b.ActiveCalls,
+		FailedCalls: a.FailedCalls + sign*b.FailedCalls, UnknownUsageCalls: a.UnknownUsageCalls + sign*b.UnknownUsageCalls,
+		ReportedCalls: a.ReportedCalls + sign*b.ReportedCalls, PartialUsageCalls: a.PartialUsageCalls + sign*b.PartialUsageCalls,
+		CacheKnownCalls: a.CacheKnownCalls + sign*b.CacheKnownCalls, InputTokens: a.InputTokens + s64*b.InputTokens,
+		OutputTokens: a.OutputTokens + s64*b.OutputTokens, ReportedInputTokens: a.ReportedInputTokens + s64*b.ReportedInputTokens,
+		ReportedOutputTokens: a.ReportedOutputTokens + s64*b.ReportedOutputTokens, CachedInputTokens: a.CachedInputTokens + s64*b.CachedInputTokens,
+	}
+}

@@ -75,3 +75,22 @@ for (const theme of ['dark', 'light'] as const) {
     }
   });
 }
+
+test('usage lists what agents spent per task and the task shows its own spend', async ({ page }) => {
+  await page.goto('/#/settings/usage');
+  const table = page.getByRole('table', { name: 'Usage by task' });
+  await expect(table.getByRole('row').filter({ hasText: 'Reject nested asset paths' })).toContainText('$0.194');
+  await expect(table.getByRole('row').filter({ hasText: 'Total' })).toContainText('≥ $0.575');
+  await expect(page.getByText('Some models have no configured rate.')).toBeVisible();
+  await table.getByRole('row').filter({ hasText: 'Reject nested asset paths' }).click();
+  await expect(page).toHaveURL(/#\/tasks\/chg-1/);
+  await expect(page.getByRole('complementary', { name: 'Review gate' })).toContainText('6 calls · 65k tokens · $0.194');
+  await expect(page.getByRole('region', { name: 'Agent run' })).toContainText('21k tokens · $0.061');
+});
+
+test('a finished agent run is announced with its spend', async ({ page, daemon }) => {
+  daemon.push({ kind: 'workflow', session_id: 'chg-1', workflow_id: 'wf-1', title: 'Reject nested asset paths in the Web UI handler', status: 'awaiting_human_review', usage: { model_calls: 6, input_tokens: 59_200, output_tokens: 5_300 }, cost: { status: 'estimated', currency: 'USD', known_subtotal: 0.194, total: 0.194, reasons: [] } });
+  await page.goto('/#/tasks');
+  await expect(page.getByText('Agents finished “Reject nested asset paths in the Web UI handler”. It needs your review.')).toBeVisible();
+  await expect(page.getByText('6 calls · 65k tokens · $0.194')).toBeVisible();
+});

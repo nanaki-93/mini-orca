@@ -1,20 +1,40 @@
 package app
 
-import "sync"
+import (
+	"context"
+	"sync"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+)
+
+// Event tells clients what changed. Kind names the area; change workflow
+// events also name the task, its workflow, the stage that moved and the
+// workflow status, and carry the run's usage and estimated cost so far.
+type Event struct {
+	Kind       string                  `json:"kind"`
+	SessionID  string                  `json:"session_id,omitempty"`
+	WorkflowID string                  `json:"workflow_id,omitempty"`
+	Title      string                  `json:"title,omitempty"`
+	Stage      string                  `json:"stage,omitempty"`
+	Status     string                  `json:"status,omitempty"`
+	Usage      *agentstate.BudgetUsage `json:"usage,omitempty"`
+	Cost       *AgentCostEstimate      `json:"cost,omitempty"`
+}
 
 type eventBroker struct {
 	mu          sync.Mutex
-	subscribers map[chan string]struct{}
+	subscribers map[chan Event]struct{}
 }
 
 func newEventBroker() *eventBroker {
 	return &eventBroker{
-		subscribers: make(map[chan string]struct{}),
+		subscribers: make(map[chan Event]struct{}),
 	}
 }
 
-func (b *eventBroker) subscribe() (<-chan string, func()) {
-	ch := make(chan string, 16)
+func (b *eventBroker) subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 16)
 	b.mu.Lock()
 	b.subscribers[ch] = struct{}{}
 	b.mu.Unlock()
@@ -26,7 +46,7 @@ func (b *eventBroker) subscribe() (<-chan string, func()) {
 	return ch, unsubscribe
 }
 
-func (b *eventBroker) publish(kind string) {
+func (b *eventBroker) publish(event Event) {
 	if b == nil {
 		return
 	}
@@ -34,23 +54,41 @@ func (b *eventBroker) publish(kind string) {
 	defer b.mu.Unlock()
 	for ch := range b.subscribers {
 		select {
-		case ch <- kind:
+		case ch <- event:
 		default:
 		}
 	}
 }
 
 // SubscribeEvents registers a listener channel for real-time project/workflow updates.
-func (s *Service) SubscribeEvents() (<-chan string, func()) {
+func (s *Service) SubscribeEvents() (<-chan Event, func()) {
 	if s == nil || s.events == nil {
-		ch := make(chan string)
+		ch := make(chan Event)
 		return ch, func() {}
 	}
 	return s.events.subscribe()
 }
 
 func (s *Service) notifyEvent(kind string) {
+	s.publishEvent(Event{Kind: kind})
+}
+
+func (s *Service) publishEvent(event Event) {
 	if s != nil && s.events != nil {
-		s.events.publish(kind)
+		s.events.publish(event)
 	}
+}
+
+// notifyWorkflow reports a change workflow's progress on a task: the stage
+// that moved (empty when the run ends), its status, and the run's usage.
+func (s *Service) notifyWorkflow(ctx context.Context, session *ChangeSession, stage string) {
+	event := Event{Kind: "workflow", SessionID: session.ID, Title: session.Title, Stage: stage}
+	if w := session.Workflow; w != nil {
+		event.WorkflowID, event.Status = w.ID, w.Status
+	}
+	if budget := agentruntime.BudgetFromContext(ctx); budget != nil {
+		usage := budget.Snapshot()
+		event.Usage, event.Cost = &usage, agentCost(usage, s.agentRuntime.Telemetry.Prices)
+	}
+	s.publishEvent(event)
 }

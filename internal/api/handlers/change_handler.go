@@ -63,6 +63,15 @@ func (h *ChangeHandler) List(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
+// Usage totals what agents spent per task in the selected checkout.
+func (h *ChangeHandler) Usage(w http.ResponseWriter, r *http.Request) {
+	if !guardedWorkflowRead(w, r, h.manager) {
+		return
+	}
+	value, err := h.service.ChangeUsage(r.Context())
+	respondWorkflow(w, value, err)
+}
+
 func (h *ChangeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
 		return

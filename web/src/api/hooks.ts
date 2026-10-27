@@ -5,7 +5,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
   AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
-  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, TaskEntry,
+  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
 import { useCheckout } from '@/app/checkout';
@@ -24,7 +24,20 @@ export const keys = {
   overview: (wt: string) => ['overview', wt] as const,
   settings: (wt: string) => ['settings', wt] as const,
   file: (wt: string, path: string) => ['file', wt, path] as const,
+  usage: (wt: string) => ['usage', wt] as const,
 };
+
+/** What agents spent per task in the selected checkout. */
+export function useUsage() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.usage(worktreePath), project?.project_revision],
+    queryFn: () => api.get<UsageReport>(withWorktree('/api/projects/current/usage' + query({ project_id: project!.project_id, project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+    staleTime: 15_000,
+  });
+}
 
 export function useStatus() {
   return useQuery({ queryKey: keys.status, queryFn: () => api.get<DaemonStatus>('/status'), staleTime: 60_000, retry: false });

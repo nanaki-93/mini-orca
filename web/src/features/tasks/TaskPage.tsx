@@ -6,7 +6,8 @@ import * as Tabs from '@radix-ui/react-tabs';
 import {
   ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Upload,
 } from 'lucide-react';
-import { useProject, useSession, useTrust } from '@/api/hooks';
+import { useProject, useSession, useTrust, useUsage } from '@/api/hooks';
+import { costCaveat, costLabel, usageLabel } from '@/lib/usage';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
@@ -202,9 +203,27 @@ function ReviewRail({ session }: { session: LoadedSession }) {
           {session.finding_targets?.length ? (<><dt>Fixes</dt><dd>{plural(session.finding_targets.length, 'issue')}</dd></>) : null}
           {session.commit ? (<><dt>Commit</dt><dd className="mono">{session.commit.state === 'committed' ? shortHash(session.commit.oid) : session.commit.state}</dd></>) : null}
           {workflow?.stages?.find(s => s.model)?.model ? (<><dt>Models</dt><dd className="truncate">{[...new Set(workflow.stages.map(s => s.model?.model).filter(Boolean))].join(', ')}</dd></>) : null}
+          <TaskSpend id={session.id} />
         </dl>
       </section>
     </aside>
+  );
+}
+
+/** What agents spent on this task across its runs and revisions. */
+function TaskSpend({ id }: { id: string }) {
+  const row = useUsage().data?.tasks.find(task => task.session_id === id);
+  if (!row?.usage.model_calls) return null;
+  const cost = costLabel(row.cost);
+  return (
+    <>
+      <dt>Spent</dt>
+      <dd title={costCaveat(row.cost) || undefined}>
+        <a href="#/settings/usage" onClick={e => { e.preventDefault(); navigate('/settings/usage'); }}>
+          {usageLabel(row.usage)}{cost ? ` · ${cost}` : ''}
+        </a>
+      </dd>
+    </>
   );
 }
 

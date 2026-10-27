@@ -3,7 +3,7 @@
 // finding sources), so the UI is exercised with what it really receives.
 
 import type {
-  ChangeHistoryEntry, ChangeSession, FileChange, Finding, GitWorkspace, ModelsCurrent, Overview, Project,
+  BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, ModelsCurrent, Overview, Project, UsageReport,
 } from '../../src/api/types';
 
 const now = Date.parse('2026-10-27T10:00:00Z');
@@ -75,9 +75,9 @@ export function reviewTask(): ChangeSession {
       id: 'wf-1',
       status: 'awaiting_human_review',
       stages: [
-        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16) },
-        { name: 'test', status: 'completed', started_at: ago(16), finished_at: ago(11) },
-        { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7) },
+        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16), usage: spend(2, 18_400, 2_100), cost: estimate(0.061) },
+        { name: 'test', status: 'completed', started_at: ago(16), finished_at: ago(11), usage: spend(1, 9_800, 1_300), cost: estimate(0.034) },
+        { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7), usage: spend(3, 31_000, 1_900), cost: estimate(0.099) },
         { name: 'human_review', status: 'waiting', started_at: ago(7) },
       ],
       review: { proposal_hash: 'sha256:9f2c1a7be4', verdict: 'approve', summary: 'Safe and tested.', findings: [] },
@@ -105,6 +105,30 @@ export function rejectedTask(): ChangeSession {
         { id: 'architecture', status: 'completed', evidence: 'model_advice', review: { proposal_hash: task.hash, verdict: 'changes_requested', summary: 'Package boundary.', findings: [blocking] } },
       ],
     },
+  };
+}
+
+function spend(calls: number, input: number, output: number): BudgetUsage {
+  return { model_calls: calls, input_tokens: input, output_tokens: output };
+}
+
+function estimate(total: number): CostEstimate {
+  return { status: 'estimated', currency: 'USD', price_version: 'fixture-v1', known_subtotal: total, total, reasons: [] };
+}
+
+/** Agent usage per task, as GET /api/projects/current/usage reports it. */
+export function usage(task: ChangeSession): UsageReport {
+  const row = { runs: 4, usage: spend(6, 59_200, 5_300), cost: estimate(0.194) };
+  return {
+    ...identity,
+    currency: 'USD',
+    price_version: 'fixture-v1',
+    tasks: [
+      { session_id: task.id, title: task.title, kind: task.kind, state: task.state, updated_at: task.updated_at, ...row },
+      { session_id: 'chg-3', title: 'Cache the parsed index', kind: 'performance', state: 'checked', updated_at: ago(55), runs: 2, usage: spend(3, 22_000, 2_400), cost: estimate(0.071) },
+    ],
+    other: { runs: 9, usage: spend(14, 120_000, 9_000), cost: { status: 'unknown', currency: 'USD', known_subtotal: 0.31, reasons: ['model_rate_unavailable'] } },
+    total: { runs: 15, usage: spend(23, 201_200, 16_700), cost: { status: 'unknown', currency: 'USD', known_subtotal: 0.575, reasons: ['model_rate_unavailable'] } },
   };
 }
 
