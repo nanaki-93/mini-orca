@@ -61,6 +61,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/overview$/, () => data.overview],
     [/^\/api\/projects\/current\/agent-settings$/, () => ({ ...data.project, state: 'ready', roles: { creation: 'bug', testing: 'code', review: 'analyze' } })],
     [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
+    [/^\/api\/projects\/current\/quarantine$/, () => ({ files: [], skipped: [] })],
     [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'go', line_count: 3, content: data.fileSource })],
   ];
 

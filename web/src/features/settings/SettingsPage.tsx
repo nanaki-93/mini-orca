@@ -11,6 +11,7 @@ import { navigate } from '@/lib/router';
 import { plural, timeAgo } from '@/lib/util';
 import { Badge, Button, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
 import { OpenProject } from './OpenProject';
+import { QuarantineList } from './Quarantine';
 
 const SECTIONS = [
   { id: 'project', label: 'Project', icon: FolderOpen },
@@ -143,6 +144,7 @@ function ProjectSettings() {
           </div>
         </div>
       ) : null}
+      <QuarantineList />
       <OpenProject />
     </>
   );

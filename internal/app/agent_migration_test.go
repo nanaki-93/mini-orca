@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
 
@@ -135,8 +136,24 @@ func TestAgentMigrationFailureAndCancellationPreventProviderDispatch(t *testing.
 			if kind == "canceled" {
 				cancel()
 			}
-			if _, err := s.retryRequest(ctx, s.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil); err == nil {
+			_, err = s.retryRequest(ctx, s.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
+			if kind == "downgrade" {
+				// An unreadable journal is set aside with its bytes; work then
+				// starts a new journal.
+				records, qerr := agentstate.Quarantines(root)
+				if err != nil || qerr != nil || len(records) != 1 || calls.Load() != 1 {
+					t.Fatalf("unreadable journal not set aside: %+v %v %v", records, err, qerr)
+				}
+				if kept, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(records[0].QuarantinedAs))); err != nil || string(kept) != string(original) {
+					t.Fatal("set-aside journal lost its bytes", err)
+				}
+				return
+			}
+			if err == nil {
 				t.Fatal("failed migration became admitted work")
+			}
+			if kind == "future" && !strings.Contains(err.Error(), "upgrade Mini-Orca") {
+				t.Fatalf("newer journal error has no remedy: %v", err)
 			}
 			read, err := os.ReadFile(path)
 			if err != nil || string(read) != string(original) || calls.Load() != 0 {

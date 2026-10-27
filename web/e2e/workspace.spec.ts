@@ -94,3 +94,17 @@ test('a finished agent run is announced with its spend', async ({ page, daemon }
   await expect(page.getByText('Agents finished “Reject nested asset paths in the Web UI handler”. It needs your review.')).toBeVisible();
   await expect(page.getByText('6 calls · 65k tokens · $0.194')).toBeVisible();
 });
+
+test('set-aside files are announced and explained with their remedy', async ({ page, daemon }) => {
+  daemon.serve('/api/projects/current/quarantine', () => ({
+    files: [{ kind: 'agent_journal', file: '.mini-orca/agents/ab12/journal.json', quarantined_as: '.mini-orca/agents/ab12/journal.quarantined-20261027T101500Z.json', reason: 'it is not valid JSON', remedy: 'Mini-Orca no longer reads the set-aside file. Inspect it if you need its history, then delete it.', at: '2026-10-27T10:15:00Z' }],
+    skipped: [{ kind: 'task', file: '.mini-orca/changes/change-9f.json', reason: 'written by a newer Mini-Orca', remedy: 'Upgrade Mini-Orca to use it, or move it away.' }],
+  }));
+  await page.goto('/#/');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page).toHaveURL(/#\/settings\/project/);
+  const list = page.getByRole('region', { name: 'Set-aside files' });
+  await expect(list).toContainText('.mini-orca/agents/ab12/journal.json');
+  await expect(list).toContainText('It is not valid JSON. Its bytes are in .mini-orca/agents/ab12/journal.quarantined-20261027T101500Z.json.');
+  await expect(list).toContainText('Upgrade Mini-Orca to use it, or move it away.');
+});

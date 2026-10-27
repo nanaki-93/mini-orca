@@ -77,6 +77,7 @@ untrusted networks.
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
 | GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, reindexing or change workflows change state; workflow events name the task, stage and status and carry the run's usage and estimated cost. |
+| GET | `/api/projects/current/quarantine` | List records set aside because they were unreadable, and records skipped because a newer Mini-Orca wrote them, with the remedy. |
 | GET | `/api/projects/current/usage` | Total agent model calls, tokens and estimated cost per task in the checkout, plus work not tied to a task. |
 | GET | `/api/projects/current/agent-runs` | Read bounded root invocation history with project/revision guards and pagination. |
 | GET | `/api/projects/current/agent-runs/events` | Replay source-free durable progress or subscribe using SSE and a sequence cursor. |
@@ -693,6 +694,24 @@ session records `checks_workspace_hash`, the tree its checks describe. When the
 project changes after checks ran, GET returns `checks_outdated: true`, and
 approval, a review override and Apply are refused until checks run again on the
 current tree; the session itself stays current.
+
+Unreadable records do not block a checkout. An agent journal that cannot be
+read (invalid JSON, unexpected content, inconsistent records, or not a private
+file of at most 64 MiB) is set aside when it is next opened: its bytes move to
+`journal.quarantined-<UTC time>.json` beside it, the move is recorded, and the
+next run starts a new journal. Agent history and waiting reviews it held are
+no longer available. An unreadable task file is set aside the same way
+(`<id>.quarantined-<UTC time>.json`) by the task list; listings that decide on
+the whole history, such as merging a worktree, still fail and name the file.
+Records written by a newer Mini-Orca (a higher journal `version` or task
+`schema_version`) are never moved: the agent journal refuses work with an
+error naming the file and asking to upgrade, and newer task files are skipped.
+The change recovery journal (`.mini-orca/changes/last-mutation.json`) is never
+set aside, since it may describe an unfinished Apply; its errors name the file
+and the remedy. `GET /api/projects/current/quarantine` (with the project
+guards) returns `files` (set aside: `kind` `agent_journal` or `task`, `file`,
+`quarantined_as`, `reason`, `remedy`, `at`) and `skipped` (newer files with the
+same fields but no move).
 
 Each `update` event of `/api/projects/current/events` carries a JSON `Event`:
 `kind` (`workflow`, `project_index`, `analysis`, `findings`, `features`,

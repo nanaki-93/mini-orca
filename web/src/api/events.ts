@@ -12,14 +12,14 @@ import { costLabel, usageLabel } from '@/lib/usage';
 export type Connection = 'connecting' | 'live' | 'offline';
 
 const INVALIDATES: Record<string, string[][]> = {
-  workflow: [['session'], ['changes'], ['git'], ['usage']],
+  workflow: [['session'], ['changes'], ['git'], ['usage'], ['quarantine']],
   project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['usage']],
   findings: [['findings'], ['overview']],
   analysis: [['overview'], ['findings'], ['usage']],
   features: [['overview']],
   scan: [['scan']],
   agent_settings: [['settings']],
-  agent_run: [['session'], ['usage']],
+  agent_run: [['session'], ['usage'], ['quarantine']],
 };
 
 export function applyEvent(client: QueryClient, event: DaemonEvent): void {

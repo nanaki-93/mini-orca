@@ -37,6 +37,10 @@ interface.
   spend per task (`GET /api/projects/current/usage`). Live events now name
   the task, stage, status and spend, refresh only that task, announce finished
   runs, and reindexing is published.
+- **Quarantine:** an unreadable agent journal or task file is set aside
+  (bytes kept beside it) instead of blocking the checkout; files from a newer
+  Mini-Orca are refused or skipped with an upgrade remedy; journal errors name
+  the file. `GET /api/projects/current/quarantine` and the Inbox report them.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

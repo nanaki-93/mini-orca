@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -37,6 +38,14 @@ func loadChangeSession(root, id string) (*ChangeSession, error) {
 		return nil, fmt.Errorf("read change session: %w", err)
 	}
 	defer input.Close()
+	session, err := readChangeSessionFile(input, id)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, &changeFileError{path: relativeMetadata(root, path), newer: errors.Is(err, errNewerTask), cause: err}
+	}
+	return session, err
+}
+
+func readChangeSessionFile(input *os.File, id string) (*ChangeSession, error) {
 	if err := boundedChangeFile(input); err != nil {
 		return nil, err
 	}
@@ -188,13 +197,23 @@ func saveChangeArtifact(ctx context.Context, store *agentstate.Store, id, name s
 	return nil
 }
 
+// listChangeSessions summarizes every session and fails on a file it cannot
+// read: callers that decide on the whole history, such as merges, must not
+// overlook a task.
 func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
-	return listChangeSessionsWith(root, nil)
+	return listChangeSessionsWith(root, sessionListing{})
 }
 
-// listChangeSessionsWith summarizes every session; freshness, when given,
-// reports each draft session's current freshness instead of the stored one.
-func listChangeSessionsWith(root string, freshness func(*ChangeSession) string) ([]ChangeHistoryEntry, error) {
+// sessionListing shapes a listing. freshness, when set, reports each draft
+// session's current freshness. A lenient listing sets unreadable task files
+// aside and skips newer ones, passing them to skipped when set.
+type sessionListing struct {
+	freshness func(*ChangeSession) string
+	lenient   bool
+	skipped   func(*changeFileError)
+}
+
+func listChangeSessionsWith(root string, listing sessionListing) ([]ChangeHistoryEntry, error) {
 	path, err := changeMetadataPath(root, "")
 	if err != nil {
 		return nil, err
@@ -214,11 +233,14 @@ func listChangeSessionsWith(root string, freshness func(*ChangeSession) string) 
 		}
 		session, err := loadChangeSession(root, id)
 		if err != nil {
-			return nil, err
+			if err := listing.recover(root, id, err); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		entry := ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt}
-		if freshness != nil && session.State == "draft" {
-			entry.Freshness = freshness(session)
+		if listing.freshness != nil && session.State == "draft" {
+			entry.Freshness = listing.freshness(session)
 		}
 		entry.Commit = session.Commit
 		for _, target := range session.Targets {
@@ -236,6 +258,23 @@ func listChangeSessionsWith(root string, freshness func(*ChangeSession) string) 
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].UpdatedAt.After(result[j].UpdatedAt) })
 	return result, nil
+}
+
+// recover handles a task file a lenient listing cannot read; anything else
+// stays an error.
+func (listing sessionListing) recover(root, id string, err error) error {
+	var problem *changeFileError
+	switch {
+	case !listing.lenient || !errors.As(err, &problem):
+		return err
+	case problem.newer:
+		if listing.skipped != nil {
+			listing.skipped(problem)
+		}
+		return nil
+	default:
+		return quarantineTask(root, id, problem)
+	}
 }
 
 func validatePinnedChangeTests(session *ChangeSession) error {

@@ -264,8 +264,22 @@ func TestChangeManualInstructionsAndCorruptHistory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".mini-orca/changes", proposal.ID+".json"), []byte("broken"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeHistory(context.Background()); err == nil {
-		t.Fatal("corrupt history became empty success")
+	if _, err := service.ChangeSession(context.Background(), proposal.ID); err == nil || !strings.Contains(err.Error(), ".mini-orca/changes/"+proposal.ID+".json is unreadable") {
+		t.Fatalf("corrupt task error does not name its file: %v", err)
+	}
+	if _, err := listChangeSessions(root); err == nil {
+		t.Fatal("a strict listing overlooked a corrupt task")
+	}
+	history, err := service.ChangeHistory(context.Background())
+	if err != nil || len(history) != 0 {
+		t.Fatalf("task list did not set the corrupt task aside: %+v %v", history, err)
+	}
+	report, err := service.Quarantine(context.Background())
+	if err != nil || len(report.Files) != 1 || report.Files[0].Kind != "task" || report.Files[0].File != ".mini-orca/changes/"+proposal.ID+".json" {
+		t.Fatalf("quarantine report: %+v %v", report, err)
+	}
+	if kept, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(report.Files[0].QuarantinedAs))); err != nil || string(kept) != "broken" {
+		t.Fatal("set-aside task lost its bytes", err)
 	}
 	if _, err := service.ChangeSession(context.Background(), "../escape"); err == nil {
 		t.Fatal("accepted history traversal")

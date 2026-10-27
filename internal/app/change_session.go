@@ -251,7 +251,7 @@ func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, erro
 	if _, err := s.manager.Index(); err != nil {
 		return nil, err
 	}
-	history, err := listChangeSessionsWith(s.manager.Root(), s.listedFreshness(s.manager.Root()))
+	history, err := listChangeSessionsWith(s.manager.Root(), sessionListing{freshness: s.listedFreshness(s.manager.Root()), lenient: true})
 	if err != nil {
 		return nil, err
 	}

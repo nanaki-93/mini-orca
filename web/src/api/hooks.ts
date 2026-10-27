@@ -5,7 +5,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
   AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
-  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, TaskEntry, UsageReport,
+  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, QuarantineReport, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
 import { useCheckout } from '@/app/checkout';
@@ -25,7 +25,20 @@ export const keys = {
   settings: (wt: string) => ['settings', wt] as const,
   file: (wt: string, path: string) => ['file', wt, path] as const,
   usage: (wt: string) => ['usage', wt] as const,
+  quarantine: (wt: string) => ['quarantine', wt] as const,
 };
+
+/** Records the daemon set aside or skipped in the selected checkout. */
+export function useQuarantine() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.quarantine(worktreePath), project?.project_revision],
+    queryFn: () => api.get<QuarantineReport>(withWorktree('/api/projects/current/quarantine' + query({ project_id: project!.project_id, project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+    staleTime: 60_000,
+  });
+}
 
 /** What agents spent per task in the selected checkout. */
 export function useUsage() {

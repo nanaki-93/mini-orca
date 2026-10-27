@@ -2049,3 +2049,21 @@
 .docs-notice {
   margin-bottom: 20px;
 }
+
+.quarantine-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quarantine-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.quarantine-item p {
+  margin: 0;
+}

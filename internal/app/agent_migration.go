@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/json/jsontext"
+	"errors"
 	"fmt"
 )
 
@@ -18,10 +19,15 @@ func decodeAgentHistory(data []byte, value any) error {
 	return decoder.Decode(value)
 }
 
+var errNewerTask = errors.New("task file was written by a newer Mini-Orca")
+
 func decodeCompatibleChangeHistory(data []byte, id string) (*ChangeSession, error) {
 	var session ChangeSession
 	if err := decodeAgentHistory(data, &session); err != nil {
 		return nil, fmt.Errorf("decode change history: %w", err)
+	}
+	if session.SchemaVersion > 1 {
+		return nil, errNewerTask
 	}
 	if session.SchemaVersion != 1 || session.ID != id || len(session.Targets) == 0 || len(session.Targets) > maxChangePaths || len(session.Messages) > maxChangeMessages {
 		return nil, fmt.Errorf("unsupported or corrupt change history")

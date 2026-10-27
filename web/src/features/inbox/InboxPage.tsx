@@ -11,6 +11,7 @@ import { taskStatus } from '@/lib/readiness';
 import { plural, severityRank } from '@/lib/util';
 import { Button, Callout, EmptyState, Kbd, ListGroup, Skeleton } from '@/components/ui';
 import { SeverityBadge, isOpenFinding } from '@/components/domain';
+import { QuarantineNotice } from '@/features/settings/Quarantine';
 import { TaskRow } from '@/features/tasks/TaskListPage';
 import { OpenProject } from '@/features/settings/OpenProject';
 
@@ -65,6 +66,7 @@ export function InboxPage() {
             Tests and lint run only after you allow this project to run its check commands in an isolated copy.
           </Callout>
         ) : null}
+        <QuarantineNotice />
         {isLoading ? (
           <Skeleton lines={6} />
         ) : nothing && !tasks.length ? (

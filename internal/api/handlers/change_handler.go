@@ -63,6 +63,15 @@ func (h *ChangeHandler) List(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
+// Quarantine lists the records set aside or skipped in the selected checkout.
+func (h *ChangeHandler) Quarantine(w http.ResponseWriter, r *http.Request) {
+	if !guardedWorkflowRead(w, r, h.manager) {
+		return
+	}
+	value, err := h.service.Quarantine(r.Context())
+	respondWorkflow(w, value, err)
+}
+
 // Usage totals what agents spent per task in the selected checkout.
 func (h *ChangeHandler) Usage(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {

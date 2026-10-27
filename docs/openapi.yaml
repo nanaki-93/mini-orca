@@ -903,6 +903,17 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/projects/current/quarantine:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: query, name: project_id, required: true, schema: {type: string}}
+      - {in: query, name: project_revision, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: Records set aside as unreadable or skipped as newer, with remedies
+      responses:
+        '200': {description: Set-aside and skipped records, content: {application/json: {schema: {$ref: '#/components/schemas/QuarantineReport'}}}}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/usage:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2490,6 +2501,22 @@ components:
         status: {type: string}
         usage: {$ref: '#/components/schemas/AgentUsage'}
         cost: {$ref: '#/components/schemas/AgentCostEstimate'}
+    QuarantinedFile:
+      type: object
+      required: [kind, file, reason, remedy]
+      properties:
+        kind: {type: string, enum: [agent_journal, task]}
+        file: {type: string, description: The record, relative to the checkout.}
+        quarantined_as: {type: string, description: Where its bytes were moved; absent for skipped newer records.}
+        reason: {type: string}
+        remedy: {type: string}
+        at: {type: string, format: date-time}
+    QuarantineReport:
+      type: object
+      required: [files, skipped]
+      properties:
+        files: {type: array, items: {$ref: '#/components/schemas/QuarantinedFile'}}
+        skipped: {type: array, items: {$ref: '#/components/schemas/QuarantinedFile'}}
     UsageTotal:
       type: object
       required: [runs, usage, cost]

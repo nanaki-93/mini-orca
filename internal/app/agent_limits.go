@@ -69,7 +69,7 @@ func (s *Service) agentJournal(root string) (*agentstate.Store, agentstate.Bindi
 	if err != nil {
 		return nil, agentstate.Binding{}, err
 	}
-	store, err := agentstate.Open(canonical)
+	store, err := openAgentJournal(canonical)
 	if err != nil {
 		return nil, agentstate.Binding{}, fmt.Errorf("%w: open checkout journal: %w", agentstate.ErrPersistence, err)
 	}

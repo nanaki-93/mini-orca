@@ -56,6 +56,17 @@ type database struct {
 
 // Open validates checkout identity without creating metadata or starting work.
 func Open(root string) (*Store, error) {
+	s, err := newStore(root)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.load(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func newStore(root string) (*Store, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("agent checkout root is required")
 	}
@@ -75,11 +86,7 @@ func Open(root string) (*Store, error) {
 		return nil, fmt.Errorf("agent checkout must be a directory")
 	}
 	digest := sha256.Sum256([]byte(canonical))
-	s := &Store{root: canonical, workspace: hex.EncodeToString(digest[:]), write: storage.WriteFileAuthorized}
-	if _, err := s.load(); err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &Store{root: canonical, workspace: hex.EncodeToString(digest[:]), write: storage.WriteFileAuthorized}, nil
 }
 
 func (s *Store) path(name string) (string, error) {
@@ -99,19 +106,28 @@ func (s *Store) load() (*database, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return s.empty(), nil
 	}
+	if errors.Is(err, ErrCorrupt) {
+		return nil, s.journalError("it is not a private file of at most 64 MiB", false)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read agent journal: %w", err)
 	}
 	if !validJSON(data) {
-		return nil, ErrCorrupt
+		return nil, s.journalError("it is not valid JSON", false)
+	}
+	if version := journalFormat(data); version > journalVersion {
+		return nil, s.journalError(fmt.Sprintf("format %d; this version reads format %d", version, journalVersion), true)
 	}
 	var db database
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&db); err != nil {
-		return nil, ErrCorrupt
+		return nil, s.journalError("it has unexpected content", false)
 	}
 	if err := s.validate(&db); err != nil {
+		if errors.Is(err, ErrCorrupt) {
+			return nil, s.journalError("its records are inconsistent", false)
+		}
 		return nil, err
 	}
 	return &db, nil

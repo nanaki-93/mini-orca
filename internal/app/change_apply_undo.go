@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -51,6 +52,19 @@ func readChangeJournal(root string) (*changeJournal, error) {
 		return nil, err
 	}
 	defer file.Close()
+	journal, err := decodeChangeJournal(file)
+	if err != nil {
+		return nil, recoveryJournalError(relativeMetadata(root, path), err)
+	}
+	if journal.Commit != nil && journal.Commit.State == "pending" {
+		reconcileChangeCommit(context.Background(), root, journal.Commit)
+	}
+	return journal, nil
+}
+
+var errNewerRecoveryJournal = errors.New("written by a newer Mini-Orca")
+
+func decodeChangeJournal(file *os.File) (*changeJournal, error) {
 	if err := boundedChangeFile(file); err != nil {
 		return nil, err
 	}
@@ -58,15 +72,27 @@ func readChangeJournal(root string) (*changeJournal, error) {
 	decoder := json.NewDecoder(io.LimitReader(file, 2*1024*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&journal); err != nil {
-		return nil, fmt.Errorf("read change recovery journal: %w", err)
+		if journal.Version > 1 {
+			return nil, errNewerRecoveryJournal
+		}
+		return nil, err
+	}
+	if journal.Version > 1 {
+		return nil, errNewerRecoveryJournal
 	}
 	if decoder.Decode(new(any)) != io.EOF || journal.Version != 1 || validateStoredChange(journal.Session) != nil {
-		return nil, fmt.Errorf("invalid change recovery journal")
-	}
-	if journal.Commit != nil && journal.Commit.State == "pending" {
-		reconcileChangeCommit(context.Background(), root, journal.Commit)
+		return nil, fmt.Errorf("its records are inconsistent")
 	}
 	return &journal, nil
+}
+
+// recoveryJournalError names the change recovery journal and the remedy. It
+// is never set aside: it may describe an Apply that did not finish.
+func recoveryJournalError(path string, err error) error {
+	if errors.Is(err, errNewerRecoveryJournal) {
+		return fmt.Errorf("change recovery journal %s was written by a newer Mini-Orca; upgrade Mini-Orca to Apply or Undo in this checkout", path)
+	}
+	return fmt.Errorf("change recovery journal %s is unreadable (%v); check the files of your last Apply with git status and restore them if needed, then move %s away to Apply again", path, err, path)
 }
 
 func (s *Service) ApplyChange(ctx context.Context, id string, request ChangeApplyRequest) (*ChangeMutationResult, error) {

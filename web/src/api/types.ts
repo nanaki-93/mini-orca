@@ -180,6 +180,21 @@ export interface UsageReport extends ProjectIdentity {
   total: UsageTotal;
 }
 
+/** A record Mini-Orca set aside because it was unreadable, or skipped because a newer version wrote it. */
+export interface QuarantinedFile {
+  kind: 'agent_journal' | 'task' | string;
+  file: string;
+  quarantined_as?: string;
+  reason: string;
+  remedy: string;
+  at?: string;
+}
+
+export interface QuarantineReport {
+  files: QuarantinedFile[];
+  skipped: QuarantinedFile[];
+}
+
 /** A live update: what changed and, for workflows, the task, stage, status and spend. */
 export interface DaemonEvent {
   kind: string;
