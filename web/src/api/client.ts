@@ -1,5 +1,13 @@
 // Same-origin daemon client. Every request carries the Web UI marker header the
-// daemon's local request policy requires for browser-originated calls.
+// daemon's local request policy requires for browser-originated calls, and a
+// request that changes state carries the daemon's per-launch write token,
+// which the daemon writes into the document.
+
+/** The write token from the document; empty when the daemon did not serve it. */
+export function documentWriteToken(doc: Document | undefined = globalThis.document): string {
+  const token = doc?.querySelector<HTMLMetaElement>('meta[name="mini-orca-write-token"]')?.content ?? '';
+  return token.startsWith('__') ? '' : token;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -39,10 +47,12 @@ export function errorMessage(err: unknown): string {
   return String(err);
 }
 
-export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
+export function createApi(fetchImpl: Fetch = (...args) => fetch(...args), writeToken: () => string = () => documentWriteToken()) {
   async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = { 'X-Mini-Orca-Web-UI': '1' };
     const init: RequestInit = { method: options.method ?? 'GET', headers, signal: options.signal };
+    const token = init.method === 'GET' ? '' : writeToken();
+    if (token) headers['X-Mini-Orca-Token'] = token;
     if (options.body !== undefined) {
       headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(options.body);

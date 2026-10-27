@@ -55,7 +55,7 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 	if err != nil || created.State != "created" || created.Error != "" {
 		t.Fatalf("create: %+v, %v", created, err)
 	}
-	mux := newHTTPMux(service, manager)
+	mux := testHTTPMux(service, manager)
 	call := func(method, path, body, origin string) *httptest.ResponseRecorder {
 		t.Helper()
 		request := httptest.NewRequest(method, path, strings.NewReader(body))

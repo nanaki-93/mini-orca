@@ -20,6 +20,7 @@ type worktreeRouteEntry struct {
 type worktreeRouter struct {
 	mu      sync.Mutex
 	entries []worktreeRouteEntry
+	token   string
 }
 
 func (router *worktreeRouter) handler(service *app.Service, manager *project.Manager) http.Handler {
@@ -30,7 +31,7 @@ func (router *worktreeRouter) handler(service *app.Service, manager *project.Man
 			return router.entries[i].routes
 		}
 	}
-	routes := newProjectHTTPMux(service, manager)
+	routes := newProjectHTTPMux(service, manager, router.token)
 	if len(router.entries) >= maxCachedWorktreeRouters {
 		copy(router.entries, router.entries[1:])
 		router.entries[len(router.entries)-1] = worktreeRouteEntry{service: service, routes: routes}

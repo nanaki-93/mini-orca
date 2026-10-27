@@ -74,7 +74,10 @@ open http://127.0.0.1:9090/ui
 The daemon listens on `127.0.0.1:9090` only, unless `MINI_ORCA_BIND_ADDRESS`
 opts into another address (see [DOCKER.md](DOCKER.md)). Keep `config.yaml`
 local. Every prompt-bearing request to a non-loopback HTTP or CLI provider asks
-for consent for that scope. Running the daemon needs no Node.js: the Web UI
+for consent for that scope. Requests that change state need the daemon's
+per-launch write token: the Web UI has it, and other local clients read it from
+`mini-orca/daemon-token` in your user configuration directory
+(`MINI_ORCA_TOKEN_FILE` selects another file). Running the daemon needs no Node.js: the Web UI
 bundle is embedded in the binary.
 
 <a id="project-intelligence"></a>

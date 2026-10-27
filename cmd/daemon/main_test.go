@@ -38,7 +38,7 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/status", nil)
 	request.Host = "localhost:9090"
-	newHTTPMux(service, manager).ServeHTTP(response, request)
+	testHTTPMux(service, manager).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status response = %d: %s", response.Code, response.Body.String())
 	}
@@ -238,6 +238,11 @@ func TestExplicitExternalBindAllowsAddressesAndListedHostNames(t *testing.T) {
 
 func daemonTestMux(t *testing.T) http.Handler {
 	t.Helper()
+	return testHTTPMux(newTestService(t))
+}
+
+func newTestService(t *testing.T) (*app.Service, *project.Manager) {
+	t.Helper()
 	root := t.TempDir()
 	manager, err := project.NewManager(root)
 	if err != nil {
@@ -250,7 +255,7 @@ func daemonTestMux(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newHTTPMux(service, manager)
+	return service, manager
 }
 
 func TestReleaseDocumentationUsesCanonicalVersion(t *testing.T) {
@@ -294,7 +299,7 @@ func TestDocumentedRoutesAreHandledByDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux := newHTTPMux(service, manager)
+	mux := testHTTPMux(service, manager)
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			req := httptest.NewRequest(route.method, requestPathForDocumentedRoute(route.path), strings.NewReader("{}"))
@@ -339,7 +344,7 @@ func TestOpenAPIGoScanPhaseIncludesWorkspace(t *testing.T) {
 // embedded document instead of hard-coding them.
 var webUIScriptPath, webUIStylesheetPath = func() (string, string) {
 	res := httptest.NewRecorder()
-	handlers.NewWebUIHandler().Serve(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
+	handlers.NewWebUIHandler(testWriteToken.value).Serve(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
 	body := res.Body.String()
 	script := regexp.MustCompile(`<script type="module"[^>]* src="(/ui/assets/[^"]+\.js)"`).FindStringSubmatch(body)
 	style := regexp.MustCompile(`<link rel="stylesheet"[^>]* href="(/ui/assets/[^"]+\.css)"`).FindStringSubmatch(body)
@@ -383,7 +388,7 @@ func TestDaemonDoesNotRegisterBrowserUIRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux := newHTTPMux(service, manager)
+	mux := testHTTPMux(service, manager)
 	for _, path := range []string{"/", "/static/js/chat.js", "/api/render/file-tree", "/api/tree/expand", "/api/files/view"} {
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -477,7 +482,7 @@ func TestUnifiedAnalysisRoutesUseLocalOriginPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux := newHTTPMux(service, manager)
+	mux := testHTTPMux(service, manager)
 	for _, route := range []string{"/api/projects/current/analysis/selection", "/api/projects/current/analysis/preview", "/api/projects/current/analysis/run", "/api/projects/current/analysis/run/control"} {
 		request := httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`))
 		request.Host = "localhost:9090"

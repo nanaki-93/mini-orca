@@ -61,8 +61,15 @@ func main() {
 	}
 	logging.Info("Workflow: single-coder preview with explicit review")
 
+	token, err := newWriteToken()
+	if err != nil {
+		logging.Error("Write token not saved; only the Web UI can change state", "error", err)
+	} else {
+		logging.Info("Write token saved for local clients", "file", token.file)
+	}
+
 	// Start HTTP server with all API endpoints
-	server := startHTTPServer(application, projectManager)
+	server := startHTTPServer(application, projectManager, token)
 
 	// Wait for shutdown signal
 	quit := waitForShutdown()
@@ -89,8 +96,9 @@ func main() {
 func startHTTPServer(
 	application *app.Service,
 	projectManager *project.Manager,
+	token writeToken,
 ) *http.Server {
-	mux := newHTTPMux(application, projectManager)
+	mux := newHTTPMux(application, projectManager, token)
 
 	server := &http.Server{
 		Addr:         daemonAddress(),
@@ -126,14 +134,16 @@ func daemonAddress() string {
 	return "127.0.0.1:9090"
 }
 
-// newHTTPMux registers only the local daemon API routes.
+// newHTTPMux registers only the local daemon API routes. Requests that change
+// state must carry the launch's write token.
 func newHTTPMux(
 	application *app.Service,
 	projectManager *project.Manager,
+	token writeToken,
 ) http.Handler {
-	current := newProjectHTTPMux(application, projectManager)
-	worktrees := &worktreeRouter{}
-	return api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	current := newProjectHTTPMux(application, projectManager, token.value)
+	worktrees := &worktreeRouter{token: token.value}
+	return api.LocalOnly(api.RequireWriteToken(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/projects/current/events" && r.URL.Path != "/api/projects/current/agent-runs/events" {
 			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(6 * time.Minute))
 		}
@@ -165,10 +175,10 @@ func newHTTPMux(
 		scopedRequest := r.Clone(r.Context())
 		scopedRequest.URL.RawQuery = query.Encode()
 		worktrees.handler(service, manager).ServeHTTP(w, scopedRequest)
-	}), daemonHostPolicy())
+	}), token.value, token.file), daemonHostPolicy())
 }
 
-func newProjectHTTPMux(application *app.Service, projectManager *project.Manager) http.Handler {
+func newProjectHTTPMux(application *app.Service, projectManager *project.Manager, token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/projects/current", func(w http.ResponseWriter, r *http.Request) {
 		analysis, err := projectManager.Analysis()
@@ -193,7 +203,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"shared_proposals"}`))
 	})
 
-	webUIHandler := handlers.NewWebUIHandler()
+	webUIHandler := handlers.NewWebUIHandler(token)
 	mux.HandleFunc("GET /ui", webUIHandler.Serve)
 	mux.HandleFunc("GET /ui/assets/{path...}", webUIHandler.ServeAsset)
 

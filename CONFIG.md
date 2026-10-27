@@ -601,3 +601,8 @@ directory (on macOS, `~/Library/Application Support/`). `MINI_ORCA_TRUST_DIR`
 can select another absolute, user-controlled directory. Each decision is bound
 to the canonical project path and command scope; copying `.mini-orca/` to another
 checkout does not transfer consent. Grant or revoke trust in **Settings → Trust**.
+
+Each launch writes a new write token to `mini-orca/daemon-token` in the same
+user configuration directory, readable only by you (mode `0600`);
+`MINI_ORCA_TOKEN_FILE` selects another absolute path. Requests that change
+state send it in `X-Mini-Orca-Token`; the Web UI receives it in its page.

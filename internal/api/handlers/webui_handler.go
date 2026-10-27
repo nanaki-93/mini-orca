@@ -20,6 +20,10 @@ const WebUICSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-
 // no other inline style or any inline script is admitted.
 const webUIStyleNoncePlaceholder = "__MINI_ORCA_STYLE_NONCE__"
 
+// webUIWriteTokenPlaceholder is replaced with the daemon's write token, which
+// the Web UI sends with every request that changes state.
+const webUIWriteTokenPlaceholder = "__MINI_ORCA_WRITE_TOKEN__"
+
 // WebUIDocumentCSP is the policy for the document itself: WebUICSP plus the
 // per-response style nonce.
 func WebUIDocumentCSP(nonce string) string {
@@ -51,19 +55,21 @@ var webUIContentTypes = map[string]string{
 // WebUIHandler serves the embedded local Web UI and its static assets.
 type WebUIHandler struct {
 	files fs.FS
+	token string
 }
 
-// NewWebUIHandler constructs the handler for GET /ui and GET /ui/assets/{path...}.
-func NewWebUIHandler() *WebUIHandler {
+// NewWebUIHandler constructs the handler for GET /ui and GET /ui/assets/{path...};
+// the document carries the daemon's write token.
+func NewWebUIHandler(token string) *WebUIHandler {
 	files, err := fs.Sub(webUIFiles, "webui/dist")
 	if err != nil {
 		panic("embedded web UI is missing: " + err.Error())
 	}
-	return newWebUIHandler(files)
+	return newWebUIHandler(files, token)
 }
 
-func newWebUIHandler(files fs.FS) *WebUIHandler {
-	return &WebUIHandler{files: files}
+func newWebUIHandler(files fs.FS, token string) *WebUIHandler {
+	return &WebUIHandler{files: files, token: token}
 }
 
 // Serve writes the Web UI document with strict local security headers. The
@@ -83,7 +89,8 @@ func (h *WebUIHandler) Serve(w http.ResponseWriter, _ *http.Request) {
 	writeWebUIHeaders(w, "text/html; charset=utf-8", "no-store")
 	w.Header().Set("Content-Security-Policy", WebUIDocumentCSP(nonce))
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(bytes.ReplaceAll(data, []byte(webUIStyleNoncePlaceholder), []byte(nonce)))
+	data = bytes.ReplaceAll(data, []byte(webUIStyleNoncePlaceholder), []byte(nonce))
+	_, _ = w.Write(bytes.ReplaceAll(data, []byte(webUIWriteTokenPlaceholder), []byte(h.token)))
 }
 
 // ServeAsset writes one embedded bundle file. Only clean, top-level paths with

@@ -144,3 +144,12 @@ test('a comment can be deleted before it is sent', async ({ page, daemon }) => {
   await expect(page.getByText('Prefer path.Clean.')).toBeHidden();
   expect(daemon.mutations('/comments/delete')[0].body).toMatchObject({ id: 'cm-1' });
 });
+
+test('a page from an earlier daemon launch is told to reload', async ({ page, daemon }) => {
+  daemon.expectedConsole.push(/status of 401/);
+  await page.goto('/#/tasks/chg-1/files');
+  await page.evaluate(() => document.querySelector('meta[name="mini-orca-write-token"]')?.setAttribute('content', 'previous-launch'));
+  await page.keyboard.press('v');
+  await expect(page.getByText("Reload the Web UI to get this daemon's write token.")).toBeVisible();
+  expect(daemon.sessions.get('chg-1')!.reviewed_files).toEqual([]);
+});

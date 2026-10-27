@@ -41,6 +41,10 @@ interface.
   (bytes kept beside it) instead of blocking the checkout; files from a newer
   Mini-Orca are refused or skipped with an upgrade remedy; journal errors name
   the file. `GET /api/projects/current/quarantine` and the Inbox report them.
+- **Write token:** every request that changes state must carry the daemon's
+  per-launch token (`X-Mini-Orca-Token`). The Web UI gets it in its document;
+  other local clients read the `0600` token file (`MINI_ORCA_TOKEN_FILE`, or
+  `mini-orca/daemon-token` in the user configuration directory).
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

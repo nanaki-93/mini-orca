@@ -62,7 +62,7 @@ func BenchmarkWorktreeRouting(b *testing.B) {
 	b.Run("rebuild", func(b *testing.B) {
 		b.ReportAllocs()
 		for range b.N {
-			newProjectHTTPMux(service, manager)
+			newProjectHTTPMux(service, manager, testWriteToken.value)
 		}
 	})
 	b.Run("reuse", func(b *testing.B) {

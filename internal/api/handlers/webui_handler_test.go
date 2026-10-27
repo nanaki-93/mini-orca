@@ -36,7 +36,7 @@ var bundleReference = regexp.MustCompile(`(?:src|href)="/ui/assets/([^"]+)"`)
 
 func TestWebUIHandlerServesDocumentWithStrictSecurityHeaders(t *testing.T) {
 	res := httptest.NewRecorder()
-	webUIMux(NewWebUIHandler()).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
+	webUIMux(NewWebUIHandler("test-write-token")).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.Code)
 	}
@@ -48,13 +48,16 @@ func TestWebUIHandlerServesDocumentWithStrictSecurityHeaders(t *testing.T) {
 	if strings.Contains(body, webUIStyleNoncePlaceholder) {
 		t.Fatal("style nonce placeholder was not replaced")
 	}
+	if !strings.Contains(body, `<meta name="mini-orca-write-token" content="test-write-token"`) || strings.Contains(body, webUIWriteTokenPlaceholder) {
+		t.Fatalf("web UI document does not carry the write token:\n%s", body)
+	}
 	if got, want := res.Header().Get("Content-Security-Policy"), WebUIDocumentCSP(nonce[1]); got != want || !strings.Contains(got, "style-src 'self' 'nonce-"+nonce[1]+"'") {
 		t.Fatalf("document CSP = %q, want %q", got, want)
 	}
 	res.Header().Set("Content-Security-Policy", WebUICSP)
 	assertWebUISecurityHeaders(t, res, "text/html; charset=utf-8", "no-store")
 	second := httptest.NewRecorder()
-	webUIMux(NewWebUIHandler()).ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/ui", nil))
+	webUIMux(NewWebUIHandler("test-write-token")).ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/ui", nil))
 	if strings.Contains(second.Body.String(), nonce[1]) {
 		t.Fatal("style nonce must differ per response")
 	}
@@ -77,7 +80,7 @@ func TestWebUIHandlerServesDocumentWithStrictSecurityHeaders(t *testing.T) {
 // Every file the document references must be embedded and served, otherwise
 // the browser fails to boot the app with no server-side signal.
 func TestWebUIBundleReferencesResolveToServedAssets(t *testing.T) {
-	handler := NewWebUIHandler()
+	handler := NewWebUIHandler("test-write-token")
 	mux := webUIMux(handler)
 	index, err := fs.ReadFile(handler.files, "index.html")
 	if err != nil {
@@ -100,7 +103,7 @@ func TestWebUIBundleReferencesResolveToServedAssets(t *testing.T) {
 // The bundled fonts are referenced from the stylesheet; they must be embedded
 // and served with a font content type the CSP font-src allows.
 func TestWebUIStylesheetFontsAreServed(t *testing.T) {
-	handler := NewWebUIHandler()
+	handler := NewWebUIHandler("test-write-token")
 	mux := webUIMux(handler)
 	entries, err := fs.ReadDir(handler.files, ".")
 	if err != nil {
@@ -141,7 +144,7 @@ func TestWebUIAssetsRejectUnsafeOrUnknownPaths(t *testing.T) {
 		"nested/app-2.js":  {Data: []byte("export {}")},
 		"notes.txt":        {Data: []byte("secret")},
 		"webui_handler.go": {Data: []byte("package handlers")},
-	})
+	}, "test-write-token")
 	mux := webUIMux(handler)
 	for _, path := range []string{"/ui/assets/app-1.js", "/ui/assets/style-1.css"} {
 		res := httptest.NewRecorder()
@@ -173,7 +176,7 @@ func TestWebUIAssetsRejectUnsafeOrUnknownPaths(t *testing.T) {
 
 func TestWebUIHandlerReportsMissingDocument(t *testing.T) {
 	res := httptest.NewRecorder()
-	webUIMux(newWebUIHandler(fstest.MapFS{})).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
+	webUIMux(newWebUIHandler(fstest.MapFS{}, "test-write-token")).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
 	if res.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", res.Code)
 	}

@@ -13,6 +13,9 @@ export interface RecordedRequest {
   body: Record<string, unknown> | null;
 }
 
+/** The fake daemon's launch token, written into the document like the daemon's. */
+export const WRITE_TOKEN = 'e2e-write-token';
+
 type Handler = (body: Record<string, unknown>, match: RegExpMatchArray) => unknown;
 
 export class FakeDaemon {
@@ -21,6 +24,8 @@ export class FakeDaemon {
   private nextId = 100;
   private readonly overrides = new Map<string, () => unknown>();
   private readonly pending: DaemonEvent[] = [];
+  /** Console messages a test expects, such as the browser's note on a refused request. */
+  readonly expectedConsole: RegExp[] = [];
 
   /**
    * Adds a live update to every event-stream connection: the fake cannot keep
@@ -41,6 +46,13 @@ export class FakeDaemon {
 
   async install(page: Page): Promise<void> {
     await page.route(url => url.pathname === '/status' || url.pathname.startsWith('/api/'), route => this.handle(route));
+    // The daemon writes its launch token into the document it serves; the
+    // dev server cannot, so the test writes it once the document is parsed.
+    await page.addInitScript(token => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelector<HTMLMetaElement>('meta[name="mini-orca-write-token"]')?.setAttribute('content', token);
+      });
+    }, WRITE_TOKEN);
   }
 
   private tasks() {
@@ -91,6 +103,9 @@ export class FakeDaemon {
     }
     if (request.headers()['x-mini-orca-web-ui'] !== '1') {
       return json(route, 403, { user_message: 'Missing the Web UI request marker.' });
+    }
+    if (method !== 'GET' && request.headers()['x-mini-orca-token'] !== WRITE_TOKEN) {
+      return json(route, 401, { user_message: 'Reload the Web UI to get this daemon\'s write token.' });
     }
     try {
       if (method === 'GET') {
@@ -208,7 +223,7 @@ export const test = base.extend<{ daemon: FakeDaemon }>({
         if (message.type() === 'error') errors.push(message.text());
       });
       await use(daemon);
-      expect(errors, 'browser console errors').toEqual([]);
+      expect(errors.filter(error => !daemon.expectedConsole.some(pattern => pattern.test(error))), 'browser console errors').toEqual([]);
     },
     { auto: true },
   ],

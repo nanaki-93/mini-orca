@@ -1,6 +1,33 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { ProxyOptions } from 'vite';
+
+// In development the page is served by Vite, so the daemon cannot write its
+// token into it; the proxy reads the daemon's token file and adds the token to
+// requests that change state, as the served Web UI does itself.
+function daemonTokenFile(): string {
+  if (process.env.MINI_ORCA_TOKEN_FILE) return process.env.MINI_ORCA_TOKEN_FILE;
+  const config = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.platform === 'win32' ? (process.env.APPDATA ?? homedir()) : (process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'));
+  return join(config, 'mini-orca', 'daemon-token');
+}
+
+const daemon: ProxyOptions = {
+  target: 'http://127.0.0.1:9090',
+  configure: proxy => {
+    proxy.on('proxyReq', (proxyReq, req) => {
+      if (req.method === 'GET' || req.method === 'HEAD') return;
+      try {
+        proxyReq.setHeader('X-Mini-Orca-Token', readFileSync(daemonTokenFile(), 'utf8').trim());
+      } catch {
+        // Without the file the daemon refuses the request and says why.
+      }
+    });
+  },
+};
 
 // The daemon serves the built UI at /ui and its files under /ui/assets/ with a
 // strict CSP (no inline script or style), so everything is emitted as files and
@@ -30,8 +57,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:9090',
-      '/status': 'http://127.0.0.1:9090',
+      '/api': daemon,
+      '/status': daemon,
     },
   },
   test: {

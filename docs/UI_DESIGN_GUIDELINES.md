@@ -139,8 +139,10 @@ modifier (`usePageKeys` and `useShortcuts` own those rules).
 - Strict CSP: same-origin scripts, styles and fonts, no inline script, and one
   per-response nonce for the style tag dialogs inject. Never add inline styles
   through HTML strings; React style props are set through the CSSOM.
-- Every request carries the Web UI marker header; mutations carry the guarded
-  proposal identity; failures show the daemon's user message.
+- Every request carries the Web UI marker header; mutations carry the write
+  token from the document and the guarded proposal identity; failures show the
+  daemon's user message. In development the Vite proxy adds the token from the
+  daemon's token file.
 - Shared pieces live in `components/` (primitives in `ui.tsx`, domain pieces in
   `domain.tsx`); a page does not grow its own copy of a list group, status badge
   or key handler.

@@ -26,8 +26,19 @@ with the structured error response described below.
 
 ## Local request boundary
 
-The daemon trusts local clients of its loopback API;
-it does not provide browser sessions, CORS access, or request authentication.
+The daemon serves local clients of its loopback API; it does not provide
+browser sessions or CORS access. Every request that can change state (any
+method but `GET`, `HEAD` and `OPTIONS`) must carry the daemon's per-launch
+write token in `X-Mini-Orca-Token`; otherwise it receives `401 Unauthorized`
+before any route runs. Each launch creates a new token and saves it, with a
+newline, to a file only the daemon's user can read (mode `0600`):
+`MINI_ORCA_TOKEN_FILE` when set (an absolute path), otherwise `mini-orca/daemon-token`
+under the user configuration directory (`~/Library/Application Support` on
+macOS, `$XDG_CONFIG_HOME` or `~/.config` on Linux, `%AppData%` on Windows). The
+Web UI document carries the token in a `mini-orca-write-token` meta tag; a page
+from an earlier launch is told to reload. A web page in another origin can read
+neither, so it cannot forge a write even when the Host and Origin checks pass.
+Reads, health checks and event streams need no token.
 With the default loopback bind, requests must use a `Host` of `localhost`,
 `127.0.0.1`, or `::1` (with an optional port). Requests carrying an `Origin`
 header are rejected unless that origin is the daemon itself and the request is a
@@ -45,8 +56,8 @@ loopback health checks with no request body.
 
 `MINI_ORCA_BIND_ADDRESS` can deliberately bind the daemon beyond loopback. In
 that mode the Host restriction is relaxed so a configured native client can
-reach it, but the API remains unauthenticated and continues to reject browser
-origins. Restrict it with network controls; it is not suitable for public or
+reach it; writes still need the token and browser origins are still rejected,
+but reads are unauthenticated. Restrict it with network controls; it is not suitable for public or
 untrusted networks.
 
 ## Live routes

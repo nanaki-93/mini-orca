@@ -8,7 +8,7 @@ import { changeOverlaps, parseCommits, workflowBlocker } from './workflow';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
 import { QueryClient } from '@tanstack/react-query';
 import { costCaveat, costLabel, formatTokens, usageLabel } from './usage';
-import { createApi, query, withWorktree } from '@/api/client';
+import { createApi, documentWriteToken, query, withWorktree } from '@/api/client';
 
 describe('fuzzy', () => {
   it('prefers basename and contiguous hits', () => {
@@ -140,5 +140,27 @@ describe('daemon events', () => {
     expect(invalidated).toContainEqual(['session', 'chg-1']);
     expect(invalidated).not.toContainEqual(['session']);
     expect(invalidated).toContainEqual(['usage']);
+  });
+});
+
+describe('write token', () => {
+  it('goes with every request that changes state, never with reads', async () => {
+    const seen: Record<string, Record<string, string>> = {};
+    const api = createApi(async (url, init) => {
+      seen[(init?.method ?? 'GET') + ' ' + String(url)] = init?.headers as Record<string, string>;
+      return new Response('{}', { status: 200 });
+    }, () => 'launch-token');
+    await api.get('/api/projects/current');
+    await api.post('/api/projects/current/changes', {});
+    expect(seen['GET /api/projects/current']['X-Mini-Orca-Token']).toBeUndefined();
+    expect(seen['POST /api/projects/current/changes']['X-Mini-Orca-Token']).toBe('launch-token');
+  });
+
+  it('reads the token the daemon wrote into the document', () => {
+    const doc = document.implementation.createHTMLDocument('ui');
+    doc.head.innerHTML = '<meta name="mini-orca-write-token" content="__MINI_ORCA_WRITE_TOKEN__">';
+    expect(documentWriteToken(doc)).toBe('');
+    doc.head.innerHTML = '<meta name="mini-orca-write-token" content="abc123">';
+    expect(documentWriteToken(doc)).toBe('abc123');
   });
 });
