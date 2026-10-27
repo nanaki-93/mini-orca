@@ -1,0 +1,126 @@
+// Diff shaping for review. The daemon sends every line of a changed file;
+// review shows changed lines with context and lets the reviewer expand gaps.
+
+import type { DiffLine, FileChange } from '@/api/types';
+
+export function isChange(line: DiffLine | undefined | null): boolean {
+  return Boolean(line && (line.kind === 'added' || line.kind === 'removed'));
+}
+
+export function diffStats(edit: Pick<FileChange, 'diff'> | { lines: DiffLine[] }): { added: number; removed: number } {
+  const lines = 'diff' in edit ? edit.diff?.lines ?? [] : edit.lines;
+  let added = 0;
+  let removed = 0;
+  for (const line of lines) {
+    if (line.kind === 'added') added++;
+    else if (line.kind === 'removed') removed++;
+  }
+  return { added, removed };
+}
+
+export type Segment = { type: 'lines'; start: number; end: number } | { type: 'gap'; start: number; end: number; count: number };
+
+/** Groups lines into visible hunks and collapsed gaps; `expanded` holds gap start indexes. */
+export function buildSegments(lines: DiffLine[], context = 3, expanded: ReadonlySet<number> = new Set()): Segment[] {
+  if (!lines.length) return [];
+  const keep = new Array<boolean>(lines.length).fill(false);
+  let anyChange = false;
+  lines.forEach((line, index) => {
+    if (!isChange(line)) return;
+    anyChange = true;
+    for (let k = Math.max(0, index - context); k <= Math.min(lines.length - 1, index + context); k++) keep[k] = true;
+  });
+  if (!anyChange) return [{ type: 'gap', start: 0, end: lines.length, count: lines.length }];
+  const segments: Segment[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const visible = keep[index];
+    let end = index;
+    while (end < lines.length && keep[end] === visible) end++;
+    if (visible || expanded.has(index) || end - index <= 2) segments.push({ type: 'lines', start: index, end });
+    else segments.push({ type: 'gap', start: index, end, count: end - index });
+    index = end;
+  }
+  const merged: Segment[] = [];
+  for (const segment of segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.type === 'lines' && segment.type === 'lines') last.end = segment.end;
+    else merged.push({ ...segment });
+  }
+  return merged;
+}
+
+/** Indexes where runs of changed lines begin, for hunk navigation. */
+export function hunkStarts(lines: DiffLine[]): number[] {
+  const starts: number[] = [];
+  lines.forEach((line, index) => {
+    if (isChange(line) && !isChange(lines[index - 1])) starts.push(index);
+  });
+  return starts;
+}
+
+export interface SplitRow {
+  left: DiffLine | null;
+  right: DiffLine | null;
+  index: number;
+}
+
+/** Pairs removed/added runs side by side for split view. */
+export function splitRows(lines: DiffLine[], start = 0, end = lines.length): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let i = start;
+  while (i < end) {
+    const line = lines[i];
+    if (!isChange(line)) {
+      rows.push({ left: line, right: line, index: i });
+      i++;
+      continue;
+    }
+    const first = i;
+    const removed: DiffLine[] = [];
+    const added: DiffLine[] = [];
+    while (i < end && lines[i].kind === 'removed') removed.push(lines[i++]);
+    while (i < end && lines[i].kind === 'added') added.push(lines[i++]);
+    for (let k = 0; k < Math.max(removed.length, added.length); k++) rows.push({ left: removed[k] ?? null, right: added[k] ?? null, index: first + k });
+  }
+  return rows;
+}
+
+export interface ParsedFileDiff {
+  path: string;
+  lines: DiffLine[];
+  binary: boolean;
+}
+
+/** Parses `git diff` text (merge previews) into per-file line lists. */
+export function parseGitDiff(text: string | undefined): ParsedFileDiff[] {
+  const files: ParsedFileDiff[] = [];
+  let current: ParsedFileDiff | null = null;
+  let oldLine = 0;
+  let newLine = 0;
+  for (const raw of (text ?? '').split('\n')) {
+    if (raw.startsWith('diff --git ')) {
+      const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(raw);
+      current = { path: match ? match[2] : raw.slice(11), lines: [], binary: false };
+      files.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (/^(\+\+\+ |--- |index |new file|deleted file|similarity|rename )/.test(raw)) continue;
+    if (raw.startsWith('Binary files')) {
+      current.binary = true;
+      continue;
+    }
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(raw);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      current.lines.push({ kind: 'hunk', text: raw });
+      continue;
+    }
+    if (raw.startsWith('+')) current.lines.push({ kind: 'added', new_line: newLine++, text: raw.slice(1) });
+    else if (raw.startsWith('-')) current.lines.push({ kind: 'removed', old_line: oldLine++, text: raw.slice(1) });
+    else if (raw.startsWith(' ')) current.lines.push({ kind: 'context', old_line: oldLine++, new_line: newLine++, text: raw.slice(1) });
+  }
+  return files;
+}

@@ -1,0 +1,263 @@
+// One task, laid out like a pull request: header with the next action, tabs
+// for the conversation, files changed and checks, and a review-gate rail.
+
+import { useState, type ReactNode } from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
+import {
+  ArrowLeft, Check, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Upload,
+} from 'lucide-react';
+import { useProject, useSession, useTrust } from '@/api/hooks';
+import type { LoadedSession } from '@/api/types';
+import { useActions, useBusy } from '@/app/actions';
+import { navigate, useRoute } from '@/lib/router';
+import { checkSummary, effectiveEdits, proposalReadiness, reviewProgress, taskStatus, workflowActive } from '@/lib/readiness';
+import { reviewVerdict, workflowBlocker } from '@/lib/workflow';
+import { basename, isTestPath, plural, shortHash, timeAgo } from '@/lib/util';
+import { Badge, Button, Callout, EmptyState, Input, Skeleton, Tip, cx } from '@/components/ui';
+import { KindTag, TaskStatusBadge } from '@/components/domain';
+import { FilesChanged } from '@/features/review/FilesChanged';
+import { ChecksPanel } from '@/features/review/ChecksPanel';
+import { TaskOverview } from './TaskOverview';
+
+export function TaskPage({ id, tab }: { id: string; tab: string }) {
+  const route = useRoute();
+  const worktreePath = route.params.get('wt') ?? '';
+  const { data: session, isLoading, error } = useSession(id, worktreePath, false);
+
+  if (isLoading) return <div className="page-scroll"><div className="page-inner"><Skeleton lines={8} /></div></div>;
+  if (error || !session) {
+    return (
+      <EmptyState icon={FileDiff} title="Task unavailable" action={<Button icon={ArrowLeft} onClick={() => navigate('/tasks')}>All tasks</Button>}>
+        {error instanceof Error ? error.message : 'This task could not be loaded.'}
+      </EmptyState>
+    );
+  }
+  const edits = effectiveEdits(session);
+  const checks = checkSummary(session.checks);
+  const current = tab === 'files' || tab === 'checks' ? tab : 'overview';
+
+  return (
+    <div className="task-page">
+      <TaskHeader session={session} />
+      <Tabs.Root className="task-tabs" value={current} onValueChange={value => navigate(`/tasks/${id}${value === 'overview' ? '' : '/' + value}`, { file: route.params.get('file') ?? undefined })}>
+        <Tabs.List className="tabs" aria-label="Task sections">
+          <Tabs.Trigger value="overview" className="tab">
+            <MessageSquare size={14} aria-hidden /> Conversation
+          </Tabs.Trigger>
+          <Tabs.Trigger value="files" className="tab">
+            <FileDiff size={14} aria-hidden /> Files changed <span className="count">{edits.length}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="checks" className="tab">
+            <FlaskConical size={14} aria-hidden /> Checks <span className={cx('count', `count-${checks.tone}`)}>{checks.total ? checks.label : '—'}</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+        <div className="task-body">
+          <div className="task-main">
+            <Tabs.Content value="overview" className="tab-panel">
+              <TaskOverview session={session} />
+            </Tabs.Content>
+            <Tabs.Content value="files" className="tab-panel tab-panel-fill">
+              <FilesChanged session={session} />
+            </Tabs.Content>
+            <Tabs.Content value="checks" className="tab-panel">
+              <ChecksPanel session={session} />
+            </Tabs.Content>
+          </div>
+          {current !== 'files' ? <ReviewRail session={session} /> : null}
+        </div>
+      </Tabs.Root>
+    </div>
+  );
+}
+
+function TaskHeader({ session }: { session: LoadedSession }) {
+  const branch = session.git?.branch || (session.checkout.worktreePath ? basename(session.checkout.worktreePath) : '');
+  return (
+    <header className="task-header">
+      <button type="button" className="icon-btn" aria-label="Back to tasks" onClick={() => navigate('/tasks')}>
+        <ArrowLeft size={16} aria-hidden />
+      </button>
+      <div className="grow">
+        <h1 className="task-title">{session.title || session.id}</h1>
+        <div className="row-wrap task-meta">
+          <TaskStatusBadge entry={session} />
+          <KindTag kind={session.kind} />
+          {branch ? (
+            <span className="chip" title={session.checkout.worktreePath || 'main checkout'}>
+              <GitBranch size={12} aria-hidden /> {branch}
+            </span>
+          ) : null}
+          <span className="xs faint">v{session.revision}{session.hash ? ` · ${shortHash(session.hash)}` : ''}</span>
+          {session.updated_at ? <span className="xs faint">updated {timeAgo(session.updated_at)}</span> : null}
+        </div>
+      </div>
+      <PrimaryAction session={session} />
+    </header>
+  );
+}
+
+/** The single most useful next step, as a button. */
+function PrimaryAction({ session }: { session: LoadedSession }) {
+  const actions = useActions();
+  const busy = useBusy();
+  const trust = useTrust().data;
+  const ready = proposalReadiness(session);
+  const blocker = workflowBlocker(session, Boolean(trust?.trusted), isTestPath);
+  if (workflowActive(session)) {
+    return (
+      <Button variant="secondary" icon={Square} onClick={() => void actions.cancelAgents(session)} disabled={session.workflow?.status === 'canceling' || Boolean(busy)}>
+        Stop agents
+      </Button>
+    );
+  }
+  switch (ready.step) {
+    case 'generate':
+      return (
+        <Tip label={blocker || 'Agents write the change, tests, and review it'}>
+          <span>
+            <Button variant="primary" icon={Play} onClick={() => void actions.startAgents(session, { autoRepair: true })} disabled={Boolean(blocker) || Boolean(busy)}>
+              Start agents
+            </Button>
+          </span>
+        </Tip>
+      );
+    case 'review':
+      return (
+        <Button variant="primary" icon={FileDiff} onClick={() => navigate(`/tasks/${session.id}/files`)}>
+          Review files
+        </Button>
+      );
+    case 'checks':
+      return (
+        <Button variant="primary" icon={FlaskConical} onClick={() => void actions.runChecks(session)} disabled={!trust?.trusted || Boolean(busy)}>
+          Run checks
+        </Button>
+      );
+    case 'approve':
+      return (
+        <Button variant="primary" icon={ThumbsUp} onClick={() => void actions.approve(session)} disabled={Boolean(busy)}>
+          Approve
+        </Button>
+      );
+    case 'applied':
+      return ready.canUndo ? (
+        <Button variant="secondary" icon={RotateCcw} onClick={() => void actions.undo(session)} disabled={Boolean(busy)}>
+          Undo
+        </Button>
+      ) : null;
+    case 'agents':
+    case 'stale':
+    case 'recovery':
+      return session.workflow && ['failed', 'canceled', 'changes_requested', 'interrupted'].includes(session.workflow.status) && !blocker ? (
+        <Button variant="secondary" icon={Play} onClick={() => void actions.startAgents(session, { autoRepair: true })} disabled={Boolean(busy)}>
+          Run agents again
+        </Button>
+      ) : null;
+    default:
+      return null;
+  }
+}
+
+function ReviewRail({ session }: { session: LoadedSession }) {
+  const ready = proposalReadiness(session);
+  const progress = reviewProgress(session);
+  const checks = checkSummary(session.checks);
+  const workflow = session.workflow;
+  const verdict = reviewVerdict(workflow);
+  const steps: { label: string; done: boolean; active: boolean; detail: ReactNode; onClick?: () => void }[] = [
+    { label: 'Agents finished', done: Boolean((session.changes ?? []).length) && !workflowActive(session), active: ready.step === 'agents' || ready.step === 'generate', detail: workflow ? taskStatus({ ...session, workflow_status: workflow.status }).label : (session.changes ?? []).length ? 'Manual proposal' : 'Not started' },
+    { label: 'Reviewers', done: verdict === 'approve', active: false, detail: verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents' },
+    { label: 'Files viewed', done: ready.filesReviewed, active: ready.step === 'review', detail: `${progress.reviewed} of ${progress.total}`, onClick: () => navigate(`/tasks/${session.id}/files`) },
+    { label: 'Checks', done: ready.checksPassed, active: ready.step === 'checks', detail: checks.label, onClick: () => navigate(`/tasks/${session.id}/checks`) },
+    { label: 'Your approval', done: Boolean(session.reviewed_hash) && session.reviewed_hash === session.hash, active: ready.step === 'approve', detail: session.reviewed_hash === session.hash && session.hash ? 'This exact version' : 'Not yet' },
+  ];
+  return (
+    <aside className="rail" aria-label="Review gate">
+      <section className="rail-section">
+        <div className="rail-title">Ready to apply?</div>
+        <ol className="gate">
+          {steps.map(step => (
+            <li key={step.label} className={cx('gate-step', step.done && 'is-done', step.active && 'is-active')}>
+              {step.done ? <CheckCircle2 size={15} className="tone-success" aria-hidden /> : <Circle size={15} className={step.active ? 'tone-accent' : 'faint'} aria-hidden />}
+              <button type="button" className="gate-label" onClick={step.onClick} disabled={!step.onClick}>
+                <span>{step.label}</span>
+                <span className="xs muted">{step.detail}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <p className="xs muted">{ready.message}</p>
+      </section>
+      {(session.changes ?? []).length || session.state === 'applied' ? <ApplyBox session={session} /> : null}
+      <section className="rail-section">
+        <div className="rail-title">Details</div>
+        <dl className="details">
+          <dt>Checkout</dt>
+          <dd className="truncate" title={session.checkout.worktreePath || 'main checkout'}>{session.checkout.worktreePath ? basename(session.checkout.worktreePath) : 'main checkout'}</dd>
+          {session.git?.branch ? (<><dt>Branch</dt><dd>{session.git.branch}</dd></>) : null}
+          <dt>Scope</dt>
+          <dd>{plural((session.targets ?? []).length, 'file')}</dd>
+          {session.finding_targets?.length ? (<><dt>Fixes</dt><dd>{plural(session.finding_targets.length, 'issue')}</dd></>) : null}
+          {session.commit ? (<><dt>Commit</dt><dd className="mono">{session.commit.state === 'committed' ? shortHash(session.commit.oid) : session.commit.state}</dd></>) : null}
+          {workflow?.stages?.find(s => s.model)?.model ? (<><dt>Models</dt><dd className="truncate">{[...new Set(workflow.stages.map(s => s.model?.model).filter(Boolean))].join(', ')}</dd></>) : null}
+        </dl>
+      </section>
+    </aside>
+  );
+}
+
+function ApplyBox({ session }: { session: LoadedSession }) {
+  const actions = useActions();
+  const busy = useBusy();
+  const project = useProject().data;
+  const ready = proposalReadiness(session);
+  const [commit, setCommit] = useState(Boolean(session.git?.head));
+  const [message, setMessage] = useState(`${session.kind === 'fix' ? 'fix' : 'feat'}: ${session.title}`.slice(0, 120));
+  const input = session.workflow?.input;
+
+  if (session.state === 'applied') {
+    return (
+      <section className="rail-section">
+        <Callout tone="success" icon={ShieldCheck} title={session.commit?.state === 'committed' ? 'Applied and committed' : 'Applied'}>
+          {ready.message.replace(/^Applied\. /, '')}
+        </Callout>
+        {session.checkout.worktreePath ? (
+          <Button icon={ExternalLink} onClick={() => navigate('/git')}>
+            Merge from Branches
+          </Button>
+        ) : null}
+      </section>
+    );
+  }
+  if (!ready.editable) return null;
+  return (
+    <section className="rail-section">
+      {ready.canApply ? (
+        <>
+          <label className="check-label">
+            <input type="checkbox" checked={commit} onChange={e => setCommit(e.target.checked)} disabled={!session.git?.head} />
+            <GitCommitHorizontal size={14} aria-hidden /> Commit after apply
+          </label>
+          {commit ? <Input value={message} onChange={e => setMessage(e.target.value)} aria-label="Commit message" maxLength={200} /> : null}
+          <Button variant="primary" icon={Upload} onClick={() => void actions.apply(session, project, { commit, message })} disabled={Boolean(busy)} loading={busy === 'Applying…'}>
+            {commit ? 'Apply & commit' : 'Apply changes'}
+          </Button>
+        </>
+      ) : ready.canApprove ? (
+        <Button variant="primary" icon={Check} onClick={() => void actions.approve(session)} disabled={Boolean(busy)} loading={busy === 'Approving…'}>
+          Approve this version
+        </Button>
+      ) : (
+        <Button variant="primary" icon={Upload} disabled>
+          Apply changes
+        </Button>
+      )}
+      {input?.status === 'waiting' ? (
+        <Button variant="ghost" icon={ThumbsDown} onClick={() => void actions.reject(session)} disabled={Boolean(busy)}>
+          Reject proposal
+        </Button>
+      ) : null}
+      {workflowActive(session) ? <Badge tone="info">Agents are still working</Badge> : null}
+    </section>
+  );
+}

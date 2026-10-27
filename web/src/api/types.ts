@@ -1,0 +1,398 @@
+// Wire types for the daemon's loopback API. They mirror the Go DTOs in
+// internal/tui/client/models.go; fields the UI does not read are omitted.
+
+export interface ProjectIdentity {
+  project_id: string;
+  project_revision: string;
+}
+
+export interface GitIdentity {
+  head: string;
+  branch: string;
+}
+
+export interface Project extends ProjectIdentity {
+  name: string;
+  path: string;
+  type: string;
+  build_file?: string;
+  file_count: number;
+  source_file_count?: number;
+  total_lines?: number;
+  languages?: Record<string, number>;
+  summary?: string;
+}
+
+export interface IndexedFile {
+  path: string;
+  content_hash: string;
+  language: string;
+  binary?: boolean;
+  size_bytes?: number;
+  line_count?: number;
+  analysis_status?: string;
+}
+
+export interface ProjectIndex extends ProjectIdentity {
+  files: IndexedFile[];
+}
+
+export interface FileInfo {
+  path: string;
+  content_hash: string;
+  name?: string;
+  language: string;
+  size_bytes?: number;
+  line_count?: number;
+  binary?: boolean;
+  content: string;
+}
+
+export interface ModelCapabilities {
+  completion?: boolean;
+  json_schema?: boolean;
+  tools?: boolean;
+  streaming?: boolean;
+}
+
+export interface Model {
+  scope: string;
+  profile?: string;
+  model: string;
+  provider_origin?: string;
+  remote_provider?: boolean;
+  reasoning_effort?: string;
+  timeout?: string;
+  context_max_tokens?: number;
+  capabilities?: ModelCapabilities;
+}
+
+export interface ModelsCurrent {
+  scopes: Record<string, Model>;
+}
+
+export interface ExecutionTrust extends ProjectIdentity {
+  trusted: boolean;
+  commands: string[][];
+}
+
+export type CheckState = 'passed' | 'failed' | 'running' | 'skipped' | 'unavailable' | 'canceled' | 'pending' | string;
+
+export interface Check {
+  name: string;
+  required: boolean;
+  state: CheckState;
+  command?: string[];
+  output?: string;
+  exit_code?: number;
+  duration_ms?: number;
+  outcome?: string;
+}
+
+export interface DiffLine {
+  kind: 'context' | 'added' | 'removed' | 'hunk' | string;
+  old_line?: number;
+  new_line?: number;
+  text: string;
+}
+
+export interface FileDiff {
+  old_path?: string;
+  new_path?: string;
+  lines: DiffLine[];
+}
+
+export interface FileChange {
+  path: string;
+  content: string;
+  hash: string;
+  summary?: string;
+  criteria?: number[];
+  diff: FileDiff;
+}
+
+export interface ChangeTarget {
+  path: string;
+  hash: string;
+  exists: boolean;
+}
+
+export interface ChangeCommit extends Partial<GitIdentity> {
+  state: string;
+  message?: string;
+  oid?: string;
+  error?: string;
+}
+
+export interface WorkflowStage {
+  name: string;
+  status: string;
+  reason?: string;
+  started_at?: string;
+  finished_at?: string;
+  model?: Model;
+}
+
+export interface WorkflowReview {
+  proposal_hash?: string;
+  verdict: 'approve' | 'changes_requested' | string;
+  summary: string;
+  findings: string[];
+}
+
+export interface SpecialistReview {
+  id: string;
+  status: string;
+  reason?: string;
+  evidence: string;
+  model?: Model;
+  review?: WorkflowReview;
+}
+
+export interface WorkflowInput {
+  request_id: string;
+  workflow_id: string;
+  status: string;
+  action: string;
+  expires_at: string;
+}
+
+export interface ChangeWorkflow {
+  id: string;
+  status: string;
+  reason?: string;
+  attempt?: number;
+  auto_repair?: boolean;
+  auto_repair_attempts?: number;
+  stages: WorkflowStage[];
+  review?: WorkflowReview;
+  specialists?: SpecialistReview[];
+  input?: WorkflowInput;
+  started_at?: string;
+  updated_at?: string;
+}
+
+export interface ChangeMessage {
+  role: string;
+  content: string;
+}
+
+export interface PlanEvidence {
+  path: string;
+  start_line?: number;
+  end_line?: number;
+  quote?: string;
+  reason?: string;
+}
+
+export interface ChangePlan {
+  problem?: string;
+  approach?: string;
+  evidence?: PlanEvidence[];
+  assumptions?: string[];
+  non_goals?: string[];
+  read_paths?: string[];
+  hash?: string;
+  approved_hash?: string;
+}
+
+export interface FindingTarget {
+  project_id: string;
+  kind: string;
+  id: string;
+  path: string;
+}
+
+export interface UndoAvailability {
+  available: boolean;
+  reason: string;
+}
+
+export interface ChangeSession extends ProjectIdentity {
+  id: string;
+  kind: string;
+  title: string;
+  acceptance_criteria: string[];
+  revision: number;
+  hash: string;
+  state: string;
+  freshness: string;
+  targets: ChangeTarget[];
+  changes: FileChange[];
+  pinned_tests?: FileChange[];
+  review_diff?: FileChange[];
+  messages: ChangeMessage[];
+  checks: Check[];
+  reviewed_hash?: string;
+  reviewed_files?: string[];
+  file_review_hash?: string;
+  last_reviewed_hash?: string;
+  repair_attempts?: number;
+  workflow?: ChangeWorkflow;
+  plan?: ChangePlan;
+  scope_suggestions?: string[];
+  finding_targets?: FindingTarget[];
+  git?: GitIdentity;
+  commit?: ChangeCommit;
+  worktree_path?: string;
+  updated_at: string;
+}
+
+/** A change session as the UI tracks it: where it lives and its checkout identity. */
+export interface LoadedSession extends ChangeSession {
+  checkout: CheckoutRef;
+  undo?: UndoAvailability;
+}
+
+export interface CheckoutRef extends ProjectIdentity {
+  worktreePath: string;
+}
+
+export interface ChangeHistoryEntry extends ProjectIdentity {
+  id: string;
+  kind: string;
+  title: string;
+  revision: number;
+  hash: string;
+  state: string;
+  freshness: string;
+  commit?: ChangeCommit;
+  updated_at: string;
+  paths?: string[];
+  workflow_status?: string;
+  workflow_reason?: string;
+  worktree_path?: string;
+  finding_targets?: FindingTarget[];
+}
+
+/** A task row in lists: the history entry plus the checkout that owns it. */
+export interface TaskEntry extends ChangeHistoryEntry {
+  worktreePath: string;
+  branch?: string;
+}
+
+export interface ChangeMutationResult extends ProjectIdentity {
+  session_id: string;
+  state: string;
+  hash: string;
+  undo_available: boolean;
+  warnings: string[];
+  commit?: ChangeCommit;
+}
+
+export interface SourceAnchor {
+  path: string;
+  start_line?: number;
+  end_line?: number;
+}
+
+export interface Finding {
+  id: string;
+  source: string;
+  confidence?: string;
+  severity: string;
+  title: string;
+  message: string;
+  rule?: string;
+  location: SourceAnchor;
+  evidence?: string;
+  status: string;
+  freshness?: string;
+  category?: string;
+  task_spec?: { target_path?: string; acceptance_criteria?: string[]; non_goals?: string[] };
+}
+
+export interface FindingsResponse extends ProjectIdentity {
+  findings: Finding[];
+}
+
+export interface GitWorktree extends GitIdentity {
+  path: string;
+  current?: boolean;
+  locked?: boolean;
+  prunable?: boolean;
+  dirty?: boolean;
+  mergeable?: boolean;
+  integration?: string;
+  overlap_paths?: string[];
+  completed?: ChangeHistoryEntry[];
+  sessions?: ChangeHistoryEntry[];
+  error?: string;
+}
+
+export interface GitBranch {
+  name: string;
+  head: string;
+  worktree_path?: string;
+}
+
+export interface GitWorkspace extends GitIdentity, ProjectIdentity {
+  available: boolean;
+  root: string;
+  dirty: boolean;
+  merge_head?: string;
+  operation?: string;
+  conflicts: string[];
+  branches?: GitBranch[];
+  worktrees: GitWorktree[];
+}
+
+export interface MergePreview {
+  diff?: string;
+  commits?: string;
+  conflicts?: string[];
+  files?: string[];
+  state?: string;
+}
+
+export interface DocsComponent {
+  name: string;
+  layer?: string;
+  path?: string;
+  summary?: string;
+  responsibilities?: string[];
+  contracts?: string[];
+  dependencies?: string[];
+}
+
+export interface ProjectDocs {
+  status: string;
+  context?: { purpose?: string; goal_pursuit?: string[]; topology?: string; stack?: string[] };
+  dependencies?: { name: string; kind?: string; version?: string; source?: string; summary?: string }[];
+  components?: DocsComponent[];
+  scenarios?: { title: string; trigger?: string; summary?: string; invariant?: string; steps?: { phase?: string; layer?: string; title: string; detail?: string; path?: string }[] }[];
+  decisions?: { title: string; status?: string; context?: string; decision?: string; consequences?: string }[];
+  runbook?: { label: string; command: string; description?: string }[];
+  glossary?: { term: string; definition: string }[];
+  updated_at?: string;
+}
+
+export interface AnalysisRunSummary {
+  identity?: Record<string, string>;
+  status: string;
+  reason?: string;
+  started_at?: string;
+  updated_at?: string;
+}
+
+export interface Overview extends ProjectIdentity {
+  docs?: ProjectDocs;
+  metrics?: { type?: string; file_count?: number; source_file_count?: number; total_lines?: number; languages?: Record<string, number> };
+  analysis?: { status?: string; purpose?: string; failure?: string; model?: string; generated_at?: string };
+  analysis_coverage?: Record<string, number>;
+  analysis_run?: AnalysisRunSummary;
+  finding_counts?: { verified?: number; ai_suggestions?: number };
+}
+
+export interface AgentSettings extends ProjectIdentity {
+  state: string;
+  roles: Record<string, string>;
+  limits?: Record<string, number>;
+  ceilings?: Record<string, number>;
+  models?: Model[];
+}
+
+export interface DaemonStatus {
+  status: string;
+  version: string;
+}

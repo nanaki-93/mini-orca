@@ -1,0 +1,156 @@
+// All tasks, grouped by what they need, with keyboard navigation (j/k, Enter).
+
+import { useEffect, useMemo, useState } from 'react';
+import { GitBranch, ListTodo, Plus, Search } from 'lucide-react';
+import { useTasks } from '@/api/hooks';
+import type { TaskEntry } from '@/api/types';
+import { openNewTask } from '@/app/store';
+import { isTyping } from '@/app/shortcuts';
+import { navigate, setParam, useRoute } from '@/lib/router';
+import { rankItems } from '@/lib/fuzzy';
+import { taskStatus, type TaskStatus } from '@/lib/readiness';
+import { basename, plural, timeAgo } from '@/lib/util';
+import { Button, EmptyState, Highlight, Input, Segmented, Skeleton, cx } from '@/components/ui';
+import { KindTag, StatusGlyph } from '@/components/domain';
+
+const GROUPS: { id: string; label: string; statuses: TaskStatus[] }[] = [
+  { id: 'needs', label: 'Needs you', statuses: ['needs_you', 'ready'] },
+  { id: 'running', label: 'Agents working', statuses: ['running'] },
+  { id: 'attention', label: 'Failed or stale', statuses: ['failed', 'stale'] },
+  { id: 'draft', label: 'Drafts', statuses: ['draft', 'canceled'] },
+  { id: 'done', label: 'Done', statuses: ['applied', 'done'] },
+];
+
+type Filter = 'active' | 'running' | 'done' | 'all';
+
+export function TaskListPage() {
+  const route = useRoute();
+  const { tasks, isLoading } = useTasks();
+  const filter = (route.params.get('filter') as Filter) || 'active';
+  const [q, setQ] = useState('');
+  const [cursor, setCursor] = useState(0);
+
+  const visible = useMemo(() => {
+    const byFilter = tasks.filter(task => {
+      const status = taskStatus(task).status;
+      if (filter === 'running') return status === 'running';
+      if (filter === 'done') return status === 'applied' || status === 'done';
+      if (filter === 'active') return status !== 'applied' && status !== 'done';
+      return true;
+    });
+    return rankItems(byFilter, q, task => `${task.title} ${task.kind} ${task.id}`, 500);
+  }, [tasks, filter, q]);
+
+  const grouped = useMemo(
+    () =>
+      GROUPS.map(group => ({ ...group, items: visible.filter(v => group.statuses.includes(taskStatus(v.item).status)) })).filter(group => group.items.length),
+    [visible],
+  );
+  const flat = grouped.flatMap(group => group.items.map(v => v.item));
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (isTyping(event.target) || document.querySelector('[role="dialog"]')) return;
+      if (event.key === 'j' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        setCursor(c => Math.min(c + 1, flat.length - 1));
+      } else if (event.key === 'k' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setCursor(c => Math.max(c - 1, 0));
+      } else if (event.key === 'Enter' && flat[cursor]) {
+        event.preventDefault();
+        openTask(flat[cursor]);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flat, cursor]);
+
+  return (
+    <div className="page-scroll">
+      <div className="page-head">
+        <div className="grow">
+          <h1 className="page-title">Tasks</h1>
+          <p className="page-sub">Each task is a bounded change that agents write, test and review. Nothing reaches your files until you apply it.</p>
+        </div>
+        <Button variant="primary" icon={Plus} onClick={() => openNewTask()} kbd="C">
+          New task
+        </Button>
+      </div>
+      <div className="toolbar">
+        <Segmented
+          label="Filter tasks"
+          value={filter}
+          onChange={value => setParam('filter', value === 'active' ? undefined : value)}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'running', label: 'Running' },
+            { value: 'done', label: 'Done' },
+            { value: 'all', label: 'All' },
+          ]}
+        />
+        <span className="spacer" />
+        <Input icon={Search} placeholder="Filter tasks…" value={q} onChange={e => setQ(e.target.value)} aria-label="Filter tasks" className="toolbar-search" />
+      </div>
+      {isLoading ? (
+        <Skeleton lines={6} className="list-skeleton" />
+      ) : !flat.length ? (
+        <EmptyState icon={ListTodo} title={tasks.length ? 'No tasks match' : 'No tasks yet'} action={!tasks.length ? <Button variant="primary" icon={Plus} onClick={() => openNewTask()}>New task</Button> : undefined}>
+          {tasks.length ? 'Try another filter.' : 'Describe a bug to fix or a feature to build. Agents write the change and tests; you review and apply it.'}
+        </EmptyState>
+      ) : (
+        <div className="list" role="list">
+          {grouped.map(group => (
+            <section key={group.id} className="list-group" aria-label={group.label}>
+              <div className="list-group-head">
+                {group.label}
+                <span className="count">{group.items.length}</span>
+              </div>
+              {group.items.map(({ item, positions }) => {
+                const index = flat.indexOf(item);
+                return <TaskRow key={item.id} task={item} positions={positions} active={index === cursor} onHover={() => setCursor(index)} />;
+              })}
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function openTask(task: TaskEntry) {
+  navigate(`/tasks/${task.id}`, { wt: task.worktreePath || undefined });
+}
+
+export function TaskRow({ task, positions = [], active, onHover, compact }: { task: TaskEntry; positions?: number[]; active?: boolean; onHover?: () => void; compact?: boolean }) {
+  const status = taskStatus(task);
+  return (
+    <a
+      href={`#/tasks/${encodeURIComponent(task.id)}${task.worktreePath ? `?wt=${encodeURIComponent(task.worktreePath)}` : ''}`}
+      className={cx('list-row', active && 'is-active')}
+      role="listitem"
+      onMouseEnter={onHover}
+      onClick={event => {
+        event.preventDefault();
+        openTask(task);
+      }}
+    >
+      <StatusGlyph status={status.status} />
+      <span className="list-title truncate">
+        <Highlight text={task.title || task.id} positions={positions.filter(p => p < (task.title || '').length)} />
+      </span>
+      {!compact && task.workflow_reason && (status.status === 'failed' || status.status === 'canceled') ? <span className="list-reason truncate">{task.workflow_reason}</span> : null}
+      <span className="spacer" />
+      <span className={cx('status-text', `tone-${status.tone}`)}>{status.label}</span>
+      {!compact ? <KindTag kind={task.kind} /> : null}
+      {task.worktreePath ? (
+        <span className="chip" title={task.worktreePath}>
+          <GitBranch size={12} aria-hidden />
+          {task.branch || basename(task.worktreePath)}
+        </span>
+      ) : null}
+      {!compact && task.paths?.length ? <span className="xs faint nowrap">{plural(task.paths.length, 'file')}</span> : null}
+      <span className="xs faint nowrap list-time">{timeAgo(task.updated_at)}</span>
+    </a>
+  );
+}

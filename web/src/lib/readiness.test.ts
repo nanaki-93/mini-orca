@@ -1,0 +1,99 @@
+import { describe, expect, it } from 'vitest';
+import type { ChangeSession, Check, FileChange } from '@/api/types';
+import { checkSummary, effectiveEdits, nextUnreviewedPath, phaseTone, proposalReadiness, reviewProgress, taskStatus, undoFromRecovery } from './readiness';
+
+function edit(path: string): FileChange {
+  return { path, content: '', hash: 'h-' + path, diff: { lines: [] } } as unknown as FileChange;
+}
+
+function check(name: string, state: string, required = true): Check {
+  return { name, state, required } as Check;
+}
+
+function session(overrides: Partial<ChangeSession> = {}): ChangeSession {
+  return {
+    project_id: 'p', project_revision: 'r', id: 'chg-1', kind: 'fix', title: 'Fix', acceptance_criteria: [],
+    revision: 2, hash: 'sha-2', state: 'draft', freshness: 'current', targets: [], changes: [edit('a.go'), edit('a_test.go')],
+    messages: [], checks: [], updated_at: '2026-10-01T00:00:00Z', ...overrides,
+  };
+}
+
+const reviewed = { file_review_hash: 'sha-2', reviewed_files: ['a.go', 'a_test.go'] };
+
+describe('proposalReadiness', () => {
+  it('walks review → checks → approve → apply', () => {
+    expect(proposalReadiness(session()).step).toBe('review');
+    expect(proposalReadiness(session({ ...reviewed })).step).toBe('checks');
+    const checked = session({ ...reviewed, checks: [check('lint', 'passed'), check('tests', 'passed'), check('optional', 'failed', false)] });
+    const approve = proposalReadiness(checked);
+    expect(approve).toMatchObject({ step: 'approve', canApprove: true, canApply: false });
+    expect(proposalReadiness({ ...checked, reviewed_hash: 'sha-2' })).toMatchObject({ step: 'apply', canApply: true });
+  });
+
+  it('does not count reviews recorded for an older hash', () => {
+    const r = proposalReadiness(session({ file_review_hash: 'sha-1', reviewed_files: ['a.go', 'a_test.go'], checks: [check('tests', 'passed')], reviewed_hash: 'sha-1' }));
+    expect(r.filesReviewed).toBe(false);
+    expect(r.canApply).toBe(false);
+  });
+
+  it('waits for a workflow to reach human review', () => {
+    const base = session({ ...reviewed, checks: [check('tests', 'passed')], reviewed_hash: 'sha-2' });
+    expect(proposalReadiness({ ...base, workflow: { status: 'running' } as ChangeSession['workflow'] }).step).toBe('agents');
+    expect(proposalReadiness({ ...base, workflow: { status: 'changes_requested', reason: 'Reviewer asked for tests' } as ChangeSession['workflow'] })).toMatchObject({ step: 'agents', canApply: false, message: 'Reviewer asked for tests' });
+    expect(proposalReadiness({ ...base, workflow: { status: 'awaiting_human_review' } as ChangeSession['workflow'] }).canApply).toBe(true);
+  });
+
+  it('blocks stale proposals and reports undo for applied ones', () => {
+    expect(proposalReadiness(session({ freshness: 'stale' }))).toMatchObject({ step: 'stale', editable: false });
+    expect(proposalReadiness({ ...session({ state: 'applied' }), undo: { available: false, reason: 'Already undone.' } })).toMatchObject({ step: 'applied', canUndo: false });
+    expect(proposalReadiness(session({ changes: [] })).step).toBe('generate');
+  });
+});
+
+describe('review helpers', () => {
+  it('counts progress and finds the next unreviewed file with wraparound', () => {
+    const s = session({ file_review_hash: 'sha-2', reviewed_files: ['a.go'] });
+    expect(reviewProgress(s)).toEqual({ reviewed: 1, total: 2, percent: 50 });
+    expect(nextUnreviewedPath(s, s.changes, 'a_test.go')).toBe('a_test.go');
+    expect(nextUnreviewedPath(s, s.changes, 'a.go')).toBe('a_test.go');
+    expect(nextUnreviewedPath(session({ ...reviewed }), session().changes, 'a.go')).toBe('');
+  });
+
+  it('merges pinned tests without duplicates and supports the since-review delta', () => {
+    const s = session({ pinned_tests: [edit('a_test.go'), edit('b_test.go')], review_diff: [edit('a.go')] });
+    expect(effectiveEdits(s).map(e => e.path)).toEqual(['a.go', 'a_test.go', 'b_test.go']);
+    expect(effectiveEdits(s, true).map(e => e.path)).toEqual(['a.go']);
+    expect(effectiveEdits(null)).toEqual([]);
+  });
+
+  it('summarizes checks', () => {
+    expect(checkSummary([])).toMatchObject({ label: 'Not run', tone: 'neutral' });
+    expect(checkSummary([check('a', 'passed'), check('b', 'failed')])).toMatchObject({ label: '1 failed', tone: 'danger' });
+    expect(checkSummary([check('a', 'passed'), check('b', 'running')])).toMatchObject({ label: 'Running', tone: 'info' });
+    expect(checkSummary([check('a', 'passed')])).toMatchObject({ label: '1/1 passed', tone: 'success' });
+    expect(phaseTone(' Approved ')).toBe('passed');
+    expect(phaseTone('mystery')).toBe('idle');
+  });
+});
+
+describe('undoFromRecovery', () => {
+  it('offers undo only for the latest apply that was not undone', () => {
+    expect(undoFromRecovery({ id: 'a' }, null).available).toBe(false);
+    expect(undoFromRecovery({ id: 'a' }, { session_id: 'b', undo_available: true, state: 'applied' } as never).reason).toMatch(/latest Apply/);
+    expect(undoFromRecovery({ id: 'a' }, { session_id: 'a', undo_available: true, state: 'undone' } as never).available).toBe(false);
+    expect(undoFromRecovery({ id: 'a' }, { session_id: 'a', undo_available: true, state: 'applied' } as never).available).toBe(true);
+  });
+});
+
+describe('taskStatus', () => {
+  const entry = { state: 'draft', freshness: 'current', revision: 0, hash: '' };
+  it('maps history entries to list statuses', () => {
+    expect(taskStatus(entry).status).toBe('draft');
+    expect(taskStatus({ ...entry, revision: 1, hash: 'x' }).label).toBe('Needs review');
+    expect(taskStatus({ ...entry, workflow_status: 'running' }).status).toBe('running');
+    expect(taskStatus({ ...entry, workflow_status: 'running', freshness: 'stale' }).status).toBe('running');
+    expect(taskStatus({ ...entry, freshness: 'stale' }).status).toBe('stale');
+    expect(taskStatus({ ...entry, workflow_status: 'interrupted' }).label).toBe('Interrupted');
+    expect(taskStatus({ ...entry, state: 'applied', commit: { state: 'committed' } as never }).label).toBe('Committed');
+  });
+});

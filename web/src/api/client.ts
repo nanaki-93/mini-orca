@@ -1,0 +1,77 @@
+// Same-origin daemon client. Every request carries the Web UI marker header the
+// daemon's local request policy requires for browser-originated calls.
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly data: unknown;
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+export function withWorktree(path: string, worktreePath?: string): string {
+  if (!worktreePath) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'worktree_path=' + encodeURIComponent(worktreePath);
+}
+
+export function query(params: Record<string, string | number | boolean | undefined | null>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') q.set(key, String(value));
+  }
+  const text = q.toString();
+  return text ? '?' + text : '';
+}
+
+type Fetch = typeof fetch;
+
+export interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
+export function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+export function createApi(fetchImpl: Fetch = (...args) => fetch(...args)) {
+  async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const headers: Record<string, string> = { 'X-Mini-Orca-Web-UI': '1' };
+    const init: RequestInit = { method: options.method ?? 'GET', headers, signal: options.signal };
+    if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+    const response = await fetchImpl(path, init);
+    if (response.status === 204) return null as T;
+    const text = await response.text();
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text };
+      }
+    }
+    if (!response.ok) {
+      const body = (data ?? {}) as { user_message?: string; message?: string; error?: string };
+      throw new ApiError(body.user_message || body.message || body.error || `HTTP ${response.status}`, response.status, data);
+    }
+    return data as T;
+  }
+  return {
+    get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+    post: <T>(path: string, body: unknown = {}) => request<T>(path, { method: 'POST', body }),
+    patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
+    del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  };
+}
+
+export type Api = ReturnType<typeof createApi>;
+
+export const api = createApi();

@@ -1,0 +1,187 @@
+// Server state. Every read goes through react-query so views share one cache,
+// refetch on daemon events and never show another checkout's data.
+
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { api, query, withWorktree } from './client';
+import type {
+  AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
+  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, TaskEntry,
+} from './types';
+import { undoFromRecovery } from '@/lib/readiness';
+import { useCheckout } from '@/app/checkout';
+
+export const keys = {
+  status: ['status'] as const,
+  models: ['models'] as const,
+  mainProject: ['project', ''] as const,
+  project: (wt: string) => ['project', wt] as const,
+  index: (wt: string) => ['index', wt] as const,
+  trust: (wt: string) => ['trust', wt] as const,
+  git: ['git'] as const,
+  changes: (wt: string) => ['changes', wt] as const,
+  session: (id: string) => ['session', id] as const,
+  findings: (wt: string) => ['findings', wt] as const,
+  overview: (wt: string) => ['overview', wt] as const,
+  settings: (wt: string) => ['settings', wt] as const,
+  file: (wt: string, path: string) => ['file', wt, path] as const,
+};
+
+export function useStatus() {
+  return useQuery({ queryKey: keys.status, queryFn: () => api.get<DaemonStatus>('/status'), staleTime: 60_000, retry: false });
+}
+
+export function useModels() {
+  return useQuery({ queryKey: keys.models, queryFn: () => api.get<ModelsCurrent>('/api/models/current'), staleTime: 60_000 });
+}
+
+export function useMainProject() {
+  return useQuery({ queryKey: keys.mainProject, queryFn: () => api.get<Project>('/api/projects/current'), retry: false, retryOnMount: false });
+}
+
+/** The project facts of the selected checkout (the main checkout or a worktree). */
+export function useProject(): UseQueryResult<Project> {
+  const { worktreePath } = useCheckout();
+  return useQuery({ queryKey: keys.project(worktreePath), queryFn: () => api.get<Project>(withWorktree('/api/projects/current', worktreePath)), retry: false, retryOnMount: false });
+}
+
+function useRevision() {
+  const project = useProject().data;
+  return project?.project_id ? project : null;
+}
+
+export function useIndex() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.index(worktreePath), project?.project_revision],
+    queryFn: () => api.get<ProjectIndex>(withWorktree('/api/projects/current/index', worktreePath)),
+    enabled: Boolean(project),
+    staleTime: 30_000,
+  });
+}
+
+export function useTrust() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.trust(worktreePath), project?.project_revision],
+    queryFn: () => api.get<ExecutionTrust>(withWorktree('/api/projects/current/execution-trust' + query({ project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+  });
+}
+
+export function useGitWorkspace() {
+  const main = useMainProject().data;
+  return useQuery({
+    queryKey: [...keys.git, main?.project_revision],
+    queryFn: () => api.get<GitWorkspace>('/api/projects/current/git/workspace' + query({ project_id: main!.project_id, project_revision: main!.project_revision })),
+    enabled: Boolean(main?.project_id),
+    retry: false,
+  });
+}
+
+/** Tasks of the selected checkout, plus (from the main checkout) tasks living in other worktrees. */
+export function useTasks(): UseQueryResult<ChangeHistoryEntry[]> & { tasks: TaskEntry[] } {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  const git = useGitWorkspace().data;
+  const result = useQuery({
+    queryKey: [...keys.changes(worktreePath), project?.project_revision],
+    queryFn: () => api.get<ChangeHistoryEntry[]>(withWorktree('/api/projects/current/changes' + query({ project_id: project!.project_id, project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+  });
+  const tasks = mergeTaskSources(result.data ?? [], git, worktreePath);
+  return Object.assign(result, { tasks });
+}
+
+export function mergeTaskSources(base: ChangeHistoryEntry[], git: GitWorkspace | undefined, worktreePath: string): TaskEntry[] {
+  const out: TaskEntry[] = [];
+  const seen = new Set<string>();
+  for (const entry of base) {
+    if (!entry?.id || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    out.push({ ...entry, worktreePath: entry.worktree_path || worktreePath });
+  }
+  if (!worktreePath && git) {
+    for (const tree of git.worktrees ?? []) {
+      if (tree.current || !tree.path) continue;
+      for (const entry of tree.sessions ?? []) {
+        if (!entry?.id || seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        out.push({ ...entry, worktreePath: tree.path, branch: tree.branch });
+      }
+    }
+  }
+  return out.sort((a, b) => Date.parse(b.updated_at || '') - Date.parse(a.updated_at || ''));
+}
+
+async function checkoutIdentity(worktreePath: string) {
+  const project = await api.get<Project>(withWorktree('/api/projects/current', worktreePath));
+  return { project_id: project.project_id, project_revision: project.project_revision, worktreePath };
+}
+
+/** Loads one task with the identity of the checkout that owns it. */
+export async function fetchSession(id: string, worktreePath: string): Promise<LoadedSession> {
+  const checkout = await checkoutIdentity(worktreePath);
+  const session = await api.get<ChangeSession>(withWorktree('/api/projects/current/changes/' + encodeURIComponent(id) + query({ project_id: checkout.project_id, project_revision: checkout.project_revision }), worktreePath));
+  const loaded: LoadedSession = { ...session, checkout };
+  if (session.state === 'applied') {
+    try {
+      const recovery = await api.get<ChangeMutationResult>(withWorktree('/api/projects/current/changes/recovery', worktreePath));
+      loaded.undo = undoFromRecovery(session, recovery);
+    } catch (err) {
+      loaded.undo = { available: false, reason: 'The undo journal could not be read: ' + (err instanceof Error ? err.message : String(err)) };
+    }
+  }
+  return loaded;
+}
+
+export function useSession(id: string | undefined, worktreePath: string, live: boolean) {
+  return useQuery({
+    queryKey: keys.session(id ?? ''),
+    queryFn: () => fetchSession(id!, worktreePath),
+    enabled: Boolean(id),
+    refetchInterval: query => (live || query.state.data?.workflow?.status === 'running' || query.state.data?.workflow?.status === 'canceling' ? 2500 : false),
+  });
+}
+
+export function useFindings() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.findings(worktreePath), project?.project_revision],
+    queryFn: () => api.get<FindingsResponse>(withWorktree('/api/projects/current/findings' + query({ project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+  });
+}
+
+export function useOverview() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.overview(worktreePath), project?.project_revision],
+    queryFn: () => api.get<Overview>(withWorktree('/api/projects/current/overview' + query({ project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(project),
+  });
+}
+
+export function useAgentSettings(worktreePath: string, identity: { project_id: string; project_revision: string } | null) {
+  return useQuery({
+    queryKey: [...keys.settings(worktreePath), identity?.project_revision],
+    queryFn: () => api.get<AgentSettings>(withWorktree('/api/projects/current/agent-settings' + query({ project_id: identity!.project_id, project_revision: identity!.project_revision }), worktreePath)),
+    enabled: Boolean(identity?.project_id),
+    retry: false,
+  });
+}
+
+export function useFile(path: string | undefined) {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.file(worktreePath, path ?? ''), project?.project_revision],
+    queryFn: () => api.get<FileInfo>(withWorktree('/api/projects/current/files/info' + query({ path }), worktreePath)),
+    enabled: Boolean(path && project),
+    staleTime: 30_000,
+    retry: false,
+  });
+}

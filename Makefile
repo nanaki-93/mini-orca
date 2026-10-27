@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-test tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-install webui-build webui-test webui-dev webui-dist-check tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 .PHONY: build-agents build-agents-linux
 
 # ─── Default Target ────────────────────────────────────────────────────────────
@@ -113,8 +113,20 @@ quality: ## Run Go static, reachability, complexity and clone checks
 tui-test: ## Run Go TUI workflow, state and renderer tests
 	@$(GO) test -race ./internal/tui/... ./cmd/tui/...
 
-webui-test: ## Run the browser workspace module tests with Node's built-in runner
-	@if command -v node >/dev/null 2>&1; then node --test internal/api/handlers/webui/test/*.test.mjs; else echo "SKIP webui-test: node is not installed"; fi
+webui-install: ## Install the Web UI toolchain (web/node_modules) from the lockfile
+	@cd web && npm ci
+
+webui-build: ## Type-check and build the Web UI into the embedded internal/api/handlers/webui/dist
+	@cd web && npm run build
+
+webui-test: ## Type-check the Web UI and run its unit and component tests
+	@if command -v npm >/dev/null 2>&1; then cd web && { test -d node_modules || npm ci; } && npm run typecheck && npm test; else echo "SKIP webui-test: npm is not installed"; fi
+
+webui-dev: ## Serve the Web UI with hot reload on :5173, proxying the API to the daemon on :9090
+	@cd web && npm run dev
+
+webui-dist-check: ## Fail when the committed Web UI bundle is out of date with web/src
+	@cd web && npm run build >/dev/null && cd .. && git diff --exit-code --stat -- internal/api/handlers/webui/dist && test -z "$$(git ls-files --others --exclude-standard internal/api/handlers/webui/dist)" || { echo "Run make webui-build and commit internal/api/handlers/webui/dist"; exit 1; }
 
 tui-build: ## Build the Go TUI binary
 	@mkdir -p $(BUILD_DIR)

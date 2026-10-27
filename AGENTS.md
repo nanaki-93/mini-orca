@@ -65,7 +65,7 @@ Current behavior is documented in the README, TUI design guidelines and API cont
 - Source and composed diffs are read-only except guided `AGENTS.md` instruction text. Source mutation requires explicit diff Review/Apply and guarded Undo with current project, proposal and source identity/hash checks.
 - Navigation, disclosures, previews and local restore must not trigger provider requests, project-code execution or source writes. Keep remote-provider consent, Security review intent and execution trust tied to the relevant scope.
 - Keep model suggestions, verified findings and measured benchmarks distinct. Failed, unavailable, partial, stale and canceled results retain their meaning.
-- Keep the daemon loopback-only by default. Never commit credentials, provider tokens, source-bearing diagnostics, local `config.yaml`, or generated outputs (`build/`, `.mini-orca/autopilot/`).
+- Keep the daemon loopback-only by default. Never commit credentials, provider tokens, source-bearing diagnostics, local `config.yaml`, or generated outputs (`build/`, `.mini-orca/autopilot/`, `web/node_modules/`). The one committed build output is the embedded Web UI bundle in `internal/api/handlers/webui/dist`, rebuilt with `make webui-build` in the same change as its `web/src` sources.
 
 ## Validation, diff review & handoff
 
@@ -73,7 +73,7 @@ Current behavior is documented in the README, TUI design guidelines and API cont
 | --- | --- |
 | Go code (`cmd/`, `internal/`) | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
 | Go TUI (`cmd/tui`, `internal/tui`) | `make tui-test` (`go test -race ./internal/tui/... ./cmd/tui/...`) |
-| Web UI (`internal/api/handlers/webui`) | `make webui-test`, `go test ./internal/api/handlers ./cmd/daemon`, and a browser check of changed pages |
+| Web UI (`web/`, embedded `internal/api/handlers/webui/dist`) | `make webui-test`, `make webui-build` (commit the rebuilt `dist/`), `make webui-dist-check`, `go test ./internal/api/handlers ./cmd/daemon`, and a browser check of changed pages in dark and light themes |
 | Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
 | Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
 | Cross-stack changes or full validation request | `./scripts/validate.sh` (or `just check`) |

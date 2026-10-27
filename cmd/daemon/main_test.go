@@ -8,11 +8,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/api/handlers"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -145,16 +147,17 @@ func TestLocalAPIPolicyAllowsSameOriginWebUIFetchWithCustomHeader(t *testing.T) 
 // requests for the Web UI shell and static assets may omit the Web UI header.
 func TestLocalAPIPolicyAllowsSameOriginModuleAssetsOnly(t *testing.T) {
 	mux := daemonTestMux(t)
+	script, stylesheet := webUIBundlePaths(t)
 	tests := []struct {
 		name, method, path, origin, webUIHeader string
 		want                                    int
 	}{
-		{name: "module script", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://127.0.0.1:9090", want: http.StatusOK},
-		{name: "stylesheet head", method: http.MethodHead, path: "/ui/assets/app.css", origin: "http://127.0.0.1:9090", want: http.StatusOK},
+		{name: "module script", method: http.MethodGet, path: script, origin: "http://127.0.0.1:9090", want: http.StatusOK},
+		{name: "stylesheet head", method: http.MethodHead, path: stylesheet, origin: "http://127.0.0.1:9090", want: http.StatusOK},
 		{name: "shell", method: http.MethodGet, path: "/ui", origin: "http://127.0.0.1:9090", want: http.StatusOK},
-		{name: "cross-origin asset", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://evil.example", want: http.StatusForbidden},
-		{name: "other loopback port", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "http://127.0.0.1:3000", want: http.StatusForbidden},
-		{name: "https origin", method: http.MethodGet, path: "/ui/assets/js/main.js", origin: "https://127.0.0.1:9090", want: http.StatusForbidden},
+		{name: "cross-origin asset", method: http.MethodGet, path: script, origin: "http://evil.example", want: http.StatusForbidden},
+		{name: "other loopback port", method: http.MethodGet, path: script, origin: "http://127.0.0.1:3000", want: http.StatusForbidden},
+		{name: "https origin", method: http.MethodGet, path: script, origin: "https://127.0.0.1:9090", want: http.StatusForbidden},
 		{name: "api read without header", method: http.MethodGet, path: "/api/projects/current", origin: "http://127.0.0.1:9090", want: http.StatusForbidden},
 		{name: "asset-like prefix outside assets", method: http.MethodGet, path: "/ui/assetsx/main.js", origin: "http://127.0.0.1:9090", want: http.StatusForbidden},
 	}
@@ -376,6 +379,28 @@ func TestLibraryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
 	}
 }
 
+// The built bundle has content-hashed names, so tests read them from the
+// embedded document instead of hard-coding them.
+var webUIScriptPath, webUIStylesheetPath = func() (string, string) {
+	res := httptest.NewRecorder()
+	handlers.NewWebUIHandler().Serve(res, httptest.NewRequest(http.MethodGet, "/ui", nil))
+	body := res.Body.String()
+	script := regexp.MustCompile(`<script type="module"[^>]* src="(/ui/assets/[^"]+\.js)"`).FindStringSubmatch(body)
+	style := regexp.MustCompile(`<link rel="stylesheet"[^>]* href="(/ui/assets/[^"]+\.css)"`).FindStringSubmatch(body)
+	if script == nil || style == nil {
+		return "", ""
+	}
+	return script[1], style[1]
+}()
+
+func webUIBundlePaths(t *testing.T) (string, string) {
+	t.Helper()
+	if webUIScriptPath == "" || webUIStylesheetPath == "" {
+		t.Fatal("embedded Web UI document does not reference a script and a stylesheet under /ui/assets/")
+	}
+	return webUIScriptPath, webUIStylesheetPath
+}
+
 func requestPathForDocumentedRoute(path string) string {
 	switch path {
 	case "/api/projects/current/files/info", "/api/projects/current/files/analysis", "/api/projects/current/context":
@@ -383,7 +408,7 @@ func requestPathForDocumentedRoute(path string) string {
 	case "/api/projects/current/overview", "/api/projects/current/findings", "/api/projects/current/scan":
 		return path + "?project_revision=sha256:missing"
 	case "/ui/assets/{path}":
-		return "/ui/assets/app.css"
+		return webUIScriptPath
 	default:
 		return path
 	}

@@ -1,9 +1,0 @@
-{
-  "name": "mini-orca-webui",
-  "private": true,
-  "type": "module",
-  "description": "No-build ES module Web UI embedded in the daemon. Run tests with: node --test internal/api/handlers/webui/test/*.test.mjs",
-  "scripts": {
-    "test": "node --test test/*.test.mjs"
-  }
-}

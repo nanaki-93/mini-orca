@@ -70,45 +70,57 @@ in smaller terminals. Frames fit the actual terminal size, with a resize prompt 
 
 ## Browser workspace
 
-Run `:web` in the TUI to open the local browser workspace with the selected
-checkout, proposal and file. Use `:web files`, `:web tasks`, `:web issues`,
-`:web git` or `:web diff` to choose a view directly.
+The daemon serves a browser workspace at `http://127.0.0.1:9090/ui`. Run `:web`
+in the TUI to open it on the selected checkout, task and file (`:web files`,
+`:web tasks`, `:web issues`, `:web git` choose a page). It is built for the
+three things you do most: **start a task and watch the agents**, **review and
+apply**, and **understand the project**.
 
-The browser workspace is a lightweight IDE served by the daemon at `/ui`:
-
-| Key | Page | What it is for |
+| Page | Shortcut | What it is for |
 | --- | --- | --- |
-| `1` | **Home** | The single next step, workspace counts, the active task pipeline and recent tasks. |
-| `2` | **Explorer** | Folder tree with fuzzy filter, tabbed read-only source, issue markers, Explain and New task. |
-| `3` | **Tasks** | Tasks grouped by what needs attention; the three-step **Describe → Choose files → Confirm** wizard. |
-| `4` | **Review** | Changed-file tree with review state, split/unified diff with collapsed context, and the steps **Changes · Checks · Agents · Refine · Apply**. |
-| `5` | **Issues** | Filters by status, category and severity; detail pane with evidence, insight and Create fix task. |
-| `6` | **Docs** | The generated handbook: overview, architecture, components, scenarios, decisions, dependencies, runbook, glossary. |
-| `7` | **Checks** | Go scan phases and project analysis coverage, with run, pause and cancel. |
-| `8` | **Git** | Current checkout, agent worktrees, merge preview (incoming commits and diff) and guarded merge. |
-| `9` | **Settings** | Theme, density, diff layout, checkout scope, execution trust and models. |
+| **Inbox** | `g h` | What needs you now: tasks waiting for review, running agents, failures, branches ready to merge, open issues and analysis coverage. |
+| **Tasks** | `g t` | Every task grouped by state (Needs you, Agents working, Failed or stale, Drafts, Done), with filters and `j`/`k` navigation. |
+| **Task** | — | A pull-request style page: **Conversation** (brief, live agent timeline with stages and reviewers, revise box), **Files changed** (tree with viewed marks, unified/split diff, “since last review”), **Checks**, and a **Ready to apply?** gate with Apply, commit and Undo. |
+| **Code** | `g c` | IDE-style explorer: virtualized tree, editor tabs, highlighted source, issue markers, line links, Explain and “New task with this file”. |
+| **Issues** | `g i` | Findings by status and severity with evidence and **Fix with agents**. |
+| **Docs** | `g d` | The generated handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
+| **Branches** | `g b` | Agent worktrees, merge preview (commits and diff) and guarded merge or abort. |
+| **Settings** | `g s` | Project, execution trust, models and agents, analysis, appearance. |
 
-The **Agents** step starts the native ADK workflow (create → tests → specialist
-reviews) after an explicit confirmation that lists every remote destination,
-follows each stage live and records your approval for the exact proposal hash.
-**Apply** can also commit the reviewed files through a private index. Apply,
-Undo, trust, merge and remote model requests always ask for confirmation; Review
-navigation, previews and filters never start model work, checks or writes.
+`Ctrl+K` / `Cmd+K` opens the command palette (files, tasks, issues, commands);
+`Ctrl+P` / `Cmd+P` jumps to a file; `c` creates a task; `?` lists every shortcut.
+In **Files changed**, `j`/`k` move between files, `v` marks the file viewed,
+`[`/`]` jump between hunks and `s` toggles split view. The checkout menu in the
+top bar switches between the main checkout and agent worktrees; every page then
+shows that checkout. Pages update live from the daemon's event stream. Light,
+dark and system themes are available.
 
-`Ctrl+K` / `Cmd+K` searches commands, tasks and files (`>` commands only, `#`
-tasks only); `Cmd+P` opens files; `Cmd+B` toggles the side panel; `c` starts a
-new task; `?` lists every shortcut. In Review, `j`/`k` move between files, `n`
-jumps to the next unreviewed file, `m` marks the current file reviewed, `v`
-switches split/unified and `[`/`]` move between steps. Browser Back/Forward
-restores pages, review steps and the selected file. Themes are System, Midnight,
-Light, Tokyo Night and High contrast.
+The task composer asks for a title, an optional description, the kind (fix,
+feature, performance, security), the files agents may change (up to eight; a
+companion test is suggested for every Go file) and “done when” criteria.
+**Start agents** runs the native ADK workflow (create → tests → specialist
+reviews) after a confirmation that lists every remote model destination.
+Apply is enabled only when every changed file is viewed at the current version,
+required checks pass, the workflow is waiting for human review and you approved
+this exact version. Apply, Undo, trust, merge and remote model requests always
+ask for confirmation; navigation, previews and filters never start model work,
+checks or writes.
 
-The UI is a set of embedded, no-build ES modules under
-`internal/api/handlers/webui/` served with a strict Content-Security-Policy (no
-inline scripts or styles). Run its tests with Node's built-in runner:
-`make webui-test` (or `node --test internal/api/handlers/webui/test/*.test.mjs`).
-They cover review authority, diff shaping, routing, fuzzy search and every
-action boundary (what each operation may send, and when it must send nothing).
+### Web UI development
+
+The UI is a React + TypeScript application in `web/`, built with Vite into
+`internal/api/handlers/webui/dist`. The built bundle is committed and embedded
+in the daemon, so running Mini-Orca needs no Node.js. It is served with a strict
+Content-Security-Policy: same-origin scripts, styles and fonts only, no inline
+scripts, and one per-response nonce for the style tag dialogs inject.
+
+```sh
+make webui-install   # npm ci in web/
+make webui-dev       # hot reload on :5173, API proxied to the daemon on :9090
+make webui-test      # type-check + unit and component tests (vitest)
+make webui-build     # rebuild the embedded bundle; commit the dist/ changes
+make webui-dist-check  # fail if the committed bundle is out of date
+```
 
 ## Reviewing a task in the TUI
 

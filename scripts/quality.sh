@@ -58,6 +58,13 @@ run_go_quality() {
     --format go \
     --ignore '**/*_test.go,**/testdata/**,build/**' \
     internal cmd
+  run_stage "Web UI clone detection" npx --yes jscpd@"$jscpd_version" \
+    --min-tokens 70 \
+    --min-lines 8 \
+    --threshold 1 \
+    --format typescript,tsx \
+    --ignore '**/*.test.ts,**/*.test.tsx,**/node_modules/**' \
+    web/src
 }
 
 case "${1:-all}" in
