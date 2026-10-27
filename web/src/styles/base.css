@@ -113,7 +113,6 @@ ol {
 
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
-.text-2 { color: var(--text-2); }
 .small { font-size: var(--text-sm); }
 .xs { font-size: var(--text-xs); }
 .strong { font-weight: 600; }

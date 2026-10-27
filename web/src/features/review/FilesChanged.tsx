@@ -1,12 +1,12 @@
 // "Files changed": a file tree with review state beside the selected file's
 // diff, like a pull request. `v` marks the file viewed and moves to the next.
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Check, Columns2, FileDiff, ListTree, Rows3, WrapText } from 'lucide-react';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { setUI, useUI } from '@/app/store';
-import { isTyping } from '@/app/shortcuts';
+import { usePageKeys } from '@/app/shortcuts';
 import { diffStats } from '@/lib/diff';
 import { effectiveEdits, isFileReviewed, nextUnreviewedPath, proposalReadiness, reviewProgress } from '@/lib/readiness';
 import { setParam, useRoute } from '@/lib/router';
@@ -38,26 +38,14 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
     if (next) select(next);
   }
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (isTyping(event.target) || document.querySelector('[role="dialog"]')) return;
-      const index = edits.findIndex(edit => edit.path === current?.path);
-      if (event.key === 'v' && canMark) {
-        event.preventDefault();
-        void markViewed();
-      } else if ((event.key === 'j' || event.key === ']') && index < edits.length - 1) {
-        event.preventDefault();
-        select(edits[index + 1].path);
-      } else if ((event.key === 'k' || event.key === '[') && index > 0) {
-        event.preventDefault();
-        select(edits[index - 1].path);
-      } else if (event.key === 's') {
-        event.preventDefault();
-        setUI({ diffLayout: layout === 'split' ? 'unified' : 'split' });
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+  usePageKeys(key => {
+    const index = edits.findIndex(edit => edit.path === current?.path);
+    if (key === 'v' && canMark) void markViewed();
+    else if ((key === 'j' || key === ']') && index < edits.length - 1) select(edits[index + 1].path);
+    else if ((key === 'k' || key === '[') && index > 0) select(edits[index - 1].path);
+    else if (key === 's') setUI({ diffLayout: layout === 'split' ? 'unified' : 'split' });
+    else return false;
+    return true;
   });
 
   if (!edits.length) {

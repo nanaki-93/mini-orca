@@ -9,7 +9,7 @@ import { useCheckout } from '@/app/checkout';
 import { navigate } from '@/lib/router';
 import { taskStatus } from '@/lib/readiness';
 import { plural, severityRank } from '@/lib/util';
-import { Button, Callout, EmptyState, Kbd, Skeleton } from '@/components/ui';
+import { Button, Callout, EmptyState, Kbd, ListGroup, Skeleton } from '@/components/ui';
 import { SeverityBadge, isOpenFinding } from '@/components/domain';
 import { TaskRow } from '@/features/tasks/TaskListPage';
 import { OpenProject } from '@/features/settings/OpenProject';
@@ -92,22 +92,22 @@ export function InboxPage() {
         <div className="inbox-grid">
           <div className="stack-lg">
             {needs.length ? (
-              <Section title="Needs your review" count={needs.length}>
+              <ListGroup title="Needs your review" count={needs.length}>
                 {needs.map(t => <TaskRow key={t.id} task={t} />)}
-              </Section>
+              </ListGroup>
             ) : null}
             {running.length ? (
-              <Section title="Agents working" count={running.length} icon={Bot}>
+              <ListGroup title="Agents working" count={running.length} icon={Bot}>
                 {running.map(t => <TaskRow key={t.id} task={t} />)}
-              </Section>
+              </ListGroup>
             ) : null}
             {failed.length ? (
-              <Section title="Failed or stale" count={failed.length}>
+              <ListGroup title="Failed or stale" count={failed.length}>
                 {failed.map(t => <TaskRow key={t.id} task={t} />)}
-              </Section>
+              </ListGroup>
             ) : null}
             {toMerge.length ? (
-              <Section title="Ready to merge" count={toMerge.length} icon={GitMerge}>
+              <ListGroup title="Ready to merge" count={toMerge.length} icon={GitMerge}>
                 {toMerge.map(tree => (
                   <button key={tree.path} type="button" className="list-row" onClick={() => navigate('/git', { path: tree.path })}>
                     <GitMerge size={14} className="tone-warning" aria-hidden />
@@ -117,12 +117,12 @@ export function InboxPage() {
                     {(tree.overlap_paths ?? []).length ? <span className="badge badge-warning">{plural(tree.overlap_paths!.length, 'overlap')}</span> : null}
                   </button>
                 ))}
-              </Section>
+              </ListGroup>
             ) : null}
             {recent.length ? (
-              <Section title="Recently applied" count={recent.length}>
+              <ListGroup title="Recently applied" count={recent.length}>
                 {recent.map(t => <TaskRow key={t.id} task={t} compact />)}
-              </Section>
+              </ListGroup>
             ) : null}
           </div>
           <div className="stack-lg">
@@ -186,19 +186,6 @@ function inboxSummary(needs: number, running: number, failed: number, toMerge: n
     toMerge ? `${plural(toMerge, 'branch', 'branches')} ready to merge` : '',
   ].filter(Boolean);
   return parts.length ? parts.join(' · ') : 'Nothing is waiting for you.';
-}
-
-function Section({ title, count, icon: Icon, children }: { title: string; count: number; icon?: typeof Bot; children: React.ReactNode }) {
-  return (
-    <section className="list-group" aria-label={title}>
-      <div className="list-group-head">
-        {Icon ? <Icon size={13} aria-hidden /> : null}
-        {title}
-        <span className="count">{count}</span>
-      </div>
-      <div role="list">{children}</div>
-    </section>
-  );
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

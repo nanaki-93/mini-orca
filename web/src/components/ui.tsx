@@ -196,6 +196,20 @@ export function SectionHeader({ title, children, count }: { title: ReactNode; ch
   );
 }
 
+/** A titled group of list rows with its item count. */
+export function ListGroup({ title, count, icon: Icon, children }: { title: string; count: number; icon?: LucideIcon; children: ReactNode }) {
+  return (
+    <section className="list-group" aria-label={title}>
+      <div className="list-group-head">
+        {Icon ? <Icon size={13} aria-hidden /> : null}
+        {title}
+        <span className="count">{count}</span>
+      </div>
+      <div role="list">{children}</div>
+    </section>
+  );
+}
+
 export function Highlight({ text, positions }: { text: string; positions: number[] }) {
   if (!positions.length) return <>{text}</>;
   const set = new Set(positions);

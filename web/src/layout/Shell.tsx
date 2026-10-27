@@ -17,6 +17,7 @@ import { basename, plural } from '@/lib/util';
 import type { Project } from '@/api/types';
 import { Dot, IconButton, Kbd, Spinner, Tip, cx } from '@/components/ui';
 import { formatKeys } from '@/app/shortcuts';
+import { isOpenFinding } from '@/components/domain';
 
 interface NavItem {
   path: string;
@@ -49,7 +50,7 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
 
   const needsYou = tasks.filter(task => taskStatus(task).status === 'needs_you').length;
   const running = tasks.filter(task => taskStatus(task).status === 'running').length;
-  const openIssues = findings.filter(f => !['dismissed', 'fixed', 'retired'].includes(f.status || 'open')).length;
+  const openIssues = findings.filter(isOpenFinding).length;
   const toMerge = (git?.worktrees ?? []).filter(tree => !tree.current && tree.mergeable).length;
 
   const items: NavItem[] = useMemo(

@@ -1,7 +1,7 @@
 // Global keyboard shortcuts. Single keys never fire while typing; sequences
 // ("g t") must complete within a second.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export interface Shortcut {
   keys: string;
@@ -57,6 +57,25 @@ export function useShortcuts(shortcuts: Shortcut[]): void {
       window.clearTimeout(timer);
     };
   }, [shortcuts]);
+}
+
+/**
+ * Page-scoped single keys (list navigation, review keys). They follow the
+ * global rules: never while typing, never under an open dialog, never with a
+ * modifier. The handler returns true when it used the key.
+ */
+export function usePageKeys(handler: (key: string) => boolean | void): void {
+  const latest = useRef(handler);
+  latest.current = handler;
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTyping(event.target) || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      if (latest.current(event.key)) event.preventDefault();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 }
 
 export function formatKeys(keys: string): string[] {

@@ -1,16 +1,16 @@
 // All tasks, grouped by what they need, with keyboard navigation (j/k, Enter).
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { GitBranch, ListTodo, Plus, Search } from 'lucide-react';
 import { useTasks } from '@/api/hooks';
 import type { TaskEntry } from '@/api/types';
 import { openNewTask } from '@/app/store';
-import { isTyping } from '@/app/shortcuts';
+import { usePageKeys } from '@/app/shortcuts';
 import { navigate, setParam, useRoute } from '@/lib/router';
 import { rankItems } from '@/lib/fuzzy';
 import { taskStatus, type TaskStatus } from '@/lib/readiness';
 import { basename, plural, timeAgo } from '@/lib/util';
-import { Button, EmptyState, Highlight, Input, Segmented, Skeleton, cx } from '@/components/ui';
+import { Button, EmptyState, Highlight, Input, ListGroup, Segmented, Skeleton, cx } from '@/components/ui';
 import { KindTag, StatusGlyph } from '@/components/domain';
 
 const GROUPS: { id: string; label: string; statuses: TaskStatus[] }[] = [
@@ -48,23 +48,13 @@ export function TaskListPage() {
   );
   const flat = grouped.flatMap(group => group.items.map(v => v.item));
 
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (isTyping(event.target) || document.querySelector('[role="dialog"]')) return;
-      if (event.key === 'j' || event.key === 'ArrowDown') {
-        event.preventDefault();
-        setCursor(c => Math.min(c + 1, flat.length - 1));
-      } else if (event.key === 'k' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        setCursor(c => Math.max(c - 1, 0));
-      } else if (event.key === 'Enter' && flat[cursor]) {
-        event.preventDefault();
-        openTask(flat[cursor]);
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [flat, cursor]);
+  usePageKeys(key => {
+    if (key === 'j' || key === 'ArrowDown') setCursor(c => Math.min(c + 1, flat.length - 1));
+    else if (key === 'k' || key === 'ArrowUp') setCursor(c => Math.max(c - 1, 0));
+    else if (key === 'Enter' && flat[cursor]) openTask(flat[cursor]);
+    else return false;
+    return true;
+  });
 
   return (
     <div className="page-scroll">
@@ -99,18 +89,14 @@ export function TaskListPage() {
           {tasks.length ? 'Try another filter.' : 'Describe a bug to fix or a feature to build. Agents write the change and tests; you review and apply it.'}
         </EmptyState>
       ) : (
-        <div className="list" role="list">
+        <div className="list">
           {grouped.map(group => (
-            <section key={group.id} className="list-group" aria-label={group.label}>
-              <div className="list-group-head">
-                {group.label}
-                <span className="count">{group.items.length}</span>
-              </div>
+            <ListGroup key={group.id} title={group.label} count={group.items.length}>
               {group.items.map(({ item, positions }) => {
                 const index = flat.indexOf(item);
                 return <TaskRow key={item.id} task={item} positions={positions} active={index === cursor} onHover={() => setCursor(index)} />;
               })}
-            </section>
+            </ListGroup>
           ))}
         </div>
       )}
