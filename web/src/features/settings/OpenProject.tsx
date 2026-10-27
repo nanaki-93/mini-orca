@@ -8,7 +8,8 @@ import { Button, Field, Input } from '@/components/ui';
 
 export function OpenProject() {
   const project = useMainProject().data;
-  const [path, setPath] = useState(project?.path ?? '');
+  const [edited, setPath] = useState<string | null>(null);
+  const path = edited ?? project?.path ?? '';
   const actions = useActions();
   const busy = useBusy();
   const value = path.trim();

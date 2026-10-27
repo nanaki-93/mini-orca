@@ -7,7 +7,7 @@ import {
   Bot, BookOpen, ChevronDown, CircleAlert, Code2, FolderOpen, GitBranch, GitMerge, Inbox, Keyboard, ListTodo, PanelLeft, Plus, Search, Settings, ShieldCheck, ShieldOff, Sparkles,
 } from 'lucide-react';
 import { useRoute, navigate } from '@/lib/router';
-import { useFindings, useGitWorkspace, useMainProject, useModels, useProject, useStatus, useTasks, useTrust } from '@/api/hooks';
+import { useFindings, useGitWorkspace, useMainProject, useModels, useProject, useSession, useStatus, useTasks, useTrust } from '@/api/hooks';
 import type { Connection } from '@/api/events';
 import { useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
@@ -75,7 +75,8 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
           <span className="sidebar-label">New task</span>
           <Kbd>C</Kbd>
         </button>
-        <nav className="nav">
+        <div className="nav-section" aria-hidden>Workspace</div>
+        <nav className="nav" aria-label="Workspace">
           {items.map(item => (
             <Tip key={item.path} label={<span className="row">{item.label} <span className="row">{formatKeys(item.keys).map(k => <Kbd key={k}>{k}</Kbd>)}</span></span>} side="right">
               <a href={`#${item.path}`} className={cx('nav-item', active(item.path) && 'is-active')} aria-current={active(item.path) ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.path); }}>
@@ -87,7 +88,7 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
           ))}
         </nav>
         <div className="spacer" />
-        <nav className="nav">
+        <nav className="nav" aria-label="Preferences">
           <a href="#/settings" className={cx('nav-item', active('/settings') && 'is-active')} onClick={event => { event.preventDefault(); navigate('/settings'); }}>
             <Settings size={16} aria-hidden />
             <span className="sidebar-label">Settings</span>
@@ -168,14 +169,26 @@ function CheckoutMenu() {
 
 function TopBar() {
   const route = useRoute();
+  const section = route.segments[0] ?? '';
   const title = pageTitle(route.path);
+  const taskId = section === 'tasks' && route.segments[1] && route.segments[1] !== 'new' ? route.segments[1] : '';
   return (
     <header className="topbar">
-      <div className="row grow">
+      <nav className="crumbs grow" aria-label="Breadcrumb">
         <CheckoutMenu />
         <span className="topbar-sep" aria-hidden>/</span>
-        <span className="topbar-title truncate">{title}</span>
-      </div>
+        {taskId ? (
+          <>
+            <button type="button" className="crumb-link" onClick={() => navigate('/tasks')}>
+              {title}
+            </button>
+            <span className="topbar-sep" aria-hidden>/</span>
+            <TaskCrumb id={taskId} />
+          </>
+        ) : (
+          <span className="topbar-title truncate" aria-current="page">{title}</span>
+        )}
+      </nav>
       <button type="button" className="search-trigger" onClick={() => openPalette()} aria-label="Search and run commands">
         <Search size={14} aria-hidden />
         <span className="grow">Search files, tasks, commands…</span>
@@ -184,6 +197,12 @@ function TopBar() {
       <div className="row grow topbar-end" />
     </header>
   );
+}
+
+function TaskCrumb({ id }: { id: string }) {
+  const { worktreePath } = useCheckout();
+  const title = useSession(id, worktreePath, false).data?.title;
+  return <span className="topbar-title truncate" aria-current="page">{title || id}</span>;
 }
 
 function projectSubtitle(project: Project | undefined): string {

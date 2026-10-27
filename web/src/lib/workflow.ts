@@ -64,6 +64,25 @@ export function reviewVerdict(workflow: ChangeWorkflow | undefined): 'approve' |
   return 'pending';
 }
 
+const RUN_LABELS: Record<string, string> = {
+  queued: 'Queued',
+  running: 'Working',
+  canceling: 'Stopping',
+  awaiting_human_review: 'Finished',
+  changes_requested: 'Finished with requested changes',
+  failed: 'Failed',
+  canceled: 'Stopped',
+  interrupted: 'Interrupted',
+  stale: 'Outdated',
+  outdated: 'Outdated',
+};
+
+/** How far the agent run got, worded for the review gate. */
+export function agentRunLabel(workflow: ChangeWorkflow | undefined, hasChanges: boolean): string {
+  if (!workflow) return hasChanges ? 'Manual proposal' : 'Not started';
+  return RUN_LABELS[workflow.status] ?? workflow.status.replace(/_/g, ' ');
+}
+
 /** A short human label for a stage that has no duration yet. */
 export function stageStatusLabel(stage: Pick<StageView, 'name' | 'status' | 'tone'>): string {
   if (stage.name === 'human_review' && (stage.status === 'waiting' || stage.status === 'awaiting_human_review')) return 'Waiting for you';

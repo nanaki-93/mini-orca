@@ -4,6 +4,7 @@
   display: grid;
   grid-template-columns: var(--sidebar) minmax(0, 1fr);
   height: 100vh;
+  background: var(--chrome);
 }
 
 .shell.is-collapsed {
@@ -15,9 +16,23 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  padding: 8px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-sunken);
+  padding: 10px 8px 8px;
+  background: var(--chrome);
+}
+
+.nav-section {
+  margin: 14px 10px 2px;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.is-collapsed .nav-section {
+  visibility: hidden;
+  height: 0;
+  margin: 8px 0 0;
 }
 
 .is-collapsed .sidebar-label,
@@ -49,11 +64,11 @@
   width: 28px;
   height: 28px;
   flex: none;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #b07bff);
+  border-radius: 8px;
+  background: linear-gradient(150deg, #8f95ff 0%, var(--accent) 45%, #a46bff 100%);
   color: #fff;
   font-weight: 700;
-  box-shadow: var(--shadow-sm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .project-name {
@@ -72,17 +87,18 @@
   align-items: center;
   gap: 8px;
   height: 32px;
+  margin-top: 2px;
   padding: 0 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: var(--surface);
+  border-radius: 8px;
+  background: var(--surface-2);
   color: var(--text);
   font-weight: 500;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--highlight), var(--shadow-sm);
 }
 
 .sidebar-new:hover {
-  background: var(--surface-2);
+  background: var(--surface-3);
 }
 
 .sidebar-new .kbd {
@@ -125,6 +141,7 @@
 .nav-item.is-active {
   background: var(--active);
   color: var(--text);
+  box-shadow: var(--highlight);
 }
 
 .nav-item svg {
@@ -157,20 +174,49 @@
 .nav-count-info { background: var(--info-soft); color: var(--info); }
 .nav-count-warning { background: var(--warning-soft); color: var(--warning); }
 
+/* The content panel sits inset in the chrome, like a document on a desk. */
 .main {
   display: grid;
   grid-template-rows: var(--topbar) minmax(0, 1fr) var(--statusbar);
   min-width: 0;
   min-height: 0;
+  margin: var(--gutter) var(--gutter) var(--gutter) 0;
+  border-radius: var(--radius-panel);
+  background: var(--bg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.crumb-link {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.crumb-link:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .topbar-end {
@@ -194,8 +240,8 @@
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
+  border-radius: 7px;
+  background: var(--surface-2);
   color: var(--text-2);
   font-size: var(--text-sm);
 }
@@ -209,12 +255,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: min(460px, 40vw);
+  width: min(440px, 38vw);
   height: 30px;
   padding: 0 6px 0 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
+  border-radius: 8px;
+  background: var(--surface-2);
   color: var(--faint);
   font-size: var(--text-sm);
   text-align: left;
@@ -237,7 +283,7 @@
   gap: 2px;
   padding: 0 8px;
   border-top: 1px solid var(--border);
-  background: var(--bg-sunken);
+  background: var(--bg);
   color: var(--muted);
   font-size: var(--text-xs);
   overflow: hidden;
@@ -313,7 +359,8 @@
 .page-title {
   font-size: var(--text-2xl);
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
+  line-height: 1.25;
 }
 
 .page-sub {
@@ -1733,7 +1780,12 @@
 }
 
 .open-project {
-  align-items: flex-end;
+  align-items: flex-start;
+}
+
+/* Line the button up with the input, below the field label. */
+.open-project > .btn {
+  margin-top: 23px;
 }
 
 /* ---------------------------------------------------------------- palette */

@@ -54,7 +54,7 @@ export function InboxPage() {
         <div className="page-head">
           <div className="grow">
             <h1 className="page-title">Inbox</h1>
-            <p className="page-sub">{project?.path || ' '}</p>
+            <p className="page-sub">{isLoading ? ' ' : inboxSummary(needs.length, running.length, failed.length, toMerge.length)}</p>
           </div>
           <Button variant="primary" icon={Plus} onClick={() => openNewTask()} kbd="C">
             New task
@@ -176,6 +176,16 @@ export function InboxPage() {
       </div>
     </div>
   );
+}
+
+function inboxSummary(needs: number, running: number, failed: number, toMerge: number): string {
+  const parts = [
+    needs ? `${plural(needs, 'task')} to review` : '',
+    running ? `${plural(running, 'agent run')} in progress` : '',
+    failed ? `${failed} failed or stale` : '',
+    toMerge ? `${plural(toMerge, 'branch', 'branches')} ready to merge` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Nothing is waiting for you.';
 }
 
 function Section({ title, count, icon: Icon, children }: { title: string; count: number; icon?: typeof Bot; children: React.ReactNode }) {

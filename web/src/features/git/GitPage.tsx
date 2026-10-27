@@ -11,6 +11,8 @@ import { parseGitDiff } from '@/lib/diff';
 import { parseCommits } from '@/lib/workflow';
 import { basename, languageOf, plural, shortHash } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Skeleton, Spinner, cx } from '@/components/ui';
+import { TaskStatusBadge } from '@/components/domain';
+import type { Tone } from '@/lib/util';
 import { DiffView } from '@/features/review/DiffView';
 import { useUI } from '@/app/store';
 
@@ -76,13 +78,28 @@ export function GitPage() {
   );
 }
 
+/** The worktree's relation to the main branch, as the daemon's gitops reports it. */
+function integrationInfo(tree: GitWorktree): { label: string; tone: Tone } {
+  if (tree.error) return { label: 'Unavailable', tone: 'danger' };
+  if (tree.dirty) return { label: 'Uncommitted changes', tone: 'warning' };
+  if (tree.integration === 'merged') return { label: 'Merged', tone: 'success' };
+  if (tree.integration === 'unrelated') return { label: 'Unrelated history', tone: 'danger' };
+  if (tree.integration === 'behind') return { label: (tree.overlap_paths ?? []).length ? plural(tree.overlap_paths!.length, 'overlapping file') : 'Main moved ahead', tone: 'warning' };
+  if (tree.mergeable) return { label: 'Ready to merge', tone: 'accent' };
+  if (tree.integration === 'up_to_date') return { label: 'No new commits', tone: 'neutral' };
+  return { label: 'Work in progress', tone: 'neutral' };
+}
+
 function IntegrationBadge({ tree }: { tree: GitWorktree }) {
-  if (tree.error) return <Badge tone="danger">unavailable</Badge>;
-  if (tree.dirty) return <Badge tone="warning">uncommitted</Badge>;
-  if (tree.integration === 'merged') return <Badge tone="success">merged</Badge>;
-  if (tree.integration === 'behind') return <Badge tone="warning">{(tree.overlap_paths ?? []).length ? `${plural(tree.overlap_paths!.length, 'overlap')}` : 'main advanced'}</Badge>;
-  if (tree.mergeable) return <Badge tone="accent">ready to merge</Badge>;
-  return <Badge>{tree.integration || 'in progress'}</Badge>;
+  const info = integrationInfo(tree);
+  return <Badge tone={info.tone}>{info.label}</Badge>;
+}
+
+function notMergeableReason(tree: GitWorktree): string {
+  if (tree.integration === 'merged') return 'This branch is already part of the main branch.';
+  if (tree.dirty) return 'Commit or discard the uncommitted changes in this worktree before merging.';
+  if (tree.integration === 'up_to_date') return 'This branch has no commits that the main branch lacks yet.';
+  return 'Merge becomes available when the tasks on this branch are applied and committed.';
 }
 
 function WorktreeDetail({ tree, trusted }: { tree: GitWorktree; trusted: boolean }) {
@@ -121,12 +138,15 @@ function WorktreeDetail({ tree, trusted }: { tree: GitWorktree; trusted: boolean
         <span className="strong">{tree.branch || basename(tree.path)}</span>
         <IntegrationBadge tree={tree} />
         <span className="spacer" />
-        <Button variant="primary" icon={GitMerge} onClick={() => void actions.merge(git, tree, main)} disabled={!tree.mergeable || !trusted || Boolean(busy) || Boolean(git.merge_head)} loading={busy === 'Merging…'}>
-          Merge into {git.branch}
-        </Button>
+        {tree.mergeable ? (
+          <Button variant="primary" icon={GitMerge} onClick={() => void actions.merge(git, tree, main)} disabled={!trusted || Boolean(busy) || Boolean(git.merge_head)} loading={busy === 'Merging…'}>
+            Merge into {git.branch}
+          </Button>
+        ) : null}
       </div>
       <div className="xs faint mono truncate">{tree.path}</div>
-      {!trusted ? <Callout tone="warning" icon={ShieldOff} title="Merging needs trust">Merges can run repository filters and merge drivers. Allow checks in Settings first.</Callout> : null}
+      {!tree.mergeable ? <p className="small muted">{notMergeableReason(tree)}</p> : null}
+      {!trusted && tree.mergeable ? <Callout tone="warning" icon={ShieldOff} title="Merging needs trust">Merges can run repository filters and merge drivers. Allow checks in Settings first.</Callout> : null}
       {tree.integration === 'behind' && (tree.overlap_paths ?? []).length ? (
         <Callout tone="warning" icon={AlertTriangle} title={`${plural(tree.overlap_paths!.length, 'file')} changed on both branches`}>{tree.overlap_paths!.join(', ')}</Callout>
       ) : null}
@@ -136,7 +156,7 @@ function WorktreeDetail({ tree, trusted }: { tree: GitWorktree; trusted: boolean
           {tasks.map(t => (
             <button key={t.id} type="button" className="mini-row" onClick={() => navigate(`/tasks/${t.id}`, { wt: tree.path })}>
               <span className="truncate grow">{t.title}</span>
-              <Badge tone={t.state === 'applied' ? 'success' : 'neutral'}>{t.commit?.state === 'committed' ? 'committed' : t.state}</Badge>
+              <TaskStatusBadge entry={t} />
             </button>
           ))}
         </div>

@@ -51,12 +51,18 @@ export function SeverityBadge({ severity }: { severity: string }) {
   return <Badge tone={tone}>{severity || 'info'}</Badge>;
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  ai: 'AI suggestion',
+  vet: 'Verified by go vet',
+  parser: 'Verified by parser',
+  test: 'Verified by a test',
+  deterministic: 'Security rule',
+};
+
+/** Where a finding comes from; model output is never presented as verified. */
 export function sourceLabel(finding: Finding): string {
   const source = (finding.source || '').toLowerCase();
-  if (source.includes('semantic') || source.includes('ai') || source.includes('model')) return 'AI suggestion';
-  if (source.includes('scan') || source.includes('vet') || source.includes('staticcheck')) return 'Verified by scan';
-  if (source.includes('security')) return 'Security review';
-  return finding.source || 'Finding';
+  return SOURCE_LABELS[source] ?? (source ? source.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()) : 'Finding');
 }
 
 export function isOpenFinding(finding: Finding): boolean {

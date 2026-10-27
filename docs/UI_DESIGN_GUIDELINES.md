@@ -168,9 +168,12 @@ explicit reading position; moving the selection follows focus again.
 
 - **Sidebar** — project switcher, New task, the workspaces with counts,
   Settings and collapse. Collapsed, it keeps icons with tooltips.
-- **Top bar** — the checkout menu (main checkout or an agent worktree; every
-  page then shows that checkout), the page title and the command palette
-  trigger (`⌘K` / `Ctrl+K`).
+- **Top bar** — breadcrumbs that start with the checkout menu (main checkout
+  or an agent worktree; every page then shows that checkout) followed by the
+  page and, on a task, the task title; then the command palette trigger
+  (`⌘K` / `Ctrl+K`).
+- **Content panel** — pages sit in one panel inset from the window chrome
+  (sidebar and gutters use `--chrome`, the panel `--bg`).
 - **Status bar** — connection to the live event stream, busy work, running
   agents, trust, models, project path, version and the shortcut reference.
 

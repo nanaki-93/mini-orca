@@ -10,8 +10,8 @@ import { useProject, useSession, useTrust } from '@/api/hooks';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
-import { checkSummary, effectiveEdits, proposalReadiness, reviewProgress, taskStatus, workflowActive } from '@/lib/readiness';
-import { reviewVerdict, workflowBlocker } from '@/lib/workflow';
+import { checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
+import { agentRunLabel, reviewVerdict, workflowBlocker } from '@/lib/workflow';
 import { basename, isTestPath, plural, shortHash, timeAgo } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Input, Skeleton, Tip, cx } from '@/components/ui';
 import { KindTag, TaskStatusBadge } from '@/components/domain';
@@ -74,9 +74,6 @@ function TaskHeader({ session }: { session: LoadedSession }) {
   const branch = session.git?.branch || (session.checkout.worktreePath ? basename(session.checkout.worktreePath) : '');
   return (
     <header className="task-header">
-      <button type="button" className="icon-btn" aria-label="Back to tasks" onClick={() => navigate('/tasks')}>
-        <ArrowLeft size={16} aria-hidden />
-      </button>
       <div className="grow">
         <h1 className="task-title">{session.title || session.id}</h1>
         <div className="row-wrap task-meta">
@@ -165,7 +162,7 @@ function ReviewRail({ session }: { session: LoadedSession }) {
   const workflow = session.workflow;
   const verdict = reviewVerdict(workflow);
   const steps: { label: string; done: boolean; active: boolean; detail: ReactNode; onClick?: () => void }[] = [
-    { label: 'Agents finished', done: Boolean((session.changes ?? []).length) && !workflowActive(session), active: ready.step === 'agents' || ready.step === 'generate', detail: workflow ? taskStatus({ ...session, workflow_status: workflow.status }).label : (session.changes ?? []).length ? 'Manual proposal' : 'Not started' },
+    { label: 'Agents finished', done: Boolean((session.changes ?? []).length) && !workflowActive(session), active: ready.step === 'agents' || ready.step === 'generate', detail: agentRunLabel(workflow, Boolean((session.changes ?? []).length)) },
     { label: 'Reviewers', done: verdict === 'approve', active: false, detail: verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents' },
     { label: 'Files viewed', done: ready.filesReviewed, active: ready.step === 'review', detail: `${progress.reviewed} of ${progress.total}`, onClick: () => navigate(`/tasks/${session.id}/files`) },
     { label: 'Checks', done: ready.checksPassed, active: ready.step === 'checks', detail: checks.label, onClick: () => navigate(`/tasks/${session.id}/checks`) },

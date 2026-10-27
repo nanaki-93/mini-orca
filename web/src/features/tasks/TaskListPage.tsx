@@ -139,18 +139,18 @@ export function TaskRow({ task, positions = [], active, onHover, compact }: { ta
       <span className="list-title truncate">
         <Highlight text={task.title || task.id} positions={positions.filter(p => p < (task.title || '').length)} />
       </span>
-      {!compact && task.workflow_reason && (status.status === 'failed' || status.status === 'canceled') ? <span className="list-reason truncate">{task.workflow_reason}</span> : null}
+      {!compact && task.workflow_reason && (status.status === 'failed' || status.status === 'canceled') ? <span className="list-reason truncate" title={task.workflow_reason}>{task.workflow_reason}</span> : null}
       <span className="spacer" />
-      <span className={cx('status-text', `tone-${status.tone}`)}>{status.label}</span>
-      {!compact ? <KindTag kind={task.kind} /> : null}
       {task.worktreePath ? (
         <span className="chip" title={task.worktreePath}>
           <GitBranch size={12} aria-hidden />
           {task.branch || basename(task.worktreePath)}
         </span>
       ) : null}
-      {!compact && task.paths?.length ? <span className="xs faint nowrap">{plural(task.paths.length, 'file')}</span> : null}
-      <span className="xs faint nowrap list-time">{timeAgo(task.updated_at)}</span>
+      <span className={cx('col col-status status-text', `tone-${status.tone}`)}>{status.label}</span>
+      <span className="col col-kind">{compact ? null : <KindTag kind={task.kind} />}</span>
+      <span className="col col-files xs faint">{!compact && task.paths?.length ? plural(task.paths.length, 'file') : ''}</span>
+      <span className="col col-time xs faint">{timeAgo(task.updated_at)}</span>
     </a>
   );
 }

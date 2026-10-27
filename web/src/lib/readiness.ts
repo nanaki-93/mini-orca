@@ -49,12 +49,21 @@ export interface CheckSummary {
   tone: Tone;
 }
 
+/** Summarizes checks; only a failed required check blocks Apply, so optional failures read as a warning. */
 export function checkSummary(checks: Check[] | undefined): CheckSummary {
   const list = checks ?? [];
   const counts = { total: list.length, passed: 0, failed: 0, running: 0, idle: 0 };
   for (const check of list) counts[phaseTone(check.state)]++;
-  const label = !list.length ? 'Not run' : counts.failed ? `${counts.failed} failed` : counts.running ? 'Running' : `${counts.passed}/${list.length} passed`;
-  const tone: Tone = !list.length ? 'neutral' : counts.failed ? 'danger' : counts.running ? 'info' : counts.passed === list.length ? 'success' : 'warning';
+  const requiredFailed = list.filter(check => check.required && phaseTone(check.state) === 'failed').length;
+  const optionalFailed = counts.failed - requiredFailed;
+  let label: string;
+  let tone: Tone;
+  if (!list.length) [label, tone] = ['Not run', 'neutral'];
+  else if (requiredFailed) [label, tone] = [`${requiredFailed} required failed`, 'danger'];
+  else if (counts.running) [label, tone] = ['Running', 'info'];
+  else if (optionalFailed) [label, tone] = [`${optionalFailed} optional failed`, 'warning'];
+  else if (counts.passed === list.length) [label, tone] = [`${counts.passed}/${list.length} passed`, 'success'];
+  else [label, tone] = [`${counts.passed}/${list.length} passed`, 'warning'];
   return { ...counts, label, tone };
 }
 
