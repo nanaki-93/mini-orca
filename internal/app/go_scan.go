@@ -340,7 +340,7 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 	report, err := s.ScanGoProject(ctx, revision)
 	if err != nil {
 		if active, activeErr := s.manager.Analysis(); activeErr == nil && active.ProjectID == projectID && active.ProjectRevision == revision {
-			report = failedGoScanReport(projectID, revision, active.Path, err)
+			report = stoppedGoScanReport(ctx, projectID, revision, active.Path, err)
 			data, persistErr := marshalGoScanReport(report)
 			if persistErr == nil {
 				persistErr = s.goScan.writeFailureReport(active.Path, data)
@@ -351,7 +351,7 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 					"error", sanitizeCheckOutput(persistErr.Error(), false, "", active.Path))
 			}
 		} else {
-			report = failedGoScanReport(projectID, revision, "", err)
+			report = stoppedGoScanReport(ctx, projectID, revision, "", err)
 		}
 	}
 	s.goScan.mu.Lock()
@@ -364,16 +364,22 @@ func (s *Service) runStartedGoScan(ctx context.Context, projectID, revision stri
 	s.goScan.done = nil
 }
 
-func failedGoScanReport(projectID, revision, root string, failure error) *GoScanReport {
+// stoppedGoScanReport records a scan that ended before its phases ran. A scan
+// the user canceled reads as canceled, not as a failure of the workspace.
+func stoppedGoScanReport(ctx context.Context, projectID, revision, root string, failure error) *GoScanReport {
 	now := time.Now().UTC()
+	status, state := "failed", CheckFailed
+	if ctx.Err() != nil && errors.Is(failure, context.Canceled) {
+		status, state = "canceled", CheckCanceled
+	}
 	return &GoScanReport{
 		ProjectID:       projectID,
 		ProjectRevision: revision,
-		Status:          "failed",
+		Status:          status,
 		StartedAt:       now,
 		UpdatedAt:       now,
 		CompletedAt:     now,
-		Phases:          []GoScanPhase{{Name: "workspace", State: CheckFailed, Output: sanitizeCheckOutput(failure.Error(), false, "", root)}},
+		Phases:          []GoScanPhase{{Name: "workspace", State: state, Output: sanitizeCheckOutput(failure.Error(), false, "", root)}},
 	}
 }
 

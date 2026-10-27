@@ -99,21 +99,26 @@ func TestGoScanLifecycleStartsReadsAndCancels(t *testing.T) {
 	if _, err := service.GoScanProgress(revision); err != nil {
 		t.Fatal(err)
 	}
+	service.goScan.mu.Lock()
+	done := service.goScan.done
+	service.goScan.mu.Unlock()
 	if _, err := service.CancelGoScan(revision); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		report, err := service.GoScanProgress(revision)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if report != nil && report.Status == "canceled" {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	// The worker closes done after it persists its final report; the deadline
+	// only guards against a hang.
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("scan did not stop")
 	}
-	t.Fatal("scan did not report cancellation")
+	report, err := service.GoScanProgress(revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report == nil || report.Status != "canceled" {
+		t.Fatalf("scan did not report cancellation: %+v", report)
+	}
 }
 
 func TestGoScanLifecyclePersistsWorkspaceLimitFailure(t *testing.T) {
