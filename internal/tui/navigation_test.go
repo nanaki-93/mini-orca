@@ -76,7 +76,7 @@ func TestMessageLogKeepsStatusAndErrorsNewestFirst(t *testing.T) {
 	s.ExecuteCommand(":messages")
 	frame := ansi.Strip(s.Render(120, 30))
 	first, second := strings.Index(frame, "connection refused"), strings.Index(frame, "Reindexed 128 files")
-	if !strings.Contains(frame, "MESSAGES") || first < 0 || second < 0 || first > second {
+	if !strings.Contains(frame, "Messages") || first < 0 || second < 0 || first > second {
 		t.Fatalf("message log must list newest first:\n%s", frame)
 	}
 	assertFrameSize(t, s.Render(120, 30), 120, 30)

@@ -33,6 +33,8 @@ type ansiTheme struct {
 	errorBoxStyle lipgloss.Style
 	progStartHex  string
 	progEndHex    string
+	addBg         string
+	delBg         string
 }
 
 func themeForPalette(p Palette) ansiTheme {
@@ -80,6 +82,8 @@ func themeForPalette(p Palette) ansiTheme {
 			Padding(0, 1),
 		progStartHex: c.ProgStart,
 		progEndHex:   c.ProgEnd,
+		addBg:        "\033[48;5;" + c.AddBgCode + "m",
+		delBg:        "\033[48;5;" + c.DelBgCode + "m",
 	}
 }
 
@@ -108,51 +112,12 @@ func monochromeTheme() ansiTheme {
 	}
 }
 
-func (th ansiTheme) hubColor(key string) string {
-	switch key {
-	case "2":
-		return th.purple
-	case "3":
-		return th.cyan
-	case "4":
-		return th.green
-	case "5":
-		return th.amber
-	default:
-		return th.accent
-	}
-}
-
-func (th ansiTheme) keyPill(k, desc string) string {
-	return theme.KeyPill(th.cyan, th.fg, th.reset, k, desc)
-}
-
 func (th ansiTheme) renderCommandInput(value string, cursor, width int) string {
 	return theme.RenderCommandInput(th.bold+th.fg, th.reset, value, cursor, width)
 }
 
 func (th ansiTheme) renderProgressBar(done, total, barWidth int) string {
 	return theme.RenderProgressBar(th.progStartHex, th.progEndHex, done, total, barWidth)
-}
-
-func (th ansiTheme) severityBadge(sev string) string {
-	upper := strings.ToUpper(strings.TrimSpace(sev))
-	if upper == "" {
-		upper = "INFO"
-	}
-	label := fmt.Sprintf("[%-8s]", theme.TruncatePlain(upper, 8))
-	switch upper {
-	case "CRITICAL":
-		return th.critBg + label + th.reset
-	case "HIGH":
-		return th.warnBg + label + th.reset
-	case "MEDIUM", "MED":
-		return th.purple + label + th.reset
-	case "LOW":
-		return th.cyan + label + th.reset
-	default:
-		return th.muted + label + th.reset
-	}
 }
 
 func (th ansiTheme) statusBadge(state string) string {
@@ -185,14 +150,6 @@ func (th ansiTheme) padBadge(state string, width int) string {
 
 func (th ansiTheme) renderPanelBox(title, rightMeta string, innerWidth int, body []string) []string {
 	return theme.RenderPanelBox(th.titleStyle, th.mutedStyle, th.cardStyle, th.border, th.reset, title, rightMeta, innerWidth, body)
-}
-
-func (th ansiTheme) renderErrorBanner(errText string, innerWidth int) []string {
-	return theme.RenderErrorBanner(th.errorBoxStyle, th.critBg, th.bold+th.red, th.reset, errText, innerWidth)
-}
-
-func (th ansiTheme) renderMetrics(cards [][2]string, totalWidth int) []string {
-	return theme.RenderMetrics(th.mutedStyle, th.surface, th.fg, cards, totalWidth)
 }
 
 func (th ansiTheme) renderTableHeader(columns string, width int) []string {

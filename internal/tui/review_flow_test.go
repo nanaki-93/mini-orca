@@ -11,14 +11,16 @@ func TestWideDiffShowsFileListWithReviewState(t *testing.T) {
 	s := twoFileReviewState()
 	s.Change.FileReviewHash, s.Change.ReviewedFiles = s.Change.Hash, []string{"internal/api/server_test.go"}
 	wide := ansi.Strip(s.Render(170, 34))
-	for _, token := range []string{"FILES 1/2 reviewed", "● server.go", "✓ server_test.go", "+1 -0"} {
+	for _, token := range []string{"Changed files", "1/2 viewed", "○ server.go", "✔ server_test.go", "+1 −0", "var T = 5"} {
 		if !strings.Contains(wide, token) {
 			t.Fatalf("wide diff missing %q:\n%s", token, wide)
 		}
 	}
 	assertFrameSize(t, s.Render(170, 34), 170, 34)
-	if narrow := ansi.Strip(s.Render(120, 34)); strings.Contains(narrow, "FILES 1/2 reviewed") {
-		t.Fatalf("a narrow diff must keep the full width for code:\n%s", narrow)
+	narrow := ansi.Strip(s.Render(80, 34))
+	files, code := strings.Index(narrow, "Changed files"), strings.Index(narrow, "var T = 5")
+	if files < 0 || code < 0 || code < files {
+		t.Fatalf("a narrow diff stacks the file list above the code:\n%s", narrow)
 	}
 }
 

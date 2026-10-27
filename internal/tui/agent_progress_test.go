@@ -174,7 +174,7 @@ func TestDynamicStageViewsFitPalettesAndTerminalSizes(t *testing.T) {
 			frame := s.Render(dims[0], dims[1])
 			assertFrameSize(t, frame, dims[0], dims[1])
 			if dims[0] >= 52 && dims[1] >= 16 {
-				for _, token := range []string{"Task · stages", "Verify", "[:] Commands"} {
+				for _, token := range []string{"Task · stages", "Verify", ": commands"} {
 					if !strings.Contains(frame, token) {
 						t.Fatalf("%v %s missing %q: %s", dims, palette, token, frame)
 					}

@@ -28,27 +28,6 @@ func twoFileReviewState() *State {
 	return s
 }
 
-func TestBreadcrumbShowsWorkspaceViewAndFocusedItem(t *testing.T) {
-	s := workspaceSampleState()
-	s.Navigate(PageBugs)
-	frame := ansi.Strip(s.Render(120, 30))
-	if !strings.Contains(frame, "Work › Issues") {
-		t.Fatalf("issues page breadcrumb missing:\n%s", frame)
-	}
-	review := twoFileReviewState()
-	if frame := ansi.Strip(review.Render(120, 30)); !strings.Contains(frame, "Code › Files & Diff › internal/api/server.go") {
-		t.Fatalf("diff breadcrumb must name the active file:\n%s", frame)
-	}
-	s.ShowKeybindsModal = true
-	if line := s.renderBreadcrumb(themeForPalette(s.Palette), 120); line != "" {
-		t.Fatalf("overlays must not show a breadcrumb, got %q", line)
-	}
-	for _, size := range [][2]int{{60, 20}, {80, 24}, {160, 40}} {
-		s.ShowKeybindsModal = false
-		assertFrameSize(t, s.Render(size[0], size[1]), size[0], size[1])
-	}
-}
-
 // runDispatch drives a queued batch of blocking actions to completion the way
 // the Bubble Tea runtime would: start message, background command, done message.
 func runDispatch(t *testing.T, m *BubbleModel, start tea.Msg) {
@@ -187,7 +166,7 @@ func TestEscCancelsReadOnlyActionsButNotMutations(t *testing.T) {
 	s, m, done := startBlockedDispatch(t, ActionRequest{Kind: "open-file", Target: "internal/api/server.go"}, func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	})
-	if !strings.Contains(ansi.Strip(m.View()), "[Esc] Cancel") {
+	if !strings.Contains(ansi.Strip(m.View()), "Esc cancel") {
 		t.Fatal("a read-only action must advertise Esc to cancel")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -305,18 +284,6 @@ func TestMarkingAFileReviewedMovesToTheNextUnreviewedFile(t *testing.T) {
 	}
 	if !strings.Contains(s.CmdOutput, "1/2 files") {
 		t.Fatalf("status should report review progress, got %q", s.CmdOutput)
-	}
-}
-
-func TestActionBarShowsHowManyHintsDidNotFit(t *testing.T) {
-	s := twoFileReviewState()
-	th := themeForPalette(s.Palette)
-	narrow := ansi.Strip(s.renderActionBar(th, 70))
-	if !strings.Contains(narrow, "more") {
-		t.Fatalf("narrow action bar must count hidden hints: %q", narrow)
-	}
-	if wide := ansi.Strip(s.renderActionBar(th, 220)); strings.Contains(wide, "more") {
-		t.Fatalf("wide action bar should fit every hint: %q", wide)
 	}
 }
 

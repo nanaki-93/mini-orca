@@ -141,12 +141,9 @@ func TestCommandInputAndSelectedHintStayTogetherAtEverySize(t *testing.T) {
 		frame = ansi.Strip(s.Render(dims[0], dims[1]))
 		var content []string
 		for _, line := range strings.Split(frame, "\n") {
-			if _, body, sidebar := strings.Cut(line, "│"); sidebar {
-				line = body
-			}
-			content = append(content, strings.Fields(line)...)
+			content = append(content, strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(line))...)
 		}
-		if !strings.Contains(strings.Join(content, " "), "Requires project trust.") || !strings.Contains(frame, "[Esc] Cancel") || len(s.PendingActions) != 0 {
+		if !strings.Contains(strings.Join(content, " "), "Requires project trust.") || !strings.Contains(frame, "Esc cancel") || len(s.PendingActions) != 0 {
 			t.Fatalf("selected command lost its scope hint or cancel at %v:\n%s", dims, frame)
 		}
 	}
@@ -261,16 +258,13 @@ func TestCommandMissingArgumentsExplainRequiredInput(t *testing.T) {
 			s.HandleKey(KeyEvent{Key: "Enter"})
 			frame := ansi.Strip(s.Render(size[0], size[1]))
 			assertFrameSize(t, frame, size[0], size[1])
-			if !strings.Contains(frame, "Argument required") || strings.Contains(frame, "[Enter] Run") || len(s.PendingActions) != 0 {
+			if !strings.Contains(frame, "Argument required") || strings.Contains(frame, "Enter  Run") || len(s.PendingActions) != 0 {
 				t.Fatalf("missing argument was not explained at %v in %s:\n%s", size, palette, frame)
 			}
 			if size[0] >= 52 {
 				var content []string
 				for _, line := range strings.Split(frame, "\n") {
-					if _, body, sidebar := strings.Cut(line, "│"); sidebar {
-						line = body
-					}
-					content = append(content, strings.Fields(line)...)
+					content = append(content, strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(line))...)
 				}
 				text := strings.Join(content, " ")
 				for _, explanation := range []string{"main: project checkout (default)", "task: selected task worktree", "future runs", ":roles or :skills"} {
@@ -281,7 +275,7 @@ func TestCommandMissingArgumentsExplainRequiredInput(t *testing.T) {
 			}
 			s.HandleKey(KeyEvent{Text: "main"})
 			frame = ansi.Strip(s.Render(size[0], size[1]))
-			if strings.Contains(frame, "Argument required") || size[0] >= 52 && !strings.Contains(frame, "[Enter] Run") || len(s.PendingActions) != 0 {
+			if strings.Contains(frame, "Argument required") || size[0] >= 52 && !strings.Contains(frame, "Enter  Run") || len(s.PendingActions) != 0 {
 				t.Fatalf("supplying an argument did not restore passive command submission at %v:\n%s", size, frame)
 			}
 		}

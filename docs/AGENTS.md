@@ -7,7 +7,7 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
   and measured evidence from an assumption.
 - Update the existing owner of a fact: root README for setup, `CONFIG.md` and
   `config.example.yaml` for configuration, `api-contract.md`/`openapi.yaml` for the
-  wire contract, and [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for TUI interaction. Link instead of duplicating prose.
+  wire contract, [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for the structure and look of both interfaces, and [ui-behavior.md](ui-behavior.md) for TUI workflow behavior. Link instead of duplicating prose.
 - Keep agent instructions short and actionable. Shared rules belong in root
   `AGENTS.md`; area rules belong in the relevant area file and must be linked from
   the root. Update affected instructions when ownership or commands change.

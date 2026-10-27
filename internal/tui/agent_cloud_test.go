@@ -328,7 +328,7 @@ func TestCloudUILiveTransportCancellationAndQuit(t *testing.T) {
 func TestCloudUILayoutAndPassiveKeyboardActions(t *testing.T) {
 	f := newCloudUIFixture(t)
 	s := f.s
-	if len(HubTabs()) != 5 {
+	if len(HubTabs()) != 7 {
 		t.Fatal("cloud added another workspace")
 	}
 	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {

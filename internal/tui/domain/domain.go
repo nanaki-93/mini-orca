@@ -383,7 +383,7 @@ func worktreeSpecCollides(existing []client.GitWorktree, branch, relPath string)
 	return false
 }
 
-// CollectAllAgentItems derives Work › Tasks items from all tracked change sessions.
+// CollectAllAgentItems derives Tasks items from all tracked change sessions.
 func CollectAllAgentItems(change *client.ChangeSession, activeChanges []*client.ChangeSession, receipt *client.ChangeMutation, gitWS *client.GitWorkspace) []AgentItem {
 	items, seenIDs := collectSessionAgentItems(change, activeChanges, receipt, gitWS)
 	if shouldAppendPrimaryChange(change, len(items), seenIDs) {

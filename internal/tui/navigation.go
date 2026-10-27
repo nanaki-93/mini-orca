@@ -146,32 +146,6 @@ func (s *State) handleMessageLogKey(ev KeyEvent) {
 	}
 }
 
-// renderMessageLog lists recent messages, newest first.
-func (s *State) renderMessageLog(th ansiTheme, width, rows int) []string {
-	body := []string{
-		fmt.Sprintf("%sMESSAGES%s  %s%d recent · newest first%s", th.bold+th.green, th.reset, th.muted, len(s.nav.log), th.reset),
-		th.border + strings.Repeat("─", max(10, width-6)) + th.reset,
-	}
-	if len(s.nav.log) == 0 {
-		body = append(body, th.muted+"No messages yet. Status updates and errors appear here as you work."+th.reset)
-	}
-	for i := len(s.nav.log) - 1; i >= 0; i-- {
-		entry := s.nav.log[i]
-		tone, mark := th.fg, "·"
-		if entry.isError {
-			tone, mark = th.red, "✖"
-		}
-		prefix := fmt.Sprintf("%s%s%s %s%s%s ", th.muted, entry.at.Format("15:04:05"), th.reset, tone, mark, th.reset)
-		for j, line := range wrapPlain(entry.text, max(20, width-16)) {
-			if j > 0 {
-				prefix = strings.Repeat(" ", 11)
-			}
-			body = append(body, prefix+tone+line+th.reset)
-		}
-	}
-	return scrollWindow(th, body, rows, &s.nav.logScroll)
-}
-
 // wrapPlain wraps text on spaces to at most width runes per line.
 func wrapPlain(text string, width int) []string {
 	words := strings.Fields(text)

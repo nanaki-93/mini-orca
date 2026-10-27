@@ -8,7 +8,21 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
-const sidebarMenuWidth = 24
+// The frame is four fixed bars around a body of bordered panes:
+//
+//	header      project · branch · checkout            activity · trust · connection
+//	workspaces  1 Inbox  2 Tasks  3 Code  4 Issues  5 Docs  6 Branches  7 Settings
+//	body        one or two panes for the active workspace, overlays on top
+//	hints       the keys that act on what is selected
+//	messages    the latest status message, busy work or error
+const frameChromeRows = 4
+
+// minFrameWidth and minFrameHeight are the smallest terminal the frame
+// renders in; below it a resize prompt keeps the session intact.
+const (
+	minFrameWidth  = 52
+	minFrameHeight = 16
+)
 
 // Render generates a full-screen frame that never exceeds the terminal's dimensions.
 func (s *State) Render(width, height int) string {
@@ -22,42 +36,17 @@ func (s *State) Render(width, height int) string {
 			s.viewport.followSelection = true
 		}
 	}
-	if width < 52 || height < 16 {
+	if width < minFrameWidth || height < minFrameHeight {
 		return s.renderSmallTerminal(th, width, height)
 	}
-	header := []string{theme.PaintLine(th.surface, th.fg, s.renderBrandBar(th, width), width), s.renderStatusBar(th, width)}
-	sidebar := width >= 100 && height >= 20
-	if !sidebar {
-		header = append(header, s.renderHubBar(th, width), s.renderSubViewBar(th, width))
-	}
-	rule := th.border + strings.Repeat("─", width) + th.reset
-	header = append(header, rule)
-	footer := []string{rule, theme.PaintLine(th.surface, th.fg, s.renderActionBar(th, width), width), s.renderCommandBar(th, width)}
-	bodyRows := height - len(header) - len(footer)
-	contentWidth := width
-	if sidebar {
-		contentWidth -= sidebarMenuWidth + 1
-	}
-	s.viewportBodyRows = bodyRows
-	body := s.renderWorkspaceContent(th, contentWidth, bodyRows)
-	if sidebar {
-		menu := s.renderSidebarMenu(th, sidebarMenuWidth, bodyRows)
-		for i := 0; i < bodyRows; i++ {
-			if i >= len(body) {
-				body = append(body, "")
-			}
-			body[i] = theme.PaintLine(th.surface, th.fg, menu[i], sidebarMenuWidth) + th.border + "│" + th.reset + body[i]
-		}
-	}
-	lines := append([]string(nil), header...)
-	for i := 0; i < bodyRows; i++ {
-		row := ""
-		if i < len(body) {
-			row = body[i]
-		}
-		lines = append(lines, row)
-	}
-	return fitFrame(th, append(lines, footer...), width, height)
+	bodyRows := height - frameChromeRows
+	body := s.renderBody(th, width, bodyRows)
+	body = s.renderOverlay(th, body, width, bodyRows)
+	lines := make([]string, 0, height)
+	lines = append(lines, s.renderHeaderBar(th, width), s.renderWorkspaceTabs(th, width))
+	lines = append(lines, body...)
+	lines = append(lines, s.renderKeyHints(th, width), s.renderMessageLine(th, width))
+	return fitFrame(th, lines, width, height)
 }
 
 func fitFrame(th ansiTheme, lines []string, width, height int) string {
@@ -73,39 +62,17 @@ func fitFrame(th ansiTheme, lines []string, width, height int) string {
 }
 
 func (s *State) renderSmallTerminal(th ansiTheme, width, height int) string {
-	lines := []string{"MINI-ORCA", "", "Enlarge the terminal to 52 × 16.", "Your workspace is preserved.", "", "Ctrl+C: quit"}
+	lines := []string{th.bold + th.fg + "◈ mini-orca" + th.reset, "", fmt.Sprintf("Enlarge the terminal to %d × %d.", minFrameWidth, minFrameHeight), th.muted + "Your workspace is preserved." + th.reset, "", th.muted + "Ctrl+C quit" + th.reset}
 	if s.CmdActive {
-		lines = []string{"MINI-ORCA", th.renderCommandInput(s.CmdInput, s.commandCursor, width)}
+		lines = []string{"◈ mini-orca", th.renderCommandInput(s.CmdInput, s.commandCursor, width)}
 		if s.commandMissingArguments() != nil {
 			lines = append(lines, theme.WrapVisibleLine(requiredCommandArgumentHint, width)...)
-			lines = append(lines, "Esc: cancel")
+			lines = append(lines, "Esc cancel")
 		} else {
-			lines = append(lines, "Enter: run · Esc: cancel")
+			lines = append(lines, "Enter run · Esc cancel")
 		}
 	}
 	return fitFrame(th, lines, width, height)
-}
-
-func (s *State) renderBrandBar(th ansiTheme, width int) string {
-	name := "Open a project to begin"
-	if s.Project != nil {
-		name = client.FirstNonEmpty(s.Project.Name, s.Project.Path)
-	}
-	right := th.amber + "○ Offline" + th.reset
-	if s.Connected {
-		right = th.green + "● Connected" + th.reset
-	}
-	if count := len(s.AgentItems()); count > 0 && width >= 88 {
-		right = fmt.Sprintf("%s%d task(s)%s  %s", th.purple, count, th.reset, right)
-	}
-	brand := th.accentBg + " ◈ MINI-ORCA " + th.reset
-	nameBudget := max(8, width-theme.VisibleRuneCount(right)-26)
-	left := brand + th.border + " │ " + th.reset + th.bold + th.fg + theme.TruncatePlain(name, nameBudget) + th.reset
-	if width >= 104 {
-		active := s.ActiveHub()
-		left += th.muted + "  ·  " + th.hubColor(active.Key) + "[" + active.Key + "] " + active.Label + th.reset
-	}
-	return alignBar(left, right+" ", width)
 }
 
 func alignBar(left, right string, width int) string {
@@ -113,192 +80,219 @@ func alignBar(left, right string, width int) string {
 	return theme.PadVisibleRight(left, leftWidth) + "  " + right
 }
 
-func (s *State) renderWorkspaceContent(th ansiTheme, width, rows int) []string {
-	s.viewportBodyRows = max(1, rows-1)
-	var body []string
-	switch {
-	case s.CmdActive:
-		body = s.renderCommandMenu(th, width, rows-1)
-	case s.Confirmation != nil:
-		body = s.renderDialog(th, width, rows-1)
-	case s.nav.showLog:
-		body = s.renderMessageLog(th, width, rows-1)
-	case s.ShowKeybindsModal:
-		body = s.renderKeybindsModal(th, width)
-	case s.Error != "":
-		body = s.renderDialog(th, width, rows-1)
-	default:
-		s.viewport.dialogKey, s.viewport.dialogScroll = "", 0
-		body = s.renderActivePage(th, width)
-		if !(s.Page == PageEditor && s.isViewingDiff()) {
-			body = wrapWorkspaceLines(body, width)
-		}
-		body = s.scrollDetails(th, body, rows-1)
+// renderHeaderBar names the project and checkout on the left and shows live
+// activity, execution trust and the daemon connection on the right. When
+// space is short the project name shrinks first, then the branch.
+func (s *State) renderHeaderBar(th ansiTheme, width int) string {
+	brand := th.accentBg + " ◈ mini-orca " + th.reset
+	var right []string
+	if activity := s.headerActivity(th); activity != "" {
+		right = append(right, activity)
 	}
-	for i, line := range body {
-		if strings.HasPrefix(line, "  "+th.renderCursorPrefix(true)) {
-			body[i] = theme.PaintLine(th.selection, th.fg, line, width-2)
+	if s.Project != nil && width >= 96 {
+		if s.WorkspaceTrust {
+			right = append(right, th.green+"✔"+th.reset+th.muted+" checks trusted"+th.reset)
+		} else {
+			right = append(right, th.amber+"⚠"+th.reset+th.muted+" checks need trust"+th.reset)
 		}
 	}
-	return append([]string{s.renderBreadcrumb(th, width)}, body...)
+	if s.Connected {
+		right = append(right, th.green+"●"+th.reset+th.muted+" live"+th.reset)
+	} else {
+		right = append(right, th.red+"○"+th.reset+th.muted+" offline"+th.reset)
+	}
+	rightText := strings.Join(right, th.border+"  │  "+th.reset) + " "
+	if s.Project == nil {
+		return theme.PaintLine(th.surface, th.fg, alignBar(brand+" "+th.muted+"No project open"+th.reset, rightText, width), width)
+	}
+	name := client.FirstNonEmpty(s.Project.Name, s.Project.Path)
+	branch := "no Git"
+	if s.Repository != nil && s.Repository.Available {
+		branch = client.FirstNonEmpty(s.Repository.Branch, "detached HEAD")
+	}
+	modified := ""
+	if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
+		modified = th.amber + " ●" + th.reset + th.muted + " modified" + th.reset
+	}
+	budget := width - theme.VisibleRuneCount(rightText) - 2 - theme.VisibleRuneCount(brand) - theme.VisibleRuneCount(modified) - 5
+	branchW := min(theme.VisibleRuneCount(branch), max(8, budget/2))
+	nameW := max(6, budget-branchW)
+	left := brand + " " + th.bold + th.fg + theme.TruncatePlain(name, nameW) + th.reset +
+		th.muted + "  ⎇ " + th.reset + th.purple + theme.TruncatePlain(branch, branchW) + th.reset + modified
+	return theme.PaintLine(th.surface, th.fg, alignBar(left, rightText, width), width)
 }
 
-// renderBreadcrumb shows where the user is: workspace › view › focused item.
-// Overlays (commands, dialogs, help, errors) keep the line empty.
-func (s *State) renderBreadcrumb(th ansiTheme, width int) string {
-	if s.CmdActive || s.Confirmation != nil || s.ShowKeybindsModal || s.nav.showLog || s.Error != "" || width < 60 {
-		return ""
+func (s *State) headerActivity(th ansiTheme) string {
+	if s.mediaActiveNotice() != "" {
+		return th.amber + "● live media session" + th.reset
 	}
-	hub := s.ActiveHub()
-	page := s.EffectivePage()
-	parent := parentPage(page)
-	parts := []string{th.hubColor(hub.Key) + hub.Label + th.reset}
-	for _, sp := range hub.SubPages {
-		if sp.Page == parent {
-			parts = append(parts, th.fg+sp.Label+th.reset)
-			break
-		}
+	if s.Busy != "" {
+		return th.cyan + s.spinner() + " " + theme.TruncatePlain(s.Busy, 32) + th.reset
 	}
-	if detail := s.breadcrumbDetail(page); detail != "" {
-		parts = append(parts, th.bold+th.fg+theme.TruncatePlain(theme.SanitizeSingleLine(detail), max(12, width/3))+th.reset)
+	if s.asyncWork > 0 {
+		return th.cyan + s.spinner() + " working" + th.reset
 	}
-	line := "  " + strings.Join(parts, th.muted+" › "+th.reset)
-	if theme.VisibleRuneCount(line) > width-2 {
-		return theme.TruncateVisible(line, width-2)
+	_, running, _, _, _ := s.agentFleetBreakdown()
+	if running > 0 {
+		return th.amber + s.spinner() + fmt.Sprintf(" %d agent run", running) + plural(running) + th.reset
 	}
-	return line
-}
-
-func (s *State) breadcrumbDetail(page Page) string {
-	switch page {
-	case PageIssueDetail:
-		return "Issue"
-	case PageFeatureDetail:
-		return "Feature"
-	case PageWorktreeDetail:
-		return "Worktree"
-	case PageEditor:
-		if s.File != nil && s.File.Path != "" && !s.isViewingDiff() {
-			return s.File.Path
-		}
-		if s.isViewingDiff() {
-			if active, _, ok := s.activeDiffHunk(); ok {
-				return active.Path
-			}
-		}
-	case PageAgents:
-		if s.AgentDetailOpen && s.Change != nil {
-			return client.FirstNonEmpty(s.Change.Title, s.Change.ID)
-		}
+	if s.Run != nil && s.Run.Status == "running" {
+		done, total := runAggregateCoverage(s.Run)
+		return th.cyan + s.spinner() + fmt.Sprintf(" analysis %d/%d", done, total) + th.reset
 	}
 	return ""
 }
 
-func (s *State) renderSidebarMenu(th ansiTheme, width, rows int) []string {
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// renderWorkspaceTabs lists the seven workspaces with their number keys and
+// attention counts; the active one is filled. Narrow terminals drop the
+// hint, then shorten inactive tabs to their keys.
+func (s *State) renderWorkspaceTabs(th ansiTheme, width int) string {
 	active := s.ActiveHub()
-	models := s.renderSidebarModels(th, width)
-	subPages := s.renderSidebarSubPages(th, active, width, rows-len(HubTabs())-len(models))
-	roomy := rows >= len(HubTabs())+len(subPages)+len(models)+5
-	var lines []string
-	if roomy {
-		lines = append(lines, "", "  "+th.bold+th.cyan+"◈ WORKSPACE"+th.reset, "")
-	}
-	for _, tab := range HubTabs() {
-		style := th.hubColor(tab.Key)
-		if tab.Key == active.Key {
-			style += th.bold
-		}
-		lines = append(lines, "  "+style+tab.Key+"  "+tab.Label+th.reset)
-		if tab.Key == active.Key {
-			lines = append(lines, subPages...)
-			if roomy {
-				lines = append(lines, "")
+	badges := s.workspaceBadges()
+	build := func(compact bool) string {
+		var parts []string
+		for _, tab := range HubTabs() {
+			badge := badges[tab.Key]
+			if tab.Key == active.Key {
+				label := tab.Label
+				if badge > 0 {
+					label += fmt.Sprintf(" %d", badge)
+				}
+				parts = append(parts, th.accentBg+" "+tab.Key+" "+label+" "+th.reset)
+				continue
 			}
+			count := ""
+			if badge > 0 {
+				count = th.amber + fmt.Sprintf(" %d", badge) + th.reset
+			}
+			if compact {
+				// Keys only; a dot marks a workspace that needs attention.
+				dot := " "
+				if badge > 0 {
+					dot = th.amber + "•" + th.reset
+				}
+				parts = append(parts, " "+th.fg+tab.Key+th.reset+dot)
+				continue
+			}
+			parts = append(parts, " "+th.muted+tab.Key+th.reset+" "+th.fg+tab.Label+th.reset+count+" ")
 		}
+		return " " + strings.Join(parts, " ")
 	}
-	if rows-len(lines) >= len(models)+2 {
-		models = append([]string{"  " + th.border + strings.Repeat("─", width-4) + th.reset, "  " + th.muted + "◈ MODELS" + th.reset}, models...)
+	left := build(false)
+	right := th.muted + "Tab views · ? help · Ctrl+K commands" + th.reset + " "
+	if theme.VisibleRuneCount(left)+theme.VisibleRuneCount(right)+2 <= width {
+		return alignBar(left, right, width)
 	}
-	for len(lines) < rows-len(models) {
-		lines = append(lines, "")
+	if theme.VisibleRuneCount(left)+2 <= width {
+		return left
 	}
-	return append(lines, models...)
+	return build(true)
 }
 
-func (s *State) renderSidebarModels(th ansiTheme, width int) []string {
-	var lines []string
-	for _, role := range []struct{ scope, label string }{{"analyze", "Analyze"}, {"bug", "Bug"}, {"code", "Code"}} {
-		model := s.EffectiveScopeModel(role.scope).Model
-		if model == "" || model == role.scope {
-			model = "unavailable"
-		}
-		color := th.cyan
-		if role.scope == "bug" {
-			color = th.purple
-		} else if role.scope == "code" {
-			color = th.green
-		}
-		lines = append(lines, fmt.Sprintf("  %s%-7s%s %s", color, role.label, th.reset, theme.TruncatePlain(theme.SanitizeSingleLine(model), max(1, width-10))))
-	}
-	return lines
-}
-
-func (s *State) renderSidebarSubPages(th ansiTheme, tab HubTab, width, availableRows int) []string {
-	curPage := parentPage(s.EffectivePage())
-	var pages []HubSubPage
-	selected := 0
-	for _, sp := range tab.SubPages {
-		if sp.Page == PageIssueDetail {
-			continue
-		}
-		if sp.Page == curPage {
-			selected = len(pages)
-		}
-		pages = append(pages, sp)
-	}
-	limit := max(1, availableRows)
-	more := len(pages) > limit && limit > 1
-	if more {
-		limit--
-	}
-	start, end := windowBounds(len(pages), selected, limit)
-	var out []string
-	for _, sp := range pages[start:end] {
-		label := theme.TruncatePlain(sp.Label, width-8)
-		if sp.Page == curPage {
-			out = append(out, theme.PaintLine(th.selection, th.hubColor(tab.Key), "    ▸ "+label, width))
-		} else {
-			out = append(out, "      "+th.muted+label+th.reset)
-		}
-	}
-	if more {
-		out = append(out, "    "+th.muted+"Tab · more views"+th.reset)
-	}
-	return out
-}
-
-func (s *State) renderStatusBar(th ansiTheme, width int) string {
-	left := " " + th.muted + "Local workspace" + th.reset
+// workspaceBadges counts what needs attention per workspace key.
+func (s *State) workspaceBadges() map[string]int {
+	_, running, review, failed, toMerge := s.agentFleetBreakdown()
+	_ = running
+	badges := map[string]int{"1": review + failed, "6": toMerge}
 	if s.Project != nil {
-		branch := "Git unavailable"
-		if s.Repository != nil && s.Repository.Available {
-			branch = client.FirstNonEmpty(s.Repository.Branch, "Detached HEAD")
-		}
-		left = " " + th.purple + "⎇ " + theme.TruncatePlain(branch, 22) + th.reset
-		if s.GitWorkspace != nil && s.GitWorkspace.Dirty {
-			left += th.amber + " · Modified" + th.reset
-		}
-		trust := th.amber + "⚠ Checks need trust"
-		if s.WorkspaceTrust {
-			trust = th.green + "✔ Checks trusted"
-		}
-		if width >= 80 {
-			left += th.muted + "  ·  " + trust + th.reset
-		}
+		badges["4"] = len(s.issuesInView("open"))
 	}
-	activity := s.statusBarActivity()
-	maxRight := max(10, min(width/2-2, width-theme.VisibleRuneCount(left)-4))
-	return alignBar(left, th.cyan+theme.TruncatePlain(activity, maxRight)+th.reset+" ", width)
+	return badges
+}
+
+// issuesInView counts issues with the given status view without changing the
+// active filter.
+func (s *State) issuesInView(view string) []IssueRow {
+	saved, savedCategory := s.IssueView, s.IssueCategory
+	s.IssueView, s.IssueCategory = view, "all"
+	issues := s.FilteredIssues()
+	s.IssueView, s.IssueCategory = saved, savedCategory
+	return issues
+}
+
+// renderKeyHints shows the keys that act on the current selection, the
+// primary one first and highlighted, followed by an overflow count.
+func (s *State) renderKeyHints(th ansiTheme, width int) string {
+	items, right := s.keyHintItems(th, width)
+	available := width - theme.VisibleRuneCount(right) - 3
+	var hints []string
+	for i, item := range items {
+		hint := th.cyan + item.key + th.reset + " " + th.fg + item.desc + th.reset
+		if i == 0 {
+			hint = th.accentBg + " " + item.key + " " + th.reset + " " + th.bold + th.fg + item.desc + th.reset
+		}
+		// Reserve room for the overflow marker so hidden actions stay discoverable.
+		reserve := 0
+		if i < len(items)-1 {
+			reserve = len("   +9 more")
+		}
+		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "   "))+reserve > available {
+			if i == 0 {
+				hints = append(hints, theme.TruncateVisible(hint, max(4, available)))
+			}
+			break
+		}
+		hints = append(hints, hint)
+	}
+	if hidden := len(items) - len(hints); hidden > 0 && len(hints) > 0 {
+		hints = append(hints, th.muted+fmt.Sprintf("+%d more", hidden)+th.reset)
+	}
+	return theme.PaintLine(th.surface, th.fg, alignBar(" "+strings.Join(hints, "   "), right, width), width)
+}
+
+// keyHintItems picks the hints for the page or the open overlay and the
+// right-hand reminder that goes with them.
+func (s *State) keyHintItems(th ansiTheme, width int) ([]keyDesc, string) {
+	switch {
+	case s.CmdActive:
+		items := []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}, {"↑/↓", "Select"}}
+		if s.commandMissingArguments() != nil {
+			items[0].desc = "Needs arguments"
+		}
+		return items, th.muted + "Esc cancel" + th.reset + " "
+	case s.Confirmation != nil:
+		// Cancel is pinned on the right so a long accept label never hides it.
+		return []keyDesc{{"y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm")}}, th.cyan + "n/Esc" + th.reset + " " + th.fg + "Cancel" + th.reset + " "
+	case s.ShowKeybindsModal || s.nav.showLog:
+		return []keyDesc{{"↑/↓", "Scroll"}, {"PgUp/PgDn", "Page"}}, th.muted + "Esc close" + th.reset + " "
+	}
+	right := th.muted + "Esc back · : commands · ? help" + th.reset + " "
+	if width < 100 {
+		right = th.muted + ": commands · ? help" + th.reset + " "
+	}
+	if s.Error != "" {
+		return []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}, right
+	}
+	return s.pageActions(), right
+}
+
+// renderMessageLine shows, in priority order, the command input help, an
+// error, busy work with its detail, or the latest status message.
+func (s *State) renderMessageLine(th ansiTheme, width int) string {
+	switch {
+	case s.CmdActive:
+		return " " + th.muted + theme.TruncatePlain("Type to search commands · Ctrl+P/N history · Ctrl+U clear", width-2) + th.reset
+	case s.Error != "":
+		return " " + th.red + "✖ " + th.reset + th.fg + theme.TruncatePlain(theme.SanitizeSingleLine(s.Error), max(1, width-18)) + th.reset + th.muted + "  Esc dismiss" + th.reset
+	case s.Busy != "":
+		message := s.Busy
+		if s.busyDetail != "" {
+			message += " · " + s.busyDetail
+		}
+		return " " + th.cyan + s.spinner() + " " + th.reset + th.fg + theme.TruncatePlain(message, width-4) + th.reset
+	}
+	message := s.CmdOutput
+	if message == "" || message == "Workspace ready" {
+		message = "1–7 workspaces · Tab views · ↑/↓ select · Enter open · Ctrl+K commands"
+	}
+	return " " + th.muted + theme.TruncatePlain(theme.SanitizeSingleLine(message), width-2) + th.reset
 }
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -307,11 +301,13 @@ func (s *State) spinner() string {
 	return spinnerFrames[s.spinnerFrame%len(spinnerFrames)]
 }
 
-// showsActivity reports whether the status bar has live work to animate.
+// showsActivity reports whether the frame has live work to animate.
 func (s *State) showsActivity() bool {
 	return s.Busy != "" || s.asyncWork > 0 || s.hasActiveBackgroundJob()
 }
 
+// statusBarActivity summarizes live work in one phrase, for narrow layouts
+// and the message log.
 func (s *State) statusBarActivity() string {
 	if s.Busy != "" {
 		return s.spinner() + " " + s.Busy
@@ -342,98 +338,6 @@ func (s *State) statusBarActivity() string {
 	return ""
 }
 
-func (s *State) renderHubBar(th ansiTheme, width int) string {
-	active := s.ActiveHub()
-	var parts []string
-	for _, tab := range HubTabs() {
-		label := " " + tab.Key + " " + tab.Label + " "
-		if tab.Key == active.Key {
-			parts = append(parts, theme.PaintLine(th.selection, th.hubColor(tab.Key), label, theme.VisibleRuneCount(label)))
-		} else {
-			parts = append(parts, th.hubColor(tab.Key)+label+th.reset)
-		}
-	}
-	return theme.PadVisibleRight(" "+strings.Join(parts, " "), width)
-}
-
-func (s *State) renderSubViewBar(th ansiTheme, width int) string {
-	hub := s.ActiveHub()
-	page := parentPage(s.EffectivePage())
-	var labels []string
-	active := 0
-	for _, sp := range hub.SubPages {
-		if sp.Page == PageIssueDetail {
-			continue
-		}
-		label := sp.Label
-		if sp.Page == page {
-			active = len(labels)
-			label = th.hubColor(hub.Key) + "▸ " + label + th.reset
-		} else {
-			label = th.muted + label + th.reset
-		}
-		labels = append(labels, label)
-	}
-	// Center the visible tabs on the current view; Tab always reaches the rest.
-	start, end := active, active+1
-	for start > 0 && theme.VisibleRuneCount(strings.Join(labels[start-1:end], "  ")) <= width-12 {
-		start--
-	}
-	for end < len(labels) && theme.VisibleRuneCount(strings.Join(labels[start:end+1], "  ")) <= width-12 {
-		end++
-	}
-	prefix, suffix := "  ", ""
-	if start > 0 {
-		prefix = "‹ "
-	}
-	if end < len(labels) {
-		suffix = " ›"
-	}
-	return prefix + strings.Join(labels[start:end], "  ") + suffix
-}
-
-func (s *State) renderActionBar(th ansiTheme, width int) string {
-	if s.Confirmation != nil {
-		confirm := th.keyPill("y/Enter", client.FirstNonEmpty(s.Confirmation.AcceptLabel, "Confirm"))
-		return alignBar(" "+confirm, th.keyPill("n/Esc", "Cancel")+" ", width)
-	}
-	items := s.pageActions()
-	right := th.muted + "[?] Help  [:] Commands" + th.reset + " "
-	if s.CmdActive {
-		items = []keyDesc{{"Enter", "Run"}, {"Tab", "Complete"}}
-		if s.commandMissingArguments() != nil {
-			items[0].desc = "Needs arguments"
-		}
-		right = th.keyPill("Esc", "Cancel") + " "
-	} else if s.Error != "" && !s.ShowKeybindsModal {
-		items = []keyDesc{{"Esc", "Dismiss"}, {"PgUp/PgDn", "Details"}}
-	} else if s.ShowKeybindsModal || s.nav.showLog {
-		items = []keyDesc{{"↑/↓", "Scroll"}, {"PgUp/PgDn", "Page"}}
-		right = th.keyPill("Esc", "Close") + " "
-	}
-	available := width - theme.VisibleRuneCount(right) - 3
-	var hints []string
-	for i, item := range items {
-		hint := th.keyPill(item.key, item.desc)
-		if i == 0 {
-			hint = th.accentBg + "[" + item.key + "]" + th.reset + " " + th.fg + item.desc + th.reset
-		}
-		// Reserve room for the overflow marker so hidden actions stay discoverable.
-		reserve := 0
-		if i < len(items)-1 {
-			reserve = len(" +9 more")
-		}
-		if theme.VisibleRuneCount(strings.Join(append(hints, hint), "  "))+reserve > available {
-			break
-		}
-		hints = append(hints, hint)
-	}
-	if hidden := len(items) - len(hints); hidden > 0 && len(hints) > 0 {
-		hints = append(hints, th.muted+fmt.Sprintf("+%d more", hidden)+th.reset)
-	}
-	return alignBar(" "+strings.Join(hints, "  "), right, width)
-}
-
 func runAggregateCoverage(run *AnalysisRun) (int, int) {
 	if run == nil {
 		return 0, 0
@@ -447,37 +351,4 @@ func runAggregateCoverage(run *AnalysisRun) (int, int) {
 		return 1, 1
 	}
 	return done, total
-}
-
-func (s *State) renderConfirmationModal(th ansiTheme, width int) []string {
-	c := s.Confirmation
-	body := []string{
-		fmt.Sprintf("%s%s%s", th.bold+th.fg, c.Title, th.reset),
-		c.Message,
-		"",
-		fmt.Sprintf("Confirm: %s  ·  Cancel: %s",
-			th.keyPill("y/Enter", client.FirstNonEmpty(c.AcceptLabel, "Confirm")),
-			th.keyPill("n/Esc", "Cancel")),
-	}
-	return th.renderPanelBox("CONFIRMATION REQUIRED", "PgUp/PgDn: details", min(82, width-6), body)
-}
-
-func (s *State) renderCommandBar(th ansiTheme, width int) string {
-	if s.CmdActive {
-		return " " + th.muted + theme.TruncatePlain("Type to search · Ctrl+P/N: history · Ctrl+U: clear", width-2) + th.reset
-	}
-	if s.Error != "" {
-		return " " + th.red + "Error · " + th.reset + theme.TruncatePlain(s.Error, max(1, width-24)) + th.muted + "  [Esc] Dismiss" + th.reset
-	}
-	message := client.FirstNonEmpty(s.Busy, s.CmdOutput)
-	if s.Busy != "" && s.busyDetail != "" {
-		message = s.Busy + " · " + s.busyDetail
-	}
-	if message == "Workspace ready" {
-		message = "1–5: workspace · Tab: view · Ctrl+K: commands"
-		if width >= 76 {
-			message = "1–5: workspace · Tab: view · ↑/↓: select · Ctrl+K: commands"
-		}
-	}
-	return " " + th.muted + theme.TruncatePlain(message, width-2) + th.reset
 }

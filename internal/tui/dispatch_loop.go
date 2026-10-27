@@ -217,7 +217,7 @@ func (m *BubbleModel) dispatchDetail() string {
 	case run.notice != "":
 		parts = append(parts, run.notice)
 	case run.cancelable:
-		parts = append(parts, "[Esc] Cancel")
+		parts = append(parts, "Esc cancel")
 	}
 	if run.queuedKeys > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s queued", run.queuedKeys, pluralWord(run.queuedKeys, "key", "keys")))

@@ -1,12 +1,9 @@
 package tui
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"unicode"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
 type commandItem struct {
@@ -455,40 +452,6 @@ func (s *State) completeCommand(execute bool) {
 	}
 	s.CmdActive, s.CmdInput = false, ""
 	s.ExecuteCommand(item.command)
-}
-
-func (s *State) renderCommandMenu(th ansiTheme, width, rows int) []string {
-	lines := renderPageHeader(th, "Commands", "")
-	input := th.renderCommandInput(s.CmdInput, s.commandCursor, width-4)
-	lines[1] = "  " + theme.PaintLine(th.surface, th.fg, input, width-4)
-	if rows >= 12 {
-		lines = append(lines, "")
-	}
-	if item := s.commandArgumentContext(); item != nil {
-		if s.commandMissingArguments() != nil {
-			lines = appendWrappedText(lines, requiredCommandArgumentHint, width)
-		}
-		lines = append(lines, "  "+th.cyan+item.title+th.reset)
-		return appendWrappedText(lines, item.hint, width)
-	}
-	items := s.commandMatches()
-	if len(items) == 0 {
-		return append(lines, "  No matching suggestions.", "  Enter runs the command you typed.")
-	}
-	selected := min(max(0, s.commandSelection), len(items)-1)
-	hint := theme.WrapVisibleLine(items[selected].hint, width-4)
-	start, end := windowBounds(len(items), selected, max(1, rows-len(lines)-len(hint)-1))
-	commandWidth := min(20, width/3)
-	for i := start; i < end; i++ {
-		item := items[i]
-		line := th.renderCursorPrefix(i == selected) + theme.PadVisibleRight(th.cyan+":"+item.command+th.reset, commandWidth) + " " + rowTitleStyle(th, i == selected) + item.title + th.reset
-		lines = append(lines, "  "+theme.TruncateVisible(line, width-4))
-	}
-	lines = append(lines, "  "+th.muted+fmt.Sprintf("%d–%d of %d commands", start+1, end, len(items))+th.reset)
-	for _, line := range hint {
-		lines = append(lines, "  "+th.cyan+line+th.reset)
-	}
-	return lines
 }
 
 func (s *State) execViewCommand(cmd string) bool {

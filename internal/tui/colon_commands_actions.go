@@ -409,7 +409,7 @@ func (s *State) mergeSelectedWorktree() {
 		return
 	}
 	if worktreeHasUnfinishedTasks(&wt) {
-		s.CmdOutput = "Finish verification and Apply the saved task in Work > Tasks before merging."
+		s.CmdOutput = "Finish verification and Apply the saved task in Tasks [2] before merging."
 		return
 	}
 	if wt.Current || !wt.Mergeable {
@@ -1282,7 +1282,7 @@ func (s *State) execMutationCommand(cmd, arg string) bool {
 func (s *State) execAgentMissionCommand(arg string) {
 	s.Navigate(PageAgents)
 	if arg == "" {
-		s.CmdOutput = "Work › Tasks"
+		s.CmdOutput = "Tasks"
 		return
 	}
 	seed := &ChangeSeed{Title: arg, Kind: "fix", Message: arg}

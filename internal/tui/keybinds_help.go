@@ -74,65 +74,6 @@ func formatCommandCatalogCell(th ansiTheme, it keyDesc, colW int) string {
 	return theme.PadVisibleRight(cell, colW)
 }
 
-func (s *State) renderKeybindsModal(th ansiTheme, width int) []string {
-	spec := lookupPageHelpSpec(s.EffectivePage())
-	if s.EffectivePage() == PagePlan && s.PlanView == "mission" {
-		spec = s.missionHelpSpec()
-	}
-	boxW := max(44, width-4)
-	contentW := max(24, boxW-4)
-	globalItems := []keyDesc{
-		{"↑/↓ · ←/→", "Move / step option"},
-		{"1-5 / Tab", "Switch hub / tab"},
-		{"Enter / Esc", "Activate / close"},
-		{"Bksp / Ctrl+O", "Previous view"},
-		{"? / : / Ctrl+K", "Help / commands"},
-		{"p / Ctrl+C", "Theme / quit"},
-	}
-	var pageItems []keyDesc
-	pageItems = append(pageItems, spec.primary...)
-	pageItems = append(pageItems, spec.secondary...)
-	pageItems = append(pageItems, spec.commands...)
-
-	rule := fmt.Sprintf("%s%s%s", th.border, strings.Repeat("─", contentW), th.reset)
-	gapLines := []string{""}
-
-	body := []string{
-		fmt.Sprintf("%sPAGE SHORTCUTS · %s%s", th.bold+th.green, spec.title, th.reset),
-		rule,
-	}
-	body = append(body, renderCommandCatalogRows(th, pageItems, contentW)...)
-	body = append(body, gapLines...)
-	body = append(body,
-		fmt.Sprintf("%sGLOBAL NAV · ARROWS & GLOBAL KEYS%s", th.bold+th.amber, th.reset),
-		rule,
-	)
-	body = append(body, renderCommandCatalogRows(th, globalItems, contentW)...)
-	body = append(body, gapLines...)
-	body = append(body,
-		fmt.Sprintf("%sGENERIC CMDS · ACTION COLON COMMANDS%s", th.bold+th.purple, th.reset),
-		rule,
-	)
-	body = append(body, renderCommandCatalogRows(th, allColonCommands, contentW)...)
-
-	rightMeta := "[?] / Esc"
-	if s.viewportBodyRows > 0 {
-		maxInner := max(1, s.viewportBodyRows-3)
-		if len(body) > maxInner {
-			maxScroll := len(body) - maxInner
-			scroll := min(max(0, s.KeybindsScroll), maxScroll)
-			s.KeybindsScroll = scroll
-			body = body[scroll : scroll+maxInner]
-			rightMeta = fmt.Sprintf("[j/k] %d-%d/%d · [?] / Esc", scroll+1, scroll+maxInner, len(body)+maxScroll)
-		} else {
-			for len(body) < maxInner {
-				body = append(body, "")
-			}
-		}
-	}
-	return th.renderPanelBox("KEYBOARD REFERENCE", rightMeta, boxW, body)
-}
-
 func lookupPageHelpSpec(page Page) pageHelpSpec {
 	if spec, ok := hubOneTwoHelpSpecs[page]; ok {
 		return spec
@@ -144,7 +85,7 @@ func lookupPageHelpSpec(page Page) pageHelpSpec {
 }
 
 func (s *State) missionHelpSpec() pageHelpSpec {
-	spec := pageHelpSpec{title: "[2] WORK · MISSIONS", primary: []keyDesc{{"Enter", "Open plan"}, {"n", "New draft"}, {"r", "Refresh"}}, secondary: []keyDesc{{"←/→", "Section"}, {"PgUp/PgDn", "Details"}, {"Esc", "History / back"}}, commands: []keyDesc{{":mission-scope main|task", "Select checkout"}, {":mission-child ID", "Select / add child"}, {":mission-edit", "Edit local fields"}, {":mission-budget", "Edit explicit limits"}, {":mission-draft", "Return to draft"}, {":plan", "Ordinary task plan"}}}
+	spec := pageHelpSpec{title: "Tasks · Missions", primary: []keyDesc{{"Enter", "Open plan"}, {"n", "New draft"}, {"r", "Refresh"}}, secondary: []keyDesc{{"←/→", "Section"}, {"PgUp/PgDn", "Details"}, {"Esc", "History / back"}}, commands: []keyDesc{{":mission-scope main|task", "Select checkout"}, {":mission-child ID", "Select / add child"}, {":mission-edit", "Edit local fields"}, {":mission-budget", "Edit explicit limits"}, {":mission-draft", "Return to draft"}, {":plan", "Ordinary task plan"}}}
 	if s.Mission != nil && s.Mission.Draft != nil && !s.Mission.History {
 		spec.primary = s.missionDraftActions()
 		if s.Mission.ExecutionOpen {
@@ -178,67 +119,67 @@ func (s *State) missionDraftActions() []keyDesc {
 
 var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 	PageSummary: {
-		title:     "[1] PROJECT · DASHBOARD",
+		title:     "Inbox",
 		primary:   []keyDesc{{"Enter", "Open selected area"}, {"n", "New task"}, {"o", "Switch project"}},
 		secondary: []keyDesc{{"r / t", "Analysis / checks"}},
 		commands:  []keyDesc{{":reanalyze", "Fresh analysis"}, {":test", "Run checks"}},
 	},
 	PageRepo: {
-		title:     "[1] OVERVIEW · REPOSITORY & INDEX",
+		title:     "Inbox · Repository",
 		primary:   []keyDesc{{"Enter / r", "Reindex repo"}, {"t", "Run checks/tests"}},
 		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":reindex", "Reindex repo"}, {":project <path>", "Switch repo"}},
 	},
 	PageProject: {
-		title:     "[1] OVERVIEW · PROJECT & VERIFICATION",
+		title:     "Inbox · Checks",
 		primary:   []keyDesc{{"Enter / t", "Run checks/tests"}, {"r", "Run/resume scan"}},
 		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"R", "Retry failed run"}},
 		commands:  []keyDesc{{":test", "Run checks"}, {":analyze", "Run analysis"}},
 	},
 	PageAgents: {
-		title:     "[2] WORK · TASKS & EXECUTION",
+		title:     "Tasks",
 		primary:   []keyDesc{{"i / Enter", "Agent detail"}, {"d", "Inspect diff"}},
 		secondary: []keyDesc{{"←/→", "Execution section"}, {"a / c", "Apply & commit"}, {"r / x", "Repair / reject"}},
 		commands:  []keyDesc{{":execution", "Run detail"}, {":run-output ID", "Private text"}, {":run-input", "Decision"}, {":run-export", "Export trace"}},
 	},
 	PagePlan: {
-		title:     "[2] AGENT STUDIO · TASK PLAN",
+		title:     "Tasks · Plan",
 		primary:   []keyDesc{{"g", "Approve & generate"}, {"s", "Save draft"}, {"i", "Investigate scope"}},
 		secondary: []keyDesc{{"a / x", "Accept / cancel"}, {"e / f / t", "Edit plan fields"}, {"←/→", "Change section"}},
 		commands:  []keyDesc{{":investigate", "Investigate scope"}, {":replan", "Use current base"}, {":repairs on|off", "Automatic repair"}},
 	},
 	PageBugs: {
-		title:     "[2] AGENT STUDIO · ISSUES & FINDINGS",
+		title:     "Issues",
 		primary:   []keyDesc{{"Space / x", "Select batch"}, {"Enter / a", "Review fix plan"}},
 		secondary: []keyDesc{{"s / t", "Status / type"}, {"i / d", "Inspect / delete"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageIssueDetail: {
-		title:     "[2] AGENT STUDIO · ISSUE INSPECTOR",
+		title:     "Issues · Finding",
 		primary:   []keyDesc{{"Enter / f", "Review fix plan"}, {"i / Esc", "Back to issues"}},
 		secondary: []keyDesc{{"←/→", "Change section"}, {"j/k", "Prev/next issue"}},
 		commands:  []keyDesc{{":fix", "Fix finding"}, {":delete", "Delete finding"}},
 	},
 	PageFeatures: {
-		title:     "[2] AGENT STUDIO · FEATURE SUGGESTIONS",
+		title:     "Tasks · Feature ideas",
 		primary:   []keyDesc{{"Enter", "Inspect feature"}, {"f / a", "Review feature plan"}},
 		secondary: []keyDesc{{"r", "Run/resume scan"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":agent <msg>", "Custom feature"}, {":analyze", "Run analysis"}},
 	},
 	PageFeatureDetail: {
-		title:     "FEATURE",
+		title:     "Tasks · Feature idea",
 		primary:   []keyDesc{{"f / Enter", "Review feature plan"}, {"Esc", "Back"}},
 		secondary: []keyDesc{{"←/→", "Change section"}, {"PgUp/PgDn", "Scroll"}},
 		commands:  []keyDesc{{":agent <goal>", "Custom feature"}},
 	},
 	PageAnalysisRun: {
-		title:     "ANALYSIS",
+		title:     "Inbox · Analysis",
 		primary:   []keyDesc{{"r", "Run/resume scan"}, {"P / R", "Pause / retry"}},
 		secondary: []keyDesc{{"x", "Reset config"}, {"n", "Fresh reanalyze"}},
 		commands:  []keyDesc{{":batch <n>", "Set batch size"}, {":budget <s>", "Set time budget"}},
 	},
 	PageAnalysisFiles: {
-		title:     "FILE SCOPE",
+		title:     "Inbox · Analysis scope",
 		primary:   []keyDesc{{"Enter / Space", "Toggle scope"}, {"r", "Run scoped scan"}},
 		secondary: []keyDesc{{"n", "Fresh reanalyze"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":open <file>", "Open file"}, {":analyze", "Run analysis"}},
@@ -247,127 +188,127 @@ var hubOneTwoHelpSpecs = map[Page]pageHelpSpec{
 
 var hubThreeToFiveHelpSpecs = map[Page]pageHelpSpec{
 	PageEditor: {
-		title:     "FILES & DIFF",
+		title:     "Code · Files & review",
 		primary:   []keyDesc{{"w / W", "Reviewed / next"}, {"Enter / a", "Apply & commit"}},
 		secondary: []keyDesc{{"x", "Reject hunk"}, {"n / f / v", "Hunk/file/layout"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
 	},
 	PageGit: {
-		title:     "[3] CODE & DIFF · GIT & WORKTREES",
+		title:     "Branches",
 		primary:   []keyDesc{{"Enter", "Inspect worktree"}, {"m", "Merge worktree"}},
 		secondary: []keyDesc{{"x / c", "Reject / clean up"}, {"r / R", "Refresh / reindex"}},
 		commands:  []keyDesc{{":merge / :reject", "Decide integration"}, {":reindex", "Update index"}},
 	},
 	PageWorktreeDetail: {
-		title:     "WORKTREE · INTEGRATION",
+		title:     "Branches · Worktree",
 		primary:   []keyDesc{{"m", "Merge"}, {"x / c", "Reject / clean up"}},
 		secondary: []keyDesc{{"r / R", "Refresh / reindex"}, {"Esc", "Back"}},
 		commands:  []keyDesc{{":merge", "Merge worktree"}},
 	},
 	PageHistory: {
-		title:     "PROPOSAL HISTORY",
+		title:     "Tasks · Proposals",
 		primary:   []keyDesc{{"Enter", "Load proposal"}, {"a / c", "Apply & commit"}},
 		secondary: []keyDesc{{"u", "Guarded undo"}, {"d", "Inspect diff"}},
 		commands:  []keyDesc{{":apply", "Apply & commit"}, {":undo", "Guarded undo"}},
 	},
 	PageDocs: {
-		title:     "[4] HANDBOOK & ARCH · CONTEXT & DEPENDENCIES",
+		title:     "Docs · Context",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDocsComponents: {
-		title:     "COMPONENTS",
+		title:     "Docs · Components",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDocsDecisions: {
-		title:     "[4] HANDBOOK & ARCH · SCENARIOS & DECISIONS",
+		title:     "Docs · Scenarios & decisions",
 		primary:   []keyDesc{{"r", "Refresh handbook"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageDiagrams: {
-		title:     "ARCHITECTURE DIAGRAM",
+		title:     "Docs · Architecture",
 		primary:   []keyDesc{{"r", "Refresh diagram"}, {"n", "Fresh reanalyze"}},
 		secondary: []keyDesc{{"R", "Retry failed run"}, {"P", "Pause scan"}},
 		commands:  []keyDesc{{":analyze", "Run analysis"}, {":reanalyze", "Fresh analysis"}},
 	},
 	PageInstructions: {
-		title:     "[5] GOVERNANCE & RULES · TRUST POLICY",
+		title:     "Settings · Trust",
 		primary:   []keyDesc{{"Enter / t", "Toggle trust"}, {"b", "Bootstrap rules"}},
 		secondary: []keyDesc{{"g", "Graduate lesson"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":trust", "Toggle trust"}, {":bootstrap", "Bootstrap rules"}},
 	},
 	PageModels: {
-		title:     "[5] SETTINGS · MODELS",
+		title:     "Settings · Models",
 		primary:   []keyDesc{{"s / n", "Save new preset"}, {"d", "Delete preset"}},
 		secondary: []keyDesc{{"x", "Reset scope"}, {"r", "Refresh models"}},
 		commands:  []keyDesc{{":model <s> <id>", "Set model"}, {":preset <id>", "Apply preset"}},
 	},
 	PageRoles: {
-		title:     "[5] SETTINGS · ROLES & BUDGETS",
+		title:     "Settings · Roles & budgets",
 		primary:   []keyDesc{{"Enter / e", "Edit selected setting"}, {"r", "Refresh local settings"}},
 		secondary: []keyDesc{{"o", "Select checkout"}, {"x", "Cancel request; refresh outcome"}},
 		commands:  []keyDesc{{":agent-role", "Assign model scope"}, {":agent-budget", "Reduce a budget"}, {":settings-reset", "Confirm restore defaults"}},
 	},
 	PageCloud: {
-		title:     "[5] SETTINGS · CLOUD COPIES",
+		title:     "Settings · Cloud copies",
 		primary:   []keyDesc{{"e", "Preview private data"}, {"c", "Confirm copy"}, {"i", "Check remote copy"}, {"d", "Delete remote copy"}},
 		secondary: []keyDesc{{"r", "Refresh local receipts"}, {"Enter", "Show or hide details"}, {"x", "Cancel local request"}},
 		commands:  []keyDesc{{":cloud-preview", "Choose destination and source"}, {":cloud-check", "Reconcile uncertain outcome"}, {":cloud-delete", "Confirm remote cleanup"}},
 	},
 	PageAmbient: {
-		title:     "[5] SETTINGS · AMBIENT ANALYSIS",
+		title:     "Settings · Ambient analysis",
 		primary:   []keyDesc{{"w", "Set watch"}, {"g", "Grant provider permission"}, {"v", "Revoke permission"}, {"d", "Disable watch"}},
 		secondary: []keyDesc{{"r", "Refresh local state"}, {"Enter", "Show or hide details"}, {"x", "Cancel local request"}},
 		commands:  []keyDesc{{":ambient-watch", "Choose paths and timing"}, {":ambient-grant", "Confirm expiry and limits"}, {":ambient-disable", "Stop automatic work"}},
 	},
 	PageSkills: {
-		title:     "[5] SETTINGS · SKILLS",
+		title:     "Settings · Skills",
 		primary:   []keyDesc{{"Enter / v", "Validate selected skill"}, {"e", "Confirm enable or disable"}},
 		secondary: []keyDesc{{"r", "Refresh local settings"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":skill-validate", "Validate captured files"}, {":skill-toggle", "Enable or disable"}, {":agent-settings", "Select main or task checkout"}},
 	},
 	PageConnections: {
-		title:     "[5] SETTINGS · CONNECTIONS",
+		title:     "Settings · Connections",
 		primary:   []keyDesc{{"Enter / c", "Confirm discovery or incoming grant"}, {"d", "Confirm revoke"}},
 		secondary: []keyDesc{{"s", "Select for plan investigation"}, {"w", "External Work"}, {"r", "Refresh local inventory"}, {"o", "Select checkout"}, {"x", "Cancel request"}},
 		commands:  []keyDesc{{":connection-scope", "Select main or task checkout"}, {":connection-use", "Toggle selected plan tool grant"}, {":connections-clear", "Clear plan tool selections"}},
 	},
 	PageMedia: {
-		title:     "[2] WORK · MEDIA & LIVE ADVICE",
+		title:     "Tasks · Media",
 		primary:   []keyDesc{{"Enter", "Inspect selected record"}, {"Space", "Select imported attachment"}, {"n / q", "Import / ask with confirmation"}},
 		secondary: []keyDesc{{"a / l / o", "Attachments / live / outputs"}, {"s", "Edit live input"}, {"e", "Confirm private export"}, {"r", "Refresh metadata"}, {"x", "Cancel local request"}, {"Esc", "Hide private text"}},
 		commands:  []keyDesc{{":live-open", "Confirm a new connection"}, {":live-close", "Close the selected session"}, {":live-reconnect", "Confirm fresh connection without replay"}, {":media-scope", "Choose main or task checkout"}},
 	},
 	PageArtifacts: {
-		title:     "[3] CODE · ARTIFACTS & EVIDENCE",
+		title:     "Tasks · Artifacts",
 		primary:   []keyDesc{{"Enter", "Preview retained text"}, {"e", "Confirm private export"}, {"d", "Confirm exact version deletion"}},
 		secondary: []keyDesc{{"n / N", "Next / first page"}, {"r", "Refresh metadata"}, {"o", "Select checkout"}, {"w", "Open inspected research report"}, {"x", "Cancel request"}, {"Esc", "Hide private previews"}},
 		commands:  []keyDesc{{":artifact-export", "Create private byte-for-byte copy"}, {":library-scope", "Select main or task checkout"}},
 	},
 	PageMemory: {
-		title:     "[5] SETTINGS · MEMORY",
+		title:     "Settings · Memory",
 		primary:   []keyDesc{{"Enter", "Inspect advice and source freshness"}, {"a", "Confirm candidate acceptance"}},
 		secondary: []keyDesc{{"n / e", "Create / edit advice"}, {"d / f", "Reject candidate / forget accepted"}, {"s", "Read selected source"}, {"t", "Retain proposal lesson or outcome"}, {"r", "Refresh metadata"}, {"o", "Select checkout"}, {"x", "Cancel request"}, {"Esc", "Hide previews"}},
 		commands:  []keyDesc{{":memory-create", "kind days title | text"}, {":memory-retain", "outcome or lesson:number days title"}, {":library-scope", "Select main or task checkout"}},
 	},
 	PageExternalWork: {
-		title:     "[5] SETTINGS · EXTERNAL WORK",
+		title:     "Settings · External work",
 		primary:   []keyDesc{{"Enter", "Inspect receipt / open research report"}, {"a", "Confirm reviewed API dispatch"}},
 		secondary: []keyDesc{{"r", "Refresh local history"}, {"n", "Research question"}, {"d", "Delegate advisory work"}, {"i", "Reply when input is required"}, {"u", "Reconcile uncertain outcome"}, {"x", "Stop local request"}, {"o", "Select checkout"}},
 		commands:  []keyDesc{{":remote-refresh", "Confirm remote task status request"}, {":remote-reconnect", "Confirm retained stream connection"}, {":remote-cancel", "Confirm remote cancellation"}, {":api-reconcile", "Record externally checked outcome"}},
 	},
 	PageBootstrap: {
-		title:     "PROJECT SETUP",
+		title:     "Settings · Bootstrap",
 		primary:   []keyDesc{{"Enter / b", "Bootstrap pillar"}, {"t", "Toggle trust"}},
 		secondary: []keyDesc{{"g", "Graduate lesson"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":bootstrap", "Bootstrap rules"}, {":trust", "Toggle trust"}},
 	},
 	PageLessons: {
-		title:     "LESSONS",
+		title:     "Settings · Lessons",
 		primary:   []keyDesc{{"Enter / g", "Graduate lesson"}, {"a / c", "Apply & commit"}},
 		secondary: []keyDesc{{"d", "Inspect diff"}, {"u", "Guarded undo"}},
 		commands:  []keyDesc{{":apply", "Apply AGENTS.md"}, {":undo", "Guarded undo"}},

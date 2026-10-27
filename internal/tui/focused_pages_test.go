@@ -11,10 +11,10 @@ func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
 	for _, tc := range []struct {
 		page, next, previous Page
 	}{
-		{PagePlan, PageAnalysisRun, PageFeatures},
-		{PageIssueDetail, PageFeatures, PageAgents},
-		{PageFeatureDetail, PagePlan, PageBugs},
-		{PageMedia, PageAgents, PageAnalysisFiles},
+		{PagePlan, PageFeatures, PageAgents},
+		{PageIssueDetail, PageBugs, PageBugs},
+		{PageFeatureDetail, PageHistory, PagePlan},
+		{PageMedia, PageAgents, PageArtifacts},
 		{PageAmbient, PageCloud, PageMemory},
 		{PageCloud, PageInstructions, PageAmbient},
 	} {
@@ -37,7 +37,7 @@ func TestDetailTabNavigationAlwaysReachesSidebarViews(t *testing.T) {
 
 	s := NewState()
 	s.openTaskPlan(&ChangeSeed{Title: "Keep draft", Paths: []string{"main.go"}})
-	for _, page := range []Page{PageAnalysisRun, PageAnalysisFiles, PageMedia, PageAgents, PageBugs, PageFeatures, PagePlan} {
+	for _, page := range []Page{PageFeatures, PageHistory, PageArtifacts, PageMedia, PageAgents, PagePlan} {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != page {
 			t.Fatalf("sidebar cycle stopped at %s, want %s", s.Page, page)

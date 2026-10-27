@@ -167,7 +167,7 @@ func (s *State) handleIssueDetailKey(ev KeyEvent) {
 		s.stepInspectedIssue(1)
 	case "k", "ArrowUp", "N":
 		s.stepInspectedIssue(-1)
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6", "7":
 		s.switchHubByKey(ev.Key)
 	case "[", "]":
 		s.cycleHub(ev.Key == "]")
@@ -224,7 +224,7 @@ func (s *State) handleGlobalNavigationKey(ev KeyEvent) bool {
 	case ":", "/":
 		s.openCommandInput("")
 		return true
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6", "7":
 		return s.switchHubByKey(ev.Key)
 	case "[", "]":
 		s.cycleHub(ev.Key == "]")
@@ -693,7 +693,7 @@ func (s *State) handleAgentsKey(key string) bool {
 	switch key {
 	case "b":
 		s.Navigate(PageBugs)
-		s.CmdOutput = "Work › Issues"
+		s.CmdOutput = "Issues"
 		return true
 	case "n":
 		s.openCommandInput("agent ")

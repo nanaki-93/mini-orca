@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"github.com/charmbracelet/x/ansi"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,7 +43,15 @@ func TestFailedWorktreeTaskRestoredWithoutReopeningIssue(t *testing.T) {
 		t.Fatalf("same-base worktree shown as %s", status)
 	}
 	s.Navigate(PageWorktreeDetail)
-	if frame := s.Render(120, 40); !strings.Contains(frame, entry.WorkflowReason) || !strings.Contains(frame, "Work > Tasks") {
+	frame := ansi.Strip(s.Render(120, 40))
+	var right []string
+	for _, line := range strings.Split(frame, "\n") {
+		if parts := strings.Split(line, "│"); len(parts) >= 4 {
+			right = append(right, strings.TrimSpace(parts[3]))
+		}
+	}
+	detail := strings.Join(strings.Fields(strings.Join(right, " ")), " ")
+	if !strings.Contains(detail, entry.WorkflowReason) || !strings.Contains(detail, "Tasks [2]") {
 		t.Fatalf("failure and recovery path missing: %s", frame)
 	}
 }

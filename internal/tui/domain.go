@@ -29,7 +29,7 @@ func (s *State) EffectiveScopeModel(scope string) Model {
 	return domain.EffectiveScopeModel(s.ScopeModels, s.AvailableModels, s.Models, scope)
 }
 
-// AgentItems returns all Work › Tasks rows across active change sessions and git worktrees.
+// AgentItems returns all Tasks rows across active change sessions and git worktrees.
 func (s *State) AgentItems() []AgentItem {
 	items := domain.CollectAllAgentItems(s.Change, s.ActiveChanges, s.ChangeReceipt, s.GitWorkspace)
 	for i := range items {

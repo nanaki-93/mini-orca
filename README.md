@@ -16,57 +16,50 @@ Mini-Orca helps engineers understand and improve local codebases without surrend
 1. **Deterministic Indexing & Context Policy**: Indexes repository files and imports under `.mini-orca/index.json` while enforcing `.mini-orcaignore` and path exclusions before any prompt is constructed.
 2. **Scoped Multi-Stage Analysis**: Runs resumable analysis (`analysis/run.json`) across configured model scopes (`analyze`, `bug`, `code`). Separates verified static findings from AI suggestions and preserves explicit remote-provider consent and security-review intent.
 3. **Native ADK Workflows with Host-Owned Guards**: Sequential change stages, parallel specialist reviews, conditional analysis and bounded repair loops share admitted budgets. Generation and test generation precede isolated checks; model advice and human approval remain separate. Repairs are off by default and can be explicitly enabled for at most two iterations. Review every changed file before **Apply**, then explicitly integrate a worktree or use guarded **Undo**.
-4. **Keyboard-First Pure Go TUI**: Provides a responsive workspace (`cmd/tui`, `internal/tui`) backed by the loopback API (`127.0.0.1:9090`), with a project dashboard, searchable commands, arrow/Vim navigation, and 4 color palettes (`tokyo`, `crt`, `amber`, `paper`).
+4. **Two interfaces, one model**: A keyboard-first terminal UI (`cmd/tui`, `internal/tui`) with lazygit-style panes, and a browser workspace (`web/`, served at `/ui`) with a pull-request style review. Both talk to the loopback API (`127.0.0.1:9090`) and share workspaces, task statuses and the review gate.
 
-## Navigating the workspace
+## Terminal UI
 
-The dashboard shows issues, tasks, analysis coverage and verification status.
-Use `↑/↓` to select an activity and `Enter` to open it. Checks and analysis that
-have not run are labeled separately from successful results. Press `o` on the
-dashboard or Repository page to enter a project path; paths may contain spaces.
-Press `n` on the dashboard or Tasks page to plan a new task. On the dashboard,
-`r` runs or resumes analysis; use `:reanalyze` for a fresh analysis.
+The terminal UI is organized like the browser workspace, around seven
+workspaces you switch with the number keys:
 
-| Key | Workspace | Contents |
+| Key | Workspace | What it is for |
 | --- | --- | --- |
-| `1` | Project | Dashboard, repository inventory, tests and check output |
-| `2` | Work | Tasks and execution details, mission plans, issues, features, analysis, file scope and media |
-| `3` | Code | Read-only files and diffs, worktrees, saved proposals and artifacts |
-| `4` | Docs | Context, dependencies, components, decisions and architecture |
-| `5` | Settings | Trust, models, roles, skills, connections, external work, bootstrap, lessons, memory, ambient analysis and cloud copies |
+| `1` | **Inbox** | What needs you: tasks to review, failed analysis or checks, running agents, failed or stale tasks, branches ready to merge, then issues, analysis, checks and the repository. |
+| `2` | **Tasks** | Every task beside its brief, **Ready to apply?** gate, live agent run, checks, changed files and criteria. Views: Plan, Feature ideas, Proposals, Artifacts, Media. |
+| `3` | **Code** | Review a proposal (changed files beside the diff) or browse the repository (files beside the source). |
+| `4` | **Issues** | Findings with status and category filters beside the selected finding's problem, evidence, source and proposed fix. |
+| `5` | **Docs** | The handbook: context, components, scenarios and decisions, architecture. |
+| `6` | **Branches** | The main checkout and agent worktrees beside their tasks, integration state and next step. |
+| `7` | **Settings** | Trust, models, roles and budgets, skills, connections, external work, bootstrap, lessons, memory, ambient analysis, cloud copies. |
 
-`Tab` / `Shift+Tab` cycle views within a workspace. Use `↑/↓` or `j/k` to
-select rows, `PgUp/PgDn` to read long pages, and `Esc` to return from details.
-`Backspace` or `Ctrl+O` goes back to the previous view with its selection, and
-each view remembers the row you left it on. `:messages` shows recent status
-updates and errors. The bottom bar shows actions for the current view. `?` opens
-the keyboard reference, `p` changes the palette, and `Ctrl+C` quits. Set
-`NO_COLOR=1` for a monochrome theme.
+The header shows the project, branch, live activity, execution trust and the
+connection; the workspace row shows attention counts. Every view is one or two
+bordered panes: lists on the left (stacked on top below 96 columns), the
+selected item's detail on the right. A pane's title lists the workspace's views
+— `Tab` / `Shift+Tab` switch them — and its bottom border shows the scroll
+position. The hint row names the keys that act on the selection, the primary one
+first.
 
-Long daemon actions never freeze the terminal: the status bar shows what is
-running and for how long, keys you type are queued and replayed afterwards, and
-`Esc` cancels read-only work such as opening a file. Apply, merge, Undo and trust
-changes always run to completion.
+`↑/↓` or `j/k` move the selection, `Enter` opens or runs the primary action,
+`Esc`/`Backspace` go back and `Ctrl+O` returns to the previous view with its
+selection. `PgUp/PgDn` and `Home/End` scroll the detail. `Ctrl+K` or `:` opens the
+command palette (search, completion, history); `?` shows the keys of the current
+view; `p` changes the palette (Tokyo, CRT, Amber, Paper; `NO_COLOR=1` for
+monochrome); `Ctrl+C` quits. `:messages` lists recent status updates and errors.
 
-Press `Ctrl+K` or `:` to search commands by name or type a command directly.
-The input sits above the results and the selected command's explanation.
-`↑/↓` selects a suggestion, `Tab` completes it, and `Enter` runs it. Commands
-needing a path or request open an editable prompt first. Use `←/→`, `Home/End`
-and `Delete` to edit; `Ctrl+P/N` recalls session history and `Ctrl+U` clears the input. `Esc`
-cancels without running anything. Confirmation dialogs keep keyboard focus until
-you confirm or cancel them.
+Long daemon actions never freeze the terminal: the header and message row show
+what is running and for how long, keys you type are queued and replayed
+afterwards, and `Esc` cancels read-only work such as opening a file. Apply,
+merge, Undo and trust changes always run to completion. Confirmations float over
+the workspace, name their exact effect and keep `y` / `n` visible. Below 52 × 16
+columns and rows a resize prompt keeps the session intact.
 
-`:roles` opens Roles & Budgets; `:skills` opens Skills. Settings initially use the
-main project checkout. Use `:agent-settings task` to select the inspected task's
-worktree, or `:agent-settings main` to switch back. `main` and `task` are fixed
-checkout choices. Saved edits affect future runs in that checkout.
-
-Workspace areas have distinct accents, with filled panels and selection highlights
-across Tokyo, CRT, Amber and Paper. Wide terminals use a sidebar with a compact
-model summary; narrow terminals use navigation tabs. The dashboard adds count
-cards and a next-step panel when space permits, prioritizing activity navigation
-in smaller terminals. Frames fit the actual terminal size, with a resize prompt below
-52 columns or 16 rows. A larger terminal is recommended for reviewing diffs.
+`n` plans a new task (`:agent <request>`), `o` opens another project, `r` runs or
+resumes analysis on the Inbox and `:reanalyze` starts fresh. `:roles` opens Roles
+& Budgets and `:skills` opens Skills; settings use the main checkout until
+`:agent-settings task` selects the inspected task's worktree (`:agent-settings
+main` switches back).
 
 ## Browser workspace
 
@@ -122,10 +115,10 @@ make webui-build     # rebuild the embedded bundle; commit the dist/ changes
 make webui-dist-check  # fail if the committed bundle is out of date
 ```
 
-## Reviewing a task in the TUI
+## Planning and reviewing a task in the TUI
 
-Selecting a fix opens **Task Plan**. In Features, `Enter` opens its details and
-`f` prepares a plan. `←/→` or `h/l` switch focused detail sections; `Tab` / `Shift+Tab`
+Selecting a fix opens **Tasks › Plan**. In Feature ideas, `Enter` opens its
+details and `f` prepares a plan. `←/→` or `h/l` switch focused detail sections; `Tab` / `Shift+Tab`
 continue to switch workspace views. Edit the approach with `e`, write
 scope with `f`, and criteria with `t`. Use `:context path; path` for read-only
 context, `:boundaries item; item` for non-goals, and `:repairs on|off` for repair
@@ -140,21 +133,26 @@ reproduction; a test that already passed or failed to compile on the original
 source is labeled separately from a reproduced failure.
 
 Repository inventories, handbook pages, check logs and long error or confirmation
-messages also scroll. Confirmation actions stay in the bottom bar. In the source
+messages also scroll. Confirmation actions stay in the hint row. In the source
 viewer, `PgUp/PgDn` moves through lines, `Home/End` jumps to the first/last line,
 and `h/l` pans long lines (`0` resets the horizontal position).
 
-In the diff, `PgUp/PgDn` scroll explanations while keeping code visible, `h/l` scroll long lines, `w` marks the current file reviewed and moves to the next unreviewed one, `f/F`
-moves between files (wide terminals list them beside the diff), `e` shows rationale and criterion references, and `z` compares
-against the last complete review. `P` opens the plan. Apply shows its commit
+In the diff the changed files and their review state stay beside it (above it on
+narrow terminals). `w` marks the current file reviewed and moves to the next
+unreviewed one, `W` jumps there without marking, `n/N` move between hunks, `f/F`
+between files, `v` cycles focused hunk, unified stream and side by side, `h/l`
+pan long lines, `e` shows the rationale and criterion references (scrolled with
+`PgUp/PgDn` while code stays visible), and `z` compares against the last complete
+review. `P` opens the plan. Apply shows its commit
 destination and requires review of every changed file; changed proposals clear
 review progress. `:retry test` reuses implementation, while `:retry review`
 reuses current passing checks. Attempts, stage timings and failure reasons remain
 visible in workflow details.
 
 `:investigate` requests scoped repository evidence for a draft; explicitly accept
-the result before it changes the plan. `:execution` opens task details with
-Overview, Timeline, Evidence, Usage and Recovery sections. `:run-output <ID>`
+the result before it changes the plan. `Enter` on a task (or `:execution`) opens
+its stages beside the selected stage's evidence; `←/→` switch to the Timeline,
+Evidence, Usage and Recovery sections. `:run-output <ID>`
 discloses one private invocation; `:hide-output` closes it. A waiting human input
 can be approved, rejected or canceled with `:run-input <decision>`; recording the
 decision does not apply files. Interrupted work requires fresh consent and checks.
@@ -170,16 +168,16 @@ Current revision and workspace checks still apply before execution.
 Tasks start from the current branch. The TUI blocks generation when another
 active task already owns a write path; finish or discard that task first. A saved
 plan in an outdated worktree cannot start generation: refresh, use `:replan`, and
-review the new plan. The old worktree remains available in **Worktrees**.
+review the new plan. The old worktree remains available in **Branches**.
 
 After review, **Apply** commits the fix in its isolated checkout and moves it from
-Tasks to **Worktrees** as **TO_MERGE**. Its linked issues leave the issue lists
+Tasks to **Branches** as **TO_MERGE**. Its linked issues leave the issue lists
 until you decide: `m` merges, marks the issues Done, and deletes the worktree and
 its branch; `x` rejects the fix and returns the issues to TODO, retaining the
 unmerged commits on their branch. Failed tasks remain in Tasks for inspection
 and retry; matching the destination's Git HEAD does not make them integrated.
 
-In **Worktrees**, `Enter` opens integration details. When the destination has
+In **Branches**, `Enter` opens integration details. When the destination has
 advanced, overlapping paths are a review hint, not proof of conflict. If a merge
 conflicts, resolve it with your external Git tool and commit the merge. Press `R`
 to update the project index. Saved project trust is restored automatically;
@@ -236,7 +234,7 @@ authentication, privacy, bounds and recovery behavior.
 
 Capabilities are admitted for the configured provider and exact operation. No
 provider fallback occurs. See [configuration and limits](CONFIG.md), the
-[API contract](docs/api-contract.md), and [TUI interactions](docs/UI_DESIGN_GUIDELINES.md).
+[API contract](docs/api-contract.md), the [UI guidelines](docs/UI_DESIGN_GUIDELINES.md) and [TUI workflow behavior](docs/ui-behavior.md).
 
 | Capability | Delivered behavior and boundary |
 | --- | --- |
@@ -338,7 +336,7 @@ failed/incomplete campaign with a receipt, and `2` for invalid configuration or
 receipt output failure. Ctrl-C stops requests and emits an incomplete receipt.
 No live evaluation is run by tests or CI.
 
-Follow [AGENTS.md](AGENTS.md). TUI contributions follow the [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md). Run focused tests while editing. The full local gate is:
+Follow [AGENTS.md](AGENTS.md). UI contributions follow the [UI guidelines](docs/UI_DESIGN_GUIDELINES.md) and the [TUI workflow behavior](docs/ui-behavior.md). Run focused tests while editing. The full local gate is:
 
 ```sh
 ./scripts/validate.sh
@@ -348,6 +346,6 @@ The checks use fakes and temporary directories, do not start the daemon, and do 
 
 - `make check`: Formatting, Go unit/race/vet checks, Python tooling, and Go TUI tests.
 - `make quality`: Pinned Go static, reachability, complexity, and clone checks.
-- [Interactive technical docs](docs/technical-docs.html) · [TUI design guidelines](docs/UI_DESIGN_GUIDELINES.md)
+- [Interactive technical docs](docs/technical-docs.html) · [UI guidelines](docs/UI_DESIGN_GUIDELINES.md) · [TUI workflow behavior](docs/ui-behavior.md) · [Design direction](docs/design/ui-directions.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
 - [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [LICENSE](LICENSE)

@@ -47,7 +47,7 @@ func (s *State) activateIssueRow() {
 	if issue == nil {
 		if s.Page == PageSummary {
 			s.Navigate(PageBugs)
-			s.CmdOutput = "Work › Issues"
+			s.CmdOutput = "Issues"
 		}
 		return
 	}
@@ -101,7 +101,7 @@ func (s *State) openAgentDiffInspector() {
 		return
 	}
 	s.Navigate(PageEditor)
-	s.CmdOutput = "Code › Files & Diff"
+	s.CmdOutput = "Code › Files & review"
 }
 
 func (s *State) activateAgentRow() {
@@ -366,15 +366,15 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 		return true
 	case "scope", "files":
 		s.Navigate(PageAnalysisFiles)
-		s.CmdOutput = "Work › File Scope"
+		s.CmdOutput = "Inbox › Analysis scope"
 		return true
 	case "proposals", "history":
 		s.Navigate(PageHistory)
-		s.CmdOutput = "Code › Proposals"
+		s.CmdOutput = "Tasks › Proposals"
 		return true
 	case "features":
 		s.Navigate(PageFeatures)
-		s.CmdOutput = "Work › Features"
+		s.CmdOutput = "Tasks › Feature ideas"
 		return true
 	case "arch", "diagrams":
 		s.Navigate(PageDiagrams)
@@ -386,7 +386,7 @@ func (s *State) execNavigationCommand(cmd, arg string) bool {
 		return true
 	case "git":
 		s.Navigate(PageGit)
-		s.CmdOutput = "Code › Worktrees"
+		s.CmdOutput = "Branches"
 		return true
 	case "open":
 		if arg != "" {
@@ -490,7 +490,7 @@ func (s *State) applyCombinedFilterArg(arg string) bool {
 func (s *State) navigateToIssuesCategory(cmd string) {
 	s.Navigate(PageBugs)
 	if cmd == "issues" {
-		s.CmdOutput = "Work › Issues"
+		s.CmdOutput = "Issues"
 		return
 	}
 	cat := cmd
@@ -499,7 +499,7 @@ func (s *State) navigateToIssuesCategory(cmd string) {
 	}
 	s.IssueCategory = cat
 	s.SelectedIdx = 0
-	s.CmdOutput = fmt.Sprintf("Work › Issues · %s", strings.ToLower(cat))
+	s.CmdOutput = fmt.Sprintf("Issues · %s", strings.ToLower(cat))
 }
 
 func (s *State) execHubMatchCommand(cmd string) bool {

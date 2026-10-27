@@ -47,7 +47,7 @@ paths, with diff review, explicit Apply and guarded Undo.
 3. Identify observable behavior, failure cases and checks that establish completion. For a bug, reproduce it or add a regression case that exposes it.
 4. Resolve routine choices from the code and request. Ask only when missing information materially changes product behavior, compatibility or scope.
 
-Current behavior is documented in the README, TUI design guidelines and API contract. Do not infer authorization from old task queues or `.mini-orca/autopilot/` worktrees.
+Current behavior is documented in the README, UI guidelines, TUI workflow behavior and API contract. Do not infer authorization from old task queues or `.mini-orca/autopilot/` worktrees.
 
 ## Implementation, error handling & concurrency standard
 
@@ -61,7 +61,7 @@ Current behavior is documented in the README, TUI design guidelines and API cont
 
 ## UI, UX & product boundaries
 
-- Follow [docs/UI_DESIGN_GUIDELINES.md](docs/UI_DESIGN_GUIDELINES.md) for TUI interaction and verification expectations. Keep actions, states, errors, scope, consent and recovery clear.
+- Follow [docs/UI_DESIGN_GUIDELINES.md](docs/UI_DESIGN_GUIDELINES.md) for the structure, look and verification of the TUI and the browser workspace, and [docs/ui-behavior.md](docs/ui-behavior.md) for TUI workflow behavior. Keep actions, states, errors, scope, consent and recovery clear.
 - Source and composed diffs are read-only except guided `AGENTS.md` instruction text. Source mutation requires explicit diff Review/Apply and guarded Undo with current project, proposal and source identity/hash checks.
 - Navigation, disclosures, previews and local restore must not trigger provider requests, project-code execution or source writes. Keep remote-provider consent, Security review intent and execution trust tied to the relevant scope.
 - Keep model suggestions, verified findings and measured benchmarks distinct. Failed, unavailable, partial, stale and canceled results retain their meaning.

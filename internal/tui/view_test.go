@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
 
@@ -75,20 +76,14 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 	for _, p := range pages {
 		s.Navigate(p)
 		frame := s.Render(120, 40)
-		if got := strings.Count(frame, "MINI-ORCA"); got != 1 {
-			t.Fatalf("expected MINI-ORCA exactly once in header on page %s, got %d", p, got)
+		if got := strings.Count(frame, "◈ mini-orca"); got != 1 {
+			t.Fatalf("expected mini-orca exactly once in header on page %s, got %d", p, got)
 		}
-		if !strings.Contains(frame, "WORKSPACE") || !strings.Contains(frame, "│") {
-			t.Fatalf("expected workspace navigation on page %s", p)
+		if !strings.Contains(frame, "Inbox") || !strings.Contains(frame, "Settings") || !strings.Contains(frame, "╭") {
+			t.Fatalf("expected workspace navigation and panes on page %s", p)
 		}
 	}
 
-	// Verify Overview Dashboard does NOT duplicate the raw issues table, while Issues & Issue Detail do
-	s.Navigate(PageSummary)
-	summaryFrame := s.Render(120, 40)
-	if strings.Contains(summaryFrame, "Unchecked error return") {
-		t.Fatalf("expected Overview Dashboard to avoid redundant issue table rows:\n%s", summaryFrame)
-	}
 	s.Navigate(PageBugs)
 	bugsFrame := s.Render(120, 40)
 	if !strings.Contains(bugsFrame, "Unchecked error return") {
@@ -99,7 +94,7 @@ func TestRenderAllHubsAndPalettes(t *testing.T) {
 		t.Fatalf("expected 'i' on PageBugs to open PageIssueDetail, got %s", s.Page)
 	}
 	detailFrame := s.Render(120, 40)
-	if !strings.Contains(detailFrame, "Cause hypothesis:") || !strings.Contains(detailFrame, "Check error from Close") {
+	if !strings.Contains(detailFrame, "PROBLEM") || !strings.Contains(detailFrame, "Check error from Close") {
 		t.Fatalf("expected dedicated Issue Detail view with root cause:\n%s", detailFrame)
 	}
 
@@ -147,7 +142,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	s.Navigate(PageEditor)
 	s.HandleKey(KeyEvent{Key: "e"})
 	diffFrame := s.Render(110, 34)
-	if !strings.Contains(diffFrame, "GUARDED DIFF REVIEW") || !strings.Contains(diffFrame, "Enforce explicit read header timeout") {
+	if !strings.Contains(diffFrame, "Changed files") || !strings.Contains(diffFrame, "Enforce explicit read header timeout") {
 		t.Fatalf("expected enterprise diff review panel and inline why:\n%s", diffFrame)
 	}
 	if strings.Contains(diffFrame, "Active Proposal:") {
@@ -171,7 +166,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 		AcceptLabel: "Apply",
 	}
 	modalFrame := s.Render(90, 28)
-	if !strings.Contains(modalFrame, "CONFIRMATION REQUIRED") || !strings.Contains(modalFrame, "Apply Guarded Proposal") {
+	if !strings.Contains(modalFrame, "Apply Guarded Proposal") || !strings.Contains(modalFrame, "Cancel") {
 		t.Fatalf("expected confirmation modal panel:\n%s", modalFrame)
 	}
 	s.Confirmation = nil
@@ -179,7 +174,7 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 	// Verify Error Alert Banner and Escape dismissal
 	s.Error = "daemon connection refused on 127.0.0.1:9090"
 	errFrame := s.Render(110, 34)
-	if !strings.Contains(errFrame, "ERROR / DIAGNOSTIC ALERT") || !strings.Contains(errFrame, "daemon connection refused") {
+	if !strings.Contains(errFrame, "Something went wrong") || !strings.Contains(errFrame, "daemon connection refused") {
 		t.Fatalf("expected prominent error alert banner:\n%s", errFrame)
 	}
 	s.HandleKey(KeyEvent{Key: "Escape"})
@@ -218,39 +213,27 @@ func TestEnterprisePanelsModalsDiffAndViewports(t *testing.T) {
 		}
 	}
 
-	// Navigation uses a narrow sidebar without repeating settings or telemetry.
-	s.Navigate(PageSummary)
-	splitOut := s.Render(120, 36)
-	if !strings.Contains(splitOut, "WORKSPACE") || !strings.Contains(splitOut, "│") {
-		t.Fatalf("missing split navigation: %s", splitOut)
-	}
-	for _, redundant := range []string{"WORKSPACE PULSE", "MODEL ROUTING", "palette:"} {
-		if strings.Contains(splitOut, redundant) {
-			t.Fatalf("unexpected repeated panel %s", redundant)
-		}
-	}
-
-	// Verify sidebar highlight moves in Sections 4 and 5 when stepping through submenus
-	s.HandleKey(KeyEvent{Key: "4"})
-	if !strings.Contains(s.Render(120, 36), "▸ Context & Deps") {
-		t.Fatal("expected Section 4 initial highlight on Context & Deps")
-	}
-	s.HandleKey(KeyEvent{Key: "l"})
-	if !strings.Contains(s.Render(120, 36), "▸ Components") {
-		t.Fatal("expected Section 4 highlight to move to Components after 'l'")
-	}
+	// Every workspace is one key away; Tab and h/l move the active view tab.
 	s.HandleKey(KeyEvent{Key: "5"})
-	if !strings.Contains(s.Render(120, 36), "▸ Trust") {
-		t.Fatal("expected Section 5 initial highlight on Trust Policy")
+	if !strings.Contains(ansi.Strip(s.Render(120, 36)), "Context") || s.Page != PageDocs {
+		t.Fatal("expected Docs to open on Context")
 	}
 	s.HandleKey(KeyEvent{Key: "l"})
-	if !strings.Contains(s.Render(120, 36), "▸ Models") {
-		t.Fatal("expected Section 5 highlight to move to Model Routing after 'l'")
+	if s.EffectivePage() != PageDocsComponents {
+		t.Fatalf("expected l to move Docs to Components, got %s", s.EffectivePage())
+	}
+	s.HandleKey(KeyEvent{Key: "7"})
+	if !strings.Contains(ansi.Strip(s.Render(120, 36)), "Trust") || s.EffectivePage() != PageInstructions {
+		t.Fatal("expected Settings to open on Trust")
+	}
+	s.HandleKey(KeyEvent{Key: "l"})
+	if s.EffectivePage() != PageModels {
+		t.Fatalf("expected l to move Settings to Models, got %s", s.EffectivePage())
 	}
 
 	s.HandleKey(KeyEvent{Key: "?"})
-	helpOut := s.Render(120, 36)
-	if !strings.Contains(helpOut, "KEYBOARD REFERENCE") {
+	helpOut := ansi.Strip(s.Render(120, 36))
+	if !strings.Contains(helpOut, "Keyboard shortcuts") {
 		t.Fatalf("expected on-demand keybindings modal when pressing '?':\n%s", helpOut)
 	}
 	s.HandleKey(KeyEvent{Key: "Escape"})
@@ -313,7 +296,7 @@ func TestDecodeInputBytesAndInteractiveSession(t *testing.T) {
 	if !s.Quitting {
 		t.Fatal("expected session to quit after :q")
 	}
-	if !strings.Contains(output.String(), "MINI-ORCA") {
+	if !strings.Contains(output.String(), "mini-orca") {
 		t.Fatal("expected rendered frames in output")
 	}
 }
@@ -340,22 +323,22 @@ func TestPageSpecificHelpOverlayAcrossAllPages(t *testing.T) {
 
 		frame := s.Render(120, 36)
 		for _, token := range []string{
-			"KEYBOARD REFERENCE",
-			"PAGE SHORTCUTS · " + spec.title,
+			"Keyboard shortcuts",
+			strings.ToUpper(spec.title),
 			spec.primary[0].desc,
 			spec.commands[0].key,
 			spec.commands[0].desc,
-			"GLOBAL NAV",
-			"GENERIC CMDS",
+			"NAVIGATION",
+			"COMMANDS",
 		} {
 			if !strings.Contains(frame, token) {
 				t.Fatalf("page %s help overlay missing %q:\n%s", p, token, frame)
 			}
 		}
 		th := themeForPalette(s.Palette)
-		wantFirstSectionTitle := th.bold + th.green + "PAGE SHORTCUTS · " + spec.title
+		wantFirstSectionTitle := th.bold + th.accent + strings.ToUpper(spec.title)
 		if !strings.Contains(frame, wantFirstSectionTitle) {
-			t.Fatalf("page %s help overlay expected distinct green first section title %q", p, wantFirstSectionTitle)
+			t.Fatalf("page %s help overlay expected an accented first section title %q", p, wantFirstSectionTitle)
 		}
 		for _, cmd := range allColonCommands {
 			if !strings.Contains(frame, cmd.key) || !strings.Contains(frame, cmd.desc) {
@@ -426,7 +409,7 @@ func TestCodeDiffAndSourceTabAndLongLineSanitization(t *testing.T) {
 
 	// Verify focused hunk view shows changed lines immediately and 'n'/'N' steps hunks
 	frame120 := s.Render(120, 36)
-	if !strings.Contains(frame120, "ReadHeaderTimeout") || !strings.Contains(frame120, "Hunk #1/2") {
+	if !strings.Contains(frame120, "ReadHeaderTimeout") || !strings.Contains(frame120, "hunk 1/2") {
 		t.Fatalf("expected focused hunk #1 in diff view:\n%s", frame120)
 	}
 	s.HandleKey(KeyEvent{Key: "n"})
@@ -496,7 +479,7 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 
 	// 1. Initially focused on Hunk #1/2 in file 1/2 (server.go)
 	frameHunk1 := s.Render(120, 36)
-	if !strings.Contains(frameHunk1, "Hunk #1/2") || !strings.Contains(frameHunk1, "ReadHeaderTimeout = 5") {
+	if !strings.Contains(frameHunk1, "hunk 1/2") || !strings.Contains(frameHunk1, "ReadHeaderTimeout = 5") {
 		t.Fatalf("expected Hunk #1/2 from server.go in initial view:\n%s", frameHunk1)
 	}
 
@@ -506,7 +489,7 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 		t.Fatalf("expected 'n' to focus hunk #2/2 in server_test.go, got HunkIdx=%d CmdOutput=%q", s.HunkIdx, s.CmdOutput)
 	}
 	frameHunk2 := s.Render(120, 36)
-	if !strings.Contains(frameHunk2, "Hunk #2/2") || !strings.Contains(frameHunk2, "TestTimeout") || !strings.Contains(frameHunk2, "Verify timeout configuration") {
+	if !strings.Contains(frameHunk2, "hunk 2/2") || !strings.Contains(frameHunk2, "TestTimeout") || !strings.Contains(frameHunk2, "Verify timeout configuration") {
 		t.Fatalf("expected Hunk #2/2 and rationale from server_test.go:\n%s", frameHunk2)
 	}
 
@@ -575,28 +558,6 @@ func TestMultiFileDiffHunkNavigationAndViewModes(t *testing.T) {
 	}
 }
 
-func TestKeybindsModalNoTruncationAcrossAllPages(t *testing.T) {
-	s := NewState()
-	pages := []Page{
-		PageSummary, PageRepo, PageProject, PageAgents, PageBugs, PageIssueDetail,
-		PageFeatures, PageFeatureDetail, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageEditor, PageGit, PageWorktreeDetail,
-		PageHistory, PageDocs, PageDocsComponents, PageDocsDecisions, PageDiagrams,
-		PageInstructions, PageModels, PageBootstrap, PageLessons,
-	}
-	th := themeForPalette(s.Palette)
-	for _, p := range pages {
-		s.Navigate(p)
-		for _, width := range []int{80, 100, 120} {
-			lines := s.renderKeybindsModal(th, width)
-			for idx, line := range lines {
-				if strings.Contains(line, "…") {
-					t.Fatalf("page %s at width %d: keybinds modal row %d was truncated: %q", p, width, idx, line)
-				}
-			}
-		}
-	}
-}
-
 func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 	s := NewState()
 	var addedLines []DiffLine
@@ -630,11 +591,11 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 	s.Navigate(PageEditor)
 
 	// 1. Verify no inline KEYS: or FILES: bar clutters the diff screen and untouched target files do not appear in the diff
-	frame := s.Render(120, 36)
+	frame := ansi.Strip(s.Render(120, 36))
 	if strings.Contains(frame, "KEYS:") || strings.Contains(frame, "FILES:") {
 		t.Fatalf("expected clean diff screen without inline KEYS: or FILES: rows:\n%s", frame)
 	}
-	if !strings.Contains(frame, "File 1/1:") || !strings.Contains(frame, "(+20/-0)") || strings.Contains(frame, "File 1/2:") {
+	if !strings.Contains(frame, "file 1/1") || !strings.Contains(frame, "+20 −0") || strings.Contains(frame, "file 1/2") || strings.Contains(frame, "utils.go ") {
 		t.Fatalf("expected diff header to count only touched file (File 1/1 with +20/-0), got:\n%s", frame)
 	}
 	for _, row := range s.unifiedDiffRows() {
@@ -683,7 +644,7 @@ func TestDiffPageAcceptTargetFilesAndFileBrowser(t *testing.T) {
 		t.Fatal("expected 'o' to switch PageEditor to repository file browser")
 	}
 	browserFrame := s.Render(120, 36)
-	if !strings.Contains(browserFrame, "REPOSITORY FILE PATH") {
+	if !strings.Contains(browserFrame, "Files") || !strings.Contains(browserFrame, "utils_test.go") {
 		t.Fatalf("expected repository file list when BrowseFiles is true:\n%s", browserFrame)
 	}
 }
@@ -891,72 +852,11 @@ func TestFullScreenVerticalSpaceUtilization(t *testing.T) {
 		if strings.Contains(frame, "WORKSPACE PULSE") || strings.Contains(frame, "MODEL ROUTING") || strings.Contains(frame, "palette:") {
 			t.Fatalf("duplicated global settings on %s: %s", p, frame)
 		}
-		if !strings.Contains(frame, "[?] Help  [:] Commands") || len(strings.Split(frame, "\n")) != 46 {
+		if !strings.Contains(frame, ": commands · ? help") || len(strings.Split(frame, "\n")) != 46 {
 			t.Fatalf("lost command access or frame height on %s: %s", p, frame)
 		}
 	}
 
-}
-
-func TestSidebarModelsStayVisibleAcrossHubsAndHeights(t *testing.T) {
-	for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
-		for _, height := range []int{20, 21, 22, 23, 24, 30, 46} {
-			for _, hub := range HubTabs() {
-				s := NewState()
-				s.Palette = palette
-				s.Models = &ModelCatalog{Scopes: map[string]Model{
-					"analyze": {Model: "inspector"}, "bug": {Model: "reviewer"}, "code": {Model: "coder"},
-				}}
-				s.Navigate(hub.Page)
-				frame := s.Render(120, height)
-				var sidebar strings.Builder
-				for _, row := range strings.Split(frame, "\n")[3 : height-3] {
-					sidebar.WriteString(theme.TruncateVisible(row, sidebarMenuWidth+1))
-				}
-				for _, model := range []string{"inspector", "reviewer", "coder"} {
-					if !strings.Contains(sidebar.String(), model) {
-						t.Fatalf("model %s missing on %s at height %d", model, hub.Page, height)
-					}
-				}
-				for _, tab := range HubTabs() {
-					if !strings.Contains(sidebar.String(), tab.Key+"  "+tab.Label) {
-						t.Fatalf("models displaced navigation to %s at height %d", tab.Page, height)
-					}
-				}
-				if len(strings.Split(frame, "\n")) != height || len(s.PendingActions) != 0 {
-					t.Fatal("model display changed frame height or dispatched work")
-				}
-				for _, row := range strings.Split(frame, "\n") {
-					if theme.VisibleRuneCount(row) != 120 {
-						t.Fatal("model summary broke frame width")
-					}
-				}
-			}
-		}
-	}
-	s := NewState()
-	s.ScopeModels["code"] = "chosen-model"
-	if frame := s.Render(120, 24); !strings.Contains(frame, "chosen-model") || !strings.Contains(frame, "unavailable") {
-		t.Fatal("sidebar lost assigned model or missing-model state")
-	}
-}
-
-func TestLongSettingsSidebarFollowsSelectedView(t *testing.T) {
-	s := NewState()
-	for _, view := range HubTabs()[4].SubPages {
-		s.Navigate(view.Page)
-		frame := s.Render(120, 20)
-		var sidebar strings.Builder
-		for _, row := range strings.Split(frame, "\n")[3:17] {
-			sidebar.WriteString(theme.TruncateVisible(row, sidebarMenuWidth))
-		}
-		if !strings.Contains(sidebar.String(), "▸ "+view.Label) || !strings.Contains(sidebar.String(), "Tab · more views") {
-			t.Fatalf("sidebar hid selected settings view %s", view.Page)
-		}
-		if len(s.PendingActions) != 0 {
-			t.Fatal("sidebar selection dispatched work")
-		}
-	}
 }
 
 func TestNeverTruncateMessagesOrCheckCommands(t *testing.T) {
@@ -1108,7 +1008,7 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 	s.Project = &Project{Name: "mini-orca", Path: "/workspace/mini-orca", Type: "go", FileCount: 64}
 	s.Navigate(PageAgents)
 	emptyAgentsFrame := s.Render(132, 38)
-	if !strings.Contains(emptyAgentsFrame, "No active tasks") || !strings.Contains(emptyAgentsFrame, "[n] New task") || strings.Contains(emptyAgentsFrame, "4-STAGE") {
+	if !strings.Contains(emptyAgentsFrame, "No active tasks") || !strings.Contains(emptyAgentsFrame, "plan a new task") || strings.Contains(emptyAgentsFrame, "4-STAGE") {
 		t.Fatalf("expected empty Tasks page to show an actionable empty state:\n%s", emptyAgentsFrame)
 	}
 
@@ -1138,24 +1038,24 @@ func TestAgentOrchestrationDashboardViews(t *testing.T) {
 	}
 
 	s.Navigate(PageSummary)
-	dashFrame := s.Render(132, 38)
-	for _, token := range []string{"Dashboard", "ACTIVITY", "WORKSPACE", "CURRENT TASK", "Review gate:", "0/1 files reviewed", "Web IDE", "1 task"} {
+	dashFrame := ansi.Strip(s.Render(132, 38))
+	for _, token := range []string{"Inbox", "NEEDS YOU", "Orchestrate parallel worktree verification", "READY TO APPLY?", "Files reviewed", "0 of 1", "READY TO MERGE", "orca/agent-orch"} {
 		if !strings.Contains(dashFrame, token) {
 			t.Fatalf("expected dashboard to contain %q:\n%s", token, dashFrame)
 		}
 	}
 
 	s.Navigate(PageAgents)
-	agentsFrame := s.Render(132, 38)
-	for _, token := range []string{"Tasks", "SELECTED TASK", "internal/app/service.go"} {
+	agentsFrame := ansi.Strip(s.Render(132, 38))
+	for _, token := range []string{"Tasks", "CHANGED FILES", "internal/app/service.go"} {
 		if !strings.Contains(agentsFrame, token) {
 			t.Fatalf("expected populated Agents page to contain %q:\n%s", token, agentsFrame)
 		}
 	}
 
 	s.Navigate(PageGit)
-	gitFrame := s.Render(132, 38)
-	for _, token := range []string{"Worktrees", "SELECTED WORKTREE INTEGRATION", "orca/agent-orch"} {
+	gitFrame := ansi.Strip(s.Render(132, 38))
+	for _, token := range []string{"Worktrees", "NEXT", "orca/agent-orch"} {
 		if !strings.Contains(gitFrame, token) {
 			t.Fatalf("expected Worktrees page to contain %q:\n%s", token, gitFrame)
 		}

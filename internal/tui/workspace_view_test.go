@@ -20,7 +20,7 @@ func TestWorkspaceAgentStatesAcrossHubsAndPalettes(t *testing.T) {
 							s.Navigate(page.Page)
 							frame := s.Render(dims[0], dims[1])
 							assertFrameSize(t, frame, dims[0], dims[1])
-							if !strings.Contains(frame, "[:] Commands") || !strings.Contains(frame, "[?] Help") {
+							if !strings.Contains(frame, ": commands") || !strings.Contains(frame, "? help") {
 								t.Fatalf("actions hidden on %s", page.Page)
 							}
 							s.HandleKey(KeyEvent{Key: "End"})
@@ -74,7 +74,13 @@ func TestWorkspaceFitsActualTerminalAndKeepsActiveNavigation(t *testing.T) {
 				frame := s.Render(dims[0], dims[1])
 				assertFrameSize(t, frame, dims[0], dims[1])
 				if dims[0] >= 52 && dims[1] >= 16 && page.Page != PageIssueDetail {
-					if !strings.Contains(frame, "▸ "+page.Label) || !strings.Contains(frame, "[?] Help") {
+					// The active workspace tab is always named; content views also
+					// name the active view in their pane title.
+					named := strings.Contains(frame, hub.Label)
+					if page.Page != PageSummary && page.Page != PageEditor && page.Page != PageBugs && page.Page != PageGit {
+						named = named && strings.Contains(frame, page.Label)
+					}
+					if !named || !strings.Contains(frame, "? help") {
 						t.Fatalf("active page or help hidden at %v on %s:\n%s", dims, page.Page, frame)
 					}
 				}
@@ -109,12 +115,12 @@ func TestWorkspaceStatusAndCommandRemainVisible(t *testing.T) {
 		s.Connected = connected
 		frame := s.Render(100, 24)
 		assertFrameSize(t, frame, 100, 24)
-		for _, token := range []string{"Modified", "Checks trusted", "[?] Help", "[:] Commands"} {
+		for _, token := range []string{"modified", "checks trusted", "? help", ": commands"} {
 			if !strings.Contains(frame, token) {
 				t.Fatalf("status %q disappeared with a long project name", token)
 			}
 		}
-		if connected != strings.Contains(frame, "Connected") {
+		if connected != strings.Contains(frame, " live") {
 			t.Fatal("incorrect connection state")
 		}
 	}

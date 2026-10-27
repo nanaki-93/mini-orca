@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 )
 
@@ -22,23 +23,21 @@ func TestHubAndSubViewKeyboardNavigation(t *testing.T) {
 		t.Fatalf("expected initial page summary, got %s", s.Page)
 	}
 
-	// Switch to [2] Agent Studio
+	// [2] opens Tasks; Tab cycles its views and Shift+Tab returns.
 	s.HandleKey(KeyEvent{Key: "2"})
 	if s.Page != PageAgents {
 		t.Fatalf("expected page agents, got %s", s.Page)
 	}
-
-	// Tab cycles sub-views within Agent Studio: Agents -> Issues -> Features -> Last Run -> File Scope
 	s.HandleKey(KeyEvent{Key: "Tab"})
-	if s.Page != PageBugs {
-		t.Fatalf("expected page bugs after Tab, got %s", s.Page)
+	if s.Page != PagePlan {
+		t.Fatalf("expected the plan view after Tab, got %s", s.Page)
 	}
 	s.HandleKey(KeyEvent{Key: "Tab", Shift: true})
 	if s.Page != PageAgents {
 		t.Fatalf("expected page agents after Shift+Tab, got %s", s.Page)
 	}
 
-	// Bracket keys cycle hubs
+	// Bracket keys cycle workspaces.
 	s.HandleKey(KeyEvent{Key: "]"})
 	if s.Page != PageEditor {
 		t.Fatalf("expected page editor after ], got %s", s.Page)
@@ -616,18 +615,24 @@ func TestAgentStartFailureClearsPreviewAndSurfacesDetail(t *testing.T) {
 func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	s := NewState()
 
-	// Work cycles through every sidebar view, skipping the issue-detail disclosure.
+	// Tasks cycles through every view of the workspace.
 	s.HandleKey(KeyEvent{Key: "2"})
-	wantSec2 := []Page{PageBugs, PageFeatures, PagePlan, PageAnalysisRun, PageAnalysisFiles, PageMedia, PageAgents}
+	wantSec2 := []Page{PagePlan, PageFeatures, PageHistory, PageArtifacts, PageMedia, PageAgents}
 	for _, want := range wantSec2 {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != want {
-			t.Fatalf("Section 2 Tab cycle: got %s, want %s", s.Page, want)
+			t.Fatalf("Tasks Tab cycle: got %s, want %s", s.Page, want)
 		}
+	}
+	// Issues has one view: Tab stays on the list, skipping the detail disclosure.
+	s.HandleKey(KeyEvent{Key: "4"})
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageBugs {
+		t.Fatalf("Issues Tab cycle: got %s", s.Page)
 	}
 
 	// Section 4: Tab and h/l update both Page and DocsSection; arrow keys and j/k do not switch submenus
-	s.HandleKey(KeyEvent{Key: "4"})
+	s.HandleKey(KeyEvent{Key: "5"})
 	if s.Page != PageDocs || s.DocsSection != "context" {
 		t.Fatalf("Section 4 initial state: page=%s section=%s", s.Page, s.DocsSection)
 	}
@@ -651,7 +656,7 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	}
 
 	// Section 5: Tab updates both Page and RulesSection, while Left/Right arrows change options on the active page
-	s.HandleKey(KeyEvent{Key: "5"})
+	s.HandleKey(KeyEvent{Key: "7"})
 	if s.Page != PageInstructions || s.RulesSection != "trust" {
 		t.Fatalf("Section 5 initial state: page=%s section=%s", s.Page, s.RulesSection)
 	}
@@ -711,12 +716,18 @@ func TestSubmenuNavigationUpdatesPageAndSectionState(t *testing.T) {
 	if s.Page != PageCloud || s.RulesSection != "cloud" || len(s.PendingActions) != ambientActions {
 		t.Fatal("cloud navigation changed scope or dispatched work")
 	}
-	s.HandleKey(KeyEvent{Key: "3"})
-	for _, want := range []Page{PageGit, PageHistory, PageArtifacts, PageEditor} {
+	// Inbox cycles analysis, scope, checks and repository; Code has one view.
+	s.HandleKey(KeyEvent{Key: "1"})
+	for _, want := range []Page{PageAnalysisRun, PageAnalysisFiles, PageProject, PageRepo, PageSummary} {
 		s.HandleKey(KeyEvent{Key: "Tab"})
 		if s.Page != want {
-			t.Fatalf("Code hub Tab cycle: got %s, want %s", s.Page, want)
+			t.Fatalf("Inbox Tab cycle: got %s, want %s", s.Page, want)
 		}
+	}
+	s.HandleKey(KeyEvent{Key: "3"})
+	s.HandleKey(KeyEvent{Key: "Tab"})
+	if s.Page != PageEditor {
+		t.Fatalf("Code Tab cycle: got %s", s.Page)
 	}
 
 	// Verify Left/Right/Up/Down arrows never navigate submenus on any page
@@ -864,7 +875,7 @@ func TestEndToEndBugFixWorkflowAndLiveStageTracking(t *testing.T) {
 		},
 	}
 	agentFrame := s.Render(120, 36)
-	if !strings.Contains(agentFrame, "Review changed files") || strings.Contains(agentFrame, "Clean context cancellation fix") {
+	if !strings.Contains(agentFrame, "review changed files") || strings.Contains(agentFrame, "Clean context cancellation fix") {
 		t.Fatalf("expected PageAgents to display critic summary and Ready to Review & Apply:\n%s", agentFrame)
 	}
 
@@ -1707,7 +1718,7 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 
 	s.Navigate(PageAgents)
 	frame := s.Render(120, 44)
-	if !strings.Contains(frame, "Inspect failure") || strings.Contains(frame, "--- FAIL: TestParse") {
+	if !strings.Contains(frame, "inspect failure") || strings.Contains(frame, "--- FAIL: TestParse") {
 		t.Fatalf("task list should direct to diagnostics without expanding them: %s", frame)
 	}
 
@@ -1729,7 +1740,7 @@ func TestWorkflowErrorDiagnosticsAndDebugInspector(t *testing.T) {
 	for _, want := range []string{
 		"Task · stages",
 		"qwen2.5-coder",
-		"Stage reason:",
+		"Reason",
 		"go test failed with exit code 1",
 	} {
 		if !strings.Contains(debugFrame, want) {
@@ -2005,7 +2016,8 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 		t.Fatalf("expected Issue Detail to target cursor issue f-second, got %+v", cur)
 	}
 	detailFrame := s.Render(120, 44)
-	if !strings.Contains(detailFrame, "Second targeted finding") || strings.Contains(detailFrame, "First critical finding") {
+	// The list stays beside the detail; only the targeted finding's cause is shown.
+	if !strings.Contains(detailFrame, "Second root cause") || strings.Contains(detailFrame, "First root cause") {
 		t.Fatalf("expected Issue Detail frame to render targeted 2nd issue, got:\n%s", detailFrame)
 	}
 	if strings.Contains(detailFrame, "Finding:") || strings.Contains(detailFrame, "semantic:f-second") {
@@ -2017,22 +2029,21 @@ func TestIssueDetailTargetsCursorAndIsolatesShortcuts(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Issue 2 of 3",
-		"Confidence:",
-		"HIGH",
+		"high confidence",
 		"SEC-JWT-01",
 		"internal/app/second.go:25-32",
 		"ValidateToken",
 		"Go ·",
 		"120 lines",
 		"if token == \"\" { return nil }",
-		"Proposed approach:",
+		"PROPOSED FIX",
 		"Enforce strict authentication/cryptographic validation",
-		"▸ Verification:",
+		"DONE WHEN",
 		"Reject empty token in ValidateToken",
 		"Cover empty token in unit test",
-		"▸ Guardrails:",
+		"OUT OF SCOPE",
 		"Do not alter token signing format",
-		"▸ Next Action:",
+		"plan a fix",
 		"internal/app/second_test.go",
 	} {
 		if !strings.Contains(detailFrame, want) {
@@ -2791,15 +2802,15 @@ func TestRejectAgentFixInHumanStageDeletesWorktreeAndReopensIssue(t *testing.T) 
 	s.ActiveChanges = []*ChangeSession{chg}
 	s.Navigate(PageAgents)
 
-	view := s.Render(120, 40)
-	if !strings.Contains(view, "[x]") || !strings.Contains(view, "Reject") {
-		t.Fatalf("expected Agent Studio mission control to show '[x] Reject', got:\n%s", view)
+	view := ansi.Strip(s.Render(120, 40))
+	if !strings.Contains(view, "x reject") {
+		t.Fatalf("expected the task overview to offer x reject, got:\n%s", view)
 	}
 	s.AgentDetailOpen = true
 	s.AgentStageID = "human_review"
-	detailView := s.Render(120, 40)
-	if !strings.Contains(detailView, "[x]") || !strings.Contains(detailView, "Reject Fix") {
-		t.Fatalf("expected Agent Detail Stage 4 banner to show '[x] Reject Fix', got:\n%s", detailView)
+	detailView := ansi.Strip(s.Render(120, 40))
+	if !strings.Contains(detailView, "x reject") {
+		t.Fatalf("expected the human review stage to offer x reject, got:\n%s", detailView)
 	}
 
 	s.HandleKey(KeyEvent{Key: "x"})

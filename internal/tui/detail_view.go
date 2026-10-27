@@ -2,27 +2,9 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
-
-func (s *State) issueSourceExcerpt(cur IssueRow, th ansiTheme, contentW int) []string {
-	if s.IssueFile == nil || s.IssueFile.Path != cur.Path {
-		return nil
-	}
-	raw := strings.Split(strings.ReplaceAll(s.IssueFile.Content, "\r\n", "\n"), "\n")
-	start := max(0, cur.Line-3)
-	end := min(len(raw), min(cur.Line+8, max(cur.Line+2, cur.EndLine)))
-	var excerpt []string
-	for i := start; i < end; i++ {
-		excerpt = append(excerpt, fmt.Sprintf("%d: %s", i+1, theme.SanitizeCodeText(raw[i])))
-	}
-	return renderDiagnosticBulletRows(th, th.cyan, "Source snapshot:", th.cyan, th.fg, excerpt, contentW)
-}
 
 func (s *State) queueIssueSource(issue IssueRow) {
 	s.DetailScroll = 0

@@ -54,6 +54,9 @@ type PaletteColors struct {
 	CyanCode     string
 	ProgStart    string
 	ProgEnd      string
+	// AddBgCode and DelBgCode tint added and removed diff lines.
+	AddBgCode string
+	DelBgCode string
 }
 
 func ColorsForPalette(p Palette) PaletteColors {
@@ -63,28 +66,28 @@ func ColorsForPalette(p Palette) PaletteColors {
 			Name: "CRT PHOSPHOR", BgCode: "232", SurfaceCode: "234", AccentCode: "46", AccentBgCode: "28", OnAccentCode: "231", OnStatusCode: "232", FgCode: "157", MutedCode: "114",
 			BorderCode: "28", SelBgCode: "236", GreenCode: "46", AmberCode: "226",
 			RedCode: "210", PurpleCode: "157", CyanCode: "50",
-			ProgStart: "#00aa00", ProgEnd: "#00ff66",
+			ProgStart: "#00aa00", ProgEnd: "#00ff66", AddBgCode: "22", DelBgCode: "52",
 		}
 	case PaletteAmber:
 		return PaletteColors{
 			Name: "AMBER TERMINAL", BgCode: "233", SurfaceCode: "235", AccentCode: "222", AccentBgCode: "130", OnAccentCode: "231", OnStatusCode: "232", FgCode: "223", MutedCode: "180",
 			BorderCode: "136", SelBgCode: "237", GreenCode: "150", AmberCode: "222",
 			RedCode: "210", PurpleCode: "183", CyanCode: "117",
-			ProgStart: "#d78700", ProgEnd: "#ffd75f",
+			ProgStart: "#d78700", ProgEnd: "#ffd75f", AddBgCode: "58", DelBgCode: "52",
 		}
 	case PalettePaper:
 		return PaletteColors{
 			Name: "PAPER LIGHT", BgCode: "255", SurfaceCode: "254", AccentCode: "25", AccentBgCode: "25", OnAccentCode: "255", OnStatusCode: "255", FgCode: "235", MutedCode: "240",
 			BorderCode: "247", SelBgCode: "253", GreenCode: "22", AmberCode: "58",
 			RedCode: "124", PurpleCode: "91", CyanCode: "24",
-			ProgStart: "#005f87", ProgEnd: "#0087af",
+			ProgStart: "#005f87", ProgEnd: "#0087af", AddBgCode: "194", DelBgCode: "224",
 		}
 	default:
 		return PaletteColors{
 			Name: "TOKYO", BgCode: "233", SurfaceCode: "235", AccentCode: "111", AccentBgCode: "62", OnAccentCode: "231", OnStatusCode: "232", FgCode: "253", MutedCode: "248",
 			BorderCode: "240", SelBgCode: "237", GreenCode: "114", AmberCode: "222",
 			RedCode: "210", PurpleCode: "183", CyanCode: "80",
-			ProgStart: "#87afff", ProgEnd: "#5fd7d7",
+			ProgStart: "#87afff", ProgEnd: "#5fd7d7", AddBgCode: "22", DelBgCode: "52",
 		}
 	}
 }
@@ -350,7 +353,7 @@ func splitVisibleChunk(s string, maxCols int, startSGR string) (string, string, 
 			}
 			return s[:i], s[i:], curSGR
 		}
-		if r == ' ' && cols >= maxCols/3 {
+		if r == ' ' && cols > 0 {
 			lastSpaceIdx = i
 			lastSpaceSGR = curSGR
 		}

@@ -17,22 +17,16 @@ func (s *State) renderActivePage(th ansiTheme, width int) []string {
 	return lines
 }
 
+// renderActiveContent renders pages shown as one content pane. Inbox, Tasks,
+// Code, Issues, Branches and Docs have their own pane layouts (ui_*.go).
 func (s *State) renderActiveContent(th ansiTheme, width int) []string {
 	switch s.Page {
-	case PageSummary:
-		return s.renderSummaryPage(th, width)
 	case PageRepo:
 		return s.renderRepoPage(th, width)
 	case PageProject:
 		return s.renderProjectPage(th, width)
 	case PagePlan:
 		return s.renderPlanPage(th, width)
-	case PageAgents:
-		return s.renderAgentsPage(th, width)
-	case PageBugs:
-		return s.renderBugsPage(th, width)
-	case PageIssueDetail:
-		return s.renderIssueDetailPage(th, width)
 	case PageFeatures:
 		return s.renderFeaturesPage(th, width)
 	case PageFeatureDetail:
@@ -48,35 +42,23 @@ func (s *State) renderActiveContent(th ansiTheme, width int) []string {
 
 func (s *State) renderSecondaryPage(th ansiTheme, width int) []string {
 	switch s.Page {
-	case PageEditor:
-		return s.renderEditorPage(th, width)
-	case PageGit:
-		return s.renderGitPage(th, width)
-	case PageWorktreeDetail:
-		return s.renderWorktreeDetail(th, width)
 	case PageHistory:
 		return s.renderHistoryPage(th, width)
 	case PageMedia:
 		return s.renderMedia(th, width)
 	case PageArtifacts:
 		return s.renderLibrary(th, width)
-	case PageDocs:
-		return s.renderDocsPage(th, width)
-	case PageDocsComponents:
-		return s.renderDocsComponentsPage(th, width)
-	case PageDocsDecisions:
-		return s.renderDocsDecisionsPage(th, width)
-	case PageDiagrams:
-		return s.renderDiagramsPage(th, width)
 	case PageInstructions, PageModels, PageRoles, PageSkills, PageConnections, PageExternalWork, PageBootstrap, PageLessons, PageMemory, PageAmbient, PageCloud:
 		return s.renderGovernanceSubPage(th, width)
 	default:
-		return s.renderSummaryPage(th, width)
+		return nil
 	}
 }
 
+// adaptivePanelWidth is the width of a boxed panel inside content of the
+// given width, after its two-column margin.
 func adaptivePanelWidth(width int) int {
-	return max(42, width-6)
+	return max(42, width-2)
 }
 
 // pageHeaderInlineLimit keeps title and subtitle on one line when they fit the
@@ -87,7 +69,7 @@ const pageHeaderInlineLimit = 68
 // a quieter tone. The breadcrumb above already says where the page lives, so
 // the header stays short and leaves the rows to content.
 func renderPageHeader(th ansiTheme, title, subtitle string) []string {
-	head := fmt.Sprintf("  %s%s◆ %s%s", th.bold, th.accent, title, th.reset)
+	head := fmt.Sprintf("  %s%s%s%s", th.bold, th.fg, title, th.reset)
 	subtitle = strings.TrimSpace(subtitle)
 	switch {
 	case subtitle == "":

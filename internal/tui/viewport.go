@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
@@ -13,6 +12,21 @@ type viewportMemory struct {
 	manualScroll    bool
 	dialogScroll    int
 	dialogKey       string
+	// lists keeps each split view's list scroll so the cursor moves within a
+	// stable window instead of re-centering on every key.
+	lists map[Page]int
+}
+
+// listScroll returns the scroll offset of the active page's list pane that
+// keeps cursorRow visible.
+func (s *State) listScroll(cursorRow, total, rows int) int {
+	if s.viewport.lists == nil {
+		s.viewport.lists = map[Page]int{}
+	}
+	page := s.EffectivePage()
+	next := theme.FollowScroll(s.viewport.lists[page], cursorRow, total, rows)
+	s.viewport.lists[page] = next
+	return next
 }
 
 func (s *State) isReadingPage() bool {
@@ -41,38 +55,6 @@ func (s *State) handleDetailScrollKey(ev KeyEvent) bool {
 	return true
 }
 
-func (s *State) scrollDetails(th ansiTheme, body []string, rows int) []string {
-	if s.Page == PageEditor && s.isViewingDiff() {
-		return body
-	}
-	if s.viewport.followSelection {
-		s.viewport.followSelection = false
-		s.viewport.manualScroll = false
-		marker := "  " + th.renderCursorPrefix(true)
-		for i, line := range body {
-			if strings.HasPrefix(line, marker) {
-				if i < s.DetailScroll || i >= s.DetailScroll+max(1, rows-1) {
-					s.DetailScroll = max(0, i-max(1, rows-1)/2)
-				}
-				break
-			}
-		}
-	}
-	return scrollWindow(th, body, rows, &s.DetailScroll)
-}
-
-func scrollWindow(th ansiTheme, body []string, rows int, scroll *int) []string {
-	if len(body) <= rows {
-		*scroll = 0
-		return body
-	}
-	visible := max(1, rows-1)
-	*scroll = min(max(0, *scroll), max(0, len(body)-visible))
-	end := min(len(body), *scroll+visible)
-	out := append([]string(nil), body[*scroll:end]...)
-	return append(out, fmt.Sprintf("  %sPgUp/PgDn · lines %d–%d of %d%s", th.muted, *scroll+1, end, len(body), th.reset))
-}
-
 func wrapWorkspaceLines(lines []string, width int) []string {
 	var wrapped []string
 	for _, line := range lines {
@@ -85,25 +67,6 @@ func wrapWorkspaceLines(lines []string, width int) []string {
 		}
 	}
 	return wrapped
-}
-
-func (s *State) renderDialog(th ansiTheme, width, rows int) []string {
-	key := s.Error
-	var body []string
-	if s.Confirmation != nil {
-		key = s.Confirmation.Title + "\x00" + s.Confirmation.Message
-		body = s.renderConfirmationModal(th, width)
-	} else {
-		body = th.renderErrorBanner(s.Error, width-4)
-		body = append(body, "", "  [Esc] Dismiss · [:] Commands")
-		if !s.Connected {
-			body = append(body, "  Start the daemon, then use :reconnect.")
-		}
-	}
-	if s.viewport.dialogKey != key {
-		s.viewport.dialogKey, s.viewport.dialogScroll = key, 0
-	}
-	return scrollWindow(th, body, rows, &s.viewport.dialogScroll)
 }
 
 func (s *State) handleDialogScrollKey(ev KeyEvent) bool {
@@ -134,7 +97,7 @@ func (s *State) handleErrorOverlayKey(ev KeyEvent) {
 		s.openCommandInput("")
 	case "?":
 		s.ShowKeybindsModal, s.KeybindsScroll = true, 0
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6", "7":
 		s.switchHubByKey(ev.Key)
 	}
 }

@@ -306,7 +306,7 @@ func TestExecutionDetailsFitAllPalettesAndSizes(t *testing.T) {
 				s.DetailScroll = 0
 				frame := s.Render(size[0], size[1])
 				assertFrameSize(t, frame, size[0], size[1])
-				if !strings.Contains(frame, "[:] Commands") {
+				if !strings.Contains(frame, ": commands") {
 					t.Fatal("command access disappeared")
 				}
 			}

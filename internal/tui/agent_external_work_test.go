@@ -546,7 +546,7 @@ func TestExternalViewsAreBoundedSanitizedAndPassivelyInspectable(t *testing.T) {
 					}
 					s.HandleKey(KeyEvent{Key: "PageDown"})
 				}
-				for _, token := range []string{"SELECTED EXTERNAL WORK", "Checkout:", "/repo"} {
+				for _, token := range []string{"SELECTED EXTERNAL", "Checkout:", "/repo"} {
 					if !strings.Contains(visited.String(), token) {
 						t.Fatal("external detail inaccessible", token, size, selection)
 					}

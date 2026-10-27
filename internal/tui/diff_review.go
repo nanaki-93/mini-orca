@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
@@ -96,62 +95,6 @@ func (s *State) activeProposalReviewCount() (reviewed, total int) {
 	return reviewed, total
 }
 
-func (s *State) activeProposalChecksSummary() string {
-	if s.Change == nil || len(s.Change.Checks) == 0 {
-		return ""
-	}
-	passed := 0
-	for _, ch := range s.Change.Checks {
-		if ch.State == "passed" {
-			passed++
-		}
-	}
-	return fmt.Sprintf("Checks %d/%d passed", passed, len(s.Change.Checks))
-}
-
-func (s *State) diffReviewOverview(th ansiTheme, active FileDiffHunk, width int) []string {
-	if s.Change == nil {
-		return nil
-	}
-	var labels []string
-	for _, file := range domain.EffectiveSessionChanges(s.Change) {
-		mark := "○"
-		if s.Change.FileReviewHash == s.Change.Hash && domain.ContainsString(s.Change.ReviewedFiles, file.Path) {
-			mark = "✓"
-		}
-		labels = append(labels, mark+" "+file.Path)
-	}
-	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
-	reviewed := 0
-	if s.Change.FileReviewHash == s.Change.Hash {
-		reviewed = len(s.Change.ReviewedFiles)
-	}
-	rows := []string{fmt.Sprintf("%d/%d files reviewed · [w] Mark reviewed · [e] Details", reviewed, len(labels))}
-	if s.ShowInlineWhy {
-		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Files:", th.fg, strings.Join(labels, " · "), contentW)...)
-	}
-	mode := "Complete proposal"
-	if s.DiffSinceReview {
-		mode = "Changes since last complete review"
-	}
-	rows = append(rows, fmt.Sprintf("%s · column %d · [h/l] Scroll · [z] Compare", mode, s.DiffOffset))
-	for _, file := range s.diffChanges() {
-		if file.Path != active.Path {
-			continue
-		}
-		var criteria []string
-		for _, n := range file.Criteria {
-			if n > 0 && n <= len(s.Change.AcceptanceCriteria) {
-				criteria = append(criteria, fmt.Sprintf("%d. %s", n, s.Change.AcceptanceCriteria[n-1]))
-			}
-		}
-		if s.ShowInlineWhy && len(criteria) > 0 {
-			rows = append(rows, renderDiagnosticBulletRows(th, th.purple, "Model says this meets:", th.purple, th.fg, criteria, contentW)...)
-		}
-	}
-	return append(rows, s.diffApplyDestination())
-}
-
 func shiftedDiffLine(line DiffLine, offset int) DiffLine {
 	line.Text = shiftedCode(line.Text, offset)
 	return line
@@ -166,22 +109,6 @@ func (s *State) diffApplyDestination() string {
 		return "Apply: commit in " + s.Change.WorktreePath + "; review and merge separately in Worktrees"
 	}
 	return "Apply: write and commit reviewed files in " + branch
-}
-
-func (s *State) diffMetadataWindow(rows []string, panelW int) []string {
-	var wrapped []string
-	for _, row := range rows {
-		wrapped = append(wrapped, theme.WrapVisibleLine(row, issuePanelContentWidth(panelW))...)
-	}
-	budget := s.diffMetadataRows()
-	if len(wrapped) <= budget {
-		s.DetailScroll = 0
-		return wrapped
-	}
-	s.DetailScroll = min(s.DetailScroll, len(wrapped)-budget)
-	first := s.DetailScroll
-	out := append([]string(nil), wrapped[first:first+budget]...)
-	return append(out, fmt.Sprintf("[PgUp/PgDn] Details %d–%d/%d · [e] Why", first+1, first+budget, len(wrapped)))
 }
 
 func (s *State) diffMetadataRows() int {

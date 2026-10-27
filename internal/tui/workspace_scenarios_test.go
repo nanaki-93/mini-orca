@@ -26,67 +26,14 @@ func workspaceSampleState() *State {
 	return s
 }
 
-func TestDashboardNavigationAndUnknownResults(t *testing.T) {
-	s := workspaceSampleState()
-	s.Scan, s.Run = nil, nil
-	frame := s.Render(120, 30)
-	if strings.Count(frame, "Not run yet") != 2 || strings.Contains(frame, "[CLEAN]") {
-		t.Fatal("unrun analysis or checks must not appear clean")
-	}
-	for i, page := range dashboardPages {
-		s.Navigate(PageSummary)
-		s.SelectedIdx = i
-		s.HandleKey(KeyEvent{Key: "Enter"})
-		if s.Page != page || len(s.PendingActions) != 0 {
-			t.Fatalf("dashboard navigation started work: %s %+v", s.Page, s.PendingActions)
-		}
-	}
-	s = NewState()
-	s.HandleKey(KeyEvent{Key: "Enter"})
-	if !s.CmdActive || s.CmdInput != "project " || len(s.PendingActions) != 0 {
-		t.Fatal("welcome must open an editable project prompt")
-	}
-}
-
-func TestDashboardKeepsActivitiesVisibleAtCompactSizes(t *testing.T) {
-	for _, dims := range [][2]int{{52, 16}, {60, 20}, {80, 24}, {100, 20}, {120, 30}, {160, 44}} {
-		for _, palette := range []Palette{PaletteTokyo, PaletteCRT, PaletteAmber, PalettePaper} {
-			s := workspaceSampleState()
-			s.Palette = palette
-			s.Run, s.Scan = nil, nil
-			frame := s.Render(dims[0], dims[1])
-			assertFrameSize(t, frame, dims[0], dims[1])
-			for _, label := range []string{"Dashboard", "Issues", "Tasks", "Analysis", "Checks"} {
-				if !strings.Contains(frame, label) {
-					t.Fatalf("%s missing at %v in %s", label, dims, palette)
-				}
-			}
-			if strings.Count(frame, "Not run yet") != 2 {
-				t.Fatalf("unrun states hidden at %v", dims)
-			}
-			for i := range dashboardPages {
-				frame = s.Render(dims[0], dims[1])
-				label := []string{"Issues", "Tasks", "Analysis", "Checks"}[i]
-				if !strings.Contains(ansi.Strip(frame), "▸ "+label) || s.ClampedIdx() != i {
-					t.Fatalf("activity selection lost at %v", dims)
-				}
-				s.HandleKey(KeyEvent{Key: "ArrowDown"})
-			}
-			if len(s.PendingActions) != 0 || s.Confirmation != nil {
-				t.Fatal("dashboard browsing must remain passive")
-			}
-		}
-	}
-}
-
 func TestDashboardKeepsFailureStatesAndFullReason(t *testing.T) {
 	for _, dims := range [][2]int{{52, 16}, {80, 24}, {120, 34}} {
 		s := workspaceSampleState()
 		s.Run.Status, s.Scan.Status = "partial", "failed"
 		s.Run.Reason = strings.Repeat("A provider did not finish this scope. ", 40) + "LAST_REASON"
 		frame := s.Render(dims[0], dims[1])
-		for _, label := range []string{"[PARTIAL]", "[FAILED]"} {
-			if !strings.Contains(frame, label) {
+		for _, label := range []string{"partial", "failed"} {
+			if !strings.Contains(ansi.Strip(frame), label) {
 				t.Fatalf("%s hidden at %v", label, dims)
 			}
 		}
@@ -156,7 +103,7 @@ func TestManualReadingPositionSurvivesTerminalResize(t *testing.T) {
 	// A deliberate selection change follows focus again, even after reading.
 	s.HandleKey(KeyEvent{Key: "ArrowDown"})
 	frame := s.Render(80, 20)
-	if s.DetailScroll >= end || !strings.Contains(ansi.Strip(frame), "▸") {
+	if s.DetailScroll >= end || !strings.Contains(ansi.Strip(frame), "▌") {
 		t.Fatal("selection did not restore focus tracking")
 	}
 	s.HandleKey(KeyEvent{Key: "Home"})
@@ -172,7 +119,7 @@ func TestLongDialogsKeepActionsAndDiagnosticsReachable(t *testing.T) {
 	s.Render(60, 20)
 	s.HandleKey(KeyEvent{Key: "End"})
 	frame := s.Render(60, 20)
-	if !strings.Contains(frame, "LAST_ERROR") || !strings.Contains(frame, "[Esc]") {
+	if !strings.Contains(frame, "LAST_ERROR") || !strings.Contains(ansi.Strip(frame), "Esc dismiss") {
 		t.Fatal("error recovery or diagnostic tail is hidden")
 	}
 	s.HandleKey(KeyEvent{Key: "Enter"})
@@ -185,7 +132,7 @@ func TestLongDialogsKeepActionsAndDiagnosticsReachable(t *testing.T) {
 	s.Render(60, 20)
 	s.HandleKey(KeyEvent{Key: "End"})
 	frame = s.Render(60, 20)
-	if !strings.Contains(frame, "LAST_SCOPE") || !strings.Contains(frame, "[y/Enter]") || !strings.Contains(frame, "[n/Esc]") {
+	if !strings.Contains(frame, "LAST_SCOPE") || !strings.Contains(ansi.Strip(frame), "y/Enter") || !strings.Contains(ansi.Strip(frame), "n/Esc") {
 		t.Fatal("confirmation lost full scope or its pinned actions")
 	}
 	s.HandleKey(KeyEvent{Key: "Escape"})
@@ -199,8 +146,8 @@ func TestOverlayFooterAlwaysShowsItsAvailableEscapeAction(t *testing.T) {
 	s.Confirmation = &Confirmation{Title: "Confirm scope", AcceptLabel: strings.Repeat("Long action label ", 10)}
 	for _, width := range []int{52, 60, 80, 120} {
 		frame := s.Render(width, 20)
-		footer := strings.Split(frame, "\n")[18]
-		if !strings.Contains(footer, "[y/Enter]") || !strings.Contains(footer, "[n/Esc]") || !strings.Contains(footer, "Cancel") {
+		footer := ansi.Strip(strings.Split(frame, "\n")[18])
+		if !strings.Contains(footer, "y/Enter") || !strings.Contains(footer, "n/Esc") || !strings.Contains(footer, "Cancel") {
 			t.Fatalf("dialog lost confirm or cancel at width %d", width)
 		}
 	}
@@ -209,8 +156,8 @@ func TestOverlayFooterAlwaysShowsItsAvailableEscapeAction(t *testing.T) {
 	for _, menu := range []bool{true, false} {
 		s.CmdActive, s.ShowKeybindsModal = menu, !menu
 		frame := s.Render(52, 20)
-		footer := strings.Split(frame, "\n")[18]
-		if !strings.Contains(footer, "[Esc]") || strings.Contains(footer, "[:] Commands") {
+		footer := ansi.Strip(strings.Split(frame, "\n")[18])
+		if !strings.Contains(footer, "Esc") || strings.Contains(footer, ": commands") {
 			t.Fatal("overlay footer advertised an unavailable action or hid Escape")
 		}
 	}

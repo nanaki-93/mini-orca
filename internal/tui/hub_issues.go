@@ -5,55 +5,8 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/domain"
 	"github.com/nanaki-93/mini-orca/v2/internal/tui/theme"
 )
-
-func (s *State) renderBugsPage(th ansiTheme, width int) []string {
-	open, active, done := s.IssueStatusCounts()
-	lines := renderPageHeader(th, "Issues", "Investigate findings, select a batch and plan a fix")
-	lines = append(lines, "", "  "+s.renderIssueStatusFilterStrip(th, open, active, done))
-	lines = append(lines, fmt.Sprintf("  %s[t] Category: %s · [s] Status · %d selected%s", th.muted, s.IssueCategory, len(s.SelectedIssueIDs), th.reset), "")
-	filtered := s.FilteredIssues()
-	if len(filtered) == 0 {
-		return append(lines, "  No findings match these filters.", "  [s] Change status · [t] Change category · [r] Analyze")
-	}
-	selected := s.ClampedIdx()
-	start, end := windowBounds(len(filtered), selected, s.adaptiveWindowRows(12, 8))
-	for idx := start; idx < end; idx++ {
-		row := filtered[idx]
-		mark := "[ ]"
-		if domain.ContainsString(s.SelectedIssueIDs, row.ID) {
-			mark = th.green + "[x]" + th.reset
-		}
-		prefix := "  " + th.renderCursorPrefix(idx == selected) + th.muted + mark + th.reset + " " + th.severityBadge(row.Severity) + " "
-		nameWidth := max(1, width-theme.VisibleRuneCount(prefix)-2)
-		lines = append(lines, prefix+rowTitleStyle(th, idx == selected)+theme.TruncatePlain(row.Name, nameWidth)+th.reset)
-	}
-	lines = appendWindowFooter(th, lines, start, end, len(filtered))
-	return s.appendSelectedIssuePreview(th, lines, filtered[selected], width)
-}
-
-func (s *State) appendSelectedIssuePreview(th ansiTheme, lines []string, cur IssueRow, width int) []string {
-	if s.viewportBodyRows >= 28 {
-		body := []string{
-			fmt.Sprintf("%s%s%s  ·  %s%s%s", th.bold+th.fg, cur.Name, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset),
-			fmt.Sprintf("%s · %s · %s", th.statusBadge(cur.Status), strings.ToUpper(cur.Category), formatIssueOrigin(cur)),
-		}
-		if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
-			body = append(body, "Commit: "+formatIssueCommitLink(cur.CommitCode, cur.CommitOID))
-		}
-		return append(append(lines, ""), th.renderPanelBox("SELECTED FINDING", strings.ToUpper(cur.Category), adaptivePanelWidth(width), body)...)
-	}
-	lines = append(lines, "", "  "+th.muted+"SELECTED FINDING"+th.reset)
-	lines = appendWrappedText(lines, th.bold+th.fg+cur.Name+th.reset, width)
-	lines = appendWrappedText(lines, th.cyan+formatIssueLocationSpan(cur)+th.reset, width)
-	lines = appendWrappedText(lines, th.statusBadge(cur.Status)+" · "+cur.Category+" · "+formatIssueOrigin(cur), width)
-	if cur.Status == "done" && (cur.CommitCode != "" || cur.CommitOID != "") {
-		lines = appendWrappedText(lines, "Commit: "+formatIssueCommitLink(cur.CommitCode, cur.CommitOID), width)
-	}
-	return lines
-}
 
 func formatIssueCommitLink(code, oid string) string {
 	shortOID := theme.TruncatePlain(strings.TrimSpace(oid), 8)
@@ -66,87 +19,6 @@ func formatIssueCommitLink(code, oid string) string {
 		return shortOID
 	default:
 		return "verified"
-	}
-}
-
-func (s *State) renderIssueStatusFilterStrip(th ansiTheme, openCount, inProgCount, doneCount int) string {
-	tabs := []struct {
-		id    string
-		label string
-		count int
-	}{
-		{"open", "OPEN", openCount},
-		{"in_progress", "IN_PROGRESS", inProgCount},
-		{"done", "DONE", doneCount},
-	}
-	var parts []string
-	for _, t := range tabs {
-		if s.IssueView == t.id {
-			parts = append(parts, fmt.Sprintf("%s[%s:%d]%s", th.bold+th.green, t.label, t.count, th.reset))
-		} else {
-			parts = append(parts, fmt.Sprintf("%s%s:%d%s", th.muted, t.label, t.count, th.reset))
-		}
-	}
-	if s.IssueView == "all" {
-		parts = append(parts, fmt.Sprintf("%s[ALL:%d]%s", th.bold+th.green, openCount+inProgCount+doneCount, th.reset))
-	}
-	return strings.Join(parts, th.border+" · "+th.reset)
-}
-
-func (s *State) renderIssueDetailPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "Issue", fmt.Sprintf("Issue %d of %d · [f] Plan fix · [j/k] Next/prev · [Esc] Back", s.ClampedIdx()+1, len(s.FilteredIssues())))
-	cur := s.SelectedIssue()
-	if cur == nil {
-		return append(lines, "  No finding selected.")
-	}
-	lines = append(lines, s.renderDetailSections(th)...)
-	panelW := adaptivePanelWidth(width)
-	contentW := issuePanelContentWidth(panelW)
-	var rows []string
-	switch s.DetailSection {
-	case 1:
-		rows = s.buildIssueDetailMetadataLines(th, *cur)
-		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Evidence:", th.fg, cur.Evidence, contentW)...)
-		rows = append(rows, s.issueSourceExcerpt(*cur, th, contentW)...)
-	case 2:
-		rows = renderDiagnosticRow(th, th.green, "Proposed approach:", th.fg, cur.Solution, contentW)
-		rows = append(rows, s.formatIssueVerificationLines(th, *cur, contentW)...)
-		rows = append(rows, formatIssueGuardrailLines(th, cur.NonGoals, contentW)...)
-		rows = append(rows, s.renderIssueDetailWorkflowLines(th, *cur, contentW)...)
-	default:
-		rows = renderDiagnosticRow(th, th.cyan, "Issue:", th.fg, cur.Name, contentW)
-		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Location:", th.fg, formatIssueLocationSpan(*cur), contentW)...)
-		rows = append(rows, fmt.Sprintf("%s · %s", th.severityBadge(cur.Severity), th.statusBadge(cur.Status)))
-		rows = append(rows, renderDiagnosticRow(th, th.amber, "Cause hypothesis:", th.fg, formatIssueRootCauseText(*cur), contentW)...)
-	}
-	return append(lines, th.renderPanelBox(s.detailSections()[s.DetailSection], "", panelW, rows)...)
-}
-
-func (s *State) buildIssueDetailMetadataLines(th ansiTheme, cur IssueRow) []string {
-	conf := strings.ToUpper(client.FirstNonEmpty(cur.Confidence, "medium"))
-	origin := formatIssueOrigin(cur)
-	rule := client.FirstNonEmpty(cur.Rule, cur.Category+"-check")
-	fresh := client.FirstNonEmpty(cur.Freshness, "current")
-	fileMeta := s.resolveIssueFileMeta(cur)
-	locLine := fmt.Sprintf("%sLocation:%s   %s%s%s",
-		th.muted, th.reset, th.cyan, formatIssueLocationSpan(cur), th.reset)
-	if fileMeta != "" {
-		locLine += fmt.Sprintf("   %sFile:%s %s%s%s", th.muted, th.reset, th.muted, fileMeta, th.reset)
-	}
-	scopePaths := domain.EnsureChangeTestPaths([]string{cur.Path}, s.Index)
-	scopeStr := client.FirstNonEmpty(strings.Join(scopePaths, ", "), cur.Path, "workspace")
-	return []string{
-		fmt.Sprintf("%sSeverity:%s   %s  %sCategory:%s %s%s%s  %sStatus:%s %s  %sConfidence:%s %s%s%s",
-			th.muted, th.reset, th.severityBadge(cur.Severity),
-			th.muted, th.reset, th.bold+th.purple, strings.ToUpper(cur.Category), th.reset,
-			th.muted, th.reset, th.statusBadge(cur.Status),
-			th.muted, th.reset, th.bold+th.cyan, conf, th.reset),
-		fmt.Sprintf("%sOrigin:%s     %s%s%s   %sRule:%s %s%s%s   %sFreshness:%s %s%s%s",
-			th.muted, th.reset, th.cyan, origin, th.reset,
-			th.muted, th.reset, th.purple, rule, th.reset,
-			th.muted, th.reset, th.green, fresh, th.reset),
-		locLine,
-		fmt.Sprintf("%sScope:%s      %s%s%s", th.muted, th.reset, th.cyan, scopeStr, th.reset),
 	}
 }
 
@@ -215,24 +87,6 @@ func renderDiagnosticBulletRows(th ansiTheme, labelStyle, label, bulletStyle, te
 	return out
 }
 
-func (s *State) formatIssueVerificationLines(th ansiTheme, cur IssueRow, contentW int) []string {
-	if len(cur.AcceptanceCriteria) == 0 {
-		plan := domain.SynthesizeIssueVerification(cur, s.Index)
-		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Verification:", th.cyan, plan, contentW)
-	}
-	if len(cur.AcceptanceCriteria) == 1 {
-		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Verification:", th.cyan, cur.AcceptanceCriteria[0], contentW)
-	}
-	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Verification:", th.cyan, th.cyan, cur.AcceptanceCriteria, contentW)
-}
-
-func formatIssueGuardrailLines(th ansiTheme, nonGoals []string, contentW int) []string {
-	if len(nonGoals) == 1 {
-		return renderDiagnosticRow(th, th.bold+th.purple, "▸ Guardrails:", th.muted, nonGoals[0], contentW)
-	}
-	return renderDiagnosticBulletRows(th, th.bold+th.purple, "▸ Guardrails:", th.purple, th.muted, nonGoals, contentW)
-}
-
 func formatIssueOrigin(cur IssueRow) string {
 	kind := client.FirstNonEmpty(cur.Target.Kind, "semantic")
 	src := client.FirstNonEmpty(cur.Source, cur.Target.Source)
@@ -271,27 +125,6 @@ func formatIndexedFileSummary(f IndexedFile) string {
 		return fmt.Sprintf("%s · %d lines", lang, f.LineCount)
 	}
 	return lang
-}
-
-func (s *State) renderIssueDetailWorkflowLines(th ansiTheme, cur IssueRow, contentW int) []string {
-	switch cur.Status {
-	case "in_progress":
-		val := fmt.Sprintf("In Progress (%s) · %s[Enter/w]%s Watch Pipeline · %s[d]%s Delete · %s[i/Esc]%s Back",
-			client.FirstNonEmpty(cur.AgentPath, "active"), th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-		return renderDiagnosticRow(th, th.bold+th.amber, "⟳ Agent Status:", th.fg, val, contentW)
-	case "done":
-		commitRef := ""
-		if cur.CommitCode != "" || cur.CommitOID != "" {
-			commitRef = " [" + formatIssueCommitLink(cur.CommitCode, cur.CommitOID) + "]"
-		}
-		val := fmt.Sprintf("Verified & Fixed%s · %s[Enter/o]%s Inspect File · %s[d]%s Delete · %s[i/Esc]%s Back",
-			commitRef, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-		return renderDiagnosticRow(th, th.bold+th.green, "✔ Resolution:", th.fg, val, contentW)
-	default:
-		val := fmt.Sprintf("%s[Enter/f]%s Fix · %s[d]%s Delete · %s[o]%s Open File · %s[i/Esc]%s Back",
-			th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset, th.cyan, th.reset)
-		return renderDiagnosticRow(th, th.bold+th.cyan, "▸ Next Action:", th.fg, val, contentW)
-	}
 }
 
 func (s *State) renderFeaturesPage(th ansiTheme, width int) []string {

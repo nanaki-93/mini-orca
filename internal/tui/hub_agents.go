@@ -343,101 +343,13 @@ func (s *State) renderAgentNextStepLine(th ansiTheme, item AgentItem) string {
 	return "  " + th.cyan + next + th.reset
 }
 
-func (s *State) renderEditorPage(th ansiTheme, width int) []string {
-	panelW := adaptivePanelWidth(width)
-	subRight := "Read-only repository inspector"
-	if s.isViewingDiff() {
-		subRight = diffModeDisplayName(s.EffectiveDiffMode())
-	} else if !s.BrowseFiles && s.File != nil {
-		subRight = theme.SanitizeCodeText(s.File.Path)
-	}
-	lines := renderPageHeader(th, "Files & diff", subRight)
-	if s.isViewingDiff() {
-		if width >= diffSidebarMinWidth && len(s.diffChanges()) > 1 {
-			return append(lines, s.renderDiffWithSidebar(th, width)...)
-		}
-		return append(lines, s.renderChangeDiffLines(th, width)...)
-	}
-	if !s.BrowseFiles && s.File != nil {
-		header := fmt.Sprintf("%sFile:%s %s%s%s %s(%s · %d lines)%s",
-			th.muted, th.reset, th.bold+th.fg, theme.SanitizeCodeText(s.File.Path), th.reset,
-			th.muted, client.FirstNonEmpty(s.File.Language, "text"), s.File.LineCount, th.reset)
-		lines = append(lines, th.renderPanelBox("READ-ONLY SOURCE VIEWER", "SOURCE", panelW, []string{header})...)
-		if s.File.Content != "" {
-			rawLines := strings.Split(strings.ReplaceAll(s.File.Content, "\r\n", "\n"), "\n")
-			codeCol := max(16, width-14)
-			start, end := windowBounds(len(rawLines), s.ClampedIdx(), s.adaptiveWindowRows(10, 14))
-			for idx := start; idx < end; idx++ {
-				codeText := theme.TruncatePlain(shiftedCode(rawLines[idx], s.DiffOffset), codeCol)
-				lines = append(lines, fmt.Sprintf("  %s%s%4d │%s %s", th.renderCursorPrefix(idx == s.ClampedIdx()), th.muted, idx+1, th.reset, codeText))
-			}
-			lines = appendWindowFooter(th, lines, start, end, len(rawLines))
-		}
-		return lines
-	}
-	return s.renderIndexedFilesInEditor(th, width, lines)
-}
-
-func (s *State) renderIndexedFilesInEditor(th ansiTheme, width int, lines []string) []string {
-	if s.Index == nil || len(s.Index.Files) == 0 {
-		return append(lines, renderEmptyState(th, "No file or diff loaded",
-			"Files appear here once the project is indexed: run :reindex.",
-			"Open a file directly with :open <path>, or press [d] for the current proposal diff.",
-			"Tasks with generated changes open their diff here for review.")...)
-	}
-	lines = append(lines, th.renderTableHeader("   REPOSITORY FILE PATH                        LANGUAGE      LINES", width)...)
-	selected := s.ClampedIdx()
-	total := len(s.Index.Files)
-	start, end := windowBounds(total, selected, s.adaptiveWindowRows(8, 14))
-	for idx := start; idx < end; idx++ {
-		f := s.Index.Files[idx]
-		cursor := th.renderCursorPrefix(idx == selected)
-		tStyle := rowTitleStyle(th, idx == selected)
-		lines = append(lines, fmt.Sprintf("  %s%s%-40s%s %s(%s)  %d lines%s",
-			cursor, tStyle, f.Path, th.reset, th.muted, client.FirstNonEmpty(f.Language, "text"), f.LineCount, th.reset))
-	}
-	return appendWindowFooter(th, lines, start, end, total)
-}
-
-func (s *State) renderGitPage(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "Worktrees", s.worktreeRecoveryHint())
-	if s.GitWorkspace == nil || len(s.GitWorkspace.Worktrees) == 0 {
-		return append(lines, renderEmptyState(th, "No Git worktrees yet",
-			"Agent tasks that run in isolation get their own worktree and branch.",
-			"They appear here to inspect, merge or clean up. [r] Refresh")...)
-	}
-	lines = append(lines, th.renderTableHeader("    STATUS            BRANCH                           WORKTREE PATH", width)...)
-	selected := s.ClampedIdx()
-	start, end := windowBounds(len(s.GitWorkspace.Worktrees), selected, s.adaptiveWindowRows(11, 10))
-	for idx := start; idx < end; idx++ {
-		wt := s.GitWorkspace.Worktrees[idx]
-		stBadge := th.padBadge(worktreeStatus(wt), 16)
-		branchCol := theme.PadVisibleRight(rowTitleStyle(th, idx == selected)+theme.TruncatePlain(wt.Branch, 30)+th.reset, 32)
-		pathCol := th.muted + theme.TruncatePlain(wt.Path, max(10, width-54)) + th.reset
-		lines = append(lines, fmt.Sprintf("  %s%s  %s %s", th.renderCursorPrefix(idx == selected), stBadge, branchCol, pathCol))
-	}
-	lines = appendWindowFooter(th, lines, start, end, len(s.GitWorkspace.Worktrees))
-	if wt := s.selectedWorktree(); wt != nil && (s.viewportBodyRows <= 0 || s.viewportBodyRows >= 22) {
-		body := []string{
-			fmt.Sprintf("%sBranch:%s %s⎇ %s%s · %sPath:%s %s%s%s · %sHEAD:%s %s%s%s",
-				th.muted, th.reset, th.bold+th.purple, client.FirstNonEmpty(wt.Branch, "detached"), th.reset,
-				th.muted, th.reset, th.cyan, wt.Path, th.reset,
-				th.muted, th.reset, th.fg, theme.TruncatePlain(client.FirstNonEmpty(wt.Head, "—"), 12), th.reset),
-			fmt.Sprintf("%sNext:%s   %s%s%s", th.muted, th.reset, th.green, s.worktreeNextAction(wt), th.reset),
-		}
-		lines = append(lines, "")
-		lines = append(lines, th.renderPanelBox("SELECTED WORKTREE INTEGRATION", worktreeStatus(*wt), adaptivePanelWidth(width), body)...)
-	}
-	return lines
-}
-
 func (s *State) renderHistoryPage(th ansiTheme, width int) []string {
 	panelW := adaptivePanelWidth(width)
 	lines := renderPageHeader(th, "Proposal history", "Applied and rejected proposals with their audit trail")
 	if len(s.ChangeHistory) == 0 {
 		return append(lines, renderEmptyState(th, "No proposals in history",
 			"Applied and rejected proposals are kept here with their commit and audit trail.",
-			"Start one with [2] Work › Tasks or :agent <request>.")...)
+			"Start one with [2] Tasks or :agent <request>.")...)
 	}
 	lines = append(lines, th.renderTableHeader("    STATE         COMMIT CODE    PROPOSAL TITLE                   REVISION", width)...)
 	selected := s.ClampedIdx()

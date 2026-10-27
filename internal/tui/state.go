@@ -212,25 +212,25 @@ func HubTabs() []HubTab {
 		{
 			Key:   "1",
 			Page:  PageSummary,
-			Label: "Project",
+			Label: "Inbox",
 			SubPages: []HubSubPage{
-				{Page: PageSummary, Label: "Dashboard"},
+				{Page: PageSummary, Label: "Inbox"},
+				{Page: PageAnalysisRun, Label: "Analysis"},
+				{Page: PageAnalysisFiles, Label: "Analysis scope"},
+				{Page: PageProject, Label: "Checks"},
 				{Page: PageRepo, Label: "Repository"},
-				{Page: PageProject, Label: "Tests & Checks"},
 			},
 		},
 		{
 			Key:   "2",
 			Page:  PageAgents,
-			Label: "Work",
+			Label: "Tasks",
 			SubPages: []HubSubPage{
 				{Page: PageAgents, Label: "Tasks"},
-				{Page: PageBugs, Label: "Issues"},
-				{Page: PageIssueDetail, Label: "Issue Detail"},
-				{Page: PageFeatures, Label: "Features"},
-				{Page: PagePlan, Label: "Task Plan"},
-				{Page: PageAnalysisRun, Label: "Analysis"},
-				{Page: PageAnalysisFiles, Label: "File Scope"},
+				{Page: PagePlan, Label: "Plan"},
+				{Page: PageFeatures, Label: "Feature ideas"},
+				{Page: PageHistory, Label: "Proposals"},
+				{Page: PageArtifacts, Label: "Artifacts"},
 				{Page: PageMedia, Label: "Media"},
 			},
 		},
@@ -239,39 +239,53 @@ func HubTabs() []HubTab {
 			Page:  PageEditor,
 			Label: "Code",
 			SubPages: []HubSubPage{
-				{Page: PageEditor, Label: "Files & Diff"},
-				{Page: PageGit, Label: "Worktrees"},
-				{Page: PageHistory, Label: "Proposals"},
-				{Page: PageArtifacts, Label: "Artifacts"},
+				{Page: PageEditor, Label: "Files & review"},
 			},
 		},
 		{
 			Key:   "4",
-			Page:  PageDocs,
-			Label: "Docs",
+			Page:  PageBugs,
+			Label: "Issues",
 			SubPages: []HubSubPage{
-				{Page: PageDocs, Label: "Context & Deps"},
-				{Page: PageDocsComponents, Label: "Components"},
-				{Page: PageDocsDecisions, Label: "Scenarios & ADRs"},
-				{Page: PageDiagrams, Label: "Architecture"},
+				{Page: PageBugs, Label: "Issues"},
+				{Page: PageIssueDetail, Label: "Issue Detail"},
 			},
 		},
 		{
 			Key:   "5",
+			Page:  PageDocs,
+			Label: "Docs",
+			SubPages: []HubSubPage{
+				{Page: PageDocs, Label: "Context"},
+				{Page: PageDocsComponents, Label: "Components"},
+				{Page: PageDocsDecisions, Label: "Scenarios & decisions"},
+				{Page: PageDiagrams, Label: "Architecture"},
+			},
+		},
+		{
+			Key:   "6",
+			Page:  PageGit,
+			Label: "Branches",
+			SubPages: []HubSubPage{
+				{Page: PageGit, Label: "Worktrees"},
+			},
+		},
+		{
+			Key:   "7",
 			Page:  PageInstructions,
 			Label: "Settings",
 			SubPages: []HubSubPage{
 				{Page: PageInstructions, Label: "Trust"},
 				{Page: PageModels, Label: "Models"},
-				{Page: PageRoles, Label: "Roles & Budgets"},
+				{Page: PageRoles, Label: "Roles & budgets"},
 				{Page: PageSkills, Label: "Skills"},
 				{Page: PageConnections, Label: "Connections"},
-				{Page: PageExternalWork, Label: "External Work"},
+				{Page: PageExternalWork, Label: "External work"},
 				{Page: PageBootstrap, Label: "Bootstrap"},
 				{Page: PageLessons, Label: "Lessons"},
 				{Page: PageMemory, Label: "Memory"},
 				{Page: PageAmbient, Label: "Ambient"},
-				{Page: PageCloud, Label: "Cloud Copies"},
+				{Page: PageCloud, Label: "Cloud copies"},
 			},
 		},
 	}
@@ -1043,7 +1057,7 @@ func (s *State) ActiveListLength() int {
 		if s.Project == nil {
 			return 1
 		}
-		return len(dashboardPages)
+		return len(s.inboxItems(themeForPalette(s.Palette)))
 	case PageProject:
 		if s.Scan != nil && len(s.Scan.Phases) > 0 {
 			return len(s.Scan.Phases)

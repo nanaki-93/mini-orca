@@ -225,31 +225,6 @@ func (s *State) dispatchCleanupMerged(ctx context.Context, cl *Client, reqID str
 	return nil
 }
 
-func (s *State) renderWorktreeDetail(th ansiTheme, width int) []string {
-	lines := renderPageHeader(th, "Worktree", "[r] Refresh · [R] Update index · [m] Merge · [x] Reject · [c] Cleanup · [Esc] Back")
-	wt := s.selectedWorktree()
-	if wt == nil {
-		return append(lines, "  No worktree selected.")
-	}
-	contentW := issuePanelContentWidth(adaptivePanelWidth(width))
-	rows := renderDiagnosticRow(th, th.cyan, "Branch:", th.fg, wt.Branch, contentW)
-	rows = append(rows, renderDiagnosticRow(th, th.cyan, "Path:", th.fg, wt.Path, contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.cyan, "Commit:", th.fg, wt.Head, contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.amber, "Status:", th.fg, worktreeStatus(*wt), contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.red, "Error:", th.fg, wt.Error, contentW)...)
-	rows = append(rows, renderDiagnosticRow(th, th.green, "Next:", th.fg, s.worktreeNextAction(wt), contentW)...)
-	for _, entry := range wt.Sessions {
-		rows = append(rows, renderDiagnosticRow(th, th.cyan, "Task:", th.fg, entry.Title, contentW)...)
-		rows = append(rows, renderDiagnosticRow(th, th.amber, "Result:", th.fg, entry.WorkflowReason, contentW)...)
-	}
-	if s.Repository != nil && s.Repository.MergeHead != "" {
-		rows = append(rows, renderDiagnosticBulletRows(th, th.red, "Unresolved files:", th.red, th.fg, s.Repository.Conflicts, contentW)...)
-	} else if wt.Integration == "behind" {
-		rows = append(rows, renderDiagnosticBulletRows(th, th.amber, "Changed on both branches:", th.amber, th.fg, wt.OverlapPaths, contentW)...)
-	}
-	return append(lines, th.renderPanelBox("INTEGRATION", "", adaptivePanelWidth(width), rows)...)
-}
-
 func (s *State) worktreeNextAction(wt *GitWorktree) string {
 	switch {
 	case s.Repository != nil && s.Repository.MergeHead != "":
@@ -261,7 +236,7 @@ func (s *State) worktreeNextAction(wt *GitWorktree) string {
 	case wt.Locked || wt.Prunable || wt.Error != "":
 		return "Resolve the worktree's lock or unavailable state in Git, then [r] refresh."
 	case worktreeHasUnfinishedTasks(wt):
-		return "Saved tasks are unfinished. Open Work > Tasks to inspect checks and retry, or [c] explicitly discard them; the Git branch is retained."
+		return "Saved tasks are unfinished. Open Tasks [2] to inspect checks and retry, or [c] explicitly discard them; the Git branch is retained."
 	case wt.Integration == "merged":
 		return "Integrated. [c] completes linked issues and removes the clean checkout and merged branch."
 	case wt.Integration == "behind":
@@ -269,17 +244,6 @@ func (s *State) worktreeNextAction(wt *GitWorktree) string {
 	default:
 		return "[m] Merge, mark linked issues Done and delete the worktree and branch. [x] Reject returns issues to TODO and retains committed work on its branch."
 	}
-}
-
-func (s *State) worktreeRecoveryHint() string {
-	if s.Repository != nil && s.Repository.MergeHead != "" {
-		return "Merge in progress · resolve + commit externally, then [R] Update index · [Enter] Recovery details"
-	}
-	wt := s.selectedWorktree()
-	if wt != nil && wt.Integration == "behind" {
-		return fmt.Sprintf("Destination advanced · %d overlapping paths · [Enter] Inspect before merging", len(wt.OverlapPaths))
-	}
-	return "[Enter] Inspect · [m] Merge · [x] Reject · [c] Cleanup · [r] Refresh"
 }
 
 func (s *State) handleWorktreeKey(key string) bool {

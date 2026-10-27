@@ -1,467 +1,234 @@
-# Mini-Orca TUI design guidelines
+# Mini-Orca UI guidelines
 
-Design around the developer's next action. Keep the main content and primary
-action prominent; disclose supporting metadata and explanations on demand.
-Routine actions execute from their keyboard shortcuts or colon commands without
-redundant dialogs. Palette, typography, navigation and layout may evolve as needed.
+Mini-Orca has two interfaces over the same daemon: a terminal UI (`cmd/tui`,
+`internal/tui`) and a browser workspace (`web/`, served at `/ui`). Both exist
+for three jobs, in this order:
 
-The workspace uses five areas: **Project**, **Work**, **Code**, **Docs** and
-**Settings**. The dashboard links to issues, tasks, analysis and checks without
-starting work. Keep project identity, connection and Git state visible above the
-content; keep contextual actions and command access below it. Use short page
-titles, restrained borders and explicit text states. Counts summarize recorded
-data; an empty list does not prove the project is clean.
+1. **Start a task and watch the agents** — describe a change, give it a scope
+   and "done when" criteria, start the agents and follow every stage live.
+2. **Review and apply** — read every changed file, run checks, approve the exact
+   version and apply it, with Undo for the latest Apply.
+3. **Understand the project** — browse code, read findings with their evidence
+   and read the generated handbook.
 
-Give each workspace area a consistent accent and distinguish navigation, content
-and selected rows with readable surfaces. The dashboard presents recorded counts,
-selectable activities and a next-step panel when space permits. In short terminals,
-prioritize its title and all four activity routes before supporting detail. `n`
-opens an editable task prompt on the dashboard and Tasks page; `r` runs or resumes
-analysis on the dashboard, and `:reanalyze` starts fresh analysis.
+Everything else (models, roles, skills, connections, media, missions, cloud
+copies) is supporting configuration and stays one step away from these jobs.
+[ui-behavior.md](ui-behavior.md) is the behavior contract for every workflow;
+this document owns how the interfaces are organized, look and respond.
 
-## Interaction and accessibility
+## Principles
 
-Keep actions, current state, errors and recovery paths clear. Use consistent
-keybindings, visible selection indicators (`▸`) and explicit focus in tables and
-command prompts. Color supplements text labels and badges (`[CRITICAL]`,
-`[TRUSTED]`, `[SURGICAL]`); never rely on color alone. Show progress while
-requests or jobs run and prevent duplicate submission. The terminal never freezes:
-blocking daemon actions run off the UI goroutine and set a named busy status (for
-example "Applying reviewed changes…") that renders before the request starts. The
-command bar adds elapsed time and how many keys are queued; typed keys replay in
-order once the action finishes. Esc cancels read-only actions (opening a file or
-task, reconnecting, refreshing worktrees); mutations such as Apply, merge, Undo
-and trust always finish, and Ctrl+C during one quits after it completes. The status
-bar spinner animates only while work is in flight. The first content row is a
-breadcrumb (`Workspace › View › Item`) so the current location is always visible,
-and page headers stay a short title-case name with their purpose on the same line.
+- **Show the next step.** Every view answers "what needs me now?" first. Tasks
+  that wait for review, failed runs and branches ready to merge rise to the top;
+  the primary key or button for the selected item is always visible.
+- **Detail beside the list.** Lists stay on the left; the selected item's detail
+  stays on the right (stacked below on narrow screens). Moving the selection
+  updates the detail without leaving the list.
+- **Nothing happens by looking.** Navigation, selection, filters, previews,
+  disclosures and command completion never call a model, run project code or
+  write source. Every action that does names its effect before it happens.
+- **States keep their meaning.** Unknown, unavailable, stale, partial, failed,
+  canceled and "not run" are always labeled as such; an empty list never claims
+  the project is clean, and model suggestions are never shown as verified.
+- **One vocabulary.** Both interfaces use the same workspace names, task
+  statuses, review gate and key bindings so moving between them costs nothing.
 
-Navigation is reversible. Backspace, `Ctrl+O` or `:back` return to the previous
-view with its selection, and each view remembers the row it was left on.
-`:messages` lists recent status updates and errors, newest first. Empty views say
-why they are empty and what to do next.
+## Information architecture
 
-Destructive or consequential keys ask first: rejecting a diff hunk (it rewrites
-the proposal and clears its review marks and checks), Enter in the diff view
-(Apply & commit; `a` stays direct), granting execution trust (revoking is
-immediate) and merging a worktree, whose confirmation previews the destination,
-linked issues and paths changed on both branches. Backspace means "back" and never
-deletes or dismisses anything. `NO_COLOR` selects a monochrome theme that relies on
-bold, faint and reverse video.
+Both interfaces have the same workspaces, in the same order:
 
-Preserve access to findings, explanations and diagnostics. Long paths and narrow
-terminal viewports must not hide actions or corrupt layout. Model-authored text
-remains inert; source and composed diffs stay read-only in review panes.
-Keep text contrast at least 4.5:1 on the page, panel and selection backgrounds in
-each palette. Nested text styles must restore the surrounding surface when they end.
+| Key | Workspace | Contents |
+| --- | --- | --- |
+| `1` | **Inbox** | Needs you (tasks to review, failed analysis or checks), agents working, failed or stale tasks, branches ready to merge, then the project's issues, analysis, checks and repository. |
+| `2` | **Tasks** | Every task with its brief, review gate and live agent run; views: Plan, Feature ideas, Proposals, Artifacts, Media. |
+| `3` | **Code** | Review when a proposal is open (changed files beside the diff); otherwise a read-only explorer (files beside the source). |
+| `4` | **Issues** | Findings with filters beside the selected finding's problem, evidence, source and proposed fix. |
+| `5` | **Docs** | The handbook: context, components, scenarios and decisions, architecture. |
+| `6` | **Branches** | The main checkout and agent worktrees beside the selected branch's tasks, integration state and next step. |
+| `7` | **Settings** | Trust, models, roles and budgets, skills, connections, external work, bootstrap, lessons, memory, ambient analysis, cloud copies. |
 
-At 100 columns and 20 rows or above, use the sidebar; below that, keep numbered
-workspace tabs and the active view visible. Fit the real terminal dimensions, including
-when showing a resize prompt below 52 columns or 16 rows. Small diff panes must
-retain visible code, and split diffs must retain both sides. Palettes supply their
-own backgrounds so the Paper palette remains readable in dark terminals too.
+The browser has no numbered keys for workspaces; it uses `g` sequences
+(`g h` Inbox, `g t` Tasks, `g c` Code, `g i` Issues, `g d` Docs, `g b` Branches,
+`g s` Settings) and the sidebar. A task opens on its own page there, with the
+GitHub pull-request structure: **Conversation**, **Files changed**, **Checks**
+and a **Ready to apply?** rail.
 
-The command menu opens with `:` or `Ctrl+K` and supports search, completion,
-editable arguments and session command history. Keep its input above the results
-and the selected command's explanation visible, including in compact terminals.
-Results rank exact commands, then command prefixes, then word starts, with this
-session's recent commands first on an empty query and a subsequence fallback for
-typos. Browsing or completing a command is passive. Enter explicitly runs the
-chosen command; commands requiring arguments stay in the editor until supplied.
-Show a missing-argument message and usage guidance, and label Enter as needing
-arguments until a value is supplied. Checkout choices explain their scope and
-purpose; `main` selects the project checkout and `task` its selected task worktree.
-Pasted text is inert outside that editor. Keep existing guards on every command
-route. Opening a project and planning a custom task have visible prompt shortcuts.
-`Ctrl+K` preserves an already-open input draft and cannot bypass a confirmation.
+### Task status
 
-Use Page Up/Down for overflowing pages, diagnostics, help and dialogs; Home/End
-reaches the beginning/end. Keep confirmation actions visible while its message
-scrolls. Resizing preserves an explicit reading position; moving selection or
-navigating restores focus tracking. Compact task stages retain workflow state
-and fresh-consent recovery guidance, reachable by paging even when space is tight.
-Error overlays expose recovery and command access and consume shortcuts
-that would otherwise act on the obscured page. Source views support paging and
-horizontal panning without exposing diff-review actions.
+A task is always in exactly one of these states, shown with the same glyph and
+label everywhere:
 
-## Product behavior
+| Glyph | Label | Meaning |
+| --- | --- | --- |
+| `◉` | Needs review / Changes requested | Agents finished; the human decides. |
+| spinner | Agents working / Canceling | A run is active. |
+| `✖` | Failed / Interrupted | The run stopped; the reason and recovery are on the task. |
+| `◌` | Stale | The project changed since the proposal; plan again. |
+| `○` | Draft | No run yet. |
+| `✔` | Applied / Committed | Written to the checkout. |
+| `⊘` | Canceled / Undone | Ended without applying. |
 
-Navigation, disclosures and previews do not dispatch providers, execute project
-code or write source. Keep provider consent and execution trust tied to the
-relevant action and scope. Explicit Apply/Undo and stale-evidence checks remain
-enforced. Never invent project facts or present suggestions as verified results.
-Unknown, unavailable, stale, partial, failed and canceled states retain meaning.
+### Review gate
 
-Task selection opens an editable plan without generation. Make approach, evidence,
-write/read scope, criteria and non-goals inspectable before explicit approval.
-Investigation is an explicit action (`i` / `:investigate`) using the Code
-profile, with remote-provider confirmation when required. Keep it asynchronous
-and cancelable (`x` / `:cancel-investigation`), retaining the draft on failure or
-cancellation. Show pending approach, quoted evidence, assumptions, suggested
-scope and criteria in the existing plan sections, labeled as model suggestions.
-Acceptance (`a` / `:accept-investigation`) updates the editable draft and clears
-prior approval; it does not generate code. Suggested paths require explicit scope
-editing. Discard results after project or draft replacement, and keep navigation
-and command-menu browsing passive. Remove accepted citations to paths removed
-from scope; replanning against the current base clears captured citations so
-old source evidence cannot block a fresh investigation.
-Automatic repair is opt-in. Failed checks may suggest additional scope, but cannot
-silently expand an approved plan. Stage retries must state which work is reused.
-Retrying failed creation retains the saved task and worktree even when no proposal
-changes exist. Explicit retry loads that checkout's local settings when needed
-before fresh provider consent; it does not require a manual settings-scope command.
-Failed settings reads and changed or canceled requests cannot start generation.
-Stage details show the model budget alongside elapsed time. Testing generates
-test files before verification; missing check results must not imply tests have
-run. Busy stages do not advertise a duplicate retry. Timeout recovery identifies
-the relevant model or check limit, and interrupted checks do not trigger code repair.
+Apply is offered only when every condition holds, and the gate lists them in
+this order with their current state: **Agents finished**, **Reviewers** (the
+recorded verdict, else the specialists' verdicts), **Files reviewed** (every
+changed file viewed at the current proposal hash), **Checks** (every required
+check passed) and, in the browser, **Your approval** of this exact version. The
+gate is derived from daemon state; the daemon re-checks every condition when
+Apply is requested.
 
-Mission plans share Work's plan surface. `:missions` reads local history;
-`:mission-scope main|task` explicitly selects the checkout. Enter inspects a
-saved plan and its binding freshness. Keep current and stored revisions,
-dependency/integration order, captured paths, child allocations and review state
-available through Overview, Children, Scope and Budget sections. History source
-freshness is unchecked until detail inspection. Preserve history selection by ID.
-`:plan` returns to the ordinary task plan without losing either draft.
+## Terminal UI
 
-`:mission-new <goal>` creates a local draft. `:mission-edit` edits goal, files,
-integration order, or the selected child's title, approach, criteria, writes,
-reads and dependencies (`depends`). Lists use semicolons. `:mission-child <id>`
-selects or adds a child; `:mission-remove <id>` removes it locally, leaving any
-dependent references for explicit correction. `:mission-budget
-mission|planning|child <field> <integer>` edits the displayed allocations within
-their effective ceilings. These edits are passive. `e` opens the relevant field
-editor, and `j/k` selects children in the Children section. Saving (`s` /
-`:mission-save`) validates the complete graph and clears previous reviews and
-approval. Unsaved edits cannot reuse approval of the saved plan.
+### Frame
 
-Decomposition (`g` / `:mission-plan`) is a separate confirmed, asynchronous model
-action. Disclose the checkout, current catalog, goal, every captured path/hash
-or planned absent path, applicable instruction sharing, Code model and
-destination, and both the planning budget and future mission allocation.
-Recheck the captured draft and settings on confirmation and queued dispatch;
-refresh local provider metadata before transport. Prevent duplicate submission.
-`x` / `:mission-cancel` stops owned transport and retains the draft. Failures or
-cancellation require local history refresh before retrying, because saving may
-have completed before the receipt was lost. Reject late/replaced results, and
-clear private mission state when its project or task checkout changes.
-An inspected execution retains its owner when opening an exactly owned nested
-child. An owner revision change invalidates action consent and requires explicit
-refresh; it does not discard the retained mission or adopt unrelated source changes.
+The frame is four fixed rows around a body of bordered panes:
 
-Review (`r` / `:mission-review`) shows the selected concrete child's approach,
-criteria, paths, dependencies and budget in a scrollable confirmation bound to
-the exact saved plan hash and catalog revision. Final approval (`a` /
-`:mission-approve`) requires all children reviewed and a separate confirmation
-of that hash. These decisions start no child execution and grant no Apply
-authority. History, section navigation, command completion and local editing
-never invoke providers or checks. Mission controls replace ordinary task
-generation shortcuts while the mission view is active; `:mission-draft` returns
-from history to the retained draft.
+1. **Header** — brand, project, branch and modified state on the left; live
+   activity (spinner and what is running, or the live-media indicator),
+   execution trust and the daemon connection on the right. When space is short
+   the project name shrinks first, then the branch.
+2. **Workspaces** — `1 Inbox … 7 Settings` with attention counts; the active
+   workspace is filled. Narrow terminals drop the hint, then show keys only with
+   a dot for workspaces that need attention.
+3. **Body** — one or two panes. Each pane has a rounded border, a title in the
+   top border (the workspace's views as tabs: the current one emphasized,
+   `Tab`/`Shift+Tab` to switch; when they do not fit, the current view and its
+   position) and a position indicator (`11–20 of 48`) in the bottom border when
+   it scrolls. The focused pane's border uses the accent color.
+4. **Hints** — the keys that act on the selection, the primary one filled;
+   `+N more` when they do not fit. Cancel is pinned on the right of confirmations.
+5. **Messages** — an error, busy work with elapsed time and queued keys, or the
+   latest status message. `:messages` lists them newest first.
 
-Enter on an approved plan or `:mission-execution` inspects execution in the same
-four sections. `:mission-draft` returns to the retained plan. Keep navigation and
-refresh passive, preserve local edits, selected child and scroll as progress arrives,
-and show unavailable progress without replacing the last receipt. Local event
-subscriptions reconnect with their acknowledged cursor, use bounded passive reads
-for lease/effect changes, and stop on navigation, pending mutations or scope change.
+At 96 columns or more, split views show list and detail side by side; below
+that they stack, the list taking about two fifths of the rows (half below 18
+rows). Below 52 × 16 a resize prompt replaces the frame without losing state.
+Every row is exactly the terminal width; tests assert this for every view.
 
-Preparation (`p` / `:mission-prepare`) confirms the approved plan and clean Git
-base without executing models or checks. Starting (`g` / `:mission-start`) confirms
-the actual configured Creation, Testing and Review profiles, provider destinations,
-shared context, check commands and fixed allocations for ready children. Check
-trust (`t` / `:mission-trust`) is a separate confirmation for the exact owner;
-recording it runs no commands. Pause (`P` / `:mission-pause`) interrupts the active
-wave; Stop (`X` / `:mission-stop`) permanently cancels the mission. Neither control
-resets consumed child allocations. Show unstarted allocations separately from
-measured model usage, and recorded elapsed charges separately from active reservations.
+### Panes and content
 
-Enter or `:mission-proposal` opens the selected owned child in the ordinary diff
-inspector. Every changed file still needs `w` review and explicit Apply/commit.
-Committing returns to the mission for `a` / `:mission-integrate`, bound to its
-approved order, exact proposal, commit and current destination. A task-scoped
-integration updates that task's owner and never replaces the top-level project.
-Invalidate check trust and require current command/settings inspection after a
-base advance. An older-base proposal uses `v` / `:mission-revalidate` to create a
-fresh candidate and run consented checks without model calls or inherited approval.
+- Selected list rows have a selection background and an accent bar (`▌`).
+  Lists never re-center on every key: the window moves only to keep the
+  selection visible.
+- Section headings inside panes are short, muted and uppercase (`READY TO
+  APPLY?`, `AGENT RUN`, `CHANGED FILES`); facts are label/value rows.
+- Diffs show old and new line numbers, `+`/`−` signs and tinted backgrounds for
+  added and removed lines; the hunk header names the line ranges and the hunk's
+  position in the file. `v` cycles focused hunk, unified stream and side by
+  side; `e` shows the rationale and the criteria a file claims to meet in at most
+  a third of the pane, scrolled with PgUp/PgDn so code stays visible.
+- Source views show a line-number gutter and the cursor line; `h`/`l` pan.
+- Pages without their own layout render inside one pane titled with the
+  workspace's views; their content scrolls with PgUp/PgDn and follows the
+  selected row.
 
-Show failed/interrupted children, candidate generations, protected proposal
-references, Git conflicts and cleanup states in the child detail. `:mission-candidate
-0|1|2|3` inspects retained generations; `0` is the original proposal.
-`:mission-model-history` opens the original child's execution as historical
-evidence. Neither action promotes that generation into the selected candidate.
-Independent model retries cannot reset a mission child's fixed allocation.
+### Overlays
 
-Recovery (`c`) selects the applicable explicit control: `:mission-reconcile` for
-an abandoned wave, `:mission-recover-integration` for a pending Git outcome, or
-`:mission-recover-revalidation` for an interrupted candidate check. Active owner
-leases remain visible and cannot be stolen. Recovery never repeats model calls,
-checks or merges. `:mission-cleanup` retries only a proven integrated child's
-checkout/branch cleanup. After transport cancellation, `r` / `:mission-execution`
-reads the same owner's current revision before inspecting retained receipts;
-uncertain outcomes never become success or trigger automatic replay.
+The command palette (`Ctrl+K` or `:`), confirmations, the keyboard reference
+(`?`), errors and the message log float over a faint backdrop of the
+workspace. On terminals narrower than 70 columns or shorter than 18 rows they
+take the full width and height. Confirmations name their exact effect and pin
+their actions; long messages scroll with PgUp/PgDn. An open overlay owns the
+keyboard; it never forwards keys to the page behind it.
 
-Task stages follow recorded node identities, including separate generation and
-verification and parallel specialist reviews. Selection and scroll remain stable
-as progress arrives. Unknown nodes remain inspectable, and interrupted or missing
-evidence never becomes success. Native execution completion does not approve a
-proposal. Older combined testing summaries are labeled Testing; unavailable native
-history falls back to those summaries with an explicit availability message.
-Inspection reads bounded, source-free progress for the exact project revision,
-checkout and workflow. Private model text requires a separate explicit disclosure.
+### Keyboard
 
-Use Left/Right in task detail for Overview, Timeline, Evidence, Usage and Recovery;
-Tab continues to change workspace views. Timeline lists invocation IDs. Explicit
-`:run-output <ID>` opens bounded private output and tool argument/result records
-in Evidence; `:hide-output` closes it. Sanitize terminal control bytes and label
-truncation. Updates preserve selected stages and scroll instead of following text.
-Progress reconnects with the last acknowledged cursor and stops when inspection
-ends or its project, checkout or workflow changes. A private disclosure refreshes
-only while open. `:stream-output on|off` controls streaming for new workflows and
-retries through the existing provider capability and consent checks.
+| Keys | Action |
+| --- | --- |
+| `1`–`7`, `[` / `]` | Workspace |
+| `Tab` / `Shift+Tab` | View within the workspace |
+| `↑`/`↓`, `j`/`k` | Selection |
+| `←`/`→`, `h`/`l` | Detail sections, diff panning, options on settings rows |
+| `Enter` | Open or primary action (Apply from the diff asks first) |
+| `Esc`, `Backspace`, `Ctrl+O` | Back; previous view with its selection |
+| `PgUp`/`PgDn`, `Home`/`End` | Scroll the detail |
+| `Ctrl+K`, `:` | Commands |
+| `?` | Keyboard reference for the current view |
+| `p` | Next palette (Tokyo, CRT, Amber, Paper; `NO_COLOR` is monochrome) |
+| `Ctrl+C` | Quit |
 
-Recovery shows the exact pending proposal scope, hashes and destination.
-`:run-input approve|reject|cancel` records a guarded decision; per-file diff review
-and Apply remain separate. `:run-cancel` cancels an active native root. Task pause
-and resume are unavailable; use cancellation and a guarded stage retry. Analysis
-retains its own pause/resume controls. Usage displays the shared run budget once,
-with unavailable token measurements explicitly identified.
-Timeline also shows bounded local spans shared by retries and child work, with
-parent identities, execution outcomes and measured durations. Label omitted and
-unfinished spans; span completion does not imply a passing check or approval.
-Usage distinguishes reported tokens from conservative charges and shows the
-version/currency of a configured price table. If measurements or rates are
-incomplete, show an unknown total and a separately labeled known subtotal.
-Cost remains an estimate, not an invoice. These panels stay passive and fit the
-minimum terminal size in every palette using the existing detail scroller.
+Review keys: `d` open the diff, `w` mark reviewed and move on, `W` next
+unreviewed without marking, `n`/`N` hunks, `f` next file, `v` layout, `z`
+compare with the last review, `a` apply and commit, `u` guarded undo, `x`
+reject. Task keys: `n` new task, `Enter` stages, `r` retry, `x` cancel or reject,
+`m` merge the task's branch.
 
-`:run-export` opens a scrollable confirmation for the current retained snapshot.
-Show the checkout and current/stored revisions, invocation, exact destination,
-destination fingerprint and snapshot hash, plus finished, unfinished and omitted
-span counts. Browsing or opening this confirmation sends nothing. Revalidate the
-captured scope, snapshot and destination both on confirmation and before queued
-dispatch. Receipts distinguish accepted, partially rejected, warning and unknown
-delivery; unknown acceptance is never displayed as zero. Ignore late receipts
-for a replaced request or checkout. Exports do not grant proposal approval or
-Apply authority, and no export retries automatically.
+### Responsiveness
 
-Long detail content scrolls with Page Up/Down; long diff lines scroll horizontally.
-Keep full-proposal review distinct from comparison against the previous review.
-Mark changed files individually (`w` moves to the next unreviewed file; `W` jumps
-there without marking; wide terminals list the changed files beside the diff with
-their review state), invalidate progress when the proposal changes,
-and show Apply's commit destination. Worktree Apply commits the reviewed proposal
-and moves it from Tasks to Worktrees as `TO_MERGE`; it never merges automatically.
-Withhold linked issues from the issue lists while awaiting that decision. Explicit
-Merge marks them Done and removes the worktree and its branch. Reject returns
-them to TODO and retains the unmerged branch. Model rationale and criterion references
-are advisory; distinguish reproduced failures, tests already passing, and checks
-that could not execute. Progress timings are diagnostics, not measured speedups.
+Blocking daemon actions run off the UI goroutine. The header and message line
+name the work and its elapsed time; keys typed meanwhile replay afterwards.
+`Esc` cancels read-only work; mutations (Apply, merge, Undo, trust) always
+finish. Spinners animate only while work is in flight. Resizing keeps an
+explicit reading position; moving the selection follows focus again.
 
-Keep lists focused on selection and next actions. Task stages, feature evidence,
-and worktree recovery belong in detail views. Plans separate approach, evidence,
-scope and acceptance; issue details separate problem, evidence and solution.
-`Tab` / `Shift+Tab` always switch sidebar views, including from task plans and
-detail pages. Left/Right (or `h`/`l`) switch detail sections without requests or
-mutations. Preserve full content through scrolling. Keep a compact model summary
-in the sidebar at every supported sidebar height. Detailed routing, settings and
-workspace statistics belong on their own pages. Diff explanations are initially
-collapsed and remain reachable with `e`.
+## Browser workspace
 
-Model lists show assignments and access boundaries; full parameters and preset
-routing belong to the selected item's scrollable details. Worktree details show
-the recovery action for the current state rather than every possible workflow.
+### Shell
 
-Keep Models, Roles & Budgets, and Skills as separate Settings lists. Show the
-selected checkout path, settings version and configured/overridden/stale state.
-The main checkout and selected task worktree have separate overrides. Navigation
-and selection remain passive; explicit refresh reads only local settings.
-Budget and role edits and skill enablement require a scoped confirmation, affect
-future runs, and preserve active runs' captured settings. Skill validation reports
-captured metadata and hashes without execution or tool grants. Required tools
-are declarations; availability is checked for each invocation. Preserve the
-selected skill by directory across refreshes. Canceling a save leaves its outcome
-unknown until refresh. Display stale and unavailable states without inventing
-defaults. Provider confirmation identifies selected workflow models, destinations
-and captured paths; changed routing, settings or task input invalidates consent.
+- **Sidebar** — project switcher, New task, the workspaces with counts,
+  Settings and collapse. Collapsed, it keeps icons with tooltips.
+- **Top bar** — the checkout menu (main checkout or an agent worktree; every
+  page then shows that checkout), the page title and the command palette
+  trigger (`⌘K` / `Ctrl+K`).
+- **Status bar** — connection to the live event stream, busy work, running
+  agents, trust, models, project path, version and the shortcut reference.
 
-Connections uses one compact list with explicit MCP, OpenAPI, A2A outbound and
-A2A inbound labels. Selected details show the checkout, destination, credential
-references, permissions and expiry without displaying grant tokens. Keep failed
-requests and unavailable inventories distinct from empty configuration, expired
-grants and confirmed disconnection. Refresh reads local metadata. Discovery and
-incoming access require scoped confirmation; cancellation leaves the outcome
-unavailable until refresh. OpenAPI schema readiness does not imply endpoint
-availability. Preserve selection by kind and ID, including partial refreshes.
-When Settings exceeds the sidebar height, window its subviews around the active
-view and retain all hub shortcuts and all three model summaries.
+Pages update from the daemon's event stream; a lost stream reconnects with
+backoff and the status bar says so. Light, dark and system themes share one
+token set; keep text at 4.5:1 contrast or better against its surface.
 
-Selecting up to two MCP/API connections for a draft does not start an
-investigation or share source. Before dispatch, separately confirm provider and
-tool destinations with the captured plan scope, and invalidate changed grants,
-inventories, routing or draft input. Show the selected connections on the plan.
-Incoming access and outbound remote agents remain separate capabilities; neither
-grants local Apply, merge or project execution permission.
+### Pages
 
-External Work keeps API actions, retained research reports and remote advisory
-tasks in one scoped history. Local refresh and private receipt inspection are
-passive. API dispatch requires inspection of the complete persisted request and
-a separate confirmation bound to its current version and hash. Uncertain delivery
-never offers retry; reconciliation records an externally checked user observation.
-Cancellation or failed control transport requires local history refresh before
-another action. Preserve selection by receipt kind/ID and healthy history groups
-when another group is unavailable.
+- **Inbox** — grouped rows (Needs your review, Agents working, Failed, Ready to
+  merge, Recently applied) with open issues and analysis coverage beside them.
+- **Tasks** — grouped list with status filters and `j`/`k`/`Enter`.
+- **Task** — Conversation (brief, criteria, scope, the agent timeline with
+  reviewer verdicts, messages, revise), Files changed (file tree with viewed
+  marks and progress, unified or split diff with expandable context, "since last
+  review"), Checks (results with output), and the Ready to apply? rail with Apply,
+  commit message and Undo.
+- **Code** — virtualized file tree, editor tabs per checkout, highlighted
+  source with issue markers and line links, an inspector with Explain and "New
+  task with this file".
+- **Issues**, **Docs**, **Branches** (merge preview with commits and diff, merge
+  and abort) and **Settings** follow the same list-and-detail structure.
 
-Research and delegation capture the current plan's indexed source hashes before
-confirmation. List every shared path/hash and explicitly identify planned paths
-without indexed content as unshared. An entirely unavailable source selection
-requires correction or an explicit `--question-only` choice. Confirm the provider
-or remote destination, search/delegation intent and source sharing; changed plans,
-models, grants, cards or checkout invalidate pending consent. Keep remote usage
-labeled as remotely reported and output as advisory, including partial artifacts.
-Offer task refresh, stream reconnection, input, cancellation and reconciliation
-only when the current receipt and connection permit them. A remote status refresh
-is a separate confirmed network action from refreshing local history.
+### Task composer
 
-Open a retained research report only on Enter or `:report-open`. Use its guarded
-loopback URL and a system browser argument vector, preserving the HTML report's
-citations and original search suggestions. The terminal shows report metadata;
-navigation does not launch a browser or contact a provider.
+Title, optional description, kind (fix, feature, performance, security), the
+files agents may change (up to eight; a companion test is suggested for every Go
+file and a test file is required to start agents) and "done when" criteria.
+**Save draft** and **Start agents** (`⌘↵`) are explicit; starting lists every
+remote model destination for consent first.
 
-Artifacts lives in Code; Memory sits beside Lessons in Settings. Both share an
-explicit main-checkout or task-worktree scope. Lists show local metadata, versions,
-ownership, source references, freshness and retention without reading payloads.
-Enter explicitly discloses retained text in the scrollable read-only details;
-binary artifacts remain metadata. Mark bounded previews as truncated. Research
-artifacts link to the cited HTML report and open it only on an explicit action.
+### Implementation rules
 
-Artifact export and deletion each require a confirmation naming the checkout,
-exact version and hash. Show the actual private export path/hash from its receipt.
-Protected recovery evidence and unfinished-run references cannot be deleted.
-Pagination stays bound to a catalog snapshot; changed catalogs require refresh.
-These pages never inherit proposal Apply/Undo shortcuts.
+- React + TypeScript; server state through TanStack Query only; one hash
+  router whose `wt` parameter carries the selected checkout.
+- Strict CSP: same-origin scripts, styles and fonts, no inline script, and one
+  per-response nonce for the style tag dialogs inject. Never add inline styles
+  through HTML strings; React style props are set through the CSSOM.
+- Every request carries the Web UI marker header; mutations carry the guarded
+  proposal identity; failures show the daemon's user message.
 
-Create/edit advice by capturing current plan, open-file or retained-record source
-hashes before confirmation. Show uncaptured planned files explicitly; retain at
-least one current source. Edits create a candidate again. Accept only inspected,
-current, unexpired candidates; rejecting a candidate and forgetting accepted
-advice are separate confirmed actions. Retained proposal lessons and check outcomes
-must derive their text through the existing proposal authority owner. Display
-accepted memory as advisory context, never permission or current verification.
-Explicit source links verify checkout and content identity and remain read-only.
+## Accessibility
 
-Library requests own cancellation and reject changed scope or record identity.
-Preserve healthy inventory when another group fails and keep selection by record
-ID. Canceled or failed mutations require refresh before another action; exported
-copies may already exist if transport lost the receipt. Hide private previews on
-request, and never claim an unavailable inventory is empty.
-
-Work / Media (`:media`) groups Attachments, Live sessions and Outputs without
-adding a workspace. `:media-scope main|task` selects the checkout; `a/l/o` changes
-the section. Refresh (`r`) reads local metadata. It neither contacts a provider
-nor reads files from a guessed path. An unavailable catalog stays unavailable;
-retained rows are labeled as the last known state.
-
-Import (`n` / `:media-import <path>`) captures at most 512 KiB from an explicitly
-selected regular file inside that checkout, rejecting symlinks and path escapes.
-Review the captured name, MIME, byte count and hash before private local import.
-PNG, JPEG, PDF, supported WAV and raw 16 kHz PCM have no implicit conversion.
-Space selects up to four immutable imported versions totaling at most 1 MiB.
-Ask (`q` / `:media-ask <question>`) separately confirms the exact question,
-versions, checkout, settings and Code provider destination. Answers remain
-advisory. Enter explicitly discloses private retained text; Esc hides it.
-Binary/audio outputs expose metadata and a confirmed private export (`e`), with
-no automatic playback. Older outputs remain available in Code / Artifacts.
-
-`:live-open` confirms the configured live destination, conservative budget and
-bounded lifetime. Missing `agent_runtime.live_model` or an unsupported Code
-profile explains the configuration required. Inspect a session with Enter before
-acting. `s` / `:live-send <text>` confirms each text input; `:live-send-media`
-confirms exactly one selected JPEG or raw PCM version of at most 64 KiB.
-`:live-interrupt` and `:live-close` are explicit controls. Reconnect is a separate
-confirmation using the remaining lifetime and budget; it never replays input.
-Show acknowledged progress, reported partial usage and conservative charges as
-distinct values. Transcript/audio artifacts appear after a connection ends.
-
-The visible session uses a cancelable passive metadata watcher. Leaving Media
-stops that watcher while the daemon retains its bounded session owner; other
-pages show a reminder to return to Media and explicitly close it. Cancel (`x`)
-stops the pending local request, retaining its draft. A failed or canceled
-operation may have a retained outcome and requires refresh before another
-mutation; close remains available. Confirmation and dispatch bind the exact
-checkout, selection, settings and control revision. Replaced or late responses
-cannot update a different view or authorize another request.
-
-Settings / Ambient (`:ambient`) shows the main-checkout watch, provider permission,
-expiry, next eligibility, last attempt and conservative window consumption.
-Refresh (`r`) reads the current index and local receipt without provider calls;
-it may adopt a newer revision of the same project. Enter discloses paths, exact
-destination, limits and receipt details; Page Up/Down keeps them accessible in
-compact terminals. Retained data is labeled last known when refresh fails.
-
-Watch (`w` / `:ambient-watch changes <path; path>` or `:ambient-watch interval
-<seconds> <path; path>`) edits a retained draft and confirms one to eight indexed
-sources. This permits only detection. Grant (`g` / `:ambient-grant [seconds]`)
-separately confirms selected source and filtered-context sharing, the actual
-model/destination, expiry and fixed per-attempt/window budgets. Bind confirmation
-and queued dispatch to the current checkout, draft, settings, scope and control
-revision. Changing a draft or scope invalidates pending confirmation.
-
-Revoke (`v`) and Disable (`d`) explicitly stop daemon work; charges and receipts
-remain. Cancel (`x`) only stops the local request. An unavailable control receipt
-may have a retained outcome and requires refresh before another control. Preserve
-the draft and healthy last-known metadata through failure or cancellation. Cancel
-local transport on navigation, project replacement and quit, reject late results,
-and never replay missed controls. Navigation, inspection and command completion
-cannot grant provider permission or start project commands.
-
-Inspecting a failed task never retries it. Failed tasks remain restorable in Tasks
-with their check errors, even when the worktree has no new commits. Equal Git HEADs
-alone must not label such a task integrated. Starting a second task in an occupied
-write scope requires finishing or discarding the existing task. Worktree refresh
-is passive; cleanup is explicit and must wait for the daemon's removal receipt.
-Keep integration, merge conflicts and cleanup warnings distinct. External merge
-resolution must remain recoverable through refresh and guarded cleanup.
-Updating the index after external changes is a separate explicit action; it stops
-outdated destination checks and workflows. Remember project trust across reopening
-and reindexing, rebinding execution authority to current validated sources. Keep
-revocation available and report failures to save or restore trust.
+- Color always pairs with a glyph or a word; `NO_COLOR` and monochrome palettes
+  rely on bold, faint and reverse video.
+- Every interactive element is reachable by keyboard; the browser shows focus
+  rings and uses Radix primitives for dialogs, menus, tabs and tooltips.
+- Text stays readable at the smallest supported size: nothing that explains
+  an action or a failure is truncated without a way to read it in full.
 
 ## Verification
 
-Use deterministic Go tests (`go test -race ./internal/tui/... ./cmd/tui/...`)
-across all 5 hubs, sub-views, palettes and terminal dimensions. Exercise
-loading, empty, populated, pending-input, disconnected, failed, partial, stale
-and canceled states, keyboard navigation, colon commands, action reachability
-and late-response identity guards. Check compact and wide layouts, full approval
-paths and hashes, manual scrolling across resize, and that inspection never
-submits approval, calls a provider, executes checks or changes source.
-
-## Cloud copies
-
-Settings → Cloud Copies (`:cloud`) reads local configuration and transfer
-receipts for the main checkout. Navigation, details and Refresh (`r`) never
-probe Google services. Configured destinations do not imply availability.
-Opening the view from a main-checkout artifact or an inspected task can prefill
-its source; the user still selects a preview and confirms copying separately.
-
-Preview (`e` / `:cloud-preview <destination> artifact|session <source-id>`) reads
-the exact selected local archive. Show its source revision/version, hash, size,
-principal, Google project, region and resource in scrollable details. Copy (`c`)
-requires a separate confirmation of private data sharing. Bind confirmation and
-queued dispatch to the exact source, destination, checkout, draft and selection.
-An edited or replaced selection requires a fresh review.
-
-Select a retained copy for explicit remote Check (`i`) or Delete (`d`). Refresh
-reads local receipts only. Preserve original source revisions after reindexing;
-require the destination's recorded configuration for remote recovery. Distinguish
-completed, unknown, missing and deleted outcomes. An expired operation lease
-permits explicit recovery, never an automatic upload replay. Retention is a
-manual cleanup deadline; provider backups and soft-delete may retain data after
-live-copy deletion. Local originals and approval authority remain local.
-
-Cancel (`x`), navigation, project replacement and quit stop owned local transport.
-Preserve drafts and healthy metadata on errors, reject late/replaced results and
-require local refresh after uncertain controls. A successful HTTP response with
-an unknown remote outcome must stay visibly unknown. Keep five workspaces and
-use the existing palettes, text status labels, selection marker and scrolling.
+- TUI: `make tui-test` (`go test -race ./internal/tui/... ./cmd/tui/...`). The
+  frame tests render every workspace and overlay at sizes from 52 × 16 to
+  220 × 60 and assert exact frame size; behavior tests cover navigation,
+  passive browsing, consent and identity guards. `MINI_ORCA_TUI_FRAMES=<dir> go
+  test ./internal/tui -run TestWriteFramesForVisualReview` writes ANSI frames of
+  every view for visual review.
+- Browser: `make webui-test` (type-check and vitest), `make webui-dist-check`,
+  `go test ./internal/api/handlers ./cmd/daemon`, and a browser check of changed
+  pages in dark and light themes with no console or CSP errors.
