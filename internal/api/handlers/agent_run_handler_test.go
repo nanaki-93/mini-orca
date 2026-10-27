@@ -17,7 +17,6 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
-	"github.com/nanaki-93/mini-orca/v2/internal/tui/client"
 )
 
 func agentHandlerFixture(t *testing.T) (*AgentRunHandler, string) {
@@ -169,7 +168,7 @@ func TestAgentDetailTraceAndCostContractRemainsScopedAndSourceFree(t *testing.T)
 	r := httptest.NewRequest("GET", "/?"+query.Encode(), nil)
 	r.SetPathValue("runID", key.ID)
 	h.Detail(w, r)
-	var detail client.AgentRunDetail
+	var detail app.AgentRunDetail
 	if err := json.Unmarshal(w.Body.Bytes(), &detail); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +185,7 @@ func TestAgentDetailTraceAndCostContractRemainsScopedAndSourceFree(t *testing.T)
 	}
 }
 
-func traceExportHandlerFixture(t *testing.T, endpoint string) (*AgentRunHandler, string, client.AgentTraceExportRequest) {
+func traceExportHandlerFixture(t *testing.T, endpoint string) (*AgentRunHandler, string, app.AgentTraceExportRequest) {
 	t.Helper()
 	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	cfg := scopedHandlerConfig("http://127.0.0.1:1")
@@ -228,7 +227,7 @@ func traceExportHandlerFixture(t *testing.T, endpoint string) (*AgentRunHandler,
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := client.AgentTraceExportRequest{ProjectIdentity: client.ProjectIdentity{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision}, Snapshot: detail.Trace.Snapshot, DestinationFingerprint: detail.Trace.Export.Fingerprint, Confirm: true}
+	request := app.AgentTraceExportRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Snapshot: detail.Trace.Snapshot, DestinationFingerprint: detail.Trace.Export.Fingerprint, Confirm: true}
 	return NewAgentRunHandler(service), run.ID, request
 }
 
@@ -280,13 +279,20 @@ func TestAgentTraceExportHandlerClientContractAndRejections(t *testing.T) {
 	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/export", h.Export)
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	cl, err := client.NewClient(server.URL)
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Close()
-	var receipt client.AgentTraceExportReceipt
-	if err := cl.DoJSON(t.Context(), "trace-export", http.MethodPost, "/api/projects/current/agent-runs/"+id+"/export", request, &receipt); err != nil {
+	response, err := http.Post(server.URL+"/api/projects/current/agent-runs/"+id+"/export", "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var receipt app.AgentTraceExportReceipt
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("export status %d", response.StatusCode)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&receipt); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != 1 || receipt.State != "exported" || receipt.Accepted == nil || *receipt.Accepted != 1 || receipt.RunID != id || receipt.Snapshot != request.Snapshot || receipt.DestinationFingerprint != request.DestinationFingerprint {

@@ -59,8 +59,7 @@ func (s *Service) runSecurityReview(ctx context.Context, request SecurityReviewR
 }
 
 func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, []project.SecurityFinding, error) {
-	ctx, err := s.securityReviewMemoryContext(ctx, snapshot)
-	if err != nil {
+	if err := s.validateSecurityReviewSnapshot(ctx, snapshot); err != nil {
 		return modelOutput{}, nil, err
 	}
 	prompt, err := securityReviewPrompt(snapshot)

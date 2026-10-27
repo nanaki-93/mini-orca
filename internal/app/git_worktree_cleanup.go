@@ -55,12 +55,6 @@ func (s *Service) removeGitWorktree(ctx context.Context, root string, source *Gi
 }
 
 func (s *Service) stopWorktreeJobs(ctx context.Context) error {
-	if err := s.stopTriggers(ctx); err != nil {
-		return err
-	}
-	if err := s.stopLiveSessions(); err != nil {
-		return err
-	}
 	s.invalidateJobsForProjectChange(stopReasonWorktreeRemoved)
 	if err := s.ShutdownChangeWorkflows(ctx); err != nil {
 		return err
@@ -91,9 +85,6 @@ func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationReq
 	}
 	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
 		return nil, fmt.Errorf("worktree branch changed; refresh Git status before discarding: %w", project.ErrRevisionConflict)
-	}
-	if err := s.guardMissionWorktree(ctx, repository.Root, source); err != nil {
-		return nil, err
 	}
 	history, err := listChangeSessions(source.Path)
 	if err != nil {

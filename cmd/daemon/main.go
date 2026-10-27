@@ -54,12 +54,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	agentServer, err := startAgentHTTPServer(application)
-	if err != nil {
-		logging.Error("Failed to initialize local A2A service", "error", err)
-		os.Exit(1)
-	}
-
 	// Log successful startup
 	logging.Info("Mini-Orca daemon started successfully")
 	for _, model := range application.EffectiveModels() {
@@ -71,7 +65,7 @@ func main() {
 	server := startHTTPServer(application, projectManager)
 
 	// Wait for shutdown signal
-	quit := waitForShutdown(agentServer.failures())
+	quit := waitForShutdown()
 	logging.Info("Daemon stopping", "reason", quit)
 	application.CancelChangeWorkflows()
 
@@ -79,9 +73,6 @@ func main() {
 	// must not leave running jobs and their check processes uncanceled.
 	httpCtx, cancelHTTP := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHTTP()
-	if err := agentServer.shutdown(httpCtx); err != nil {
-		logging.Error("Local A2A service shutdown error", "error", err)
-	}
 	if err := server.Shutdown(httpCtx); err != nil {
 		logging.Error("HTTP server shutdown error", "error", err)
 	}
@@ -156,14 +147,6 @@ func newHTTPMux(
 			current.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/projects/current/agent-triggers") {
-			api.WriteAppError(w, api.BadRequest("ambient analysis requires the main checkout", "Select the main project scope before inspecting or controlling its watch.", nil))
-			return
-		}
-		if strings.HasPrefix(r.URL.Path, "/api/projects/current/cloud-copies") {
-			api.WriteAppError(w, api.BadRequest("cloud copies require the main checkout", "Select the main project scope before inspecting cloud copies.", nil))
-			return
-		}
 		if len(paths) != 1 || paths[0] == "" {
 			api.WriteAppError(w, api.BadRequest("invalid worktree scope", "Provide worktree_path once with an absolute registered worktree path.", nil))
 			return
@@ -217,56 +200,9 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	agentHandler := handlers.NewAgentRunHandler(application)
 	settingsHandler := handlers.NewAgentSettingsHandler(application)
-	triggersHandler := handlers.NewAgentTriggersHandler(application)
-	mux.HandleFunc("GET /api/projects/current/agent-triggers", triggersHandler.Get)
-	mux.HandleFunc("POST /api/projects/current/agent-triggers/control", triggersHandler.Control)
-	cloudHandler := handlers.NewAgentCloudHandler(application)
-	mux.HandleFunc("GET /api/projects/current/cloud-copies", cloudHandler.List)
-	mux.HandleFunc("POST /api/projects/current/cloud-copies/preview", cloudHandler.Preview)
-	mux.HandleFunc("POST /api/projects/current/cloud-copies/control", cloudHandler.Control)
 	mux.HandleFunc("GET /api/projects/current/agent-settings", settingsHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/control", settingsHandler.Control)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/skills/validate", settingsHandler.ValidateSkill)
-	memoryHandler := handlers.NewAgentMemoryHandler(application)
-	libraryHandler := handlers.NewAgentLibraryHandler(application)
-	attachmentHandler := handlers.NewAgentAttachmentHandler(application)
-	mux.HandleFunc("GET /api/projects/current/attachments", attachmentHandler.Overview)
-	mux.HandleFunc("POST /api/projects/current/attachments", attachmentHandler.Import)
-	mux.HandleFunc("POST /api/projects/current/attachments/advice", attachmentHandler.Advice)
-	liveHandler := handlers.NewAgentLiveHandler(application)
-	mux.HandleFunc("GET /api/projects/current/live-sessions", liveHandler.Overview)
-	mux.HandleFunc("POST /api/projects/current/live-sessions", liveHandler.Open)
-	mux.HandleFunc("GET /api/projects/current/live-sessions/{liveID}", liveHandler.Detail)
-	mux.HandleFunc("POST /api/projects/current/live-sessions/{liveID}/control", liveHandler.Control)
-	mux.HandleFunc("GET /api/projects/current/artifacts", libraryHandler.List)
-	mux.HandleFunc("GET /api/projects/current/artifacts/{artifactID}", libraryHandler.Detail)
-	mux.HandleFunc("POST /api/projects/current/artifacts/{artifactID}/control", libraryHandler.Control)
-	integrationHandler := handlers.NewAgentIntegrationsHandler(application)
-	mux.HandleFunc("GET /api/projects/current/integrations", integrationHandler.List)
-	mux.HandleFunc("POST /api/projects/current/integrations/{integrationID}/control", integrationHandler.Control)
-	apiHandler := handlers.NewAgentAPIsHandler(application)
-	mux.HandleFunc("GET /api/projects/current/apis", apiHandler.List)
-	mux.HandleFunc("POST /api/projects/current/apis/{integrationID}/control", apiHandler.Control)
-	mux.HandleFunc("GET /api/projects/current/api-actions", apiHandler.Actions)
-	mux.HandleFunc("POST /api/projects/current/api-actions/{actionID}/control", apiHandler.ControlAction)
-	researchHandler := handlers.NewAgentResearchHandler(application)
-	delegationHandler := handlers.NewAgentDelegationHandler(application)
-	remoteServiceHandler := handlers.NewAgentRemoteServiceHandler(application)
-	mux.HandleFunc("GET /api/projects/current/agent-access", remoteServiceHandler.List)
-	mux.HandleFunc("POST /api/projects/current/agent-access/{principalID}/control", remoteServiceHandler.Control)
-	mux.HandleFunc("GET /api/projects/current/remote-agents", delegationHandler.Remotes)
-	mux.HandleFunc("POST /api/projects/current/remote-agents/{integrationID}/control", delegationHandler.ControlRemote)
-	mux.HandleFunc("GET /api/projects/current/delegations", delegationHandler.List)
-	mux.HandleFunc("POST /api/projects/current/delegations", delegationHandler.Start)
-	mux.HandleFunc("GET /api/projects/current/delegations/{delegationID}", delegationHandler.Detail)
-	mux.HandleFunc("POST /api/projects/current/delegations/{delegationID}/control", delegationHandler.Control)
-	mux.HandleFunc("GET /api/projects/current/research", researchHandler.Overview)
-	mux.HandleFunc("POST /api/projects/current/research", researchHandler.Run)
-	mux.HandleFunc("GET /api/projects/current/research/{reportID}/report", researchHandler.Report)
-	mux.HandleFunc("GET /api/projects/current/memory", memoryHandler.List)
-	mux.HandleFunc("POST /api/projects/current/memory", memoryHandler.Mutate)
-	mux.HandleFunc("GET /api/projects/current/memory/{memoryID}", memoryHandler.Detail)
-	mux.HandleFunc("POST /api/projects/current/memory/{memoryID}", memoryHandler.Mutate)
 	mux.HandleFunc("GET /api/projects/current/agent-runs", agentHandler.List)
 	mux.HandleFunc("GET /api/projects/current/agent-runs/events", agentHandler.Events)
 	mux.HandleFunc("GET /api/projects/current/agent-runs/{runID}", agentHandler.Detail)
@@ -274,14 +210,6 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/input", agentHandler.Input)
 	mux.HandleFunc("POST /api/projects/current/agent-runs/{runID}/export", agentHandler.Export)
 	mux.HandleFunc("POST /api/projects/current/plans/investigate", changeHandler.InvestigatePlan)
-	missionHandler := handlers.NewAgentMissionHandler(application)
-	mux.HandleFunc("GET /api/projects/current/missions", missionHandler.List)
-	mux.HandleFunc("POST /api/projects/current/missions", missionHandler.Mutate)
-	mux.HandleFunc("POST /api/projects/current/missions/plan", missionHandler.Plan)
-	mux.HandleFunc("GET /api/projects/current/missions/{missionID}", missionHandler.Detail)
-	mux.HandleFunc("POST /api/projects/current/missions/{missionID}", missionHandler.Mutate)
-	mux.HandleFunc("GET /api/projects/current/missions/{missionID}/execution", missionHandler.Execution)
-	mux.HandleFunc("POST /api/projects/current/missions/{missionID}/execution", missionHandler.ControlExecution)
 	gitHandler := handlers.NewGitHandler(application)
 	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)
 	mux.HandleFunc("GET /api/projects/current/git/workspace", gitHandler.Workspace)
@@ -390,18 +318,10 @@ func daemonAllowsExternalHosts() bool {
 	return ip == nil || !ip.IsLoopback()
 }
 
-// waitForShutdown also stops the daemon if its optional listener fails.
-func waitForShutdown(failures <-chan error) string {
+// waitForShutdown blocks until the daemon is asked to stop.
+func waitForShutdown() string {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
-	select {
-	case sig := <-sigChan:
-		return sig.String()
-	case err := <-failures:
-		if err != nil {
-			return "A2A listener failed: " + err.Error()
-		}
-		return "A2A listener stopped"
-	}
+	return (<-sigChan).String()
 }

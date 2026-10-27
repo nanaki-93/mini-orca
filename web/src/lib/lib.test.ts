@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fuzzyScore, rankItems } from './fuzzy';
 import { ancestors, buildTree, visibleRows } from './tree';
-import { buildHash, legacyRoute, parseHash } from './router';
+import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, isTestPath, timeAgo } from './util';
 import { parseCommits, workflowBlocker } from './workflow';
@@ -36,16 +36,6 @@ describe('router', () => {
     expect(route.segments).toEqual(['tasks', 'chg 1', 'files']);
     expect(route.params.get('wt')).toBe('/tmp/wt');
     expect(parseHash('').path).toBe('/');
-  });
-
-  it('translates TUI links', () => {
-    expect(legacyRoute('')).toBeNull();
-    expect(legacyRoute('?tab=diff&session_id=chg-1&file=a.go&worktree_path=/w')).toBe('#/tasks/chg-1/files?file=a.go&wt=%2Fw');
-    expect(legacyRoute('?tab=checks&session_id=chg-1')).toBe('#/tasks/chg-1/checks');
-    expect(legacyRoute('?session_id=chg-1')).toBe('#/tasks/chg-1');
-    expect(legacyRoute('?tab=new-task')).toBe('#/tasks/new');
-    expect(legacyRoute('?tab=explorer&file=x.go')).toBe('#/code?file=x.go');
-    expect(legacyRoute('?tab=unknown')).toBe('#/');
   });
 });
 

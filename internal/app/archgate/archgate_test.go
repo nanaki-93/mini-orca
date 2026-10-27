@@ -106,10 +106,6 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 			Path:    "internal/app/gitops/bad.go",
 			Content: "package gitops\nimport _ \"github.com/nanaki-93/mini-orca/v2/internal/app/archgate\"\n",
 		},
-		{
-			Path:    "internal/tui/client/bad.go",
-			Content: "package client\nimport _ \"github.com/nanaki-93/mini-orca/v2/internal/tui/domain\"\n",
-		},
 	})
 	if len(violationChecks) == 0 || violationChecks[0].State != CheckFailed {
 		t.Fatalf("expected subpackage boundary violations to fail, got %+v", violationChecks)
@@ -117,7 +113,6 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 	for _, want := range []string{
 		"internal/project/diff must never import internal/project/symbols",
 		"internal/app/gitops must never import internal/app/archgate",
-		"internal/tui/client must never import internal/tui/domain",
 	} {
 		if !strings.Contains(violationChecks[0].Output, want) {
 			t.Fatalf("expected violation %q in output, got:\n%s", want, violationChecks[0].Output)
@@ -140,14 +135,12 @@ func TestAgentRuntimeImportBoundary(t *testing.T) {
 		{"internal/app/agentruntime/model.go", "github.com/nanaki-93/mini-orca/v2/internal/project", false},
 		{"internal/app/agentruntime/model.go", "github.com/nanaki-93/mini-orca/v2/internal/storage", false},
 		{"internal/app/service.go", "google.golang.org/adk/v2/runner", false},
-		{"internal/tui/client/models.go", "google.golang.org/genai", false},
 		{"internal/project/project_overview.go", "google.golang.org/adk/v2/model", false},
 		{"internal/storage/file.go", "google.golang.org/adk/v2/session", false},
 		{"internal/agenteval/eval.go", "google.golang.org/adk/v2/runner", false},
 		{"internal/insighteval/eval.go", "google.golang.org/genai", false},
 		{"cmd/daemon/main.go", "google.golang.org/adk/v2/runner", false},
 		{"cmd/agent-eval/main.go", "google.golang.org/adk/v2/runner", false},
-		{"cmd/agent-worker/main.go", "google.golang.org/adk/v2/runner", false},
 		{"cmd/agent-inspect/main.go", "google.golang.org/genai", false},
 		{"main.go", "google.golang.org/adk/v2/runner", true},
 	} {

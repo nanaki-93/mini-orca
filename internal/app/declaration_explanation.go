@@ -24,12 +24,11 @@ const (
 // DeclarationExplanationRequest pins one read-only request to the exact active
 // project and indexed source file.
 type DeclarationExplanationRequest struct {
-	Integrations          []IntegrationUse `json:"integrations,omitempty"`
-	ProjectID             string           `json:"project_id"`
-	ProjectRevision       string           `json:"project_revision"`
-	BaseFileHash          string           `json:"base_file_hash"`
-	TargetPath            string           `json:"target_path"`
-	ConfirmRemoteProvider bool             `json:"confirm_remote_provider,omitempty"`
+	ProjectID             string `json:"project_id"`
+	ProjectRevision       string `json:"project_revision"`
+	BaseFileHash          string `json:"base_file_hash"`
+	TargetPath            string `json:"target_path"`
+	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
 // SourceAnchor identifies the bounded source range that the explanation covers.
@@ -103,9 +102,6 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 		return nil, err
 	}
 	runtime := s.runtimes.function
-	if len(request.Integrations) > 0 && !llm.ProviderCapabilities(runtime.profile).Tools {
-		return nil, fmt.Errorf("selected integrations require a tool-capable profile")
-	}
 	prepared, err := s.prepareDeclarationExplanation(ctx, request, runtime)
 	if err != nil {
 		return nil, err
@@ -128,12 +124,6 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	authorize := func(ctx context.Context) error { return s.validateExplanationContext(ctx, request, prepared) }
-	endLine := max(1, prepared.file.LineCount)
-	sources := []project.AgentScope{{Path: prepared.file.Path, Hash: prepared.file.ContentHash, StartLine: 1, EndLine: endLine}}
-	timed, err := withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, prepared.file.Path, sources, authorize)
-	if err != nil {
-		return nil, err
-	}
 	result, err := s.retryAgentRequest(timed, runtime, input, authorize)
 	if timed.Err() != nil {
 		return nil, timed.Err()
@@ -159,7 +149,7 @@ func (s *Service) explainDeclarationInRun(ctx context.Context, request Declarati
 	return &DeclarationExplanation{
 		Version: parsed.Version, ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision,
 		BaseFileHash: request.BaseFileHash,
-		Anchor:       SourceAnchor{Path: prepared.file.Path, StartLine: 1, EndLine: endLine},
+		Anchor:       SourceAnchor{Path: prepared.file.Path, StartLine: 1, EndLine: max(1, prepared.file.LineCount)},
 		Summary:      parsed.Summary, Behavior: parsed.Behavior, Inputs: parsed.Inputs, Outputs: parsed.Outputs,
 		SideEffects: parsed.SideEffects, ErrorBehavior: parsed.ErrorBehavior,
 		EngineeringInsight: project.CloneEngineeringInsight(parsed.EngineeringInsight), ContextManifest: prepared.manifest,

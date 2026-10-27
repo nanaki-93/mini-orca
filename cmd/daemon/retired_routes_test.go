@@ -22,6 +22,21 @@ func TestRetiredWorkflowRoutesAreUnavailable(t *testing.T) {
 		{"GET", "performance"},
 		{"GET", "performance/context"},
 		{"POST", "performance-job"},
+		// Features that only the terminal UI exposed.
+		{"GET", "missions"},
+		{"GET", "live-sessions"},
+		{"GET", "cloud-copies"},
+		{"GET", "agent-triggers"},
+		{"GET", "integrations"},
+		{"GET", "apis"},
+		{"GET", "api-actions"},
+		{"GET", "agent-access"},
+		{"GET", "remote-agents"},
+		{"GET", "delegations"},
+		{"GET", "research"},
+		{"GET", "attachments"},
+		{"GET", "artifacts"},
+		{"GET", "memory"},
 	} {
 		t.Run(route.method+"/"+route.path, func(t *testing.T) {
 			request := httptest.NewRequest(route.method, "/api/projects/current/"+route.path, strings.NewReader("{}"))

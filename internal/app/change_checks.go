@@ -470,9 +470,6 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	if err != nil {
 		return nil, root, err
 	}
-	if err := requireMissionProviderAdmission(ctx, session); err != nil {
-		return nil, root, err
-	}
 	if err := s.requireRepairableChange(session); err != nil {
 		return nil, root, err
 	}

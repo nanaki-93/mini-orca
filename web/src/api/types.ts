@@ -1,5 +1,6 @@
-// Wire types for the daemon's loopback API. They mirror the Go DTOs in
-// internal/tui/client/models.go; fields the UI does not read are omitted.
+// Wire types for the daemon's loopback API. They mirror the JSON of the Go
+// DTOs in internal/app (and internal/project, internal/app/gitops); fields the
+// UI does not read are omitted.
 
 export interface ProjectIdentity {
   project_id: string;

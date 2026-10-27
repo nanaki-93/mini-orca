@@ -35,9 +35,6 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	if err := requireFinishedWorktreeTasks(source.Path); err != nil {
 		return nil, err
 	}
-	if err := s.guardMissionWorktree(ctx, repository.Root, source); err != nil {
-		return nil, err
-	}
 	completed, err := gitops.MergedFindingTargets(ctx, repository, source, listChangeSessions)
 	if err != nil {
 		return nil, err
@@ -69,9 +66,6 @@ func (s *Service) CleanupMergedWorktree(ctx context.Context, request GitMutation
 	}
 	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
 		return nil, project.ErrRevisionConflict
-	}
-	if err := s.guardMissionWorktree(ctx, repository.Root, source); err != nil {
-		return nil, err
 	}
 	if err := requireFinishedWorktreeTasks(source.Path); err != nil {
 		return nil, err

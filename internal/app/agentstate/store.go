@@ -35,21 +35,23 @@ type Store struct {
 }
 
 type database struct {
-	RuntimeFamily    string                    `json:"runtime_family,omitempty"`
-	Traces           map[string]TraceRecord    `json:"traces,omitempty"`
-	Settings         *SettingsRecord           `json:"settings,omitempty"`
-	Delegations      map[string]Delegation     `json:"delegations,omitempty"`
-	Actions          map[string]ExternalAction `json:"actions,omitempty"`
-	ProgressEpoch    string                    `json:"progress_epoch,omitempty"`
-	ProgressSequence uint64                    `json:"progress_sequence,omitempty"`
-	Progress         []ProgressEvent           `json:"progress,omitempty"`
-	Version          int                       `json:"version"`
-	Workspace        string                    `json:"workspace"`
-	Sessions         map[string]*Session       `json:"sessions"`
-	AppState         map[string]State          `json:"app_state"`
-	UserState        map[string]State          `json:"user_state"`
-	Runs             map[string]Run            `json:"runs"`
-	Budgets          map[string]BudgetRecord   `json:"budgets"`
+	RuntimeFamily string                 `json:"runtime_family,omitempty"`
+	Traces        map[string]TraceRecord `json:"traces,omitempty"`
+	Settings      *SettingsRecord        `json:"settings,omitempty"`
+	// Retired features (delegations, external API actions) kept their records
+	// in this journal. They are preserved verbatim so older journals still open.
+	RetiredDelegations jsontext.Value          `json:"delegations,omitempty"`
+	RetiredActions     jsontext.Value          `json:"actions,omitempty"`
+	ProgressEpoch      string                  `json:"progress_epoch,omitempty"`
+	ProgressSequence   uint64                  `json:"progress_sequence,omitempty"`
+	Progress           []ProgressEvent         `json:"progress,omitempty"`
+	Version            int                     `json:"version"`
+	Workspace          string                  `json:"workspace"`
+	Sessions           map[string]*Session     `json:"sessions"`
+	AppState           map[string]State        `json:"app_state"`
+	UserState          map[string]State        `json:"user_state"`
+	Runs               map[string]Run          `json:"runs"`
+	Budgets            map[string]BudgetRecord `json:"budgets"`
 }
 
 // Open validates checkout identity without creating metadata or starting work.
@@ -191,12 +193,6 @@ func (s *Store) validate(db *database) error {
 
 func validateJournalDomains(db *database) error {
 	if err := validateTraces(db); err != nil {
-		return err
-	}
-	if err := validateActions(db); err != nil {
-		return err
-	}
-	if err := validateDelegations(db); err != nil {
 		return err
 	}
 	if err := validateSettings(db.Settings); err != nil {

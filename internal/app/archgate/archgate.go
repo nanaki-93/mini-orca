@@ -80,11 +80,11 @@ type architectureQualityBudgets struct {
 var defaultArchitectureImportRules = []architectureImportRule{
 	{
 		sourcePrefix: "internal/api",
-		forbidden:    []string{"internal/storage", "internal/llm", "internal/tui"},
+		forbidden:    []string{"internal/storage", "internal/llm"},
 	},
 	{
 		sourcePrefix: "internal/project",
-		forbidden:    []string{"internal/app", "internal/api", "internal/tui"},
+		forbidden:    []string{"internal/app", "internal/api"},
 	},
 	{
 		sourcePrefix: "internal/project/diff",
@@ -112,7 +112,7 @@ var defaultArchitectureImportRules = []architectureImportRule{
 	},
 	{
 		sourcePrefix: "internal/app",
-		forbidden:    []string{"internal/api", "internal/tui"},
+		forbidden:    []string{"internal/api"},
 	},
 	{
 		sourcePrefix: "internal/app/agentruntime",
@@ -141,22 +141,6 @@ var defaultArchitectureImportRules = []architectureImportRule{
 	{
 		sourcePrefix: "internal/app/changes",
 		forbidden:    []string{"internal/app/archgate", "internal/app/gitops", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/tui",
-		forbidden:    []string{"internal/app", "internal/api", "internal/project", "internal/storage", "internal/llm", "internal/config"},
-	},
-	{
-		sourcePrefix: "internal/tui/client",
-		forbidden:    []string{"internal/tui/theme", "internal/tui/domain"},
-	},
-	{
-		sourcePrefix: "internal/tui/theme",
-		forbidden:    []string{"internal/tui/client", "internal/tui/domain"},
-	},
-	{
-		sourcePrefix: "internal/tui/domain",
-		forbidden:    []string{"internal/tui/theme"},
 	},
 }
 

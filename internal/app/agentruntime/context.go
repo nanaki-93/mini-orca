@@ -74,9 +74,6 @@ func requireContextAuthority(ctx context.Context) error {
 	if err := validateContextAuthority(ctx); err != nil {
 		return err
 	}
-	if err := validateMemoryDispatch(ctx); err != nil {
-		return err
-	}
 	return authorizeInvestigation(ctx)
 }
 

@@ -45,7 +45,7 @@ func runtimePreferences(runtime config.AgentRuntime) agentstate.AgentPreferences
 
 func (s *Service) AgentSettings(ctx context.Context, query AgentRunQuery) (*AgentSettings, error) {
 	root := s.manager.Root()
-	if err := s.integrationScope(ctx, query, root); err != nil {
+	if err := s.agentScope(ctx, query, root); err != nil {
 		return nil, err
 	}
 	store, _, err := s.agentJournal(root)
@@ -58,7 +58,7 @@ func (s *Service) AgentSettings(ctx context.Context, query AgentRunQuery) (*Agen
 	}
 	view, err := s.settingsView(query, record)
 	if err == nil {
-		err = s.integrationScope(ctx, query, root)
+		err = s.agentScope(ctx, query, root)
 	}
 	return view, err
 }
@@ -158,10 +158,6 @@ func (s *Service) ControlAgentSettings(ctx context.Context, request AgentSetting
 		return nil, fmt.Errorf("%w: %v", project.ErrRevisionConflict, err)
 	}
 	if err != nil {
-		return nil, err
-	}
-	s.cancelLiveSessions()
-	if err := s.stopTriggers(ctx); err != nil {
 		return nil, err
 	}
 	s.notifyEvent("agent_settings")

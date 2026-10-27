@@ -53,25 +53,6 @@ func TestDaemonStatusReportsCanonicalVersion(t *testing.T) {
 	}
 }
 
-func TestAmbientRoutesRejectTaskScopeBeforeWorktreeRouting(t *testing.T) {
-	mux := daemonTestMux(t)
-	for _, route := range []struct{ method, path string }{
-		{http.MethodGet, "/api/projects/current/agent-triggers"},
-		{http.MethodPost, "/api/projects/current/agent-triggers/control"},
-	} {
-		for _, scope := range []string{"/unregistered/private/task", ""} {
-			r := httptest.NewRequest(route.method, route.path+"?worktree_path="+scope, strings.NewReader(`{}`))
-			r.Host = "localhost:9090"
-			r.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, r)
-			if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "ambient analysis requires the main checkout") {
-				t.Fatalf("task scope reached a service: %d %s", w.Code, w.Body.String())
-			}
-		}
-	}
-}
-
 func TestLocalAPIPolicyRejectsBrowserAndInvalidContentBeforeRoutes(t *testing.T) {
 	t.Setenv("MINI_ORCA_BIND_ADDRESS", "")
 	mux := daemonTestMux(t)
@@ -316,7 +297,10 @@ func TestDocumentedRoutesAreHandledByDaemon(t *testing.T) {
 	mux := newHTTPMux(service, manager)
 	for _, route := range routes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			req := httptest.NewRequest(route.method, requestPathForDocumentedRoute(route.path), nil)
+			req := httptest.NewRequest(route.method, requestPathForDocumentedRoute(route.path), strings.NewReader("{}"))
+			// Pass the local request policy so the status reflects the route table.
+			req.Host = "localhost:9090"
+			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, req)
 			if response.Code == http.StatusNotFound || response.Code == http.StatusMethodNotAllowed {
@@ -349,34 +333,6 @@ func TestOpenAPIGoScanPhaseIncludesWorkspace(t *testing.T) {
 		}
 	}
 	t.Fatalf("GoScanPhase names = %v, want workspace", spec.Components.Schemas["GoScanPhase"].Properties["name"].Enum)
-}
-
-func TestLibraryRoutesEnforceProjectIdentityBeforeCuration(t *testing.T) {
-	root := t.TempDir()
-	manager, err := project.NewManager(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.Set(root, &project.Analysis{Name: "memory fixture", Path: root}); err != nil {
-		t.Fatal(err)
-	}
-	service, err := app.New(config.Default(), manager)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mux := newHTTPMux(service, manager)
-	for _, route := range []struct{ method, path string }{
-		{"GET", "/memory"}, {"POST", "/memory"}, {"GET", "/memory/example"}, {"POST", "/memory/example"},
-		{"GET", "/artifacts"}, {"GET", "/artifacts/example"}, {"POST", "/artifacts/example/control"},
-		{"GET", "/missions"}, {"POST", "/missions"}, {"GET", "/missions/example"}, {"POST", "/missions/example"},
-		{"POST", "/missions/plan"},
-	} {
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, httptest.NewRequest(route.method, "http://127.0.0.1:9090/api/projects/current"+route.path, nil))
-		if w.Code != 400 {
-			t.Fatalf("unguarded %s %s: %d %s", route.method, route.path, w.Code, w.Body.String())
-		}
-	}
 }
 
 // The built bundle has content-hashed names, so tests read them from the

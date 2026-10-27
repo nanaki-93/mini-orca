@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -175,4 +178,11 @@ func inspectRecordedArtifacts(ctx context.Context, store *agentstate.Store, entr
 		return agentstate.ErrNotFound
 	}
 	return nil
+}
+
+// artifactLibraryID is the stable, opaque ID of one recorded artifact version.
+func artifactLibraryID(record agentstate.Artifact) string {
+	key := record.Key
+	digest := sha256.Sum256([]byte(strings.Join([]string{key.Session.App, key.Session.User, key.Session.ID, key.Name, strconv.FormatInt(record.Version, 10)}, "\x00")))
+	return hex.EncodeToString(digest[:])
 }

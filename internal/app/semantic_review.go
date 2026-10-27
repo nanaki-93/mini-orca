@@ -308,11 +308,6 @@ func (s *Service) requestFileAnalysis(ctx context.Context, prepared preparedFile
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	schema := FileAnalysisResponseSchema()
-	sources := []project.AgentScope{{Path: prepared.indexedFile.Path, Hash: prepared.indexedFile.ContentHash}}
-	timed, err = withProjectMemory(timed, prepared.root, prepared.input.ProjectID, prepared.input.ProjectRevision, prepared.indexedFile.Path+" semantic review lessons", sources, func(ctx context.Context) error { return s.validateFileAnalysisSnapshot(ctx, prepared) })
-	if err != nil {
-		return nil, err
-	}
 	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
 		return nil, timed.Err()

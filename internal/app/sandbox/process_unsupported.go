@@ -11,7 +11,3 @@ import (
 func ConfigureCommand(_ *exec.Cmd) error {
 	return fmt.Errorf("project command execution is unavailable: descendant cancellation is unsupported on this platform")
 }
-
-func VerifyCommandGroupStopped(_ *exec.Cmd) error {
-	return fmt.Errorf("process group cleanup verification is unavailable on this platform")
-}

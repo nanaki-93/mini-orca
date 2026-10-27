@@ -13,7 +13,7 @@ printf '%s\\n' "go $*" >> "$QUALITY_CALLS"
 case "$2" in
   honnef.co/go/tools/cmd/staticcheck@v0.8.2|github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0)
     exit 0 ;;
-  golang.org/x/tools/cmd/deadcode@v0.40.0)
+  golang.org/x/tools/cmd/deadcode@v0.51.0)
     printf '%s' "$DEADCODE_STDOUT"
     printf '%s' "$DEADCODE_STDERR" >&2
     exit "$DEADCODE_STATUS" ;;
@@ -65,8 +65,8 @@ class QualityTests(unittest.TestCase):
         )
         calls = self.calls.read_text().splitlines()
         self.assertIn(
-            "go run golang.org/x/tools/cmd/deadcode@v0.40.0 "
-            "./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/agent-worker ./cmd/agent-inspect ./cmd/tui",
+            "go run golang.org/x/tools/cmd/deadcode@v0.51.0 "
+            "./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/agent-inspect",
             calls,
         )
         self.assertTrue(any("gocyclo@v0.6.0" in call for call in calls))
@@ -151,10 +151,9 @@ class ValidationTests(unittest.TestCase):
                         capture_output=True, text=True, timeout=10,
                     )
                     self.assertEqual(result.returncode, 1 if failure else 0)
-                    self.assertIn("PASS tui-test", result.stdout)
                     self.assertIn("PASS go-quality", result.stdout)
                     self.assertIn("PASS daemon-contracts", result.stdout)
-                    self.assertEqual(len(calls.read_text().splitlines()), 7 if failure else 8)
+                    self.assertEqual(len(calls.read_text().splitlines()), 6 if failure else 7)
                     if failure:
                         self.assertIn("Validation failed: go-test", result.stderr)
                     else:

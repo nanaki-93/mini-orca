@@ -86,21 +86,3 @@ func TestProgressProjectionIgnoresUntrustedNamesAndPayloads(t *testing.T) {
 		t.Fatalf("untrusted projection: %+v", value)
 	}
 }
-
-func TestMissionProgressProjectsOnlyBoundedSourceFreeNodeNames(t *testing.T) {
-	for _, name := range []string{"mission_child_0", "mission_child_15", "join_mission", "mission_result", "mission_child_16", "mission_child_01", "PRIVATE_SOURCE"} {
-		event := &session.Event{Author: "PRIVATE_SOURCE", CustomMetadata: map[string]any{"mini_orca.mission_node": name, "mini_orca.node_status": "running", "private": "PRIVATE_INPUT"}, Output: "PRIVATE_OUTPUT"}
-		value := projectEvent(event, agentstate.Key{App: "app", User: "user", ID: "id"})
-		want := name
-		if name == "mission_child_16" || name == "mission_child_01" || name == "PRIVATE_SOURCE" {
-			want = "agent"
-		}
-		if value.NodeID != want {
-			t.Fatal("mission progress identity", value)
-		}
-		data, err := json.Marshal(value)
-		if err != nil || strings.Contains(string(data), "PRIVATE_") {
-			t.Fatal("progress included source-bearing data", string(data), err)
-		}
-	}
-}

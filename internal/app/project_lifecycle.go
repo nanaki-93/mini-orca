@@ -13,16 +13,6 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 // reindexActiveProject stops work bound to the old source; reason tells the
 // stopped tasks why.
 func (s *Service) reindexActiveProject(reason string) (*project.ProjectIndex, error) {
-	if err := s.stopTriggersForLifecycle(); err != nil {
-		return nil, err
-	}
-	if err := s.stopLiveSessions(); err != nil {
-		return nil, err
-	}
-	// Synchronous Git effects hold jobLifecycleMu. An integration's own reindex
-	// must preserve its cancellation context through observation and cleanup.
-	s.cancelMissionWaves()
-	s.cancelIntegrations()
 	s.cancelChangeWorkflowsBecause(reason)
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
@@ -50,14 +40,7 @@ func (s *Service) RestoreActiveProject(root string, analysis *project.Analysis) 
 func (s *Service) replaceActiveProject(activate func() error) error {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
-	if err := s.stopTriggersForLifecycle(); err != nil {
-		return err
-	}
-	s.cancelMissionJobs()
 	if err := s.closeWorktreeServices(); err != nil {
-		return err
-	}
-	if err := s.stopLiveSessions(); err != nil {
 		return err
 	}
 	s.invalidateJobsForProjectChange(stopReasonProjectSwitch)
@@ -69,8 +52,6 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 }
 
 func (s *Service) invalidateJobsForProjectChange(reason string) {
-	s.cancelMissionJobs()
-	s.cancelIntegrations()
 	s.cancelChangeWorkflowsBecause(reason)
 	s.interruptAnalysisRunForProjectChange()
 	s.cancelGoScan()

@@ -53,14 +53,9 @@ type modelOutput = agentruntime.Result
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
-	openCloud                       func(context.Context, config.CloudTarget) (agentruntime.CloudServices, error)
 	config                          *config.Config
 	agentRuntime                    config.AgentRuntime
 	agentRuns                       *agentRunController
-	missions                        *missionController
-	integrations                    *integrationRegistry
-	live                            *liveRegistry
-	triggers                        *triggerController
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
@@ -103,10 +98,6 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	integrations, err := newIntegrationRegistry(cfg.Integrations)
-	if err != nil {
-		return nil, err
-	}
 	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
 	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
 	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
@@ -126,9 +117,6 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
 		config:            cfg,
-		integrations:      integrations,
-		live:              &liveRegistry{sessions: make(map[string]*liveSessionOwner)},
-		triggers:          &triggerController{},
 		agentRuntime:      agentConfig,
 		worktrees:         make(map[string]*Service),
 		discoverPiModels:  llm.DiscoverPiModels,
@@ -151,7 +139,6 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		executionTrust:          newExecutionTrustStore(),
 		events:                  newEventBroker(),
 		agentRuns:               newAgentRunController(),
-		missions:                newMissionController(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}

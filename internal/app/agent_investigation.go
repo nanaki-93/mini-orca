@@ -37,7 +37,6 @@ type PlanInvestigationSource struct {
 }
 
 type PlanInvestigationRequest struct {
-	Integrations          []IntegrationUse          `json:"integrations,omitempty"`
 	ProjectID             string                    `json:"project_id"`
 	ProjectRevision       string                    `json:"project_revision"`
 	Plan                  ChangePlanInput           `json:"plan"`
@@ -98,10 +97,6 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 		return nil, err
 	}
 	authorize := func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, prepared) }
-	timed, err = withProjectMemory(timed, prepared.root, request.ProjectID, request.ProjectRevision, request.Plan.Problem, manifestMemorySources(prepared.manifest), authorize)
-	if err != nil {
-		return nil, err
-	}
 	output, err := s.retryAgentRequest(timed, runtime, input, authorize)
 	if err != nil {
 		return nil, err
@@ -127,7 +122,6 @@ func (s *Service) preparePlanInvestigation(ctx context.Context, request PlanInve
 	request.Paths = slices.Clone(request.Paths)
 	request.Sources = slices.Clone(request.Sources)
 	request.AcceptanceCriteria = slices.Clone(request.AcceptanceCriteria)
-	request.Integrations = slices.Clone(request.Integrations)
 	if err := validatePlanInvestigationRequest(request); err != nil {
 		return nil, err
 	}
@@ -318,25 +312,20 @@ func (s *Service) planInvestigationInput(ctx context.Context, p *preparedPlanInv
 	input.Messages = []llm.ChatMessage{{Role: "user", Content: prompt}}
 	p.manifest.EstimatedTokens, p.manifest.TokenLimit = (len(prompt)+3)/4, input.ContextMaxTokens
 	if !tools {
-		if len(p.request.Integrations) > 0 {
-			return input, fmt.Errorf("selected integrations require a tool-capable profile and admitted repository scope")
-		}
 		return input, nil
 	}
 	reader, err := project.NewAgentContext(p.index, p.scopes, p.policy.ReadSource)
 	if err != nil {
 		return input, err
 	}
-	input.Investigation, err = s.integrationInvestigation(ctx, p.root, p.inputHash, repositoryTools(reader), p.request.Integrations, func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, p) })
+	input.Investigation, err = s.skillInvestigation(ctx, p.root, p.inputHash, repositoryTools(reader), func(ctx context.Context) error { return s.validatePlanInvestigation(ctx, p) })
 	return input, err
 }
 
 func (p *preparedPlanInvestigation) prompt(tools bool) (string, error) {
 	var text strings.Builder
 	text.WriteString("Investigate this editable task plan. Return only JSON matching the supplied schema. Propose an approach and testable acceptance criteria. Separate assumptions from source evidence. Every evidence item must quote exact admitted source within its cited line range and hash. Suggested scope is advisory; do not treat it as permission. Do not execute commands or change source.\n")
-	promptRequest := p.request
-	promptRequest.Integrations = nil // Grant tokens belong to admission, not model context.
-	data, err := json.Marshal(promptRequest)
+	data, err := json.Marshal(p.request)
 	if err != nil {
 		return "", err
 	}

@@ -27,7 +27,7 @@ func writeContextFixture(t *testing.T, path string, catalog *contextCatalog) {
 }
 
 func TestContextClaimsSurviveRestartAndPublishExactlyOnce(t *testing.T) {
-	store := memoryStore(t)
+	store := openTestStore(t)
 	key := contextFixture("summary")
 	if _, err := store.Context(t.Context(), key); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestContextClaimsSurviveRestartAndPublishExactlyOnce(t *testing.T) {
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("passive read created a cache")
 	}
-	claimed, owner, err := store.ClaimContext(t.Context(), key, time.Time{}, allowMemoryWrite)
+	claimed, owner, err := store.ClaimContext(t.Context(), key, time.Time{}, allowWrite)
 	if err != nil || !owner {
 		t.Fatalf("claim=%+v owner=%v error=%v", claimed, owner, err)
 	}
@@ -44,16 +44,16 @@ func TestContextClaimsSurviveRestartAndPublishExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := reopened.ClaimContext(t.Context(), key, time.Time{}, allowMemoryWrite); !errors.Is(err, ErrContextPending) {
+	if _, _, err := reopened.ClaimContext(t.Context(), key, time.Time{}, allowWrite); !errors.Is(err, ErrContextPending) {
 		t.Fatalf("pending operation repeated: %v", err)
 	}
-	if err := reopened.SaveContext(t.Context(), key, "other", []byte(`{"summary":"advice"}`), time.Time{}, allowMemoryWrite); !errors.Is(err, ErrContextPending) {
+	if err := reopened.SaveContext(t.Context(), key, "other", []byte(`{"summary":"advice"}`), time.Time{}, allowWrite); !errors.Is(err, ErrContextPending) {
 		t.Fatal(err)
 	}
-	if err := store.SaveContext(t.Context(), key, claimed.Claim, []byte(`{"summary":"advice"}`), time.Time{}, allowMemoryWrite); err != nil {
+	if err := store.SaveContext(t.Context(), key, claimed.Claim, []byte(`{"summary":"advice"}`), time.Time{}, allowWrite); err != nil {
 		t.Fatal(err)
 	}
-	reused, owner, err := reopened.ClaimContext(t.Context(), key, time.Time{}, allowMemoryWrite)
+	reused, owner, err := reopened.ClaimContext(t.Context(), key, time.Time{}, allowWrite)
 	if err != nil || owner || string(reused.Value) != `{"summary":"advice"}` {
 		t.Fatalf("reuse=%+v owner=%v %v", reused, owner, err)
 	}
@@ -75,12 +75,12 @@ func TestContextClaimsSurviveRestartAndPublishExactlyOnce(t *testing.T) {
 }
 
 func TestContextConcurrentClaimsHaveOneOwner(t *testing.T) {
-	store := memoryStore(t)
+	store := openTestStore(t)
 	var wg sync.WaitGroup
 	owners := make(chan bool, 8)
 	for range 8 {
 		wg.Go(func() {
-			_, owner, err := store.ClaimContext(t.Context(), contextFixture("summary"), time.Time{}, allowMemoryWrite)
+			_, owner, err := store.ClaimContext(t.Context(), contextFixture("summary"), time.Time{}, allowWrite)
 			if err != nil && !errors.Is(err, ErrContextPending) {
 				t.Error(err)
 			}
@@ -101,10 +101,10 @@ func TestContextConcurrentClaimsHaveOneOwner(t *testing.T) {
 }
 
 func TestContextFailuresPreserveExistingData(t *testing.T) {
-	store := memoryStore(t)
+	store := openTestStore(t)
 	key := contextFixture("composition")
 	expires := time.Now().Add(time.Hour)
-	if err := store.SaveContext(t.Context(), key, "", []byte(`{"text":"original"}`), expires, allowMemoryWrite); err != nil {
+	if err := store.SaveContext(t.Context(), key, "", []byte(`{"text":"original"}`), expires, allowWrite); err != nil {
 		t.Fatal(err)
 	}
 	path, _ := store.path("context-cache.json")
@@ -114,7 +114,7 @@ func TestContextFailuresPreserveExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, value := range [][]byte{[]byte(`null null`), []byte(`{"x":1,"x":2}`), oversized} {
-		if err := store.SaveContext(t.Context(), key, "", value, expires, allowMemoryWrite); err == nil {
+		if err := store.SaveContext(t.Context(), key, "", value, expires, allowWrite); err == nil {
 			t.Fatal("invalid cache value accepted")
 		}
 	}
@@ -128,7 +128,7 @@ func TestContextFailuresPreserveExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.write = func(string, []byte, os.FileMode, func() error) error { return errors.New("disk full") }
-	if err := store.SaveContext(t.Context(), key, "", []byte(`{}`), expires, allowMemoryWrite); !errors.Is(err, ErrPersistence) {
+	if err := store.SaveContext(t.Context(), key, "", []byte(`{}`), expires, allowWrite); !errors.Is(err, ErrPersistence) {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(path)
@@ -144,13 +144,13 @@ func TestContextFailuresPreserveExistingData(t *testing.T) {
 }
 
 func TestContextExpiryNeverReplaysAnUncertainPaidCall(t *testing.T) {
-	store := memoryStore(t)
+	store := openTestStore(t)
 	key := contextFixture("provider")
-	claimed, _, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowMemoryWrite)
+	claimed, _, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowWrite)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SaveContext(t.Context(), key, claimed.Claim, []byte(`{}`), claimed.ExpiresAt.Add(time.Hour), allowMemoryWrite); err == nil {
+	if err := store.SaveContext(t.Context(), key, claimed.Claim, []byte(`{}`), claimed.ExpiresAt.Add(time.Hour), allowWrite); err == nil {
 		t.Fatal("retention extension accepted")
 	}
 	// Advance only the stored timestamps, without sleeping or changing global time.
@@ -163,14 +163,25 @@ func TestContextExpiryNeverReplaysAnUncertainPaidCall(t *testing.T) {
 	claimed.CreatedAt, claimed.ExpiresAt = time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour)
 	catalog.Records[id] = claimed
 	writeContextFixture(t, path, catalog)
-	if _, _, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowMemoryWrite); !errors.Is(err, ErrContextPending) {
+	if _, _, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowWrite); !errors.Is(err, ErrContextPending) {
 		t.Fatal("expired uncertain call retried", err)
 	}
 	claimed.State, claimed.Value = "ready", []byte(`{}`)
 	catalog.Records[id] = claimed
 	writeContextFixture(t, path, catalog)
-	next, owner, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowMemoryWrite)
+	next, owner, err := store.ClaimContext(t.Context(), key, time.Now().Add(time.Hour), allowWrite)
 	if err != nil || !owner || next.Claim == claimed.Claim {
 		t.Fatalf("completed expired cache did not renew: %+v %v", next, err)
 	}
 }
+
+func openTestStore(t *testing.T) *Store {
+	t.Helper()
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func allowWrite() error { return nil }

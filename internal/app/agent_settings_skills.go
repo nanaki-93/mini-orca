@@ -64,7 +64,7 @@ func (s *Service) ValidateAgentSkill(ctx context.Context, request AgentSkillVali
 
 func (s *Service) skillInspectionReader(root string, query AgentRunQuery, policy string) func(context.Context, string, string) ([]byte, error) {
 	return func(ctx context.Context, path, hash string) ([]byte, error) {
-		if err := s.integrationScope(ctx, query, root); err != nil {
+		if err := s.agentScope(ctx, query, root); err != nil {
 			return nil, err
 		}
 		current, err := project.NewContextPolicy(root)

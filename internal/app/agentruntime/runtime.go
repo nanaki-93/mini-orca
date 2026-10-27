@@ -21,8 +21,6 @@ import (
 
 // Request is an admitted completion. The caller owns retries and scope checks.
 type Request struct {
-	grounding        bool             // Only the explicit search-only entry point may set this.
-	attachments      []llm.Attachment // Only the admitted multimodal entry point may set this.
 	Messages         []llm.ChatMessage
 	Schema           *llm.JSONSchema
 	Stream           bool
@@ -33,7 +31,6 @@ type Request struct {
 
 // Result retains provider metadata without exposing ADK types to callers.
 type Result struct {
-	Grounding    *GroundingInfo
 	Content      string
 	Model        string
 	FinishReason string
@@ -63,10 +60,6 @@ func Complete(ctx context.Context, client CompletionClient, request Request) (Re
 	}
 	var err error
 	request = prepareSkillRequest(request)
-	ctx, request, err = prepareCompletionMemory(ctx, client, request)
-	if err != nil {
-		return Result{}, err
-	}
 	var completion agent.Agent
 	if request.Investigation != nil {
 		if parent, ok := ctx.Value(investigationKey{}).(*Investigation); ok && parent != request.Investigation {
@@ -124,7 +117,7 @@ func runCompletion(ctx context.Context, completion agent.Agent, request Request,
 	if compaction != nil {
 		service = compactionSessionService{service}
 	}
-	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: service, Compaction: compaction, ArtifactService: completionArtifacts(invocation), MemoryService: completionMemory(ctx), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
+	runtime, err := runner.New(runner.Config{AppName: appName, Agent: completion, SessionService: service, Compaction: compaction, ArtifactService: completionArtifacts(invocation), PluginConfig: runner.PluginConfig{Plugins: []*plugin.Plugin{artifacts, policy}}})
 	if err != nil {
 		return Result{}, fmt.Errorf("create completion runner: %w", err)
 	}
@@ -191,7 +184,6 @@ func consumePartialText(ctx context.Context, event *session.Event, onText func(s
 
 func snapshotRequest(request Request) Request {
 	request.Messages = append([]llm.ChatMessage(nil), request.Messages...)
-	request.attachments = cloneAttachments(request.attachments)
 	if request.Schema != nil {
 		schema := *request.Schema
 		schema.Schema = append([]byte(nil), schema.Schema...)

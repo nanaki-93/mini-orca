@@ -41,9 +41,6 @@ func (s *Service) prepareChangeContext(ctx context.Context, root string, session
 		}
 		identity := ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}
 		prepared.ctx = agentruntime.WithContextAuthority(prepared.ctx, func(current context.Context) error {
-			if err := requireMissionProviderAdmission(current, session); err != nil {
-				return err
-			}
 			_, currentRoot, err := s.loadChangeForAction(current, session.ID, identity)
 			if err != nil {
 				return err
@@ -71,7 +68,7 @@ func composedChangeContext(ctx context.Context, root string, session *ChangeSess
 	if session.Plan != nil {
 		readTargets = session.Plan.ReadTargets
 	}
-	identity := []any{"change-composition-v2", session.ProjectID, session.ProjectRevision, session.WorkspaceHash, session.PolicyFingerprint, session.Targets, readTargets, session.Instructions, stageZero, session.MissionOrigin != nil}
+	identity := []any{"change-composition-v2", session.ProjectID, session.ProjectRevision, session.WorkspaceHash, session.PolicyFingerprint, session.Targets, readTargets, session.Instructions, stageZero}
 	data, err := agentruntime.CachedContext(ctx, identity, func() (json.RawMessage, error) {
 		text, manifest, err := composeChangeStagePromptContext(root, session, stageZero)
 		if err != nil {

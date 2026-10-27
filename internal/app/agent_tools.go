@@ -56,7 +56,7 @@ func (s *Service) declarationInvestigation(ctx context.Context, request Declarat
 		}
 		return json.Marshal(result)
 	}})
-	return s.integrationInvestigation(ctx, root, hex.EncodeToString(hash[:]), tools, request.Integrations, authorize)
+	return s.skillInvestigation(ctx, root, hex.EncodeToString(hash[:]), tools, authorize)
 }
 
 func (s *Service) validateExplanationContext(ctx context.Context, request DeclarationExplanationRequest, prepared preparedDeclarationExplanation) error {

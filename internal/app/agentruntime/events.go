@@ -142,9 +142,6 @@ func eventNodeID(event *session.Event) string {
 }
 
 func metadataNodeID(metadata map[string]any) string {
-	if name, ok := metadata["mini_orca.mission_node"].(string); ok && knownMissionNode(name) {
-		return name
-	}
 	if name := changeNodeMetadata(metadata["mini_orca.change_node"]); name != "" {
 		return name
 	}
@@ -165,8 +162,6 @@ func metadataNodeID(metadata map[string]any) string {
 
 func outputNodeID(output any) string {
 	switch output := output.(type) {
-	case MissionGraphResult:
-		return "mission_result"
 	case ChangeNodeResult:
 		return changeNodeMetadata(output.Node)
 	case ReviewNodeResult:
@@ -209,5 +204,5 @@ func changeNodeMetadata(value any) string {
 }
 
 func knownProgressNode(name string) bool {
-	return knownMissionNode(name) || knownAnalysisNode(name) || knownKnowledgeNode(name) || slices.Contains([]string{"create", "generate_tests", "verify", "review", "human_review", "review_correctness", "review_architecture", "review_test_quality", "review_security", "review_performance", "join_reviews", "review_result", "attempt_0", "attempt_1", "attempt_2", "completion", "agent"}, name)
+	return knownAnalysisNode(name) || knownKnowledgeNode(name) || slices.Contains([]string{"create", "generate_tests", "verify", "review", "human_review", "review_correctness", "review_architecture", "review_test_quality", "review_security", "review_performance", "join_reviews", "review_result", "attempt_0", "attempt_1", "attempt_2", "completion", "agent"}, name)
 }

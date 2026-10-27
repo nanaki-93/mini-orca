@@ -14,38 +14,15 @@ setup:
 dev:
     make dev
 
-# Launch both the local daemon (if not already running on :9090) and the Go TUI
-tui:
+# Open the Web UI served by the running daemon
+ui:
     #!/usr/bin/env sh
-    set -eu
-    daemon_pid=""
-    cleanup() {
-        if [ -n "$daemon_pid" ] && kill -0 "$daemon_pid" 2>/dev/null; then
-            kill "$daemon_pid" 2>/dev/null || true
-        fi
-    }
-    trap cleanup EXIT INT TERM
-    if ! lsof -iTCP:9090 -sTCP:LISTEN -t >/dev/null 2>&1; then
-        echo "Starting Mini-Orca daemon on 127.0.0.1:9090..."
-        go run ./cmd/daemon &
-        daemon_pid=$!
-        sleep 1
-    else
-        echo "Using existing Mini-Orca daemon on 127.0.0.1:9090..."
-    fi
-    go run ./cmd/tui
+    url="http://127.0.0.1:9090/ui"
+    if command -v open >/dev/null 2>&1; then open "$url"; elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url"; else echo "$url"; fi
 
-# Launch only the Go TUI client (assumes daemon is already running)
-tui-run:
-    make tui-run
-
-# Build the Go TUI binary
-tui-build:
-    make tui-build
-
-# Run Go TUI workflow and renderer tests
-tui-test:
-    make tui-test
+# Serve the Web UI with hot reload on :5173 (proxying the daemon on :9090)
+ui-dev:
+    make webui-dev
 
 # Run automated unit and race tests
 test:
@@ -62,10 +39,10 @@ check:
     ./scripts/quality.sh --go-only
     make check
 
-# Build the local daemon and TUI binaries and substitute mini-orca into ~/DEV/lab/mini-orca
+# Build the daemon and substitute mini-orca-daemon into ~/DEV/lab/mini-orca
 build:
     make install
 
-# Build and substitute the mini-orca executable into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME)
+# Build and substitute mini-orca-daemon into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME)
 install:
     make install

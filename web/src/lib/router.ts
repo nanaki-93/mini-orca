@@ -58,22 +58,3 @@ export function setParam(key: string, value: string | undefined, options: { repl
   params[key] = value;
   navigate(route.path, params, options);
 }
-
-/**
- * The TUI opens /ui?tab=diff&session_id=…&file=…&worktree_path=…; translate
- * those links into routes once at startup.
- */
-export function legacyRoute(search: string): string | null {
-  const q = new URLSearchParams(search);
-  if (![...q.keys()].length) return null;
-  const tab = q.get('tab') ?? '';
-  const session = q.get('session_id') ?? '';
-  const file = q.get('file') ?? '';
-  const wt = q.get('worktree_path') ?? undefined;
-  if (session) {
-    const sub = file || tab === 'diff' || tab === 'files' ? 'files' : tab === 'checks' ? 'checks' : '';
-    return buildHash(`/tasks/${session}/${sub}`, { file: file || undefined, wt });
-  }
-  const pages: Record<string, string> = { files: '/code', explorer: '/code', issues: '/issues', docs: '/docs', checks: '/settings/analysis', git: '/git', settings: '/settings', tasks: '/tasks', 'new-task': '/tasks/new', home: '/', diff: '/tasks' };
-  return buildHash(pages[tab] ?? (file ? '/code' : '/'), { file: file || undefined, wt });
-}

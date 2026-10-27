@@ -71,10 +71,6 @@ func (s *Service) analyzeProjectKnowledge(ctx context.Context, root string) (*pr
 		return nil, err
 	}
 	defer release()
-	admitted, err = withOverviewMemory(admitted, snapshot)
-	if err != nil {
-		return nil, err
-	}
 	analyzer := project.NewAnalyzerWithProvenance(overviewCompletion{runtime}, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort)
 	analysis, err := runKnowledgeHost(admitted, agentruntime.KnowledgeOverview, func(ctx context.Context) (*project.Analysis, string, error) {
 		result, err := analyzer.AnalyzeSnapshot(ctx, snapshot)

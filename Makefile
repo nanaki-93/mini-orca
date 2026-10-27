@@ -23,7 +23,7 @@ COLOR_YELLOW := \033[33m
 COLOR_BLUE := \033[34m
 
 # ─── Phony Targets ────────────────────────────────────────────────────────────
-.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher tui-test webui-install webui-build webui-test webui-e2e webui-dev webui-dist-check tui-build tui-run docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
+.PHONY: all build install build-linux clean test test-race vet fmt-check quality check agent-dispatcher webui-install webui-build webui-test webui-e2e webui-dev webui-dist-check docker-build docker-build-cache docker-run docker-run-detached docker-stop docker-logs docker-restart docker-clean compose-up compose-up-llm compose-down compose-logs compose-restart compose-clean dev dev-watch version help
 .PHONY: build-agents build-agents-linux
 
 # ─── Default Target ────────────────────────────────────────────────────────────
@@ -38,47 +38,41 @@ help: ## Show this help message
 	@echo ""
 
 # ─── Local Build ───────────────────────────────────────────────────────────────
-build: build-agents ## Build daemon, TUI, evaluation and agent command binaries locally
+build: build-agents ## Build the daemon (which serves the Web UI) and the evaluation and inspector commands
 	@echo "$(COLOR_GREEN)Building $(APP_NAME) $(VERSION)...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
-	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
-	@cp -f $(BUILD_DIR)/$(APP_NAME)-tui ./$(APP_NAME)
 	@cp -f $(BUILD_DIR)/$(APP_NAME)-daemon ./$(APP_NAME)-daemon
-	@echo "$(COLOR_GREEN)Build complete: ./$(APP_NAME), ./$(APP_NAME)-daemon ($(BUILD_DIR)/)$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)Build complete: ./$(APP_NAME)-daemon ($(BUILD_DIR)/); open http://127.0.0.1:9090/ui after starting it$(COLOR_RESET)"
 
-install: build ## Build and substitute mini-orca into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME if present)
+install: build ## Build and substitute mini-orca-daemon into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME if present)
 	@target_dir="$$HOME/DEV/lab/mini-orca"; \
 	if [ -d "$$target_dir" ] && [ "$$(cd "$$target_dir" && pwd)" != "$$(pwd)" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$$target_dir/$(APP_NAME)"; \
 		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$target_dir/$(APP_NAME)-daemon"; \
 	fi
 	@if [ -n "$${MINI_ORCA_HOME:-}" ] && [ -d "$${MINI_ORCA_HOME}" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$${MINI_ORCA_HOME}/$(APP_NAME)"; \
 		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$${MINI_ORCA_HOME}/$(APP_NAME)-daemon"; \
 		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $${MINI_ORCA_HOME}$(COLOR_RESET)"; \
 	elif [ -d "$$HOME/DEV/programs/mini-orca" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-tui "$$HOME/DEV/programs/mini-orca/$(APP_NAME)"; \
 		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$HOME/DEV/programs/mini-orca/$(APP_NAME)-daemon"; \
 		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $$HOME/DEV/programs/mini-orca$(COLOR_RESET)"; \
 	fi
-	@echo "$(COLOR_GREEN)Updated $(APP_NAME) in $$HOME/DEV/lab/mini-orca/$(APP_NAME)$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)Updated $(APP_NAME)-daemon in $$HOME/DEV/lab/mini-orca$(COLOR_RESET)"
 
 build-linux: build-agents-linux ## Build all Linux amd64 release command binaries
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64 ./cmd/daemon
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64 ./cmd/tui
-	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64, $(BUILD_DIR)/$(APP_NAME)-tui-linux-amd64$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)Linux build complete: $(BUILD_DIR)/$(APP_NAME)-daemon-linux-amd64$(COLOR_RESET)"
 
-build-agents: ## Build evaluation, worker and inspector commands without CGO
+build-agents: ## Build the evaluation and inspector commands without CGO
 	@mkdir -p $(BUILD_DIR)
-	@for agent_command in engineering-insight-eval agent-eval agent-worker agent-inspect; do \
+	@for agent_command in engineering-insight-eval agent-eval agent-inspect; do \
 		CGO_ENABLED=0 $(GO) build -o $(BUILD_DIR)/$(APP_NAME)-$$agent_command ./cmd/$$agent_command || exit $$?; \
 	done
 
-build-agents-linux: ## Cross-build evaluation, worker and inspector for Linux amd64 without CGO
+build-agents-linux: ## Cross-build the evaluation and inspector commands for Linux amd64 without CGO
 	@mkdir -p $(BUILD_DIR)
-	@for agent_command in engineering-insight-eval agent-eval agent-worker agent-inspect; do \
+	@for agent_command in engineering-insight-eval agent-eval agent-inspect; do \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -o $(BUILD_DIR)/$(APP_NAME)-$$agent_command-linux-amd64 ./cmd/$$agent_command || exit $$?; \
 	done
 
@@ -110,9 +104,6 @@ fmt-check: ## Verify Go formatting without modifying files
 quality: ## Run Go static, reachability, complexity and clone checks
 	@./scripts/quality.sh
 
-tui-test: ## Run Go TUI workflow, state and renderer tests
-	@$(GO) test -race ./internal/tui/... ./cmd/tui/...
-
 webui-install: ## Install the Web UI toolchain (web/node_modules) from the lockfile
 	@cd web && npm ci
 
@@ -131,14 +122,7 @@ webui-dev: ## Serve the Web UI with hot reload on :5173, proxying the API to the
 webui-dist-check: ## Fail when the committed Web UI bundle is out of date with web/src
 	@cd web && npm run build >/dev/null && cd .. && git diff --exit-code --stat -- internal/api/handlers/webui/dist && test -z "$$(git ls-files --others --exclude-standard internal/api/handlers/webui/dist)" || { echo "Run make webui-build and commit internal/api/handlers/webui/dist"; exit 1; }
 
-tui-build: ## Build the Go TUI binary
-	@mkdir -p $(BUILD_DIR)
-	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-tui ./cmd/tui
-
-tui-run: ## Launch the Go TUI client
-	@$(GO) run ./cmd/tui
-
-check: fmt-check test test-race vet agent-dispatcher tui-test webui-test webui-e2e ## Run the complete supported validation path
+check: fmt-check test test-race vet agent-dispatcher webui-test webui-e2e ## Run the complete supported validation path
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image
@@ -171,7 +155,7 @@ docker-run: ## Run container in detached mode
 		-e MINI_ORCA_BIND_ADDRESS=0.0.0.0:9090 \
 		$(DOCKER_IMAGE)
 	@echo "$(COLOR_GREEN)Container started: $(APP_NAME)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Web UI available at: http://localhost:9090/ui$(COLOR_RESET)"
 
 docker-run-detached: docker-run ## Run container in detached mode (alias)
 
@@ -191,13 +175,13 @@ compose-up: ## Start services with docker-compose
 	@echo "$(COLOR_GREEN)Starting services with docker-compose...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) up -d --build
 	@echo "$(COLOR_GREEN)Services started$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Web UI available at: http://localhost:9090/ui$(COLOR_RESET)"
 
 compose-up-llm: ## Start services with docker-compose including LM Studio
 	@echo "$(COLOR_GREEN)Starting services with docker-compose (with LM Studio)...$(COLOR_RESET)"
 	@$(DOCKER_COMPOSE) --profile with-llm up -d --build
 	@echo "$(COLOR_GREEN)Services started (with LM Studio)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Daemon API available to the TUI client at: http://localhost:9090$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Web UI available at: http://localhost:9090/ui$(COLOR_RESET)"
 
 compose-down: ## Stop services with docker-compose
 	@echo "$(COLOR_YELLOW)Stopping services...$(COLOR_RESET)"

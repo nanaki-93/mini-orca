@@ -20,7 +20,6 @@ type ChangeEdit = archgate.ChangeEdit
 // ChangeSession is private project-local history, unlike source-free findings
 // and audits. Restored check/review evidence is cleared before reuse.
 type ChangeSession struct {
-	MissionOrigin       *MissionChildOrigin     `json:"mission_origin,omitempty"`
 	Plan                *ChangePlan             `json:"plan,omitempty"`
 	ScopeSuggestions    []string                `json:"scope_suggestions,omitempty"`
 	ReviewedFiles       []string                `json:"reviewed_files,omitempty"`
@@ -64,7 +63,6 @@ type ChangeSession struct {
 type ChangeHistoryEntry = gitops.ChangeHistoryEntry
 
 type ChangeCreateRequest struct {
-	missionOrigin      *MissionChildOrigin
 	Plan               *ChangePlanInput        `json:"plan,omitempty"`
 	ProjectID          string                  `json:"project_id"`
 	ProjectRevision    string                  `json:"project_revision"`

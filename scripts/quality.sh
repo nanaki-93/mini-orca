@@ -3,7 +3,7 @@
 set -u
 
 staticcheck_version=v0.8.2
-tools_version=v0.40.0
+tools_version=v0.51.0
 gocyclo_version=v0.6.0
 jscpd_version=4.0.5
 forced_failure=${MINI_ORCA_QUALITY_FAIL_STAGE:-}
@@ -32,7 +32,7 @@ run_stage() {
 run_go_reachability() {
   # Keep daemon, evaluation, worker, inspector and terminal UI roots.
   # deadcode reports findings on stdout but exits successfully when it finds any.
-  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/agent-worker ./cmd/agent-inspect ./cmd/tui)
+  reachability_output=$(go run golang.org/x/tools/cmd/deadcode@"$tools_version" ./cmd/daemon ./cmd/engineering-insight-eval ./cmd/agent-eval ./cmd/agent-inspect)
   reachability_status=$?
   if [ -n "$reachability_output" ]; then
     printf '%s\n' "$reachability_output"

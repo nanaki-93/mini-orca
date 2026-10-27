@@ -72,13 +72,6 @@ func (s *Service) cancelChangeWorkflowsBecause(reason string) {
 // active change workflows, analysis runs, and project scans. Lifecycle mutations
 // use cancellation alone to avoid lock waits.
 func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
-	if err := s.stopTriggers(ctx); err != nil {
-		return err
-	}
-	s.cancelMissionJobs()
-	if err := s.waitMissionJobs(ctx); err != nil {
-		return err
-	}
 	children := s.worktreeServices()
 	for _, child := range children {
 		child.invalidateJobsForProjectChange(stopReasonShutdown)
@@ -89,9 +82,6 @@ func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
 		}
 	}
 	s.invalidateJobsForProjectChange(stopReasonShutdown)
-	if err := s.waitIntegrations(ctx); err != nil {
-		return err
-	}
 	if err := s.waitChangeWorkflowDone(ctx); err != nil {
 		return err
 	}

@@ -224,10 +224,6 @@ func (s *Service) executeFeatureGeneration(ctx context.Context, generation *feat
 		}
 		return s.verifyFeatureInput(ctx, generation.root, generation.previous, generation.fingerprint, request)
 	}
-	timed, err := withProjectMemory(timed, generation.root, request.ProjectID, request.ProjectRevision, request.Goals, manifestMemorySources(generation.manifest), authorize)
-	if err != nil {
-		return nil, err
-	}
 	result, generationErr := s.retryRequestAuthorized(timed, runtime, generation.messages, &schema, authorize)
 	var suggestions []FeatureSuggestion
 	if generationErr == nil {
@@ -237,7 +233,7 @@ func (s *Service) executeFeatureGeneration(ctx context.Context, generation *feat
 		}
 	}
 	var published *FeatureReport
-	err = authority.Publish(func() error {
+	err := authority.Publish(func() error {
 		var err error
 		published, err = s.publishFeatureGeneration(timed, generation, suggestions, generationErr)
 		return err
