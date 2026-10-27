@@ -12,14 +12,16 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 
 // reindexActiveProject stops work bound to the old source; reason tells the
 // stopped tasks why.
+// reindexActiveProject refreshes project facts after source changed and
+// stops only the change workflows whose tasks the change made stale.
 func (s *Service) reindexActiveProject(reason string) (*project.ProjectIndex, error) {
-	s.cancelChangeWorkflowsBecause(reason)
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
 		s.resetExecutionTrust(true)
 		s.refreshAnalysisRunAfterReindex()
 	}
+	s.stopAffectedChangeWorkflows(reason)
 	return index, err
 }
 
@@ -51,8 +53,17 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 	return nil
 }
 
+// invalidateJobsForProjectChange stops every job: the project is replaced,
+// removed or shut down.
 func (s *Service) invalidateJobsForProjectChange(reason string) {
 	s.cancelChangeWorkflowsBecause(reason)
+	s.invalidateWholeTreeJobs()
+}
+
+// invalidateWholeTreeJobs stops the jobs that depend on the whole tree and
+// revokes execution trust before Git rewrites source. Change workflows keep
+// running; the reindex that follows stops those the rewrite made stale.
+func (s *Service) invalidateWholeTreeJobs() {
 	s.interruptAnalysisRunForProjectChange()
 	s.cancelGoScan()
 	s.clearExecutionTrust()

@@ -4,7 +4,7 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, isTestPath, timeAgo } from './util';
-import { parseCommits, workflowBlocker } from './workflow';
+import { changeOverlaps, parseCommits, workflowBlocker } from './workflow';
 import { parseFrames } from '@/api/events';
 import { createApi, query, withWorktree } from '@/api/client';
 
@@ -94,5 +94,16 @@ describe('client', () => {
     await expect(api.post('/x', { a: 1 })).rejects.toMatchObject({ message: 'Review every file first.', status: 409 });
     expect((calls[0].headers as Record<string, string>)['X-Mini-Orca-Web-UI']).toBe('1');
     expect(calls[0].body).toBe('{"a":1}');
+  });
+});
+
+describe('changeOverlaps', () => {
+  it('flags shared files, packages and build manifests above a task', () => {
+    expect(changeOverlaps(['internal/app/a.go'], ['internal/app/b.go'])).toBe(true);
+    expect(changeOverlaps(['internal/app/a.go'], ['internal/llm/c.go'])).toBe(false);
+    expect(changeOverlaps(['go.mod'], ['internal/llm/c.go'])).toBe(true);
+    expect(changeOverlaps(['web/package.json'], ['web/src/app.tsx'])).toBe(true);
+    expect(changeOverlaps(['web/package.json'], ['internal/app/a.go'])).toBe(false);
+    expect(changeOverlaps(['README.md'], ['internal/app/a.go'])).toBe(false);
   });
 });

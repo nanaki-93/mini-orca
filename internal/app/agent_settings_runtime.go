@@ -128,6 +128,11 @@ func (s *Service) confirmationJournal(ctx context.Context, root, runID string) (
 		if len(parts) == 3 && parts[0] == "settings-v1" && parts[1] == binding.Configuration {
 			binding.Configuration = run.Binding.Configuration
 		}
+		// A path-scoped task stays current across reindexing, so its waiting
+		// input keeps the revision its run was admitted with.
+		if run.Binding.Project == binding.Project && run.Binding.Policy == binding.Policy {
+			binding.Revision = run.Binding.Revision
+		}
 		// The native handoff still compares the complete project/revision/
 		// policy binding and the exact request and proposal identities.
 		return store, binding, nil

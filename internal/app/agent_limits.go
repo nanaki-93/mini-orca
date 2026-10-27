@@ -48,6 +48,7 @@ func (s *Service) agentRunContextForSnapshot(ctx context.Context, root string, s
 		if snapshot != nil {
 			binding.Project, binding.Revision = snapshot.ProjectID, snapshot.ProjectRevision
 		}
+		binding = inheritWorkflowRevision(bounded, binding)
 		bounded, err = agentruntime.WithPersistence(bounded, store, binding)
 	}
 	if err != nil {
@@ -90,6 +91,18 @@ func (s *Service) agentJournal(root string) (*agentstate.Store, agentstate.Bindi
 	}
 	binding.Configuration, err = s.agentConfiguration(s.agentRuntime)
 	return store, binding, err
+}
+
+// inheritWorkflowRevision keeps a change workflow's requests on the project
+// revision its run was admitted with. A reindex during the run does not stop
+// a task whose freshness scope is unchanged; that scope, not the revision,
+// guards its source.
+func inheritWorkflowRevision(ctx context.Context, binding agentstate.Binding) agentstate.Binding {
+	admitted, ok := agentruntime.PersistenceBinding(ctx)
+	if ok && ctx.Value(changeWorkflowContextKey{}) != nil && admitted.Project == binding.Project && admitted.Policy == binding.Policy && admitted.Configuration == binding.Configuration {
+		binding.Revision = admitted.Revision
+	}
+	return binding
 }
 
 func (s *Service) workflowAgentContext(ctx context.Context, models ChangeWorkflowModels) (context.Context, context.CancelFunc, error) {

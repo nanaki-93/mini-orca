@@ -98,7 +98,7 @@ func (s *Service) SwitchGitBranch(ctx context.Context, request GitMutationReques
 	if !found || request.TargetBranch == repository.Branch {
 		return nil, fmt.Errorf("choose a different existing local branch")
 	}
-	s.invalidateJobsForProjectChange(stopReasonGit)
+	s.invalidateWholeTreeJobs()
 	_, err = gitRead(ctx, repository.Root, "switch", "--no-guess", "--", request.TargetBranch)
 	return s.completeGitMutation(repository.Root, "switched", err), nil
 }

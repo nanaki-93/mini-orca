@@ -31,6 +31,8 @@ test('reviews, approves and applies a task through the gate', async ({ page, dae
   await gate.getByRole('button', { name: 'Apply & commit' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toContainText('commits it on main');
+  // The running task in another package keeps going.
+  await expect(dialog).not.toContainText('running task');
   await dialog.getByRole('button', { name: 'Apply & commit' }).click();
   await expect(page.getByText('Applied and committed.')).toBeVisible();
 
@@ -105,4 +107,13 @@ test('a stale task names the file that changed', async ({ page, daemon }) => {
   daemon.sessions.set('chg-1', { ...session, freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' });
   await page.goto('/#/tasks/chg-1');
   await expect(page.getByText('Out of date: go.mod changed since this proposal was made. Start it again to continue.')).toBeVisible();
+});
+
+test('Apply names the running tasks whose files it changes', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, reviewed_files: session.changes.map(change => change.path), reviewed_hash: session.hash });
+  daemon.sessions.set('chg-9', { ...session, id: 'chg-9', title: 'Serve fonts with a content type', targets: [{ path: 'internal/api/handlers/fonts.go', hash: '', exists: false }], workflow: { ...session.workflow!, id: 'wf-9', status: 'running', input: undefined } });
+  await page.goto('/#/tasks/chg-1');
+  await page.getByRole('complementary', { name: 'Review gate' }).getByRole('button', { name: /apply/i }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('It stops 1 running task whose files it changes: “Serve fonts with a content type”.');
 });

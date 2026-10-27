@@ -23,6 +23,15 @@ type persistence struct {
 	budgetID string
 }
 
+// PersistenceBinding returns the journal binding the run was admitted with.
+func PersistenceBinding(ctx context.Context) (agentstate.Binding, bool) {
+	p, ok := ctx.Value(persistenceKey{}).(*persistence)
+	if !ok {
+		return agentstate.Binding{}, false
+	}
+	return p.binding, true
+}
+
 func WithPersistence(ctx context.Context, store *agentstate.Store, binding agentstate.Binding) (context.Context, error) {
 	if previous, ok := ctx.Value(persistenceKey{}).(*persistence); ok {
 		if previous.binding != binding {

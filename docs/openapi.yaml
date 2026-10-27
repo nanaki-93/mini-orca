@@ -2837,6 +2837,8 @@ components:
         state: {type: string}
         freshness: {type: string}
         workflow_status: {type: string}
+        workflow_reason: {type: string}
+        paths: {type: array, maxItems: 64, items: {type: string}, description: The task's write paths.}
         updated_at: {type: string, format: date-time}
     ChangeVerification:
       type: object

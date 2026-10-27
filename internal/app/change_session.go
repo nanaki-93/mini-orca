@@ -154,11 +154,11 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 	if err := s.verifyChangeTargetsCurrent(root, session); err != nil {
 		return err
 	}
+	if session.ScopeVersion != 0 {
+		return verifySessionBranch(ctx, root, session.Git)
+	}
 	if err := verifySessionGitIdentity(ctx, root, session.Git); err != nil {
 		return err
-	}
-	if session.ScopeVersion != 0 {
-		return nil
 	}
 	return (workspaceIdentity{fingerprint: session.WorkspaceHash}).verifyCurrent(ctx, root)
 }

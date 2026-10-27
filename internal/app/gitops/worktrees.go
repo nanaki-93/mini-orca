@@ -33,6 +33,7 @@ type ChangeHistoryEntry struct {
 	WorkflowReason  string                  `json:"workflow_reason,omitempty"`
 	Commit          *ChangeCommit           `json:"commit,omitempty"`
 	FindingTargets  []project.FindingTarget `json:"finding_targets,omitempty"`
+	Paths           []string                `json:"paths,omitempty"`
 	UpdatedAt       time.Time               `json:"updated_at"`
 }
 

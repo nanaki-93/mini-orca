@@ -212,6 +212,9 @@ func listChangeSessionsWith(root string, freshness func(*ChangeSession) string) 
 			entry.Freshness = freshness(session)
 		}
 		entry.Commit = session.Commit
+		for _, target := range session.Targets {
+			entry.Paths = append(entry.Paths, target.Path)
+		}
 		entry.FindingTargets = session.FindingTargets
 		if session.Workflow != nil {
 			entry.WorkflowStatus = session.Workflow.Status

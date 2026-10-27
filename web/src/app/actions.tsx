@@ -8,7 +8,7 @@ import { api, errorMessage, query, withWorktree } from '@/api/client';
 import type { AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, proposalReadiness, workflowActive } from '@/lib/readiness';
-import { mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
+import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
 import { navigate } from '@/lib/router';
 import { plural } from '@/lib/util';
 import { keys } from '@/api/hooks';
@@ -89,19 +89,20 @@ export function useActions() {
   }
 
   /** Running tasks in the same checkout that an Apply, Undo or reindex stops. */
-  function runningTasksNote(session: { id: string; checkout: { worktreePath: string } }): string {
+  /** Names the running tasks in this checkout that applying `changed` likely stops; the rest keep running. */
+  function runningTasksNote(session: { id: string; checkout: { worktreePath: string } }, changed: string[]): string {
     const lists = client.getQueriesData<ChangeHistoryEntry[]>({ queryKey: ['changes'] });
     const running = new Map<string, ChangeHistoryEntry>();
     for (const [key, list] of lists) {
       const checkout = String(key[1] ?? '');
       for (const task of list ?? []) {
         const where = task.worktree_path || checkout;
-        if (task.id !== session.id && where === session.checkout.worktreePath && ['running', 'canceling'].includes(task.workflow_status ?? '')) running.set(task.id, task);
+        if (task.id !== session.id && where === session.checkout.worktreePath && ['running', 'canceling'].includes(task.workflow_status ?? '') && changeOverlaps(changed, task.paths ?? [])) running.set(task.id, task);
       }
     }
     if (!running.size) return '';
     const names = [...running.values()].slice(0, 3).map(task => `“${task.title || task.id}”`).join(', ');
-    return ` This stops ${plural(running.size, 'running task')} in this checkout: ${names}${running.size > 3 ? ', …' : ''}.`;
+    return ` It stops ${plural(running.size, 'running task')} whose files it changes: ${names}${running.size > 3 ? ', …' : ''}.`;
   }
 
   // ---------------------------------------------------------------- tasks
@@ -308,7 +309,7 @@ export function useActions() {
     }
     const ok = await confirm({
       title: commit ? 'Apply and commit?' : 'Apply these changes?',
-      body: `Writes “${session.title || session.id}” to ${destination}${commit ? ` and commits it on ${session.git?.branch || 'the current branch'}` : ''}. Undo stays available for the latest Apply while the files are unchanged${commit ? '; it restores the files but keeps the commit' : ''}.${runningTasksNote(session)}`,
+      body: `Writes “${session.title || session.id}” to ${destination}${commit ? ` and commits it on ${session.git?.branch || 'the current branch'}` : ''}. Undo stays available for the latest Apply while the files are unchanged${commit ? '; it restores the files but keeps the commit' : ''}.${runningTasksNote(session, (session.changes ?? []).map(change => change.path))}`,
       confirmLabel: commit ? 'Apply & commit' : 'Apply',
     });
     if (!ok) return;
@@ -331,7 +332,7 @@ export function useActions() {
     if (!proposalReadiness(session).canUndo) return;
     const ok = await confirm({
       title: 'Undo these changes?',
-      body: `Restores the files changed by “${session.title || session.id}” after verifying they still match the applied version.${session.commit?.state === 'committed' ? ' The commit stays in history.' : ''}${runningTasksNote(session)}`,
+      body: `Restores the files changed by “${session.title || session.id}” after verifying they still match the applied version.${session.commit?.state === 'committed' ? ' The commit stays in history.' : ''}${runningTasksNote(session, (session.changes ?? []).map(change => change.path))}`,
       confirmLabel: 'Undo',
       danger: true,
     });
@@ -451,7 +452,7 @@ export function useActions() {
     const overlap = worktree.overlap_paths ?? [];
     const ok = await confirm({
       title: `Merge ${worktree.branch || 'worktree'} into ${workspace.branch || 'the current branch'}?`,
-      body: `Merges ${worktree.head.slice(0, 7)}, marks its linked issues done, then removes the worktree and its branch.${overlap.length ? ` ${plural(overlap.length, 'path')} changed on both branches: ${overlap.slice(0, 3).join(', ')}${overlap.length > 3 ? ', …' : ''}.` : ''} Conflicts stop the merge so you can resolve or abort it.${runningTasksNote({ id: '', checkout: { worktreePath: '' } })}`,
+      body: `Merges ${worktree.head.slice(0, 7)}, marks its linked issues done, then removes the worktree and its branch.${overlap.length ? ` ${plural(overlap.length, 'path')} changed on both branches: ${overlap.slice(0, 3).join(', ')}${overlap.length > 3 ? ', …' : ''}.` : ''} Conflicts stop the merge so you can resolve or abort it. Running tasks keep going unless the merge changes their files.`,
       confirmLabel: 'Merge',
     });
     if (!ok) return;

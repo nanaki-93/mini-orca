@@ -30,13 +30,10 @@ func (c *workflowStopCause) Unwrap() error { return context.Canceled }
 
 // Reasons name the event in the user's terms; they complete "Stopped because …".
 const (
-	stopReasonProjectChanged  = "the project changed"
 	stopReasonReindex         = "the project was reindexed"
 	stopReasonApply           = "changes were applied or undone in this checkout"
 	stopReasonGit             = "a Git merge, branch switch or worktree change touched this checkout"
-	stopReasonIntegration     = "a mission child was integrated into this checkout"
 	stopReasonProjectSwitch   = "another project was opened"
-	stopReasonFileChanged     = "a watched file changed on disk"
 	stopReasonShutdown        = "the daemon is shutting down"
 	stopReasonWorktreeRemoved = "its worktree is being removed"
 )
@@ -49,9 +46,15 @@ func (job *changeWorkflowJob) stop(reason string) {
 	job.cancel()
 }
 
+// workflowDeadlineCause reports why a stopped run ended: a daemon stop names
+// its reason even when the interrupted step failed in another way first.
 func workflowDeadlineCause(ctx context.Context, err error) error {
-	if (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) && ctx.Err() != nil {
-		return context.Cause(ctx)
+	if err == nil || ctx.Err() == nil {
+		return err
+	}
+	var stopped *workflowStopCause
+	if cause := context.Cause(ctx); errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.As(cause, &stopped) {
+		return cause
 	}
 	return err
 }

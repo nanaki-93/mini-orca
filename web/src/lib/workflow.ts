@@ -126,6 +126,26 @@ export function workflowSpecialists(workflow: ChangeWorkflow | undefined): Speci
   }));
 }
 
+const BUILD_MANIFESTS = new Set(['go.mod', 'go.sum', 'go.work', 'go.work.sum', 'package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'tsconfig.json', 'Cargo.toml', 'Cargo.lock', 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', 'Pipfile.lock', 'Makefile', 'justfile']);
+
+const directoryOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
+/**
+ * Whether writing `changed` likely makes a task with `paths` stale: a shared
+ * file or package directory, or a build manifest above one of its files. The
+ * daemon decides exactly from each task's recorded scope.
+ */
+export function changeOverlaps(changed: string[], paths: string[]): boolean {
+  return changed.some(file => {
+    const dir = directoryOf(file);
+    const name = file.slice(dir ? dir.length + 1 : 0);
+    return paths.some(path => {
+      const own = directoryOf(path);
+      return path === file || own === dir || (BUILD_MANIFESTS.has(name) && (dir === '' || own === dir || own.startsWith(dir + '/')));
+    });
+  });
+}
+
 const DEFAULT_ROLES = { creation: 'bug', testing: 'code', review: 'analyze' } as const;
 
 export interface Destination {

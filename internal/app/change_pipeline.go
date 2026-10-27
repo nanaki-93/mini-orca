@@ -384,7 +384,7 @@ func workflowFailure(err error, checks []CheckResult) (string, string) {
 	case errors.Is(err, context.DeadlineExceeded):
 		return "failed", "An operation timed out. Inspect the failed stage and check evidence before retrying."
 	case errors.Is(err, project.ErrRevisionConflict), errors.Is(err, project.ErrExcludedFile):
-		return "stale", "Project source or instructions changed. Start a fresh conversation."
+		return "stale", staleWorkflowReason(staleReason(err))
 	case errors.Is(err, errWorkflowChecksFailed):
 		base := "Tests or source checks failed. Inspect the check evidence before running again."
 		if existingTestsFail(checks) {

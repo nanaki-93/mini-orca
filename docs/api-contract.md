@@ -691,6 +691,15 @@ project changes after checks ran, GET returns `checks_outdated: true`, and
 approval, a review override and Apply are refused until checks run again on the
 current tree; the session itself stays current.
 
+Apply, Undo, Git merges, merge aborts, branch switches and reindexing stop only
+the running workflows whose tasks they made stale, by the same check: captured
+sources, scope and, for path-scoped sessions, the checkout branch (commits on
+it do not matter). A stopped workflow reads `canceled` with a reason naming the
+event and the changed file; the others keep running under the revision their
+run was admitted with, and a waiting human input stays answerable after a
+reindex. Opening another project, removing a worktree and shutdown stop every
+workflow.
+
 The client supplies a `plan` with `problem`, `evidence`, `approach`, `non_goals`
 and optional `read_paths`, plus at least one acceptance criterion. Creation captures
 1–8 write paths and up to 8 distinct existing read-only paths. Read context cannot

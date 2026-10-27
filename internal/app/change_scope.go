@@ -269,3 +269,11 @@ func (s *Service) listedFreshness(root string) func(*ChangeSession) string {
 		}
 	}
 }
+
+// staleWorkflowReason explains a workflow ended or shown as stale.
+func staleWorkflowReason(detail string) string {
+	if detail == "" {
+		return "Project source or instructions changed. Start a fresh conversation."
+	}
+	return "The task is out of date: " + detail + ". Start a fresh conversation."
+}

@@ -65,8 +65,8 @@ every guard when the action arrives.
   waiting workflow after confirmation.
 - **Apply.** Writes the approved version to its checkout, optionally followed
   by a commit with the shown message. The confirmation names the destination,
-  the branch for a commit, and the running tasks in that checkout that Apply
-  stops.
+  the branch for a commit, and the running tasks in that checkout whose files
+  it changes; Apply stops only those, and other tasks keep running.
 - **Undo.** Covers only the latest Apply in a checkout and restores files only
   when they still match the applied version; a commit stays in history.
 

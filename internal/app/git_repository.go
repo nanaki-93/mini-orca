@@ -71,6 +71,10 @@ func verifySessionGitIdentity(ctx context.Context, root string, expected *GitIde
 	return gitops.VerifyChangeGit(ctx, root, expected)
 }
 
+func verifySessionBranch(ctx context.Context, root string, expected *GitIdentity) error {
+	return gitops.VerifyChangeBranch(ctx, root, expected)
+}
+
 func gitCommand(ctx context.Context, root, index string, input io.Reader, args ...string) (string, error) {
 	return gitops.Command(ctx, root, index, input, args...)
 }

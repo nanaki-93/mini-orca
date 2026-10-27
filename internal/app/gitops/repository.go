@@ -187,6 +187,22 @@ func CaptureChangeGit(ctx context.Context, root string) (*GitIdentity, error) {
 	return &repository.GitIdentity, nil
 }
 
+// VerifyChangeBranch requires the checkout to stay on the captured branch;
+// commits on it do not matter to a task whose freshness is path-scoped.
+func VerifyChangeBranch(ctx context.Context, root string, expected *GitIdentity) error {
+	if expected == nil {
+		return nil
+	}
+	actual, err := CaptureChangeGit(ctx, root)
+	if err != nil {
+		return err
+	}
+	if actual == nil || actual.Branch != expected.Branch {
+		return fmt.Errorf("%w: the checkout left branch %s since this proposal was made", project.ErrRevisionConflict, expected.Branch)
+	}
+	return nil
+}
+
 func VerifyChangeGit(ctx context.Context, root string, expected *GitIdentity) error {
 	if expected == nil {
 		return nil

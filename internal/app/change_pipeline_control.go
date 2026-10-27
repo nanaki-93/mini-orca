@@ -68,6 +68,47 @@ func (s *Service) cancelChangeWorkflowsBecause(reason string) {
 	}
 }
 
+// stopAffectedChangeWorkflows stops the running workflows whose tasks a source
+// change made stale, naming what changed, and lets the others continue. A
+// path-scoped task is affected only when its captured sources, freshness
+// scope or branch changed; an older task by any change.
+func (s *Service) stopAffectedChangeWorkflows(reason string) {
+	s.changeWorkflow.mu.Lock()
+	var running []*changeWorkflowJob
+	for _, job := range s.changeWorkflow.allJobs() {
+		if !job.finished {
+			running = append(running, job)
+		}
+	}
+	s.changeWorkflow.mu.Unlock()
+	for _, job := range running {
+		affected, detail := s.changeWorkflowAffected(job)
+		if !affected {
+			continue
+		}
+		cause := reason
+		if detail != "" {
+			cause += " (" + detail + ")"
+		}
+		s.changeWorkflow.mu.Lock()
+		if !job.finished {
+			job.stop(cause)
+		}
+		s.changeWorkflow.mu.Unlock()
+	}
+}
+
+func (s *Service) changeWorkflowAffected(job *changeWorkflowJob) (bool, string) {
+	session, err := loadChangeSession(job.root, job.sessionID)
+	if err != nil {
+		return true, ""
+	}
+	if err := s.verifyChangeCurrent(context.Background(), job.root, session); err != nil {
+		return true, staleReason(err)
+	}
+	return false, ""
+}
+
 // ShutdownChangeWorkflows waits for process/workspace cleanup after revoking
 // active change workflows, analysis runs, and project scans. Lifecycle mutations
 // use cancellation alone to avoid lock waits.
@@ -172,7 +213,7 @@ func (s *Service) restoreChangeWorkflow(session *ChangeSession) {
 		w.Status, w.Reason = "interrupted", "The workflow stopped before completion. Restore the conversation to run again."
 	}
 	if session.Freshness == "stale" {
-		w.Status, w.Reason = "stale", "Project source or instructions changed. Start a fresh conversation."
+		w.Status, w.Reason = "stale", staleWorkflowReason(session.StaleReason)
 	}
 	if w.Status == "interrupted" || w.Status == "failed" || w.Status == "stale" {
 		stopChangeWorkflowStages(w)

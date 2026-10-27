@@ -25,7 +25,10 @@ interface.
 - **Freshness:** a task goes stale only when a file it depends on changes (its
   targets and read context, the rest of the target packages, build manifests
   above them; `.gitignore`d files never count), and it names that file. Changes
-  elsewhere keep it current and only mark its checks outdated.
+  elsewhere keep it current and only mark its checks outdated. Apply, Undo,
+  merges, branch switches and reindexing stop only the running workflows whose
+  files they change, and say which file; the task list now carries each task's
+  paths.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.
