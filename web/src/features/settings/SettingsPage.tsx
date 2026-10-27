@@ -129,21 +129,21 @@ function ModelSettings() {
       </div>
       <div className="card">
         <div className="card-head"><Bot size={15} aria-hidden /><span className="strong">Agent roles</span></div>
-        <div className="card-body">
+        <div className="card-body stack-lg">
           <dl className="details details-wide">
             <dt>Writes the change</dt><dd className="mono small">{roles.creation ?? 'bug'}</dd>
             <dt>Writes tests</dt><dd className="mono small">{roles.testing ?? 'code'}</dd>
             <dt>Reviews</dt><dd className="mono small">{roles.review ?? 'analyze'}</dd>
           </dl>
           {settings?.limits ? (
-            <>
+            <div>
               <div className="label-row">Budget per run</div>
               <div className="stat-row">
                 {Object.entries(settings.limits).map(([key, value]) => (
                   <div key={key} className="stat"><div className="stat-value">{value.toLocaleString()}</div><div className="stat-label">{key.replace(/_/g, ' ')}</div></div>
                 ))}
               </div>
-            </>
+            </div>
           ) : null}
         </div>
       </div>
