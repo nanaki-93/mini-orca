@@ -144,6 +144,21 @@ export interface WorkflowReview {
   notes?: string[];
 }
 
+/** A reviewer comment on one line of a proposal version. */
+export interface ChangeComment {
+  id: string;
+  path: string;
+  side: 'new' | 'old';
+  line: number;
+  excerpt: string;
+  text: string;
+  /** The proposal the comment was written on. */
+  hash: string;
+  /** The revision whose repair brief carried it; absent while open. */
+  sent_revision?: number;
+  created_at: string;
+}
+
 /** A human override of the reviewers' rejection, bound to one proposal hash. */
 export interface WorkflowOverride {
   proposal_hash: string;
@@ -237,6 +252,7 @@ export interface ChangeSession extends ProjectIdentity {
   checks: Check[];
   reviewed_hash?: string;
   review_notes?: string;
+  comments?: ChangeComment[];
   /** Why the proposal is stale: the scope file that changed. */
   stale_reason?: string;
   /** The project changed since the checks ran; they must run again. */

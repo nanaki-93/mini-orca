@@ -131,6 +131,24 @@ func (h *ChangeHandler) Review(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
+func (h *ChangeHandler) Comment(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeCommentRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.CommentChangeLine(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}
+
+func (h *ChangeHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeCommentDeleteRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.DeleteChangeComment(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}
+
 func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffLine } from '@/api/types';
-import { buildSegments, diffStats, hunkStarts, parseGitDiff, splitRows } from './diff';
+import { anchorKey, buildSegments, diffStats, hunkStarts, lineAnchor, parseGitDiff, splitRows } from './diff';
 
 const ctx = (n: number): DiffLine => ({ kind: 'context', old_line: n, new_line: n, text: 'line ' + n });
 
@@ -13,6 +13,22 @@ describe('diff shaping', () => {
       { type: 'lines', start: 7, end: 15 },
       { type: 'gap', start: 15, end: 22, count: 7 },
     ]);
+  });
+
+  it('keeps commented lines visible inside collapsed context', () => {
+    expect(buildSegments(lines, 3, new Set(), new Set([1]))).toEqual([
+      { type: 'lines', start: 0, end: 2 },
+      { type: 'gap', start: 2, end: 7, count: 5 },
+      { type: 'lines', start: 7, end: 15 },
+      { type: 'gap', start: 15, end: 22, count: 7 },
+    ]);
+  });
+
+  it('anchors comments to the old side of removed lines and the new side otherwise', () => {
+    expect(lineAnchor(lines[10])).toEqual({ side: 'old', line: 11 });
+    expect(lineAnchor(lines[11])).toEqual({ side: 'new', line: 11 });
+    expect(anchorKey(lineAnchor(ctx(4))!)).toBe('new:4');
+    expect(lineAnchor({ kind: 'hunk', text: '@@' })).toBeNull();
   });
 
   it('expands a gap when asked and merges adjacent visible runs', () => {

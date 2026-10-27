@@ -2,18 +2,19 @@
 // diff, like a pull request. `v` marks the file viewed and moves to the next.
 
 import { useMemo } from 'react';
-import { Check, Columns2, FileDiff, ListTree, Rows3, WrapText } from 'lucide-react';
+import { Check, Columns2, FileDiff, ListTree, MessageSquare, Rows3, WrapText } from 'lucide-react';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { setUI, useUI } from '@/app/store';
 import { usePageKeys } from '@/app/shortcuts';
 import { diffStats } from '@/lib/diff';
-import { effectiveEdits, isFileReviewed, nextUnreviewedPath, proposalReadiness, reviewProgress } from '@/lib/readiness';
+import { effectiveEdits, isFileReviewed, nextUnreviewedPath, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
 import { setParam, useRoute } from '@/lib/router';
 import { basename, dirname, languageOf } from '@/lib/util';
 import { Button, EmptyState, IconButton, Kbd, Progress, Segmented, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { DiffView } from './DiffView';
+import { SendComments, useFileComments } from './LineComments';
 
 export function FilesChanged({ session }: { session: LoadedSession }) {
   const route = useRoute();
@@ -27,6 +28,13 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
   const actions = useActions();
   const busy = useBusy();
   const canMark = ready.editable && !since && Boolean(current) && !isFileReviewed(session, current.path) && (session.changes ?? []).some(edit => edit.path === current?.path);
+  const canComment = ready.editable && !since && !workflowActive(session) && (session.changes ?? []).some(edit => edit.path === current?.path);
+  const fileComments = useFileComments(session, current?.path ?? '', canComment);
+  const commentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const comment of session.comments ?? []) if (comment.hash === session.hash && !comment.sent_revision) counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
+    return counts;
+  }, [session.comments, session.hash]);
 
   const select = (path: string) => setParam('file', path);
 
@@ -79,6 +87,7 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
             ) : null}
           </div>
           <Progress value={progress.percent} tone={progress.reviewed === progress.total ? 'success' : 'accent'} label="Files viewed" />
+          <SendComments session={session} disabled={!ready.editable || workflowActive(session)} />
         </div>
         <ul className="fc-files">
           {edits.map(edit => {
@@ -95,6 +104,11 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
                     <span className="fc-name">{basename(edit.path)}</span>
                     <span className="fc-dir">{dirname(edit.path)}</span>
                   </span>
+                  {commentCounts.get(edit.path) ? (
+                    <span className="fc-comments xs" aria-label={`${commentCounts.get(edit.path)} open comments`}>
+                      <MessageSquare size={11} aria-hidden /> {commentCounts.get(edit.path)}
+                    </span>
+                  ) : null}
                   <span className="fc-stats">
                     <span className="add">+{stats.added}</span>
                     <span className="del">−{stats.removed}</span>
@@ -138,7 +152,7 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
             </div>
           ) : null}
           <div className="fc-diff-body">
-            <DiffView key={current.path + session.hash + layout} lines={current.diff?.lines ?? []} language={languageOf(current.path)} layout={layout} wrap={wrap} anchorPrefix={`d-${current.path}`} />
+            <DiffView key={current.path + session.hash + layout} lines={current.diff?.lines ?? []} language={languageOf(current.path)} layout={layout} wrap={wrap} anchorPrefix={`d-${current.path}`} comments={since ? undefined : fileComments} />
           </div>
         </section>
       ) : null}

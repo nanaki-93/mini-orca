@@ -347,6 +347,30 @@ paths:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/comments:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Add a reviewer comment on one line of the current proposal. It changes no source, revision or review state; open comments join the next revision or workflow run that sets include_comments.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeCommentRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/comments/delete:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Delete an open line comment; sent comments are history.
+      requestBody: {required: true, content: {application/json: {schema: {allOf: [{$ref: '#/components/schemas/ChangeIdentity'}, {type: object, required: [id], properties: {id: {type: string}}}]}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/apply:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2443,6 +2467,29 @@ components:
         - type: object
           properties:
             notes: {type: string, maxLength: 2048, description: Reviewer notes kept with this approval; cleared when the approval is.}
+    ChangeCommentRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [path, side, line, text]
+          properties:
+            path: {type: string}
+            side: {type: string, enum: [new, old], description: new for added and context lines, old for removed lines.}
+            line: {type: integer, minimum: 1}
+            text: {type: string, minLength: 1, maxLength: 1024}
+    ChangeComment:
+      type: object
+      required: [id, path, side, line, excerpt, text, hash, created_at]
+      properties:
+        id: {type: string}
+        path: {type: string}
+        side: {type: string, enum: [new, old]}
+        line: {type: integer, minimum: 1}
+        excerpt: {type: string, maxLength: 240, description: The commented line as written in the proposal.}
+        text: {type: string, maxLength: 1024}
+        hash: {type: string, description: The proposal the comment was written on.}
+        sent_revision: {type: integer, description: The revision whose repair brief carried the comment; absent while open.}
+        created_at: {type: string, format: date-time}
     ChangeReviewOverride:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
@@ -2591,6 +2638,7 @@ components:
             profile: {$ref: '#/components/schemas/ModelSelection', default: code}
             confirm_remote_provider: {type: boolean}
             repair: {type: boolean}
+            include_comments: {type: boolean, description: Send the open line comments as a repair brief; the message may then be empty.}
     ChangeCheckRequest:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
@@ -2620,13 +2668,13 @@ components:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
         - type: object
-          required: [message]
           properties:
             stream_output: {type: boolean, default: false, description: Opt into bounded private model streaming; every selected provider must support it.}
             plan_hash: {type: string, description: Required matching plan.hash for planned sessions; explicitly approves captured intent.}
             resume_from: {type: string, enum: [create, test, review], default: create}
             auto_repair: {type: boolean, default: false, description: Opt into up to two automatic repairs within approved scope.}
-            message: {type: string, minLength: 1, maxLength: 8192}
+            message: {type: string, maxLength: 8192, description: Required unless include_comments sends the open line comments.}
+            include_comments: {type: boolean, description: Send the open line comments as a repair brief; the request and brief stay within 8192 bytes.}
             models:
               type: object
               additionalProperties: false
@@ -2799,6 +2847,7 @@ components:
         checks_outdated: {type: boolean, description: Set on read when the project changed after the checks ran; they must run again before approval or Apply.}
         reviewed_hash: {type: string}
         review_notes: {type: string, maxLength: 2048, description: Notes given with the approval of reviewed_hash.}
+        comments: {type: array, maxItems: 128, items: {$ref: '#/components/schemas/ChangeComment'}}
         repair_attempts: {type: integer, maximum: 3}
         workflow: {$ref: '#/components/schemas/ChangeWorkflow'}
         context_manifest: {$ref: '#/components/schemas/ContextManifest'}

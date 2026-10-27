@@ -29,6 +29,9 @@ interface.
   merges, branch switches and reindexing stop only the running workflows whose
   files they change, and say which file; the task list now carries each task's
   paths.
+- **Line comments:** comment on any line of a changed file; open comments go
+  to the agents as one structured repair brief with the next revision or run
+  (`include_comments`) and stay as history once sent.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

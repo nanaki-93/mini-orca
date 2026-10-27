@@ -42,7 +42,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if err := request.Models.validate(); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(request.Message) == "" || len(request.Message) > 8192 {
+	if len(request.Message) > 8192 || strings.TrimSpace(request.Message) == "" && !request.IncludeComments {
 		return nil, fmt.Errorf("provide a workflow request of at most 8192 bytes")
 	}
 	if err := s.validateModelSelections(ctx, request.Models.selections()); err != nil {
@@ -57,23 +57,20 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 		return nil, err
 	}
 	cleanedMessages := stripWorkflowTestMessages(session.Messages)
-	if err := s.admitChangeWorkflow(ctx, session, request, len(cleanedMessages)); err != nil {
-		return nil, err
-	}
-	if err := approveWorkflowPlan(session, request.PlanHash); err != nil {
-		return nil, err
-	}
-	startStage, err := s.workflowResumeStage(session, request.ResumeFrom)
+	startStage, err := s.admitWorkflowSession(ctx, session, request, len(cleanedMessages))
 	if err != nil {
 		return nil, err
 	}
-	if err := validateResumedModels(session, request.Models, startStage); err != nil {
+	message, sent, err := workflowRequestMessage(session, request)
+	if err != nil {
 		return nil, err
 	}
 	agentCtx, release, err := s.newChangeWorkflowContext(ctx, request.Models)
 	if err != nil {
 		return nil, err
 	}
+	markCommentsSent(session.Comments, sent, session.Revision)
+	request.Message = message
 	refreshChangeScopeSuggestions(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
@@ -84,6 +81,37 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if startStage != 2 {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
+	s.launchChangeWorkflow(agentCtx, release, root, id, w, request, startStage, retryMessage)
+	return session, nil
+}
+
+// admitWorkflowSession checks the session may start this run and returns the
+// stage it starts from.
+func (s *Service) admitWorkflowSession(ctx context.Context, session *ChangeSession, request ChangeWorkflowRequest, messages int) (int, error) {
+	if err := s.admitChangeWorkflow(ctx, session, request, messages); err != nil {
+		return 0, err
+	}
+	if err := approveWorkflowPlan(session, request.PlanHash); err != nil {
+		return 0, err
+	}
+	startStage, err := s.workflowResumeStage(session, request.ResumeFrom)
+	if err != nil {
+		return 0, err
+	}
+	return startStage, validateResumedModels(session, request.Models, startStage)
+}
+
+// workflowRequestMessage is the run's request with any line-comment brief.
+func workflowRequestMessage(session *ChangeSession, request ChangeWorkflowRequest) (string, []string, error) {
+	message, sent, err := withRepairBrief(session, request.Message, request.IncludeComments)
+	if err == nil && len(message) > maxWorkflowRetryMessage {
+		err = fmt.Errorf("the request and its line comments exceed %d bytes; shorten the request", maxWorkflowRetryMessage)
+	}
+	return message, sent, err
+}
+
+// launchChangeWorkflow starts the admitted run's worker under its total deadline.
+func (s *Service) launchChangeWorkflow(agentCtx context.Context, release context.CancelFunc, root, sessionID string, w *ChangeWorkflow, request ChangeWorkflowRequest, startStage int, message string) {
 	budget := s.changeWorkflowTimeout(agentCtx, request.Models, startStage, request.AutoRepair)
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := func() { cancelTimeout(); release() }
@@ -92,12 +120,11 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	if request.StreamOutput {
 		workCtx = agentruntime.WithStreaming(workCtx)
 	}
-	job := &changeWorkflowJob{root: root, sessionID: id, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, interrupt: interrupt, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: sessionID, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, interrupt: interrupt, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
-	go s.runChangeWorkflow(workCtx, job, retryMessage)
-	return session, nil
+	go s.runChangeWorkflow(workCtx, job, message)
 }
 
 func (s *Service) newChangeWorkflowContext(ctx context.Context, models ChangeWorkflowModels) (context.Context, context.CancelFunc, error) {

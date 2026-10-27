@@ -2,7 +2,7 @@
 // authority: these helpers only decide which controls are offered, so a stale
 // or incomplete proposal never presents Apply as available.
 
-import type { ChangeHistoryEntry, ChangeMutationResult, ChangeSession, Check, FileChange, LoadedSession, UndoAvailability } from '@/api/types';
+import type { ChangeComment, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, Check, FileChange, LoadedSession, UndoAvailability } from '@/api/types';
 import type { Tone } from './util';
 
 export type PhaseTone = 'passed' | 'failed' | 'running' | 'idle';
@@ -146,6 +146,11 @@ export function canOverrideReview(session: ChangeSession | null | undefined): bo
   const workflow = session?.workflow;
   const ready = proposalReadiness(session);
   return Boolean(workflow) && ready.editable && ready.checksPassed && workflow!.status === 'changes_requested' && !workflow!.input && workflow!.review?.verdict === 'changes_requested' && workflow!.review.proposal_hash === session!.hash;
+}
+
+/** Comments not yet sent to the agents, which join the next revision or run. */
+export function openComments(session: Pick<ChangeSession, 'comments'> | null | undefined): ChangeComment[] {
+  return (session?.comments ?? []).filter(comment => !comment.sent_revision);
 }
 
 /** The next unreviewed edit after `current`, wrapping around, or ''. */

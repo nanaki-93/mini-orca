@@ -117,3 +117,30 @@ test('Apply names the running tasks whose files it changes', async ({ page, daem
   await page.getByRole('complementary', { name: 'Review gate' }).getByRole('button', { name: /apply/i }).click();
   await expect(page.getByRole('alertdialog')).toContainText('It stops 1 running task whose files it changes: “Serve fonts with a content type”.');
 });
+
+test('line comments become the brief of the next revision', async ({ page, daemon }) => {
+  await page.goto('/#/tasks/chg-1/files');
+  const diff = page.getByRole('region', { name: /Diff of internal\/api\/handlers\/webui.go/ });
+  await diff.getByRole('row').filter({ hasText: 'strings.Contains(name, "/")' }).hover();
+  await diff.getByRole('button', { name: 'Comment on line 42' }).click();
+  await diff.getByRole('textbox', { name: 'Comment on line 42' }).fill('Also reject backslashes.');
+  await diff.locator('.comment-form').getByRole('button', { name: /^Comment/ }).click();
+  await expect(diff.getByText('Also reject backslashes.')).toBeVisible();
+  expect(daemon.mutations('/comments')[0].body).toMatchObject({ path: 'internal/api/handlers/webui.go', side: 'new', line: 42, text: 'Also reject backslashes.', revision: 3 });
+  await expect(page.getByLabel('1 open comments')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Revise with 1 comment' }).click();
+  await expect(page.getByText('Proposal updated. Review the new diff.')).toBeVisible();
+  expect(daemon.mutations('/messages')[0].body).toMatchObject({ include_comments: true, message: '' });
+  await expect(page.getByRole('button', { name: /Revise with/ })).toHaveCount(0);
+});
+
+test('a comment can be deleted before it is sent', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, comments: [{ id: 'cm-1', path: 'internal/api/handlers/webui.go', side: 'new', line: 42, excerpt: 'if name == "" || strings.Contains(name, "/") {', text: 'Prefer path.Clean.', hash: session.hash, created_at: session.updated_at }] });
+  await page.goto('/#/tasks/chg-1/files');
+  await expect(page.getByText('Prefer path.Clean.')).toBeVisible();
+  await page.getByRole('button', { name: 'Delete comment' }).click();
+  await expect(page.getByText('Prefer path.Clean.')).toBeHidden();
+  expect(daemon.mutations('/comments/delete')[0].body).toMatchObject({ id: 'cm-1' });
+});

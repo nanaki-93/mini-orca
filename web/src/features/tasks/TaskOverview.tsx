@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Bot, CornerDownLeft, FileText, Gavel, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
-import { proposalReadiness, workflowActive } from '@/lib/readiness';
+import { openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { activeOverride, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
 import { formatDuration, plural, timeAgo } from '@/lib/util';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
@@ -213,12 +213,15 @@ function Conversation({ session }: { session: LoadedSession }) {
 
 function Revise({ session }: { session: LoadedSession }) {
   const [text, setText] = useState('');
+  const [withComments, setWithComments] = useState(true);
   const actions = useActions();
   const busy = useBusy();
   const ready = proposalReadiness(session);
+  const comments = openComments(session).length;
   if (!ready.editable || workflowActive(session)) return null;
+  const sendComments = comments > 0 && withComments;
   const submit = async () => {
-    if (await actions.refine(session, text)) setText('');
+    if (await actions.refine(session, text, sendComments)) setText('');
   };
   return (
     <section className="revise" aria-label="Ask for a revision">
@@ -235,10 +238,16 @@ function Revise({ session }: { session: LoadedSession }) {
         }}
         aria-label="Revision request"
       />
+      {comments ? (
+        <label className="check-label small">
+          <input type="checkbox" checked={withComments} onChange={e => setWithComments(e.target.checked)} />
+          Include my {plural(comments, 'line comment')}
+        </label>
+      ) : null}
       <div className="row">
         <span className="xs faint">A revision creates a new version; earlier review marks and checks no longer apply.</span>
         <span className="spacer" />
-        <Button variant="secondary" icon={CornerDownLeft} onClick={() => void submit()} disabled={!text.trim() || Boolean(busy)} loading={busy === 'Generating…'} kbd="mod+Enter">
+        <Button variant="secondary" icon={CornerDownLeft} onClick={() => void submit()} disabled={(!text.trim() && !sendComments) || Boolean(busy)} loading={busy === 'Generating…'} kbd="mod+Enter">
           {(session.changes ?? []).length ? 'Revise' : 'Generate'}
         </Button>
       </div>

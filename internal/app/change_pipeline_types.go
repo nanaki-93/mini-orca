@@ -38,6 +38,8 @@ type ChangeWorkflowRequest struct {
 	ConfirmedProfiles []string             `json:"confirmed_profiles"`
 	ConfirmSecurity   bool                 `json:"confirm_security"`
 	AutoRepair        bool                 `json:"auto_repair,omitempty"`
+	// IncludeComments sends the open line comments as a repair brief.
+	IncludeComments bool `json:"include_comments,omitempty"`
 }
 
 type ChangeWorkflowControl struct {

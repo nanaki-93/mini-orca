@@ -58,6 +58,7 @@ type ChangeSession struct {
 	ChecksOutdated      bool                    `json:"checks_outdated,omitempty"` // Set on read; never stored.
 	ReviewedHash        string                  `json:"reviewed_hash,omitempty"`
 	ReviewNotes         string                  `json:"review_notes,omitempty"`
+	Comments            []ChangeComment         `json:"comments,omitempty"`
 	RepairAttempts      int                     `json:"repair_attempts"`
 	Workflow            *ChangeWorkflow         `json:"workflow,omitempty"`
 	CreatedAt           time.Time               `json:"created_at"`
@@ -100,6 +101,9 @@ type ChangeMessageRequest struct {
 	ConfirmRemoteProvider bool              `json:"confirm_remote_provider"`
 	Repair                bool              `json:"repair,omitempty"`
 	Changes               []ChangeEditInput `json:"changes,omitempty"`
+	// IncludeComments sends the open line comments as a repair brief.
+	IncludeComments bool `json:"include_comments,omitempty"`
+	sentComments    []string
 }
 
 type InstructionProposalRequest struct {

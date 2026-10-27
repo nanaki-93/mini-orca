@@ -76,10 +76,19 @@ func validateStoredChange(session ChangeSession) error {
 	if err := validateStoredScope(&session); err != nil {
 		return err
 	}
+	if err := validateStoredReview(&session); err != nil {
+		return err
+	}
+	return validateStoredWorkflow(session.Workflow)
+}
+
+// validateStoredReview checks the human review state: approval notes bind an
+// approval, and line comments are bounded and anchored.
+func validateStoredReview(session *ChangeSession) error {
 	if session.ReviewNotes != "" && (session.ReviewedHash == "" || !boundedWorkflowText(session.ReviewNotes, maxApprovalNotes)) {
 		return fmt.Errorf("corrupt approval notes")
 	}
-	return validateStoredWorkflow(session.Workflow)
+	return validateStoredComments(session)
 }
 
 // validateStoredTargets returns the set of captured target paths.

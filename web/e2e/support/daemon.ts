@@ -60,6 +60,9 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/workflow\/input$/, (body, m) => this.update(m[1], body, s => ({ ...s, workflow: { ...s.workflow!, input: { ...s.workflow!.input!, status: String(body.decision) === 'approve' ? 'answered' : 'rejected' }, status: body.decision === 'approve' ? 'awaiting_human_review' : 'canceled' } }))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/review$/, (body, m) => this.update(m[1], body, s => this.approve(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/review-override$/, (body, m) => this.update(m[1], body, s => this.override(s, body))],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/comments$/, (body, m) => this.update(m[1], body, s => this.comment(s, body))],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/comments\/delete$/, (body, m) => this.update(m[1], body, s => ({ ...s, comments: (s.comments ?? []).filter(c => c.id !== body.id || c.sent_revision) }))],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/messages$/, (body, m) => this.update(m[1], body, s => this.revise(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
   ];
@@ -125,6 +128,23 @@ export class FakeDaemon {
     if (typeof body.reason !== 'string' || !body.reason.trim()) throw new Error('Give a reason for overriding the reviewers.');
     const stages = workflow.stages.map(stage => (stage.name === 'human_review' ? { ...stage, status: 'waiting' } : stage));
     return { ...s, workflow: { ...workflow, status: 'awaiting_human_review', stages, override: { proposal_hash: s.hash, reason: body.reason.trim(), at: data.ago(0) } } };
+  }
+
+  /** A comment anchors to a line of the current proposal and quotes it. */
+  private comment(s: ChangeSession, body: Record<string, unknown>): ChangeSession {
+    const edit = s.changes.find(change => change.path === body.path);
+    const line = edit?.diff.lines.find(l => (body.side === 'old' ? l.kind === 'removed' && l.old_line === body.line : l.kind !== 'removed' && l.new_line === body.line));
+    if (!line || typeof body.text !== 'string' || !body.text.trim()) throw new Error('Comment on a line of the current proposal.');
+    const comment = { id: `cm-${this.nextId++}`, path: String(body.path), side: body.side as 'new' | 'old', line: Number(body.line), excerpt: line.text, text: body.text.trim(), hash: s.hash, created_at: data.ago(0) };
+    return { ...s, comments: [...(s.comments ?? []), comment] };
+  }
+
+  /** A revision is a new version; the open comments it carried are marked sent. */
+  private revise(s: ChangeSession, body: Record<string, unknown>): ChangeSession {
+    const open = (s.comments ?? []).filter(comment => !comment.sent_revision);
+    if (body.include_comments && !open.length) throw new Error('There are no open line comments to send.');
+    const comments = (s.comments ?? []).map(comment => (body.include_comments && !comment.sent_revision ? { ...comment, sent_revision: s.revision } : comment));
+    return { ...s, revision: s.revision + 1, hash: `${s.hash}-r${s.revision + 1}`, comments, reviewed_files: [], reviewed_hash: undefined, checks: [], messages: [...s.messages, { role: 'user', content: String(body.message || 'Line comments') }, { role: 'assistant', content: 'Addressed the comments.' }] };
   }
 
   private apply(id: string, body: Record<string, unknown>) {

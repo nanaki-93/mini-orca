@@ -47,6 +47,12 @@ every guard when the action arrives.
 - **View files.** Each changed file is marked viewed at the current proposal
   hash (`v` marks it and moves to the next unviewed file). "Since last review"
   shows only what changed since the last complete review.
+- **Line comments.** Any line of a changed file takes a comment (the gutter
+  `+`); a comment writes nothing and changes no review state. Open comments
+  can be deleted, show on their file in the tree, and go to the agents as one
+  repair brief with the next revision (**Revise with N comments**, or the
+  revise box's "Include my line comments") or agent run; sent comments are
+  kept as history.
 - **Checks.** Running checks needs execution trust and runs in an isolated copy.
   Only required checks gate approval; an optional failure is a warning. When
   the project changed after checks ran, they read Outdated and must run again

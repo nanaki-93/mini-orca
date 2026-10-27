@@ -20,8 +20,11 @@ export function diffStats(edit: Pick<FileChange, 'diff'> | { lines: DiffLine[] }
 
 export type Segment = { type: 'lines'; start: number; end: number } | { type: 'gap'; start: number; end: number; count: number };
 
-/** Groups lines into visible hunks and collapsed gaps; `expanded` holds gap start indexes. */
-export function buildSegments(lines: DiffLine[], context = 3, expanded: ReadonlySet<number> = new Set()): Segment[] {
+/**
+ * Groups lines into visible hunks and collapsed gaps; `expanded` holds gap
+ * start indexes and `pinned` line indexes that stay visible (commented lines).
+ */
+export function buildSegments(lines: DiffLine[], context = 3, expanded: ReadonlySet<number> = new Set(), pinned: ReadonlySet<number> = new Set()): Segment[] {
   if (!lines.length) return [];
   const keep = new Array<boolean>(lines.length).fill(false);
   let anyChange = false;
@@ -30,6 +33,9 @@ export function buildSegments(lines: DiffLine[], context = 3, expanded: Readonly
     anyChange = true;
     for (let k = Math.max(0, index - context); k <= Math.min(lines.length - 1, index + context); k++) keep[k] = true;
   });
+  for (const index of pinned) {
+    if (index >= 0 && index < lines.length) [keep[index], anyChange] = [true, true];
+  }
   if (!anyChange) return [{ type: 'gap', start: 0, end: lines.length, count: lines.length }];
   const segments: Segment[] = [];
   let index = 0;
@@ -124,3 +130,17 @@ export function parseGitDiff(text: string | undefined): ParsedFileDiff[] {
   }
   return files;
 }
+
+/** Where a line comment attaches: removed lines on the old side, others on the new. */
+export interface LineAnchor {
+  side: 'new' | 'old';
+  line: number;
+}
+
+export function lineAnchor(line: DiffLine | null | undefined): LineAnchor | null {
+  if (!line || line.kind === 'hunk') return null;
+  if (line.kind === 'removed') return line.old_line ? { side: 'old', line: line.old_line } : null;
+  return line.new_line ? { side: 'new', line: line.new_line } : null;
+}
+
+export const anchorKey = (anchor: LineAnchor) => `${anchor.side}:${anchor.line}`;

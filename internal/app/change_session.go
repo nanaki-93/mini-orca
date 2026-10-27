@@ -308,7 +308,7 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 	if len(request.Changes) > 0 {
 		return s.updateChangeProposal(ctx, id, request)
 	}
-	if strings.TrimSpace(request.Message) == "" || len(request.Message) > 8192 {
+	if len(request.Message) > 8192 || strings.TrimSpace(request.Message) == "" && !request.IncludeComments {
 		return nil, fmt.Errorf("provide a message of at most 8192 bytes")
 	}
 	runtime, err := s.changeMessageRuntime(ctx, request)
@@ -316,6 +316,10 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 		return nil, err
 	}
 	session, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
+	if err != nil {
+		return nil, err
+	}
+	request.Message, request.sentComments, err = withRepairBrief(session, request.Message, request.IncludeComments)
 	if err != nil {
 		return nil, err
 	}
@@ -433,9 +437,13 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
-	if _, _, err := s.loadChangeForAction(timed, session.ID, request.ChangeIdentity); err != nil {
+	current, _, err := s.loadChangeForAction(timed, session.ID, request.ChangeIdentity)
+	if err != nil {
 		return nil, err
 	}
+	// Comments written during generation are kept; the sent ones are marked.
+	session.Comments = current.Comments
+	markCommentsSent(session.Comments, request.sentComments, session.Revision)
 	if request.Repair && len(session.Changes) > 0 {
 		edits = preservePinnedTests(edits, session.Changes)
 	} else if len(session.PinnedTests) > 0 {

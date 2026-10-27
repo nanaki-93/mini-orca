@@ -122,6 +122,8 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/workflow/input` | Respond to the exact durable review request with current proposal identity. |
 | POST | `/api/projects/current/changes/{sessionID}/plan` | Save revised task intent and scope before generation. |
 | POST | `/api/projects/current/changes/{sessionID}/review-file` | Record inspection of a changed file for the current hash. |
+| POST | `/api/projects/current/changes/{sessionID}/comments` | Add a reviewer comment on one line of the current proposal. |
+| POST | `/api/projects/current/changes/{sessionID}/comments/delete` | Delete an open line comment. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review-override` | Override the model reviewers' rejection of the current checked hash with a reason; approves nothing. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
@@ -690,6 +692,19 @@ session records `checks_workspace_hash`, the tree its checks describe. When the
 project changes after checks ran, GET returns `checks_outdated: true`, and
 approval, a review override and Apply are refused until checks run again on the
 current tree; the session itself stays current.
+
+Line comments are the reviewer's requests on specific lines. `POST
+.../comments` takes `ChangeIdentity`, a changed `path`, `side` (`new` for added
+and context lines, `old` for removed lines), a `line` number on that side and
+`text` (1–1024 bytes). The daemon quotes the line as `excerpt` and records the
+proposal `hash`; comments change no source, revision or review state. A session
+keeps at most 32 open and 128 comments, and the open ones fit a 6 KiB brief.
+`.../comments/delete` takes `ChangeIdentity` and an open comment `id`. A
+`/messages` or `/workflow` request with `include_comments: true` sends every
+open comment as a numbered repair brief (path, line, quoted line and text; a
+comment on an earlier version says so) after the optional message, which may
+then be empty, and marks them `sent_revision`. A workflow request with its
+brief stays within 8192 bytes. Without open comments the flag is rejected.
 
 Apply, Undo, Git merges, merge aborts, branch switches and reindexing stop only
 the running workflows whose tasks they made stale, by the same check: captured

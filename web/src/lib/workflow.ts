@@ -184,7 +184,7 @@ export function workflowDestinations(settings: AgentSettings | null | undefined,
   return { selections, destinations, confirmed, local };
 }
 
-export function workflowRequest(identity: ProjectIdentity & { revision: number; hash: string }, message: string, choice: DestinationChoice, options: { autoRepair?: boolean; confirmSecurity?: boolean; planHash?: string } = {}) {
+export function workflowRequest(identity: ProjectIdentity & { revision: number; hash: string }, message: string, choice: DestinationChoice, options: { autoRepair?: boolean; confirmSecurity?: boolean; planHash?: string; includeComments?: boolean } = {}) {
   return {
     ...identity,
     message,
@@ -193,6 +193,7 @@ export function workflowRequest(identity: ProjectIdentity & { revision: number; 
     confirm_security: Boolean(options.confirmSecurity),
     auto_repair: Boolean(options.autoRepair),
     plan_hash: options.planHash || undefined,
+    include_comments: options.includeComments || undefined,
   };
 }
 

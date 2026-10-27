@@ -97,7 +97,8 @@ token set; keep text at 4.5:1 contrast or better against its surface.
   groups.
 - **Task** — Conversation (brief, criteria, scope, the agent timeline with
   reviewer verdicts, messages, revise), Files changed (file tree with viewed
-  marks and progress, unified or split diff, "since last review"), Checks
+  marks, progress and comment counts, unified or split diff with line
+  comments, "since last review"), Checks
   (results with output), and the Ready to apply? rail with Apply, commit message
   and Undo.
 - **Code** — virtualized file tree, editor tabs per checkout, highlighted

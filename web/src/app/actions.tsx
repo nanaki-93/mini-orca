@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
 import type { AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
-import { canOverrideReview, changeIdentity, proposalReadiness, workflowActive } from '@/lib/readiness';
+import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
 import { navigate } from '@/lib/router';
 import { plural } from '@/lib/util';
@@ -88,7 +88,6 @@ export function useActions() {
     return { ok, remote: true };
   }
 
-  /** Running tasks in the same checkout that an Apply, Undo or reindex stops. */
   /** Names the running tasks in this checkout that applying `changed` likely stops; the rest keep running. */
   function runningTasksNote(session: { id: string; checkout: { worktreePath: string } }, changed: string[]): string {
     const lists = client.getQueriesData<ChangeHistoryEntry[]>({ queryKey: ['changes'] });
@@ -137,6 +136,7 @@ export function useActions() {
   }
 
   async function startAgents(session: LoadedSession, options: { message?: string; autoRepair?: boolean } = {}): Promise<boolean> {
+    const comments = openComments(session).length;
     const message = (options.message ?? session.title).trim();
     if (!message) {
       toast('Describe the change for the agents first.', 'warning');
@@ -168,6 +168,7 @@ export function useActions() {
             <p className="small muted">All selected models run locally.</p>
           )}
           {security ? <p className="small">This is a security task: a security specialist reviews it.</p> : null}
+          {comments ? <p className="small">Your {plural(comments, 'line comment')} {comments === 1 ? 'goes' : 'go'} to the agents as a repair brief.</p> : null}
         </div>
       ),
       confirmLabel: 'Start agents',
@@ -176,7 +177,7 @@ export function useActions() {
     return Boolean(
       await guarded('Starting agents…', async () => {
         try {
-          const body = workflowRequest(changeIdentity(session), message, choice, { autoRepair: options.autoRepair, confirmSecurity: security, planHash: session.plan?.hash });
+          const body = workflowRequest(changeIdentity(session), message, choice, { autoRepair: options.autoRepair, confirmSecurity: security, planHash: session.plan?.hash, includeComments: comments > 0 });
           setSession(await api.post<ChangeSession>(changePath(session, '/workflow'), body), session);
           toast('Agents started. Progress updates live.', 'info');
           return true;
@@ -201,9 +202,10 @@ export function useActions() {
     });
   }
 
-  async function refine(session: LoadedSession, message: string): Promise<boolean> {
+  /** Revises the proposal from a message and, when asked, the open line comments. */
+  async function refine(session: LoadedSession, message: string, includeComments = false): Promise<boolean> {
     const text = message.trim();
-    if (!text) {
+    if (!text && !includeComments) {
       toast('Describe what should change first.', 'warning');
       return false;
     }
@@ -212,7 +214,7 @@ export function useActions() {
     return Boolean(
       await guarded('Generating…', async () => {
         try {
-          setSession(await api.post<ChangeSession>(changePath(session, '/messages'), { ...changeIdentity(session), message: text, profile: 'code', confirm_remote_provider: consent.remote }), session);
+          setSession(await api.post<ChangeSession>(changePath(session, '/messages'), { ...changeIdentity(session), message: text, profile: 'code', confirm_remote_provider: consent.remote, include_comments: includeComments || undefined }), session);
           toast('Proposal updated. Review the new diff.', 'success');
           return true;
         } catch (err) {
@@ -224,6 +226,30 @@ export function useActions() {
   }
 
   // ---------------------------------------------------------------- review
+
+  async function addComment(session: LoadedSession, anchor: { path: string; side: 'new' | 'old'; line: number }, text: string): Promise<boolean> {
+    return Boolean(
+      await guarded('Saving comment…', async () => {
+        try {
+          setSession(await api.post<ChangeSession>(changePath(session, '/comments'), { ...changeIdentity(session), ...anchor, text: text.trim() }), session);
+          return true;
+        } catch (err) {
+          fail('Could not save the comment', err);
+          return false;
+        }
+      }),
+    );
+  }
+
+  async function deleteComment(session: LoadedSession, id: string): Promise<void> {
+    await guarded('Deleting comment…', async () => {
+      try {
+        setSession(await api.post<ChangeSession>(changePath(session, '/comments/delete'), { ...changeIdentity(session), id }), session);
+      } catch (err) {
+        fail('Could not delete the comment', err);
+      }
+    });
+  }
 
   async function markViewed(session: LoadedSession, path: string): Promise<boolean> {
     return Boolean(
@@ -500,7 +526,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {
