@@ -18,17 +18,27 @@ func (s *Service) PreviewGitMerge(ctx context.Context, request GitMutationReques
 	return gitops.PreviewMerge(ctx, repository, request)
 }
 
+// mergePreflight resolves the clean merge target and the requested source
+// worktree; callers hold jobLifecycleMu.
+func (s *Service) mergePreflight(ctx context.Context, request GitMutationRequest) (*GitRepository, *GitWorktree, error) {
+	repository, err := s.gitMutationPreflight(ctx, request, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := gitops.RequireMergeTarget(repository); err != nil {
+		return nil, nil, err
+	}
+	source, err := gitops.MergeSource(ctx, repository, request)
+	if err != nil {
+		return nil, nil, err
+	}
+	return repository, source, nil
+}
+
 func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
-	repository, err := s.gitMutationPreflight(ctx, request, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := gitops.RequireMergeTarget(repository); err != nil {
-		return nil, err
-	}
-	source, err := gitops.MergeSource(ctx, repository, request)
+	repository, source, err := s.mergePreflight(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -53,14 +63,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 func (s *Service) CleanupMergedWorktree(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
-	repository, err := s.gitMutationPreflight(ctx, request, false)
-	if err != nil {
-		return nil, err
-	}
-	if err := gitops.RequireMergeTarget(repository); err != nil {
-		return nil, err
-	}
-	source, err := gitops.MergeSource(ctx, repository, request)
+	repository, source, err := s.mergePreflight(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +92,7 @@ func requireFinishedWorktreeTasks(path string) error {
 		return err
 	}
 	for _, entry := range history {
-		if entry.State != "applied" || entry.Commit == nil || entry.Commit.State != "committed" {
+		if !entry.Integrated() {
 			return fmt.Errorf("worktree contains unfinished task %q; finish it or explicitly discard the worktree", entry.Title)
 		}
 	}

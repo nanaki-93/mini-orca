@@ -36,6 +36,12 @@ type ChangeHistoryEntry struct {
 	UpdatedAt       time.Time               `json:"updated_at"`
 }
 
+// Integrated reports whether the task was applied and committed on its
+// branch: the condition for merging its worktree and completing its findings.
+func (entry ChangeHistoryEntry) Integrated() bool {
+	return entry.State == "applied" && entry.Commit != nil && entry.Commit.State == "committed"
+}
+
 type GitBranch struct {
 	Name         string `json:"name"`
 	Head         string `json:"head"`
@@ -135,7 +141,7 @@ func PopulateWorktree(ctx context.Context, target *GitRepository, tree *GitWorkt
 	}
 	tree.Sessions = history
 	for _, entry := range history {
-		if entry.State == "applied" && entry.Commit != nil && entry.Commit.State == "committed" {
+		if entry.Integrated() {
 			tree.Completed = append(tree.Completed, entry)
 		}
 	}

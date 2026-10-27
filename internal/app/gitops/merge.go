@@ -80,7 +80,7 @@ func WorktreeMergeable(ctx context.Context, target *GitRepository, tree *GitWork
 		return false, nil
 	}
 	for _, entry := range tree.Sessions {
-		if entry.State != "applied" || entry.Commit == nil || entry.Commit.State != "committed" {
+		if !entry.Integrated() {
 			return false, nil
 		}
 	}
@@ -164,7 +164,7 @@ func MergedFindingTargets(ctx context.Context, repository *GitRepository, source
 	}
 	completed := []project.FindingCompletion{}
 	for _, entry := range history {
-		if len(entry.FindingTargets) == 0 || entry.State != "applied" || entry.Commit == nil || entry.Commit.State != "committed" {
+		if len(entry.FindingTargets) == 0 || !entry.Integrated() {
 			continue
 		}
 		if !commitOIDPattern.MatchString(entry.Commit.OID) {
