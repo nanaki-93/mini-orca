@@ -25,6 +25,17 @@ export class FakeDaemon {
   private readonly overrides = new Map<string, () => unknown>();
   private readonly pending: DaemonEvent[] = [];
   private settings = data.agentSettings(0, null, null);
+  /** The analysis run the overview reports; tests set it with serveRun. */
+  private run: ReturnType<typeof data.analysisRun> | undefined;
+
+  serveRun(run: ReturnType<typeof data.analysisRun> | undefined): void {
+    this.run = run;
+  }
+
+  private setRun(status: string) {
+    this.run = { ...(this.run ?? data.analysisRun()), status, reason: undefined };
+    return this.run;
+  }
   /** Console messages a test expects, such as the browser's note on a refused request. */
   readonly expectedConsole: RegExp[] = [];
 
@@ -72,7 +83,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes$/, () => this.tasks()],
     [/^\/api\/projects\/current\/changes\/recovery$/, () => ({ ...data.project, session_id: '', state: '', hash: '', undo_available: false, warnings: [] })],
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
-    [/^\/api\/projects\/current\/overview$/, () => data.overview],
+    [/^\/api\/projects\/current\/overview$/, () => ({ ...data.overview, analysis_run: this.run ?? data.overview.analysis_run })],
     [/^\/api\/projects\/current\/agent-settings$/, () => this.settings],
     [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
     [/^\/api\/projects\/current\/quarantine$/, () => ({ files: [], skipped: [] })],
@@ -90,6 +101,9 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/messages$/, (body, m) => this.update(m[1], body, s => this.revise(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
     [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
+    [/^\/api\/projects\/current\/analysis\/preview$/, body => ({ identity: { ...body, queue_id: 'queue-2' }, preview_id: 'preview-1', providers: [{ id: 'p-bug', model: { model: 'local-bug-model', provider_origin: 'http://localhost:1234' } }], files: [{}, {}, {}, {}], max_model_requests: 12, security_review_intent_required: false })],
+    [/^\/api\/projects\/current\/analysis\/run$/, () => this.setRun('running')],
+    [/^\/api\/projects\/current\/analysis\/run\/control$/, body => this.setRun(body.action === 'pause' ? 'paused' : body.action === 'cancel' ? 'canceled' : 'running')],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
   ];
 

@@ -1,18 +1,19 @@
 // Settings: project, trust, models and agents, analysis, appearance.
 
-import { AlertTriangle, Bot, Coins, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
+import { Bot, Coins, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
 import { useModels, useOverview, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
-import type { ModelsCurrent, UsageTotal } from '@/api/types';
+import type { UsageTotal } from '@/api/types';
 import { costCaveat, costLabel, formatTokens } from '@/lib/usage';
 import { useActions, useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { setUI, useUI, type Theme } from '@/app/store';
 import { navigate } from '@/lib/router';
 import { plural, timeAgo } from '@/lib/util';
-import { Badge, Button, Callout, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
+import { Badge, Button, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
 import { OpenProject } from './OpenProject';
 import { QuarantineList } from './Quarantine';
 import { AgentRoles } from './AgentRoles';
+import { ConfigSource } from './ConfigSource';
 
 const SECTIONS = [
   { id: 'project', label: 'Project', icon: FolderOpen },
@@ -210,17 +211,6 @@ function ModelSettings() {
   );
 }
 
-/** Names the daemon's configuration file, or warns that the built-in defaults apply. */
-export function ConfigSource({ models }: { models: ModelsCurrent | undefined }) {
-  if (!models || models.config_file === undefined) return null;
-  if (models.config_file) return <p className="xs muted">Configuration: <span className="mono">{models.config_file}</span></p>;
-  return (
-    <Callout tone="warning" icon={AlertTriangle} title="No config.yaml was found">
-      The daemon uses its built-in local model defaults (<span className="mono">http://localhost:1234/v1</span>), so model requests fail unless a local server answers there. Put your configuration in <span className="mono">~/.config/mini-orca/config.yaml</span> or the project folder, then restart the daemon.
-    </Callout>
-  );
-}
-
 function AnalysisSettings() {
   const overview = useOverview().data;
   const project = useProject().data;
@@ -237,6 +227,7 @@ function AnalysisSettings() {
           <Sparkles size={15} aria-hidden />
           <span className="strong">Coverage</span>
           <span className="spacer" />
+          <Button onClick={() => navigate('/analysis')}>Open dashboard</Button>
           {project ? <Button variant="primary" icon={Play} onClick={() => void actions.runAnalysis(project, worktreePath)} disabled={Boolean(busy)}>Analyze project</Button> : null}
         </div>
         <div className="card-body">

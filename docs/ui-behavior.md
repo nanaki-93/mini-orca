@@ -100,7 +100,17 @@ every guard when the action arrives.
   scans and agent verification. Trust is bound to the canonical project path.
 - **Analyze.** A preview comes first; the confirmation names the file count, the
   maximum model requests, remote destinations and whether a security review is
-  included. Analysis writes findings and the handbook, never source.
+  included. Analysis writes findings and the handbook, never source. A dispatch
+  window covers up to 64 files and 30 minutes; a run that reaches either pauses
+  and resumes from the dashboard.
+- **Analysis dashboard.** Shows the last or running run live: overall progress,
+  failed stages grouped by reason (with a link to the models when the provider
+  could not be reached), each section's coverage and findings (opening Issues
+  filtered to that category), the models used, and every file's stages with
+  their reasons, filterable to failed, with findings or in progress. Controls
+  follow the run: pause and cancel while it runs; resume (after a fresh preview)
+  or cancel when it is paused or interrupted; otherwise analyze changes, retry
+  only failed and stale stages, or re-analyze everything.
 - **Issues.** Dismiss and reopen are local triage. **Fix with agents** opens the
   composer prefilled from the finding; nothing starts until the user does.
 - **Explain a file.** Sends the file's admitted context to a model after remote

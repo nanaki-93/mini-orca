@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisRunSummary, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
@@ -33,6 +33,30 @@ export function useBusy(): string {
 }
 
 const changePath = (session: LoadedSession, suffix: string) => withWorktree('/api/projects/current/changes/' + encodeURIComponent(session.id) + suffix, session.checkout.worktreePath);
+
+/**
+ * One dispatch window's bounds: up to 64 files and 30 minutes, two attempts
+ * per stage. A window that ends pauses the run; resume continues it.
+ */
+const ANALYSIS_LIMITS = { batch_files: 64, budget_seconds: 1800, max_attempts_per_stage: 2 };
+
+export interface AnalysisOptions {
+  /** Retry only stages that failed or went stale. */
+  retryFailed?: boolean;
+  /** Analyze again even where saved results are current. */
+  refresh?: boolean;
+  /** Resume this paused or interrupted run. */
+  resume?: AnalysisRunSummary;
+}
+
+interface AnalysisPreview {
+  identity: unknown;
+  preview_id: string;
+  providers?: { id: string; remote_confirmation_required?: boolean; model?: { model?: string; scope?: string; provider_origin?: string } }[];
+  files?: unknown[];
+  max_model_requests?: number;
+  security_review_intent_required?: boolean;
+}
 
 export interface DraftTask {
   title: string;
@@ -437,28 +461,63 @@ export function useActions() {
     });
   }
 
-  async function runAnalysis(project: Project, worktreePath: string) {
-    await guarded('Preparing analysis…', async () => {
+  /** Previews an analysis (or the resumption of a stopped run), asks for consent, then starts it. */
+  async function runAnalysis(project: Project, worktreePath: string, options: AnalysisOptions = {}) {
+    const resume = options.resume?.identity;
+    await guarded(resume ? 'Preparing to resume…' : 'Preparing analysis…', async () => {
       try {
-        const limits = { batch_files: 64, budget_seconds: 300, max_attempts_per_stage: 2 };
-        const preview = await api.post<{ identity: unknown; preview_id: string; providers?: { id: string; remote_confirmation_required?: boolean; model?: { model?: string; scope?: string; provider_origin?: string } }[]; files?: unknown[]; max_model_requests?: number; security_review_intent_required?: boolean }>(
-          withWorktree('/api/projects/current/analysis/preview', worktreePath),
-          { project_id: project.project_id, project_revision: project.project_revision, scope: 'project', refresh: false, limits },
-        );
+        // A resumption repeats the run's own plan options.
+        const plan = options.resume?.plan;
+        const limits = plan?.limits ?? ANALYSIS_LIMITS;
+        const refresh = resume ? Boolean(plan?.refresh) : Boolean(options.refresh);
+        const retryFailed = resume ? Boolean(plan?.retry_stale_failed) : Boolean(options.retryFailed);
+        const preview = await api.post<AnalysisPreview>(withWorktree('/api/projects/current/analysis/preview', worktreePath), {
+          project_id: project.project_id,
+          project_revision: project.project_revision,
+          scope: 'project',
+          refresh,
+          retry_stale_failed: retryFailed || undefined,
+          resume_run: resume,
+          limits,
+        });
         const providers = preview.providers ?? [];
         const remote = providers.filter(p => p.remote_confirmation_required).map(p => `${p.model?.model || p.model?.scope} at ${p.model?.provider_origin || 'remote provider'}`);
         const security = Boolean(preview.security_review_intent_required);
+        const what = options.retryFailed ? 'Retries the failed and stale stages of' : options.refresh ? 'Analyzes again, ignoring saved results,' : resume ? 'Resumes the analysis of' : 'Analyzes';
         const ok = await confirm({
-          title: 'Analyze the project?',
-          body: `Analyzes ${plural((preview.files ?? []).length, 'file')} (up to ${preview.max_model_requests ?? 0} model requests) for bugs, performance and security, then refreshes the generated docs.${security ? ' Includes an AI security review.' : ''}${remote.length ? ` Sends bounded source context to ${remote.join(', ')}.` : ''}`,
-          confirmLabel: 'Analyze',
+          title: resume ? 'Resume the analysis?' : options.retryFailed ? 'Retry failed analysis?' : 'Analyze the project?',
+          body: `${what} ${plural((preview.files ?? []).length, 'file')} (up to ${preview.max_model_requests ?? 0} model requests) for bugs, performance and security, then refreshes the generated docs.${security ? ' Includes an AI security review.' : ''}${remote.length ? ` Sends bounded source context to ${remote.join(', ')}.` : ''}`,
+          confirmLabel: resume ? 'Resume' : 'Analyze',
         });
         if (!ok) return;
-        await api.post(withWorktree('/api/projects/current/analysis/run', worktreePath), { identity: preview.identity, preview_id: preview.preview_id, limits, refresh: false, confirmations: { provider_ids: providers.map(p => p.id).filter(Boolean), security_review: security } });
-        toast('Analysis started.', 'info');
+        const confirmations = { provider_ids: providers.map(p => p.id).filter(Boolean), security_review: security };
+        if (resume) {
+          await api.post(withWorktree('/api/projects/current/analysis/run/control', worktreePath), { identity: resume, action: 'resume', preview_id: preview.preview_id, confirmations });
+        } else {
+          await api.post(withWorktree('/api/projects/current/analysis/run', worktreePath), { identity: preview.identity, preview_id: preview.preview_id, limits, refresh, retry_stale_failed: retryFailed || undefined, confirmations });
+        }
+        toast(resume ? 'Analysis resumed.' : 'Analysis started.', 'info');
         void client.invalidateQueries({ queryKey: ['overview'] });
       } catch (err) {
-        fail('Analysis could not start', err);
+        fail(resume ? 'Analysis could not resume' : 'Analysis could not start', err);
+      }
+    });
+  }
+
+  /** Pauses or cancels the running analysis; finished stages keep their results. */
+  async function controlAnalysis(run: AnalysisRunSummary, worktreePath: string, action: 'pause' | 'cancel') {
+    if (!run.identity) return;
+    if (action === 'cancel') {
+      const ok = await confirm({ title: 'Cancel the analysis?', body: 'Running model requests stop. Finished files keep their results; a new analysis starts over for the rest.', confirmLabel: 'Cancel analysis', cancelLabel: 'Keep running', danger: true });
+      if (!ok) return;
+    }
+    await guarded(action === 'pause' ? 'Pausing analysis…' : 'Canceling analysis…', async () => {
+      try {
+        await api.post(withWorktree('/api/projects/current/analysis/run/control', worktreePath), { identity: run.identity, action });
+        toast(action === 'pause' ? 'Analysis pauses after the current requests.' : 'Analysis canceled.', 'info');
+        void client.invalidateQueries({ queryKey: ['overview'] });
+      } catch (err) {
+        fail(action === 'pause' ? 'Could not pause the analysis' : 'Could not cancel the analysis', err);
       }
     });
   }
@@ -553,7 +612,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

@@ -475,10 +475,78 @@ export interface ProjectDocs {
   updated_at?: string;
 }
 
+export interface AnalysisRunIdentity {
+  project_id: string;
+  project_revision: string;
+  policy_fingerprint: string;
+  provider_fingerprint: string;
+  queue_id: string;
+  id: string;
+  generation: string;
+}
+
+export type AnalysisStageName = 'semantic' | 'performance' | 'security_rules' | 'security_ai';
+
+export interface AnalysisStageProgress {
+  stage: AnalysisStageName | string;
+  status: string;
+  attempts: number;
+  cached: boolean;
+  finding_count?: number | null;
+  reason?: string;
+}
+
+export interface AnalysisRunFile {
+  path: string;
+  language?: string;
+  stages: AnalysisStageProgress[];
+}
+
+export interface AnalysisCoverageCounts {
+  total: number;
+  pending: number;
+  running: number;
+  succeeded: number;
+  partial: number;
+  failed: number;
+  skipped: number;
+  unavailable: number;
+}
+
+export interface AnalysisSection {
+  category: 'bugs' | 'performance' | 'security' | string;
+  status: string;
+  coverage: AnalysisCoverageCounts;
+  finding_count?: number | null;
+}
+
+export interface AnalysisProvider {
+  id: string;
+  stages: string[];
+  model: Model;
+  remote_confirmation_required?: boolean;
+}
+
+/** An analysis run: what it planned, each file's stages and the totals per section. */
 export interface AnalysisRunSummary {
-  identity?: Record<string, string>;
+  identity?: AnalysisRunIdentity;
   status: string;
   reason?: string;
+  files?: AnalysisRunFile[];
+  sections?: AnalysisSection[];
+  plan?: {
+    limits?: { batch_files: number; budget_seconds: number; max_attempts_per_stage: number };
+    providers?: AnalysisProvider[];
+    excluded?: { path: string; reason: string }[];
+    refresh?: boolean;
+    retry_stale_failed?: boolean;
+    expected_model_requests?: number;
+    max_model_requests?: number;
+  };
+  features?: { status: string; reason?: string; suggestion_count?: number | null } | null;
+  elapsed_seconds?: number;
+  window_files_completed?: number;
+  created_at?: string;
   started_at?: string;
   updated_at?: string;
 }

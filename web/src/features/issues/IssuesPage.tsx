@@ -22,14 +22,15 @@ export function IssuesPage() {
   const all = data?.findings ?? [];
   const status = (route.params.get('status') as StatusFilter) || 'open';
   const severity = route.params.get('severity') ?? 'all';
+  const category = route.params.get('category') ?? '';
   const selectedId = route.params.get('id') ?? '';
   const [q, setQ] = useState('');
 
   const list = useMemo(() => {
-    const filtered = all.filter(f => (status === 'all' ? true : status === 'open' ? isOpenFinding(f) : !isOpenFinding(f))).filter(f => severity === 'all' || (f.severity || '').toLowerCase() === severity);
+    const filtered = all.filter(f => (status === 'all' ? true : status === 'open' ? isOpenFinding(f) : !isOpenFinding(f))).filter(f => severity === 'all' || (f.severity || '').toLowerCase() === severity).filter(f => !category || f.category === category);
     const sorted = [...filtered].sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || (a.location?.path ?? '').localeCompare(b.location?.path ?? ''));
     return rankItems(sorted, q, f => `${f.title} ${f.location?.path ?? ''} ${f.category ?? ''}`, 1000).map(r => r.item);
-  }, [all, status, severity, q]);
+  }, [all, status, severity, category, q]);
   const selected = list.find(f => f.id === selectedId) ?? null;
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -56,6 +57,12 @@ export function IssuesPage() {
               </button>
             ))}
           </div>
+          {category ? (
+            <button type="button" className="chip chip-toggle is-on" onClick={() => setParam('category', undefined)} aria-label={`Clear the ${category} filter`}>
+              {category}
+              <XCircle size={12} aria-hidden />
+            </button>
+          ) : null}
           <span className="spacer" />
           <Input icon={Search} placeholder="Filter issues…" value={q} onChange={e => setQ(e.target.value)} aria-label="Filter issues" className="toolbar-search" />
         </div>

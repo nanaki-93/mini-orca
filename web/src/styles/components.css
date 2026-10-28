@@ -618,6 +618,18 @@
   background: var(--success);
 }
 
+.progress-warning .progress-bar {
+  background: var(--warning);
+}
+
+.progress-danger .progress-bar {
+  background: var(--danger);
+}
+
+.progress-info .progress-bar {
+  background: var(--info);
+}
+
 .section-header {
   display: flex;
   align-items: center;

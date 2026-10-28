@@ -57,6 +57,11 @@ interface.
   install` seeds `~/.config/mini-orca/config.yaml`, the launcher prints the file
   it uses, and the status bar and Settings warn when there is none. A missing
   `MINI_ORCA_CONFIG` file now stops startup.
+- **Analysis dashboard** (`g a`): live progress of the last or running analysis,
+  failed stages grouped by reason, coverage and findings per section, models
+  used and every file's stages, with analyze, retry failed, re-analyze, pause,
+  resume and cancel. Issues filter by category. An analysis window now runs up
+  to 30 minutes before pausing.
 - **Analysis failures say why:** a failed stage names an unreachable provider, a
   timeout, a rejected request or an unusable answer instead of one generic
   message.

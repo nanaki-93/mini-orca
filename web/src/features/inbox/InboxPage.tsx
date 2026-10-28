@@ -8,8 +8,9 @@ import { useActions, useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { navigate } from '@/lib/router';
 import { taskStatus } from '@/lib/readiness';
-import { plural, severityRank } from '@/lib/util';
-import { Button, Callout, EmptyState, Kbd, ListGroup, Skeleton } from '@/components/ui';
+import { plural, severityRank, timeAgo } from '@/lib/util';
+import { runActive, runProgress, statusLabel, statusTone } from '@/lib/analysis';
+import { Badge, Button, Callout, EmptyState, Kbd, ListGroup, Progress, Skeleton } from '@/components/ui';
 import { SeverityBadge, isOpenFinding } from '@/components/domain';
 import { QuarantineNotice } from '@/features/settings/Quarantine';
 import { TaskRow } from '@/features/tasks/TaskListPage';
@@ -47,6 +48,8 @@ export function InboxPage() {
   const toMerge = (git?.worktrees ?? []).filter(tree => !tree.current && tree.mergeable);
   const topIssues = [...findings].sort((a, b) => severityRank(a.severity) - severityRank(b.severity)).slice(0, 5);
   const coverage = overview?.analysis_coverage;
+  const run = overview?.analysis_run;
+  const progress = runProgress(run);
   const nothing = !needs.length && !failed.length && !running.length && !toMerge.length;
 
   return (
@@ -156,6 +159,10 @@ export function InboxPage() {
               <div className="card-head">
                 <Sparkles size={15} aria-hidden />
                 <span className="strong">Project analysis</span>
+                <span className="spacer" />
+                <button type="button" className="link-btn small" onClick={() => navigate('/analysis')}>
+                  Dashboard
+                </button>
               </div>
               <div className="card-body stack">
                 {coverage ? (
@@ -165,7 +172,20 @@ export function InboxPage() {
                     <Stat label="Missing" value={coverage.missing ?? 0} />
                   </div>
                 ) : null}
-                <p className="small muted">{overview?.analysis_run ? `Last run: ${overview.analysis_run.status}` : 'Analysis finds bugs, performance and security issues and writes the project docs.'}</p>
+                {run ? (
+                  <div className="stack-tight">
+                    <div className="row small">
+                      <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>
+                      <span className="muted">{runActive(run) ? 'running now' : run.updated_at ? timeAgo(run.updated_at) : ''}</span>
+                      <span className="spacer" />
+                      <span className="xs muted">{progress.percent}%</span>
+                    </div>
+                    <Progress value={progress.percent} tone={progress.failed ? 'warning' : 'accent'} label="Analysis progress" />
+                    {progress.failed ? <button type="button" className="link-btn xs tone-danger" onClick={() => navigate('/analysis')}>{plural(progress.failed, 'stage')} failed — see why</button> : null}
+                  </div>
+                ) : (
+                  <p className="small muted">Analysis finds bugs, performance and security issues and writes the project docs.</p>
+                )}
                 {project ? (
                   <Button size="sm" icon={Play} onClick={() => void actions.runAnalysis(project, worktreePath)} disabled={Boolean(busy)}>
                     Analyze project

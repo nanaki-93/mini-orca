@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { Command } from 'cmdk';
 import * as Dialog from '@radix-ui/react-dialog';
-import { BookOpen, CircleAlert, Code2, GitMerge, Inbox, Keyboard, ListTodo, Moon, Play, Plus, RefreshCw, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Activity, BookOpen, CircleAlert, Code2, GitMerge, Inbox, Keyboard, ListTodo, Moon, Play, Plus, RefreshCw, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useFindings, useIndex, useProject, useTasks, useTrust } from '@/api/hooks';
 import { useActions } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
@@ -59,6 +59,7 @@ function Palette({ mode }: { mode: 'all' | 'files' | 'commands' }) {
     { id: 'tasks', label: 'Go to Tasks', icon: ListTodo, keys: 'G T', run: () => navigate('/tasks') },
     { id: 'code', label: 'Go to Code', icon: Code2, keys: 'G C', run: () => navigate('/code') },
     { id: 'issues', label: 'Go to Issues', icon: CircleAlert, keys: 'G I', run: () => navigate('/issues') },
+    { id: 'analysis', label: 'Go to Analysis', icon: Activity, keys: 'G A', run: () => navigate('/analysis') },
     { id: 'docs', label: 'Go to Docs', icon: BookOpen, keys: 'G D', run: () => navigate('/docs') },
     { id: 'git', label: 'Go to Branches', icon: GitMerge, keys: 'G B', run: () => navigate('/git') },
     { id: 'settings', label: 'Open Settings', icon: Settings, keys: 'G S', run: () => navigate('/settings') },

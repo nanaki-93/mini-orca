@@ -4,15 +4,16 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
-  AlertTriangle, Bot, BookOpen, ChevronDown, CircleAlert, Code2, FolderOpen, GitBranch, GitMerge, Inbox, Keyboard, ListTodo, PanelLeft, Plus, Search, Settings, ShieldCheck, ShieldOff, Sparkles,
+  Activity, AlertTriangle, Bot, BookOpen, ChevronDown, CircleAlert, Code2, FolderOpen, GitBranch, GitMerge, Inbox, Keyboard, ListTodo, PanelLeft, Plus, Search, Settings, ShieldCheck, ShieldOff, Sparkles,
 } from 'lucide-react';
 import { useRoute, navigate } from '@/lib/router';
-import { useFindings, useGitWorkspace, useMainProject, useModels, useProject, useSession, useStatus, useTasks, useTrust } from '@/api/hooks';
+import { useFindings, useGitWorkspace, useMainProject, useModels, useOverview, useProject, useSession, useStatus, useTasks, useTrust } from '@/api/hooks';
 import type { Connection } from '@/api/events';
 import { useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { openNewTask, openPalette, setUI, useUI } from '@/app/store';
 import { taskStatus } from '@/lib/readiness';
+import { runActive } from '@/lib/analysis';
 import { basename, plural } from '@/lib/util';
 import type { Project } from '@/api/types';
 import { Dot, IconButton, Kbd, Spinner, Tip, cx } from '@/components/ui';
@@ -52,6 +53,7 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
   const running = tasks.filter(task => taskStatus(task).status === 'running').length;
   const openIssues = findings.filter(isOpenFinding).length;
   const toMerge = (git?.worktrees ?? []).filter(tree => !tree.current && tree.mergeable).length;
+  const analyzing = runActive(useOverview().data?.analysis_run);
 
   const items: NavItem[] = useMemo(
     () => [
@@ -59,10 +61,11 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
       { path: '/tasks', label: 'Tasks', icon: ListTodo, count: running || undefined, tone: 'info', keys: 'g t' },
       { path: '/code', label: 'Code', icon: Code2, keys: 'g c' },
       { path: '/issues', label: 'Issues', icon: CircleAlert, count: openIssues || undefined, keys: 'g i' },
+      { path: '/analysis', label: 'Analysis', icon: Activity, count: analyzing ? 1 : undefined, tone: 'info', keys: 'g a' },
       { path: '/docs', label: 'Docs', icon: BookOpen, keys: 'g d' },
       { path: '/git', label: 'Branches', icon: GitMerge, count: toMerge || undefined, tone: 'warning', keys: 'g b' },
     ],
-    [needsYou, running, openIssues, toMerge],
+    [needsYou, running, openIssues, toMerge, analyzing],
   );
 
   const active = (path: string) => (path === '/' ? route.path === '/' : route.path === path || route.path.startsWith(path + '/'));
@@ -215,7 +218,7 @@ function projectSubtitle(project: Project | undefined): string {
 function pageTitle(path: string): string {
   if (path === '/') return 'Inbox';
   const first = path.split('/')[1];
-  return { tasks: 'Tasks', code: 'Code', issues: 'Issues', docs: 'Docs', git: 'Branches', settings: 'Settings' }[first] ?? '';
+  return { tasks: 'Tasks', code: 'Code', issues: 'Issues', analysis: 'Analysis', docs: 'Docs', git: 'Branches', settings: 'Settings' }[first] ?? '';
 }
 
 function StatusBar({ connection, running }: { connection: Connection; running: number }) {

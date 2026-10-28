@@ -3,7 +3,7 @@
 // finding sources), so the UI is exercised with what it really receives.
 
 import type {
-  AgentSettings, AvailableModels, BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, Model, ModelsCurrent, Overview, Project, UsageReport,
+  AgentSettings, AnalysisRunFile, AnalysisRunSummary, AnalysisStageProgress, AvailableModels, BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, Model, ModelsCurrent, Overview, Project, UsageReport,
 } from '../../src/api/types';
 
 const now = Date.parse('2026-10-27T10:00:00Z');
@@ -172,6 +172,37 @@ export const overview: Overview = {
     components: [{ name: 'App service', layer: 'application', path: 'internal/app', summary: 'Workflow orchestration.' }],
   },
 };
+
+const runIdentity = { project_id: identity.project_id, project_revision: identity.project_revision, policy_fingerprint: '3:pol', provider_fingerprint: 'prov', queue_id: 'queue', id: 'analysis-1', generation: 'gen-1' };
+const unreachable = 'The model provider could not be reached. Check that it is running and that config.yaml names the right address.';
+const stage = (name: string, status: string, extra: Partial<AnalysisStageProgress> = {}): AnalysisStageProgress => ({ stage: name, status, attempts: status === 'pending' ? 0 : 1, cached: false, ...extra });
+
+/** An analysis run like the one a daemon without config.yaml leaves: every model stage failed. */
+export function analysisRun(status = 'partial'): AnalysisRunSummary {
+  const failed = (path: string): AnalysisRunFile => ({ path, language: 'Go', stages: [stage('semantic', 'failed', { reason: unreachable }), stage('performance', 'failed', { reason: unreachable }), stage('security_rules', 'completed_empty', { finding_count: 0 }), stage('security_ai', 'failed', { reason: unreachable })] });
+  return {
+    identity: runIdentity,
+    status,
+    files: [
+      failed('internal/vault/store.go'),
+      failed('internal/vault/crypto.go'),
+      { path: 'cmd/list.go', language: 'Go', stages: [stage('semantic', 'completed', { finding_count: 2 }), stage('performance', 'completed_empty', { finding_count: 0 }), stage('security_rules', 'completed', { finding_count: 1 }), stage('security_ai', status === 'running' ? 'running' : 'completed_empty', { finding_count: 0 })] },
+      { path: 'README.md', language: 'Text', stages: [stage('semantic', 'skipped', { reason: 'Not eligible for semantic source analysis.', attempts: 0 }), stage('performance', 'completed_empty', { finding_count: 0 }), stage('security_rules', 'skipped', { reason: 'Passive security rules require a Go source file.', attempts: 0 }), stage('security_ai', 'completed_empty', { finding_count: 0 })] },
+    ],
+    sections: [
+      { category: 'bugs', status: 'partial', coverage: { total: 3, pending: 0, running: 0, succeeded: 1, partial: 0, failed: 2, skipped: 0, unavailable: 0 }, finding_count: 2 },
+      { category: 'performance', status: 'partial', coverage: { total: 4, pending: 0, running: 0, succeeded: 2, partial: 0, failed: 2, skipped: 0, unavailable: 0 }, finding_count: 0 },
+      { category: 'security', status: 'partial', coverage: { total: 7, pending: 0, running: 0, succeeded: 4, partial: 0, failed: 2, skipped: 1, unavailable: 0 }, finding_count: 1 },
+    ],
+    plan: {
+      limits: { batch_files: 64, budget_seconds: 1800, max_attempts_per_stage: 2 },
+      providers: [{ id: 'p-bug', stages: ['semantic'], model: { scope: 'bug', model: 'local-bug-model', provider_origin: 'http://localhost:1234', remote_provider: false } }],
+    },
+    elapsed_seconds: 139,
+    created_at: ago(30),
+    updated_at: ago(28),
+  };
+}
 
 export function gitWorkspace(): GitWorkspace {
   return {

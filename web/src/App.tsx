@@ -16,6 +16,7 @@ import { TaskPage } from '@/features/tasks/TaskPage';
 import { NewTaskDialog } from '@/features/tasks/NewTaskDialog';
 import { CodePage } from '@/features/code/CodePage';
 import { IssuesPage } from '@/features/issues/IssuesPage';
+import { AnalysisPage } from '@/features/analysis/AnalysisPage';
 import { DocsPage } from '@/features/docs/DocsPage';
 import { GitPage } from '@/features/git/GitPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
@@ -58,6 +59,7 @@ function Workspace() {
       { keys: 'g t', label: 'Tasks', group: 'Go to', run: () => navigate('/tasks') },
       { keys: 'g c', label: 'Code', group: 'Go to', run: () => navigate('/code') },
       { keys: 'g i', label: 'Issues', group: 'Go to', run: () => navigate('/issues') },
+      { keys: 'g a', label: 'Analysis', group: 'Go to', run: () => navigate('/analysis') },
       { keys: 'g d', label: 'Docs', group: 'Go to', run: () => navigate('/docs') },
       { keys: 'g b', label: 'Branches', group: 'Go to', run: () => navigate('/git') },
       { keys: 'g s', label: 'Settings', group: 'Go to', run: () => navigate('/settings') },
@@ -97,6 +99,8 @@ function Page() {
       return <CodePage />;
     case 'issues':
       return <IssuesPage />;
+    case 'analysis':
+      return <AnalysisPage />;
     case 'docs':
       return <DocsPage section={second ?? 'overview'} />;
     case 'git':
