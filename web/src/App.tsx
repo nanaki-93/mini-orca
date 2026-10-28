@@ -6,6 +6,7 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { FeedbackProvider, Modal } from '@/components/overlays';
 import { Kbd } from '@/components/ui';
 import { useDaemonEvents } from '@/api/events';
+import { useSetup } from '@/api/hooks';
 import { Shell } from '@/layout/Shell';
 import { navigate, useRoute } from '@/lib/router';
 import { openNewTask, openPalette, setUI, useUI } from '@/app/store';
@@ -17,6 +18,7 @@ import { NewTaskDialog } from '@/features/tasks/NewTaskDialog';
 import { CodePage } from '@/features/code/CodePage';
 import { IssuesPage } from '@/features/issues/IssuesPage';
 import { AnalysisPage } from '@/features/analysis/AnalysisPage';
+import { SetupPage } from '@/features/setup/SetupPage';
 import { DocsPage } from '@/features/docs/DocsPage';
 import { GitPage } from '@/features/git/GitPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
@@ -67,6 +69,7 @@ function Workspace() {
     [],
   );
   useShortcuts(shortcuts);
+  useSetupOffer();
 
   useEffect(() => {
     if (route.segments[0] === 'tasks' && route.segments[1] === 'new') {
@@ -87,6 +90,20 @@ function Workspace() {
   );
 }
 
+/** Projects whose setup was already offered in this window. */
+const offeredSetup = new Set<string>();
+
+/** Opens setup once per project that has no configuration of its own yet. */
+function useSetupOffer() {
+  const setup = useSetup().data;
+  const route = useRoute();
+  useEffect(() => {
+    if (setup?.state !== 'needed' || route.segments[0] === 'setup' || offeredSetup.has(setup.config_file)) return;
+    offeredSetup.add(setup.config_file);
+    navigate('/setup');
+  }, [setup, route.segments]);
+}
+
 function Page() {
   const route = useRoute();
   const [first, second, third] = route.segments;
@@ -101,6 +118,8 @@ function Page() {
       return <IssuesPage />;
     case 'analysis':
       return <AnalysisPage />;
+    case 'setup':
+      return <SetupPage />;
     case 'docs':
       return <DocsPage section={second ?? 'overview'} />;
     case 'git':

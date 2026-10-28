@@ -608,3 +608,51 @@ export interface DaemonStatus {
   status: string;
   version: string;
 }
+
+// ---------------------------------------------------------------- project setup
+
+export type SetupProvider = '' | 'openai' | 'gemini' | 'vertex' | 'agy' | 'pi';
+
+/** One model scope as setup edits it. Secrets are write-only: api_key_set says one is saved. */
+export interface SetupModel {
+  provider: SetupProvider | string;
+  cli_path?: string;
+  api_base_url?: string;
+  api_key?: string;
+  api_key_set?: boolean;
+  clear_api_key?: boolean;
+  vertex_project?: string;
+  vertex_location?: string;
+  model: string;
+  reasoning_effort?: string;
+  temperature?: number;
+  max_tokens?: number;
+  context_max_tokens?: number;
+}
+
+export type SetupScope = 'analyze' | 'bug' | 'code';
+
+export interface ProjectSetup extends ProjectIdentity {
+  state: 'needed' | 'skipped' | 'configured' | 'invalid' | string;
+  config_file: string;
+  daemon_config_file: string;
+  error?: string;
+  models: Record<SetupScope, SetupModel>;
+  roles: Record<AgentRole, string>;
+  limits: Record<string, number>;
+}
+
+export interface SetupModelTest {
+  ok: boolean;
+  model?: string;
+  latency_ms: number;
+  reason?: string;
+  detail?: string;
+}
+
+export interface AnalysisFileSelection extends ProjectIdentity {
+  selection_id: string;
+  excluded_paths: string[];
+  files: { path: string; reason: string }[];
+  editable: boolean;
+}

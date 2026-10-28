@@ -144,7 +144,7 @@ test('a daemon without config.yaml warns that it uses the default models', async
   await page.goto('/#/');
   await page.getByRole('button', { name: 'No config.yaml · default models' }).click();
   await expect(page).toHaveURL(/#\/settings\/models/);
-  await expect(page.getByText('No config.yaml was found')).toBeVisible();
+  await expect(page.getByText('No configuration was found')).toBeVisible();
 });
 
 test('stale and failed tasks can be deleted from the list and the task page', async ({ page, daemon }) => {

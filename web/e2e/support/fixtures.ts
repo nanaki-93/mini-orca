@@ -3,7 +3,7 @@
 // finding sources), so the UI is exercised with what it really receives.
 
 import type {
-  AgentSettings, AnalysisRunFile, AnalysisRunSummary, AnalysisStageProgress, AvailableModels, BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, Model, ModelsCurrent, Overview, Project, UsageReport,
+  AgentSettings, AnalysisFileSelection, AnalysisRunFile, ProjectSetup, AnalysisRunSummary, AnalysisStageProgress, AvailableModels, BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, Model, ModelsCurrent, Overview, Project, UsageReport,
 } from '../../src/api/types';
 
 const now = Date.parse('2026-10-27T10:00:00Z');
@@ -267,3 +267,35 @@ export function agentSettings(version: number, roles: Record<string, string> | n
 }
 
 export const fileSource = 'package handlers\n\nfunc ServeAsset() {}\n';
+
+/** Project setup as the daemon reports it; `state` decides whether the wizard opens. */
+export function projectSetup(state: string): ProjectSetup {
+  return {
+    ...identity,
+    state,
+    config_file: '/work/mini-orca/.mini-orca/config.yaml',
+    daemon_config_file: '/home/me/.config/mini-orca/config.yaml',
+    models: {
+      analyze: { provider: '', api_base_url: 'https://api.example/v1', api_key_set: true, model: 'gemini-2.5-pro' },
+      bug: { provider: '', api_base_url: 'http://127.0.0.1:1234/v1', api_key_set: false, model: 'qwen3-coder' },
+      code: { provider: '', api_base_url: 'http://127.0.0.1:1234/v1', api_key_set: false, model: 'qwen3-coder' },
+    },
+    roles: { creation: 'bug', testing: 'code', review: 'analyze' },
+    limits: { model_calls: 40, tool_calls: 120, input_tokens: 400_000, output_tokens: 60_000, elapsed_seconds: 1_800, concurrent_calls: 2, repairs: 2 },
+  };
+}
+
+export function analysisSelection(excluded: string[]): AnalysisFileSelection {
+  return {
+    ...identity,
+    selection_id: 'sel-' + excluded.length,
+    excluded_paths: excluded,
+    editable: true,
+    files: [
+      ...indexedPaths.map(path => ({ path, reason: '' })),
+      { path: 'vendor/lib/a.go', reason: '' },
+      { path: 'vendor/lib/b.go', reason: '' },
+      { path: 'assets/logo.png', reason: 'Not a supported text source file.' },
+    ],
+  };
+}

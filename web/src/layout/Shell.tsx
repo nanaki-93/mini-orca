@@ -220,7 +220,7 @@ function projectSubtitle(project: Project | undefined): string {
 function pageTitle(path: string): string {
   if (path === '/') return 'Inbox';
   const first = path.split('/')[1];
-  return { tasks: 'Tasks', code: 'Code', issues: 'Issues', analysis: 'Analysis', docs: 'Docs', git: 'Branches', settings: 'Settings' }[first] ?? '';
+  return { tasks: 'Tasks', code: 'Code', issues: 'Issues', analysis: 'Analysis', setup: 'Setup', docs: 'Docs', git: 'Branches', settings: 'Settings' }[first] ?? '';
 }
 
 function StatusBar({ connection, running }: { connection: Connection; running: number }) {

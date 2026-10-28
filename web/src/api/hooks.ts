@@ -4,7 +4,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
-  AgentSettings, AvailableModels, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
+  AgentSettings, AnalysisFileSelection, AvailableModels, ProjectSetup, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
   FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, QuarantineReport, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
@@ -14,6 +14,8 @@ export const keys = {
   status: ['status'] as const,
   models: ['models'] as const,
   availableModels: ['models', 'available'] as const,
+  setup: ['setup'] as const,
+  selection: ['selection'] as const,
   mainProject: ['project', ''] as const,
   project: (wt: string) => ['project', wt] as const,
   index: (wt: string) => ['index', wt] as const,
@@ -59,6 +61,27 @@ export function useStatus() {
 
 export function useModels() {
   return useQuery({ queryKey: keys.models, queryFn: () => api.get<ModelsCurrent>('/api/models/current'), staleTime: 60_000 });
+}
+
+/** The main project's setup: its own configuration file and whether setup is still needed. */
+export function useSetup() {
+  const project = useMainProject().data;
+  return useQuery({
+    queryKey: [...keys.setup, project?.project_revision],
+    queryFn: () => api.get<ProjectSetup>('/api/projects/current/setup' + query({ project_id: project!.project_id, project_revision: project!.project_revision })),
+    enabled: Boolean(project?.project_id),
+    retry: false,
+  });
+}
+
+/** Which files analysis leaves out. */
+export function useAnalysisSelection(enabled: boolean) {
+  const project = useMainProject().data;
+  return useQuery({
+    queryKey: [...keys.selection, project?.project_revision],
+    queryFn: () => api.get<AnalysisFileSelection>('/api/projects/current/analysis/selection' + query({ project_id: project!.project_id, project_revision: project!.project_revision })),
+    enabled: enabled && Boolean(project?.project_id),
+  });
 }
 
 /** The model catalog. Listing Agy and Pi models runs their CLIs, so it loads only when asked. */

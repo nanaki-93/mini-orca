@@ -1,8 +1,8 @@
 // The landing page: what needs you now, what agents are doing, and the state
 // of the project, so a glance answers "what should I do next?".
 
-import { Bot, CircleAlert, FolderOpen, GitMerge, Inbox, Play, Plus, ShieldOff, Sparkles } from 'lucide-react';
-import { useFindings, useGitWorkspace, useMainProject, useOverview, useProject, useTasks, useTrust } from '@/api/hooks';
+import { Bot, CircleAlert, FolderOpen, GitMerge, Inbox, Play, Plus, ShieldOff, Sparkles, Wrench } from 'lucide-react';
+import { useFindings, useGitWorkspace, useMainProject, useOverview, useProject, useSetup, useTasks, useTrust } from '@/api/hooks';
 import { openNewTask } from '@/app/store';
 import { useActions, useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
@@ -69,6 +69,7 @@ export function InboxPage() {
             Tests and lint run only after you allow this project to run its check commands in an isolated copy.
           </Callout>
         ) : null}
+        <SetupNotice />
         <QuarantineNotice />
         {isLoading ? (
           <Skeleton lines={6} />
@@ -197,6 +198,24 @@ export function InboxPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Offers setup while the project has no configuration of its own, or a broken one. */
+function SetupNotice() {
+  const setup = useSetup().data;
+  if (setup?.state === 'invalid') {
+    return (
+      <Callout tone="danger" icon={Wrench} title="The project’s configuration could not be applied" action={<Button size="sm" onClick={() => navigate('/setup')}>Fix in setup</Button>}>
+        {setup.error} Mini-Orca uses the daemon’s configuration until it is fixed.
+      </Callout>
+    );
+  }
+  if (setup?.state !== 'needed') return null;
+  return (
+    <Callout tone="info" icon={Wrench} title="Set up this project" action={<Button size="sm" variant="primary" onClick={() => navigate('/setup')}>Start setup</Button>}>
+      Choose its models, agents, checks and what analysis reads. It uses the daemon’s configuration until then.
+    </Callout>
   );
 }
 

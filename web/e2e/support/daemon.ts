@@ -4,7 +4,7 @@
 // mutation must carry the Web UI header and the current proposal identity.
 
 import { test as base, expect, type Page, type Route } from '@playwright/test';
-import type { ChangeHistoryEntry, ChangeSession, DaemonEvent } from '../../src/api/types';
+import type { ChangeHistoryEntry, ChangeSession, DaemonEvent, ProjectSetup } from '../../src/api/types';
 import * as data from './fixtures';
 
 export interface RecordedRequest {
@@ -25,6 +25,13 @@ export class FakeDaemon {
   private readonly overrides = new Map<string, () => unknown>();
   private readonly pending: DaemonEvent[] = [];
   private settings = data.agentSettings(0, null, null);
+  private setup = data.projectSetup('configured');
+  private selection = data.analysisSelection([]);
+
+  /** Sets the project's setup state for this test; "needed" opens the wizard. */
+  serveSetup(state: string): void {
+    this.setup = data.projectSetup(state);
+  }
   /** The analysis run the overview reports; tests set it with serveRun. */
   private run: ReturnType<typeof data.analysisRun> | undefined;
 
@@ -104,6 +111,8 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
     [/^\/api\/projects\/current\/overview$/, () => ({ ...data.overview, analysis_run: this.run ?? data.overview.analysis_run })],
     [/^\/api\/projects\/current\/agent-settings$/, () => this.settings],
+    [/^\/api\/projects\/current\/setup$/, () => this.setup],
+    [/^\/api\/projects\/current\/analysis\/selection$/, () => this.selection],
     [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
     [/^\/api\/projects\/current\/quarantine$/, () => ({ files: [], skipped: [] })],
     [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'go', line_count: 3, content: data.fileSource })],
@@ -121,6 +130,10 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/delete$/, (body, m) => this.deleteTask(m[1], body)],
     [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
+    [/^\/api\/projects\/current\/setup$/, body => this.saveSetup(body)],
+    [/^\/api\/projects\/current\/setup\/skip$/, () => (this.setup = { ...this.setup, state: 'skipped' })],
+    [/^\/api\/projects\/current\/setup\/test-model$/, body => ((body.model as { model?: string }).model ? { ok: true, model: (body.model as { model: string }).model, latency_ms: 840 } : { ok: false, latency_ms: 0, reason: 'The model provider could not be reached.' })],
+    [/^\/api\/projects\/current\/analysis\/selection$/, body => (this.selection = { ...data.analysisSelection(body.excluded_paths as string[]) })],
     [/^\/api\/projects\/current\/analysis\/preview$/, body => ({ identity: { ...body, queue_id: 'queue-2' }, preview_id: 'preview-1', providers: [{ id: 'p-bug', model: { model: 'local-bug-model', provider_origin: 'http://localhost:1234' } }], files: [{}, {}, {}, {}], max_model_requests: 12, security_review_intent_required: false })],
     [/^\/api\/projects\/current\/analysis\/run$/, () => this.setRun('running')],
     [/^\/api\/projects\/current\/analysis\/run\/control$/, body => this.setRun(body.action === 'pause' ? 'paused' : body.action === 'cancel' ? 'canceled' : 'running')],
@@ -161,6 +174,15 @@ export class FakeDaemon {
     } catch (err) {
       return json(route, 409, { user_message: (err as Error).message });
     }
+  }
+
+  /** Saves setup like the daemon: models, roles and budget; secrets are never echoed. */
+  private saveSetup(body: Record<string, unknown>) {
+    if (body.project_revision !== this.setup.project_revision) throw new Error('The project changed; reload setup.');
+    const models = body.models as ProjectSetup['models'];
+    const echoed = Object.fromEntries(Object.entries(models).map(([scope, model]) => [scope, { ...model, api_key: undefined, api_key_set: Boolean(model.api_key) || Boolean(model.api_key_set) }]));
+    this.setup = { ...this.setup, state: 'configured', models: echoed as ProjectSetup['models'], roles: body.roles as ProjectSetup['roles'], limits: body.limits as ProjectSetup['limits'] };
+    return this.setup;
   }
 
   /** Replaces or resets agent settings with the daemon's version and configuration guard. */

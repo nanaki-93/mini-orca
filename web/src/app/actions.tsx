@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisRunSummary, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
@@ -533,6 +533,63 @@ export function useActions() {
     });
   }
 
+  // --------------------------------------------------------------- project setup
+
+  /** Saves the project's configuration file; the daemon applies it at once. */
+  async function saveSetup(setup: ProjectSetup, draft: Pick<ProjectSetup, 'models' | 'roles' | 'limits'>): Promise<ProjectSetup | null> {
+    return (await guarded('Saving the project configuration…', async () => {
+      try {
+        const saved = await api.post<ProjectSetup>('/api/projects/current/setup', { project_id: setup.project_id, project_revision: setup.project_revision, models: draft.models, roles: draft.roles, limits: draft.limits });
+        client.setQueryData([...keys.setup, setup.project_revision], saved);
+        void client.invalidateQueries({ queryKey: ['models'] });
+        void client.invalidateQueries({ queryKey: ['settings'] });
+        toast('Project configuration saved.', 'success', saved.config_file);
+        return saved;
+      } catch (err) {
+        fail('Could not save the project configuration', err);
+        return null;
+      }
+    })) ?? null;
+  }
+
+  /** Keeps the daemon's configuration for this project and stops offering setup. */
+  async function skipSetup(setup: ProjectSetup): Promise<boolean> {
+    return (await guarded('Skipping setup…', async () => {
+      try {
+        const skipped = await api.post<ProjectSetup>('/api/projects/current/setup/skip', { project_id: setup.project_id, project_revision: setup.project_revision });
+        client.setQueryData([...keys.setup, setup.project_revision], skipped);
+        return true;
+      } catch (err) {
+        fail('Could not skip setup', err);
+        return false;
+      }
+    })) ?? false;
+  }
+
+  /** Sends one short request to a model as setup would configure it. */
+  async function testSetupModel(setup: ProjectSetup, scope: SetupScope, model: SetupModel): Promise<SetupModelTest | null> {
+    try {
+      return await api.post<SetupModelTest>('/api/projects/current/setup/test-model', { project_id: setup.project_id, project_revision: setup.project_revision, scope, model });
+    } catch (err) {
+      fail('Could not test the model', err);
+      return null;
+    }
+  }
+
+  /** Saves which files analysis leaves out. */
+  async function saveAnalysisSelection(selection: AnalysisFileSelection, excluded: string[]): Promise<boolean> {
+    return (await guarded('Saving analysis exclusions…', async () => {
+      try {
+        const saved = await api.post<AnalysisFileSelection>('/api/projects/current/analysis/selection', { project_id: selection.project_id, project_revision: selection.project_revision, selection_id: selection.selection_id, excluded_paths: excluded });
+        client.setQueryData([...keys.selection, selection.project_revision], saved);
+        return true;
+      } catch (err) {
+        fail('Could not save analysis exclusions', err);
+        return false;
+      }
+    })) ?? false;
+  }
+
   // ------------------------------------------------------------------ deletion
 
   /**
@@ -661,7 +718,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

@@ -1,7 +1,7 @@
 // Settings: project, trust, models and agents, analysis, appearance.
 
-import { Bot, Coins, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
-import { useModels, useOverview, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
+import { Bot, Coins, Wrench, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
+import { useModels, useOverview, useSetup, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
 import type { UsageTotal } from '@/api/types';
 import { costCaveat, costLabel, formatTokens } from '@/lib/usage';
 import { useActions, useBusy } from '@/app/actions';
@@ -146,9 +146,43 @@ function ProjectSettings() {
           </div>
         </div>
       ) : null}
+      <ProjectConfiguration />
       <QuarantineList />
       <OpenProject />
     </>
+  );
+}
+
+const SETUP_STATES: Record<string, { tone: 'success' | 'warning' | 'danger' | 'neutral'; label: string; text: string }> = {
+  configured: { tone: 'success', label: 'Project configuration', text: 'This project runs with its own configuration file.' },
+  needed: { tone: 'warning', label: 'Not set up', text: 'This project uses the daemon’s configuration. Setup gives it its own models, agents and budget.' },
+  skipped: { tone: 'neutral', label: 'Daemon configuration', text: 'Setup was skipped; this project uses the daemon’s configuration.' },
+  invalid: { tone: 'danger', label: 'Not applied', text: 'The project’s configuration file could not be applied; the daemon’s is used.' },
+};
+
+/** Where the project's configuration comes from, and a way back into setup. */
+function ProjectConfiguration() {
+  const setup = useSetup().data;
+  if (!setup) return null;
+  const state = SETUP_STATES[setup.state] ?? SETUP_STATES.needed;
+  return (
+    <section className="card" aria-label="Project configuration">
+      <div className="card-head">
+        <Wrench size={15} aria-hidden />
+        <span className="strong">Configuration</span>
+        <Badge tone={state.tone}>{state.label}</Badge>
+        <span className="spacer" />
+        <Button size="sm" variant={setup.state === 'configured' ? 'secondary' : 'primary'} onClick={() => navigate('/setup')}>{setup.state === 'configured' ? 'Edit in setup' : 'Run setup'}</Button>
+      </div>
+      <div className="card-body stack">
+        <p className="small">{state.text}</p>
+        {setup.error ? <p className="small tone-danger">{setup.error}</p> : null}
+        <dl className="details details-wide">
+          <dt>Project file</dt><dd className="mono small">{setup.config_file}</dd>
+          <dt>Daemon file</dt><dd className="mono small">{setup.daemon_config_file || 'none — built-in local defaults'}</dd>
+        </dl>
+      </div>
+    </section>
   );
 }
 

@@ -11,8 +11,8 @@ export function ConfigSource({ models, action }: { models: ModelsCurrent | undef
   if (!models || models.config_file === undefined) return null;
   if (models.config_file) return action ? null : <p className="xs muted">Configuration: <span className="mono">{models.config_file}</span></p>;
   return (
-    <Callout tone="warning" icon={AlertTriangle} title="No config.yaml was found" action={action ? <Button size="sm" onClick={() => navigate('/settings/models')}>Models</Button> : undefined}>
-      The daemon uses its built-in local model defaults (<span className="mono">http://localhost:1234/v1</span>), so model requests fail unless a local server answers there. Put your configuration in <span className="mono">~/.config/mini-orca/config.yaml</span> or the project folder, then restart the daemon.
+    <Callout tone="warning" icon={AlertTriangle} title="No configuration was found" action={<Button size="sm" onClick={() => navigate('/setup')}>Run setup</Button>}>
+      Models use the built-in local defaults (<span className="mono">http://localhost:1234/v1</span>), so requests fail unless a local server answers there. Setup saves this project’s own configuration and applies it at once{action ? '' : <>; a daemon-wide one goes in <span className="mono">~/.config/mini-orca/config.yaml</span></>}.
     </Callout>
   );
 }
