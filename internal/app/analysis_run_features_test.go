@@ -99,7 +99,9 @@ func analysisBlockingFeatureServer(t *testing.T) (*httptest.Server, *atomic.Int3
 
 func waitForAnalysisFileCount(t *testing.T, s *Service, count int) *AnalysisRun {
 	t.Helper()
-	deadline := time.After(5 * time.Second)
+	// A generous bound: the wait returns as soon as the files finish, and the
+	// race detector slows each stage's request several times over.
+	deadline := time.After(30 * time.Second)
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {

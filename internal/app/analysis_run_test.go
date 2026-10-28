@@ -664,13 +664,16 @@ func TestAnalysisRunFailedSavesStopRequestsAndRecoverWithoutResettingEvidence(t 
 func TestAnalysisRunTimeBudgetAndRetryAllowanceRemainCumulative(t *testing.T) {
 	server, calls, started, _ := analysisBlockingServer(t)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 1, 1}, nil)
+	// The window must outlast the resumed requests even under the race
+	// detector; the first window ends because its request never answers.
+	const budget = 3
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, budget, 1}, nil)
 	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
 		t.Fatal(err)
 	}
 	waitForTestSignal(t, started, "time-bounded request")
 	paused := completedAnalysisRun(t, s)
-	if paused.Status != AnalysisRunPaused || paused.ElapsedSeconds != 1 || paused.Files[0].Stages[0].Attempts != 1 || calls.Load() != 1 {
+	if paused.Status != AnalysisRunPaused || paused.ElapsedSeconds != budget || paused.Files[0].Stages[0].Attempts != 1 || calls.Load() != 1 {
 		t.Fatalf("timeout=%+v calls=%d", paused, calls.Load())
 	}
 	resume := analysisRunPreviewFor(t, s, preview.Limits, &paused.Identity)
