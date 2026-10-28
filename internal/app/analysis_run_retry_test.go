@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -80,7 +81,7 @@ func TestStaleOnlyAnalysisSkipsUnrelatedFailuresAndRetainsScopeOnResume(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preview.Files) != 2 || preview.Files[0].Path != "stale.go" || preview.Files[1].Path != "stale_two.go" || calls.Load() != 0 {
+	if len(scopedFiles(preview)) != 2 || scopedFiles(preview)[0].Path != "stale.go" || scopedFiles(preview)[1].Path != "stale_two.go" || calls.Load() != 0 {
 		t.Fatalf("stale-only selection = %+v", preview.Files)
 	}
 	start := analysisStartFor(preview)
@@ -95,16 +96,23 @@ func TestStaleOnlyAnalysisSkipsUnrelatedFailuresAndRetainsScopeOnResume(t *testi
 	s.analysisRun = &analysisRunController{}
 	request.ResumeRun, request.StaleOnly = &paused.Identity, false
 	resume, err := s.PreviewAnalysisRun(ctx, request)
-	if err != nil || !resume.StaleOnly || len(resume.Files) != 2 || resume.ExpectedModelRequests != 3 {
+	if err != nil || !resume.StaleOnly || len(scopedFiles(resume)) != 2 || resume.ExpectedModelRequests != 3 {
 		t.Fatalf("resume = %+v, %v", resume, err)
 	}
 	confirmations := analysisStartFor(resume).Confirmations
 	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
 		t.Fatal(err)
 	}
+	// The run covers the project: the unrelated failure is kept, so it is partial.
 	completed := completedAnalysisRun(t, s)
-	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 6 {
+	if completed.Status != AnalysisRunPartial || calls.Load() != 6 {
 		t.Fatalf("completed = %s, calls = %d", completed.Status, calls.Load())
+	}
+	if kept := analysisRunStage(t, completed, "failed.go", AnalysisStageSemantic); kept.Status != AnalysisStageFailed {
+		t.Fatalf("unrelated failure was not kept: %+v", kept)
+	}
+	if kept := analysisRunStage(t, completed, "fresh.go", AnalysisStageSemantic); kept.Status != AnalysisStageCompletedEmpty || !kept.Cached {
+		t.Fatalf("fresh result was not kept: %+v", kept)
 	}
 	failed, err := s.CachedFileAnalysis("failed.go")
 	if err != nil || failed.Status != "failed" {
@@ -127,11 +135,7 @@ func TestAnalysisRetrySelectsStaleAndFailedFilesAndPreservesSelectionOnResume(t 
 		seedRetrySemanticReport(t, s, status+".go", status)
 	}
 	preview := retryPreviewFor(t, s, nil)
-	paths := []string{}
-	for _, file := range preview.Files {
-		paths = append(paths, file.Path)
-	}
-	if !reflect.DeepEqual(paths, []string{"failed.go", "stale.go"}) || calls.Load() != 0 || preview.ExpectedModelRequests != 6 {
+	if paths := previewPaths(preview); !reflect.DeepEqual(paths, []string{"failed.go", "stale.go"}) || calls.Load() != 0 || preview.ExpectedModelRequests != 6 {
 		t.Fatalf("preview paths=%v requests=%d calls=%d", paths, preview.ExpectedModelRequests, calls.Load())
 	}
 	// Dropping the retry option cannot widen an already reviewed selection.
@@ -150,19 +154,23 @@ func TestAnalysisRetrySelectsStaleAndFailedFilesAndPreservesSelectionOnResume(t 
 	// Restore durable progress after the first selected file has become fresh.
 	s.analysisRun = &analysisRunController{}
 	resume := retryPreviewFor(t, s, &paused.Identity)
-	if resume.Identity != preview.Identity || len(resume.Files) != 2 || resume.ExpectedModelRequests != 3 {
+	if resume.Identity != preview.Identity || len(scopedFiles(resume)) != 2 || resume.ExpectedModelRequests != 3 {
 		t.Fatalf("resume=%+v", resume)
 	}
 	confirmations := analysisStartFor(resume).Confirmations
 	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
 		t.Fatal(err)
 	}
+	// main.go was never analyzed, so the whole-project run stays partial.
 	completed := completedAnalysisRun(t, s)
-	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 6 {
+	if completed.Status != AnalysisRunPartial || calls.Load() != 6 {
 		t.Fatalf("completed=%s calls=%d", completed.Status, calls.Load())
 	}
+	if kept := analysisRunStage(t, completed, "main.go", AnalysisStageSemantic); kept.Status != AnalysisStageSkipped || kept.Reason != carriedMissingReason {
+		t.Fatalf("unanalyzed file outcome=%+v", kept)
+	}
 	next := retryPreviewFor(t, s, nil)
-	if len(next.Files) != 0 || next.ExpectedModelRequests != 0 || next.SecurityReviewIntentRequired || calls.Load() != 6 {
+	if len(scopedFiles(next)) != 0 || next.ExpectedModelRequests != 0 || next.SecurityReviewIntentRequired || calls.Load() != 6 {
 		t.Fatalf("empty retry=%+v calls=%d", next, calls.Load())
 	}
 	missing, err := s.CachedFileAnalysis("main.go")
@@ -202,7 +210,7 @@ func TestAnalysisRetryIncludesDurableFailuresAndReusesFreshStages(t *testing.T) 
 	}
 	fail.Store(false)
 	retry := retryPreviewFor(t, s, nil)
-	if len(retry.Files) != 1 || retry.ExpectedModelRequests != 1 {
+	if len(scopedFiles(retry)) != 1 || retry.ExpectedModelRequests != 1 {
 		t.Fatalf("retry=%+v", retry)
 	}
 	before := calls.Load()
@@ -240,7 +248,7 @@ func TestAnalysisRetryDoesNotOverrideNewerPartialEvidence(t *testing.T) {
 	if err := project.StorePerformanceFileReport(root, *report); err != nil {
 		t.Fatal(err)
 	}
-	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
+	if retry := retryPreviewFor(t, s, nil); len(scopedFiles(retry)) != 0 {
 		t.Fatalf("old failure overrode newer partial evidence: %+v", retry)
 	}
 	selection := readSelectionFor(t, s)
@@ -257,7 +265,7 @@ func TestAnalysisRetryDoesNotOverrideNewerPartialEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertSelectionStages(t, readSelectionFor(t, s), "main.go", "fresh", "up to date")
-	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
+	if retry := retryPreviewFor(t, s, nil); len(scopedFiles(retry)) != 0 {
 		t.Fatalf("newer success still requires retry: %+v", retry)
 	}
 }
@@ -304,7 +312,7 @@ func TestAnalysisRetryRefreshFailuresOverrideOlderCachesAcrossResume(t *testing.
 	}
 	fail.Store(false)
 	retry := retryPreviewFor(t, s, nil)
-	if len(retry.Files) != 2 || retry.ExpectedModelRequests != 4 {
+	if len(scopedFiles(retry)) != 2 || retry.ExpectedModelRequests != 4 {
 		t.Fatalf("retry=%+v", retry)
 	}
 	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {
@@ -330,7 +338,70 @@ func TestAnalysisRetryRefreshFailuresOverrideOlderCachesAcrossResume(t *testing.
 	for _, path := range []string{"main.go", "helper.go"} {
 		assertSelectionStages(t, readSelectionFor(t, s), path, "fresh", "up to date")
 	}
-	if retry := retryPreviewFor(t, s, nil); len(retry.Files) != 0 {
+	if retry := retryPreviewFor(t, s, nil); len(scopedFiles(retry)) != 0 {
 		t.Fatalf("successful retries still need work: %+v", retry)
+	}
+}
+
+// Retrying failed files keeps the rest of the project in the run: every file
+// stays listed, saved reports are read back without model requests or batch
+// use, and the project's findings are counted once.
+func TestAnalysisRetryKeepsTheWholeProjectAnalysis(t *testing.T) {
+	ctx := context.Background()
+	server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageSemantic {
+			return strings.Replace(validSemanticAnalysis, `"risks":[]`, `"risks":[{"category":"bugs","severity":"low","summary":"Review correctness."}]`, 1)
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, _ := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	full := startAndCompleteAnalysis(t, s, analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil))
+	if len(full.Files) != 2 || sectionFindings(full) != 2 {
+		t.Fatalf("full run = %+v", full)
+	}
+	seedRetrySemanticReport(t, s, "main.go", "failed")
+	before := calls.Load()
+
+	retry := retryPreviewFor(t, s, nil)
+	if paths := previewPaths(retry); !reflect.DeepEqual(paths, []string{"main.go"}) || !previewRetained(retry, "helper.go") || len(retry.Files) != 2 || retry.ExpectedModelRequests != 1 {
+		t.Fatalf("retry preview = %+v", retry)
+	}
+	// The preview allows one file per batch: the retained file must not use it.
+	run := startAndCompleteAnalysis(t, s, retry)
+	if run.Status != AnalysisRunCompleted || len(run.Files) != 2 || sectionFindings(run) != 2 || calls.Load() != before+1 {
+		t.Fatalf("retry run = %s, %d files, %d findings, %d calls", run.Status, len(run.Files), sectionFindings(run), calls.Load()-before)
+	}
+	if kept := analysisRunStage(t, run, "helper.go", AnalysisStageSemantic); kept.Status != AnalysisStageCompleted || !kept.Cached || kept.Attempts != 0 {
+		t.Fatalf("retained file result = %+v", kept)
+	}
+	if retried := analysisRunStage(t, run, "main.go", AnalysisStageSemantic); retried.Status != AnalysisStageCompleted || retried.Cached || retried.Attempts != 1 {
+		t.Fatalf("retried file result = %+v", retried)
+	}
+	// The saved run, retained files included, reads back after a restart.
+	s.analysisRun = &analysisRunController{}
+	restored, err := s.currentTestAnalysisRun(ctx)
+	if err != nil || restored == nil || restored.Identity != run.Identity || !restored.Plan.Files[0].Retained {
+		t.Fatalf("restored run = %+v, %v", restored, err)
+	}
+	if err := validateStoredAnalysisRun(cloneAnalysisRun(restored)); err != nil {
+		t.Fatalf("saved run invalid: %v", err)
+	}
+	for name, change := range map[string]func(*AnalysisRun){
+		"retained dispatch": func(r *AnalysisRun) { r.Plan.Files[0].Stages[0].MaxModelRequests = 1 },
+		"carried in scope":  func(r *AnalysisRun) { r.Plan.Files[1].Stages[0].Carried = AnalysisStageFailed },
+		"unknown carry": func(r *AnalysisRun) {
+			r.Plan.Files[0].Stages[0].Carried, r.Plan.Files[0].Stages[0].Cached = AnalysisStageCompleted, false
+		},
+	} {
+		corrupt := cloneAnalysisRun(restored)
+		change(corrupt)
+		queue, err := analysisQueueFingerprint(&corrupt.Plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		corrupt.Identity.QueueID, corrupt.Plan.Identity.QueueID = queue, queue
+		if err := validateStoredAnalysisRun(corrupt); !errors.Is(err, errAnalysisRunCorrupt) {
+			t.Fatalf("%s accepted: %v", name, err)
+		}
 	}
 }

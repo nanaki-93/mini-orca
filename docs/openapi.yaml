@@ -2401,9 +2401,10 @@ components:
         stage: {$ref: '#/components/schemas/AnalysisStage'}
         eligible: {type: boolean}
         cached: {type: boolean}
+        carried: {type: string, enum: [failed, stale, skipped, canceled, unavailable], description: 'Retained files only: the earlier outcome kept for a stage without a current saved report; never dispatched.'}
         reason: {type: string, description: Sanitized eligibility/cache explanation.}
         provider_id: {type: string}
-        max_model_requests: {type: integer, minimum: 0, maximum: 4, description: Zero for cache/rules/ineligible work; otherwise includes all retries.}
+        max_model_requests: {type: integer, minimum: 0, maximum: 4, description: Zero for cache/rules/ineligible/retained work; otherwise includes all retries.}
     AnalysisPlannedFile:
       allOf:
         - {$ref: '#/components/schemas/AnalysisFileIdentity'}
@@ -2411,6 +2412,7 @@ components:
           required: [size_bytes, stages]
           properties:
             size_bytes: {type: integer, format: int64, minimum: 0}
+            retained: {type: boolean, description: 'Outside a scoped run (retry, stale-only, recovery, one stale file): saved reports are read back, other stages keep their earlier outcome, no model request is sent and the file does not count toward batch_files.'}
             stages: {type: array, items: {$ref: '#/components/schemas/AnalysisStagePlan'}}
     AnalysisExcludedFile:
       type: object
@@ -2435,7 +2437,7 @@ components:
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         clear_results: {type: boolean, default: false, description: 'Clear previously saved analysis findings and feature suggestions when starting a refreshed run from the beginning.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
-        files: {type: array, description: Selected files; remaining inventory is accounted for in excluded, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
+        files: {type: array, description: 'Eligible files; in a scoped run, files outside the scope are retained. Remaining inventory is accounted for in excluded.', items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
         excluded: {type: array, items: {$ref: '#/components/schemas/AnalysisExcludedFile'}}
         providers: {type: array, items: {$ref: '#/components/schemas/AnalysisProviderRequirement'}}
         expected_model_requests: {type: integer, minimum: 0}

@@ -139,7 +139,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/setup\/skip$/, () => (this.setup = { ...this.setup, state: 'skipped' })],
     [/^\/api\/projects\/current\/setup\/test-model$/, body => ((body.model as { model?: string }).model ? { ok: true, model: (body.model as { model: string }).model, latency_ms: 840 } : { ok: false, latency_ms: 0, reason: 'The model provider could not be reached.' })],
     [/^\/api\/projects\/current\/analysis\/selection$/, body => (this.selection = { ...data.analysisSelection(body.excluded_paths as string[]) })],
-    [/^\/api\/projects\/current\/analysis\/preview$/, body => ({ identity: { ...body, queue_id: 'queue-2' }, preview_id: 'preview-1', providers: [{ id: 'p-bug', model: { model: 'local-bug-model', provider_origin: 'http://localhost:1234' } }], files: [{}, {}, {}, {}], max_model_requests: 12, security_review_intent_required: false })],
+    [/^\/api\/projects\/current\/analysis\/preview$/, body => ({ identity: { ...body, queue_id: 'queue-2' }, preview_id: 'preview-1', providers: [{ id: 'p-bug', model: { model: 'local-bug-model', provider_origin: 'http://localhost:1234' } }], files: [{}, {}, { retained: true }, { retained: true }], max_model_requests: 12, security_review_intent_required: false })],
     [/^\/api\/projects\/current\/analysis\/run$/, () => this.setRun('running')],
     [/^\/api\/projects\/current\/analysis\/run\/control$/, body => this.setRun(body.action === 'pause' ? 'paused' : body.action === 'cancel' ? 'canceled' : 'running')],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],

@@ -212,7 +212,7 @@ func analysisMetadataPath(value string) bool {
 }
 
 func analysisMetadataReason(value string) bool {
-	if project.PerformanceReviewFailure(value).Valid() || slices.Contains(modelFailureReasons, value) {
+	if project.PerformanceReviewFailure(value).Valid() || slices.Contains(modelFailureReasons, value) || slices.Contains(carriedAnalysisReasons, value) {
 		return true
 	}
 	switch value {
@@ -298,13 +298,16 @@ func validateStoredAnalysisFiles(run *AnalysisRun) (int, error) {
 	total := 0
 	for i, file := range run.Files {
 		planned := run.Plan.Files[i]
-		if run.Plan.StalePath != "" && file.Path != run.Plan.StalePath {
+		if run.Plan.StalePath != "" && file.Path != run.Plan.StalePath && !planned.Retained {
 			return 0, errAnalysisRunCorrupt
 		}
 		if !validStoredAnalysisFile(file, planned) || i > 0 && run.Files[i-1].Path >= file.Path {
 			return 0, errAnalysisRunCorrupt
 		}
 		for j, stage := range file.Stages {
+			if !validStoredRetention(planned, planned.Stages[j]) {
+				return 0, errAnalysisRunCorrupt
+			}
 			count, err := validateStoredAnalysisStage(stage, planned.Stages[j], analysisStages[j], run.Plan.Limits.MaxAttemptsPerStage)
 			if err != nil {
 				return 0, err
@@ -313,6 +316,14 @@ func validateStoredAnalysisFiles(run *AnalysisRun) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// Retained files never dispatch; only their stages without a saved report carry an outcome.
+func validStoredRetention(file AnalysisPlannedFile, stage AnalysisStagePlan) bool {
+	if !file.Retained {
+		return stage.Carried == ""
+	}
+	return stage.MaxModelRequests == 0 && (stage.Carried == "" || validCarriedAnalysisStatus(stage.Carried) && stage.Eligible && !stage.Cached)
 }
 
 func validStoredAnalysisFile(file AnalysisRunFile, planned AnalysisPlannedFile) bool {

@@ -114,7 +114,7 @@ func TestChangedFileDoesNotMakeUnfinishedUnchangedFilesStale(t *testing.T) {
 	assertSelectionStages(t, selection, "main.go", "interrupted", "before this stage")
 	request := AnalysisPreviewRequest{ProjectID: selection.ProjectID, ProjectRevision: selection.ProjectRevision, Scope: AnalysisRunScopeProject, StaleOnly: true, Limits: preview.Limits}
 	retry, err := s.PreviewAnalysisRun(ctx, request)
-	if err != nil || len(retry.Files) != 1 || retry.Files[0].Path != "helper.go" || calls.Load() != 3 {
+	if err != nil || len(scopedFiles(retry)) != 1 || scopedFiles(retry)[0].Path != "helper.go" || calls.Load() != 3 {
 		t.Fatalf("stale-only scope includes unchanged unfinished files: %+v, %v", retry, err)
 	}
 }

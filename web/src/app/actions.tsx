@@ -53,7 +53,8 @@ interface AnalysisPreview {
   identity: unknown;
   preview_id: string;
   providers?: { id: string; remote_confirmation_required?: boolean; model?: { model?: string; scope?: string; provider_origin?: string } }[];
-  files?: unknown[];
+  /** Retained files are outside a retry's scope: they keep their saved results. */
+  files?: { retained?: boolean }[];
   max_model_requests?: number;
   security_review_intent_required?: boolean;
 }
@@ -495,9 +496,11 @@ export function useActions() {
         const remote = providers.filter(p => p.remote_confirmation_required).map(p => `${p.model?.model || p.model?.scope} at ${p.model?.provider_origin || 'remote provider'}`);
         const security = Boolean(preview.security_review_intent_required);
         const what = options.retryFailed ? 'Retries the failed and stale stages of' : options.refresh ? 'Analyzes again, ignoring saved results,' : resume ? 'Resumes the analysis of' : 'Analyzes';
+        const files = preview.files ?? [];
+        const kept = files.filter(file => file.retained).length;
         const ok = await confirm({
           title: resume ? 'Resume the analysis?' : options.retryFailed ? 'Retry failed analysis?' : 'Analyze the project?',
-          body: `${what} ${plural((preview.files ?? []).length, 'file')} (up to ${preview.max_model_requests ?? 0} model requests) for bugs, performance and security, then refreshes the generated docs.${security ? ' Includes an AI security review.' : ''}${remote.length ? ` Sends bounded source context to ${remote.join(', ')}.` : ''}`,
+          body: `${what} ${plural(files.length - kept, 'file')} (up to ${preview.max_model_requests ?? 0} model requests) for bugs, performance and security, then refreshes the generated docs.${kept ? ` The other ${plural(kept, 'file')} keep their saved results.` : ''}${security ? ' Includes an AI security review.' : ''}${remote.length ? ` Sends bounded source context to ${remote.join(', ')}.` : ''}`,
           confirmLabel: resume ? 'Resume' : 'Analyze',
         });
         if (!ok) return;

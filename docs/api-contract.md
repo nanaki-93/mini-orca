@@ -388,16 +388,28 @@ only eligible files with stale or failed producer evidence or durable failed sta
 are selected. A failed refresh overrides older cached evidence and is retried even when an
 older report remains available. A later saved review supersedes that failure.
 Fresh stages reuse their caches; files with no prior analysis are
-excluded unless another stage on that file qualifies it. Missing, partial,
+retained, not analyzed, unless another stage on that file qualifies it. Missing, partial,
 canceled and ineligible stages alone do not qualify a file. This option cannot be
 combined with `refresh`. The selection is part of both admission fingerprints;
 resume echoes the option and retains the admitted file set even after reports
 become fresh. Excluded files remain accounted for in the inventory. An empty
-selection produces no model requests and is reported as unavailable, not clean.
+selection produces no model requests.
+
+Scoped runs (`retry_stale_failed`, `stale_only`, `stale_path`, `recover_incomplete`)
+still cover the whole project, so a retry never drops earlier results. Every
+eligible file the scope does not select stays in `files` with `retained: true`
+and `max_model_requests: 0` on each stage: stages with a current saved report
+are read back from it (they count findings once and report `cached: true`), and
+the others keep their earlier outcome in `carried` (`failed`, `stale`, `skipped`
+for never-analyzed, `canceled` or `unavailable`) with its reason. Retained files
+are never dispatched and do not count toward `batch_files`. Run status and
+section coverage therefore describe the project, not only the retried files.
+Runs saved before retention excluded those files with a scope reason; they are
+still read, resumed and reported as before.
 
 Preview and start accept `stale_only` (default false) to select just files with
-stale evidence. Unrelated failed or missing files are excluded; current stages
-stay cached. This option cannot be combined with `refresh`, `retry_stale_failed`,
+stale evidence. Unrelated failed or missing files are retained (see scoped runs
+below); current stages stay cached. This option cannot be combined with `refresh`, `retry_stale_failed`,
 `recover_incomplete` or `include_features`. It is bound to both admission
 fingerprints. Resume uses the captured option and file set; requesting it for a
 run without that option returns 409.
@@ -409,16 +421,15 @@ return 409. A target without stale evidence yields an empty preview. The target
 is captured in the preview and both fingerprints; start must echo it and cannot
 drop or change it. Resume preserves the captured target when omitted and rejects
 a different target with 409. This does not change the saved file selection.
-Results outside the target remain available with their own freshness, while
-user and policy exclusions remain excluded.
+Other files are retained with their own freshness, while user and policy
+exclusions remain excluded.
 
 Preview and start also accept optional `recover_incomplete` (default false), which
 completes unfinished analysis without changing source code. Under the requested
 `models`, it selects files with at least one recoverable eligible stage: stale,
 failed, partial, missing, canceled, interrupted or unavailable evidence whose model
-is configured (passive Security rules need none). Other inventory files are
-excluded with `No incomplete analysis for this file.`; user, policy and
-unsupported-file exclusions keep their own reasons. Recoverable stages bypass
+is configured (passive Security rules need none). Other eligible files are
+retained; user, policy and unsupported-file exclusions keep their own reasons. Recoverable stages bypass
 caches within the attempt limits, current successful stages remain cached with
 no requests, and stages whose model is not configured keep that reason with no
 requests. Pending, running and paused work belongs to its run, so paused and
@@ -430,11 +441,10 @@ sending `true` for a run admitted without it returns 409. Resume retains the
 admitted file set. An empty recovery selection produces no model requests.
 `retry_stale_failed` keeps the narrower semantics above for existing clients.
 
-Unfiltered result reads retain saved evidence from eligible files omitted only by
-the stale-only, stale/failed or incomplete-work selection. `retained_files` supplies those
-current indexed file identities; user and source-policy exclusions remain
-excluded. The dispatch plan, run coverage and file-filter guards still describe
-the admitted scope.
+Unfiltered result reads include the saved evidence of retained files.
+`retained_files` lists their identities (for runs saved before retention, the
+current identities of files omitted only by the scope); user and source-policy
+exclusions remain excluded.
 
 File reports retain their original project revision as provenance. Their freshness
 depends on that file's current content, applicable instructions, policy and analyzer

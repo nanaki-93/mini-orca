@@ -37,7 +37,7 @@ func TestStalePathAnalysisRetainsTargetAcrossAdmissionAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.StalePath != "main.go" || len(preview.Files) != 1 || preview.Files[0].Path != "main.go" || calls.Load() != 0 {
+	if preview.StalePath != "main.go" || len(scopedFiles(preview)) != 1 || scopedFiles(preview)[0].Path != "main.go" || calls.Load() != 0 {
 		t.Fatalf("single-file preview = %+v, calls = %d", preview, calls.Load())
 	}
 	for _, path := range []string{"", "helper.go"} {
@@ -60,7 +60,7 @@ func TestStalePathAnalysisRetainsTargetAcrossAdmissionAndResume(t *testing.T) {
 	s.analysisRun = &analysisRunController{}
 	request.ResumeRun, request.StaleOnly, request.StalePath = &paused.Identity, false, ""
 	resume, err := s.PreviewAnalysisRun(ctx, request)
-	if err != nil || resume.StalePath != "main.go" || !resume.StaleOnly || len(resume.Files) != 1 || resume.Files[0].Path != "main.go" || resume.Identity != preview.Identity {
+	if err != nil || resume.StalePath != "main.go" || !resume.StaleOnly || len(scopedFiles(resume)) != 1 || scopedFiles(resume)[0].Path != "main.go" || resume.Identity != preview.Identity {
 		t.Fatalf("restored target = %+v, %v", resume, err)
 	}
 	request.StaleOnly, request.StalePath = true, "helper.go"
@@ -71,9 +71,13 @@ func TestStalePathAnalysisRetainsTargetAcrossAdmissionAndResume(t *testing.T) {
 	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
 		t.Fatal(err)
 	}
+	// The run covers the project, keeping the other file's stale outcome.
 	completed := completedAnalysisRun(t, s)
-	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 3 {
+	if completed.Status != AnalysisRunPartial || calls.Load() != 3 {
 		t.Fatalf("completed = %s, calls = %d", completed.Status, calls.Load())
+	}
+	if kept := analysisRunStage(t, completed, "helper.go", AnalysisStageSemantic); kept.Status != AnalysisStageStale || kept.Attempts != 0 {
+		t.Fatalf("other file's outcome was not kept: %+v", kept)
 	}
 	other, err := s.CachedFileAnalysis("helper.go")
 	if err != nil || other.Status != "stale" {
@@ -114,7 +118,7 @@ func TestStalePathAnalysisRejectsUnavailableTargetsAndChangedEvidence(t *testing
 	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(preview)); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("fresh target admitted from a stale preview: %v", err)
 	}
-	if current, err := s.PreviewAnalysisRun(ctx, request); err != nil || len(current.Files) != 0 {
+	if current, err := s.PreviewAnalysisRun(ctx, request); err != nil || len(scopedFiles(current)) != 0 {
 		t.Fatalf("fresh target became stale work: %+v, %v", current, err)
 	}
 	if calls.Load() != 0 {

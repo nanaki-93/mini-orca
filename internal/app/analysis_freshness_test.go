@@ -68,7 +68,7 @@ func TestAnalysisFreshnessIsLocalToChangedFiles(t *testing.T) {
 		t.Fatal("freshness reads dispatched provider work")
 	}
 	retry := retryPreviewFor(t, s, nil)
-	if len(retry.Files) != 1 || retry.Files[0].Path != "main.go" {
+	if len(scopedFiles(retry)) != 1 || scopedFiles(retry)[0].Path != "main.go" {
 		t.Fatalf("retry must only select the changed file: %+v", retry.Files)
 	}
 	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {

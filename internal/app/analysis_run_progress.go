@@ -30,6 +30,9 @@ func newAnalysisRun(preview AnalysisRunPreview) *AnalysisRun {
 			if stage.Reason == "The model for this stage is not configured." && !stage.Cached {
 				status = AnalysisStageUnavailable
 			}
+			if stage.Carried != "" {
+				status = stage.Carried
+			}
 			progress.Stages = append(progress.Stages, AnalysisStageProgress{Stage: stage.Stage, Status: status, Reason: stage.Reason})
 		}
 		run.Files = append(run.Files, progress)
@@ -190,6 +193,14 @@ func nextAnalysisStage(run *AnalysisRun) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// countAnalysisFileFinished counts a finished file toward the batch limit.
+// Retained files only read back saved reports, so they never count.
+func countAnalysisFileFinished(run *AnalysisRun, fileIndex int) {
+	if !run.Plan.Files[fileIndex].Retained && analysisFileFinished(run.Files[fileIndex]) {
+		run.WindowFilesCompleted++
+	}
 }
 
 func analysisFileFinished(file AnalysisRunFile) bool {

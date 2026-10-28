@@ -135,7 +135,9 @@ every guard when the action arrives.
   their reasons, filterable to failed, with findings or in progress. Controls
   follow the run: pause and cancel while it runs; resume (after a fresh preview)
   or cancel when it is paused or interrupted; otherwise analyze changes, retry
-  only failed and stale stages, or re-analyze everything.
+  only failed and stale stages, or re-analyze everything. A retry still covers
+  the whole project: the other files keep their saved results and stay on the
+  dashboard, and the confirmation says how many files are retried and kept.
 - **Issues.** Dismiss and reopen are local triage. **Fix with agents** opens the
   composer prefilled from the finding; nothing starts until the user does.
 - **Explain a file.** Sends the file's admitted context to a model after remote

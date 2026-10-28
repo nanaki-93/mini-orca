@@ -239,7 +239,7 @@ func TestAnalysisResultsKeepFilesOutsideRetryWithoutDoubleCountingOrIgnoringExcl
 	}
 	mode.Store(1)
 	retry := retryPreviewFor(t, s, nil)
-	if len(retry.Files) != 1 || retry.Files[0].Path != "main.go" {
+	if len(scopedFiles(retry)) != 1 || scopedFiles(retry)[0].Path != "main.go" {
 		t.Fatalf("retry scope: %+v", retry.Files)
 	}
 	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {
@@ -262,7 +262,7 @@ func TestAnalysisResultsKeepFilesOutsideRetryWithoutDoubleCountingOrIgnoringExcl
 	}
 	assertSavedAnalysisCounts(t, s, completedAnalysisRun(t, s), 1, 1, 1)
 	retry = retryPreviewFor(t, s, nil)
-	if len(retry.Files) != 0 {
+	if len(scopedFiles(retry)) != 0 {
 		t.Fatal("successful retries still need work")
 	}
 	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {
@@ -270,8 +270,10 @@ func TestAnalysisResultsKeepFilesOutsideRetryWithoutDoubleCountingOrIgnoringExcl
 	}
 	run = completedAnalysisRun(t, s)
 	assertSavedAnalysisCounts(t, s, run, 1, 1, 1)
-	if run.Status != AnalysisRunUnavailable {
-		t.Fatal("retained findings changed empty retry coverage")
+	// Nothing needs a retry, so the run reads every saved report back: it reports
+	// the whole project's results, each finding counted once.
+	if run.Status != AnalysisRunCompleted || sectionFindings(run) != 3 {
+		t.Fatalf("empty retry dropped the project's results: %s, %d findings", run.Status, sectionFindings(run))
 	}
 	selection := readSelectionFor(t, s)
 	if _, err := s.SaveAnalysisSelection(ctx, AnalysisSelectionRequest{selection.ProjectID, selection.ProjectRevision, selection.SelectionID, []string{"helper.go"}}); err != nil {
@@ -282,4 +284,14 @@ func TestAnalysisResultsKeepFilesOutsideRetryWithoutDoubleCountingOrIgnoringExcl
 		t.Fatal(err)
 	}
 	assertSavedAnalysisCounts(t, s, completedAnalysisRun(t, s), 0, 0, 0)
+}
+
+func sectionFindings(run *AnalysisRun) int {
+	total := 0
+	for _, section := range run.Sections {
+		if section.FindingCount != nil {
+			total += *section.FindingCount
+		}
+	}
+	return total
 }

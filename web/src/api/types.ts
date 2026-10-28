@@ -536,6 +536,8 @@ export interface AnalysisRunSummary {
   sections?: AnalysisSection[];
   plan?: {
     limits?: { batch_files: number; budget_seconds: number; max_attempts_per_stage: number };
+    /** Retained files are outside a scoped run (such as a retry): their saved results are kept, not analyzed again. */
+    files?: { path: string; retained?: boolean }[];
     providers?: AnalysisProvider[];
     excluded?: { path: string; reason: string }[];
     refresh?: boolean;

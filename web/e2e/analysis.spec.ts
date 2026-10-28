@@ -35,12 +35,25 @@ test('the dashboard explains a failed run and retries only what failed', async (
   await page.goBack();
 
   await page.getByRole('button', { name: 'Retry failed' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Analyze' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('Retries the failed and stale stages of 2 files');
+  await expect(dialog).toContainText('The other 2 files keep their saved results.');
+  await dialog.getByRole('button', { name: 'Analyze' }).click();
   await expect(page.getByText('Analysis started.')).toBeVisible();
   const [preview] = daemon.mutations('/analysis/preview');
   expect(preview.body).toMatchObject({ retry_stale_failed: true, refresh: false, scope: 'project' });
   expect(daemon.mutations('/analysis/run')[0].body).toMatchObject({ preview_id: 'preview-1', retry_stale_failed: true });
   await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+});
+
+test('a retry keeps the rest of the project on the dashboard', async ({ page, daemon }) => {
+  const run = analysisRun('completed');
+  run.plan = { ...run.plan, retry_stale_failed: true, files: (run.files ?? []).map((file, i) => ({ path: file.path, retained: i > 1 })) };
+  daemon.serveRun(run);
+  await page.goto('/#/analysis');
+  const progress = page.getByRole('region', { name: 'Progress' });
+  await expect(progress).toContainText('This run analyzed 2 files again; the other 2 files keep their saved results');
+  await expect(page.getByRole('region', { name: 'Files' }).getByRole('row')).toHaveCount(5);
 });
 
 test('a running analysis can be paused and resumed with a fresh preview', async ({ page, daemon }) => {

@@ -129,17 +129,21 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 func captureAnalysisSectionFiles(run *AnalysisRun, index *project.ProjectIndex, path string, result *AnalysisSectionResults) (map[string]AnalysisRunFile, map[string]string, error) {
 	captured := map[string]AnalysisRunFile{}
 	hashes := map[string]string{}
-	for _, file := range run.Files {
+	for i, file := range run.Files {
 		captured[file.Path] = file
 		hashes[file.Path] = file.ContentHash
+		if path == "" && run.Plan.Files[i].Retained {
+			result.RetainedFiles = append(result.RetainedFiles, file.AnalysisFileIdentity)
+		}
 	}
 	if path != "" {
 		if _, ok := captured[path]; !ok {
 			return nil, nil, project.ErrRevisionConflict
 		}
 	}
-	// A scoped retry or recovery changes dispatch scope, not the saved findings
-	// inventory. User/policy exclusions remain excluded; only scope-omitted files are retained.
+	// Runs admitted before retained files excluded the files outside their scope;
+	// their saved findings still belong to the results. User/policy exclusions
+	// remain excluded; only scope-omitted files are retained.
 	if omitted := analysisSelectionMode(run.Plan.RetryStaleFailed, run.Plan.RecoverIncomplete, run.Plan.StaleOnly).exclusion(); path == "" && omitted != "" {
 		retained := make(map[string]bool)
 		for _, file := range run.Plan.Excluded {

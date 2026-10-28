@@ -92,7 +92,11 @@ func analysisRunHasTerminalEvidence(run *AnalysisRun) bool {
 				evidence = true
 			case AnalysisStageFailed, AnalysisStageUnavailable:
 			case AnalysisStageSkipped:
-				if run.Plan.Files[i].Stages[j].Eligible {
+				if plan := run.Plan.Files[i].Stages[j]; plan.Eligible && plan.Carried == "" {
+					return false
+				}
+			case AnalysisStageCanceled, AnalysisStageStale:
+				if run.Plan.Files[i].Stages[j].Carried == "" {
 					return false
 				}
 			default:

@@ -107,6 +107,7 @@ func TestAnalysisGraphCaptureBoundsInventoryAndReusesSettledStages(t *testing.T)
 			file.Stages = append(file.Stages, AnalysisStageProgress{Stage: stage, Status: AnalysisStagePending})
 		}
 		run.Files = append(run.Files, file)
+		run.Plan.Files = append(run.Plan.Files, AnalysisPlannedFile{})
 	}
 	input := captureAnalysisGraph(run)
 	if len(input.Work) != 2000 || input.Work[1999].FileIndex != 499 {
@@ -121,6 +122,11 @@ func TestAnalysisGraphCaptureBoundsInventoryAndReusesSettledStages(t *testing.T)
 	input = captureAnalysisGraph(run)
 	if len(input.Work) != 2 || input.Work[0].FileIndex != 1 || input.Work[0].Stage != "security_rules" || input.Work[0].Ordinal != 0 {
 		t.Fatalf("capture replayed settled evidence: %+v", input.Work)
+	}
+	run.Plan.Files[2].Retained = true
+	input = captureAnalysisGraph(run)
+	if len(input.Work) != 6 || input.Work[5].FileIndex != 2 {
+		t.Fatalf("retained file used the batch or was left out of the window: %+v", input.Work)
 	}
 }
 

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -95,11 +96,14 @@ func (s *Service) analysisStageConfigured(stage AnalysisStage, models *AnalysisM
 	return stage == AnalysisStageSecurityRules || s.analysisModelRuntime(stage, models).client != nil
 }
 
-// Resume keeps the admitted file set even as this run replaces stale reports.
-// New starts recompute selection, so changed evidence invalidates an old preview.
+// A scoped preview keeps every eligible file: files the scope selects get their
+// selected stages redispatched, and every other file is retained with its saved
+// results, so a retry never drops the rest of the project's analysis. Resume
+// keeps the admitted plan even as this run replaces stale reports; new starts
+// recompute the selection, so changed evidence invalidates an old preview.
 func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, mode analysisScopedSelection, preview *AnalysisRunPreview, resume *AnalysisRunIdentity) error {
-	if err := scopeAnalysisStalePath(preview); err != nil {
-		return err
+	if preview.StalePath != "" && !slices.ContainsFunc(preview.Files, func(file AnalysisPlannedFile) bool { return file.Path == preview.StalePath }) {
+		return fmt.Errorf("%w: stale file is not in the eligible saved selection", project.ErrRevisionConflict)
 	}
 	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
@@ -109,57 +113,117 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, mode analysisSc
 	for _, file := range index.Files {
 		indexed[file.Path] = file
 	}
-	retained := make(map[string]AnalysisPlannedFile)
+	admitted := make(map[string]AnalysisPlannedFile)
 	if run := s.analysisRun.run; run != nil && run.Identity.ProjectID == preview.Identity.ProjectID {
 		for _, file := range run.Plan.Files {
-			retained[file.Path] = file
+			admitted[file.Path] = file
 		}
 	}
 	evidence := selectionEvidence(s.analysisRun.run, *analysis)
-	selected := []AnalysisPlannedFile{}
+	kept := []AnalysisPlannedFile{}
 	for _, file := range preview.Files {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		previous, captured := retained[file.Path]
-		include := captured
-		if resume == nil {
-			include = s.planAnalysisRetryFile(mode, *analysis, indexed[file.Path], policy, &file, evidence, preview.Limits, preview.Models)
-		}
-		if resume != nil && include {
-			for j := range file.Stages {
-				if !previous.Stages[j].Cached {
-					s.planAnalysisRetryStage(&file.Stages[j], preview.Limits, preview.Models)
-				}
+		if resume != nil {
+			previous, captured := admitted[file.Path]
+			if !captured {
+				// Runs admitted before retention excluded the files outside their scope.
+				preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: legacyAnalysisScopeExclusion(mode, preview.StalePath, file.Path)})
+				continue
 			}
+			s.resumeAnalysisScopedFile(&file, previous, preview.Limits, preview.Models)
+		} else if preview.StalePath != "" && file.Path != preview.StalePath || !s.planAnalysisRetryFile(mode, *analysis, indexed[file.Path], policy, &file, evidence, preview.Limits, preview.Models) {
+			s.retainAnalysisFile(*analysis, indexed[file.Path], policy, &file, evidence, preview.Models)
 		}
-		if include {
-			selected = append(selected, file)
-		} else {
-			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: mode.exclusion()})
-		}
+		kept = append(kept, file)
 	}
-	preview.Files = selected
+	preview.Files = kept
 	return nil
 }
 
-func scopeAnalysisStalePath(preview *AnalysisRunPreview) error {
-	if preview.StalePath == "" {
-		return nil
+func legacyAnalysisScopeExclusion(mode analysisScopedSelection, stalePath, path string) string {
+	if stalePath != "" && path != stalePath {
+		return analysisStalePathExclusion
 	}
-	selected := []AnalysisPlannedFile{}
-	for _, file := range preview.Files {
-		if file.Path == preview.StalePath {
-			selected = append(selected, file)
-		} else {
-			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: analysisStalePathExclusion})
+	return mode.exclusion()
+}
+
+// resumeAnalysisScopedFile repeats the admitted plan for one file.
+func (s *Service) resumeAnalysisScopedFile(file *AnalysisPlannedFile, previous AnalysisPlannedFile, limits AnalysisRunLimits, models *AnalysisModels) {
+	file.Retained = previous.Retained
+	for j := range file.Stages {
+		stage, admitted := &file.Stages[j], previous.Stages[j]
+		switch {
+		case previous.Retained:
+			stage.Carried, stage.Reason, stage.MaxModelRequests = admitted.Carried, admitted.Reason, 0
+			if admitted.Carried != "" {
+				stage.Cached = false
+			}
+		case !admitted.Cached:
+			s.planAnalysisRetryStage(stage, limits, models)
 		}
 	}
-	if len(selected) == 0 {
-		return fmt.Errorf("%w: stale file is not in the eligible saved selection", project.ErrRevisionConflict)
+}
+
+// retainAnalysisFile keeps a file outside the scope: stages with a current saved
+// report are read back from it, and the others carry their earlier outcome.
+func (s *Service) retainAnalysisFile(analysis project.Analysis, indexed project.IndexFile, policy *project.ContextPolicy, file *AnalysisPlannedFile, evidence analysisSelectionEvidence, models *AnalysisModels) {
+	file.Retained = true
+	for i := range file.Stages {
+		stage := &file.Stages[i]
+		stage.MaxModelRequests = 0
+		if !stage.Eligible || stage.Cached {
+			continue
+		}
+		stage.Carried, stage.Reason = carriedAnalysisStage(s.analysisSelectionStageForModels(analysis, indexed, policy, stage.Stage, evidence, models))
 	}
-	preview.Files = selected
-	return nil
+}
+
+// Reasons for retained stages without a current saved report.
+const (
+	carriedFailedReason      = "This stage failed before analysis could complete."
+	carriedStaleReason       = "Saved analysis no longer matches this file, its instructions or analysis configuration."
+	carriedMissingReason     = "No saved analysis exists for this stage."
+	carriedIncompleteReason  = "The saved analysis is incomplete. Retry analysis to complete coverage."
+	carriedCanceledReason    = "The run was canceled before this stage completed."
+	carriedStoppedReason     = "The earlier run stopped before this stage completed."
+	carriedUnavailableReason = "No usable analysis is available for this stage."
+)
+
+var carriedAnalysisReasons = []string{carriedFailedReason, carriedStaleReason, carriedMissingReason, carriedIncompleteReason, carriedCanceledReason, carriedStoppedReason, carriedUnavailableReason}
+
+// carriedAnalysisStage turns a stage's current observation into the outcome a
+// retained file keeps. Saved reasons stay when they are already a stored reason
+// (such as why a model request failed); others get a fixed one.
+func carriedAnalysisStage(observed AnalysisFileStageStatus) (AnalysisStageStatus, string) {
+	status, reason := AnalysisStageSkipped, carriedMissingReason
+	switch observed.Status {
+	case "failed":
+		status, reason = AnalysisStageFailed, carriedFailedReason
+	case "stale":
+		status, reason = AnalysisStageStale, carriedStaleReason
+	case "partial":
+		reason = carriedIncompleteReason
+	case "canceled":
+		status, reason = AnalysisStageCanceled, carriedCanceledReason
+	case "interrupted", "paused", "pending", "running":
+		status, reason = AnalysisStageCanceled, carriedStoppedReason
+	case "unavailable":
+		status, reason = AnalysisStageUnavailable, carriedUnavailableReason
+	}
+	if observed.Reason != "" && observed.Status != "missing" && observed.Status != "partial" && analysisMetadataReason(observed.Reason) {
+		reason = observed.Reason
+	}
+	return status, reason
+}
+
+func validCarriedAnalysisStatus(status AnalysisStageStatus) bool {
+	switch status {
+	case AnalysisStageFailed, AnalysisStageStale, AnalysisStageSkipped, AnalysisStageCanceled, AnalysisStageUnavailable:
+		return true
+	}
+	return false
 }
 
 func (s *Service) planAnalysisRetryFile(mode analysisScopedSelection, analysis project.Analysis, indexed project.IndexFile, policy *project.ContextPolicy, file *AnalysisPlannedFile, evidence analysisSelectionEvidence, limits AnalysisRunLimits, models *AnalysisModels) bool {

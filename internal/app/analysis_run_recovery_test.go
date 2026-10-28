@@ -37,7 +37,7 @@ func recoveryPreviewFor(t *testing.T, s *Service, limits AnalysisRunLimits, resu
 
 func previewPaths(preview *AnalysisRunPreview) []string {
 	paths := []string{}
-	for _, file := range preview.Files {
+	for _, file := range scopedFiles(preview) {
 		paths = append(paths, file.Path)
 	}
 	return paths
@@ -159,8 +159,8 @@ func TestAnalysisRecoverSelectsIncompleteStagesAndReusesFreshOnes(t *testing.T) 
 	if paths := previewPaths(preview); !reflect.DeepEqual(paths, []string{"failed.go", "main.go", "stale.go"}) {
 		t.Fatalf("recovery paths=%v", paths)
 	}
-	if reason := previewExclusion(preview, "fresh.go"); reason != analysisRecoveryExclusion {
-		t.Fatalf("fresh file exclusion=%q", reason)
+	if !previewRetained(preview, "fresh.go") || previewExclusion(preview, "fresh.go") != "" {
+		t.Fatalf("fresh file was not retained: %+v", preview.Files)
 	}
 	required := map[string]AnalysisStage{"failed.go": AnalysisStageSemantic, "main.go": AnalysisStagePerformance, "stale.go": AnalysisStageSemantic}
 	for _, file := range preview.Files {
@@ -186,7 +186,7 @@ func TestAnalysisRecoverSelectsIncompleteStagesAndReusesFreshOnes(t *testing.T) 
 		t.Fatalf("recovery-omitted evidence not retained: %+v %v", result.RetainedFiles, err)
 	}
 	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryComplete, 0, 0, "")
-	if next := recoveryPreviewFor(t, s, limits, nil); len(next.Files) != 0 || next.ExpectedModelRequests != 0 || calls.Load() != 15 {
+	if next := recoveryPreviewFor(t, s, limits, nil); len(scopedFiles(next)) != 0 || next.ExpectedModelRequests != 0 || calls.Load() != 15 {
 		t.Fatalf("complete recovery=%+v calls=%d", next, calls.Load())
 	}
 }
@@ -211,7 +211,7 @@ func TestAnalysisRecoverIncludesMissingCanceledAndInterruptedStages(t *testing.T
 	assertSelectionStages(t, readSelectionFor(t, s), "main.go", "canceled", "canceled")
 	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryAvailable, 1, 4, "")
 	canceled := recoveryPreviewFor(t, s, limits, nil)
-	if !reflect.DeepEqual(previewPaths(canceled), []string{"main.go"}) || previewExclusion(canceled, "helper.go") != analysisRecoveryExclusion || canceled.ExpectedModelRequests != 3 {
+	if !reflect.DeepEqual(previewPaths(canceled), []string{"main.go"}) || !previewRetained(canceled, "helper.go") || canceled.ExpectedModelRequests != 3 {
 		t.Fatalf("canceled recovery=%+v", canceled)
 	}
 	// Restore a canceled run whose remaining stages were interrupted by a lost window.
@@ -256,14 +256,14 @@ func TestAnalysisRecoverSeparatesConfigurationBlockersFromRecoverableStages(t *t
 	}
 	assertRecovery(t, selection.Recovery, AnalysisRecoveryBlocked, 0, 0, "bug model profile used for Code analysis")
 	blocked := recoveryPreviewFor(t, s, limits, nil)
-	if len(blocked.Files) != 0 || blocked.ExpectedModelRequests != 0 || previewExclusion(blocked, "main.go") != analysisRecoveryExclusion {
+	if len(scopedFiles(blocked)) != 0 || blocked.ExpectedModelRequests != 0 || !previewRetained(blocked, "main.go") {
 		t.Fatalf("configuration-only work admitted: %+v", blocked)
 	}
 	// A recoverable stage admits the file; the unconfigured stage keeps its reason and gets no requests.
 	storeCachedPerformanceReport(t, s, root)
 	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryAvailable, 1, 1, "")
 	mixed := recoveryPreviewFor(t, s, limits, nil)
-	if len(mixed.Files) != 1 || mixed.ExpectedModelRequests != 1 {
+	if len(scopedFiles(mixed)) != 1 || mixed.ExpectedModelRequests != 1 {
 		t.Fatalf("mixed recovery=%+v", mixed)
 	}
 	stages := mixed.Files[0].Stages
@@ -313,10 +313,13 @@ func TestAnalysisRecoverIgnoresExcludedAndUnsupportedFiles(t *testing.T) {
 	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryComplete, 0, 0, "")
 	before := calls.Load()
 	preview := recoveryPreviewFor(t, s, limits, nil)
-	if len(preview.Files) != 0 || preview.ExpectedModelRequests != 0 || calls.Load() != before {
+	if len(scopedFiles(preview)) != 0 || preview.ExpectedModelRequests != 0 || calls.Load() != before {
 		t.Fatalf("excluded work admitted: %+v", preview)
 	}
-	for path, reason := range map[string]string{"helper.go": analysisSelectionExclusion, "main.go": analysisRecoveryExclusion, "data.bin": "Not a supported text source file."} {
+	if !previewRetained(preview, "main.go") {
+		t.Fatalf("main.go was not retained: %+v", preview.Files)
+	}
+	for path, reason := range map[string]string{"helper.go": analysisSelectionExclusion, "data.bin": "Not a supported text source file."} {
 		if got := previewExclusion(preview, path); got != reason {
 			t.Fatalf("%s exclusion=%q want %q", path, got, reason)
 		}
@@ -345,7 +348,7 @@ func TestAnalysisRecoverResumeAdoptsCapturedOptionAndRejectsMismatch(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resume.RecoverIncomplete || resume.Identity != preview.Identity || len(resume.Files) != 2 || resume.ExpectedModelRequests != 3 || resume.Features != nil {
+	if !resume.RecoverIncomplete || resume.Identity != preview.Identity || len(scopedFiles(resume)) != 2 || resume.ExpectedModelRequests != 3 || resume.Features != nil {
 		t.Fatalf("resume=%+v", resume)
 	}
 	if explicit := recoveryPreviewFor(t, s, limits, &paused.Identity); explicit.PreviewID != resume.PreviewID {
@@ -395,7 +398,7 @@ func TestAnalysisRecoverSingleTargetAndRefreshesDocsAfterReindex(t *testing.T) {
 	}
 	before := calls.Load()
 	run := startAndCompleteAnalysis(t, s, preview)
-	if run.Status != AnalysisRunCompletedEmpty || calls.Load() != before+1 {
+	if run.Status != AnalysisRunPartial || calls.Load() != before+1 || analysisRunStage(t, run, "helper.go", AnalysisStageSemantic).Status != AnalysisStageFailed {
 		t.Fatalf("single-target recovery run=%s calls=%d", run.Status, calls.Load()-before)
 	}
 	overview, err := s.ProjectOverview()

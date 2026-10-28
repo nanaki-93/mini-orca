@@ -95,6 +95,7 @@ function RunDashboard({ run, coverage }: { run: AnalysisRunSummary; coverage?: R
   const files = run.files ?? [];
   const findings = files.reduce((sum, file) => sum + fileFindings(file), 0);
   const active = runActive(run);
+  const kept = (run.plan?.files ?? []).filter(file => file.retained).length;
   return (
     <>
       {run.reason ? <Callout tone={statusTone(run.status) === 'danger' ? 'danger' : 'warning'} icon={AlertTriangle} title={run.reason} /> : null}
@@ -107,6 +108,7 @@ function RunDashboard({ run, coverage }: { run: AnalysisRunSummary; coverage?: R
             {active ? <span className="row small tone-info"><Loader2 size={13} className="spin" aria-hidden />{plural(progress.running, 'stage')} running</span> : null}
           </div>
           <Progress value={progress.percent} tone={progress.failed ? 'warning' : active ? 'accent' : 'success'} label="Analysis progress" />
+          {kept ? <p className="xs muted">This run analyzed {plural(files.length - kept, 'file')} again; the other {plural(kept, 'file')} keep their saved results, so the dashboard covers the whole project.</p> : null}
           <div className="stat-row">
             <Stat value={files.length} label={files.length === 1 ? 'file' : 'files'} />
             <Stat value={progress.succeeded} label="stages done" tone="success" />

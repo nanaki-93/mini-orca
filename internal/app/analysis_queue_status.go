@@ -18,6 +18,9 @@ type analysisSelectionEvidence struct {
 	files    map[string]AnalysisRunFile
 	excluded map[string]string
 	run      *AnalysisRun
+	// carried marks retained stages that kept an earlier outcome; a carried
+	// stale stage defers to the saved report, which still says stale.
+	carried map[string][]AnalysisStageStatus
 }
 
 func selectionEvidence(run *AnalysisRun, analysis project.Analysis) analysisSelectionEvidence {
@@ -29,8 +32,14 @@ func selectionEvidence(run *AnalysisRun, analysis project.Analysis) analysisSele
 		evidence.excluded[file.Path] = file.Reason
 	}
 	evidence.run = run
-	for _, file := range run.Files {
+	evidence.carried = map[string][]AnalysisStageStatus{}
+	for i, file := range run.Files {
 		evidence.files[file.Path] = file
+		if planned := run.Plan.Files[i]; planned.Retained {
+			for _, stage := range planned.Stages {
+				evidence.carried[file.Path] = append(evidence.carried[file.Path], stage.Carried)
+			}
+		}
 	}
 	return evidence
 }
@@ -103,8 +112,11 @@ func (e analysisSelectionEvidence) stage(file project.IndexFile, stage AnalysisS
 	if !ok || progress.ContentHash != file.ContentHash {
 		return AnalysisStageProgress{}, false
 	}
-	for _, item := range progress.Stages {
+	for i, item := range progress.Stages {
 		if item.Stage == stage {
+			if carried := e.carried[file.Path]; i < len(carried) && carried[i] == AnalysisStageStale {
+				return AnalysisStageProgress{}, false
+			}
 			return item, true
 		}
 	}

@@ -186,18 +186,26 @@ type AnalysisProviderRequirement struct {
 	RemoteConfirmationRequired bool            `json:"remote_confirmation_required"`
 }
 
+// Carried is set on a retained file's stage that has no current saved report:
+// the run keeps the stage's earlier outcome (with Reason) and never dispatches it.
 type AnalysisStagePlan struct {
-	Stage            AnalysisStage `json:"stage"`
-	Eligible         bool          `json:"eligible"`
-	Cached           bool          `json:"cached"`
-	Reason           string        `json:"reason,omitempty"`
-	ProviderID       string        `json:"provider_id,omitempty"`
-	MaxModelRequests int           `json:"max_model_requests"`
+	Stage            AnalysisStage       `json:"stage"`
+	Eligible         bool                `json:"eligible"`
+	Cached           bool                `json:"cached"`
+	Carried          AnalysisStageStatus `json:"carried,omitempty"`
+	Reason           string              `json:"reason,omitempty"`
+	ProviderID       string              `json:"provider_id,omitempty"`
+	MaxModelRequests int                 `json:"max_model_requests"`
 }
 
+// A scoped run (retry, stale-only, recovery or one stale file) still covers the
+// whole project: files outside its scope are Retained. Their saved reports are
+// read back and their other stages keep the earlier outcome; no model request
+// is sent for them and they do not count toward the batch limit.
 type AnalysisPlannedFile struct {
 	AnalysisFileIdentity
 	SizeBytes int64               `json:"size_bytes"`
+	Retained  bool                `json:"retained,omitempty"`
 	Stages    []AnalysisStagePlan `json:"stages"`
 }
 

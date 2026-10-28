@@ -77,7 +77,7 @@ func TestAnalysisHandlerStaleOnlyAdmission(t *testing.T) {
 	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: app.AnalysisRunScopeProject, StaleOnly: true, StalePath: "main.go", Limits: app.AnalysisRunLimits{BatchFiles: 10, BudgetSeconds: 30, MaxAttemptsPerStage: 1}}
 	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
 	var preview app.AnalysisRunPreview
-	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &preview) != nil || !preview.StaleOnly || preview.StalePath != "main.go" || len(preview.Files) != 0 {
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &preview) != nil || !preview.StaleOnly || preview.StalePath != "main.go" || scopedAnalysisFiles(preview) != 0 || preview.ExpectedModelRequests != 0 {
 		t.Fatalf("stale-only preview = %d %s", w.Code, w.Body)
 	}
 	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, StaleOnly: true, StalePath: "main.go"}
@@ -255,7 +255,7 @@ func TestAnalysisHandlerRetrySelectionRequiresMatchingAdmission(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil {
 		t.Fatal(err)
 	}
-	if !preview.RetryStaleFailed || len(preview.Files) != 0 || preview.ExpectedModelRequests != 0 {
+	if !preview.RetryStaleFailed || scopedAnalysisFiles(preview) != 0 || preview.ExpectedModelRequests != 0 {
 		t.Fatalf("missing file included: %+v", preview)
 	}
 	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits}
@@ -497,4 +497,15 @@ func waitHandlerAnalysis(t *testing.T, h *AnalysisHandler, analysis *project.Ana
 		time.Sleep(5 * time.Millisecond)
 	}
 	return run
+}
+
+// scopedAnalysisFiles counts the files a scoped preview selects; the others are retained.
+func scopedAnalysisFiles(preview app.AnalysisRunPreview) int {
+	selected := 0
+	for _, file := range preview.Files {
+		if !file.Retained {
+			selected++
+		}
+	}
+	return selected
 }

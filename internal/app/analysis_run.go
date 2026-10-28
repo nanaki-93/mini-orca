@@ -610,9 +610,7 @@ func (s *Service) recordAnalysisStageLocked(ctx context.Context, identity Analys
 	}
 
 	recordAnalysisResult(c.run, fileIndex, stageIndex, result)
-	if analysisFileFinished(c.run.Files[fileIndex]) {
-		c.run.WindowFilesCompleted++
-	}
+	countAnalysisFileFinished(c.run, fileIndex)
 	if err := s.saveAnalysisRunLocked(false); err != nil {
 		return false
 	}
@@ -676,9 +674,7 @@ func (s *Service) failExhaustedAnalysisStageLocked(fileIndex, stageIndex int) er
 	stage := &c.run.Files[fileIndex].Stages[stageIndex]
 	stage.Status = AnalysisStageFailed
 	stage.Reason = "The stage exhausted its total attempt allowance."
-	if analysisFileFinished(c.run.Files[fileIndex]) {
-		c.run.WindowFilesCompleted++
-	}
+	countAnalysisFileFinished(c.run, fileIndex)
 	return s.saveAnalysisRunLocked(false)
 }
 

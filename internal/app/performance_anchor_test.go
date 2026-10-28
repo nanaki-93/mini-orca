@@ -94,7 +94,7 @@ func TestPerformanceRetryCompletesRangesSpanningDeclarations(t *testing.T) {
 			}
 			s.analysisRun = &analysisRunController{}
 			assertSelectionStages(t, readSelectionFor(t, s), "main.go", "fresh", "up to date")
-			if next := retryPreviewFor(t, s, nil); len(next.Files) != 0 || calls.Load() != 4 {
+			if next := retryPreviewFor(t, s, nil); len(scopedFiles(next)) != 0 || calls.Load() != 4 {
 				t.Fatalf("completed range still needs retry: %+v", next)
 			}
 		})
