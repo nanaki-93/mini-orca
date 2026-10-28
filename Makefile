@@ -38,26 +38,28 @@ help: ## Show this help message
 	@echo ""
 
 # ─── Local Build ───────────────────────────────────────────────────────────────
-build: build-agents ## Build the daemon (which serves the Web UI) and the evaluation and inspector commands
+build: build-agents ## Build the mini-orca launcher, the daemon (which serves the Web UI) and the evaluation and inspector commands
 	@echo "$(COLOR_GREEN)Building $(APP_NAME) $(VERSION)...$(COLOR_RESET)"
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME)-daemon ./cmd/daemon
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-w -s -X github.com/nanaki-93/mini-orca/v2/internal/version.Version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME) ./cmd/mini-orca
+	@cp -f $(BUILD_DIR)/$(APP_NAME) ./$(APP_NAME)
 	@cp -f $(BUILD_DIR)/$(APP_NAME)-daemon ./$(APP_NAME)-daemon
-	@echo "$(COLOR_GREEN)Build complete: ./$(APP_NAME)-daemon ($(BUILD_DIR)/); open http://127.0.0.1:9090/ui after starting it$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)Build complete: ./$(APP_NAME), ./$(APP_NAME)-daemon ($(BUILD_DIR)/); run mini-orca in a project folder$(COLOR_RESET)"
 
-install: build ## Build and substitute mini-orca-daemon into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME if present)
+install: build ## Build and copy mini-orca and mini-orca-daemon into ~/DEV/lab/mini-orca and MINI_ORCA_HOME (or ~/DEV/programs/mini-orca)
 	@target_dir="$$HOME/DEV/lab/mini-orca"; \
 	if [ -d "$$target_dir" ] && [ "$$(cd "$$target_dir" && pwd)" != "$$(pwd)" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$target_dir/$(APP_NAME)-daemon"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME) $(BUILD_DIR)/$(APP_NAME)-daemon "$$target_dir/"; \
 	fi
 	@if [ -n "$${MINI_ORCA_HOME:-}" ] && [ -d "$${MINI_ORCA_HOME}" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$${MINI_ORCA_HOME}/$(APP_NAME)-daemon"; \
-		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $${MINI_ORCA_HOME}$(COLOR_RESET)"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME) $(BUILD_DIR)/$(APP_NAME)-daemon "$${MINI_ORCA_HOME}/"; \
+		echo "$(COLOR_GREEN)Installed $(APP_NAME) and $(APP_NAME)-daemon into $${MINI_ORCA_HOME}$(COLOR_RESET)"; \
 	elif [ -d "$$HOME/DEV/programs/mini-orca" ]; then \
-		cp -f $(BUILD_DIR)/$(APP_NAME)-daemon "$$HOME/DEV/programs/mini-orca/$(APP_NAME)-daemon"; \
-		echo "$(COLOR_GREEN)Installed $(APP_NAME) into $$HOME/DEV/programs/mini-orca$(COLOR_RESET)"; \
+		cp -f $(BUILD_DIR)/$(APP_NAME) $(BUILD_DIR)/$(APP_NAME)-daemon "$$HOME/DEV/programs/mini-orca/"; \
+		echo "$(COLOR_GREEN)Installed $(APP_NAME) and $(APP_NAME)-daemon into $$HOME/DEV/programs/mini-orca$(COLOR_RESET)"; \
 	fi
-	@echo "$(COLOR_GREEN)Updated $(APP_NAME)-daemon in $$HOME/DEV/lab/mini-orca$(COLOR_RESET)"
+	@echo "$(COLOR_GREEN)Run mini-orca in a project folder to open it in the Web UI$(COLOR_RESET)"
 
 build-linux: build-agents-linux ## Build all Linux amd64 release command binaries
 	@mkdir -p $(BUILD_DIR)

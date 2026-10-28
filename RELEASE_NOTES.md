@@ -45,6 +45,12 @@ interface.
   per-launch token (`X-Mini-Orca-Token`). The Web UI gets it in its document;
   other local clients read the `0600` token file (`MINI_ORCA_TOKEN_FILE`, or
   `mini-orca/daemon-token` in the user configuration directory).
+- **Launcher:** `mini-orca` (built and installed by `just build`) opens the
+  project in the current folder: it starts the daemon when none is running,
+  switches it to the folder and opens the Web UI; Ctrl+C stops a daemon it
+  started.
+- **Fixed:** a daemon with no `config.yaml` failed to start instead of using
+  local defaults.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

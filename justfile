@@ -39,10 +39,10 @@ check:
     ./scripts/quality.sh --go-only
     make check
 
-# Build the daemon and substitute mini-orca-daemon into ~/DEV/lab/mini-orca
+# Build mini-orca and mini-orca-daemon and install them (see make install); then run mini-orca in a project folder
 build:
     make install
 
-# Build and substitute mini-orca-daemon into ~/DEV/lab/mini-orca (and MINI_ORCA_HOME)
+# Build mini-orca and mini-orca-daemon into ~/DEV/lab/mini-orca and MINI_ORCA_HOME (or ~/DEV/programs/mini-orca)
 install:
     make install

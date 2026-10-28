@@ -525,7 +525,10 @@ plan, consent and execution trust.
 Only the current YAML schema is supported. For retired configurations, create a
 fresh local file from `config.example.yaml`; unknown keys fail startup instead
 of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path
-(default `config.yaml`). Restart the daemon after changes.
+(default `config.yaml` in the daemon's working folder; when that file is absent
+the daemon starts with local defaults). The `mini-orca` launcher starts the
+daemon in the project folder and passes `MINI_ORCA_CONFIG` when it finds a
+`config.yaml` there or beside the binaries. Restart the daemon after changes.
 
 ## Local metadata and manual cleanup
 

@@ -2,7 +2,10 @@ package api
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 // WriteTokenHeader carries the daemon's per-launch write token.
@@ -31,4 +34,21 @@ func RequireWriteToken(next http.Handler, token, tokenFile string) http.Handler 
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// WriteTokenFile is where the daemon saves its write token for local clients:
+// MINI_ORCA_TOKEN_FILE when set (an absolute path), otherwise
+// mini-orca/daemon-token in the user configuration directory.
+func WriteTokenFile() (string, error) {
+	if path := os.Getenv("MINI_ORCA_TOKEN_FILE"); path != "" {
+		if !filepath.IsAbs(path) {
+			return "", fmt.Errorf("MINI_ORCA_TOKEN_FILE must be an absolute path")
+		}
+		return path, nil
+	}
+	directory, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("locate the write token directory: %w", err)
+	}
+	return filepath.Join(directory, "mini-orca", "daemon-token"), nil
 }

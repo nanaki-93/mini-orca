@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -128,7 +129,7 @@ func LoadConfig() (*Config, error) {
 
 	cfg, err := LoadFromYAML(configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			logging.Info("Config file not found, using local defaults", "path", configPath)
 			return Default(), nil
 		}
@@ -145,7 +146,7 @@ func LoadFromYAML(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("config file not found: %s", path)
+			return nil, fmt.Errorf("config file not found: %s: %w", path, os.ErrNotExist)
 		}
 		return nil, fmt.Errorf("read config file: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
@@ -22,7 +23,7 @@ type writeToken struct {
 // Web UI can send it.
 func newWriteToken() (writeToken, error) {
 	token := writeToken{value: rand.Text()}
-	path, err := writeTokenPath()
+	path, err := api.WriteTokenFile()
 	if err != nil {
 		return token, err
 	}
@@ -34,18 +35,4 @@ func newWriteToken() (writeToken, error) {
 	}
 	token.file = path
 	return token, nil
-}
-
-func writeTokenPath() (string, error) {
-	if path := os.Getenv("MINI_ORCA_TOKEN_FILE"); path != "" {
-		if !filepath.IsAbs(path) {
-			return "", fmt.Errorf("MINI_ORCA_TOKEN_FILE must be an absolute path")
-		}
-		return path, nil
-	}
-	directory, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("locate the write token directory: %w", err)
-	}
-	return filepath.Join(directory, "mini-orca", "daemon-token"), nil
 }

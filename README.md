@@ -67,9 +67,21 @@ Read [CONFIG.md](CONFIG.md) before the first launch.
 
 ```sh
 cp config.example.yaml config.yaml   # fill the three model scopes
-go run ./cmd/daemon                  # or: make build && ./mini-orca-daemon
-open http://127.0.0.1:9090/ui
+just build                           # or: make install
+cd ~/code/my-project && mini-orca    # opens this folder in the Web UI
 ```
+
+`just build` copies `mini-orca` and `mini-orca-daemon` into `MINI_ORCA_HOME`
+(or `~/DEV/programs/mini-orca`); put that folder on your `PATH`. Run `mini-orca`
+in a project folder, or pass the folder as its argument: it starts the daemon
+beside it when none is running, opens that folder as the project and opens the
+Web UI in your browser. The daemon it started runs until you press Ctrl+C, with
+its log in that terminal. When a daemon is already running, `mini-orca` switches
+it to the folder and exits. A started daemon reads `MINI_ORCA_CONFIG`, else the
+project's `config.yaml`, else the `config.yaml` beside the binaries, else the
+local defaults. `--no-open` skips the browser and `--url` (or `MINI_ORCA_URL`)
+targets a daemon at another address. Without the launcher, `go run ./cmd/daemon`
+serves the folder it runs in at `http://127.0.0.1:9090/ui`.
 
 The daemon listens on `127.0.0.1:9090` only, unless `MINI_ORCA_BIND_ADDRESS`
 opts into another address (see [DOCKER.md](DOCKER.md)). Keep `config.yaml`
