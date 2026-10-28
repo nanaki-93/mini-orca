@@ -57,6 +57,9 @@ interface.
   install` seeds `~/.config/mini-orca/config.yaml`, the launcher prints the file
   it uses, and the status bar and Settings warn when there is none. A missing
   `MINI_ORCA_CONFIG` file now stops startup.
+- **Faster triage:** Issues move with `j`/`k`, fix with `f`, dismiss or reopen
+  with `x`, and filter by kind; the status bar shows a running analysis and the
+  code inspector shows each file's analysis stages.
 - **Dark palettes:** Midnight, Graphite, Ocean, Forest, Plum, Ember and True
   black, chosen in Settings → Appearance or the command palette.
 - **Delete tasks:** stale, failed and draft tasks can be deleted one at a time

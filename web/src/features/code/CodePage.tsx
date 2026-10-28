@@ -17,6 +17,7 @@ import { basename, companionTestPath, dirname, languageOf, plural } from '@/lib/
 import { Badge, Button, EmptyState, Highlight, IconButton, Input, Kbd, Skeleton, cx } from '@/components/ui';
 import { FileIcon, SeverityBadge, isOpenFinding } from '@/components/domain';
 import { useFeedback } from '@/components/overlays';
+import { FileStages } from '@/features/analysis/FileStages';
 
 const tabsByCheckout = new Map<string, string[]>();
 
@@ -271,6 +272,7 @@ function Inspector({ path, findings, hash }: { path: string; findings: Finding[]
           {result.value.responsibilities?.length ? <ul className="small">{result.value.responsibilities.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
         </div>
       ) : null}
+      <FileStages path={path} />
       <div className="inspector-section">
         <div className="row"><span className="strong small">Open issues</span><span className="count">{findings.length}</span></div>
         {findings.length ? (

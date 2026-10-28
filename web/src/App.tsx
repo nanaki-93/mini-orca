@@ -122,6 +122,11 @@ const EXTRA: { group: string; keys: string; label: string }[] = [
   { group: 'Review', keys: 'v', label: 'Mark file viewed' },
   { group: 'Review', keys: 's', label: 'Toggle split diff' },
   { group: 'Composer', keys: 'mod+Enter', label: 'Start agents' },
+  { group: 'Issues', keys: 'j', label: 'Next issue' },
+  { group: 'Issues', keys: 'k', label: 'Previous issue' },
+  { group: 'Issues', keys: 'f', label: 'Fix with agents' },
+  { group: 'Issues', keys: 'x', label: 'Dismiss or reopen' },
+  { group: 'Issues', keys: 'Escape', label: 'Close the detail' },
 ];
 
 function ShortcutsDialog({ shortcuts }: { shortcuts: Shortcut[] }) {

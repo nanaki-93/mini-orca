@@ -2,6 +2,7 @@
 // one-click "fix with agents".
 
 import { useMemo, useState } from 'react';
+import { usePageKeys } from '@/app/shortcuts';
 import { CircleAlert, ExternalLink, Search, Wrench, XCircle, RotateCcw } from 'lucide-react';
 import { useFindings, useIndex, useProject } from '@/api/hooks';
 import type { Finding } from '@/api/types';
@@ -32,6 +33,34 @@ export function IssuesPage() {
     return rankItems(sorted, q, f => `${f.title} ${f.location?.path ?? ''} ${f.category ?? ''}`, 1000).map(r => r.item);
   }, [all, status, severity, category, q]);
   const selected = list.find(f => f.id === selectedId) ?? null;
+  const categoryCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const f of all.filter(isOpenFinding)) if (f.category) c[f.category] = (c[f.category] ?? 0) + 1;
+    return c;
+  }, [all]);
+  const categories = Object.keys(categoryCounts).sort();
+  const project = useProject().data;
+  const { worktreePath } = useCheckout();
+  const actions = useActions();
+  const busy = useBusy();
+  const index = list.findIndex(f => f.id === selectedId);
+
+  // j/k move through the list, Esc closes the detail, f fixes and x dismisses or reopens.
+  usePageKeys(key => {
+    if (key === 'j' || key === 'ArrowDown') select(list[Math.min(index + 1, list.length - 1)]);
+    else if (key === 'k' || key === 'ArrowUp') select(list[Math.max(index - 1, 0)]);
+    else if (key === 'Escape' && selected) setParam('id', undefined);
+    else if (key === 'f' && selected && isOpenFinding(selected)) fixFinding(selected);
+    else if (key === 'x' && selected && project && !busy) void actions.triageFinding(project, worktreePath, selected, isOpenFinding(selected) ? 'dismissed' : 'open');
+    else return false;
+    return true;
+  });
+  function select(finding: Finding | undefined) {
+    if (!finding) return;
+    setParam('id', finding.id);
+    document.getElementById(`issue-${finding.id}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const f of all.filter(isOpenFinding)) c[(f.severity || 'info').toLowerCase()] = (c[(f.severity || 'info').toLowerCase()] ?? 0) + 1;
@@ -57,11 +86,15 @@ export function IssuesPage() {
               </button>
             ))}
           </div>
-          {category ? (
-            <button type="button" className="chip chip-toggle is-on" onClick={() => setParam('category', undefined)} aria-label={`Clear the ${category} filter`}>
-              {category}
-              <XCircle size={12} aria-hidden />
-            </button>
+          {categories.length > 1 || category ? (
+            <div className="chips" role="group" aria-label="Category">
+              {['', ...categories].map(c => (
+                <button key={c || 'all'} type="button" className={cx('chip', 'chip-toggle', category === c && 'is-on')} onClick={() => setParam('category', c || undefined)}>
+                  {c ? CATEGORY_LABELS[c] ?? c : 'All kinds'}
+                  {c && categoryCounts[c] ? <span className="count">{categoryCounts[c]}</span> : null}
+                </button>
+              ))}
+            </div>
           ) : null}
           <span className="spacer" />
           <Input icon={Search} placeholder="Filter issues…" value={q} onChange={e => setQ(e.target.value)} aria-label="Filter issues" className="toolbar-search" />
@@ -84,7 +117,7 @@ export function IssuesPage() {
             </thead>
             <tbody>
               {list.map(f => (
-                <tr key={f.id} className={cx('table-row', f.id === selectedId && 'is-active', !isOpenFinding(f) && 'is-muted')} onClick={() => setParam('id', f.id)} tabIndex={0} onKeyDown={e => e.key === 'Enter' && setParam('id', f.id)} aria-selected={f.id === selectedId}>
+                <tr key={f.id} id={`issue-${f.id}`} className={cx('table-row', f.id === selectedId && 'is-active', !isOpenFinding(f) && 'is-muted')} onClick={() => setParam('id', f.id)} tabIndex={0} onKeyDown={e => e.key === 'Enter' && setParam('id', f.id)} aria-selected={f.id === selectedId}>
                   <td><SeverityBadge severity={f.severity} /></td>
                   <td>
                     <div className="truncate strong-row">{f.title}</div>
@@ -103,6 +136,23 @@ export function IssuesPage() {
   );
 }
 
+const CATEGORY_LABELS: Record<string, string> = { bugs: 'Bugs', bug: 'Bugs', performance: 'Performance', security: 'Security' };
+
+/** Opens the composer prefilled to fix a finding, with its test file in scope. */
+function fixFinding(finding: Finding) {
+  const path = finding.location?.path || finding.task_spec?.target_path || '';
+  const paths = path ? [path] : [];
+  const companion = companionTestPath(path);
+  if (companion) paths.push(companion);
+  openNewTask({
+    title: `Fix: ${finding.title}`,
+    kind: finding.category === 'security' ? 'security' : finding.category === 'performance' ? 'performance' : 'fix',
+    description: `${finding.message}${finding.evidence ? `\n\nEvidence:\n${finding.evidence}` : ''}\n\nLocation: ${path}${finding.location?.start_line ? `:${finding.location.start_line}` : ''}`,
+    paths,
+    criteria: finding.task_spec?.acceptance_criteria?.length ? finding.task_spec.acceptance_criteria : [`Resolve “${finding.title}” without breaking existing callers`, 'Add a regression test that fails before the fix'],
+  });
+}
+
 function IssueDetail({ finding, onClose }: { finding: Finding; onClose: () => void }) {
   const project = useProject().data;
   const files = useIndex().data?.files ?? [];
@@ -111,19 +161,6 @@ function IssueDetail({ finding, onClose }: { finding: Finding; onClose: () => vo
   const busy = useBusy();
   const open = isOpenFinding(finding);
   const path = finding.location?.path || finding.task_spec?.target_path || '';
-
-  const fix = () => {
-    const paths = path ? [path] : [];
-    const companion = companionTestPath(path);
-    if (companion) paths.push(companion);
-    openNewTask({
-      title: `Fix: ${finding.title}`,
-      kind: finding.category === 'security' ? 'security' : finding.category === 'performance' ? 'performance' : 'fix',
-      description: `${finding.message}${finding.evidence ? `\n\nEvidence:\n${finding.evidence}` : ''}\n\nLocation: ${path}${finding.location?.start_line ? `:${finding.location.start_line}` : ''}`,
-      paths,
-      criteria: finding.task_spec?.acceptance_criteria?.length ? finding.task_spec.acceptance_criteria : [`Resolve “${finding.title}” without breaking existing callers`, 'Add a regression test that fails before the fix'],
-    });
-  };
 
   return (
     <aside className="detail-pane" aria-label="Issue detail">
@@ -155,12 +192,12 @@ function IssueDetail({ finding, onClose }: { finding: Finding; onClose: () => vo
         </div>
       ) : null}
       <div className="row-wrap detail-actions">
-        {open ? <Button variant="primary" icon={Wrench} onClick={fix} disabled={!files.length}>Fix with agents</Button> : null}
+        {open ? <Button variant="primary" icon={Wrench} onClick={() => fixFinding(finding)} disabled={!files.length} kbd="F">Fix with agents</Button> : null}
         {project ? (
           open ? (
-            <Button variant="ghost" icon={XCircle} onClick={() => void actions.triageFinding(project, worktreePath, finding, 'dismissed')} disabled={Boolean(busy)}>Dismiss</Button>
+            <Button variant="ghost" icon={XCircle} onClick={() => void actions.triageFinding(project, worktreePath, finding, 'dismissed')} disabled={Boolean(busy)} kbd="X">Dismiss</Button>
           ) : (
-            <Button variant="ghost" icon={RotateCcw} onClick={() => void actions.triageFinding(project, worktreePath, finding, 'open')} disabled={Boolean(busy)}>Reopen</Button>
+            <Button variant="ghost" icon={RotateCcw} onClick={() => void actions.triageFinding(project, worktreePath, finding, 'open')} disabled={Boolean(busy)} kbd="X">Reopen</Button>
           )
         ) : null}
       </div>

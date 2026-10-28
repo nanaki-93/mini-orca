@@ -178,9 +178,9 @@ export function InboxPage() {
                       <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>
                       <span className="muted">{runActive(run) ? 'running now' : run.updated_at ? timeAgo(run.updated_at) : ''}</span>
                       <span className="spacer" />
-                      <span className="xs muted">{progress.percent}%</span>
+                      {progress.total ? <span className="xs muted">{progress.percent}%</span> : null}
                     </div>
-                    <Progress value={progress.percent} tone={progress.failed ? 'warning' : 'accent'} label="Analysis progress" />
+                    {progress.total ? <Progress value={progress.percent} tone={progress.failed ? 'warning' : 'accent'} label="Analysis progress" /> : null}
                     {progress.failed ? <button type="button" className="link-btn xs tone-danger" onClick={() => navigate('/analysis')}>{plural(progress.failed, 'stage')} failed — see why</button> : null}
                   </div>
                 ) : (

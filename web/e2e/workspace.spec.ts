@@ -183,3 +183,23 @@ test('a dark palette is chosen in Appearance and kept', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'oled');
 });
+
+test('issues are triaged from the keyboard and filtered by kind', async ({ page }) => {
+  await page.goto('/#/issues');
+  await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row')).toHaveCount(3);
+  await page.keyboard.press('j');
+  const detail = page.getByRole('complementary', { name: 'Issue detail' });
+  await expect(detail).toContainText('Request body read without a size limit');
+  await page.keyboard.press('j');
+  await expect(detail).toContainText('Retry loop ignores cancellation');
+  await page.keyboard.press('Escape');
+  await expect(detail).toHaveCount(0);
+
+  await page.getByRole('group', { name: 'Category' }).getByRole('button', { name: /Security/ }).click();
+  await expect(page).toHaveURL(/category=security/);
+  await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row')).toHaveCount(2);
+  await page.keyboard.press('j');
+  await page.keyboard.press('f');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByPlaceholder('What should change?')).toHaveValue('Fix: Request body read without a size limit');
+});

@@ -28,7 +28,7 @@ test('the dashboard explains a failed run and retries only what failed', async (
   const files = page.getByRole('region', { name: 'Files' });
   await expect(files.getByRole('row')).toHaveCount(3);
   await expect(files).toContainText('internal/vault/crypto.go');
-  await expect(files).not.toContainText('cmd/list.go');
+  await expect(files).not.toContainText('internal/api/handlers/webui.go');
 
   await page.getByRole('region', { name: 'Bugs results' }).getByRole('button', { name: '2 findings' }).click();
   await expect(page).toHaveURL(/#\/issues\?category=bugs/);
@@ -47,6 +47,7 @@ test('a running analysis can be paused and resumed with a fresh preview', async 
   daemon.serveRun(analysisRun('running'));
   await page.goto('/#/analysis');
   await expect(page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /Analysis/ })).toContainText('1');
+  await expect(page.getByRole('contentinfo', { name: 'Status' }).getByRole('button', { name: /Analyzing \d+%/ })).toBeVisible();
   await page.getByRole('button', { name: 'Pause' }).click();
   await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
   expect(daemon.mutations('/analysis/run/control')[0].body).toMatchObject({ action: 'pause', identity: { id: 'analysis-1' } });
@@ -56,4 +57,14 @@ test('a running analysis can be paused and resumed with a fresh preview', async 
   await expect(page.getByText('Analysis resumed.')).toBeVisible();
   expect(daemon.mutations('/analysis/preview')[0].body).toMatchObject({ resume_run: { id: 'analysis-1' }, limits: { budget_seconds: 1800 } });
   expect(daemon.mutations('/analysis/run/control')[1].body).toMatchObject({ action: 'resume', preview_id: 'preview-1' });
+});
+
+test('the code inspector shows how analysis went for the open file', async ({ page, daemon }) => {
+  daemon.serveRun(analysisRun());
+  await page.goto('/#/code?file=internal%2Fapi%2Fhandlers%2Fwebui.go');
+  const stages = page.getByLabel('Analysis of this file');
+  await expect(stages).toContainText('Bugs');
+  await expect(stages).toContainText('2 findings');
+  await stages.getByRole('button', { name: 'Dashboard' }).click();
+  await expect(page).toHaveURL(/#\/analysis/);
 });

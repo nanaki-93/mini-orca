@@ -101,7 +101,7 @@ export function TaskListPage() {
               count={group.items.length}
               action={group.id === 'attention' || group.id === 'draft' ? (
                 <Button size="sm" variant="ghost" icon={Trash2} onClick={() => void actions.deleteTasks(group.items.map(v => deletable(v.item)))} disabled={Boolean(busy)}>
-                  Delete {group.items.length === 1 ? 'it' : `all ${group.items.length}`}
+                  {group.items.length === 1 ? 'Delete' : `Delete all ${group.items.length}`}
                 </Button>
               ) : undefined}
             >

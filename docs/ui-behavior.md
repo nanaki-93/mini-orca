@@ -78,6 +78,12 @@ every guard when the action arrives.
   by a commit with the shown message. The confirmation names the destination,
   the branch for a commit, and the running tasks in that checkout whose files
   it changes; Apply stops only those, and other tasks keep running.
+- **Issues from the keyboard.** `j`/`k` select the next or previous issue and
+  open its detail, `f` starts "Fix with agents", `x` dismisses or reopens it and
+  `Esc` closes the detail. Chips filter by kind (bugs, performance, security).
+- **Analysis everywhere.** While an analysis runs, the status bar shows its
+  progress and the sidebar counts it; the code inspector shows how each stage
+  went for the open file, with its reason, and links to the dashboard.
 - **Delete a task.** The task page offers Delete (a button when the task is
   stale, an icon otherwise); the task list deletes every task of the "Failed or
   stale" or "Drafts" group at once, or the selected one with Delete. One

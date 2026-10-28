@@ -13,7 +13,7 @@ import { useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { openNewTask, openPalette, setUI, useUI } from '@/app/store';
 import { taskStatus } from '@/lib/readiness';
-import { runActive } from '@/lib/analysis';
+import { runActive, runProgress } from '@/lib/analysis';
 import { basename, plural } from '@/lib/util';
 import type { Project } from '@/api/types';
 import { Dot, IconButton, Kbd, Spinner, Tip, cx } from '@/components/ui';
@@ -229,6 +229,7 @@ function StatusBar({ connection, running }: { connection: Connection; running: n
   const trust = useTrust().data;
   const project = useProject().data;
   const models = useModels().data;
+  const analysis = useOverview().data?.analysis_run;
   const remote = Object.values(models?.scopes ?? {}).filter(m => m.remote_provider).length;
   return (
     <footer className="statusbar" aria-label="Status">
@@ -246,6 +247,12 @@ function StatusBar({ connection, running }: { connection: Connection; running: n
         <button type="button" className="status-item status-link" onClick={() => navigate('/tasks', { filter: 'running' })}>
           <Bot size={13} aria-hidden />
           {running} agent run{running === 1 ? '' : 's'}
+        </button>
+      ) : null}
+      {analysis && runActive(analysis) ? (
+        <button type="button" className="status-item status-link" onClick={() => navigate('/analysis')}>
+          <Activity size={13} className="tone-info" aria-hidden />
+          Analyzing {runProgress(analysis).percent}%
         </button>
       ) : null}
       <span className="spacer" />
