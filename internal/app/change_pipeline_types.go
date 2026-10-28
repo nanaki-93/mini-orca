@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
 // Workflow choices reference catalog models or configured profiles; credentials
@@ -24,7 +25,7 @@ func (models ChangeWorkflowModels) selections() []string {
 func (models ChangeWorkflowModels) validate() error {
 	for _, profile := range models.selections() {
 		if !validModelSelection(profile) {
-			return fmt.Errorf("workflow models must reference catalog model IDs or configured analyze, bug or function profiles")
+			return fmt.Errorf("workflow models must reference catalog model IDs or configured analyze, bug or code profiles")
 		}
 	}
 	return nil
@@ -213,6 +214,7 @@ func validateStoredWorkflow(w *ChangeWorkflow) error {
 	if w == nil {
 		return nil // Existing schema-1 conversations have no workflow.
 	}
+	upgradeLegacyWorkflowScope(w)
 	if err := validateChangeInput(w.Input); err != nil {
 		return err
 	}
@@ -267,4 +269,36 @@ func validateWorkflowOverride(w *ChangeWorkflow) error {
 		return fmt.Errorf("corrupt workflow review override")
 	}
 	return nil
+}
+
+// legacyCodeScope is the name the code scope had before it was renamed. Tasks
+// and recovery journals saved then still name it, and must stay readable: a
+// journal that cannot be read blocks Apply, Undo and task deletion.
+const legacyCodeScope = "function"
+
+// upgradeLegacyWorkflowScope reads a stored workflow's legacy scope name as the
+// code scope, in memory only; requests naming it are still rejected.
+func upgradeLegacyWorkflowScope(w *ChangeWorkflow) {
+	for _, selection := range []*string{&w.Models.Create, &w.Models.Test, &w.Models.Review} {
+		if *selection == legacyCodeScope {
+			*selection = string(config.CodeModelScope)
+		}
+	}
+	upgrade := func(model *EffectiveModel) {
+		if model == nil {
+			return
+		}
+		if model.Scope == legacyCodeScope {
+			model.Scope = string(config.CodeModelScope)
+		}
+		if model.Profile == legacyCodeScope {
+			model.Profile = string(config.CodeModelScope)
+		}
+	}
+	for i := range w.Stages {
+		upgrade(w.Stages[i].Model)
+	}
+	for i := range w.Specialists {
+		upgrade(w.Specialists[i].Model)
+	}
 }

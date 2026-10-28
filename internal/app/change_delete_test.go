@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -61,5 +62,65 @@ func TestDeleteChangeRemovesAStaleTask(t *testing.T) {
 	}
 	if err := service.DeleteChange(context.Background(), stale.ID, changeIdentity(stale)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("second delete: %v", err)
+	}
+}
+
+// Tasks saved before the code scope was renamed name it "function". Their
+// recovery journal must stay readable, or it blocks deleting any task.
+func TestDeleteChangeReadsAJournalFromBeforeTheCodeScopeRename(t *testing.T) {
+	outputs := [3]func() string{
+		func() string { return workflowImplementation },
+		func() string { return workflowTests },
+		func() string { return workflowApproval },
+	}
+	s, root, initial := workflowService(t, outputs)
+	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, workflowRequest(initial)); err != nil {
+		t.Fatal(err)
+	}
+	session := finishedWorkflow(t, s, initial.ID)
+	reviewed, err := s.ReviewChange(context.Background(), session.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ApplyChange(context.Background(), reviewed.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(reviewed), Confirm: true}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".mini-orca", "changes", "last-mutation.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := string(data)
+	for _, field := range []string{`"review":"code"`, `"scope":"code"`, `"profile":"code"`} {
+		if !strings.Contains(legacy, field) {
+			t.Fatalf("journal fixture does not name %s", field)
+		}
+		legacy = strings.ReplaceAll(legacy, field, strings.Replace(field, `"code"`, `"function"`, 1))
+	}
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ChangeRecovery(); err != nil {
+		t.Fatalf("legacy journal is unreadable: %v", err)
+	}
+	journal, err := readChangeJournal(root)
+	if err != nil || journal == nil || journal.Session.Workflow == nil {
+		t.Fatalf("legacy journal: %+v, %v", journal, err)
+	}
+	if workflow := journal.Session.Workflow; workflow.Models.Review != "code" || workflow.Stages[2].Model.Scope != "code" || workflow.Stages[2].Model.Profile != "code" {
+		t.Fatalf("legacy scope was not read as code: %+v", workflow)
+	}
+	other := openChangeFixture(t, s, "other.go")
+	if err := s.DeleteChange(context.Background(), other.ID, changeIdentity(other)); err != nil {
+		t.Fatalf("legacy journal blocked deleting another task: %v", err)
+	}
+	if kept, _ := os.ReadFile(path); string(kept) != legacy {
+		t.Fatal("reading the legacy journal rewrote it")
+	}
+	request := workflowRequest(other)
+	request.Models.Review = legacyCodeScope
+	if err := request.Models.validate(); err == nil {
+		t.Fatal("a new workflow request named the legacy scope")
 	}
 }
