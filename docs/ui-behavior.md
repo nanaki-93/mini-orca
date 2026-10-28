@@ -105,7 +105,9 @@ every guard when the action arrives.
   finish or finish and analyze). Steps can be revisited from the step bar.
   "Skip" keeps the daemon's configuration and setup is not offered again; the
   Inbox offers it while it is needed and reports an invalid file, and Settings
-  → Project shows where the configuration comes from and reopens setup.
+  → Project shows where the configuration comes from and reopens setup, and
+  Settings → Models & agents reopens it with **Change models**. Saving is
+  refused while an analysis, agent work, a Go scan or worktree work runs.
 - **Set-aside files.** When the daemon set aside an unreadable agent journal,
   task file or saved analysis progress, or skipped one a newer Mini-Orca wrote,
   the Inbox says so and Settings → Project lists each file with where its bytes

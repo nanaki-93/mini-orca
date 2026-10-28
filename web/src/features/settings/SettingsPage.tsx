@@ -219,13 +219,23 @@ function TrustSettings() {
 
 function ModelSettings() {
   const models = useModels().data;
+  const setup = useSetup().data;
+  const ownFile = setup?.state === 'configured';
   return (
     <>
       <h1 className="page-title">Models & agents</h1>
-      <p className="muted">Model scopes are configured in the daemon's <span className="mono">config.yaml</span>. Choose which model each agent role uses for this project below; remote models receive bounded project context and always ask before each run.</p>
+      <p className="muted">
+        {ownFile ? <>Model scopes come from this project’s <span className="mono">{setup.config_file}</span>.</> : <>Model scopes come from the daemon’s configuration.</>}
+        {' '}Change them in setup; it applies them at once, once no analysis or agent work is running. Choose which model each agent role uses below; remote models receive bounded project context and always ask before each run.
+      </p>
       <ConfigSource models={models} />
       <div className="card">
-        <div className="card-head"><Sparkles size={15} aria-hidden /><span className="strong">Model scopes</span></div>
+        <div className="card-head">
+          <Sparkles size={15} aria-hidden />
+          <span className="strong">Model scopes</span>
+          <span className="spacer" />
+          {setup ? <Button size="sm" variant="secondary" onClick={() => navigate('/setup')}>Change models</Button> : null}
+        </div>
         <table className="table">
           <thead><tr><th>Scope</th><th>Model</th><th>Where</th><th>Timeout</th></tr></thead>
           <tbody>

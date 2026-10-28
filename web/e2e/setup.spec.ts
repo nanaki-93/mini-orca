@@ -79,3 +79,12 @@ test('out-of-date agent settings are explained and reset, by setup or by hand', 
   expect(daemon.mutations('/agent-settings/control').at(-1)!.body).toMatchObject({ action: 'reset', version: 1 });
   await expect(page.getByText('Agent settings are out of date')).toHaveCount(0);
 });
+
+test('a configured project changes its models from Models & agents', async ({ page, daemon }) => {
+  daemon.serveSetup('configured');
+  await page.goto('/#/settings/models');
+  await expect(page.getByText('Model scopes come from this project’s')).toBeVisible();
+  await page.getByRole('button', { name: 'Change models' }).click();
+  await expect(page).toHaveURL(/#\/setup/);
+  await expect(page.getByRole('region', { name: 'Bug model' })).toBeVisible();
+});
