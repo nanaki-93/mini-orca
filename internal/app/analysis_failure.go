@@ -12,14 +12,37 @@ import (
 // never by provider text that could carry source or credentials.
 const (
 	reasonModelFailed      = "The model request or response failed. Other analysis results remain available."
-	reasonModelUnreachable = "The model provider could not be reached. Check that it is running and that config.yaml names the right address."
-	reasonModelTimedOut    = "The model did not answer in time. Retry, or raise timeouts in config.yaml."
-	reasonModelRejected    = "The model provider rejected the request. Check the model name, credentials or CLI in config.yaml."
+	reasonModelUnreachable = "The model provider could not be reached. Check that it is running and that its address in Settings → Models & agents is right."
+	reasonModelTimedOut    = "The model did not answer in time. Retry, or raise the analysis time limit in Settings → Models & agents."
+	reasonModelRejected    = "The model provider rejected the request. Check the model name, credentials or CLI in Settings → Models & agents."
 	reasonModelUnusable    = "The model answered, but not with a usable report. Retry, or choose another model."
 )
 
-// modelFailureReasons are every reason modelFailureReason can return.
-var modelFailureReasons = []string{reasonModelFailed, reasonModelUnreachable, reasonModelTimedOut, reasonModelRejected, reasonModelUnusable}
+// modelFailureReasons are every reason modelFailureReason can return, and the
+// earlier wording of some that saved runs may still hold.
+var modelFailureReasons = []string{reasonModelFailed, reasonModelUnreachable, reasonModelTimedOut, reasonModelRejected, reasonModelUnusable,
+	legacyReasonModelUnreachable, legacyReasonModelTimedOut, legacyReasonModelRejected}
+
+// Earlier wording that pointed to config.yaml before setup and Settings could
+// change models and time limits.
+const (
+	legacyReasonModelUnreachable = "The model provider could not be reached. Check that it is running and that config.yaml names the right address."
+	legacyReasonModelTimedOut    = "The model did not answer in time. Retry, or raise timeouts in config.yaml."
+	legacyReasonModelRejected    = "The model provider rejected the request. Check the model name, credentials or CLI in config.yaml."
+)
+
+// currentModelFailureReason gives a saved reason its current wording.
+func currentModelFailureReason(reason string) string {
+	switch reason {
+	case legacyReasonModelUnreachable:
+		return reasonModelUnreachable
+	case legacyReasonModelTimedOut:
+		return reasonModelTimedOut
+	case legacyReasonModelRejected:
+		return reasonModelRejected
+	}
+	return reason
+}
 
 // modelFailureReason names what kind of failure a model request had.
 func modelFailureReason(err error) string {

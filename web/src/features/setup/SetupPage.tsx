@@ -1,20 +1,21 @@
 // Project setup: a wizard that writes the project's own configuration
-// (.mini-orca/config.yaml) — its models, which model each agent role uses and
-// the run budget — then lets the user allow the project's checks and choose
+// (.mini-orca/config.yaml) — its models, which model each agent role uses, the
+// run budget and the time limits — then lets the user allow the project's checks and choose
 // what analysis reads. It opens the first time a project without that file
 // is opened; skipping keeps the daemon's configuration.
 
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Bot, Check, CheckCircle2, Cpu, FlaskConical, FolderMinus, Loader2, Play, Plug, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Check, CheckCircle2, Clock, Cpu, FlaskConical, FolderMinus, Loader2, Play, Plug, ShieldCheck, Sparkles, XCircle } from 'lucide-react';
 import type { ProjectSetup, SetupModel, SetupModelTest, SetupScope } from '@/api/types';
 import { useAnalysisSelection, useAvailableModels, useMainProject, useSetup, useTrust } from '@/api/hooks';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, setParam, useRoute } from '@/lib/router';
 import { LIMITS, ROLES, limitErrors } from '@/lib/agentSettings';
-import { LIMIT_MAXIMA, PROVIDERS, SCOPES, SKIPPED_FOLDERS, folderGroups, modelProblem, providerOf, withProvider } from '@/lib/setup';
+import { LIMIT_MAXIMA, PROVIDERS, SCOPES, SKIPPED_FOLDERS, folderGroups, modelProblem, providerOf, timeoutErrors, withProvider } from '@/lib/setup';
 import { plural } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Field, Input, Select, Skeleton, cx } from '@/components/ui';
 import { AgentSettingsNotice } from '@/features/settings/AgentSettingsNotice';
+import { TimeoutFields } from '@/features/settings/TimeLimits';
 
 const STEPS = [
   { id: 'models', label: 'Models', icon: Cpu },
@@ -24,7 +25,7 @@ const STEPS = [
 ] as const;
 
 type StepId = (typeof STEPS)[number]['id'];
-type Draft = Pick<ProjectSetup, 'models' | 'roles' | 'limits'>;
+type Draft = Pick<ProjectSetup, 'models' | 'roles' | 'limits' | 'timeouts'>;
 
 export function SetupPage() {
   const setup = useSetup();
@@ -47,11 +48,11 @@ function SetupWizard({ setup }: { setup: ProjectSetup }) {
   const busy = Boolean(useBusy());
   const step = (STEPS.find(s => s.id === route.params.get('step'))?.id ?? 'models') as StepId;
   const index = STEPS.findIndex(s => s.id === step);
-  const [draft, setDraft] = useState<Draft>({ models: setup.models, roles: setup.roles, limits: setup.limits });
+  const [draft, setDraft] = useState<Draft>({ models: setup.models, roles: setup.roles, limits: setup.limits, timeouts: setup.timeouts });
   const go = (next: StepId) => setParam('step', next === 'models' ? undefined : next);
 
   const modelProblems = SCOPES.map(({ scope, label }) => (modelProblem(draft.models[scope]) ? `${label}: ${modelProblem(draft.models[scope]).toLowerCase()}` : '')).filter(Boolean);
-  const budgetErrors = limitErrors(draft.limits, LIMIT_MAXIMA);
+  const budgetErrors = { ...limitErrors(draft.limits, LIMIT_MAXIMA), ...timeoutErrors(draft.timeouts) };
 
   async function saveAndContinue() {
     if (await actions.saveSetup(setup, draft)) go('checks');
@@ -284,6 +285,12 @@ function AgentsStep({ draft, errors, onChange }: { draft: Draft; errors: Record<
               <Input id={`setup-limit-${key}`} type="number" inputMode="numeric" min={min} max={LIMIT_MAXIMA[key]} step={1} value={Number.isNaN(draft.limits[key]) ? '' : String(draft.limits[key] ?? '')} invalid={Boolean(errors[key])} onChange={e => onChange({ limits: { ...draft.limits, [key]: e.target.value === '' ? Number.NaN : Number(e.target.value) } })} />
             </Field>
           ))}
+        </div>
+      </section>
+      <section className="card" aria-label="Time limits">
+        <div className="card-head"><Clock size={15} aria-hidden /><span className="strong">Time limits</span><span className="xs muted">A request or check that takes longer stops; raise them for slow models.</span></div>
+        <div className="card-body">
+          <TimeoutFields id="setup-timeout" timeouts={draft.timeouts} onChange={timeouts => onChange({ timeouts })} />
         </div>
       </section>
     </div>

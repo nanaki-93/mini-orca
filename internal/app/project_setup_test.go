@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -223,5 +224,52 @@ func TestSavingSetupResetsStaleAgentOverridesAndTestsIgnoreThem(t *testing.T) {
 	again, err := s.SaveProjectSetup(t.Context(), setupRequestFrom(saved))
 	if err != nil || again.OverridesReset {
 		t.Fatalf("a second save has nothing to reset: %+v %v", again, err)
+	}
+}
+
+func TestProjectTimeoutsAreSavedFromTheAppAndAppliedLive(t *testing.T) {
+	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	id, revision := setupIdentityOf(t, s)
+	setup, err := s.ProjectSetup(t.Context(), id, revision)
+	if err != nil || setup.Timeouts.AnalysisSeconds != 300 || setup.Timeouts.WorkflowModelSeconds != config.DefaultWorkflowModelSeconds || setup.Timeouts.FocusedCheckSeconds != 60 {
+		t.Fatalf("effective time limits: %+v %v", setup.Timeouts, err)
+	}
+	timeouts := setup.Timeouts
+	timeouts.AnalysisSeconds = 900
+	saved, err := s.SaveProjectTimeouts(t.Context(), ProjectTimeoutsRequest{ProjectID: id, ProjectRevision: revision, Timeouts: timeouts})
+	if err != nil || saved.State != SetupConfigured || saved.Timeouts != timeouts {
+		t.Fatalf("save: %+v %v", saved, err)
+	}
+	if s.conf().analysisTimeout != 15*time.Minute || s.conf().runtimes.bug.effective.Timeout != "15m0s" {
+		t.Fatalf("the time limit was not applied: %v %s", s.conf().analysisTimeout, s.conf().runtimes.bug.effective.Timeout)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".mini-orca", "config.yaml"))
+	if err != nil || !strings.Contains(string(data), "analysis_seconds: 900") || strings.Contains(string(data), "model_scopes") {
+		t.Fatalf("only the time limits are written: %s %v", data, err)
+	}
+
+	// Setup without time limits keeps them; with them, it sets them.
+	request := setupRequestFrom(saved)
+	if _, err := s.SaveProjectSetup(t.Context(), request); err != nil || s.conf().analysisTimeout != 15*time.Minute {
+		t.Fatalf("setup dropped the time limits: %v %v", s.conf().analysisTimeout, err)
+	}
+	timeouts.FocusedCheckSeconds = 120
+	request.Timeouts = &timeouts
+	if _, err := s.SaveProjectSetup(t.Context(), request); err != nil || s.conf().focusedCheckTimeout != 2*time.Minute {
+		t.Fatalf("setup time limits: %v %v", s.conf().focusedCheckTimeout, err)
+	}
+
+	invalid := timeouts
+	invalid.GenerationSeconds = 0
+	if _, err := s.SaveProjectTimeouts(t.Context(), ProjectTimeoutsRequest{ProjectID: id, ProjectRevision: revision, Timeouts: invalid}); !errors.Is(err, ErrSetupInvalid) || !strings.Contains(err.Error(), "timeouts.generation_seconds") {
+		t.Fatalf("invalid time limit: %v", err)
+	}
+	_, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	s.goScan.mu.Lock()
+	s.goScan.cancel = cancel
+	s.goScan.mu.Unlock()
+	if _, err := s.SaveProjectTimeouts(t.Context(), ProjectTimeoutsRequest{ProjectID: id, ProjectRevision: revision, Timeouts: timeouts}); !errors.Is(err, ErrSetupBusy) {
+		t.Fatalf("busy save: %v", err)
 	}
 }

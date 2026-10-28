@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
@@ -539,10 +539,10 @@ export function useActions() {
   // --------------------------------------------------------------- project setup
 
   /** Saves the project's configuration file; the daemon applies it at once. */
-  async function saveSetup(setup: ProjectSetup, draft: Pick<ProjectSetup, 'models' | 'roles' | 'limits'>): Promise<ProjectSetup | null> {
+  async function saveSetup(setup: ProjectSetup, draft: Pick<ProjectSetup, 'models' | 'roles' | 'limits' | 'timeouts'>): Promise<ProjectSetup | null> {
     return (await guarded('Saving the project configuration…', async () => {
       try {
-        const saved = await api.post<ProjectSetup>('/api/projects/current/setup', { project_id: setup.project_id, project_revision: setup.project_revision, models: draft.models, roles: draft.roles, limits: draft.limits });
+        const saved = await api.post<ProjectSetup>('/api/projects/current/setup', { project_id: setup.project_id, project_revision: setup.project_revision, models: draft.models, roles: draft.roles, limits: draft.limits, timeouts: draft.timeouts });
         client.setQueryData([...keys.setup, setup.project_revision], saved);
         void client.invalidateQueries({ queryKey: ['models'] });
         void client.invalidateQueries({ queryKey: ['settings'] });
@@ -554,6 +554,22 @@ export function useActions() {
         return null;
       }
     })) ?? null;
+  }
+
+  /** Saves the project's time limits alone and applies them at once. */
+  async function saveTimeouts(setup: ProjectSetup, timeouts: SetupTimeouts): Promise<boolean> {
+    return (await guarded('Saving time limits…', async () => {
+      try {
+        const saved = await api.post<ProjectSetup>('/api/projects/current/setup/timeouts', { project_id: setup.project_id, project_revision: setup.project_revision, timeouts });
+        client.setQueryData([...keys.setup, setup.project_revision], saved);
+        void client.invalidateQueries({ queryKey: ['models'] });
+        toast('Time limits saved.', 'success', saved.config_file);
+        return true;
+      } catch (err) {
+        fail('Could not save the time limits', err);
+        return false;
+      }
+    })) ?? false;
   }
 
   /** Keeps the daemon's configuration for this project and stops offering setup. */
@@ -722,7 +738,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

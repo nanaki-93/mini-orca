@@ -504,7 +504,13 @@ logging:
 ```
 
 The operation timeouts bound the request contexts; retries only cover explicit
-prompt requests. Restore, navigation, validation, checks, Apply, and Undo do
+prompt requests. Settings → Models & agents → Time limits (and the Agents &
+budget step of setup) edit them for a project: they are saved in its
+`.mini-orca/config.yaml` and applied at once. `analysis_seconds` bounds each
+analysis request, `import_seconds` the project overview and other Analyze
+model requests, `generation_seconds` each Code model request,
+`workflow_model_seconds` each agent model call and `focused_check_seconds`
+each check command. Restore, navigation, validation, checks, Apply, and Undo do
 not make a model call.
 
 `workflow_model_seconds` gives each Creation, Testing and Review model call at

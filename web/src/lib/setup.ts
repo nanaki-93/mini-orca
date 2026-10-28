@@ -1,7 +1,7 @@
 // Project setup: the providers a model scope can use, the fields each needs,
 // and how analysis exclusions group by folder.
 
-import type { SetupModel, SetupScope } from '@/api/types';
+import type { SetupModel, SetupScope, SetupTimeouts } from '@/api/types';
 
 export const SCOPES: { scope: SetupScope; label: string; use: string }[] = [
   { scope: 'analyze', label: 'Analyze', use: 'Project overview, performance and security review, and the specialist reviewers.' },
@@ -74,6 +74,28 @@ export const LIMIT_MAXIMA: Record<string, number> = {
   concurrent_calls: 32,
   repairs: 2,
 };
+
+/** Time limits the app can set, in seconds (config.TimeoutConfig). */
+export const TIMEOUTS: { key: keyof SetupTimeouts; label: string; hint: string }[] = [
+  { key: 'analysis_seconds', label: 'Analysis request', hint: 'Each request while analyzing a file for bugs, performance and security.' },
+  { key: 'import_seconds', label: 'Project overview', hint: 'Reading the project when it opens or is reindexed, and other Analyze model requests.' },
+  { key: 'generation_seconds', label: 'Code model request', hint: 'Each request to the Code model.' },
+  { key: 'workflow_model_seconds', label: 'Agent model call', hint: 'Each model call agents make on a task, retries included.' },
+  { key: 'focused_check_seconds', label: 'Check command', hint: 'Each test or lint command agents run.' },
+];
+
+export const MAX_TIMEOUT_SECONDS = 86400;
+
+/** Why each time limit cannot be saved, by key: whole seconds up to a day. */
+export function timeoutErrors(timeouts: SetupTimeouts): Partial<Record<keyof SetupTimeouts, string>> {
+  const errors: Partial<Record<keyof SetupTimeouts, string>> = {};
+  for (const { key } of TIMEOUTS) {
+    const value = timeouts[key];
+    if (!Number.isInteger(value) || value < 1) errors[key] = 'At least 1 second.';
+    else if (value > MAX_TIMEOUT_SECONDS) errors[key] = 'At most one day (86,400 seconds).';
+  }
+  return errors;
+}
 
 export interface FolderGroup {
   folder: string;

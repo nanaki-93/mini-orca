@@ -23,6 +23,7 @@ test('a project without configuration opens setup and saves it step by step', as
 
   await page.getByLabel('Reviews').selectOption('code');
   await page.getByLabel('Model calls').fill('30');
+  await page.getByLabel('Analysis request (seconds)').fill('600');
   await page.getByRole('button', { name: 'Save and continue' }).click();
   await expect(page.getByText('Project configuration saved.')).toBeVisible();
   const [saved] = daemon.mutations('/setup');
@@ -30,6 +31,7 @@ test('a project without configuration opens setup and saves it step by step', as
     models: { bug: { provider: 'agy', model: 'gemini-3.8-pro-high', reasoning_effort: 'high' }, analyze: { model: 'gemini-2.5-pro', api_key_set: true } },
     roles: { review: 'code' },
     limits: { model_calls: 30 },
+    timeouts: { analysis_seconds: 600, workflow_model_seconds: 900 },
   });
   expect((saved.body!.models as Record<string, { api_base_url?: string }>).bug.api_base_url).toBeUndefined();
 
@@ -87,4 +89,23 @@ test('a configured project changes its models from Models & agents', async ({ pa
   await page.getByRole('button', { name: 'Change models' }).click();
   await expect(page).toHaveURL(/#\/setup/);
   await expect(page.getByRole('region', { name: 'Bug model' })).toBeVisible();
+});
+
+test('time limits are changed from Models & agents without rerunning setup', async ({ page, daemon }) => {
+  daemon.serveSetup('configured');
+  await page.goto('/#/settings/models');
+  const limits = page.getByRole('region', { name: 'Time limits' });
+  const analysis = limits.getByLabel('Analysis request (seconds)');
+  await expect(analysis).toHaveValue('120');
+  await expect(limits).toContainText('Now 2m 0s.');
+  await analysis.fill('0');
+  await expect(limits).toContainText('At least 1 second.');
+  await expect(limits.getByRole('button', { name: 'Save time limits' })).toBeDisabled();
+  await analysis.fill('900');
+  await limits.getByRole('button', { name: 'Save time limits' }).click();
+  await expect(page.getByText('Time limits saved.')).toBeVisible();
+  expect(daemon.mutations('/setup/timeouts')[0].body).toMatchObject({ project_id: 'p1', timeouts: { analysis_seconds: 900, import_seconds: 300 } });
+  expect(daemon.mutations('/setup')).toHaveLength(0);
+  await expect(analysis).toHaveValue('900');
+  await expect(limits.getByRole('button', { name: 'Save time limits' })).toBeDisabled();
 });

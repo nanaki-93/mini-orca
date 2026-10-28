@@ -100,7 +100,8 @@ every guard when the action arrives.
 - **Setup.** The first time a project without its own configuration opens, the
   Web UI opens Setup (once per window): Models (provider, model, address, key,
   reasoning effort, CLI path, with a connection test; "Same as Analyze" copies
-  a scope), Agents & budget (saving writes the file and applies it at once),
+  a scope), Agents & budget with time limits (saving writes the file and
+  applies it at once),
   Checks (allow the detected commands) and Analysis (leave folders out, then
   finish or finish and analyze). Steps can be revisited from the step bar.
   "Skip" keeps the daemon's configuration and setup is not offered again; the
@@ -108,6 +109,12 @@ every guard when the action arrives.
   → Project shows where the configuration comes from and reopens setup, and
   Settings → Models & agents reopens it with **Change models**. Saving is
   refused while an analysis, agent work, a Go scan or worktree work runs.
+- **Time limits.** Settings → Models & agents → Time limits edits how long each
+  analysis request, project overview, Code model request, agent model call and
+  check command may take, in seconds (1 to 86,400, with the current value as a
+  duration). Save writes only those keys to the project's configuration and
+  applies them at once, keeping agent settings; it is refused while work runs.
+  Failures that timed out point here.
 - **Set-aside files.** When the daemon set aside an unreadable agent journal,
   task file or saved analysis progress, or skipped one a newer Mini-Orca wrote,
   the Inbox says so and Settings → Project lists each file with where its bytes

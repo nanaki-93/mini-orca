@@ -811,6 +811,25 @@ paths:
         '200': {description: The saved setup, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetup'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/setup/timeouts:
+    post:
+      tags: [Projects]
+      description: Write only the time limits to the project's .mini-orca/config.yaml and apply them without a restart; agent overrides are kept. Refused with 409 while work runs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, project_revision, timeouts]
+              properties:
+                project_id: {type: string}
+                project_revision: {type: string}
+                timeouts: {$ref: '#/components/schemas/SetupTimeouts'}
+      responses:
+        '200': {description: The setup with the saved time limits, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetup'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/setup/skip:
     post:
       tags: [Projects]
@@ -1730,11 +1749,22 @@ components:
             code: {$ref: '#/components/schemas/SetupModel'}
         roles: {$ref: '#/components/schemas/SetupRoles'}
         limits: {$ref: '#/components/schemas/AgentLimits'}
+        timeouts: {$ref: '#/components/schemas/SetupTimeouts'}
+    SetupTimeouts:
+      type: object
+      description: Time limits in seconds. A setup read reports the values in effect, defaults included; a save sets every one, from 1 to 86400.
+      required: [import_seconds, analysis_seconds, generation_seconds, workflow_model_seconds, focused_check_seconds]
+      properties:
+        import_seconds: {type: integer, minimum: 1, maximum: 86400}
+        analysis_seconds: {type: integer, minimum: 1, maximum: 86400}
+        generation_seconds: {type: integer, minimum: 1, maximum: 86400}
+        workflow_model_seconds: {type: integer, minimum: 1, maximum: 86400}
+        focused_check_seconds: {type: integer, minimum: 1, maximum: 86400}
     ProjectSetup:
       allOf:
         - {$ref: '#/components/schemas/ProjectSetupRequest'}
         - type: object
-          required: [state, config_file, daemon_config_file]
+          required: [state, config_file, daemon_config_file, timeouts]
           properties:
             state: {type: string, enum: [needed, skipped, configured, invalid]}
             config_file: {type: string}

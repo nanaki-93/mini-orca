@@ -44,6 +44,16 @@ func (h *SetupHandler) Save(w http.ResponseWriter, r *http.Request) {
 	respondSetup(w, "project setup not saved", value, err)
 }
 
+func (h *SetupHandler) SaveTimeouts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var request app.ProjectTimeoutsRequest
+	if !decodeStrictJSON(w, r, &request, "invalid time limits", "Provide the current project identity and every time limit in seconds.") {
+		return
+	}
+	value, err := h.service.SaveProjectTimeouts(r.Context(), request)
+	respondSetup(w, "time limits not saved", value, err)
+}
+
 func (h *SetupHandler) Skip(w http.ResponseWriter, r *http.Request) {
 	var request setupIdentity
 	if !decodeStrictJSON(w, r, &request, "invalid setup skip", "Provide the current project identity.") {

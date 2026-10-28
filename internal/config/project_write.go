@@ -21,6 +21,8 @@ type ProjectUpdate struct {
 	Roles       *AgentRoles
 	// Limits sets agent_runtime's max_* budget keys.
 	Limits *AgentLimits
+	// Timeouts sets every timeouts key.
+	Timeouts *TimeoutConfig
 }
 
 const projectConfigHeader = "# Mini-Orca configuration for this project. It is applied on top of the\n# daemon's configuration and may hold API keys: keep it out of version control."
@@ -57,6 +59,9 @@ func UpdateProject(root string, global *Config, update ProjectUpdate) (*Config, 
 		} {
 			setMappingValue(runtime, item.key, scalarNode(item.value))
 		}
+	}
+	if timeouts := update.Timeouts; timeouts != nil {
+		setMappingValue(top, "timeouts", structNode(*timeouts))
 	}
 	var encoded bytes.Buffer
 	encoder := yaml.NewEncoder(&encoded)

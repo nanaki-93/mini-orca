@@ -98,6 +98,7 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/export` | Export one explicitly confirmed source-free trace snapshot to the configured collector. |
 | GET | `/api/projects/current/setup` | The project's configuration as setup edits it: `state` (`needed`, `skipped`, `configured`, `invalid`), the project and daemon files, models (secrets as `api_key_set`), roles and budget. |
 | POST | `/api/projects/current/setup` | Write the project's `.mini-orca/config.yaml` and apply it live; 409 while work runs. |
+| POST | `/api/projects/current/setup/timeouts` | Save only the project's time limits and apply them at once. |
 | POST | `/api/projects/current/setup/skip` | Keep the daemon's configuration for this project and stop offering setup. |
 | POST | `/api/projects/current/setup/test-model` | Send one short request to a model as setup would configure it for a scope. |
 | GET | `/api/projects/current/agent-settings` | Read configured or overridden role, budget and skill settings without dispatch. |
@@ -1439,8 +1440,11 @@ the built-in defaults), `error` for an `invalid` file, `models` keyed `analyze`,
 `vertex_location`, `cli_path`, `reasoning_effort`, optional `temperature`,
 `max_tokens`, `context_max_tokens`, and `api_key_set` — a key is never
 returned), `roles` (`creation`, `testing`, `review`, each a scope) and
-`limits` (the seven budget values). POST takes `models`, `roles` and `limits`
-in the same shape; an empty `api_key` keeps the configured key for the same
+`limits` (the seven budget values) and `timeouts` (`import_seconds`,
+`analysis_seconds`, `generation_seconds`, `workflow_model_seconds`,
+`focused_check_seconds`, the values in effect with defaults filled in). POST
+takes `models`, `roles`, `limits` and optional `timeouts` in the same shape
+(omitted, the time limits are kept; given, each must be 1–86400 seconds); an empty `api_key` keeps the configured key for the same
 provider and `clear_api_key: true` removes it. The result is validated on top
 of the daemon's configuration (400 with the field and reason), written `0600`
 with the file listed in `.mini-orca/.gitignore`, and applied at once; other keys
@@ -1448,7 +1452,9 @@ of an existing file and their comments are kept. A running analysis, agent
 run, Go scan or worktree work returns 409 naming it. Saving resets the agent
 overrides of `…/agent-settings` and then reports `overrides_reset: true`. A `configuration` event
 announces every applied change. `…/setup/skip` records the choice in
-`.mini-orca/setup.json`. `…/setup/test-model` takes `scope` and `model` and
+`.mini-orca/setup.json`. `…/setup/timeouts` takes `timeouts` alone, writes
+only that section with the same checks, busy refusal and live apply, keeps
+agent overrides, and returns the setup. `…/setup/test-model` takes `scope` and `model` and
 returns `ok`, `model`, `latency_ms`, and for a failure `reason` (the same kinds
 as analysis stages) and `detail`; an invalid model configuration is a 400. The
 test is admitted under the configuration's own agent settings, so out-of-date

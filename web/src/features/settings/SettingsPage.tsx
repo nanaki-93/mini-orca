@@ -14,6 +14,7 @@ import { OpenProject } from './OpenProject';
 import { QuarantineList } from './Quarantine';
 import { AgentRoles } from './AgentRoles';
 import { ConfigSource } from './ConfigSource';
+import { TimeLimits } from './TimeLimits';
 
 const SECTIONS = [
   { id: 'project', label: 'Project', icon: FolderOpen },
@@ -226,7 +227,7 @@ function ModelSettings() {
       <h1 className="page-title">Models & agents</h1>
       <p className="muted">
         {ownFile ? <>Model scopes come from this project’s <span className="mono">{setup.config_file}</span>.</> : <>Model scopes come from the daemon’s configuration.</>}
-        {' '}Change them in setup; it applies them at once, once no analysis or agent work is running. Choose which model each agent role uses below; remote models receive bounded project context and always ask before each run.
+        {' '}Change them in setup; it applies them at once, once no analysis or agent work is running. Time limits are set below. Choose which model each agent role uses below; remote models receive bounded project context and always ask before each run.
       </p>
       <ConfigSource models={models} />
       <div className="card">
@@ -250,6 +251,7 @@ function ModelSettings() {
           </tbody>
         </table>
       </div>
+      {setup ? <TimeLimits key={`${setup.project_revision}:${JSON.stringify(setup.timeouts)}`} setup={setup} /> : null}
       <AgentRoles />
     </>
   );

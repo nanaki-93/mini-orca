@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -59,5 +60,20 @@ func TestAnalysisNamesAnUnreachableProvider(t *testing.T) {
 	}
 	if run.Files[0].Stages[0].Status != AnalysisStageFailed {
 		t.Fatalf("semantic stage: %+v", run.Files[0].Stages[0])
+	}
+}
+
+// Runs saved with the wording that pointed to config.yaml still read, and show
+// where to change models and time limits now.
+func TestSavedFailureReasonsGetTheirCurrentWording(t *testing.T) {
+	for legacy, current := range map[string]string{legacyReasonModelTimedOut: reasonModelTimedOut, legacyReasonModelUnreachable: reasonModelUnreachable, legacyReasonModelRejected: reasonModelRejected} {
+		if !analysisMetadataReason(legacy) || currentModelFailureReason(legacy) != current || !strings.Contains(current, "Settings → Models & agents") {
+			t.Fatalf("%q -> %q", legacy, currentModelFailureReason(legacy))
+		}
+		run := &AnalysisRun{Plan: AnalysisRunPreview{Files: []AnalysisPlannedFile{{Stages: []AnalysisStagePlan{{Eligible: true}}}}}, Files: []AnalysisRunFile{{Stages: []AnalysisStageProgress{{Stage: AnalysisStageSemantic, Status: AnalysisStageFailed, Reason: legacy}}}}}
+		normalizeAnalysisRunEligibility(run)
+		if run.Files[0].Stages[0].Reason != current {
+			t.Fatalf("saved reason kept its old wording: %q", run.Files[0].Stages[0].Reason)
+		}
 	}
 }

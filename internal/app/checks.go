@@ -72,7 +72,7 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()
 		if ctx.Err() == nil && timed.Err() == context.DeadlineExceeded {
-			check.Output = fmt.Sprintf("%s timed out after %s. Increase timeouts.focused_check_seconds and retry checks; no code failure was established.", check.Name, s.conf().focusedCheckTimeout)
+			check.Output = fmt.Sprintf("%s timed out after %s. Raise the check time limit in Settings → Models & agents and retry checks; no code failure was established.", check.Name, s.conf().focusedCheckTimeout)
 		}
 		return check, timed.Err()
 	}

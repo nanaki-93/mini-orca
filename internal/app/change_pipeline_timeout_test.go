@@ -70,7 +70,7 @@ func TestTestingTimeoutRetainsCreationAndResumesWithoutRegeneration(t *testing.T
 	if failed.Workflow.Status != "failed" || failed.Workflow.Stages[0].Status != "completed" || failed.Workflow.Stages[1].Status != "failed" {
 		t.Fatalf("timeout stages = %+v", failed.Workflow)
 	}
-	if !strings.Contains(failed.Workflow.Reason, "Testing model request timed out after 1s") || !strings.Contains(failed.Workflow.Reason, "timeouts.workflow_model_seconds") {
+	if !strings.Contains(failed.Workflow.Reason, "Testing model request timed out after 1s") || !strings.Contains(failed.Workflow.Reason, "agent model call time limit in Settings → Models & agents") {
 		t.Fatalf("missing actionable timeout: %s", failed.Workflow.Reason)
 	}
 	if createCalls.Load() != 1 || testCalls.Load() != 1 || reviewCalls.Load() != 0 || len(failed.Checks) != 0 || len(failed.Changes) != 1 {
@@ -143,7 +143,7 @@ func TestTimedOutChecksStopAutomaticRepairAndRetainEvidence(t *testing.T) {
 		t.Fatalf("interruption mislabeled as a code failure: %s", failed.Workflow.Reason)
 	}
 	for _, check := range failed.Checks {
-		if check.Name == "tests" && check.State == CheckCanceled && strings.Contains(check.Output, "timeouts.focused_check_seconds") {
+		if check.Name == "tests" && check.State == CheckCanceled && strings.Contains(check.Output, "check time limit in Settings → Models & agents") {
 			return
 		}
 	}

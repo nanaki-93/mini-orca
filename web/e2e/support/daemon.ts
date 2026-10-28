@@ -136,6 +136,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/delete$/, (body, m) => this.deleteTask(m[1], body)],
     [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
     [/^\/api\/projects\/current\/setup$/, body => this.saveSetup(body)],
+    [/^\/api\/projects\/current\/setup\/timeouts$/, body => (this.setup = { ...this.setup, state: 'configured', timeouts: body.timeouts as ProjectSetup['timeouts'] })],
     [/^\/api\/projects\/current\/setup\/skip$/, () => (this.setup = { ...this.setup, state: 'skipped' })],
     [/^\/api\/projects\/current\/setup\/test-model$/, body => ((body.model as { model?: string }).model ? { ok: true, model: (body.model as { model: string }).model, latency_ms: 840 } : { ok: false, latency_ms: 0, reason: 'The model provider could not be reached.' })],
     [/^\/api\/projects\/current\/analysis\/selection$/, body => (this.selection = { ...data.analysisSelection(body.excluded_paths as string[]) })],
@@ -181,12 +182,12 @@ export class FakeDaemon {
     }
   }
 
-  /** Saves setup like the daemon: models, roles and budget; secrets are never echoed. */
+  /** Saves setup like the daemon: models, roles, budget and time limits; secrets are never echoed. */
   private saveSetup(body: Record<string, unknown>) {
     if (body.project_revision !== this.setup.project_revision) throw new Error('The project changed; reload setup.');
     const models = body.models as ProjectSetup['models'];
     const echoed = Object.fromEntries(Object.entries(models).map(([scope, model]) => [scope, { ...model, api_key: undefined, api_key_set: Boolean(model.api_key) || Boolean(model.api_key_set) }]));
-    this.setup = { ...this.setup, state: 'configured', models: echoed as ProjectSetup['models'], roles: body.roles as ProjectSetup['roles'], limits: body.limits as ProjectSetup['limits'] };
+    this.setup = { ...this.setup, state: 'configured', models: echoed as ProjectSetup['models'], roles: body.roles as ProjectSetup['roles'], limits: body.limits as ProjectSetup['limits'], timeouts: (body.timeouts as ProjectSetup['timeouts']) ?? this.setup.timeouts };
     // Saving replaces agent overrides, like the daemon.
     const overridesReset = this.settings.state !== 'configured';
     if (overridesReset) this.settings = data.agentSettings(this.settings.version! + 1, null, null);

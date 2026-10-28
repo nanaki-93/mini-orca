@@ -214,6 +214,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("GET /api/projects/current/setup", setupHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/setup", setupHandler.Save)
 	mux.HandleFunc("POST /api/projects/current/setup/skip", setupHandler.Skip)
+	mux.HandleFunc("POST /api/projects/current/setup/timeouts", setupHandler.SaveTimeouts)
 	mux.HandleFunc("POST /api/projects/current/setup/test-model", setupHandler.TestModel)
 	mux.HandleFunc("GET /api/projects/current/agent-settings", settingsHandler.Get)
 	mux.HandleFunc("POST /api/projects/current/agent-settings/control", settingsHandler.Control)

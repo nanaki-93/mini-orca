@@ -390,6 +390,8 @@ func normalizeAnalysisRunEligibility(run *AnalysisRun) {
 	for i := range run.Files {
 		for j := range run.Files[i].Stages {
 			stage := &run.Files[i].Stages[j]
+			// The plan keeps its admitted wording; it is part of the queue identity.
+			stage.Reason = currentModelFailureReason(stage.Reason)
 			if !run.Plan.Files[i].Stages[j].Eligible && stage.Status == AnalysisStageUnavailable {
 				stage.Status = AnalysisStageSkipped
 			}

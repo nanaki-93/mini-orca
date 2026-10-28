@@ -18,7 +18,7 @@ import (
 
 // Project setup writes the project's own configuration file
 // (config.ProjectConfigPath): its three model scopes, the scope each agent
-// role uses and the per-run budget. It is offered the first time a project
+// role uses, the per-run budget and the time limits. It is offered the first time a project
 // without that file opens; skipping it keeps the daemon's configuration.
 
 // Setup states.
@@ -70,6 +70,8 @@ type ProjectSetup struct {
 	Models           map[string]SetupModel `json:"models"`
 	Roles            SetupRoles            `json:"roles"`
 	Limits           config.AgentLimits    `json:"limits"`
+	// Timeouts are the time limits in effect, defaults included.
+	Timeouts config.TimeoutConfig `json:"timeouts"`
 	// OverridesReset says saving replaced agent overrides from Settings.
 	OverridesReset bool `json:"overrides_reset,omitempty"`
 }
@@ -81,6 +83,15 @@ type ProjectSetupRequest struct {
 	Models          map[string]SetupModel `json:"models"`
 	Roles           SetupRoles            `json:"roles"`
 	Limits          config.AgentLimits    `json:"limits"`
+	// Timeouts, when given, sets every time limit.
+	Timeouts *config.TimeoutConfig `json:"timeouts,omitempty"`
+}
+
+// ProjectTimeoutsRequest saves only the project's time limits.
+type ProjectTimeoutsRequest struct {
+	ProjectID       string               `json:"project_id"`
+	ProjectRevision string               `json:"project_revision"`
+	Timeouts        config.TimeoutConfig `json:"timeouts"`
 }
 
 // ErrSetupBusy reports running work a configuration change would cut short.
@@ -128,38 +139,32 @@ func (s *Service) ProjectSetup(ctx context.Context, id, revision string) (*Proje
 	roles := current.agentRuntime.Roles
 	setup.Roles = SetupRoles{Creation: string(roles.Creation), Testing: string(roles.Testing), Review: string(roles.Review)}
 	setup.Limits = current.agentRuntime.Limits
+	setup.Timeouts = effectiveTimeouts(cfg.Timeouts)
 	return setup, ctx.Err()
+}
+
+// effectiveTimeouts fills unset time limits with the defaults the service uses.
+func effectiveTimeouts(timeouts config.TimeoutConfig) config.TimeoutConfig {
+	seconds := func(value int, fallback time.Duration) int {
+		return int(configuredDuration(value, fallback) / time.Second)
+	}
+	return config.TimeoutConfig{
+		ImportSeconds: seconds(timeouts.ImportSeconds, defaultModelTimeout), AnalysisSeconds: seconds(timeouts.AnalysisSeconds, defaultModelTimeout),
+		GenerationSeconds: seconds(timeouts.GenerationSeconds, defaultModelTimeout), WorkflowModelSeconds: seconds(timeouts.WorkflowModelSeconds, config.DefaultWorkflowModelSeconds*time.Second),
+		FocusedCheckSeconds: seconds(timeouts.FocusedCheckSeconds, defaultFocusedCheckTimeout),
+	}
 }
 
 // SaveProjectSetup writes the project's configuration and applies it. It is
 // refused while work runs: that work was admitted with the old models.
 func (s *Service) SaveProjectSetup(ctx context.Context, request ProjectSetupRequest) (*ProjectSetup, error) {
 	s.jobLifecycleMu.Lock()
-	if err := s.requireActiveRevision(request.ProjectID, request.ProjectRevision); err != nil {
-		s.jobLifecycleMu.Unlock()
-		return nil, err
-	}
-	if busy := s.activeWork(); len(busy) > 0 {
-		s.jobLifecycleMu.Unlock()
-		return nil, fmt.Errorf("%w: %s; stop it or wait for it to finish, then save again", ErrSetupBusy, strings.Join(busy, ", "))
-	}
-	root := s.manager.Root()
-	update, err := s.setupUpdate(request)
-	if err == nil {
-		_, err = config.UpdateProject(root, s.global, update)
-	}
-	if err != nil {
-		err = fmt.Errorf("%w: %w", ErrSetupInvalid, err)
-	}
-	if err == nil {
-		err = s.closeWorktreeServices()
-	}
+	err := s.applyProjectUpdate(request.ProjectID, request.ProjectRevision, func() (config.ProjectUpdate, error) { return s.setupUpdate(request) })
 	if err != nil {
 		s.jobLifecycleMu.Unlock()
 		return nil, err
 	}
-	s.loadProjectConfiguration(root)
-	reset, err := s.resetAgentOverrides(ctx, root)
+	reset, err := s.resetAgentOverrides(ctx, s.manager.Root())
 	s.jobLifecycleMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("the configuration was saved, but agent overrides could not be reset: %w", err)
@@ -169,6 +174,46 @@ func (s *Service) SaveProjectSetup(ctx context.Context, request ProjectSetupRequ
 		setup.OverridesReset = reset
 	}
 	return setup, err
+}
+
+// SaveProjectTimeouts writes only the project's time limits and applies them.
+// Agent overrides stay: time limits are not part of what they were made for.
+func (s *Service) SaveProjectTimeouts(ctx context.Context, request ProjectTimeoutsRequest) (*ProjectSetup, error) {
+	s.jobLifecycleMu.Lock()
+	err := s.applyProjectUpdate(request.ProjectID, request.ProjectRevision, func() (config.ProjectUpdate, error) {
+		timeouts := request.Timeouts
+		return config.ProjectUpdate{Timeouts: &timeouts}, timeouts.ValidateSet()
+	})
+	s.jobLifecycleMu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return s.ProjectSetup(ctx, request.ProjectID, request.ProjectRevision)
+}
+
+// applyProjectUpdate writes an update to the active project's configuration
+// file and applies it at once. The caller holds jobLifecycleMu. It is refused
+// while work runs, since that work was admitted with the old configuration.
+func (s *Service) applyProjectUpdate(id, revision string, build func() (config.ProjectUpdate, error)) error {
+	if err := s.requireActiveRevision(id, revision); err != nil {
+		return err
+	}
+	if busy := s.activeWork(); len(busy) > 0 {
+		return fmt.Errorf("%w: %s; stop it or wait for it to finish, then save again", ErrSetupBusy, strings.Join(busy, ", "))
+	}
+	root := s.manager.Root()
+	update, err := build()
+	if err == nil {
+		_, err = config.UpdateProject(root, s.global, update)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrSetupInvalid, err)
+	}
+	if err := s.closeWorktreeServices(); err != nil {
+		return err
+	}
+	s.loadProjectConfiguration(root)
+	return nil
 }
 
 // resetAgentOverrides clears the agent overrides saved in Settings → Models &
@@ -267,6 +312,13 @@ func (s *Service) setupUpdate(request ProjectSetupRequest) (config.ProjectUpdate
 		return update, err
 	}
 	update.Roles, update.Limits = &roles, &limits
+	if request.Timeouts != nil {
+		timeouts := *request.Timeouts
+		if err := timeouts.ValidateSet(); err != nil {
+			return update, err
+		}
+		update.Timeouts = &timeouts
+	}
 	return update, nil
 }
 

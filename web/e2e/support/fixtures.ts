@@ -174,7 +174,7 @@ export const overview: Overview = {
 };
 
 const runIdentity = { project_id: identity.project_id, project_revision: identity.project_revision, policy_fingerprint: '3:pol', provider_fingerprint: 'prov', queue_id: 'queue', id: 'analysis-1', generation: 'gen-1' };
-const unreachable = 'The model provider could not be reached. Check that it is running and that config.yaml names the right address.';
+const unreachable = 'The model provider could not be reached. Check that it is running and that its address in Settings → Models & agents is right.';
 const stage = (name: string, status: string, extra: Partial<AnalysisStageProgress> = {}): AnalysisStageProgress => ({ stage: name, status, attempts: status === 'pending' ? 0 : 1, cached: false, ...extra });
 
 /** An analysis run like the one a daemon without config.yaml leaves: every model stage failed. */
@@ -282,6 +282,7 @@ export function projectSetup(state: string): ProjectSetup {
     },
     roles: { creation: 'bug', testing: 'code', review: 'analyze' },
     limits: { model_calls: 40, tool_calls: 120, input_tokens: 400_000, output_tokens: 60_000, elapsed_seconds: 1_800, concurrent_calls: 2, repairs: 2 },
+    timeouts: { import_seconds: 300, analysis_seconds: 120, generation_seconds: 300, workflow_model_seconds: 900, focused_check_seconds: 60 },
   };
 }
 

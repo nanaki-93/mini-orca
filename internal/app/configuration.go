@@ -27,6 +27,12 @@ type configuration struct {
 	retryMax             time.Duration
 }
 
+// Defaults for time limits the configuration leaves unset.
+const (
+	defaultModelTimeout        = 5 * time.Minute
+	defaultFocusedCheckTimeout = time.Minute
+)
+
 func newConfiguration(cfg *config.Config) (*configuration, error) {
 	profiles, err := config.ResolveModelProfiles(cfg)
 	if err != nil {
@@ -36,9 +42,9 @@ func newConfiguration(cfg *config.Config) (*configuration, error) {
 	if err != nil {
 		return nil, err
 	}
-	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
-	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
-	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
+	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, defaultModelTimeout)
+	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, defaultModelTimeout)
+	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, defaultModelTimeout)
 	maxRetries := positiveOr(cfg.Retry.MaxRetries, 3)
 	return &configuration{
 		config:       cfg,
@@ -51,7 +57,7 @@ func newConfiguration(cfg *config.Config) (*configuration, error) {
 		importTimeout:        importTimeout,
 		analysisTimeout:      analysisTimeout,
 		workflowModelTimeout: configuredDuration(cfg.Timeouts.WorkflowModelSeconds, config.DefaultWorkflowModelSeconds*time.Second),
-		focusedCheckTimeout:  configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
+		focusedCheckTimeout:  configuredDuration(cfg.Timeouts.FocusedCheckSeconds, defaultFocusedCheckTimeout),
 		retryBase:            time.Duration(positiveOr(cfg.Retry.BackoffBase, 1000)) * time.Millisecond,
 		retryMax:             time.Duration(positiveOr(cfg.Retry.BackoffMax, 30000)) * time.Millisecond,
 	}, nil

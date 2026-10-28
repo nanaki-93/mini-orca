@@ -73,11 +73,31 @@ type RetryConfig struct {
 // TimeoutConfig sets operation deadlines independently of HTTP server timeouts.
 // Zero values use conservative local-daemon defaults.
 type TimeoutConfig struct {
-	ImportSeconds        int `yaml:"import_seconds"`
-	AnalysisSeconds      int `yaml:"analysis_seconds"`
-	GenerationSeconds    int `yaml:"generation_seconds"`
-	WorkflowModelSeconds int `yaml:"workflow_model_seconds"`
-	FocusedCheckSeconds  int `yaml:"focused_check_seconds"`
+	ImportSeconds        int `yaml:"import_seconds" json:"import_seconds"`
+	AnalysisSeconds      int `yaml:"analysis_seconds" json:"analysis_seconds"`
+	GenerationSeconds    int `yaml:"generation_seconds" json:"generation_seconds"`
+	WorkflowModelSeconds int `yaml:"workflow_model_seconds" json:"workflow_model_seconds"`
+	FocusedCheckSeconds  int `yaml:"focused_check_seconds" json:"focused_check_seconds"`
+}
+
+// MaxTimeoutSeconds bounds a time limit set from the app: one day.
+const MaxTimeoutSeconds = 86400
+
+// ValidateSet checks time limits set from the app, where each one is explicit:
+// from one second to MaxTimeoutSeconds.
+func (t TimeoutConfig) ValidateSet() error {
+	for _, item := range []struct {
+		key   string
+		value int
+	}{
+		{"import_seconds", t.ImportSeconds}, {"analysis_seconds", t.AnalysisSeconds}, {"generation_seconds", t.GenerationSeconds},
+		{"workflow_model_seconds", t.WorkflowModelSeconds}, {"focused_check_seconds", t.FocusedCheckSeconds},
+	} {
+		if item.value < 1 || item.value > MaxTimeoutSeconds {
+			return fmt.Errorf("timeouts.%s must be between 1 and %d seconds", item.key, MaxTimeoutSeconds)
+		}
+	}
+	return nil
 }
 
 const DefaultWorkflowModelSeconds = 900
