@@ -86,8 +86,16 @@ every guard when the action arrives.
 - **Open a project.** Restores saved data for a known path, otherwise imports
   and indexes it. No model request is made.
 - **Set-aside files.** When the daemon set aside an unreadable agent journal,
-  task file or saved analysis progress, or skipped one a newer Mini-Orca wrote, the Inbox says so and
-  Settings → Project lists each file with where its bytes went and the remedy.
+  task file or saved analysis progress, or skipped one a newer Mini-Orca wrote,
+  the Inbox says so and Settings → Project lists each file with where its bytes
+  went and the remedy.
+- **Agent models.** Settings → Models & agents chooses the model each role runs
+  with (writes the change, writes tests, reviews): a configured scope or a model
+  the Agy or Pi CLI lists, each marked local or remote. It also sets the budget
+  per run within the `config.yaml` ceilings. Save applies to new runs only;
+  **Use config.yaml** resets. When `config.yaml` changes under saved settings,
+  they are marked out of date and new runs wait for a reset. Remote models still
+  ask before each run.
 - **Trust.** Granting lists the commands checks will run; revoking stops checks,
   scans and agent verification. Trust is bound to the canonical project path.
 - **Analyze.** A preview comes first; the confirmation names the file count, the

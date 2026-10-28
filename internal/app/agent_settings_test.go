@@ -290,3 +290,38 @@ func TestDisablingSkillDoesNotChangeAnAdmittedInvestigation(t *testing.T) {
 		t.Fatal("future settings did not take effect", calls.Load(), err)
 	}
 }
+
+func TestAgentRolesCanUseAnyAvailableCatalogModel(t *testing.T) {
+	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	view, err := s.AgentSettings(t.Context(), settingsQuery(t, s))
+	if err != nil || view.RoleModels["creation"].Model != s.runtimes.bug.effective.Model || view.RoleModels["review"].Model != s.runtimes.analyze.effective.Model {
+		t.Fatalf("default role models: %+v %v", view.RoleModels, err)
+	}
+	reviewer, err := configuredModelID(s.runtimes.function.profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unavailable := range []string{"configured:" + strings.Repeat("0", 64), "agy:missing-model", "gpt-unknown"} {
+		request := settingsControl(t, s)
+		request.Values.Roles.Review = unavailable
+		if _, err := s.ControlAgentSettings(t.Context(), request); err == nil {
+			t.Fatalf("unavailable role model %q was saved", unavailable)
+		}
+	}
+	request := settingsControl(t, s)
+	request.Values.Roles.Review = reviewer
+	updated, err := s.ControlAgentSettings(t.Context(), request)
+	if err != nil || updated.Roles.Review != reviewer || updated.State != "overridden" {
+		t.Fatalf("catalog role: %+v %v", updated, err)
+	}
+	if model := updated.RoleModels["review"]; model.Model != s.runtimes.function.effective.Model || model.Profile != reviewer || model.Scope != "analyze" {
+		t.Fatalf("review role model: %+v", model)
+	}
+	ctx, err := s.freezeAgentSettings(t.Context(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if models := s.resolveWorkflowModels(ctx, ChangeWorkflowModels{}); models.Review != reviewer || models.Create != "bug" {
+		t.Fatalf("a run did not use the role's model: %+v", models)
+	}
+}

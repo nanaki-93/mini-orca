@@ -3,7 +3,7 @@
 // finding sources), so the UI is exercised with what it really receives.
 
 import type {
-  BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, ModelsCurrent, Overview, Project, UsageReport,
+  AgentSettings, AvailableModels, BudgetUsage, ChangeHistoryEntry, ChangeSession, CostEstimate, FileChange, Finding, GitWorkspace, Model, ModelsCurrent, Overview, Project, UsageReport,
 } from '../../src/api/types';
 
 const now = Date.parse('2026-10-27T10:00:00Z');
@@ -197,5 +197,42 @@ export const models: ModelsCurrent = {
     code: { scope: 'code', model: 'qwen3-coder', provider_origin: 'http://127.0.0.1:1234', remote_provider: false },
   },
 };
+
+// The model catalog: the configured scopes' models plus what the Agy CLI lists.
+const agyModel = (id: string): Model => ({ scope: '', profile: 'agy:' + id, model: id, provider_origin: 'cli://agy', remote_provider: true, reasoning_effort: 'medium' });
+export const availableModels: AvailableModels = {
+  models: [
+    { id: 'configured:' + 'a'.repeat(64), name: 'gemini-2.5-pro', provider: 'gemini', source: 'configured', location: 'remote', model: { ...models.scopes.analyze, scope: '', profile: 'configured:' + 'a'.repeat(64) } },
+    { id: 'agy:gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash', provider: 'agy', source: 'agy', location: 'unknown', model: agyModel('gemini-3.8-flash-medium') },
+    { id: 'agy:gemini-3.8-pro-high', name: 'Gemini 3.8 Pro', provider: 'agy', source: 'agy', location: 'unknown', model: agyModel('gemini-3.8-pro-high') },
+  ],
+  defaults: { analyze: 'configured:' + 'a'.repeat(64) },
+  pi: { status: 'unavailable', message: 'Pi models could not be loaded. Check that Pi is installed, signed in, and its model configuration is valid, then refresh models.' },
+  agy: { status: 'ready' },
+};
+
+/** The daemon's agent settings for `roles` and `limits`, resolved like the service does. */
+export function agentSettings(version: number, roles: Record<string, string> | null, limits: Record<string, number> | null): AgentSettings {
+  const ceilings = { model_calls: 40, tool_calls: 120, input_tokens: 400_000, output_tokens: 60_000, elapsed_seconds: 1_800, concurrent_calls: 2, repairs: 2 };
+  const effective = roles ?? { creation: 'bug', testing: 'code', review: 'analyze' };
+  const resolve = (id: string): Model | undefined => models.scopes[id] ?? availableModels.models.find(choice => choice.id === id)?.model;
+  const roleModels: AgentSettings['role_models'] = {};
+  for (const role of ['creation', 'testing', 'review'] as const) {
+    const model = resolve(effective[role]);
+    if (model) roleModels[role] = model;
+  }
+  return {
+    ...project,
+    configuration: 'c'.repeat(64),
+    version,
+    state: roles ? 'overridden' : 'configured',
+    roles: effective,
+    limits: limits ?? ceilings,
+    ceilings,
+    skills: [],
+    models: Object.values(models.scopes),
+    role_models: roleModels,
+  };
+}
 
 export const fileSource = 'package handlers\n\nfunc ServeAsset() {}\n';

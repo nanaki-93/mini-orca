@@ -490,12 +490,48 @@ export interface Overview extends ProjectIdentity {
   finding_counts?: { verified?: number; ai_suggestions?: number };
 }
 
+export type AgentRole = 'creation' | 'testing' | 'review';
+
 export interface AgentSettings extends ProjectIdentity {
-  state: string;
+  configuration?: string;
+  version?: number;
+  state: 'configured' | 'overridden' | 'stale' | string;
   roles: Record<string, string>;
   limits?: Record<string, number>;
   ceilings?: Record<string, number>;
+  skills?: { directory: string; enabled: boolean }[];
   models?: Model[];
+  /** The model each role runs with; a role whose model no longer resolves has no entry. */
+  role_models?: Partial<Record<AgentRole, Model>>;
+}
+
+/** A complete replacement of the project's agent settings. */
+export interface AgentPreferences {
+  roles: Record<AgentRole, string>;
+  limits: Record<string, number>;
+  disabled_skills: string[];
+}
+
+/** A model the daemon can assign: a configured scope's model or one an installed CLI lists. */
+export interface ModelChoice {
+  id: string;
+  name: string;
+  provider: string;
+  source: 'configured' | 'agy' | 'pi' | string;
+  location: 'local' | 'remote' | 'unknown' | string;
+  model: Model;
+}
+
+export interface ModelDiscovery {
+  status: 'ready' | 'unavailable' | string;
+  message?: string;
+}
+
+export interface AvailableModels {
+  models: ModelChoice[];
+  defaults: Record<string, string>;
+  pi: ModelDiscovery;
+  agy: ModelDiscovery;
 }
 
 export interface DaemonStatus {

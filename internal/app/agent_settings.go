@@ -27,6 +27,8 @@ type AgentSettings struct {
 	Ceilings        config.AgentLimits      `json:"ceilings"`
 	Skills          []AgentSkillSetting     `json:"skills"`
 	Models          []EffectiveModel        `json:"models"`
+	// RoleModels is the model each role runs with (creation, testing, review).
+	RoleModels map[string]EffectiveModel `json:"role_models"`
 }
 
 type AgentSettingsControl struct {
@@ -77,6 +79,7 @@ func (s *Service) settingsView(query AgentRunQuery, record agentstate.SettingsRe
 		}
 	}
 	view.Roles, view.Limits = values.Roles, values.Limits
+	view.RoleModels = s.roleModels(values.Roles)
 	for i := range view.Models {
 		if value := view.Models[i].Temperature; value != nil {
 			copy := *value
@@ -93,9 +96,33 @@ func (s *Service) settingsView(query AgentRunQuery, record agentstate.SettingsRe
 	return view, nil
 }
 
+// roleModels resolves each role's selection the way a workflow stage does.
+// A selection that no longer resolves has no entry.
+func (s *Service) roleModels(roles agentstate.RoleSettings) map[string]EffectiveModel {
+	models := map[string]EffectiveModel{}
+	for stage, role := range []struct{ name, selection string }{{"creation", roles.Creation}, {"testing", roles.Testing}, {"review", roles.Review}} {
+		if runtime, ok := s.selectedRuntime(workflowStageScope(stage), role.selection); ok {
+			models[role.name] = runtime.effective
+		}
+	}
+	return models
+}
+
 func (s *Service) validateAgentPreferences(values agentstate.AgentPreferences) error {
 	if err := values.Validate(); err != nil {
 		return err
+	}
+	for _, role := range []string{values.Roles.Creation, values.Roles.Testing, values.Roles.Review} {
+		if !validModelSelection(role) {
+			return fmt.Errorf("roles must reference analyze, bug or code, or a catalog model ID")
+		}
+		// Configured IDs follow config.yaml; CLI catalogs are checked on save
+		// and when a run starts, since listing them runs the CLI.
+		if _, _, cli := cliModelSelection(role); !cli {
+			if _, ok := s.selectedRuntime(config.AnalyzeModelScope, role); !ok {
+				return fmt.Errorf("a role's model is no longer configured")
+			}
+		}
 	}
 	limits, ceiling := values.Limits, s.agentRuntime.Limits
 	for _, pair := range [][2]int64{
@@ -136,6 +163,12 @@ func (s *Service) validateSettingsControl(request AgentSettingsControl) error {
 func (s *Service) ControlAgentSettings(ctx context.Context, request AgentSettingsControl) (*AgentSettings, error) {
 	if err := s.validateSettingsControl(request); err != nil {
 		return nil, err
+	}
+	if request.Values != nil {
+		roles := request.Values.Roles
+		if err := s.validateModelSelections(ctx, []string{roles.Creation, roles.Testing, roles.Review}); err != nil {
+			return nil, err
+		}
 	}
 	// Reindex, project replacement and source Apply share this lifecycle lock.
 	// The journal additionally serializes editors across service instances.

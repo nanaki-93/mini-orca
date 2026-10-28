@@ -1419,13 +1419,16 @@ GET `/api/projects/current/agent-settings` requires current `project_id` and
 `project_revision`. Its no-store response contains the configuration fingerprint,
 settings `version` (zero before the first edit), `state` (`configured`, `overridden`
 or `stale`), effective `roles`, `limits`, operator-configured `ceilings`, configured
-skill directories with `enabled` flags, and non-secret configured model metadata.
+skill directories with `enabled` flags, non-secret configured model metadata, and
+`role_models`, the model each role runs with.
 This local read creates no journal, connection, process or provider request.
 
 POST `/api/projects/current/agent-settings/control` requires the same project
 identity, `configuration`, `version`, `confirm: true` and `action: replace` or
 `reset`. Replacement requires complete `values`: `roles` with `creation`, `testing`
-and `review` selected from `analyze`, `bug` and `function`; all seven `limits`
+and `review`, each a configured scope (`analyze`, `bug` or `code`) or a model ID from
+`GET /api/models/available` (configured, Agy or Pi models; the catalog is checked
+when saving and again when a run starts); all seven `limits`
 fields; and an explicit `disabled_skills` array drawn only from configured skill
 directories. Positive limits must remain within the configured ceilings; `repairs`
 may be zero. No provider, credential, tool, skill directory or retention permission
@@ -1434,7 +1437,8 @@ advancing the version, so old editors cannot overwrite a reset.
 
 Settings are private to the canonical checkout and survive restart. Mutation
 requires current project/configuration/version identity. Operator configuration
-changes mark retained overrides stale; new work then requires an explicit reset,
+changes, including removing a configured model a role selected, mark retained
+overrides stale; new work then requires an explicit reset,
 while retained data remains readable. Malformed requests return 400, stale scope
 or version returns 409, and corrupt or failed persistence returns 500 without
 replacing retained data. Existing runs keep their admitted roles, budget, skill

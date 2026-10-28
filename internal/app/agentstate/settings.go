@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
@@ -68,8 +69,8 @@ func (p AgentPreferences) Validate() error {
 		return fmt.Errorf("disabled_skills must be an explicit array")
 	}
 	for _, role := range []string{p.Roles.Creation, p.Roles.Testing, p.Roles.Review} {
-		if !slices.Contains([]string{"analyze", "bug", "code"}, role) {
-			return fmt.Errorf("roles must reference analyze, bug or code")
+		if !validRoleModel(role) {
+			return fmt.Errorf("roles must reference analyze, bug or code, or a catalog model ID")
 		}
 	}
 	if err := p.Limits.Validate(); err != nil {
@@ -77,6 +78,23 @@ func (p AgentPreferences) Validate() error {
 	}
 	_, err := config.ResolveAgentSkills(p.DisabledSkills)
 	return err
+}
+
+// validRoleModel accepts a configured scope or the shape of a catalog model
+// ID (configured:, agy: or pi:); the service checks the ID is available.
+func validRoleModel(role string) bool {
+	if slices.Contains([]string{"analyze", "bug", "code"}, role) {
+		return true
+	}
+	if len(role) > 256 || strings.ContainsFunc(role, func(r rune) bool { return r <= ' ' || r == 0x7f }) {
+		return false
+	}
+	for _, prefix := range []string{"configured:", "agy:", "pi:"} {
+		if id, ok := strings.CutPrefix(role, prefix); ok && id != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func validateSettings(record *SettingsRecord) error {

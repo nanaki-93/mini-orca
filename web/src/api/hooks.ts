@@ -4,7 +4,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
-  AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
+  AgentSettings, AvailableModels, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
   FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, QuarantineReport, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
@@ -13,6 +13,7 @@ import { useCheckout } from '@/app/checkout';
 export const keys = {
   status: ['status'] as const,
   models: ['models'] as const,
+  availableModels: ['models', 'available'] as const,
   mainProject: ['project', ''] as const,
   project: (wt: string) => ['project', wt] as const,
   index: (wt: string) => ['index', wt] as const,
@@ -58,6 +59,11 @@ export function useStatus() {
 
 export function useModels() {
   return useQuery({ queryKey: keys.models, queryFn: () => api.get<ModelsCurrent>('/api/models/current'), staleTime: 60_000 });
+}
+
+/** The model catalog. Listing Agy and Pi models runs their CLIs, so it loads only when asked. */
+export function useAvailableModels(enabled: boolean) {
+  return useQuery({ queryKey: keys.availableModels, queryFn: () => api.get<AvailableModels>('/api/models/available'), enabled, staleTime: 5 * 60_000, retry: false });
 }
 
 export function useMainProject() {

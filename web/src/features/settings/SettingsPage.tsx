@@ -1,7 +1,7 @@
 // Settings: project, trust, models and agents, analysis, appearance.
 
 import { Bot, Coins, FolderOpen, Monitor, Moon, Palette, Play, RefreshCw, ShieldCheck, Sparkles, Sun } from 'lucide-react';
-import { useAgentSettings, useModels, useOverview, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
+import { useModels, useOverview, useProject, useStatus, useTrust, useUsage } from '@/api/hooks';
 import type { UsageTotal } from '@/api/types';
 import { costCaveat, costLabel, formatTokens } from '@/lib/usage';
 import { useActions, useBusy } from '@/app/actions';
@@ -12,6 +12,7 @@ import { plural, timeAgo } from '@/lib/util';
 import { Badge, Button, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
 import { OpenProject } from './OpenProject';
 import { QuarantineList } from './Quarantine';
+import { AgentRoles } from './AgentRoles';
 
 const SECTIONS = [
   { id: 'project', label: 'Project', icon: FolderOpen },
@@ -183,14 +184,10 @@ function TrustSettings() {
 
 function ModelSettings() {
   const models = useModels().data;
-  const project = useProject().data;
-  const { worktreePath } = useCheckout();
-  const settings = useAgentSettings(worktreePath, project ?? null).data;
-  const roles = settings?.roles ?? {};
   return (
     <>
       <h1 className="page-title">Models & agents</h1>
-      <p className="muted">Models are configured in the daemon's <span className="mono">config.yaml</span>. Remote models receive bounded project context and always ask before each run.</p>
+      <p className="muted">Model scopes are configured in the daemon's <span className="mono">config.yaml</span>. Choose which model each agent role uses for this project below; remote models receive bounded project context and always ask before each run.</p>
       <div className="card">
         <div className="card-head"><Sparkles size={15} aria-hidden /><span className="strong">Model scopes</span></div>
         <table className="table">
@@ -207,26 +204,7 @@ function ModelSettings() {
           </tbody>
         </table>
       </div>
-      <div className="card">
-        <div className="card-head"><Bot size={15} aria-hidden /><span className="strong">Agent roles</span></div>
-        <div className="card-body stack-lg">
-          <dl className="details details-wide">
-            <dt>Writes the change</dt><dd className="mono small">{roles.creation ?? 'bug'}</dd>
-            <dt>Writes tests</dt><dd className="mono small">{roles.testing ?? 'code'}</dd>
-            <dt>Reviews</dt><dd className="mono small">{roles.review ?? 'analyze'}</dd>
-          </dl>
-          {settings?.limits ? (
-            <div>
-              <div className="label-row">Budget per run</div>
-              <div className="stat-row">
-                {Object.entries(settings.limits).map(([key, value]) => (
-                  <div key={key} className="stat"><div className="stat-value">{value.toLocaleString()}</div><div className="stat-label">{key.replace(/_/g, ' ')}</div></div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <AgentRoles />
     </>
   );
 }

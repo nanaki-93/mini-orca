@@ -45,6 +45,11 @@ interface.
   per-launch token (`X-Mini-Orca-Token`). The Web UI gets it in its document;
   other local clients read the `0600` token file (`MINI_ORCA_TOKEN_FILE`, or
   `mini-orca/daemon-token` in the user configuration directory).
+- **Agent models:** Settings → Models & agents now edits the model each agent
+  role runs with — a configured scope or any model the Agy or Pi CLI lists — and
+  the budget per run, saved per project for new runs, with a reset to
+  `config.yaml`. Roles accept catalog model IDs (`POST
+  …/agent-settings/control`), and agent settings report `role_models`.
 - **Launcher:** `mini-orca` (built and installed by `just build`) opens the
   project in the current folder: it starts the daemon when none is running,
   switches it to the folder and opens the Web UI; Ctrl+C stops a daemon it

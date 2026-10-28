@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
@@ -463,6 +463,33 @@ export function useActions() {
     });
   }
 
+  // ------------------------------------------------------------ agent settings
+
+  /** Replaces the project's agent roles and budget, or resets them to config.yaml. */
+  async function controlAgentSettings(settings: AgentSettings, worktreePath: string, values: AgentPreferences | null) {
+    const reset = values === null;
+    return guarded(reset ? 'Resetting agent settings…' : 'Saving agent settings…', async () => {
+      try {
+        const saved = await api.post<AgentSettings>(withWorktree('/api/projects/current/agent-settings/control', worktreePath), {
+          project_id: settings.project_id,
+          project_revision: settings.project_revision,
+          configuration: settings.configuration,
+          version: settings.version,
+          action: reset ? 'reset' : 'replace',
+          confirm: true,
+          ...(reset ? {} : { values }),
+        });
+        client.setQueryData([...keys.settings(worktreePath), settings.project_revision], saved);
+        void client.invalidateQueries({ queryKey: keys.settings(worktreePath) });
+        toast(reset ? 'Agents follow config.yaml again.' : 'Agent settings saved. New runs use them.', 'success');
+        return saved;
+      } catch (err) {
+        fail(reset ? 'Could not reset agent settings' : 'Could not save agent settings', err);
+        return null;
+      }
+    });
+  }
+
   // ---------------------------------------------------------------- git
 
   async function previewMerge(workspace: GitWorkspace, worktree: GitWorktree, main: Project): Promise<MergePreview | null> {
@@ -526,7 +553,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

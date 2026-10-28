@@ -4,7 +4,8 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, isTestPath, timeAgo } from './util';
-import { changeOverlaps, parseCommits, workflowBlocker } from './workflow';
+import { changeOverlaps, parseCommits, workflowBlocker, workflowDestinations } from './workflow';
+import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
 import { QueryClient } from '@tanstack/react-query';
 import { costCaveat, costLabel, formatTokens, usageLabel } from './usage';
@@ -168,5 +169,45 @@ describe('write token', () => {
     expect(documentWriteToken(doc)).toBe('');
     doc.head.innerHTML = '<meta name="mini-orca-write-token" content="abc123">';
     expect(documentWriteToken(doc)).toBe('abc123');
+  });
+});
+
+describe('agent settings', () => {
+  const scopes = {
+    analyze: { scope: 'analyze', model: 'gemini-2.5-pro', remote_provider: true, provider_origin: 'googleapis.com' },
+    bug: { scope: 'bug', model: 'qwen3-coder', remote_provider: false },
+    code: { scope: 'code', model: 'qwen3-coder', remote_provider: false },
+  };
+  const agy = { scope: '', model: 'gemini-3.8-pro', remote_provider: true, provider_origin: 'cli://agy' };
+  const catalog = {
+    models: [
+      { id: 'configured:aa', name: 'gemini-2.5-pro', provider: 'gemini', source: 'configured', location: 'remote', model: scopes.analyze },
+      { id: 'agy:gemini-3.8-pro', name: 'Gemini 3.8 Pro', provider: 'agy', source: 'agy', location: 'unknown', model: agy },
+    ],
+    defaults: {}, pi: { status: 'unavailable' }, agy: { status: 'ready' },
+  };
+
+  it('offers the scopes, then listed CLI models, and keeps an unlisted selection', () => {
+    const groups = roleModelOptions(scopes, catalog, ['bug', 'pi:local/llama'], { 'pi:local/llama': { scope: 'bug', model: 'llama' } });
+    expect(groups.map(g => g.label)).toEqual(['Configured in config.yaml', 'Agy models', 'Current selection']);
+    expect(groups[0].options.map(o => o.label)).toEqual(['analyze · gemini-2.5-pro', 'bug · qwen3-coder', 'code · qwen3-coder']);
+    expect(groups[1].options[0]).toMatchObject({ id: 'agy:gemini-3.8-pro', label: 'Gemini 3.8 Pro (agy:gemini-3.8-pro)' });
+    expect(groups[2].options[0].label).toBe('llama (pi:local/llama)');
+    expect(modelLocation(selectedModel(groups, 'agy:gemini-3.8-pro'))).toEqual({ remote: true, label: 'remote · cli://agy' });
+    expect(modelLocation(selectedModel(groups, 'bug')).label).toBe('local');
+  });
+
+  it('bounds the budget by the configured ceilings and lets repairs be zero', () => {
+    const ceilings = { model_calls: 40, tool_calls: 120, input_tokens: 1000, output_tokens: 100, elapsed_seconds: 60, concurrent_calls: 2, repairs: 2 };
+    expect(limitErrors({ ...ceilings, repairs: 0 }, ceilings)).toEqual({});
+    expect(limitErrors({ ...ceilings, model_calls: 41, tool_calls: 0, output_tokens: 1.5 }, ceilings)).toEqual({ model_calls: 'At most 40 (config.yaml).', tool_calls: 'At least 1.', output_tokens: 'At least 1.' });
+  });
+
+  it('confirms a role that runs on a remote catalog model', () => {
+    const settings = { project_id: 'p', project_revision: 'r', state: 'overridden', roles: { creation: 'bug', testing: 'code', review: 'agy:gemini-3.8-pro' }, role_models: { review: agy } };
+    const choice = workflowDestinations(settings, { scopes });
+    expect(choice.selections).toEqual({ create: 'bug', test: 'code', review: 'agy:gemini-3.8-pro' });
+    expect(choice.confirmed).toEqual(['agy:gemini-3.8-pro']);
+    expect(choice.destinations).toEqual([{ stage: 'review', selection: 'agy:gemini-3.8-pro', model: 'gemini-3.8-pro', origin: 'cli://agy' }]);
   });
 });

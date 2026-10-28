@@ -371,6 +371,28 @@
   padding-left: 30px;
 }
 
+.select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.select {
+  appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.select-icon {
+  position: absolute;
+  right: 9px;
+  color: var(--faint);
+  pointer-events: none;
+}
+
 .textarea {
   height: auto;
   padding: 8px 10px;

@@ -1,9 +1,9 @@
 // Core UI primitives. Visual styling lives in styles/components.css.
 
 import { formatKeys } from '@/app/shortcuts';
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
-import { CheckCircle2, CircleDashed, CircleDot, Loader2, XCircle, type LucideIcon } from 'lucide-react';
+import { CheckCircle2, ChevronDown, CircleDashed, CircleDot, Loader2, XCircle, type LucideIcon } from 'lucide-react';
 import type { Tone } from '@/lib/util';
 import type { PhaseTone } from '@/lib/readiness';
 
@@ -106,6 +106,17 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
     <span className={cx('input-wrap', className)}>
       <Icon size={14} className="input-icon" aria-hidden />
       <input ref={ref} className={cx('input', 'has-icon', invalid && 'is-invalid')} aria-invalid={invalid || undefined} {...rest} />
+    </span>
+  );
+});
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }>(function Select({ invalid, className, children, ...rest }, ref) {
+  return (
+    <span className={cx('select-wrap', className)}>
+      <select ref={ref} className={cx('input', 'select', invalid && 'is-invalid')} aria-invalid={invalid || undefined} {...rest}>
+        {children}
+      </select>
+      <ChevronDown size={14} className="select-icon" aria-hidden />
     </span>
   );
 });

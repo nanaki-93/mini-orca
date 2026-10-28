@@ -150,7 +150,7 @@ export function changeOverlaps(changed: string[], paths: string[]): boolean {
   });
 }
 
-const DEFAULT_ROLES = { creation: 'bug', testing: 'code', review: 'analyze' } as const;
+export const DEFAULT_ROLES = { creation: 'bug', testing: 'code', review: 'analyze' } as const;
 
 export interface Destination {
   stage: string;
@@ -175,9 +175,10 @@ export function workflowDestinations(settings: AgentSettings | null | undefined,
   const destinations: Destination[] = [];
   const local: { stage: string; model: string }[] = [];
   const confirmed: string[] = [];
+  const roleOf = { create: 'creation', test: 'testing', review: 'review' } as const;
   for (const stage of ['create', 'test', 'review'] as const) {
     const selection = selections[stage];
-    const model = scopes[selection] ?? catalog.find(entry => entry.scope === selection);
+    const model = settings?.role_models?.[roleOf[stage]] ?? scopes[selection] ?? catalog.find(entry => entry.scope === selection);
     if (model?.remote_provider) {
       destinations.push({ stage, selection, model: model.model || selection, origin: model.provider_origin || 'remote provider' });
       if (!confirmed.includes(selection)) confirmed.push(selection);

@@ -108,3 +108,33 @@ test('set-aside files are announced and explained with their remedy', async ({ p
   await expect(list).toContainText('It is not valid JSON. Its bytes are in .mini-orca/agents/ab12/journal.quarantined-20261027T101500Z.json.');
   await expect(list).toContainText('Upgrade Mini-Orca to use it, or move it away.');
 });
+
+test('agent roles can run with any listed model and a project budget', async ({ page, daemon }) => {
+  await page.goto('/#/settings/models');
+  const card = page.getByRole('region', { name: 'Agent roles' });
+  await expect(card).toContainText('From config.yaml');
+  const review = card.getByLabel('Reviews');
+  await expect(review).toHaveValue('analyze');
+  await expect(review.getByRole('option', { name: 'Gemini 3.8 Pro (agy:gemini-3.8-pro-high)' })).toBeAttached();
+  await expect(card).toContainText('Pi models could not be loaded.');
+
+  await review.selectOption('agy:gemini-3.8-pro-high');
+  await expect(card.getByText('remote · cli://agy')).toBeVisible();
+  const calls = card.getByLabel('Model calls');
+  await calls.fill('50');
+  await expect(card.getByText('At most 40 (config.yaml).')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await calls.fill('20');
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Agent settings saved. New runs use them.')).toBeVisible();
+  await expect(card).toContainText('Project settings');
+  const [saved] = daemon.mutations('/agent-settings/control');
+  expect(saved.body).toMatchObject({ action: 'replace', confirm: true, version: 0, configuration: 'c'.repeat(64), values: { roles: { creation: 'bug', testing: 'code', review: 'agy:gemini-3.8-pro-high' }, disabled_skills: [] } });
+  expect((saved.body!.values as { limits: Record<string, number> }).limits.model_calls).toBe(20);
+  await expect(review).toHaveValue('agy:gemini-3.8-pro-high');
+
+  await card.getByRole('button', { name: 'Use config.yaml' }).click();
+  await expect(card).toContainText('From config.yaml');
+  await expect(review).toHaveValue('analyze');
+  expect(daemon.mutations('/agent-settings/control')[1].body).toMatchObject({ action: 'reset', version: 1 });
+});

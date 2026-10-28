@@ -24,6 +24,7 @@ export class FakeDaemon {
   private nextId = 100;
   private readonly overrides = new Map<string, () => unknown>();
   private readonly pending: DaemonEvent[] = [];
+  private settings = data.agentSettings(0, null, null);
   /** Console messages a test expects, such as the browser's note on a refused request. */
   readonly expectedConsole: RegExp[] = [];
 
@@ -63,6 +64,7 @@ export class FakeDaemon {
   private readonly gets: [RegExp, () => unknown][] = [
     [/^\/status$/, () => ({ status: 'ok', version: '9.9.9' })],
     [/^\/api\/models\/current$/, () => data.models],
+    [/^\/api\/models\/available$/, () => data.availableModels],
     [/^\/api\/projects\/current$/, () => data.project],
     [/^\/api\/projects\/current\/index$/, () => ({ ...data.project, files: data.indexedPaths.map(path => ({ path, content_hash: 'h', language: 'go', line_count: 3 })) })],
     [/^\/api\/projects\/current\/execution-trust$/, () => ({ ...data.project, trusted: true, commands: [['go', 'test', './...']] })],
@@ -71,7 +73,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/recovery$/, () => ({ ...data.project, session_id: '', state: '', hash: '', undo_available: false, warnings: [] })],
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
     [/^\/api\/projects\/current\/overview$/, () => data.overview],
-    [/^\/api\/projects\/current\/agent-settings$/, () => ({ ...data.project, state: 'ready', roles: { creation: 'bug', testing: 'code', review: 'analyze' } })],
+    [/^\/api\/projects\/current\/agent-settings$/, () => this.settings],
     [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
     [/^\/api\/projects\/current\/quarantine$/, () => ({ files: [], skipped: [] })],
     [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'go', line_count: 3, content: data.fileSource })],
@@ -87,6 +89,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/comments\/delete$/, (body, m) => this.update(m[1], body, s => ({ ...s, comments: (s.comments ?? []).filter(c => c.id !== body.id || c.sent_revision) }))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/messages$/, (body, m) => this.update(m[1], body, s => this.revise(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
+    [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
   ];
 
@@ -124,6 +127,22 @@ export class FakeDaemon {
     } catch (err) {
       return json(route, 409, { user_message: (err as Error).message });
     }
+  }
+
+  /** Replaces or resets agent settings with the daemon's version and configuration guard. */
+  private controlSettings(body: Record<string, unknown>) {
+    const current = this.settings;
+    if (body.confirm !== true || body.version !== current.version || body.configuration !== current.configuration || body.project_revision !== current.project_revision) {
+      throw new Error('Agent settings changed; reload before editing.');
+    }
+    if (body.action === 'reset') {
+      this.settings = data.agentSettings(current.version! + 1, null, null);
+      return this.settings;
+    }
+    const values = body.values as { roles: Record<string, string>; limits: Record<string, number>; disabled_skills: string[] } | undefined;
+    if (body.action !== 'replace' || !values || !Array.isArray(values.disabled_skills)) throw new Error('Replace requires complete roles, limits and disabled skills.');
+    this.settings = data.agentSettings(current.version! + 1, values.roles, values.limits);
+    return this.settings;
   }
 
   /** Applies a guarded update: the request must name the current revision and hash. */

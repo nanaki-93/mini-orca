@@ -1227,9 +1227,9 @@ components:
       additionalProperties: false
       required: [creation, testing, review]
       properties:
-        creation: {type: string, enum: [analyze, bug, code]}
-        testing: {type: string, enum: [analyze, bug, code]}
-        review: {type: string, enum: [analyze, bug, code]}
+        creation: {$ref: '#/components/schemas/ModelSelection'}
+        testing: {$ref: '#/components/schemas/ModelSelection'}
+        review: {$ref: '#/components/schemas/ModelSelection'}
     AgentPreferences:
       type: object
       additionalProperties: false
@@ -1240,7 +1240,7 @@ components:
         disabled_skills: {type: array, maxItems: 8, uniqueItems: true, items: {type: string, maxLength: 192}, description: Only explicitly configured directories; empty enables all configured skills.}
     AgentSettings:
       type: object
-      required: [project_id, project_revision, configuration, version, state, roles, limits, ceilings, skills, models]
+      required: [project_id, project_revision, configuration, version, state, roles, limits, ceilings, skills, models, role_models]
       properties:
         project_id: {type: string}
         project_revision: {type: string}

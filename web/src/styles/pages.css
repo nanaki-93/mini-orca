@@ -2067,3 +2067,21 @@
 .quarantine-item p {
   margin: 0;
 }
+
+/* ---------------------------------------------------- settings: agent roles */
+
+.role-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.role-grid .badge {
+  flex: none;
+}
+
+.limit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
