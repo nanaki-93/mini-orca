@@ -28,6 +28,11 @@ export class FakeDaemon {
   private setup = data.projectSetup('configured');
   private selection = data.analysisSelection([]);
 
+  /** Marks the agent overrides as saved for an earlier model configuration. */
+  staleSettings(): void {
+    this.settings = { ...data.agentSettings(1, { creation: 'code', testing: 'code', review: 'analyze' }, null), state: 'stale' };
+  }
+
   /** Sets the project's setup state for this test; "needed" opens the wizard. */
   serveSetup(state: string): void {
     this.setup = data.projectSetup(state);
@@ -182,7 +187,10 @@ export class FakeDaemon {
     const models = body.models as ProjectSetup['models'];
     const echoed = Object.fromEntries(Object.entries(models).map(([scope, model]) => [scope, { ...model, api_key: undefined, api_key_set: Boolean(model.api_key) || Boolean(model.api_key_set) }]));
     this.setup = { ...this.setup, state: 'configured', models: echoed as ProjectSetup['models'], roles: body.roles as ProjectSetup['roles'], limits: body.limits as ProjectSetup['limits'] };
-    return this.setup;
+    // Saving replaces agent overrides, like the daemon.
+    const overridesReset = this.settings.state !== 'configured';
+    if (overridesReset) this.settings = data.agentSettings(this.settings.version! + 1, null, null);
+    return { ...this.setup, overrides_reset: overridesReset || undefined };
   }
 
   /** Replaces or resets agent settings with the daemon's version and configuration guard. */

@@ -13,6 +13,10 @@ import (
 )
 
 func writeWorkflowError(w http.ResponseWriter, operation string, err error) {
+	if errors.Is(err, app.ErrAgentSettingsStale) {
+		api.WriteAppError(w, api.Conflict(operation, agentSettingsStaleMessage, err))
+		return
+	}
 	if errors.Is(err, project.ErrRevisionConflict) {
 		api.WriteError(w, http.StatusConflict, "project or file changed; refresh the proposal")
 		return

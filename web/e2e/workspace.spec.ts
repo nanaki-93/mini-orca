@@ -112,7 +112,7 @@ test('set-aside files are announced and explained with their remedy', async ({ p
 test('agent roles can run with any listed model and a project budget', async ({ page, daemon }) => {
   await page.goto('/#/settings/models');
   const card = page.getByRole('region', { name: 'Agent roles' });
-  await expect(card).toContainText('From config.yaml');
+  await expect(card).toContainText('From the configuration');
   const review = card.getByLabel('Reviews');
   await expect(review).toHaveValue('analyze');
   await expect(review.getByRole('option', { name: 'Gemini 3.8 Pro (agy:gemini-3.8-pro-high)' })).toBeAttached();
@@ -133,8 +133,8 @@ test('agent roles can run with any listed model and a project budget', async ({ 
   expect((saved.body!.values as { limits: Record<string, number> }).limits.model_calls).toBe(20);
   await expect(review).toHaveValue('agy:gemini-3.8-pro-high');
 
-  await card.getByRole('button', { name: 'Use config.yaml' }).click();
-  await expect(card).toContainText('From config.yaml');
+  await card.getByRole('button', { name: 'Use the configuration' }).click();
+  await expect(card).toContainText('From the configuration');
   await expect(review).toHaveValue('analyze');
   expect(daemon.mutations('/agent-settings/control')[1].body).toMatchObject({ action: 'reset', version: 1 });
 });

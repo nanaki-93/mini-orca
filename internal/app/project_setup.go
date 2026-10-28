@@ -70,6 +70,8 @@ type ProjectSetup struct {
 	Models           map[string]SetupModel `json:"models"`
 	Roles            SetupRoles            `json:"roles"`
 	Limits           config.AgentLimits    `json:"limits"`
+	// OverridesReset says saving replaced agent overrides from Settings.
+	OverridesReset bool `json:"overrides_reset,omitempty"`
 }
 
 // ProjectSetupRequest saves a project's configuration.
@@ -157,8 +159,50 @@ func (s *Service) SaveProjectSetup(ctx context.Context, request ProjectSetupRequ
 		return nil, err
 	}
 	s.loadProjectConfiguration(root)
+	reset, err := s.resetAgentOverrides(ctx, root)
 	s.jobLifecycleMu.Unlock()
-	return s.ProjectSetup(ctx, request.ProjectID, request.ProjectRevision)
+	if err != nil {
+		return nil, fmt.Errorf("the configuration was saved, but agent overrides could not be reset: %w", err)
+	}
+	setup, err := s.ProjectSetup(ctx, request.ProjectID, request.ProjectRevision)
+	if setup != nil {
+		setup.OverridesReset = reset
+	}
+	return setup, err
+}
+
+// resetAgentOverrides clears the agent overrides saved in Settings → Models &
+// agents: setup has just set the roles and budget they deviated from, and
+// overrides from the old models would otherwise hold up all agent work.
+func (s *Service) resetAgentOverrides(ctx context.Context, root string) (bool, error) {
+	store, binding, err := s.agentJournal(root)
+	if err != nil {
+		return false, err
+	}
+	record, err := store.Settings(ctx)
+	if err != nil || record.Values == nil {
+		return false, err
+	}
+	if _, err := store.SaveSettings(ctx, record.Version, binding.Configuration, nil); err != nil {
+		return false, err
+	}
+	s.notifyEvent("agent_settings")
+	return true, nil
+}
+
+// withConfiguredAgentSettings admits work under the configuration's own agent
+// settings, not the project's overrides. A connection test must work while
+// overrides wait for a reset.
+func (s *Service) withConfiguredAgentSettings(ctx context.Context, root string) (context.Context, error) {
+	canonical, err := project.CanonicalRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	_, binding, err := s.agentJournal(canonical)
+	if err != nil {
+		return nil, err
+	}
+	return context.WithValue(ctx, agentSettingsKey{}, admittedAgentSettings{root: canonical, runtime: s.conf().agentRuntime, configuration: binding.Configuration}), nil
 }
 
 // SkipProjectSetup keeps the daemon's configuration for the active project
@@ -326,7 +370,11 @@ func (s *Service) TestSetupModel(ctx context.Context, id, revision, scope string
 	runtime := newModelRuntime(profile, setupTestTimeout, 0)
 	timed, cancelTimeout := context.WithTimeout(ctx, setupTestTimeout)
 	defer cancelTimeout()
-	admitted, release, err := s.agentRunContext(timed, runtime)
+	configured, err := s.withConfiguredAgentSettings(timed, s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
+	admitted, release, err := s.agentRunContext(configured, runtime)
 	if err != nil {
 		return nil, err
 	}

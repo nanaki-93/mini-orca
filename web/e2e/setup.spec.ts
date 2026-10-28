@@ -59,3 +59,23 @@ test('setup can be skipped and is not offered again', async ({ page, daemon }) =
   await card.getByRole('button', { name: 'Run setup' }).click();
   await expect(page).toHaveURL(/#\/setup/);
 });
+
+test('out-of-date agent settings are explained and reset, by setup or by hand', async ({ page, daemon }) => {
+  daemon.staleSettings();
+  await page.goto('/#/');
+  const notice = page.getByText('Agent settings are out of date');
+  await expect(notice).toBeVisible();
+  await page.goto('/#/setup?step=agents');
+  await expect(page.getByText('Saving setup replaces them')).toBeVisible();
+  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await expect(page.getByText('Agent overrides from Settings → Models & agents were replaced by these settings.')).toBeVisible();
+  await expect(page.getByText('Saving setup replaces them')).toHaveCount(0);
+
+  daemon.staleSettings();
+  await page.goto('/#/analysis');
+  await page.reload();
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await expect(page.getByText('Agents follow the configuration again.')).toBeVisible();
+  expect(daemon.mutations('/agent-settings/control').at(-1)!.body).toMatchObject({ action: 'reset', version: 1 });
+  await expect(page.getByText('Agent settings are out of date')).toHaveCount(0);
+});

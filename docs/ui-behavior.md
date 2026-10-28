@@ -114,8 +114,10 @@ every guard when the action arrives.
   with (writes the change, writes tests, reviews): a configured scope or a model
   the Agy or Pi CLI lists, each marked local or remote. It also sets the budget
   per run within the `config.yaml` ceilings. Save applies to new runs only;
-  **Use config.yaml** resets. When `config.yaml` changes under saved settings,
-  they are marked out of date and new runs wait for a reset. Remote models still
+  **Use the configuration** resets. When the models change under saved settings,
+  they are marked out of date and analysis and agent runs wait for a reset; the
+  Inbox, the Analysis page and setup say so and offer **Reset**, and saving
+  setup resets them. Remote models still
   ask before each run.
 - **Trust.** Granting lists the commands checks will run; revoking stops checks,
   scans and agent verification. Trust is bound to the canonical project path.

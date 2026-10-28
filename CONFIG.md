@@ -539,7 +539,9 @@ The first time a project without that file opens, the Web UI starts **setup**:
    (one short request, recorded as an agent run; no project code is sent).
    Saved keys are never shown again; leaving the field empty keeps them.
 2. **Agents & budget** — the scope each agent role uses and the per-run budget
-   (`agent_runtime.roles` and `max_*`). Saving here writes the file.
+   (`agent_runtime.roles` and `max_*`). Saving here writes the file and resets
+   any agent overrides saved in Settings → Models & agents, since setup has
+   just set the values they deviated from.
 3. **Checks** — the detected test and lint commands, to allow or not.
 4. **Analysis** — folders to leave out of analysis, then optionally the first
    analysis.
@@ -555,7 +557,12 @@ project loads its file, and saving setup reloads it at once. Saving is refused
 while an analysis, an agent run, a Go scan or work in a worktree is running,
 since that work was admitted with the old models. A file that cannot be applied
 (invalid YAML, a daemon-only key, an invalid model) leaves the daemon's
-configuration in use; the Inbox and setup show the error. Importing a project
+configuration in use; the Inbox and setup show the error. Agent overrides saved
+in Settings → Models & agents belong to the model configuration they were saved
+with: after the models change some other way (editing a file by hand), analysis
+and agent runs answer 409 until the overrides are reset there, and the Inbox,
+the Analysis page and setup offer the reset. Connection tests in setup use the
+configuration's own settings and are never held up. Importing a project
 asks its analyze model for an overview only when that model is local or the
 remote provider was confirmed; otherwise it records the deterministic inventory
 and a later analysis writes the overview.

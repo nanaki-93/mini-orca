@@ -14,6 +14,7 @@ import { LIMITS, ROLES, limitErrors } from '@/lib/agentSettings';
 import { LIMIT_MAXIMA, PROVIDERS, SCOPES, SKIPPED_FOLDERS, folderGroups, modelProblem, providerOf, withProvider } from '@/lib/setup';
 import { plural } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Field, Input, Select, Skeleton, cx } from '@/components/ui';
+import { AgentSettingsNotice } from '@/features/settings/AgentSettingsNotice';
 
 const STEPS = [
   { id: 'models', label: 'Models', icon: Cpu },
@@ -77,6 +78,7 @@ function SetupWizard({ setup }: { setup: ProjectSetup }) {
             {setup.error} Saving here replaces the settings it shows and keeps its other keys.
           </Callout>
         ) : null}
+        <AgentSettingsNotice note="The roles and budget saved in Settings → Models & agents belong to an earlier model configuration. Saving setup replaces them; until then, analysis and agents wait. Connection tests work either way." />
         <ol className="setup-steps" aria-label="Setup steps">
           {STEPS.map((s, i) => (
             <li key={s.id}>

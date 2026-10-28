@@ -1740,6 +1740,7 @@ components:
             config_file: {type: string}
             daemon_config_file: {type: string}
             error: {type: string}
+            overrides_reset: {type: boolean, description: In a save result, whether agent overrides were reset.}
     ProjectImportRequest:
       type: object
       required: [project_path]

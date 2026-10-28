@@ -640,6 +640,8 @@ export interface ProjectSetup extends ProjectIdentity {
   models: Record<SetupScope, SetupModel>;
   roles: Record<AgentRole, string>;
   limits: Record<string, number>;
+  /** Saving replaced agent overrides from Settings → Models & agents. */
+  overrides_reset?: boolean;
 }
 
 export interface SetupModelTest {

@@ -544,6 +544,7 @@ export function useActions() {
         void client.invalidateQueries({ queryKey: ['models'] });
         void client.invalidateQueries({ queryKey: ['settings'] });
         toast('Project configuration saved.', 'success', saved.config_file);
+        if (saved.overrides_reset) toast('Agent overrides from Settings → Models & agents were replaced by these settings.', 'info');
         return saved;
       } catch (err) {
         fail('Could not save the project configuration', err);
@@ -646,7 +647,7 @@ export function useActions() {
         });
         client.setQueryData([...keys.settings(worktreePath), settings.project_revision], saved);
         void client.invalidateQueries({ queryKey: keys.settings(worktreePath) });
-        toast(reset ? 'Agents follow config.yaml again.' : 'Agent settings saved. New runs use them.', 'success');
+        toast(reset ? 'Agents follow the configuration again.' : 'Agent settings saved. New runs use them.', 'success');
         return saved;
       } catch (err) {
         fail(reset ? 'Could not reset agent settings' : 'Could not save agent settings', err);

@@ -1,6 +1,6 @@
 // Settings → Models & agents: choose the model each agent role runs with and
 // the budget of each run. Saving replaces the project's settings for new runs;
-// reset follows config.yaml again. Running tasks keep what they started with.
+// reset follows the configuration (the project's or the daemon's) again. Running tasks keep what they started with.
 
 import { useMemo, useState } from 'react';
 import { Bot, RefreshCw, RotateCcw, Save } from 'lucide-react';
@@ -12,7 +12,7 @@ import { LIMITS, ROLES, limitErrors, modelLocation, preferencesOf, roleModelOpti
 import { Badge, Button, Callout, Field, Input, Select, Skeleton } from '@/components/ui';
 
 const STATE_BADGES: Record<string, { tone: 'neutral' | 'accent' | 'warning'; label: string }> = {
-  configured: { tone: 'neutral', label: 'From config.yaml' },
+  configured: { tone: 'neutral', label: 'From the configuration' },
   overridden: { tone: 'accent', label: 'Project settings' },
   stale: { tone: 'warning', label: 'Out of date' },
 };
@@ -71,8 +71,8 @@ function AgentRolesForm({ settings, worktreePath }: { settings: AgentSettings; w
       </div>
       <div className="card-body stack-lg">
         {stale ? (
-          <Callout tone="warning" title="config.yaml changed since these settings were saved" action={<Button size="sm" icon={RotateCcw} onClick={() => void actions.controlAgentSettings(settings, worktreePath, null)} disabled={Boolean(busy)}>Reset</Button>}>
-            New agent runs wait until you reset them to config.yaml; you can then choose again.
+          <Callout tone="warning" title="The model configuration changed since these settings were saved" action={<Button size="sm" icon={RotateCcw} onClick={() => void actions.controlAgentSettings(settings, worktreePath, null)} disabled={Boolean(busy)}>Reset</Button>}>
+            Analysis and agent runs wait until you reset them to the current configuration; you can then choose again.
           </Callout>
         ) : null}
         <div className="role-grid">
@@ -109,7 +109,7 @@ function AgentRolesForm({ settings, worktreePath }: { settings: AgentSettings; w
         <div className="row">
           <p className="xs muted">Remote models still ask before each run. Running tasks keep the models and budget they started with.</p>
           <span className="spacer" />
-          {settings.state === 'overridden' ? <Button icon={RotateCcw} onClick={() => void actions.controlAgentSettings(settings, worktreePath, null)} disabled={Boolean(busy)}>Use config.yaml</Button> : null}
+          {settings.state === 'overridden' ? <Button icon={RotateCcw} onClick={() => void actions.controlAgentSettings(settings, worktreePath, null)} disabled={Boolean(busy)}>Use the configuration</Button> : null}
           {dirty ? <Button variant="ghost" onClick={() => setDraft(saved)}>Discard</Button> : null}
           <Button variant="primary" icon={Save} onClick={() => void actions.controlAgentSettings(settings, worktreePath, draft)} disabled={stale || !dirty || !valid || Boolean(busy)}>Save</Button>
         </div>

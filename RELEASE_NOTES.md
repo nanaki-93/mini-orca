@@ -69,6 +69,11 @@ interface.
   longer fails for a remote analyze model without consent: it records the
   inventory and a later analysis writes the overview. A `config.yaml` in the
   project folder is no longer read as the daemon's configuration.
+- **Fixed:** after setup, connection tests and analysis failed with "The
+  active project changed" because agent overrides saved in Settings belonged to
+  the previous models. Saving setup now resets them, connection tests ignore
+  them, and the remaining case names Settings → Models & agents and offers
+  **Reset** in the Inbox, the Analysis page and setup.
 - **Faster triage:** Issues move with `j`/`k`, fix with `f`, dismiss or reopen
   with `x`, and filter by kind; the status bar shows a running analysis and the
   code inspector shows each file's analysis stages.

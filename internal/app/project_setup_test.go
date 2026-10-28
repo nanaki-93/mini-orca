@@ -184,3 +184,44 @@ func TestSetupModelTestReportsTheOutcome(t *testing.T) {
 		t.Fatalf("invalid scope: %v", err)
 	}
 }
+
+func TestSavingSetupResetsStaleAgentOverridesAndTestsIgnoreThem(t *testing.T) {
+	server, calls := analysisResponseServer(t, func(AnalysisStage) string { return "OK" })
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	// An override saved in Settings, then a model change made outside setup.
+	request := settingsControl(t, s)
+	request.Values.Limits.ModelCalls = 10
+	if _, err := s.ControlAgentSettings(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	s.conf().runtimes.bug.profile.Model = "changed-by-hand"
+	if _, err := s.freezeAgentSettings(t.Context(), s.manager.Root()); !errors.Is(err, ErrAgentSettingsStale) || !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("stale overrides: %v", err)
+	}
+
+	id, revision := setupIdentityOf(t, s)
+	test, err := s.TestSetupModel(t.Context(), id, revision, "code", SetupModel{APIBaseURL: server.URL, Model: "tested-model"})
+	if err != nil || !test.OK || calls.Load() != 1 {
+		t.Fatalf("a connection test must not wait for the overrides: %+v %v", test, err)
+	}
+
+	setup, err := s.ProjectSetup(t.Context(), id, revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.SaveProjectSetup(t.Context(), setupRequestFrom(setup))
+	if err != nil || !saved.OverridesReset {
+		t.Fatalf("save: %+v %v", saved, err)
+	}
+	view, err := s.AgentSettings(t.Context(), settingsQuery(t, s))
+	if err != nil || view.State != "configured" {
+		t.Fatalf("overrides after setup: %+v %v", view, err)
+	}
+	if _, err := s.freezeAgentSettings(t.Context(), s.manager.Root()); err != nil {
+		t.Fatalf("agent work after setup: %v", err)
+	}
+	again, err := s.SaveProjectSetup(t.Context(), setupRequestFrom(saved))
+	if err != nil || again.OverridesReset {
+		t.Fatalf("a second save has nothing to reset: %+v %v", again, err)
+	}
+}

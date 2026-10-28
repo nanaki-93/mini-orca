@@ -1435,11 +1435,14 @@ provider and `clear_api_key: true` removes it. The result is validated on top
 of the daemon's configuration (400 with the field and reason), written `0600`
 with the file listed in `.mini-orca/.gitignore`, and applied at once; other keys
 of an existing file and their comments are kept. A running analysis, agent
-run, Go scan or worktree work returns 409 naming it. A `configuration` event
+run, Go scan or worktree work returns 409 naming it. Saving resets the agent
+overrides of `…/agent-settings` and then reports `overrides_reset: true`. A `configuration` event
 announces every applied change. `…/setup/skip` records the choice in
 `.mini-orca/setup.json`. `…/setup/test-model` takes `scope` and `model` and
 returns `ok`, `model`, `latency_ms`, and for a failure `reason` (the same kinds
-as analysis stages) and `detail`; an invalid model configuration is a 400.
+as analysis stages) and `detail`; an invalid model configuration is a 400. The
+test is admitted under the configuration's own agent settings, so out-of-date
+overrides never block it.
 
 Opening or switching to a project loads its configuration file. An invalid
 file leaves the daemon's configuration in use and is reported by setup.
@@ -1468,8 +1471,10 @@ advancing the version, so old editors cannot overwrite a reset.
 
 Settings are private to the canonical checkout and survive restart. Mutation
 requires current project/configuration/version identity. Operator configuration
-changes, including removing a configured model a role selected, mark retained
-overrides stale; new work then requires an explicit reset,
+changes, including removing a configured model a role selected or any change
+of the models (a project configuration file included), mark retained overrides
+stale; new work, analysis included, then answers 409 with a message that
+names Settings → Models & agents and requires an explicit reset,
 while retained data remains readable. Malformed requests return 400, stale scope
 or version returns 409, and corrupt or failed persistence returns 500 without
 replacing retained data. Existing runs keep their admitted roles, budget, skill

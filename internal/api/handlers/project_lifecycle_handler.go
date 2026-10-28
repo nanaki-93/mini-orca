@@ -223,6 +223,8 @@ func decodeStrictJSON(w http.ResponseWriter, r *http.Request, value any, message
 	return true
 }
 
+const agentSettingsStaleMessage = "The agent settings saved in Settings → Models & agents belong to an earlier model configuration. Reset them there, or save setup, to continue."
+
 func writeProjectError(w http.ResponseWriter, action string, err error) {
 	switch {
 	case errors.Is(err, app.ErrAnalysisProgressUnavailable):
@@ -235,6 +237,8 @@ func writeProjectError(w http.ResponseWriter, action string, err error) {
 		api.WriteAppError(w, api.NotFound(action, "Import a project before using this endpoint.", err))
 	case errors.Is(err, project.ErrExcludedFile):
 		api.WriteAppError(w, api.Forbidden(action, "This file is excluded by the project context policy.", err))
+	case errors.Is(err, app.ErrAgentSettingsStale):
+		api.WriteAppError(w, api.Conflict(action, agentSettingsStaleMessage, err))
 	case errors.Is(err, project.ErrRevisionConflict):
 		api.WriteAppError(w, api.Conflict(action, "The active project changed. Refresh and try again.", err))
 	case errors.Is(err, project.ErrUnsupportedFile):

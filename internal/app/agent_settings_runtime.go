@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -16,6 +17,11 @@ import (
 )
 
 type agentSettingsKey struct{}
+
+// ErrAgentSettingsStale reports agent overrides (Settings → Models & agents)
+// saved for an earlier model configuration. New agent work waits until they
+// are reset, so an old override never silently applies to new models.
+var ErrAgentSettingsStale = errors.New("agent settings were saved for an earlier model configuration; reset them in Settings → Models & agents")
 
 type admittedAgentSettings struct {
 	root          string
@@ -90,7 +96,7 @@ func (s *Service) settingsRuntime(record agentstate.SettingsRecord, configuratio
 		return runtime, nil
 	}
 	if record.Configuration != configuration {
-		return runtime, fmt.Errorf("%w: project settings are stale; explicitly reset them before starting another run", project.ErrRevisionConflict)
+		return runtime, fmt.Errorf("%w: %w", project.ErrRevisionConflict, ErrAgentSettingsStale)
 	}
 	if err := s.validateAgentPreferences(*record.Values); err != nil {
 		return runtime, fmt.Errorf("%w: invalid project settings: %v", project.ErrRevisionConflict, err)

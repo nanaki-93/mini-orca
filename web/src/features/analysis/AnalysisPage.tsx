@@ -13,6 +13,7 @@ import { plural, timeAgo } from '@/lib/util';
 import { SECTION_LABELS, STAGES, failureGroups, fileFindings, filterFiles, formatDuration, runActive, runProgress, runResumable, stageOf, statusLabel, statusTone, type FileFilter } from '@/lib/analysis';
 import { Badge, Button, Callout, EmptyState, Input, Progress, Segmented, Skeleton, Tip, cx } from '@/components/ui';
 import { ConfigSource } from '@/features/settings/ConfigSource';
+import { AgentSettingsNotice } from '@/features/settings/AgentSettingsNotice';
 
 const FILE_PAGE = 200;
 
@@ -26,6 +27,7 @@ export function AnalysisPage() {
       <div className="page-inner stack-lg">
         <AnalysisHeader run={run} />
         <ConfigSource models={models} action />
+        <AgentSettingsNotice />
         {overview.isLoading || !project ? (
           <Skeleton lines={8} />
         ) : !run ? (

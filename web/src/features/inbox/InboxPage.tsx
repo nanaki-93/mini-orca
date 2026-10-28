@@ -13,6 +13,7 @@ import { runActive, runProgress, statusLabel, statusTone } from '@/lib/analysis'
 import { Badge, Button, Callout, EmptyState, Kbd, ListGroup, Progress, Skeleton } from '@/components/ui';
 import { SeverityBadge, isOpenFinding } from '@/components/domain';
 import { QuarantineNotice } from '@/features/settings/Quarantine';
+import { AgentSettingsNotice } from '@/features/settings/AgentSettingsNotice';
 import { TaskRow } from '@/features/tasks/TaskListPage';
 import { OpenProject } from '@/features/settings/OpenProject';
 
@@ -70,6 +71,7 @@ export function InboxPage() {
           </Callout>
         ) : null}
         <SetupNotice />
+        <AgentSettingsNotice />
         <QuarantineNotice />
         {isLoading ? (
           <Skeleton lines={6} />
