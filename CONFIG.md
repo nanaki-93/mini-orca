@@ -524,11 +524,17 @@ plan, consent and execution trust.
 
 Only the current YAML schema is supported. For retired configurations, create a
 fresh local file from `config.example.yaml`; unknown keys fail startup instead
-of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path
-(default `config.yaml` in the daemon's working folder; when that file is absent
-the daemon starts with local defaults). The `mini-orca` launcher starts the
-daemon in the project folder and passes `MINI_ORCA_CONFIG` when it finds a
-`config.yaml` there or beside the binaries. Restart the daemon after changes.
+of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path;
+a missing file then stops startup. Otherwise the daemon reads the first
+`config.yaml` of: its working folder (the project, when the `mini-orca`
+launcher starts it), `~/.config/mini-orca/`, the platform configuration
+directory's `mini-orca/` (`~/Library/Application Support/mini-orca/` on macOS)
+and the folder of the daemon binary, symlinks resolved. With none, it starts
+with local defaults (`http://localhost:1234/v1`), logs the folders it searched,
+and `GET /api/models/current` reports an empty `config_file`, which Settings →
+Models & agents shows as a warning. `make install` copies the repository's
+`config.yaml` to `~/.config/mini-orca/config.yaml` when that file does not
+exist. Restart the daemon after changes.
 
 ## Local metadata and manual cleanup
 

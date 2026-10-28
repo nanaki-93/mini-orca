@@ -50,6 +50,16 @@ interface.
   the budget per run, saved per project for new runs, with a reset to
   `config.yaml`. Roles accept catalog model IDs (`POST
   …/agent-settings/control`), and agent settings report `role_models`.
+- **Fixed:** a daemon started by `mini-orca` from an install folder without a
+  `config.yaml` silently used the local defaults (`localhost:1234`), so every
+  analysis stage failed. The daemon now also reads `~/.config/mini-orca/` and
+  the platform configuration directory (symlinked binaries resolved), `make
+  install` seeds `~/.config/mini-orca/config.yaml`, the launcher prints the file
+  it uses, and the status bar and Settings warn when there is none. A missing
+  `MINI_ORCA_CONFIG` file now stops startup.
+- **Analysis failures say why:** a failed stage names an unreachable provider, a
+  timeout, a rejected request or an unusable answer instead of one generic
+  message.
 - **Launcher:** `mini-orca` (built and installed by `just build`) opens the
   project in the current folder: it starts the daemon when none is running,
   switches it to the folder and opens the Web UI; Ctrl+C stops a daemon it

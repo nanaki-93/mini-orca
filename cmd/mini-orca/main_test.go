@@ -37,32 +37,6 @@ func TestProjectFolderDefaultsToTheCurrentFolder(t *testing.T) {
 	}
 }
 
-func TestStartedDaemonPrefersTheProjectConfigThenTheInstalledOne(t *testing.T) {
-	project, install := t.TempDir(), t.TempDir()
-	binary := filepath.Join(install, daemonBinary)
-	if got := daemonConfig(project, binary); got != "" {
-		t.Fatalf("no config: %q", got)
-	}
-	installed := filepath.Join(install, "config.yaml")
-	if err := os.WriteFile(installed, []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := daemonConfig(project, binary); got != installed {
-		t.Fatalf("installed config: %q", got)
-	}
-	local := filepath.Join(project, "config.yaml")
-	if err := os.WriteFile(local, []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := daemonConfig(project, binary); got != local {
-		t.Fatalf("project config: %q", got)
-	}
-	t.Setenv("MINI_ORCA_CONFIG", "/elsewhere/config.yaml")
-	if got := daemonConfig(project, binary); got != "" {
-		t.Fatalf("explicit MINI_ORCA_CONFIG overridden: %q", got)
-	}
-}
-
 // fakeDaemon answers like the daemon's project routes and records writes.
 type fakeDaemon struct {
 	mu      sync.Mutex
@@ -131,4 +105,18 @@ func TestStartedDaemonThatExitsEarlyIsReported(t *testing.T) {
 		t.Fatalf("early exit: %v", err)
 	}
 	daemon.stop() // An exited daemon needs no signal and must not block.
+}
+
+func TestConfigNoteNamesTheRunningDaemonsConfiguration(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"scopes":{},"config_file":"/home/me/.config/mini-orca/config.yaml"}`: "uses /home/me/.config/mini-orca/config.yaml",
+		`{"scopes":{},"config_file":""}`:                                       "built-in local model defaults",
+		`{"scopes":{}}`:                                                        "Restart the daemon",
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, body) }))
+		if got := newDaemonClient(server.URL).configNote(t.Context()); !strings.Contains(got, want) {
+			t.Errorf("%s: %q", body, got)
+		}
+		server.Close()
+	}
 }

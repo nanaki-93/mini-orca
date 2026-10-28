@@ -70,6 +70,8 @@ export interface Model {
 
 export interface ModelsCurrent {
   scopes: Record<string, Model>;
+  /** The configuration file the daemon read; empty when it uses the built-in local defaults. */
+  config_file?: string;
 }
 
 export interface ExecutionTrust extends ProjectIdentity {

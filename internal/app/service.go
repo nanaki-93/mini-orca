@@ -38,9 +38,11 @@ type EffectiveModel struct {
 	Capabilities     llm.Capabilities `json:"capabilities,omitzero"`
 }
 
-// ModelCatalog exposes the configured model metadata for each fixed scope.
+// ModelCatalog exposes the configured model metadata for each fixed scope and
+// the configuration file it came from (empty for the built-in defaults).
 type ModelCatalog struct {
-	Scopes map[string]EffectiveModel `json:"scopes"`
+	Scopes     map[string]EffectiveModel `json:"scopes"`
+	ConfigFile string                    `json:"config_file"`
 }
 
 type modelRuntime struct {
@@ -210,6 +212,9 @@ func (s *Service) EffectiveModels() []EffectiveModel {
 // model destination display and remote-confirmation decisions.
 func (s *Service) CurrentModelCatalog() ModelCatalog {
 	catalog := ModelCatalog{Scopes: make(map[string]EffectiveModel, 3)}
+	if s.config != nil {
+		catalog.ConfigFile = s.config.Source
+	}
 	for _, profile := range s.EffectiveModels() {
 		catalog.Scopes[profile.Scope] = profile
 	}

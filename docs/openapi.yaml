@@ -1610,8 +1610,9 @@ components:
         model: {$ref: '#/components/schemas/ScopedModel'}
     ModelCatalog:
       type: object
-      required: [scopes]
+      required: [scopes, config_file]
       properties:
+        config_file: {type: string, description: 'Absolute path of the configuration file the daemon read; empty when no config.yaml was found and the built-in local defaults apply.'}
         scopes:
           type: object
           required: [analyze, bug, code]

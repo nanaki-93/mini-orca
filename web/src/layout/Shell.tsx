@@ -4,7 +4,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
-  Bot, BookOpen, ChevronDown, CircleAlert, Code2, FolderOpen, GitBranch, GitMerge, Inbox, Keyboard, ListTodo, PanelLeft, Plus, Search, Settings, ShieldCheck, ShieldOff, Sparkles,
+  AlertTriangle, Bot, BookOpen, ChevronDown, CircleAlert, Code2, FolderOpen, GitBranch, GitMerge, Inbox, Keyboard, ListTodo, PanelLeft, Plus, Search, Settings, ShieldCheck, ShieldOff, Sparkles,
 } from 'lucide-react';
 import { useRoute, navigate } from '@/lib/router';
 import { useFindings, useGitWorkspace, useMainProject, useModels, useProject, useSession, useStatus, useTasks, useTrust } from '@/api/hooks';
@@ -250,9 +250,9 @@ function StatusBar({ connection, running }: { connection: Connection; running: n
           {trust?.trusted ? 'Checks allowed' : 'Checks need trust'}
         </button>
       ) : null}
-      <button type="button" className="status-item status-link" onClick={() => navigate('/settings/models')}>
-        <Sparkles size={13} aria-hidden />
-        {remote ? `${remote} remote model${remote === 1 ? '' : 's'}` : 'Local models'}
+      <button type="button" className="status-item status-link" onClick={() => navigate('/settings/models')} title={models?.config_file ? `Configuration: ${models.config_file}` : undefined}>
+        {models?.config_file === '' ? <AlertTriangle size={13} className="tone-warning" aria-hidden /> : <Sparkles size={13} aria-hidden />}
+        {models?.config_file === '' ? 'No config.yaml · default models' : remote ? `${remote} remote model${remote === 1 ? '' : 's'}` : 'Local models'}
       </button>
       {project ? (
         <span className="status-item" title={project.path}>

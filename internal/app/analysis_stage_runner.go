@@ -304,7 +304,7 @@ func analysisStageModelFailure(ctx context.Context, result *analysisFileStageRes
 		return nil
 	}
 	result.Progress.Status = AnalysisStageFailed
-	result.Progress.Reason = "The model request or response failed. Other analysis results remain available."
+	result.Progress.Reason = modelFailureReason(err)
 	var failure project.PerformanceReviewFailure
 	if errors.As(err, &failure) && failure.Valid() {
 		result.Progress.Reason = failure.Error()

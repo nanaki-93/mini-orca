@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
 const (
@@ -60,19 +61,21 @@ type ownedDaemon struct {
 }
 
 // startDaemon runs the daemon beside this command (or on PATH) in the project
-// folder, so the folder is its project, with its logs in this terminal.
-func startDaemon(ctx context.Context, project string) (*ownedDaemon, error) {
+// folder, so the folder is its project, with its logs in this terminal. It
+// names the configuration the daemon reads, or warns that there is none.
+func startDaemon(ctx context.Context, project string, out io.Writer) (*ownedDaemon, error) {
 	binary, err := findDaemon()
 	if err != nil {
 		return nil, err
 	}
+	if path := config.Find(project, binary); path != "" {
+		fmt.Fprintf(out, "Configuration: %s\n", path)
+	} else {
+		fmt.Fprintf(out, "No config.yaml found, so models use the built-in local defaults (%s).\nPut your configuration in one of:\n  %s\n", config.DefaultProviderAPIBaseURL, strings.Join(config.Candidates(project, binary), "\n  "))
+	}
 	cmd := exec.Command(binary)
 	cmd.Dir = project
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
-	if config := daemonConfig(project, binary); config != "" {
-		cmd.Env = append(cmd.Env, "MINI_ORCA_CONFIG="+config)
-	}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", binary, err)
 	}
@@ -114,20 +117,6 @@ func findDaemon() (string, error) {
 		return path, nil
 	}
 	return "", fmt.Errorf("%s was not found beside mini-orca or on PATH; run `just build` in the Mini-Orca repository", daemonBinary)
-}
-
-// daemonConfig picks the configuration a started daemon loads: MINI_ORCA_CONFIG
-// when set, else the project's config.yaml, else the one beside the daemon.
-func daemonConfig(project, binary string) string {
-	if os.Getenv("MINI_ORCA_CONFIG") != "" {
-		return ""
-	}
-	for _, candidate := range []string{filepath.Join(project, "config.yaml"), filepath.Join(filepath.Dir(binary), "config.yaml")} {
-		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-			return candidate
-		}
-	}
-	return ""
 }
 
 type daemonClient struct {
@@ -191,6 +180,21 @@ func (c *daemonClient) openProject(ctx context.Context, folder string) error {
 		return fmt.Errorf("open %s in the daemon: %w", folder, err)
 	}
 	return nil
+}
+
+// configNote says which configuration a running daemon uses; it keeps the one
+// it started with until it is restarted.
+func (c *daemonClient) configNote(ctx context.Context) string {
+	var catalog struct {
+		ConfigFile *string `json:"config_file"`
+	}
+	if err := c.call(ctx, http.MethodGet, "/api/models/current", nil, &catalog); err != nil || catalog.ConfigFile == nil {
+		return "Restart the daemon to load another configuration."
+	}
+	if *catalog.ConfigFile == "" {
+		return "The running daemon found no config.yaml and uses the built-in local model defaults; stop it and run mini-orca again after adding one."
+	}
+	return "The running daemon uses " + *catalog.ConfigFile + "; restart it to load another configuration."
 }
 
 func sameFolder(a, b string) bool {

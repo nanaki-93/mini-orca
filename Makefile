@@ -59,6 +59,13 @@ install: build ## Build and copy mini-orca and mini-orca-daemon into ~/DEV/lab/m
 		cp -f $(BUILD_DIR)/$(APP_NAME) $(BUILD_DIR)/$(APP_NAME)-daemon "$$HOME/DEV/programs/mini-orca/"; \
 		echo "$(COLOR_GREEN)Installed $(APP_NAME) and $(APP_NAME)-daemon into $$HOME/DEV/programs/mini-orca$(COLOR_RESET)"; \
 	fi
+	@user_config="$$HOME/.config/mini-orca/config.yaml"; \
+	if [ -f config.yaml ] && [ ! -e "$$user_config" ]; then \
+		mkdir -p "$$(dirname "$$user_config")" && cp config.yaml "$$user_config" && chmod 600 "$$user_config"; \
+		echo "$(COLOR_GREEN)Copied config.yaml to $$user_config$(COLOR_RESET)"; \
+	elif [ ! -e "$$user_config" ]; then \
+		echo "$(COLOR_YELLOW)No config.yaml: copy config.example.yaml to $$user_config and fill the model scopes$(COLOR_RESET)"; \
+	fi
 	@echo "$(COLOR_GREEN)Run mini-orca in a project folder to open it in the Web UI$(COLOR_RESET)"
 
 build-linux: build-agents-linux ## Build all Linux amd64 release command binaries

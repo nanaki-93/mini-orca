@@ -70,7 +70,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return fmt.Errorf("no daemon answers at %s; start it there or leave --url unset", opts.url)
 		}
 		fmt.Fprintf(out, "Starting the Mini-Orca daemon for %s…\n", opts.project)
-		if daemon, err = startDaemon(ctx, opts.project); err != nil {
+		if daemon, err = startDaemon(ctx, opts.project, out); err != nil {
 			return err
 		}
 		defer daemon.stop()
@@ -89,6 +89,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	if daemon == nil {
 		fmt.Fprintf(out, "Opened %s in the running daemon: %s\n", opts.project, page)
+		fmt.Fprintln(out, client.configNote(ctx))
 		return nil
 	}
 	fmt.Fprintf(out, "Mini-Orca is running for %s at %s — press Ctrl+C to stop it.\n", opts.project, page)

@@ -138,3 +138,11 @@ test('agent roles can run with any listed model and a project budget', async ({ 
   await expect(review).toHaveValue('analyze');
   expect(daemon.mutations('/agent-settings/control')[1].body).toMatchObject({ action: 'reset', version: 1 });
 });
+
+test('a daemon without config.yaml warns that it uses the default models', async ({ page, daemon }) => {
+  daemon.serve('/api/models/current', () => ({ scopes: {}, config_file: '' }));
+  await page.goto('/#/');
+  await page.getByRole('button', { name: 'No config.yaml · default models' }).click();
+  await expect(page).toHaveURL(/#\/settings\/models/);
+  await expect(page.getByText('No config.yaml was found')).toBeVisible();
+});

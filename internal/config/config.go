@@ -2,10 +2,10 @@ package config
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -21,6 +21,9 @@ type Config struct {
 	Timeouts     TimeoutConfig      `yaml:"timeouts"`
 	Logging      LoggingConfig      `yaml:"logging"`
 	ProjectPath  string             `yaml:"project_path"`
+	// Source is the file the configuration was read from; empty for the
+	// built-in defaults.
+	Source string `yaml:"-"`
 }
 
 // LoggingConfig holds configuration for the logger.
@@ -119,24 +122,29 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// LoadConfig reads the configured YAML file or returns explicit local defaults
-// when no configuration file exists.
+// LoadConfig reads the first configuration file Find locates for the daemon's
+// working directory and executable, or returns the built-in local defaults
+// when there is none. Source records which file was read.
 func LoadConfig() (*Config, error) {
-	configPath := "config.yaml"
-	if path := os.Getenv("MINI_ORCA_CONFIG"); path != "" {
-		configPath = path
-	}
-
-	cfg, err := LoadFromYAML(configPath)
+	workDir, err := os.Getwd()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			logging.Info("Config file not found, using local defaults", "path", configPath)
-			return Default(), nil
-		}
+		workDir = "."
+	}
+	executable, _ := os.Executable()
+	path := Find(workDir, executable)
+	if path == "" {
+		logging.Warn("No config.yaml found; using built-in local model defaults", "searched", Candidates(workDir, executable))
+		return Default(), nil
+	}
+	cfg, err := LoadFromYAML(path)
+	if err != nil {
 		return nil, err
 	}
-
-	logging.Info("Loaded config", "path", configPath)
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	cfg.Source = path
+	logging.Info("Loaded config", "path", path)
 	return cfg, nil
 }
 

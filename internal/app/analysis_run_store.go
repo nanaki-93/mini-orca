@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -211,14 +212,14 @@ func analysisMetadataPath(value string) bool {
 }
 
 func analysisMetadataReason(value string) bool {
-	if project.PerformanceReviewFailure(value).Valid() {
+	if project.PerformanceReviewFailure(value).Valid() || slices.Contains(modelFailureReasons, value) {
 		return true
 	}
 	switch value {
 	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, analysisStalePathExclusion, "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
-		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
+		"The report contains incomplete evidence; review its details.",
 		"Analysis canceled by the user.", "Analysis paused by the user.", "The batch limit was reached; resume to continue pending files.",
 		"The stage exhausted its total attempt allowance.", "The dispatch allowance ended; preview and resume the remaining work.",
 		"The file dispatch allowance ended; preview and resume the remaining work.",

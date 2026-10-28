@@ -77,9 +77,13 @@ in a project folder, or pass the folder as its argument: it starts the daemon
 beside it when none is running, opens that folder as the project and opens the
 Web UI in your browser. The daemon it started runs until you press Ctrl+C, with
 its log in that terminal. When a daemon is already running, `mini-orca` switches
-it to the folder and exits. A started daemon reads `MINI_ORCA_CONFIG`, else the
-project's `config.yaml`, else the `config.yaml` beside the binaries, else the
-local defaults. `--no-open` skips the browser and `--url` (or `MINI_ORCA_URL`)
+it to the folder and exits (it keeps the configuration it started with). The
+daemon reads `MINI_ORCA_CONFIG`, else the first `config.yaml` it finds in the
+project folder, `~/.config/mini-orca/`, your platform configuration directory's
+`mini-orca/` or beside the binaries; `just build` copies the repository's
+`config.yaml` to `~/.config/mini-orca/` when none is there yet. The launcher
+prints the file it uses; without one, models fall back to local defaults at
+`http://localhost:1234/v1` and Settings → Models & agents warns. `--no-open` skips the browser and `--url` (or `MINI_ORCA_URL`)
 targets a daemon at another address. Without the launcher, `go run ./cmd/daemon`
 serves the folder it runs in at `http://127.0.0.1:9090/ui`.
 

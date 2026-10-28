@@ -68,7 +68,7 @@ untrusted networks.
 | GET | `/status` | Daemon status and `shared_proposals` workflow identifier. |
 | GET | `/ui` | Local Web UI (lite IDE): dashboard, explorer, guarded review, agent workflow, issues, docs, checks and Git merge review. |
 | GET | `/ui/assets/{path}` | Embedded Web UI stylesheet and ES modules (`.css`/`.js` only); same strict CSP, no directory listing. |
-| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog. |
+| GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog and `config_file`, the configuration file read (empty for built-in defaults). |
 | GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |

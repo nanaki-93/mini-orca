@@ -231,7 +231,7 @@ func (s *Service) recordAnalysisFeaturesLocked(ctx context.Context, identity Ana
 	case errors.Is(err, errFeatureHistoryFull):
 		progress.Status, progress.Reason = AnalysisStageFailed, analysisFeatureHistoryFullReason
 	case err != nil:
-		progress.Status, progress.Reason = AnalysisStageFailed, "The model request or response failed. Other analysis results remain available."
+		progress.Status, progress.Reason = AnalysisStageFailed, modelFailureReason(err)
 	default:
 		// The library accumulates across generations; the run counts only ideas it added.
 		count := report.LastGeneration.AddedCount
