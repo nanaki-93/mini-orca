@@ -64,9 +64,10 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 	defer s.jobLifecycleMu.Unlock()
 	// Reading a workspace restores progress without starting requests. A retained
 	// persistence fault is visible in the run's status/reason; deterministic facts
-	// remain available while the user recovers through explicit run controls.
+	// remain available while the user recovers through explicit run controls,
+	// or upgrades to read progress a newer Mini-Orca saved.
 	run, runErr := s.currentAnalysisRunLocked(context.Background())
-	if runErr != nil && !errors.Is(runErr, errAnalysisRunPersistence) {
+	if runErr != nil && !errors.Is(runErr, errAnalysisRunPersistence) && !errors.Is(runErr, ErrNewerAnalysisRun) {
 		return nil, runErr
 	}
 	analysis, index, input, err := s.workspaceState()

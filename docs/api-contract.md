@@ -714,13 +714,20 @@ next run starts a new journal. Agent history and waiting reviews it held are
 no longer available. An unreadable task file is set aside the same way
 (`<id>.quarantined-<UTC time>.json`) by the task list; listings that decide on
 the whole history, such as merging a worktree, still fail and name the file.
-Records written by a newer Mini-Orca (a higher journal `version` or task
-`schema_version`) are never moved: the agent journal refuses work with an
-error naming the file and asking to upgrade, and newer task files are skipped.
+Unreadable saved analysis progress (`.mini-orca/analysis/run.json`, for example
+from an older Mini-Orca) is set aside to `run.quarantined-<UTC time>.json`
+beside it when it is next read, so the overview loads and a new analysis can
+be previewed and started. The moves of task files and analysis progress are
+recorded in `.mini-orca/quarantine.json`; agent journals keep their own record.
+Records written by a newer Mini-Orca (a higher journal `version`, task
+`schema_version` or analysis progress `schema_version`) are never moved: the
+agent journal refuses work with an error naming the file and asking to
+upgrade, newer task files are skipped, and the overview loads without newer
+analysis progress while an analysis preview returns `409` asking to upgrade.
 The change recovery journal (`.mini-orca/changes/last-mutation.json`) is never
 set aside, since it may describe an unfinished Apply; its errors name the file
 and the remedy. `GET /api/projects/current/quarantine` (with the project
-guards) returns `files` (set aside: `kind` `agent_journal` or `task`, `file`,
+guards) returns `files` (set aside: `kind` `agent_journal`, `task` or `analysis_run`, `file`,
 `quarantined_as`, `reason`, `remedy`, `at`) and `skipped` (newer files with the
 same fields but no move).
 

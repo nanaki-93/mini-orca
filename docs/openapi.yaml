@@ -2505,7 +2505,7 @@ components:
       type: object
       required: [kind, file, reason, remedy]
       properties:
-        kind: {type: string, enum: [agent_journal, task]}
+        kind: {type: string, enum: [agent_journal, task, analysis_run]}
         file: {type: string, description: The record, relative to the checkout.}
         quarantined_as: {type: string, description: Where its bytes were moved; absent for skipped newer records.}
         reason: {type: string}

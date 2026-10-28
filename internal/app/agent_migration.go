@@ -6,6 +6,7 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 // Compatibility decisions follow strict JSON validation. A duplicate header
@@ -53,6 +54,9 @@ func decodeCompatibleAnalysisHistory(data []byte) (*AnalysisRun, error) {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, errAnalysisRunCorrupt
 	}
+	if newerSchema(header.SchemaVersion, AnalysisRunSchemaVersion) {
+		return nil, ErrNewerAnalysisRun
+	}
 	if header.SchemaVersion == AnalysisRunSchemaVersion && (header.Plan.RetiredStage == "semantic" || header.Plan.RetiredStage == "performance") {
 		return nil, nil
 	}
@@ -64,4 +68,12 @@ func decodeCompatibleAnalysisHistory(data []byte) (*AnalysisRun, error) {
 	// aggregate before projecting today's eligible coverage; retain provenance.
 	normalizeAnalysisRunEligibility(&run)
 	return &run, nil
+}
+
+// newerSchema reports whether a stored decimal schema version is above the
+// current one; anything else is for the caller's own validation.
+func newerSchema(stored, current string) bool {
+	version, err := strconv.Atoi(stored)
+	supported, currentErr := strconv.Atoi(current)
+	return err == nil && currentErr == nil && version > supported
 }

@@ -232,6 +232,8 @@ func writeProjectError(w http.ResponseWriter, action string, err error) {
 	switch {
 	case errors.Is(err, app.ErrAnalysisProgressUnavailable):
 		api.WriteAppError(w, api.Internal(action, "Analysis progress could not be saved. Read the retained overview, then resume or cancel explicitly.", err))
+	case errors.Is(err, app.ErrNewerAnalysisRun):
+		api.WriteAppError(w, api.Conflict(action, "A newer Mini-Orca saved this project's analysis progress. Upgrade Mini-Orca to continue it, or move .mini-orca/analysis/run.json away.", err))
 	case errors.Is(err, app.ErrAnalysisRunBusy):
 		api.WriteAppError(w, api.Conflict(action, "An analysis run is already active or paused. Continue or cancel it before starting a new analysis.", err))
 	case errors.Is(err, project.ErrNoActiveProject):

@@ -51,6 +51,11 @@ interface.
   started.
 - **Fixed:** a daemon with no `config.yaml` failed to start instead of using
   local defaults.
+- **Fixed:** unreadable saved analysis progress (for example from an older
+  Mini-Orca) made the overview and every analysis preview fail with 400
+  "Review the request and try again". It is now set aside like other
+  unreadable records, and error messages in the Web UI include the daemon's
+  detail.
 - **Fixed:** a Go scan canceled while its workspace was being prepared is
   reported as canceled, not failed.
 - Model capabilities report completion, JSON Schema, tools and streaming only.

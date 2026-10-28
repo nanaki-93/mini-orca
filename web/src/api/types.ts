@@ -182,7 +182,7 @@ export interface UsageReport extends ProjectIdentity {
 
 /** A record Mini-Orca set aside because it was unreadable, or skipped because a newer version wrote it. */
 export interface QuarantinedFile {
-  kind: 'agent_journal' | 'task' | string;
+  kind: 'agent_journal' | 'task' | 'analysis_run' | string;
   file: string;
   quarantined_as?: string;
   reason: string;

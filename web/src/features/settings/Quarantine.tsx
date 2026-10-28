@@ -8,7 +8,7 @@ import { navigate } from '@/lib/router';
 import { plural, timeAgo } from '@/lib/util';
 import { Button, Callout } from '@/components/ui';
 
-const KIND_LABELS: Record<string, string> = { agent_journal: 'Agent journal', task: 'Task' };
+const KIND_LABELS: Record<string, string> = { agent_journal: 'Agent journal', task: 'Task', analysis_run: 'Analysis progress' };
 
 export function quarantineCount(report: QuarantineReport | undefined): number {
   return (report?.files.length ?? 0) + (report?.skipped.length ?? 0);

@@ -16,18 +16,21 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
-// Unreadable records must not block a checkout. An unreadable agent journal
-// or task file is set aside: its bytes move next to it under a quarantined
+// Unreadable records must not block a checkout. An unreadable agent journal,
+// task file or saved analysis progress is set aside: its bytes move next to it under a quarantined
 // name, the move is recorded, and work continues without it. Records written
 // by a newer Mini-Orca are never moved; they are skipped and reported with
 // the remedy. The change recovery journal is never set aside, because it may
 // describe a half-finished Apply; its errors name the file and the remedy.
 
-const maxTaskQuarantines = 32
+const (
+	maxSetAsideRecords = 32
+	setAsideLogPath    = ".mini-orca/quarantine.json"
+)
 
 // QuarantinedFile is a record that was set aside or skipped.
 type QuarantinedFile struct {
-	Kind          string    `json:"kind"` // agent_journal or task
+	Kind          string    `json:"kind"` // agent_journal, task or analysis_run
 	File          string    `json:"file"`
 	QuarantinedAs string    `json:"quarantined_as,omitempty"`
 	Reason        string    `json:"reason"`
@@ -92,36 +95,58 @@ func quarantineTask(root, id string, problem *changeFileError) error {
 	if err != nil {
 		return err
 	}
+	return setAside(root, "task", problem.path, from, func(stamp string) (string, error) {
+		return changeMetadataPath(root, id+".quarantined-"+stamp+".json")
+	}, problem.cause.Error())
+}
+
+// quarantineAnalysisRun sets unreadable saved analysis progress aside, so the
+// overview and a new analysis no longer depend on it.
+func quarantineAnalysisRun(root string) error {
+	from, err := storage.MetadataPath(root, analysisRunRelativePath)
+	if err != nil {
+		return err
+	}
+	return setAside(root, "analysis_run", analysisRunRelativePath, from, func(stamp string) (string, error) {
+		return storage.MetadataPath(root, ".mini-orca", "analysis", "run.quarantined-"+stamp+".json")
+	}, errAnalysisRunCorrupt.Error())
+}
+
+// setAside moves an unreadable record from its path to the one target names
+// for the move's time, then appends the move to the checkout's log.
+func setAside(root, kind, file, from string, target func(stamp string) (string, error), reason string) error {
 	now := time.Now().UTC()
-	to, err := changeMetadataPath(root, id+".quarantined-"+now.Format("20060102T150405.000000000Z")+".json")
+	to, err := target(now.Format("20060102T150405.000000000Z"))
 	if err != nil {
 		return err
 	}
 	if err := os.Rename(from, to); err != nil {
-		return fmt.Errorf("set aside %s: %w", problem.path, err)
+		return fmt.Errorf("set aside %s: %w", file, err)
 	}
-	logging.Error("Set aside an unreadable task file", "file", problem.path, "reason", problem.cause)
-	records, err := taskQuarantines(root)
+	logging.Error("Set aside an unreadable record", "kind", kind, "file", file, "quarantined_as", relativeMetadata(root, to), "reason", reason)
+	records, err := setAsideRecords(root)
 	if err != nil {
 		records = nil // An unreadable log of earlier moves does not block this one.
 	}
-	records = append(records, QuarantinedFile{Kind: "task", File: problem.path, QuarantinedAs: relativeMetadata(root, to), Reason: problem.cause.Error(), Remedy: remedySetAside, At: now})
-	if len(records) > maxTaskQuarantines {
-		records = slices.Clone(records[len(records)-maxTaskQuarantines:])
+	records = append(records, QuarantinedFile{Kind: kind, File: file, QuarantinedAs: relativeMetadata(root, to), Reason: reason, Remedy: remedySetAside, At: now})
+	if len(records) > maxSetAsideRecords {
+		records = slices.Clone(records[len(records)-maxSetAsideRecords:])
 	}
 	data, err := json.Marshal(records)
 	if err != nil {
 		return err
 	}
-	path, err := changeMetadataPath(root, "quarantine.json")
+	path, err := storage.MetadataPath(root, setAsideLogPath)
 	if err != nil {
 		return err
 	}
 	return storage.WriteFileAuthorized(path, data, 0600, nil)
 }
 
-func taskQuarantines(root string) ([]QuarantinedFile, error) {
-	path, err := changeMetadataPath(root, "quarantine.json")
+// setAsideRecords lists the task files and analysis progress set aside in
+// the checkout, oldest first. Agent journals keep their own log.
+func setAsideRecords(root string) ([]QuarantinedFile, error) {
+	path, err := storage.MetadataPath(root, setAsideLogPath)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +158,8 @@ func taskQuarantines(root string) ([]QuarantinedFile, error) {
 		return nil, err
 	}
 	var records []QuarantinedFile
-	if err := json.Unmarshal(data, &records); err != nil || len(records) > maxTaskQuarantines {
-		return nil, fmt.Errorf("the record of set-aside task files is unreadable")
+	if err := json.Unmarshal(data, &records); err != nil || len(records) > maxSetAsideRecords {
+		return nil, fmt.Errorf("the record of set-aside files is unreadable")
 	}
 	return records, nil
 }
@@ -156,12 +181,15 @@ func (s *Service) Quarantine(ctx context.Context) (*QuarantineReport, error) {
 	for _, record := range journals {
 		report.Files = append(report.Files, QuarantinedFile{Kind: "agent_journal", File: record.File, QuarantinedAs: record.QuarantinedAs, Reason: record.Reason, Remedy: remedySetAside, At: record.At})
 	}
-	tasks, err := taskQuarantines(root)
+	records, err := setAsideRecords(root)
 	if err != nil {
 		return nil, err
 	}
-	report.Files = append(report.Files, tasks...)
+	report.Files = append(report.Files, records...)
 	slices.SortFunc(report.Files, func(a, b QuarantinedFile) int { return b.At.Compare(a.At) })
+	if _, err := loadAnalysisRun(root); errors.Is(err, ErrNewerAnalysisRun) {
+		report.Skipped = append(report.Skipped, QuarantinedFile{Kind: "analysis_run", File: analysisRunRelativePath, Reason: "written by a newer Mini-Orca", Remedy: remedyUpgrade})
+	}
 	if _, err := agentstate.Open(root); errors.Is(err, agentstate.ErrNewerJournal) {
 		var problem *agentstate.JournalError
 		errors.As(err, &problem)

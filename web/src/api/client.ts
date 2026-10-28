@@ -42,7 +42,13 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** The message to show for a failure; a daemon error adds its detail, so a
+ * generic "review the request" still says what failed. */
 export function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const detail = (err.data as { detail?: unknown } | null)?.detail;
+    if (typeof detail === 'string' && detail && !err.message.includes(detail)) return `${err.message} (${detail})`;
+  }
   if (err instanceof Error) return err.message;
   return String(err);
 }

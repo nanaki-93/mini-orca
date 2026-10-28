@@ -85,8 +85,8 @@ every guard when the action arrives.
 
 - **Open a project.** Restores saved data for a known path, otherwise imports
   and indexes it. No model request is made.
-- **Set-aside files.** When the daemon set aside an unreadable agent journal
-  or task file, or skipped one a newer Mini-Orca wrote, the Inbox says so and
+- **Set-aside files.** When the daemon set aside an unreadable agent journal,
+  task file or saved analysis progress, or skipped one a newer Mini-Orca wrote, the Inbox says so and
   Settings → Project lists each file with where its bytes went and the remedy.
 - **Trust.** Granting lists the commands checks will run; revoking stops checks,
   scans and agent verification. Trust is bound to the canonical project path.

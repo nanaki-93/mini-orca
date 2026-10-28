@@ -8,7 +8,7 @@ import { changeOverlaps, parseCommits, workflowBlocker } from './workflow';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
 import { QueryClient } from '@tanstack/react-query';
 import { costCaveat, costLabel, formatTokens, usageLabel } from './usage';
-import { createApi, documentWriteToken, query, withWorktree } from '@/api/client';
+import { ApiError, createApi, documentWriteToken, errorMessage, query, withWorktree } from '@/api/client';
 
 describe('fuzzy', () => {
   it('prefers basename and contiguous hits', () => {
@@ -96,6 +96,12 @@ describe('client', () => {
     await expect(api.post('/x', { a: 1 })).rejects.toMatchObject({ message: 'Review every file first.', status: 409 });
     expect((calls[0].headers as Record<string, string>)['X-Mini-Orca-Web-UI']).toBe('1');
     expect(calls[0].body).toBe('{"a":1}');
+  });
+
+  it('adds the daemon detail to a failure message once', () => {
+    expect(errorMessage(new ApiError('Review the request and try again.', 400, { detail: 'saved analysis progress is unreadable' }))).toBe('Review the request and try again. (saved analysis progress is unreadable)');
+    expect(errorMessage(new ApiError('Disk full', 500, { detail: 'Disk full' }))).toBe('Disk full');
+    expect(errorMessage(new Error('plain'))).toBe('plain');
   });
 });
 

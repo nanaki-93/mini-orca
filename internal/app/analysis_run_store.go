@@ -18,7 +18,11 @@ import (
 const analysisRunRelativePath = ".mini-orca/analysis/run.json"
 const maxAnalysisRunMetadataBytes = 64 * 1024 * 1024
 
-var errAnalysisRunCorrupt = errors.New("saved analysis progress is invalid; preserved for explicit recovery")
+var errAnalysisRunCorrupt = errors.New("saved analysis progress is unreadable")
+
+// ErrNewerAnalysisRun identifies saved analysis progress written by a newer
+// Mini-Orca. It is never set aside: upgrading reads it again.
+var ErrNewerAnalysisRun = errors.New("saved analysis progress was written by a newer Mini-Orca; upgrade Mini-Orca to use it, or move it away")
 
 func cloneAnalysisPreview(plan AnalysisRunPreview) AnalysisRunPreview {
 	copy := plan
@@ -125,6 +129,13 @@ func (s *Service) restoreAnalysisRunLocked() error {
 		return c.fault
 	}
 	run, err := loadAnalysisRun(root)
+	if errors.Is(err, errAnalysisRunCorrupt) {
+		// Unreadable progress must not block the overview or a new analysis.
+		if setAsideErr := quarantineAnalysisRun(root); setAsideErr != nil {
+			return errors.Join(err, setAsideErr)
+		}
+		run, err = nil, nil
+	}
 	if err != nil {
 		return err
 	}
