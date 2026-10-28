@@ -146,3 +146,26 @@ test('a daemon without config.yaml warns that it uses the default models', async
   await expect(page).toHaveURL(/#\/settings\/models/);
   await expect(page.getByText('No config.yaml was found')).toBeVisible();
 });
+
+test('stale and failed tasks can be deleted from the list and the task page', async ({ page, daemon }) => {
+  daemon.addTask({ project_id: 'p1', project_revision: 'r41', id: 'chg-8', kind: 'fix', title: 'Trim the import log', revision: 3, hash: 'h8', state: 'draft', freshness: 'stale', updated_at: '2026-10-20T10:00:00Z', paths: ['internal/project/import.go'] });
+  await page.goto('/#/tasks');
+  const attention = page.getByRole('region', { name: 'Failed or stale' });
+  await expect(attention.getByRole('listitem')).toHaveCount(2);
+  await attention.getByRole('button', { name: 'Delete all 2' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('“Cache the parsed index”, “Trim the import log”');
+  await dialog.getByRole('button', { name: 'Delete 2 tasks' }).click();
+  await expect(page.getByText('2 tasks deleted.')).toBeVisible();
+  await expect(attention).toHaveCount(0);
+  expect(daemon.mutations('/delete').map(request => request.body)).toEqual([
+    { project_id: 'p1', project_revision: 'r42', revision: 2, hash: 'x' },
+    { project_id: 'p1', project_revision: 'r41', revision: 3, hash: 'h8' },
+  ]);
+
+  await page.goto('/#/tasks/chg-1');
+  await page.getByRole('button', { name: 'Delete task' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete task' }).click();
+  await expect(page).toHaveURL(/#\/tasks$/);
+  await expect(page.getByText('Reject nested asset paths')).toHaveCount(0);
+});

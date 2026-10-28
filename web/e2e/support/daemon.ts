@@ -4,7 +4,7 @@
 // mutation must carry the Web UI header and the current proposal identity.
 
 import { test as base, expect, type Page, type Route } from '@playwright/test';
-import type { ChangeSession, DaemonEvent } from '../../src/api/types';
+import type { ChangeHistoryEntry, ChangeSession, DaemonEvent } from '../../src/api/types';
 import * as data from './fixtures';
 
 export interface RecordedRequest {
@@ -67,9 +67,28 @@ export class FakeDaemon {
     }, WRITE_TOKEN);
   }
 
+  private readonly deleted = new Set<string>();
+  private readonly extraTasks: ChangeHistoryEntry[] = [];
+
+  /** Adds a listed task, such as a stale one, for this test. */
+  addTask(entry: ChangeHistoryEntry): void {
+    this.extraTasks.push(entry);
+  }
+
   private tasks() {
     const own = [...this.sessions.values()].map(session => data.historyEntry(session));
-    return [...own, ...data.otherTasks];
+    return [...own, ...data.otherTasks, ...this.extraTasks].filter(task => !this.deleted.has(task.id));
+  }
+
+  /** Deletes a task like the daemon: the body names the version shown; running tasks are kept. */
+  private deleteTask(id: string, body: Record<string, unknown>) {
+    const task = this.tasks().find(entry => entry.id === decodeURIComponent(id));
+    if (!task) throw new Error('This task no longer exists; refresh the task list.');
+    if (body.revision !== task.revision || body.hash !== task.hash) throw new Error('The task changed since it was loaded.');
+    if (task.workflow_status === 'running') throw new Error('This task cannot be deleted yet: stop its agents before deleting it.');
+    this.deleted.add(task.id);
+    this.sessions.delete(task.id);
+    return { deleted: task.id };
   }
 
   private readonly gets: [RegExp, () => unknown][] = [
@@ -100,6 +119,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/comments\/delete$/, (body, m) => this.update(m[1], body, s => ({ ...s, comments: (s.comments ?? []).filter(c => c.id !== body.id || c.sent_revision) }))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/messages$/, (body, m) => this.update(m[1], body, s => this.revise(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/delete$/, (body, m) => this.deleteTask(m[1], body)],
     [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
     [/^\/api\/projects\/current\/analysis\/preview$/, body => ({ identity: { ...body, queue_id: 'queue-2' }, preview_id: 'preview-1', providers: [{ id: 'p-bug', model: { model: 'local-bug-model', provider_origin: 'http://localhost:1234' } }], files: [{}, {}, {}, {}], max_model_requests: 12, security_review_intent_required: false })],
     [/^\/api\/projects\/current\/analysis\/run$/, () => this.setRun('running')],

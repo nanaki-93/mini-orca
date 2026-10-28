@@ -383,6 +383,19 @@ paths:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/delete:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Delete a task's history. The body names the task version shown (project_id, revision, hash; project_revision is not checked, so stale tasks can be deleted). A task with running agents, or whose latest Apply can still be undone, returns 409.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
+      responses:
+        '200': {description: The deleted task, content: {application/json: {schema: {type: object, required: [deleted], properties: {deleted: {type: string}}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/commit:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}

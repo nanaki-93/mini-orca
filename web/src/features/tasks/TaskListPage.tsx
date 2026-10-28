@@ -1,10 +1,11 @@
 // All tasks, grouped by what they need, with keyboard navigation (j/k, Enter).
 
 import { useMemo, useState } from 'react';
-import { GitBranch, ListTodo, Plus, Search } from 'lucide-react';
+import { GitBranch, ListTodo, Plus, Search, Trash2 } from 'lucide-react';
 import { useTasks } from '@/api/hooks';
 import type { TaskEntry } from '@/api/types';
 import { openNewTask } from '@/app/store';
+import { useActions, useBusy, type DeletableTask } from '@/app/actions';
 import { usePageKeys } from '@/app/shortcuts';
 import { navigate, setParam, useRoute } from '@/lib/router';
 import { rankItems } from '@/lib/fuzzy';
@@ -29,6 +30,8 @@ export function TaskListPage() {
   const filter = (route.params.get('filter') as Filter) || 'active';
   const [q, setQ] = useState('');
   const [cursor, setCursor] = useState(0);
+  const actions = useActions();
+  const busy = useBusy();
 
   const visible = useMemo(() => {
     const byFilter = tasks.filter(task => {
@@ -52,6 +55,7 @@ export function TaskListPage() {
     if (key === 'j' || key === 'ArrowDown') setCursor(c => Math.min(c + 1, flat.length - 1));
     else if (key === 'k' || key === 'ArrowUp') setCursor(c => Math.max(c - 1, 0));
     else if (key === 'Enter' && flat[cursor]) openTask(flat[cursor]);
+    else if ((key === 'Delete' || key === 'Backspace') && flat[cursor] && taskStatus(flat[cursor]).status !== 'running') void actions.deleteTasks([deletable(flat[cursor])]);
     else return false;
     return true;
   });
@@ -91,7 +95,16 @@ export function TaskListPage() {
       ) : (
         <div className="list">
           {grouped.map(group => (
-            <ListGroup key={group.id} title={group.label} count={group.items.length}>
+            <ListGroup
+              key={group.id}
+              title={group.label}
+              count={group.items.length}
+              action={group.id === 'attention' || group.id === 'draft' ? (
+                <Button size="sm" variant="ghost" icon={Trash2} onClick={() => void actions.deleteTasks(group.items.map(v => deletable(v.item)))} disabled={Boolean(busy)}>
+                  Delete {group.items.length === 1 ? 'it' : `all ${group.items.length}`}
+                </Button>
+              ) : undefined}
+            >
               {group.items.map(({ item, positions }) => {
                 const index = flat.indexOf(item);
                 return <TaskRow key={item.id} task={item} positions={positions} active={index === cursor} onHover={() => setCursor(index)} />;
@@ -102,6 +115,10 @@ export function TaskListPage() {
       )}
     </div>
   );
+}
+
+export function deletable(task: TaskEntry): DeletableTask {
+  return { id: task.id, title: task.title, worktreePath: task.worktreePath, project_id: task.project_id, project_revision: task.project_revision, revision: task.revision, hash: task.hash };
 }
 
 export function openTask(task: TaskEntry) {

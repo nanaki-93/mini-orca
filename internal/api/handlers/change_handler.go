@@ -167,6 +167,20 @@ func (h *ChangeHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
+// Delete removes a task that is not running and whose Apply cannot be undone.
+func (h *ChangeHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeIdentity
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	id := r.PathValue("sessionID")
+	if err := h.service.DeleteChange(r.Context(), id, request); err != nil {
+		writeWorkflowError(w, "task deletion failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, map[string]string{"deleted": id})
+}
+
 func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {

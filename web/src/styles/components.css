@@ -975,6 +975,13 @@ mark {
   text-transform: uppercase;
 }
 
+.list-group-action {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
 .list-row {
   display: flex;
   align-items: center;

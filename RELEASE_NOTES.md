@@ -57,6 +57,9 @@ interface.
   install` seeds `~/.config/mini-orca/config.yaml`, the launcher prints the file
   it uses, and the status bar and Settings warn when there is none. A missing
   `MINI_ORCA_CONFIG` file now stops startup.
+- **Delete tasks:** stale, failed and draft tasks can be deleted one at a time
+  or per group (`POST …/changes/{id}/delete`); running tasks and the task
+  Undo still needs are kept.
 - **Analysis dashboard** (`g a`): live progress of the last or running analysis,
   failed stages grouped by reason, coverage and findings per section, models
   used and every file's stages, with analyze, retry failed, re-analyze, pause,

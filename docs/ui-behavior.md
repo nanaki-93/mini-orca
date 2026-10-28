@@ -78,6 +78,11 @@ every guard when the action arrives.
   by a commit with the shown message. The confirmation names the destination,
   the branch for a commit, and the running tasks in that checkout whose files
   it changes; Apply stops only those, and other tasks keep running.
+- **Delete a task.** The task page offers Delete (a button when the task is
+  stale, an icon otherwise); the task list deletes every task of the "Failed or
+  stale" or "Drafts" group at once, or the selected one with Delete. One
+  confirmation names the tasks; project files never change. Tasks with running
+  agents, and the task whose latest Apply can still be undone, are kept.
 - **Undo.** Covers only the latest Apply in a checkout and restores files only
   when they still match the applied version; a commit stays in history.
 

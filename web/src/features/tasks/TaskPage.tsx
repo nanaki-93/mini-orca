@@ -4,7 +4,7 @@
 import { useState, type ReactNode } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Upload,
+  ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Trash2, Upload,
 } from 'lucide-react';
 import { useProject, useSession, useTrust, useUsage } from '@/api/hooks';
 import { costCaveat, costLabel, usageLabel } from '@/lib/usage';
@@ -14,7 +14,7 @@ import { navigate, useRoute } from '@/lib/router';
 import { canOverrideReview, checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
 import { activeOverride, agentRunLabel, reviewVerdict, workflowBlocker } from '@/lib/workflow';
 import { basename, isTestPath, plural, shortHash, timeAgo } from '@/lib/util';
-import { Badge, Button, Callout, EmptyState, Input, Skeleton, Tip, cx } from '@/components/ui';
+import { Badge, Button, Callout, EmptyState, IconButton, Input, Skeleton, Tip, cx } from '@/components/ui';
 import { KindTag, TaskStatusBadge } from '@/components/domain';
 import { FilesChanged } from '@/features/review/FilesChanged';
 import { ChecksPanel } from '@/features/review/ChecksPanel';
@@ -91,7 +91,25 @@ function TaskHeader({ session }: { session: LoadedSession }) {
         </div>
       </div>
       <PrimaryAction session={session} />
+      <DeleteTask session={session} />
     </header>
+  );
+}
+
+/** Deletes the task (not while agents run) and returns to the task list. */
+function DeleteTask({ session }: { session: LoadedSession }) {
+  const actions = useActions();
+  const busy = useBusy();
+  if (workflowActive(session)) return null;
+  const stale = session.freshness !== 'current';
+  const run = async () => {
+    const task = { id: session.id, title: session.title, worktreePath: session.checkout.worktreePath, project_id: session.project_id, project_revision: session.project_revision, revision: session.revision, hash: session.hash };
+    await actions.deleteTasks([task], () => navigate('/tasks'));
+  };
+  return stale ? (
+    <Button variant="secondary" icon={Trash2} onClick={() => void run()} disabled={Boolean(busy)}>Delete task</Button>
+  ) : (
+    <IconButton icon={Trash2} label="Delete task" onClick={() => void run()} disabled={Boolean(busy)} />
   );
 }
 

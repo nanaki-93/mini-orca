@@ -140,6 +140,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review-override` | Override the model reviewers' rejection of the current checked hash with a reason; approves nothing. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
+| POST | `/api/projects/current/changes/{sessionID}/delete` | Delete a task that is not running and whose Apply cannot be undone; stale tasks included. Publishes a `workflow` event with status `deleted`. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
 | POST | `/api/projects/current/changes/{sessionID}/verify` | Explicitly verify the latest applied change with fresh identity and trust. |
 | GET | `/api/projects/current/instructions` | Preview applicable AGENTS.md content, origins and instruction presets. |

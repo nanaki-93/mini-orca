@@ -58,6 +58,17 @@ interface AnalysisPreview {
   security_review_intent_required?: boolean;
 }
 
+/** What deleting a task needs: the version shown and the checkout that owns it. */
+export interface DeletableTask {
+  id: string;
+  title: string;
+  worktreePath: string;
+  project_id: string;
+  project_revision: string;
+  revision: number;
+  hash: string;
+}
+
 export interface DraftTask {
   title: string;
   kind: string;
@@ -522,6 +533,44 @@ export function useActions() {
     });
   }
 
+  // ------------------------------------------------------------------ deletion
+
+  /**
+   * Deletes tasks after one confirmation and returns how many were deleted.
+   * `leave` runs first, so a page showing a deleted task navigates away
+   * before the task list refreshes; its cached page expires unused.
+   */
+  async function deleteTasks(tasks: DeletableTask[], leave?: () => void): Promise<number> {
+    if (!tasks.length) return 0;
+    const one = tasks.length === 1;
+    const ok = await confirm({
+      title: one ? 'Delete this task?' : `Delete ${tasks.length} tasks?`,
+      body: one
+        ? `“${tasks[0].title || tasks[0].id}” and its conversation, proposals and comments are removed. Project files are not changed.`
+        : `Their conversations, proposals and comments are removed. Project files are not changed. ${tasks.slice(0, 5).map(t => `“${t.title || t.id}”`).join(', ')}${tasks.length > 5 ? ` and ${tasks.length - 5} more` : ''}.`,
+      confirmLabel: one ? 'Delete task' : `Delete ${tasks.length} tasks`,
+      danger: true,
+    });
+    if (!ok) return 0;
+    return (await guarded(one ? 'Deleting task…' : 'Deleting tasks…', async () => {
+      const deleted: string[] = [];
+      const failures: string[] = [];
+      for (const task of tasks) {
+        try {
+          await api.post(withWorktree('/api/projects/current/changes/' + encodeURIComponent(task.id) + '/delete', task.worktreePath), { project_id: task.project_id, project_revision: task.project_revision, revision: task.revision, hash: task.hash });
+          deleted.push(task.id);
+        } catch (err) {
+          failures.push(`${task.title || task.id}: ${errorMessage(err)}`);
+        }
+      }
+      if (deleted.length) leave?.();
+      void client.invalidateQueries({ queryKey: ['changes'] });
+      if (deleted.length) toast(one ? 'Task deleted.' : `${plural(deleted.length, 'task')} deleted.`, 'success');
+      if (failures.length) toast(`Could not delete ${plural(failures.length, 'task')}`, 'danger', failures.join('\n'));
+      return deleted.length;
+    })) ?? 0;
+  }
+
   // ------------------------------------------------------------ agent settings
 
   /** Replaces the project's agent roles and budget, or resets them to config.yaml. */
@@ -612,7 +661,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

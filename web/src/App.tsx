@@ -116,6 +116,7 @@ const EXTRA: { group: string; keys: string; label: string }[] = [
   { group: 'Lists', keys: 'j', label: 'Next item' },
   { group: 'Lists', keys: 'k', label: 'Previous item' },
   { group: 'Lists', keys: 'Enter', label: 'Open' },
+  { group: 'Lists', keys: 'Delete', label: 'Delete task' },
   { group: 'Review', keys: 'j', label: 'Next file' },
   { group: 'Review', keys: 'k', label: 'Previous file' },
   { group: 'Review', keys: 'v', label: 'Mark file viewed' },
