@@ -4,11 +4,11 @@
 import { useMemo, useState } from 'react';
 import { Command } from 'cmdk';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Activity, BookOpen, CircleAlert, Code2, GitMerge, Inbox, Keyboard, ListTodo, Moon, Play, Plus, RefreshCw, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Activity, BookOpen, CircleAlert, Code2, GitMerge, Inbox, Keyboard, ListTodo, Moon, Palette as PaletteIcon, Play, Plus, RefreshCw, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useFindings, useIndex, useProject, useTasks, useTrust } from '@/api/hooks';
 import { useActions } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
-import { openNewTask, setUI, useUI } from '@/app/store';
+import { DARK_PALETTES, openNewTask, setUI, useUI } from '@/app/store';
 import { navigate } from '@/lib/router';
 import { rankItems } from '@/lib/fuzzy';
 import { basename, dirname } from '@/lib/util';
@@ -43,6 +43,7 @@ function Palette({ mode }: { mode: 'all' | 'files' | 'commands' }) {
   const { worktreePath } = useCheckout();
   const actions = useActions();
   const theme = useUI(s => s.theme);
+  const palette = useUI(s => s.darkPalette);
   const close = () => setUI({ paletteOpen: false });
   const run = (fn: () => void) => () => {
     close();
@@ -72,6 +73,7 @@ function Palette({ mode }: { mode: 'all' | 'files' | 'commands' }) {
       : []),
     { id: 'theme', label: theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme', icon: theme === 'light' ? Moon : Sun, keys: '', run: () => setUI({ theme: theme === 'light' ? 'dark' : 'light' }) },
     { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, keys: '?', run: () => setUI({ shortcutsOpen: true }) },
+    ...DARK_PALETTES.filter(option => option.id !== palette || theme === 'light').map(option => ({ id: `palette-${option.id}`, label: `Dark theme: ${option.label}`, icon: PaletteIcon, keys: '', run: () => setUI({ theme: 'dark', darkPalette: option.id }) })),
   ];
   const commandHits = mode === 'files' ? [] : rankItems(commands, search, c => c.label, 20);
 

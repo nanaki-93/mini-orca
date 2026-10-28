@@ -169,3 +169,17 @@ test('stale and failed tasks can be deleted from the list and the task page', as
   await expect(page).toHaveURL(/#\/tasks$/);
   await expect(page.getByText('Reject nested asset paths')).toHaveCount(0);
 });
+
+test('a dark palette is chosen in Appearance and kept', async ({ page }) => {
+  await page.goto('/#/settings/appearance');
+  await page.getByRole('radio', { name: 'Plum' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-palette', 'plum');
+  await expect(page.getByRole('radio', { name: 'Plum' })).toHaveAttribute('aria-checked', 'true');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-palette', 'plum');
+  await page.getByRole('radio', { name: 'Light' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.getByRole('radio', { name: 'True black' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).toHaveAttribute('data-palette', 'oled');
+});

@@ -87,7 +87,12 @@ blocker.
 
 Pages update from the daemon's event stream; a lost stream reconnects with
 backoff and the status bar says so. Light, dark and system themes share one
-token set; keep text at 4.5:1 contrast or better against its surface.
+token set; keep text at 4.5:1 contrast or better against its surface. The dark
+theme comes in palettes (Midnight, Graphite, Ocean, Forest, Plum, Ember, True
+black), chosen in Settings → Appearance or the command palette; a palette
+(`data-palette` in `styles/tokens.css`) replaces only surfaces, text and the
+accent, never status colors. Text on the accent uses `--on-accent`, so a light
+accent stays readable.
 
 ## Pages
 

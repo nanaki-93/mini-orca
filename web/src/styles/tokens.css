@@ -1,4 +1,5 @@
-/* Design tokens. Dark is the default; light follows the OS or the user's choice. */
+/* Design tokens. Dark is the default, in one of several palettes; light follows
+   the OS or the user's choice. */
 
 :root,
 :root[data-theme='dark'] {
@@ -52,6 +53,127 @@
   --syntax-function: #82aaff;
   --syntax-type: #7fdbca;
   --syntax-attr: #ffcb6b;
+}
+
+/* Dark palettes: each replaces the surfaces, text and accent of the dark theme. */
+
+:root[data-theme='dark'][data-palette='graphite'] {
+  --chrome: #0e0e0e;
+  --bg: #141414;
+  --bg-sunken: #101010;
+  --surface: #1a1a1a;
+  --surface-2: #1f1f1f;
+  --surface-3: #282828;
+  --text: #ededed;
+  --text-2: #bdbdbd;
+  --muted: #8c8c8c;
+  --faint: #5e5e5e;
+  --accent: #e6e6e6;
+  --accent-strong: #ffffff;
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-text: #f5f5f5;
+  --on-accent: #111111;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(230, 230, 230, 0.55);
+}
+
+:root[data-theme='dark'][data-palette='ocean'] {
+  --chrome: #071018;
+  --bg: #0b1620;
+  --bg-sunken: #08121a;
+  --surface: #0f1d29;
+  --surface-2: #132332;
+  --surface-3: #1a2c3d;
+  --text: #e3eef6;
+  --text-2: #b2c4d2;
+  --muted: #7f97aa;
+  --faint: #566c7e;
+  --accent: #3fc1e8;
+  --accent-strong: #2aaed6;
+  --accent-soft: rgba(63, 193, 232, 0.14);
+  --accent-text: #8fdcf3;
+  --on-accent: #04131b;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(63, 193, 232, 0.55);
+}
+
+:root[data-theme='dark'][data-palette='forest'] {
+  --chrome: #08100c;
+  --bg: #0d1611;
+  --bg-sunken: #0a120e;
+  --surface: #121c17;
+  --surface-2: #16231c;
+  --surface-3: #1d2c24;
+  --text: #e4efe8;
+  --text-2: #b4c6ba;
+  --muted: #82988a;
+  --faint: #57695d;
+  --accent: #52c98a;
+  --accent-strong: #3fb878;
+  --accent-soft: rgba(82, 201, 138, 0.14);
+  --accent-text: #94e2b8;
+  --on-accent: #06140c;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(82, 201, 138, 0.55);
+}
+
+:root[data-theme='dark'][data-palette='plum'] {
+  --chrome: #0f0a14;
+  --bg: #150f1c;
+  --bg-sunken: #110c17;
+  --surface: #1b1424;
+  --surface-2: #21192c;
+  --surface-3: #2a2136;
+  --text: #f0e8f5;
+  --text-2: #c6b8d1;
+  --muted: #9786a6;
+  --faint: #6a5b78;
+  --accent: #d17ce8;
+  --accent-strong: #c066da;
+  --accent-soft: rgba(209, 124, 232, 0.15);
+  --accent-text: #e6b3f3;
+  --on-accent: #1a0820;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(209, 124, 232, 0.55);
+}
+
+:root[data-theme='dark'][data-palette='ember'] {
+  --chrome: #110c09;
+  --bg: #17110d;
+  --bg-sunken: #130e0b;
+  --surface: #1e1712;
+  --surface-2: #241c16;
+  --surface-3: #2e241d;
+  --text: #f3ebe4;
+  --text-2: #cdbfb2;
+  --muted: #a08f80;
+  --faint: #736356;
+  --accent: #f08a4b;
+  --accent-strong: #e07535;
+  --accent-soft: rgba(240, 138, 75, 0.15);
+  --accent-text: #f7b88f;
+  --on-accent: #1c0d03;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(240, 138, 75, 0.55);
+}
+
+:root[data-theme='dark'][data-palette='oled'] {
+  --chrome: #000000;
+  --bg: #000000;
+  --bg-sunken: #000000;
+  --surface: #0b0b0b;
+  --surface-2: #111111;
+  --surface-3: #1a1a1a;
+  --text: #f2f2f2;
+  --text-2: #c4c4c4;
+  --muted: #8f8f8f;
+  --faint: #626262;
+  --accent: #8b93ff;
+  --accent-strong: #7880fb;
+  --accent-soft: rgba(139, 147, 255, 0.16);
+  --accent-text: #b6bbff;
+  --on-accent: #ffffff;
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px rgba(139, 147, 255, 0.6);
+}
+:root[data-theme='dark'][data-palette='oled'] {
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.17);
+  --shadow-panel: 0 0 0 1px rgba(255, 255, 255, 0.09);
 }
 
 :root[data-theme='light'] {

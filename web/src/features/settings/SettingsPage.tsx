@@ -6,7 +6,7 @@ import type { UsageTotal } from '@/api/types';
 import { costCaveat, costLabel, formatTokens } from '@/lib/usage';
 import { useActions, useBusy } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
-import { setUI, useUI, type Theme } from '@/app/store';
+import { DARK_PALETTES, setUI, useUI, type Theme } from '@/app/store';
 import { navigate } from '@/lib/router';
 import { plural, timeAgo } from '@/lib/util';
 import { Badge, Button, EmptyState, Segmented, Skeleton, cx } from '@/components/ui';
@@ -246,13 +246,39 @@ function AnalysisSettings() {
 
 function Appearance() {
   const theme = useUI(s => s.theme);
+  const palette = useUI(s => s.darkPalette);
   const layout = useUI(s => s.diffLayout);
   return (
     <>
       <h1 className="page-title">Appearance</h1>
       <div className="card">
-        <div className="card-body stack">
+        <div className="card-body stack-lg">
           <div className="row"><span className="grow">Theme</span><Segmented<Theme> label="Theme" value={theme} onChange={value => setUI({ theme: value })} options={[{ value: 'system', label: 'System', icon: Monitor }, { value: 'dark', label: 'Dark', icon: Moon }, { value: 'light', label: 'Light', icon: Sun }]} /></div>
+          <div className="stack">
+            <div className="row">
+              <span className="grow">Dark palette</span>
+              {theme === 'light' ? <span className="xs muted">Used when the theme is dark</span> : null}
+            </div>
+            <div className="palette-grid" role="radiogroup" aria-label="Dark palette">
+              {DARK_PALETTES.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={palette === option.id}
+                  className={cx('palette-swatch', palette === option.id && 'is-on')}
+                  onClick={() => setUI({ darkPalette: option.id, theme: theme === 'light' ? 'dark' : theme })}
+                >
+                  <span className="swatch-preview" style={{ background: option.chrome }} aria-hidden>
+                    <span className="swatch-panel" style={{ background: option.surface }}>
+                      <span className="swatch-accent" style={{ background: option.accent }} />
+                    </span>
+                  </span>
+                  <span className="small">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="row"><span className="grow">Diff layout</span><Segmented label="Diff layout" value={layout} onChange={value => setUI({ diffLayout: value })} options={[{ value: 'unified', label: 'Unified' }, { value: 'split', label: 'Split' }]} /></div>
         </div>
       </div>

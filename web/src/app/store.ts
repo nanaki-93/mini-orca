@@ -5,6 +5,19 @@ import { useSyncExternalStore } from 'react';
 import type { DraftTask } from './actions';
 
 export type Theme = 'system' | 'dark' | 'light';
+
+/** The colors of the dark theme; styles/tokens.css defines each one. */
+export const DARK_PALETTES = [
+  { id: 'midnight', label: 'Midnight', chrome: '#0a0b0d', surface: '#15161a', accent: '#7f86ff' },
+  { id: 'graphite', label: 'Graphite', chrome: '#111111', surface: '#1c1c1c', accent: '#e0e0e0' },
+  { id: 'ocean', label: 'Ocean', chrome: '#071018', surface: '#0f1d29', accent: '#3fc1e8' },
+  { id: 'forest', label: 'Forest', chrome: '#08100c', surface: '#121c17', accent: '#52c98a' },
+  { id: 'plum', label: 'Plum', chrome: '#0f0a14', surface: '#1b1424', accent: '#d17ce8' },
+  { id: 'ember', label: 'Ember', chrome: '#110c09', surface: '#1e1712', accent: '#f08a4b' },
+  { id: 'oled', label: 'True black', chrome: '#000000', surface: '#0b0b0b', accent: '#8b93ff' },
+] as const;
+
+export type DarkPalette = (typeof DARK_PALETTES)[number]['id'];
 export type DiffLayout = 'unified' | 'split';
 
 export interface UIState {
@@ -14,6 +27,7 @@ export interface UIState {
   shortcutsOpen: boolean;
   sidebarCollapsed: boolean;
   theme: Theme;
+  darkPalette: DarkPalette;
   diffLayout: DiffLayout;
   wrapLines: boolean;
 }
@@ -35,6 +49,7 @@ let state: UIState = {
   shortcutsOpen: false,
   sidebarCollapsed: false,
   theme: 'system',
+  darkPalette: 'midnight',
   diffLayout: 'unified',
   wrapLines: false,
   ...pick(loadPrefs()),
@@ -43,6 +58,7 @@ let state: UIState = {
 function pick(prefs: Partial<UIState>): Partial<UIState> {
   const out: Partial<UIState> = {};
   if (prefs.theme === 'dark' || prefs.theme === 'light' || prefs.theme === 'system') out.theme = prefs.theme;
+  if (DARK_PALETTES.some(palette => palette.id === prefs.darkPalette)) out.darkPalette = prefs.darkPalette;
   if (prefs.diffLayout === 'split' || prefs.diffLayout === 'unified') out.diffLayout = prefs.diffLayout;
   if (typeof prefs.wrapLines === 'boolean') out.wrapLines = prefs.wrapLines;
   if (typeof prefs.sidebarCollapsed === 'boolean') out.sidebarCollapsed = prefs.sidebarCollapsed;
@@ -58,7 +74,7 @@ export function getUI(): UIState {
 export function setUI(patch: Partial<UIState>): void {
   state = { ...state, ...patch };
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: state.theme, diffLayout: state.diffLayout, wrapLines: state.wrapLines, sidebarCollapsed: state.sidebarCollapsed }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: state.theme, darkPalette: state.darkPalette, diffLayout: state.diffLayout, wrapLines: state.wrapLines, sidebarCollapsed: state.sidebarCollapsed }));
   } catch {
     // Preferences are a convenience; the UI works without storage.
   }
