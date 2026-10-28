@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -57,10 +58,13 @@ func UpdateProject(root string, global *Config, update ProjectUpdate) (*Config, 
 			setMappingValue(runtime, item.key, scalarNode(item.value))
 		}
 	}
-	data, err := yaml.Marshal(document)
-	if err != nil {
+	var encoded bytes.Buffer
+	encoder := yaml.NewEncoder(&encoded)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(document); err != nil {
 		return nil, err
 	}
+	data := encoded.Bytes()
 	merged, err := MergeProject(global, data)
 	if err != nil {
 		return nil, err
