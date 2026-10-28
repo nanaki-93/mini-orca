@@ -223,7 +223,7 @@ func TestModelSelectionsCheckBothCatalogsOnceAndPreserveLimits(t *testing.T) {
 		t.Fatalf("catalog validation = %v, calls = %d/%d", err, piCalls, agyCalls)
 	}
 	selected, ok := s.selectedRuntime(config.BugModelScope, "agy:gemini")
-	base := s.runtimes.bug
+	base := s.conf().runtimes.bug
 	if !ok || selected.profile.Provider != config.AgyProvider || selected.profile.Model != "gemini" || selected.profile.ContextMaxTokens != base.profile.ContextMaxTokens || selected.effective.Timeout != base.effective.Timeout || selected.effective.MaxRetries != base.effective.MaxRetries {
 		t.Fatalf("Agy operation limits = %+v", selected)
 	}

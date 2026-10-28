@@ -81,7 +81,7 @@ func TestWorkflowSettingsStayFrozenThroughWorkAndHumanReview(t *testing.T) {
 
 func TestWorkflowInputStillRejectsChangedOperatorConfiguration(t *testing.T) {
 	s, _, ready := readyConfirmation(t)
-	s.runtimes.function.profile.Model = "changed-by-operator"
+	s.conf().runtimes.function.profile.Model = "changed-by-operator"
 	if _, err := s.RespondChangeInput(t.Context(), ready.ID, inputResponse(ready, "approve")); err == nil {
 		t.Fatal("changed operator configuration resumed old handoff")
 	}
@@ -188,10 +188,10 @@ func TestWorkflowInputRestoreRequiresFreshChecksAndExplicitResponse(t *testing.T
 	if _, err := s.ReviewChange(t.Context(), ready.ID, ChangeReviewRequest{ChangeIdentity: identityForChange(ready)}); err != nil {
 		t.Fatal(err)
 	}
-	cfg := scopedTestConfig(s.runtimes.bug.profile.APIBaseURL)
-	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = s.runtimes.bug.profile.APIBaseURL, s.runtimes.bug.profile.Model
-	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = s.runtimes.analyze.profile.APIBaseURL, s.runtimes.analyze.profile.Model
-	cfg.ModelScopes.Code.APIBaseURL, cfg.ModelScopes.Code.Model = s.runtimes.function.profile.APIBaseURL, s.runtimes.function.profile.Model
+	cfg := scopedTestConfig(s.conf().runtimes.bug.profile.APIBaseURL)
+	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = s.conf().runtimes.bug.profile.APIBaseURL, s.conf().runtimes.bug.profile.Model
+	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = s.conf().runtimes.analyze.profile.APIBaseURL, s.conf().runtimes.analyze.profile.Model
+	cfg.ModelScopes.Code.APIBaseURL, cfg.ModelScopes.Code.Model = s.conf().runtimes.function.profile.APIBaseURL, s.conf().runtimes.function.profile.Model
 	restarted, err := New(cfg, s.manager)
 	if err != nil {
 		t.Fatal(err)

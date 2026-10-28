@@ -70,6 +70,11 @@ func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {
 	return profiles, nil
 }
 
+// ResolveModelProfile validates one scope's configuration on its own.
+func ResolveModelProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
+	return resolveProfile(scope, configured)
+}
+
 func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
 	if configured.Provider == AgyProvider || configured.Provider == PiProvider {
 		return resolveCLIProfile(scope, configured)

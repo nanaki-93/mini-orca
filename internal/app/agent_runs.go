@@ -199,7 +199,7 @@ func (s *Service) AgentRunDetail(ctx context.Context, query AgentRunQuery, id st
 	if err != nil {
 		return nil, err
 	}
-	result.Cost = agentCost(run.Usage, s.agentRuntime.Telemetry.Prices)
+	result.Cost = agentCost(run.Usage, s.conf().agentRuntime.Telemetry.Prices)
 	summarizeAgentInput(&result.Run, history, parents)
 	for _, child := range history.Runs {
 		if agentRoot(child.ID, parents) != result.Run.RootID {

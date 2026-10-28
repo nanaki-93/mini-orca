@@ -50,6 +50,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 	if err := activate(); err != nil {
 		return err
 	}
+	s.loadProjectConfiguration(s.manager.Root())
 	s.resetExecutionTrust(true)
 	return nil
 }

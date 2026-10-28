@@ -385,7 +385,7 @@ func stoppedGoScanReport(ctx context.Context, projectID, revision, root string, 
 
 func (s *Service) runGoScanPhase(ctx context.Context, scan *preparedGoScan, name string, command []string) GoScanPhase {
 	phase := GoScanPhase{Name: name, Command: append([]string(nil), command...)}
-	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
+	timed, cancel := context.WithTimeout(ctx, s.conf().focusedCheckTimeout)
 	defer cancel()
 	result, err := sandbox.RunCommandWithStart(timed, scan.workspace, command, true, func() error {
 		if err := s.requireWorkspaceExecutionTrust(timed, scan.report.ProjectRevision, scan.workspaceHash); err != nil {

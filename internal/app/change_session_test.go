@@ -85,7 +85,7 @@ func TestChangeMessageUsesSelectedProfileAndItsConsent(t *testing.T) {
 		return `{"explanation":"Document the behavior.","changes":[{"path":"README.md","content":"# Behavior\nReturns the result.\n"}]}`
 	})
 	service, _ := newSemanticAnalysisService(t, server.URL, 0)
-	service.runtimes.bug.effective.RemoteProvider = true
+	service.conf().runtimes.bug.effective.RemoteProvider = true
 	session := openChangeFixture(t, service, "README.md")
 	request := ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Document the behavior.", Profile: "unknown"}
 	if _, err := service.SendChangeMessage(context.Background(), session.ID, request); err == nil || calls.Load() != 0 {

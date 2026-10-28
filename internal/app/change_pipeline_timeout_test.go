@@ -32,14 +32,14 @@ func TestWorkflowModelTimeoutHonorsConfigurationWithoutChangingOtherRequests(t *
 				t.Fatalf("stage %d timeout = %s, want %s", stage, got, want)
 			}
 		}
-		if s.runtimes.function.effective.Timeout != "5m0s" {
+		if s.conf().runtimes.function.effective.Timeout != "5m0s" {
 			t.Fatal("workflow changed standalone generation timeout")
 		}
-		s.runtimes.bug.effective.Timeout = "45m0s"
+		s.conf().runtimes.bug.effective.Timeout = "45m0s"
 		if got := s.workflowStageRuntime(0, "bug").effective.Timeout; got != "45m0s" {
 			t.Fatalf("longer selected timeout shortened to %s", got)
 		}
-		s.runtimes.function.effective.Timeout = "50m0s"
+		s.conf().runtimes.function.effective.Timeout = "50m0s"
 		if got := s.workflowStageRuntime(2, "analyze").effective.Timeout; got != "50m0s" {
 			t.Fatalf("longer generation timeout shortened to %s", got)
 		}
@@ -60,9 +60,9 @@ func TestTestingTimeoutRetainsCreationAndResumesWithoutRegeneration(t *testing.T
 		},
 		func() string { reviewCalls.Add(1); return workflowApproval },
 	})
-	s.workflowModelTimeout = time.Second
-	s.runtimes.analyze.effective.Timeout = "1s"
-	s.runtimes.function.effective.Timeout = "1s"
+	s.conf().workflowModelTimeout = time.Second
+	s.conf().runtimes.analyze.effective.Timeout = "1s"
+	s.conf().runtimes.function.effective.Timeout = "1s"
 	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, workflowRequest(initial)); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestTestingTimeoutRetainsCreationAndResumesWithoutRegeneration(t *testing.T
 	if createCalls.Load() != 1 || testCalls.Load() != 1 || reviewCalls.Load() != 0 || len(failed.Checks) != 0 || len(failed.Changes) != 1 {
 		t.Fatalf("timeout dispatched more work or lost creation: calls=%d/%d/%d, checks=%v, changes=%d", createCalls.Load(), testCalls.Load(), reviewCalls.Load(), failed.Checks, len(failed.Changes))
 	}
-	s.workflowModelTimeout = 15 * time.Minute
+	s.conf().workflowModelTimeout = 15 * time.Minute
 	retry := workflowRequest(failed)
 	retry.ResumeFrom = "test"
 	if _, err := s.StartChangeWorkflow(context.Background(), failed.ID, retry); err != nil {
@@ -129,7 +129,7 @@ func TestTimedOutChecksStopAutomaticRepairAndRetainEvidence(t *testing.T) {
 		func() string { testCalls.Add(1); return workflowTests },
 		func() string { reviewCalls.Add(1); return workflowApproval },
 	})
-	s.focusedCheckTimeout = time.Nanosecond
+	s.conf().focusedCheckTimeout = time.Nanosecond
 	req := workflowRequest(initial)
 	req.AutoRepair = true
 	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, req); err != nil {
@@ -163,8 +163,9 @@ func TestWorkflowRepairsOnlyEstablishedCheckFailures(t *testing.T) {
 }
 
 func TestWorkflowTotalDeadlineAccommodatesStagesChecksAndRepairs(t *testing.T) {
-	s := &Service{workflowModelTimeout: 15 * time.Minute, focusedCheckTimeout: time.Minute}
-	s.agentRuntime, _ = config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
+	s := &Service{}
+	s.configured.Store(&configuration{workflowModelTimeout: 15 * time.Minute, focusedCheckTimeout: time.Minute})
+	s.conf().agentRuntime, _ = config.ResolveAgentRuntime(config.AgentRuntimeConfig{})
 	models := ChangeWorkflowModels{Create: "bug", Test: "code", Review: "analyze"}
 	full := s.changeWorkflowTimeout(t.Context(), models, 0, false)
 	resumed := s.changeWorkflowTimeout(t.Context(), models, 1, false)
@@ -172,15 +173,15 @@ func TestWorkflowTotalDeadlineAccommodatesStagesChecksAndRepairs(t *testing.T) {
 		t.Fatalf("remaining models/checks do not fit: full=%s, test retry=%s", full, resumed)
 	}
 	withRepairs := s.changeWorkflowTimeout(t.Context(), models, 1, true)
-	if withRepairs < resumed+2*(45*time.Minute+5*s.focusedCheckTimeout) {
+	if withRepairs < resumed+2*(45*time.Minute+5*s.conf().focusedCheckTimeout) {
 		t.Fatalf("repair attempts would be cut short: %s", withRepairs)
 	}
-	s.agentRuntime.Limits.Repairs = 0
+	s.conf().agentRuntime.Limits.Repairs = 0
 	if got := s.changeWorkflowTimeout(t.Context(), models, 1, true); got != resumed {
 		t.Fatalf("disabled repairs retained time allowance: %s", got)
 	}
-	s.focusedCheckTimeout = 10 * time.Minute
-	if got := s.changeWorkflowTimeout(t.Context(), models, 0, false); got < 45*time.Minute+10*s.focusedCheckTimeout {
+	s.conf().focusedCheckTimeout = 10 * time.Minute
+	if got := s.changeWorkflowTimeout(t.Context(), models, 0, false); got < 45*time.Minute+10*s.conf().focusedCheckTimeout {
 		t.Fatalf("probe and candidate checks would be cut short: %s", got)
 	}
 }

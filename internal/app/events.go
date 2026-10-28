@@ -88,7 +88,7 @@ func (s *Service) notifyWorkflow(ctx context.Context, session *ChangeSession, st
 	}
 	if budget := agentruntime.BudgetFromContext(ctx); budget != nil {
 		usage := budget.Snapshot()
-		event.Usage, event.Cost = &usage, agentCost(usage, s.agentRuntime.Telemetry.Prices)
+		event.Usage, event.Cost = &usage, agentCost(usage, s.conf().agentRuntime.Telemetry.Prices)
 	}
 	s.publishEvent(event)
 }

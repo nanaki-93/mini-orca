@@ -94,7 +94,7 @@ func TestDeclarationToolsStopBeforeNextDispatchWhenIdentityChanges(t *testing.T)
 func TestAgentChecksRemainSourceFreeProposalEvidence(t *testing.T) {
 	service, root, proposal := artifactChangeFixture(t)
 	request := declarationRequest(t, service)
-	prepared, err := service.prepareDeclarationExplanation(t.Context(), request, service.runtimes.function)
+	prepared, err := service.prepareDeclarationExplanation(t.Context(), request, service.conf().runtimes.function)
 	if err != nil {
 		t.Fatal(err)
 	}

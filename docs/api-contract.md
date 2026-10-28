@@ -71,7 +71,7 @@ untrusted networks.
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog and `config_file`, the configuration file read (empty for built-in defaults). |
 | GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
-| POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
+| POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts; the project overview is requested from the project's analyze model only when it is local or `confirm_remote_provider` is true. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current` | Read the selected project summary without changing the active project. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, optional engineering specification (`docs`), coverage, and finding counts for `project_revision`. |
@@ -96,6 +96,10 @@ untrusted networks.
 | POST | `/api/projects/current/agent-runs/{runID}/control` | Cancel an active root invocation owned by this daemon. |
 | POST | `/api/projects/current/agent-runs/{runID}/input` | Respond to a native checkpoint through the guarded proposal review owner. |
 | POST | `/api/projects/current/agent-runs/{runID}/export` | Export one explicitly confirmed source-free trace snapshot to the configured collector. |
+| GET | `/api/projects/current/setup` | The project's configuration as setup edits it: `state` (`needed`, `skipped`, `configured`, `invalid`), the project and daemon files, models (secrets as `api_key_set`), roles and budget. |
+| POST | `/api/projects/current/setup` | Write the project's `.mini-orca/config.yaml` and apply it live; 409 while work runs. |
+| POST | `/api/projects/current/setup/skip` | Keep the daemon's configuration for this project and stop offering setup. |
+| POST | `/api/projects/current/setup/test-model` | Send one short request to a model as setup would configure it for a scope. |
 | GET | `/api/projects/current/agent-settings` | Read configured or overridden role, budget and skill settings without dispatch. |
 | POST | `/api/projects/current/agent-settings/control` | Confirm a versioned replacement or reset for future admissions. |
 | POST | `/api/projects/current/agent-settings/skills/validate` | Explicitly validate a configured skill's captured local text without executing resources. |
@@ -1413,6 +1417,32 @@ and `removed_worktree`; removal failure returns `state: failed` with `error`.
 Discard reopens linked in-progress findings, including applied but unmerged fixes,
 unless another task still owns the finding. Any status persistence failure is
 reported in `warnings` without hiding the successful removal receipt.
+
+### Project setup
+
+Every setup request carries the active project's `project_id` and
+`project_revision` (query parameters for GET, body fields for POST); a stale
+pair returns 409. GET returns `state`, `config_file` (the project's
+`.mini-orca/config.yaml`, existing or not), `daemon_config_file` (empty for
+the built-in defaults), `error` for an `invalid` file, `models` keyed `analyze`,
+`bug` and `code` (`provider`, `model`, `api_base_url`, `vertex_project`,
+`vertex_location`, `cli_path`, `reasoning_effort`, optional `temperature`,
+`max_tokens`, `context_max_tokens`, and `api_key_set` — a key is never
+returned), `roles` (`creation`, `testing`, `review`, each a scope) and
+`limits` (the seven budget values). POST takes `models`, `roles` and `limits`
+in the same shape; an empty `api_key` keeps the configured key for the same
+provider and `clear_api_key: true` removes it. The result is validated on top
+of the daemon's configuration (400 with the field and reason), written `0600`
+with the file listed in `.mini-orca/.gitignore`, and applied at once; other keys
+of an existing file and their comments are kept. A running analysis, agent
+run, Go scan or worktree work returns 409 naming it. A `configuration` event
+announces every applied change. `…/setup/skip` records the choice in
+`.mini-orca/setup.json`. `…/setup/test-model` takes `scope` and `model` and
+returns `ok`, `model`, `latency_ms`, and for a failure `reason` (the same kinds
+as analysis stages) and `detail`; an invalid model configuration is a 400.
+
+Opening or switching to a project loads its configuration file. An invalid
+file leaves the daemon's configuration in use and is reported by setup.
 
 ### Agent settings and skill validation
 

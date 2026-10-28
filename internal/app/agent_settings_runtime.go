@@ -27,7 +27,7 @@ func (s *Service) agentConfiguration(runtime config.AgentRuntime) (string, error
 	data, err := json.Marshal(struct {
 		Profiles [3]config.ModelProfile
 		Runtime  config.AgentRuntime
-	}{[3]config.ModelProfile{s.runtimes.analyze.profile, s.runtimes.bug.profile, s.runtimes.function.profile}, runtime})
+	}{[3]config.ModelProfile{s.conf().runtimes.analyze.profile, s.conf().runtimes.bug.profile, s.conf().runtimes.function.profile}, runtime})
 	if err != nil {
 		return "", fmt.Errorf("fingerprint admitted configuration: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s *Service) freezeAgentSettings(ctx context.Context, root string) (context
 }
 
 func (s *Service) settingsRuntime(record agentstate.SettingsRecord, configuration string) (config.AgentRuntime, error) {
-	runtime := s.agentRuntime
+	runtime := s.conf().agentRuntime
 	runtime.Skills = slices.Clone(runtime.Skills)
 	telemetry, err := config.ResolveAgentTelemetry(runtime.Telemetry)
 	if err != nil {
@@ -108,7 +108,7 @@ func (s *Service) admittedRuntime(ctx context.Context) config.AgentRuntime {
 	if captured, ok := ctx.Value(agentSettingsKey{}).(admittedAgentSettings); ok {
 		return captured.runtime
 	}
-	return s.agentRuntime
+	return s.conf().agentRuntime
 }
 
 func (s *Service) confirmationJournal(ctx context.Context, root, runID string) (*agentstate.Store, agentstate.Binding, error) {

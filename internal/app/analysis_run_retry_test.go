@@ -248,7 +248,7 @@ func TestAnalysisRetryDoesNotOverrideNewerPartialEvidence(t *testing.T) {
 		t.Fatalf("partial evidence mislabeled: %+v", selection)
 	}
 	report.Status = "completed"
-	runtime := s.runtimes.analyze
+	runtime := s.conf().runtimes.analyze
 	report.Model = runtime.profile.Model
 	report.Profile, report.Scope = runtime.effective.Profile, runtime.effective.Scope
 	report.ProviderOrigin, report.ReasoningEffort = runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort

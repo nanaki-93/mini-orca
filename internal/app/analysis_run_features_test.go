@@ -559,7 +559,7 @@ func TestAnalysisRunFeaturesKeepPriorIdeasAndCountOnlyNewOnes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted.runtimes = s.runtimes
+	restarted.conf().runtimes = s.conf().runtimes
 	if current, err := restarted.currentTestAnalysisRun(context.Background()); err != nil || current.Status != run.Status || *current.Features.SuggestionCount != 2 {
 		t.Fatalf("restarted run=%+v %v", current, err)
 	}
@@ -666,7 +666,7 @@ func TestAnalysisRunWithEarlierFeaturePromptIdentityReadsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted.runtimes = s.runtimes
+	restarted.conf().runtimes = s.conf().runtimes
 	current, err := restarted.currentTestAnalysisRun(context.Background())
 	if err != nil || current.Status != AnalysisRunStale || current.Features.Status != AnalysisStageCompleted || *current.Features.SuggestionCount != 1 {
 		t.Fatalf("earlier prompt run=%+v %v", current, err)

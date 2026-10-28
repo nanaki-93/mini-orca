@@ -72,7 +72,7 @@ func validModelSelection(selection string) bool {
 }
 
 func (s *Service) cliExecutable(provider config.ModelProvider) string {
-	for _, runtime := range []modelRuntime{s.runtimes.analyze, s.runtimes.bug, s.runtimes.function} {
+	for _, runtime := range []modelRuntime{s.conf().runtimes.analyze, s.conf().runtimes.bug, s.conf().runtimes.function} {
 		if runtime.profile.Provider == provider {
 			return runtime.profile.CLIPath
 		}
@@ -81,11 +81,11 @@ func (s *Service) cliExecutable(provider config.ModelProvider) string {
 }
 
 func (s *Service) selectedRuntime(scope config.ModelScope, selection string) (modelRuntime, bool) {
-	if runtime, ok := s.runtimes.forScope(selection); ok {
+	if runtime, ok := s.conf().runtimes.forScope(selection); ok {
 		return runtime, true
 	}
-	base, _ := s.runtimes.forScope(string(scope))
-	for _, runtime := range []modelRuntime{s.runtimes.analyze, s.runtimes.bug, s.runtimes.function} {
+	base, _ := s.conf().runtimes.forScope(string(scope))
+	for _, runtime := range []modelRuntime{s.conf().runtimes.analyze, s.conf().runtimes.bug, s.conf().runtimes.function} {
 		id, err := configuredModelID(runtime.profile)
 		if err != nil {
 			return modelRuntime{}, false

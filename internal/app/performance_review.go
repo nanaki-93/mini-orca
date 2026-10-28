@@ -53,7 +53,7 @@ func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapsh
 	if err != nil {
 		return performanceReviewSnapshot{}, err
 	}
-	return performanceReviewSnapshot{runtime: s.runtimes.analyze, root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version(), instructions: instructions}, nil
+	return performanceReviewSnapshot{runtime: s.conf().runtimes.analyze, root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version(), instructions: instructions}, nil
 }
 
 func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, error) {
@@ -69,7 +69,7 @@ func (s *Service) requestPerformanceReview(ctx context.Context, snapshot perform
 	if snapshot.instructions.Text != "" {
 		prompt += "\n\n" + project.InstructionPromptGuidance + snapshot.instructions.Text
 	}
-	timeout := s.analysisTimeout
+	timeout := s.conf().analysisTimeout
 	if snapshot.modelProfile != "" {
 		timeout = duration(runtime.effective.Timeout)
 	}

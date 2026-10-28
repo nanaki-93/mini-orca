@@ -18,7 +18,7 @@ func reopenTrustFixture(t *testing.T, original *Service, root string) (*Service,
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(original.config, manager)
+	s, err := New(original.global, manager)
 	if err != nil {
 		t.Fatal(err)
 	}

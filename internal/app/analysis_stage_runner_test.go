@@ -262,8 +262,8 @@ func TestAnalysisFileRequiresStageConsentAndDurableReservationsBeforeEveryAttemp
 		t.Run(string(stage), func(t *testing.T) {
 			server, calls := analysisResponseServer(t, analysisReply)
 			s, _ := newSemanticAnalysisService(t, server.URL, 0)
-			s.runtimes.bug.effective.RemoteProvider = true
-			s.runtimes.analyze.effective.RemoteProvider = true
+			s.conf().runtimes.bug.effective.RemoteProvider = true
+			s.conf().runtimes.analyze.effective.RemoteProvider = true
 			request := analysisStageRequestFor(t, s, "main.go", stage)
 			reserved := 0
 			authority := analysisStageAuthorityFor(t, request)
@@ -309,9 +309,9 @@ func TestAnalysisFileAttemptsAreBoundedAndRecheckOwnershipBetweenRetries(t *test
 			}))
 			defer server.Close()
 			s, _ := newSemanticAnalysisService(t, server.URL, 0)
-			s.retryBase = time.Millisecond
-			s.retryMax = time.Millisecond
-			s.runtimes.bug.effective.MaxRetries = 8
+			s.conf().retryBase = time.Millisecond
+			s.conf().retryMax = time.Millisecond
+			s.conf().runtimes.bug.effective.MaxRetries = 8
 			request := analysisStageRequestFor(t, s, "main.go", AnalysisStageSemantic)
 			request.RemainingAttempts = test.remaining
 			authority := analysisStageAuthorityFor(t, request)
@@ -326,7 +326,7 @@ func TestAnalysisFileAttemptsAreBoundedAndRecheckOwnershipBetweenRetries(t *test
 			if (err != nil) != test.wantErr || calls.Load() != test.wantCalls || result.Progress.Attempts != int(test.wantCalls) || result.Progress.FindingCount != nil {
 				t.Fatalf("retry result=%+v, %v calls=%d", result, err, calls.Load())
 			}
-			if s.runtimes.bug.effective.MaxRetries != 8 {
+			if s.conf().runtimes.bug.effective.MaxRetries != 8 {
 				t.Fatal("stage budget mutated the shared runtime")
 			}
 		})
@@ -359,7 +359,7 @@ func TestAnalysisFilePublicationRejectsStaleCanceledOrReplacedWork(t *testing.T)
 					case "generation":
 						run.Generation = "replacement"
 					case "provider":
-						s.runtimes.analyze.effective.Model = "replacement"
+						s.conf().runtimes.analyze.effective.Model = "replacement"
 					case "storage":
 						return errors.New("durable result failed")
 					case "skipped callback":
@@ -423,7 +423,7 @@ func TestAnalysisFileModelIdentityChangesInvalidateCacheAndSourceEchoIsFailed(t 
 	if _, err := s.analyzeFileStage(context.Background(), request, analysisStageAuthorityFor(t, request)); err != nil {
 		t.Fatal(err)
 	}
-	s.runtimes.analyze.effective.ReasoningEffort = "high"
+	s.conf().runtimes.analyze.effective.ReasoningEffort = "high"
 	result, err := s.analyzeFileStage(context.Background(), request, analysisStageAuthorityFor(t, request))
 	if err != nil || result.Progress.Cached || calls.Load() != 2 {
 		t.Fatalf("changed provider cache=%+v, %v", result, err)
@@ -476,7 +476,7 @@ func TestAnalysisFileRejectsCapturedFileMismatchAndReportsUnavailableModel(t *te
 		t.Fatalf("captured mismatch=%+v, %v", result, err)
 	}
 	request = analysisStageRequestFor(t, s, "main.go", AnalysisStageSemantic)
-	s.runtimes.bug.client = nil
+	s.conf().runtimes.bug.client = nil
 	result, err = s.analyzeFileStage(context.Background(), request, analysisStageAuthorityFor(t, request))
 	if err != nil || result.Progress.Status != AnalysisStageUnavailable || result.Progress.FindingCount != nil || result.Progress.Attempts != 0 || calls.Load() != 0 {
 		t.Fatalf("unavailable model=%+v, %v", result, err)

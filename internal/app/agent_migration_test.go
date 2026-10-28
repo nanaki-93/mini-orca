@@ -78,7 +78,7 @@ func TestAgentMigrationReadsLegacyPassivelyAndAdmitsOnlyFreshNativeWork(t *testi
 	if err != nil || string(read) != string(original) || calls.Load() != 0 {
 		t.Fatal("passive legacy history mutated or dispatched", err)
 	}
-	result, err := s.retryRequest(t.Context(), s.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "explicit new request"}}, nil)
+	result, err := s.retryRequest(t.Context(), s.conf().runtimes.function, []llm.ChatMessage{{Role: "user", Content: "explicit new request"}}, nil)
 	if err != nil || result.Content != "admitted result" || calls.Load() != 1 {
 		t.Fatal("native request", result, err)
 	}
@@ -136,7 +136,7 @@ func TestAgentMigrationFailureAndCancellationPreventProviderDispatch(t *testing.
 			if kind == "canceled" {
 				cancel()
 			}
-			_, err = s.retryRequest(ctx, s.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
+			_, err = s.retryRequest(ctx, s.conf().runtimes.function, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
 			if kind == "downgrade" {
 				// An unreadable journal is set aside with its bytes; work then
 				// starts a new journal.

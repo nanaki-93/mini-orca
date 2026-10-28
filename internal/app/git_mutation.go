@@ -70,7 +70,7 @@ func (s *Service) createGitWorktreeCheckout(ctx context.Context, request GitMuta
 }
 
 func (s *Service) initializeWorktreeInventory(ctx context.Context, path string) error {
-	runtime := s.runtimes.analyze
+	runtime := s.conf().runtimes.analyze
 	analyzer := project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, runtime.effective.Scope, runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort)
 	return analyzer.StoreLocalInventory(ctx, path)
 }

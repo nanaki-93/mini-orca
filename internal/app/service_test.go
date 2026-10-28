@@ -76,10 +76,10 @@ func TestNativeGoogleRuntimeImportsAndRetainsGuardedMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	profile := service.runtimes.analyze.profile
+	profile := service.conf().runtimes.analyze.profile
 	profile.Provider, profile.APIKey = config.GeminiProvider, "explicit-key"
-	service.runtimes.analyze = newModelRuntime(profile, time.Minute, 3)
-	analysis, err := service.AnalyzeProject(context.Background(), root)
+	service.conf().runtimes.analyze = newModelRuntime(profile, time.Minute, 3)
+	analysis, err := service.ImportProject(context.Background(), root, true)
 	if err != nil || analysis.AIStatus != project.ProjectAnalysisStatusFresh || analysis.Report.Model != "reported-google" || calls != 1 {
 		t.Fatalf("analysis=%+v error=%v calls=%d", analysis, err, calls)
 	}
@@ -102,7 +102,7 @@ func TestNativeGoogleRuntimeImportsAndRetainsGuardedMetadata(t *testing.T) {
 		t.Fatal("passive restore rewrote the agent journal", err)
 	}
 	profile.APIBaseURL = "https://generativelanguage.googleapis.com"
-	service.runtimes.analyze = newModelRuntime(profile, time.Minute, 3)
+	service.conf().runtimes.analyze = newModelRuntime(profile, time.Minute, 3)
 	if err := service.RequireRemoteConfirmation(config.AnalyzeModelScope, false); err == nil {
 		t.Fatal("native remote admission skipped consent")
 	}
@@ -120,7 +120,7 @@ func TestNativeGoogleRequestRejectionIsTerminalAndSecretsDoNotChangeModelID(t *t
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests++; w.WriteHeader(http.StatusBadRequest) }))
 	defer server.Close()
 	service, _ := newSemanticAnalysisService(t, server.URL, 3)
-	profile := service.runtimes.function.profile
+	profile := service.conf().runtimes.function.profile
 	profile.Provider, profile.APIKey = config.GeminiProvider, "first-secret"
 	runtime := newModelRuntime(profile, time.Minute, 3)
 	_, err := service.retryRequest(context.Background(), runtime, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
@@ -162,7 +162,7 @@ func TestRetryDoesNotResendPromptAfterProviderRedirectRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = service.retryRequest(context.Background(), service.runtimes.function, []llm.ChatMessage{{Role: "user", Content: "prompt must not be delivered twice"}}, nil)
+	_, err = service.retryRequest(context.Background(), service.conf().runtimes.function, []llm.ChatMessage{{Role: "user", Content: "prompt must not be delivered twice"}}, nil)
 	if !errors.Is(err, llm.ErrRedirectRejected) {
 		t.Fatalf("retry error = %v", err)
 	}
@@ -324,7 +324,7 @@ func TestAnalyzeProjectStoresStructuredReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	analysis, err := service.AnalyzeProject(context.Background(), root)
+	analysis, err := service.ImportProject(context.Background(), root, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,9 +362,9 @@ func TestAnalyzeProjectKeepsInventoryWhenProjectSummaryTimesOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	analysis, err := service.AnalyzeProject(ctx, root)
+	analysis, err := service.ImportProject(ctx, root, true)
 	if err != nil {
-		t.Fatalf("AnalyzeProject() error = %v", err)
+		t.Fatalf("ImportProject() error = %v", err)
 	}
 	if analysis.FileCount != 1 || analysis.Report.Status != project.ProjectAnalysisStatusFailed || analysis.Report.Failure == "" {
 		t.Fatalf("timed-out analysis = %+v", analysis)
@@ -430,7 +430,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	analysis, err := service.AnalyzeProject(context.Background(), root)
+	analysis, err := service.ImportProject(context.Background(), root, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -85,7 +85,7 @@ func (s *Service) InvestigatePlan(ctx context.Context, request PlanInvestigation
 	if err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.function
+	runtime := s.conf().runtimes.function
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	prepared, err := s.preparePlanInvestigation(timed, request)

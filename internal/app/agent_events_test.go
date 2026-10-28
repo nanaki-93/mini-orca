@@ -74,7 +74,7 @@ func TestAgentWorkflowStreamingOutputIsOptInAndPrivate(t *testing.T) {
 		t.Fatalf("unexpected model invocation count: %d", outputs)
 	}
 	// The provider-neutral compatibility type is still used by ordinary callers.
-	if !llm.ProviderCapabilities(s.runtimes.bug.profile).Streaming {
+	if !llm.ProviderCapabilities(s.conf().runtimes.bug.profile).Streaming {
 		t.Fatal("streamed with unavailable capability")
 	}
 }

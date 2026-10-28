@@ -32,7 +32,7 @@ func (s *Service) ValidateAgentSkill(ctx context.Context, request AgentSkillVali
 	if view.Version != request.Version || view.Configuration != request.Configuration || view.State == "stale" {
 		return nil, project.ErrRevisionConflict
 	}
-	if !slices.Contains(s.agentRuntime.Skills, request.Directory) {
+	if !slices.Contains(s.conf().agentRuntime.Skills, request.Directory) {
 		return nil, fmt.Errorf("validation requires a configured skill directory")
 	}
 	root := s.manager.Root()

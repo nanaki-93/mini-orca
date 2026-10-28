@@ -61,7 +61,7 @@ func (s *Service) AvailableModels(ctx context.Context) (AvailableModels, error) 
 func (s *Service) configuredModelChoices() (AvailableModels, error) {
 	catalog := AvailableModels{Models: []ModelChoice{}, Defaults: map[string]string{}}
 	seen := map[string]bool{}
-	for _, runtime := range []modelRuntime{s.runtimes.analyze, s.runtimes.bug, s.runtimes.function} {
+	for _, runtime := range []modelRuntime{s.conf().runtimes.analyze, s.conf().runtimes.bug, s.conf().runtimes.function} {
 		id, err := configuredModelID(runtime.profile)
 		if err != nil {
 			return AvailableModels{}, err

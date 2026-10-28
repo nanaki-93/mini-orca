@@ -122,7 +122,7 @@ func TestChangedFileDoesNotMakeUnfinishedUnchangedFilesStale(t *testing.T) {
 func TestAnalysisSelectionExplainsStageFailuresAndUnavailableProviders(t *testing.T) {
 	server, _ := analysisResponseServer(t, emptyAnalysisReply)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	s.runtimes.bug.client = nil
+	s.conf().runtimes.bug.client = nil
 	selection := readSelectionFor(t, s)
 	for _, file := range selection.Files {
 		if file.Path == "main.go" {

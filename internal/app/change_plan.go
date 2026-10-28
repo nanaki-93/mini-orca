@@ -48,7 +48,7 @@ func (s *Service) UpdateChangePlan(ctx context.Context, id string, request Chang
 	if err != nil {
 		return nil, err
 	}
-	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
+	session.ContextManifest = s.contextManifestForRuntime(manifest, s.conf().runtimes.function)
 	session.ScopeSuggestions = nil
 	session.LastReviewedHash, session.FileReviewHash = "", ""
 	session.LastReviewedChanges, session.ReviewedFiles = nil, nil
@@ -248,6 +248,6 @@ func (s *Service) captureChangePromptSnapshot(ctx context.Context, root string, 
 	if err != nil {
 		return err
 	}
-	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
+	session.ContextManifest = s.contextManifestForRuntime(manifest, s.conf().runtimes.function)
 	return nil
 }

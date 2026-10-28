@@ -53,7 +53,7 @@ func TestKnowledgeImportBindsTheNewCheckoutAndRetainsPassiveRestore(t *testing.T
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.AnalyzeProject(t.Context(), root)
+	result, err := s.ImportProject(t.Context(), root, true)
 	if err != nil || result.AIStatus != project.ProjectAnalysisStatusFresh || calls.Load() != 1 || s.manager.Root() != originalRoot {
 		t.Fatalf("import=%+v calls=%d err=%v", result, calls.Load(), err)
 	}
@@ -81,7 +81,7 @@ func TestKnowledgeImportRejectsChangedSourceAndPolicyBeforePublication(t *testin
 				return projectReportFixture
 			})
 			s, _ := newSemanticAnalysisService(t, server.URL, 0)
-			result, err := s.AnalyzeProject(t.Context(), root)
+			result, err := s.ImportProject(t.Context(), root, true)
 			if result != nil || !errors.Is(err, project.ErrRevisionConflict) {
 				t.Fatalf("stale import published: %+v %v", result, err)
 			}
@@ -111,7 +111,7 @@ func TestKnowledgeImportJournalFailurePreservesPriorReport(t *testing.T) {
 		return projectReportFixture
 	})
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	if _, err := s.AnalyzeProject(t.Context(), root); err != nil {
+	if _, err := s.ImportProject(t.Context(), root, true); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(root, ".mini-orca", "project-analysis.json")
@@ -120,7 +120,7 @@ func TestKnowledgeImportJournalFailurePreservesPriorReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	fail.Store(true)
-	result, err := s.AnalyzeProject(t.Context(), root)
+	result, err := s.ImportProject(t.Context(), root, true)
 	if result != nil || !errors.Is(err, agentstate.ErrPersistence) {
 		t.Fatalf("journal failure became inventory success: %+v %v", result, err)
 	}

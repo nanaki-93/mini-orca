@@ -78,7 +78,7 @@ func (s *Service) ExportAgentTrace(ctx context.Context, id string, request Agent
 		}
 	}
 	payload := agentruntime.TraceExport{TraceID: trace.TraceID, Snapshot: trace.Snapshot, Incomplete: trace.Incomplete, Truncated: trace.Truncated, Omitted: trace.Omitted, Unfinished: trace.Export.Unfinished, Spans: spans}
-	destination := s.agentRuntime.Telemetry.Export
+	destination := s.conf().agentRuntime.Telemetry.Export
 	receipt, err := agentruntime.ExportTrace(ctx, destination, payload, func(ctx context.Context) error {
 		if _, err := s.traceForExport(ctx, id, request); err != nil {
 			return err

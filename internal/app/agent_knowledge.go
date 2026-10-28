@@ -58,14 +58,14 @@ func (c overviewCompletion) ChatWithJSONSchema(ctx context.Context, messages []l
 	return &llm.ChatResponse{Model: result.Model, Usage: result.Usage, Choices: []llm.ChatChoice{{FinishReason: result.FinishReason, Message: llm.ChatMessage{Role: "assistant", Content: result.Content}}}}, nil
 }
 
-func (s *Service) analyzeProjectKnowledge(ctx context.Context, root string) (*project.Analysis, error) {
-	timed, cancel := context.WithTimeout(ctx, s.importTimeout)
+func (s *Service) analyzeProjectKnowledge(ctx context.Context, root string, target *configuration) (*project.Analysis, error) {
+	timed, cancel := context.WithTimeout(ctx, target.importTimeout)
 	defer cancel()
 	snapshot, err := project.ScanProject(timed, root)
 	if err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.analyze
+	runtime := target.runtimes.analyze
 	admitted, release, err := s.agentRunContextForSnapshot(timed, snapshot.Path, snapshot, runtime)
 	if err != nil {
 		return nil, err

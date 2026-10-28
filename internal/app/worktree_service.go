@@ -63,7 +63,7 @@ func (s *Service) openWorktreeService(canonical, root string) (*Service, *projec
 	if err != nil {
 		return nil, nil, err
 	}
-	child, err := New(s.config, manager)
+	child, err := New(s.conf().config, manager)
 	if err != nil {
 		return nil, nil, err
 	}

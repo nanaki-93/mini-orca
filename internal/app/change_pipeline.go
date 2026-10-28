@@ -27,7 +27,7 @@ func workflowStageScope(stage int) config.ModelScope {
 
 func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
 	runtime, _ := s.selectedRuntime(workflowStageScope(stage), profile)
-	runtime.effective.Timeout = max(s.workflowModelTimeout, duration(s.runtimes.function.effective.Timeout), duration(runtime.effective.Timeout)).String()
+	runtime.effective.Timeout = max(s.conf().workflowModelTimeout, duration(s.conf().runtimes.function.effective.Timeout), duration(runtime.effective.Timeout)).String()
 	return runtime
 }
 

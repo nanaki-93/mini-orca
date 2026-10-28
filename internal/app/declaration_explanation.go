@@ -101,7 +101,7 @@ func (s *Service) ExplainDeclaration(ctx context.Context, request DeclarationExp
 	if err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.function
+	runtime := s.conf().runtimes.function
 	prepared, err := s.prepareDeclarationExplanation(ctx, request, runtime)
 	if err != nil {
 		return nil, err

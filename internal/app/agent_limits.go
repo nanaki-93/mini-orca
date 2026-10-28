@@ -89,7 +89,7 @@ func (s *Service) agentJournal(root string) (*agentstate.Store, agentstate.Bindi
 			binding.Revision = index.ProjectRevision
 		}
 	}
-	binding.Configuration, err = s.agentConfiguration(s.agentRuntime)
+	binding.Configuration, err = s.agentConfiguration(s.conf().agentRuntime)
 	return store, binding, err
 }
 

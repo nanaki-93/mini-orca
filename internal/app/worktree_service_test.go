@@ -148,7 +148,7 @@ func TestWorktreeServiceRejectsUnrelatedOrRemovedCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inactive, err := New(service.config, manager)
+	inactive, err := New(service.conf().config, manager)
 	if err != nil {
 		t.Fatal(err)
 	}

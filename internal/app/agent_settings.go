@@ -66,12 +66,12 @@ func (s *Service) AgentSettings(ctx context.Context, query AgentRunQuery) (*Agen
 }
 
 func (s *Service) settingsView(query AgentRunQuery, record agentstate.SettingsRecord) (*AgentSettings, error) {
-	configuration, err := s.agentConfiguration(s.agentRuntime)
+	configuration, err := s.agentConfiguration(s.conf().agentRuntime)
 	if err != nil {
 		return nil, err
 	}
-	view := &AgentSettings{ProjectID: query.ProjectID, ProjectRevision: query.ProjectRevision, Version: record.Version, Configuration: configuration, State: "configured", Ceilings: s.agentRuntime.Limits, Models: s.EffectiveModels(), Skills: []AgentSkillSetting{}}
-	values := runtimePreferences(s.agentRuntime)
+	view := &AgentSettings{ProjectID: query.ProjectID, ProjectRevision: query.ProjectRevision, Version: record.Version, Configuration: configuration, State: "configured", Ceilings: s.conf().agentRuntime.Limits, Models: s.EffectiveModels(), Skills: []AgentSkillSetting{}}
+	values := runtimePreferences(s.conf().agentRuntime)
 	if record.Values != nil {
 		view.State, values = "overridden", *record.Values
 		if record.Configuration != configuration || s.validateAgentPreferences(values) != nil {
@@ -90,7 +90,7 @@ func (s *Service) settingsView(query AgentRunQuery, record agentstate.SettingsRe
 			view.Models[i].MaxTokens = &copy
 		}
 	}
-	for _, directory := range s.agentRuntime.Skills {
+	for _, directory := range s.conf().agentRuntime.Skills {
 		view.Skills = append(view.Skills, AgentSkillSetting{Directory: directory, Enabled: !slices.Contains(values.DisabledSkills, directory)})
 	}
 	return view, nil
@@ -124,7 +124,7 @@ func (s *Service) validateAgentPreferences(values agentstate.AgentPreferences) e
 			}
 		}
 	}
-	limits, ceiling := values.Limits, s.agentRuntime.Limits
+	limits, ceiling := values.Limits, s.conf().agentRuntime.Limits
 	for _, pair := range [][2]int64{
 		{int64(limits.ModelCalls), int64(ceiling.ModelCalls)}, {int64(limits.ToolCalls), int64(ceiling.ToolCalls)},
 		{limits.InputTokens, ceiling.InputTokens}, {limits.OutputTokens, ceiling.OutputTokens},
@@ -136,7 +136,7 @@ func (s *Service) validateAgentPreferences(values agentstate.AgentPreferences) e
 		}
 	}
 	for _, directory := range values.DisabledSkills {
-		if !slices.Contains(s.agentRuntime.Skills, directory) {
+		if !slices.Contains(s.conf().agentRuntime.Skills, directory) {
 			return fmt.Errorf("skill controls must reference a configured directory")
 		}
 	}

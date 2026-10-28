@@ -73,7 +73,7 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	if snapshot.instructions.Text != "" {
 		prompt += "\n\n" + project.InstructionPromptGuidance + snapshot.instructions.Text
 	}
-	timeout := s.analysisTimeout
+	timeout := s.conf().analysisTimeout
 	if snapshot.modelProfile != "" {
 		timeout = duration(snapshot.runtime.effective.Timeout)
 	}
@@ -200,7 +200,7 @@ func (s *Service) prepareSecurityReview(request SecurityReviewRequest) (security
 	if err != nil {
 		return securityReviewSnapshot{}, err
 	}
-	return securityReviewSnapshot{request: request, root: root, analysis: *analysis, file: *file, source: source, policyVersion: policy.Version(), runtime: s.runtimes.analyze, instructions: instructions}, nil
+	return securityReviewSnapshot{request: request, root: root, analysis: *analysis, file: *file, source: source, policyVersion: policy.Version(), runtime: s.conf().runtimes.analyze, instructions: instructions}, nil
 }
 
 func securityReviewSource(root string, file project.IndexFile, baseHash string) (string, error) {

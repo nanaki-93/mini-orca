@@ -333,7 +333,7 @@ func TestAnalyzeFileDoesNotRetryUnsupportedStructuredFormat(t *testing.T) {
 	}))
 	defer server.Close()
 	service, _ := newSemanticAnalysisService(t, server.URL, 0)
-	service.runtimes.bug.effective.MaxRetries = 3
+	service.conf().runtimes.bug.effective.MaxRetries = 3
 	result, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
 	if err != nil || result.Status != project.AnalysisStatusFailed || requests != 1 {
 		t.Fatalf("unsupported structured format result=%+v err=%v requests=%d", result, err, requests)
@@ -381,7 +381,7 @@ func TestAnalyzeFileRequiresRemoteConfirmationBeforeSendingPrompt(t *testing.T) 
 	defer server.Close()
 
 	service, _ := newSemanticAnalysisService(t, server.URL, 0)
-	service.runtimes.bug.effective.RemoteProvider = true
+	service.conf().runtimes.bug.effective.RemoteProvider = true
 	if _, err := service.AnalyzeFile(context.Background(), "main.go", false, false); err == nil || !strings.Contains(err.Error(), "explicit confirmation") {
 		t.Fatalf("declined remote confirmation error = %v", err)
 	}

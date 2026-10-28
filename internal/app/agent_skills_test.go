@@ -28,7 +28,7 @@ func installSkillFixture(t *testing.T, service *Service, root string) {
 			t.Fatal(err)
 		}
 	}
-	service.agentRuntime.Skills = []string{"project-skills/review-code"}
+	service.conf().agentRuntime.Skills = []string{"project-skills/review-code"}
 	if _, err := service.Reindex(); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestProjectSkillsRejectUnindexedChangedAndEscapingManifestsBeforeDispatch(t
 			manifest := filepath.Join(root, "project-skills/review-code/SKILL.md")
 			switch condition {
 			case "unindexed":
-				service.agentRuntime.Skills = []string{"unindexed/skill"}
+				service.conf().agentRuntime.Skills = []string{"unindexed/skill"}
 			case "changed":
 				if err := os.WriteFile(manifest, []byte("changed"), 0600); err != nil {
 					t.Fatal(err)

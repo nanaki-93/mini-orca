@@ -76,7 +76,7 @@ func (s *Service) changeWorkflowTimeout(ctx context.Context, models ChangeWorkfl
 	}
 	// One check pass has at most five commands: two baselines, vet, gitleaks
 	// and candidate tests. Reserve preparation time for copying and identity work.
-	checks := 5*s.focusedCheckTimeout + 5*time.Minute
+	checks := 5*s.conf().focusedCheckTimeout + 5*time.Minute
 	budget := remaining + checks
 	if startStage == 0 {
 		budget += checks // An existing proposal may need a pre-generation probe.

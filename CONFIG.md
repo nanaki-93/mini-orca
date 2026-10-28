@@ -1,9 +1,12 @@
 # Configuration Guide
 
-Mini-Orca reads one YAML file, normally ignored `config.yaml`. Start with
-`config.example.yaml`; do not commit provider credentials. Configuration is
-validated once at daemon startup, and unknown or retired keys stop startup with
-the full field path in the error. JSON configuration files are not supported.
+Mini-Orca reads YAML configuration at two levels: the daemon's `config.yaml`
+(see [Configuration changes](#configuration-changes) for where it is found)
+and, for each project, that project's own `.mini-orca/config.yaml`, which the
+first-run setup in the Web UI writes (see [Project configuration](#project-configuration)).
+Start from `config.example.yaml`; do not commit provider credentials. Unknown or
+retired keys are refused with the full field path in the error. JSON
+configuration files are not supported.
 
 The daemon configures three model profiles, used by default as follows:
 
@@ -520,21 +523,59 @@ set `workflow_model_seconds`, restart the daemon, and run the agents again on th
 saved task. A retry still validates the current source,
 plan, consent and execution trust.
 
+## Project configuration
+
+A project can carry its own configuration in `.mini-orca/config.yaml`. It uses
+the daemon's schema except `logging` and `project_path`, which configure the
+daemon, and it is applied on top of the daemon's configuration: a model scope
+it names (`model_scopes.analyze`, `bug` or `code`) replaces that scope whole, so
+a provider change leaves no stale address or key behind, and every other key it
+sets replaces the daemon's value for that key.
+
+The first time a project without that file opens, the Web UI starts **setup**:
+
+1. **Models** — provider, model, address, key, reasoning effort and CLI path for
+   each scope, starting from the configuration in use, with a connection test
+   (one short request, recorded as an agent run; no project code is sent).
+   Saved keys are never shown again; leaving the field empty keeps them.
+2. **Agents & budget** — the scope each agent role uses and the per-run budget
+   (`agent_runtime.roles` and `max_*`). Saving here writes the file.
+3. **Checks** — the detected test and lint commands, to allow or not.
+4. **Analysis** — folders to leave out of analysis, then optionally the first
+   analysis.
+
+Skipping keeps the daemon's configuration and records the choice in
+`.mini-orca/setup.json`; Settings → Project shows where the configuration comes
+from and reopens setup at any time. Setup rewrites only the keys it manages and
+keeps any others, with their comments. The file is written `0600`, and
+`.mini-orca/.gitignore` lists it so it stays out of Git.
+
+The configuration applies without restarting: opening or switching to a
+project loads its file, and saving setup reloads it at once. Saving is refused
+while an analysis, an agent run, a Go scan or work in a worktree is running,
+since that work was admitted with the old models. A file that cannot be applied
+(invalid YAML, a daemon-only key, an invalid model) leaves the daemon's
+configuration in use; the Inbox and setup show the error. Importing a project
+asks its analyze model for an overview only when that model is local or the
+remote provider was confirmed; otherwise it records the deterministic inventory
+and a later analysis writes the overview.
+
 ## Configuration changes
 
 Only the current YAML schema is supported. For retired configurations, create a
 fresh local file from `config.example.yaml`; unknown keys fail startup instead
-of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path;
-a missing file then stops startup. Otherwise the daemon reads the first
-`config.yaml` of: its working folder (the project, when the `mini-orca`
-launcher starts it), `~/.config/mini-orca/`, the platform configuration
+of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the daemon's
+file; a missing file then stops startup. Otherwise the daemon reads the first
+`config.yaml` of `~/.config/mini-orca/`, the platform configuration
 directory's `mini-orca/` (`~/Library/Application Support/mini-orca/` on macOS)
-and the folder of the daemon binary, symlinks resolved. With none, it starts
-with local defaults (`http://localhost:1234/v1`), logs the folders it searched,
-and `GET /api/models/current` reports an empty `config_file`, which Settings →
-Models & agents shows as a warning. `make install` copies the repository's
-`config.yaml` to `~/.config/mini-orca/config.yaml` when that file does not
-exist. Restart the daemon after changes.
+and the folder of the daemon binary, symlinks resolved. A `config.yaml` in the
+project folder belongs to the project and is not read. With no daemon file, it
+starts with local defaults (`http://localhost:1234/v1`) and logs the folders it
+searched; `GET /api/models/current` reports the file in use as `config_file`
+(the project's file when one is applied, empty for the defaults). `make
+install` copies the repository's `config.yaml` to
+`~/.config/mini-orca/config.yaml` when that file does not exist. Restart the
+daemon after changing its own file; project files apply live.
 
 ## Local metadata and manual cleanup
 

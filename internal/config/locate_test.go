@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestFindSearchesTheProjectTheUserAndTheInstall(t *testing.T) {
+func TestFindSearchesTheUserThenTheInstallNotTheProject(t *testing.T) {
 	home, project, install := t.TempDir(), t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
@@ -27,25 +27,24 @@ func TestFindSearchesTheProjectTheUserAndTheInstall(t *testing.T) {
 	if err := os.Symlink(binary, link); err != nil {
 		t.Fatal(err)
 	}
-	if got := Find(project, link); got != "" {
+	// A config.yaml in the folder the daemon runs in belongs to that project.
+	write(filepath.Join(project, "config.yaml"))
+	t.Chdir(project)
+	if got := Find(link); got != "" {
 		t.Fatalf("nothing to find: %q", got)
 	}
 	// A daemon on PATH through a symlink still reads the config beside it.
 	installed := write(filepath.Join(install, "config.yaml"))
-	if got, want := Find(project, link), installed; !sameFile(t, got, want) {
+	if got, want := Find(link), installed; !sameFile(t, got, want) {
 		t.Fatalf("installed config: %q", got)
 	}
 	user := write(filepath.Join(home, ".config", "mini-orca", "config.yaml"))
-	if got := Find(project, link); got != user {
+	if got := Find(link); got != user {
 		t.Fatalf("user config: %q", got)
-	}
-	local := write(filepath.Join(project, "config.yaml"))
-	if got := Find(project, link); got != local {
-		t.Fatalf("project config: %q", got)
 	}
 	explicit := filepath.Join(home, "missing.yaml")
 	t.Setenv(ConfigEnv, explicit)
-	if got := Find(project, link); got != explicit {
+	if got := Find(link); got != explicit {
 		t.Fatalf("explicit config: %q", got)
 	}
 }

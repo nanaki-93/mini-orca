@@ -62,7 +62,7 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 		return check, err
 	}
 	started := time.Now()
-	timed, cancel := context.WithTimeout(ctx, s.focusedCheckTimeout)
+	timed, cancel := context.WithTimeout(ctx, s.conf().focusedCheckTimeout)
 	defer cancel()
 	result, err := s.runCheckCommand(timed, workspace, check.Command, revision, executesProjectCode)
 	check.Output = sanitizeCheckOutput(result.Output, result.Truncated, workspace, s.manager.Root())
@@ -72,7 +72,7 @@ func (s *Service) executeCheck(ctx context.Context, workspace, revision string, 
 		check.State = CheckCanceled
 		check.Output = timed.Err().Error()
 		if ctx.Err() == nil && timed.Err() == context.DeadlineExceeded {
-			check.Output = fmt.Sprintf("%s timed out after %s. Increase timeouts.focused_check_seconds and retry checks; no code failure was established.", check.Name, s.focusedCheckTimeout)
+			check.Output = fmt.Sprintf("%s timed out after %s. Increase timeouts.focused_check_seconds and retry checks; no code failure was established.", check.Name, s.conf().focusedCheckTimeout)
 		}
 		return check, timed.Err()
 	}

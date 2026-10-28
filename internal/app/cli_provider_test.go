@@ -54,7 +54,7 @@ func TestCLIProvidersAnalyzeAndProposeChangesWithScopeConsent(t *testing.T) {
 			if _, err := os.Stat(calls); !os.IsNotExist(err) {
 				t.Fatal("unconfirmed analysis launched a process")
 			}
-			analysis, err := service.AnalyzeProject(context.Background(), root)
+			analysis, err := service.ImportProject(context.Background(), root, true)
 			if err != nil || analysis.Report.Status != project.ProjectAnalysisStatusFresh {
 				t.Fatalf("project analysis = %+v, %v", analysis, err)
 			}

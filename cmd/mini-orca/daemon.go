@@ -68,11 +68,7 @@ func startDaemon(ctx context.Context, project string, out io.Writer) (*ownedDaem
 	if err != nil {
 		return nil, err
 	}
-	if path := config.Find(project, binary); path != "" {
-		fmt.Fprintf(out, "Configuration: %s\n", path)
-	} else {
-		fmt.Fprintf(out, "No config.yaml found, so models use the built-in local defaults (%s).\nPut your configuration in one of:\n  %s\n", config.DefaultProviderAPIBaseURL, strings.Join(config.Candidates(project, binary), "\n  "))
-	}
+	fmt.Fprintln(out, configurationNote(project, binary))
 	cmd := exec.Command(binary)
 	cmd.Dir = project
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -85,6 +81,21 @@ func startDaemon(ctx context.Context, project string, out io.Writer) (*ownedDaem
 		close(daemon.done)
 	}()
 	return daemon, ctx.Err()
+}
+
+// configurationNote names the configuration a daemon started from binary
+// uses for project: the project's own file, the daemon's, or the defaults.
+func configurationNote(project, binary string) string {
+	daemon := config.Find(binary)
+	if path, err := config.ProjectFile(project); err == nil {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			return "Project configuration: " + path
+		}
+	}
+	if daemon != "" {
+		return "Configuration: " + daemon + "\nThe Web UI offers to set this project up with its own configuration."
+	}
+	return fmt.Sprintf("No configuration found, so models use the built-in local defaults (%s).\nThe Web UI's setup saves this project's configuration in %s; a daemon-wide one goes in:\n  %s", config.DefaultProviderAPIBaseURL, config.ProjectConfigPath, strings.Join(config.Candidates(binary), "\n  "))
 }
 
 // stop asks the daemon to shut down and waits for it; it has its own budget

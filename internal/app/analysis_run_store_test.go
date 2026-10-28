@@ -16,8 +16,8 @@ import (
 func TestAnalysisRunStoreRestoresInterruptedProgressWithoutConsentOrRequests(t *testing.T) {
 	server, calls, started, release := analysisBlockingServer(t)
 	s, root := newSemanticAnalysisService(t, server.URL, 0)
-	s.runtimes.bug.effective.RemoteProvider = true
-	s.runtimes.analyze.effective.RemoteProvider = true
+	s.conf().runtimes.bug.effective.RemoteProvider = true
+	s.conf().runtimes.analyze.effective.RemoteProvider = true
 	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
 	startedRun, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
 	if err != nil {
@@ -45,7 +45,7 @@ func TestAnalysisRunStoreRestoresInterruptedProgressWithoutConsentOrRequests(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored.runtimes = s.runtimes
+	restored.conf().runtimes = s.conf().runtimes
 	overview, err := restored.ProjectOverview()
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +182,7 @@ func TestAnalysisRunStoreResumeReusesPublishedEvidenceWithNoAttemptsRemaining(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored.runtimes = s.runtimes
+	restored.conf().runtimes = s.conf().runtimes
 	interrupted, err := restored.currentTestAnalysisRun(context.Background())
 	if err != nil {
 		t.Fatal(err)

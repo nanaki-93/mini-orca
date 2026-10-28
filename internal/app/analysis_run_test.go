@@ -352,7 +352,7 @@ func emptyAnalysisReply(stage AnalysisStage) string {
 func TestAnalysisRunStagesShareAgentBudget(t *testing.T) {
 	server, calls := analysisResponseServer(t, emptyAnalysisReply)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	s.agentRuntime.Limits.ModelCalls = 1
+	s.conf().agentRuntime.Limits.ModelCalls = 1
 	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
 	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
 		t.Fatal(err)
@@ -710,7 +710,7 @@ func TestAnalysisRunRejectsSourcePolicyProviderAndProjectReplacement(t *testing.
 				// No provider metadata is read during the blocked HTTP response; release
 				// synchronizes the subsequent validation with this simulated config change.
 				s.analysisRun.mu.Lock()
-				s.runtimes.analyze.effective.ReasoningEffort = "replacement"
+				s.conf().runtimes.analyze.effective.ReasoningEffort = "replacement"
 				s.analysisRun.mu.Unlock()
 			case "reindex":
 				if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed(){}\n"), 0600); err != nil {

@@ -35,7 +35,7 @@ func TestAnalyzeProjectRequestsSchemaAndRestoresDiagramReport(t *testing.T) {
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 
-	analysis, err := service.AnalyzeProject(context.Background(), root)
+	analysis, err := service.ImportProject(context.Background(), root, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestAnalyzeProjectKeepsInventoryAndExplainsUnusableReplies(t *testing.T) {
 			}))
 			defer server.Close()
 			service, root := newSemanticAnalysisService(t, server.URL, 0)
-			analysis, err := service.AnalyzeProject(context.Background(), root)
+			analysis, err := service.ImportProject(context.Background(), root, true)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -57,6 +57,18 @@ interface.
   install` seeds `~/.config/mini-orca/config.yaml`, the launcher prints the file
   it uses, and the status bar and Settings warn when there is none. A missing
   `MINI_ORCA_CONFIG` file now stops startup.
+- **Project configuration and setup:** each project can have its own
+  `.mini-orca/config.yaml`, applied on top of the daemon's and live — on
+  opening or switching projects and on saving, without a restart. The first
+  time a project without one opens, a setup wizard configures its models (with
+  a connection test), the model each agent uses, the run budget, its checks and
+  what analysis reads; skipping keeps the daemon's configuration. Keys are never
+  sent back to the browser, the file is private and kept out of Git, and setup
+  keeps the file's other keys and comments (`GET/POST
+  /api/projects/current/setup`, `…/setup/skip`, `…/setup/test-model`). Import no
+  longer fails for a remote analyze model without consent: it records the
+  inventory and a later analysis writes the overview. A `config.yaml` in the
+  project folder is no longer read as the daemon's configuration.
 - **Faster triage:** Issues move with `j`/`k`, fix with `f`, dismiss or reopen
   with `x`, and filter by kind; the status bar shows a running analysis and the
   code inspector shows each file's analysis stages.

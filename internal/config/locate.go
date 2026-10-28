@@ -9,16 +9,18 @@ import (
 // ConfigEnv names an explicit configuration file; it replaces the search.
 const ConfigEnv = "MINI_ORCA_CONFIG"
 
-// Candidates lists, in order, the configuration files a daemon started in
-// workDir from executable reads: MINI_ORCA_CONFIG alone when set, otherwise
-// the project's config.yaml, the user's ~/.config/mini-orca/config.yaml, the
-// platform configuration directory's mini-orca/config.yaml, and the
-// config.yaml beside the executable (its symlinks resolved).
-func Candidates(workDir, executable string) []string {
+// Candidates lists, in order, the daemon configuration files a daemon run
+// from executable reads: MINI_ORCA_CONFIG alone when set, otherwise the
+// user's ~/.config/mini-orca/config.yaml, the platform configuration
+// directory's mini-orca/config.yaml, and the config.yaml beside the
+// executable (its symlinks resolved). A project's own configuration is
+// ProjectConfigPath inside it, applied on top (see LoadProject); a
+// config.yaml in the project folder belongs to the project, not to Mini-Orca.
+func Candidates(executable string) []string {
 	if explicit := os.Getenv(ConfigEnv); explicit != "" {
 		return []string{explicit}
 	}
-	list := []string{filepath.Join(workDir, "config.yaml")}
+	var list []string
 	if home, err := os.UserHomeDir(); err == nil {
 		list = append(list, filepath.Join(home, ".config", "mini-orca", "config.yaml"))
 	}
@@ -43,8 +45,8 @@ func Candidates(workDir, executable string) []string {
 // Find returns the first candidate that is a regular file, or "" when none
 // is and the built-in local defaults apply. An explicit MINI_ORCA_CONFIG is
 // returned even when missing, so loading it reports the error.
-func Find(workDir, executable string) string {
-	candidates := Candidates(workDir, executable)
+func Find(executable string) string {
+	candidates := Candidates(executable)
 	if os.Getenv(ConfigEnv) != "" {
 		return candidates[0]
 	}

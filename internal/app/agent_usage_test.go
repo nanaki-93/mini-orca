@@ -133,12 +133,12 @@ func TestAgentTraceDoesNotInventInterruptedRetryOwnership(t *testing.T) {
 
 func TestAgentReportingSettingsPreserveLegacyExecutionIdentity(t *testing.T) {
 	s, _, _ := agentHistoryFixture(t)
-	before, err := s.agentConfiguration(s.agentRuntime)
+	before, err := s.agentConfiguration(s.conf().agentRuntime)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, prices := costFixture()
-	changed := s.agentRuntime
+	changed := s.conf().agentRuntime
 	changed.Telemetry.Prices = prices
 	after, err := s.agentConfiguration(changed)
 	if err != nil || after != before {
@@ -152,9 +152,9 @@ func TestAgentReportingSettingsPreserveLegacyExecutionIdentity(t *testing.T) {
 			Context config.AgentContext
 			Skills  []string
 		}
-	}{Profiles: [3]config.ModelProfile{s.runtimes.analyze.profile, s.runtimes.bug.profile, s.runtimes.function.profile}}
-	legacy.Runtime.Roles, legacy.Runtime.Limits = s.agentRuntime.Roles, s.agentRuntime.Limits
-	legacy.Runtime.Context, legacy.Runtime.Skills = s.agentRuntime.Context, s.agentRuntime.Skills
+	}{Profiles: [3]config.ModelProfile{s.conf().runtimes.analyze.profile, s.conf().runtimes.bug.profile, s.conf().runtimes.function.profile}}
+	legacy.Runtime.Roles, legacy.Runtime.Limits = s.conf().agentRuntime.Roles, s.conf().agentRuntime.Limits
+	legacy.Runtime.Context, legacy.Runtime.Skills = s.conf().agentRuntime.Context, s.conf().agentRuntime.Skills
 	data, err := json.Marshal(legacy)
 	if err != nil || agentruntime.TraceIdentity(string(data)) != after {
 		t.Fatal("empty telemetry changed legacy identity", err)
@@ -182,7 +182,7 @@ func TestAgentTraceOverviewCancellationPreservesFactualInventory(t *testing.T) {
 	}
 	finished := make(chan outcome, 1)
 	go func() {
-		analysis, err := configured.AnalyzeProject(ctx, s.manager.Root())
+		analysis, err := configured.ImportProject(ctx, s.manager.Root(), true)
 		finished <- outcome{analysis, err}
 	}()
 	select {

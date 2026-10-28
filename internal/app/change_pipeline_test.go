@@ -126,18 +126,18 @@ func TestChangeWorkflowAdmissionGuardsDispatchNothing(t *testing.T) {
 			switch name {
 			case "streaming":
 				request.StreamOutput = true
-				previous := s.runtimes.function.profile.Provider
-				s.runtimes.function.profile.Provider = config.PiProvider
-				defer func() { s.runtimes.function.profile.Provider = previous }()
+				previous := s.conf().runtimes.function.profile.Provider
+				s.conf().runtimes.function.profile.Provider = config.PiProvider
+				defer func() { s.conf().runtimes.function.profile.Provider = previous }()
 			case "untrusted":
 				s.clearExecutionTrust()
 				defer s.TrustProjectExecution(context.Background(), session.ProjectRevision, true)
 			case "profile":
 				request.Models.Test = "arbitrary-model"
 			case "remote":
-				s.runtimes.function.effective.RemoteProvider = true
+				s.conf().runtimes.function.effective.RemoteProvider = true
 				request.ConfirmedProfiles = []string{"bug", "analyze"}
-				defer func() { s.runtimes.function.effective.RemoteProvider = false }()
+				defer func() { s.conf().runtimes.function.effective.RemoteProvider = false }()
 			case "security":
 				session.Kind = "security"
 				if err := storeChangeSession(s.manager.Root(), session); err != nil {
@@ -178,8 +178,8 @@ func TestChangeWorkflowDefaultRolesRequireConsentAndShareBudget(t *testing.T) {
 	var calls atomic.Int32
 	reply := func() string { calls.Add(1); return workflowImplementation }
 	s, _, initial := workflowService(t, [3]func() string{reply, reply, reply})
-	s.agentRuntime.Limits.ModelCalls = 1
-	s.runtimes.bug.effective.RemoteProvider = true
+	s.conf().agentRuntime.Limits.ModelCalls = 1
+	s.conf().runtimes.bug.effective.RemoteProvider = true
 	req := workflowRequest(initial)
 	req.Models = ChangeWorkflowModels{}
 	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, req); err == nil || calls.Load() != 0 {
@@ -386,8 +386,8 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, request); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("unlisted CLI model admitted: %v", err)
 	}
-	s.runtimes.bug.effective.Timeout = "2m0s"
-	s.runtimes.function.effective.Timeout = "5m0s"
+	s.conf().runtimes.bug.effective.Timeout = "2m0s"
+	s.conf().runtimes.function.effective.Timeout = "5m0s"
 	request.Models.Review = catalog.Defaults["code"]
 	started, err := s.StartChangeWorkflow(context.Background(), initial.ID, request)
 	if err != nil || started.Workflow.Status != "running" {

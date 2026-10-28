@@ -27,7 +27,7 @@ func TestFeatureGenerationGetsIndependentExtendedDeadline(t *testing.T) {
 	server := changeProvider(t, func() string { return validFeatureResponse })
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
 	for _, timeout := range []time.Duration{time.Millisecond, 20 * time.Minute} {
-		runtime := s.runtimes.analyze
+		runtime := s.conf().runtimes.analyze
 		runtime.effective.Timeout = timeout.String()
 		var remaining time.Duration
 		report, err := s.generateFeatures(context.Background(), featureRequestFor(t, s, "Improve cancellation."), runtime, nil, featureGenerationAuthority{
@@ -272,7 +272,7 @@ func TestFeatureGenerationAddsNewIdeasAndSuppressesDuplicates(t *testing.T) {
 	}
 	firstGeneration := first.LastGeneration.GenerationID
 	if len(first.Generations) != 1 || first.Generations[0].ID != firstGeneration || first.Generations[0].Model == nil || first.Generations[0].Model.Profile != "analyze" ||
-		first.Generations[0].Model.Model != s.runtimes.analyze.effective.Model || first.Suggestions[0].GenerationID != firstGeneration {
+		first.Generations[0].Model.Model != s.conf().runtimes.analyze.effective.Model || first.Suggestions[0].GenerationID != firstGeneration {
 		t.Fatalf("generation provenance=%+v", first.Generations)
 	}
 	request := featureRequestFor(t, s, "Improve.")
@@ -726,11 +726,11 @@ func TestFeatureGenerationBudgetCountsExistingIdeas(t *testing.T) {
 	if base+len(existingFeatureIdeas(report.Suggestions)) <= limit*4 {
 		t.Fatal("fixture ideas do not exceed the budget")
 	}
-	s.runtimes.analyze.effective.ContextMaxTokens = limit
+	s.conf().runtimes.analyze.effective.ContextMaxTokens = limit
 	before := featureHistoryBytes(t, root)
 	_, err = generateFeaturesFor(t, s, "Improve.")
 	if err == nil || !strings.Contains(err.Error(), "existing ideas") || !strings.Contains(err.Error(), fmt.Sprintf("%d-token", limit)) ||
-		!strings.Contains(err.Error(), s.runtimes.analyze.effective.Model) || provider.calls.Load() != 1 {
+		!strings.Contains(err.Error(), s.conf().runtimes.analyze.effective.Model) || provider.calls.Load() != 1 {
 		t.Fatalf("budget error=%v calls=%d", err, provider.calls.Load())
 	}
 	if string(featureHistoryBytes(t, root)) != string(before) {

@@ -19,7 +19,7 @@ import (
 func traceExportService(t *testing.T, endpoint string) (*Service, *agentstate.Store, agentstate.Run, AgentTraceExportRequest) {
 	t.Helper()
 	s, store, query := agentHistoryFixture(t)
-	s.agentRuntime.Telemetry.Export = config.AgentTelemetryExport{Endpoint: endpoint}
+	s.conf().agentRuntime.Telemetry.Export = config.AgentTelemetryExport{Endpoint: endpoint}
 	run := seedAgentRun(t, s, store, "export-run", "", time.Now().UTC())
 	span := agentstate.TraceSpan{ID: "0123456789abcdef", Kind: "provider", Status: "running", Started: time.Now().UTC(), RunKey: agentruntime.TraceIdentity(run.ID)}
 	if _, err := store.BeginSpan(t.Context(), run.BudgetID, span); err != nil {
@@ -105,8 +105,8 @@ func TestAgentTraceExportInvalidatesChangedContentAndDestinationIndependently(t 
 	s, store, run, request := traceExportService(t, collector.URL)
 	query := AgentRunQuery{ProjectID: request.ProjectID, ProjectRevision: request.ProjectRevision}
 	_, prices := costFixture()
-	s.agentRuntime.Telemetry.Prices = prices
-	s.agentRuntime.Telemetry.Export.Endpoint = collector.URL + "/replacement"
+	s.conf().agentRuntime.Telemetry.Prices = prices
+	s.conf().agentRuntime.Telemetry.Export.Endpoint = collector.URL + "/replacement"
 	detail, err := s.AgentRunDetail(t.Context(), query, run.ID, false)
 	if err != nil || detail.Trace.Snapshot != request.Snapshot || detail.Trace.Export.Fingerprint == request.DestinationFingerprint {
 		t.Fatal("content and destination identities mixed", err)
@@ -114,7 +114,7 @@ func TestAgentTraceExportInvalidatesChangedContentAndDestinationIndependently(t 
 	if _, err := s.ExportAgentTrace(t.Context(), run.ID, request); err == nil {
 		t.Fatal("old destination approval reused")
 	}
-	s.agentRuntime.Telemetry.Export.Endpoint = collector.URL
+	s.conf().agentRuntime.Telemetry.Export.Endpoint = collector.URL
 	if err := store.FinishSpan(t.Context(), run.BudgetID, "abcdef0123456789", "failed", time.Now().UTC(), 123); err != nil {
 		t.Fatal(err)
 	}

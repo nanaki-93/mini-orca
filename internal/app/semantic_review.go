@@ -405,7 +405,7 @@ func (s *Service) semanticCacheRuntime(analysis *project.Analysis) modelRuntime 
 			return s.analysisModelRuntime(AnalysisStageSemantic, models)
 		}
 	}
-	return s.runtimes.bug
+	return s.conf().runtimes.bug
 }
 
 func semanticCacheInputForRuntime(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string, runtime modelRuntime) project.FileAnalysisInput {

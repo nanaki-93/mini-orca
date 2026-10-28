@@ -32,12 +32,12 @@ func TestAgentRetriesConsumeSharedBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, stop, err := s.agentRunContext(context.Background(), s.runtimes.bug)
+	ctx, stop, err := s.agentRunContext(context.Background(), s.conf().runtimes.bug)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stop()
-	_, err = s.retryRequest(ctx, s.runtimes.bug, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
+	_, err = s.retryRequest(ctx, s.conf().runtimes.bug, []llm.ChatMessage{{Role: "user", Content: "request"}}, nil)
 	if !errors.Is(err, agentruntime.ErrBudgetExceeded) || calls.Load() != 2 {
 		t.Fatalf("retry error=%v calls=%d", err, calls.Load())
 	}
@@ -82,16 +82,16 @@ func TestAnalysisAdmissionGrantsOnlyAvailableCapturedProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cancel()
-	if _, err := agentruntime.WithPolicy(ctx, s.runtimes.analyze.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
+	if _, err := agentruntime.WithPolicy(ctx, s.conf().runtimes.analyze.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
 		t.Fatalf("uncaptured destination granted: %v", err)
 	}
-	s.runtimes.bug.client = nil
+	s.conf().runtimes.bug.client = nil
 	missing, stop, err := s.analysisAgentContext(context.Background(), preview)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stop()
-	if _, err := agentruntime.WithPolicy(missing, s.runtimes.function.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
+	if _, err := agentruntime.WithPolicy(missing, s.conf().runtimes.function.client); !errors.Is(err, agentruntime.ErrPolicyDenied) {
 		t.Fatalf("missing destination acquired a fallback: %v", err)
 	}
 }

@@ -107,9 +107,9 @@ func TestAnalysisModelsDispatchChosenProvidersAndRetainDefaults(t *testing.T) {
 func TestAnalysisModelsUseSelectedTimeouts(t *testing.T) {
 	server, calls := analysisResponseServer(t, emptyAnalysisReply)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	s.runtimes.analyze.effective.Timeout = "30m"
-	s.runtimes.function.effective.Timeout = "20m"
-	s.runtimes.bug.effective.Timeout = "1m"
+	s.conf().runtimes.analyze.effective.Timeout = "30m"
+	s.conf().runtimes.function.effective.Timeout = "20m"
+	s.conf().runtimes.bug.effective.Timeout = "1m"
 	models := &AnalysisModels{Code: "analyze", Review: "code", Features: "bug"}
 	prepared, err := s.prepareFileAnalysis("main.go")
 	if err != nil {
@@ -152,8 +152,8 @@ func TestAnalysisModelsUseSelectedTimeouts(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Legacy standalone reviews retain the existing Analysis timeout.
-	performance.runtime, performance.modelProfile = s.runtimes.analyze, ""
-	if _, err := s.requestPerformanceReview(context.Background(), performance, dispatchFor(s.analysisTimeout)); !errors.Is(err, stopped) {
+	performance.runtime, performance.modelProfile = s.conf().runtimes.analyze, ""
+	if _, err := s.requestPerformanceReview(context.Background(), performance, dispatchFor(s.conf().analysisTimeout)); !errors.Is(err, stopped) {
 		t.Fatal(err)
 	}
 	if attempts != 4 || calls.Load() != 0 {
@@ -175,7 +175,7 @@ func TestAnalysisModelsRejectInvalidRetargetingAndRequireActualProviderConsent(t
 	if _, err := s.PreviewAnalysisRun(context.Background(), request); err == nil || calls.Load() != 0 {
 		t.Fatalf("invalid profile was admitted: %v", err)
 	}
-	s.runtimes.function.effective.RemoteProvider = true
+	s.conf().runtimes.function.effective.RemoteProvider = true
 	models := &AnalysisModels{Code: "bug", Review: "analyze", Features: "code"}
 	preview := analysisModelsPreviewFor(t, s, models, request.Limits)
 	start := analysisStartFor(preview)
@@ -226,8 +226,8 @@ func TestAnalysisModelsPersistAcrossResumeAndRejectChangedProvider(t *testing.T)
 		t.Fatalf("resumed selected models did not complete: %+v calls=%d", run, calls.Load())
 	}
 	latest := analysisModelsPreviewFor(t, s, models, AnalysisRunLimits{100, 30, 2})
-	s.runtimes.function = newModelRuntime(s.runtimes.function.profile, s.importTimeout, 4)
-	s.runtimes.function.effective.ReasoningEffort = "changed"
+	s.conf().runtimes.function = newModelRuntime(s.conf().runtimes.function.profile, s.conf().importTimeout, 4)
+	s.conf().runtimes.function.effective.ReasoningEffort = "changed"
 	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(latest)); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 7 {
 		t.Fatalf("changed selected provider was admitted: %v", err)
 	}

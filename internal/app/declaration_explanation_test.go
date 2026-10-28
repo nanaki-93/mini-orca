@@ -70,7 +70,7 @@ func TestExplainDeclarationRequiresConsentAndRejectsIneligibleOrStaleTargetsWith
 	}))
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	service.runtimes.function.effective.RemoteProvider = true
+	service.conf().runtimes.function.effective.RemoteProvider = true
 	index, _ := service.manager.Index()
 	file, _ := service.manager.IndexedFile("main.go")
 	base := DeclarationExplanationRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: file.ContentHash, TargetPath: "main.go"}

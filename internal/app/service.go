@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
@@ -55,21 +56,16 @@ type modelOutput = agentruntime.Result
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
-	config                          *config.Config
-	agentRuntime                    config.AgentRuntime
+	// global is the daemon's configuration; configured is what the active
+	// project runs with (global with the project's own file applied).
+	global                          *config.Config
+	configured                      atomic.Pointer[configuration]
 	agentRuns                       *agentRunController
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
 	manager                         *project.Manager
-	runtimes                        scopedRuntimes
 	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
 	discoverAgyModels               func(context.Context, string) ([]llm.AgyModel, error)
-	importTimeout                   time.Duration
-	analysisTimeout                 time.Duration
-	workflowModelTimeout            time.Duration
-	focusedCheckTimeout             time.Duration
-	retryBase                       time.Duration
-	retryMax                        time.Duration
 	jobLifecycleMu                  sync.Mutex
 	changesMu                       sync.Mutex
 	changeAuthority                 map[string]string
@@ -84,6 +80,9 @@ type Service struct {
 	beforeSecurityReviewPublication func()
 }
 
+// New creates the service for manager's project. cfg is the daemon's
+// configuration; the project's own configuration file, when it has a valid
+// one, is applied on top (see ApplyProjectConfiguration).
 func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("application config is required")
@@ -91,51 +90,18 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 	if manager == nil {
 		return nil, fmt.Errorf("project manager is required")
 	}
-
-	profiles, err := config.ResolveModelProfiles(cfg)
+	configured, err := newConfiguration(cfg)
 	if err != nil {
 		return nil, err
 	}
-	agentConfig, err := config.ResolveAgentRuntime(cfg.AgentRuntime)
-	if err != nil {
-		return nil, err
-	}
-	functionTimeout := configuredDuration(cfg.Timeouts.GenerationSeconds, 5*time.Minute)
-	importTimeout := configuredDuration(cfg.Timeouts.ImportSeconds, 5*time.Minute)
-	analysisTimeout := configuredDuration(cfg.Timeouts.AnalysisSeconds, 5*time.Minute)
-	maxRetries := cfg.Retry.MaxRetries
-	if maxRetries == 0 {
-		maxRetries = 3
-	}
-	backoffBase := cfg.Retry.BackoffBase
-	if backoffBase == 0 {
-		backoffBase = 1000
-	}
-	backoffMax := cfg.Retry.BackoffMax
-	if backoffMax == 0 {
-		backoffMax = 30000
-	}
-
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
-		config:            cfg,
-		agentRuntime:      agentConfig,
-		worktrees:         make(map[string]*Service),
-		discoverPiModels:  llm.DiscoverPiModels,
-		discoverAgyModels: llm.DiscoverAgyModels,
-		manager:           manager,
-		changeAuthority:   make(map[string]string),
-		runtimes: scopedRuntimes{
-			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
-			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),
-			function: newModelRuntime(profiles.Code, functionTimeout, maxRetries),
-		},
-		importTimeout:           importTimeout,
-		analysisTimeout:         analysisTimeout,
-		workflowModelTimeout:    configuredDuration(cfg.Timeouts.WorkflowModelSeconds, config.DefaultWorkflowModelSeconds*time.Second),
-		focusedCheckTimeout:     configuredDuration(cfg.Timeouts.FocusedCheckSeconds, time.Minute),
-		retryBase:               time.Duration(backoffBase) * time.Millisecond,
-		retryMax:                time.Duration(backoffMax) * time.Millisecond,
+		global:                  cfg,
+		worktrees:               make(map[string]*Service),
+		discoverPiModels:        llm.DiscoverPiModels,
+		discoverAgyModels:       llm.DiscoverAgyModels,
+		manager:                 manager,
+		changeAuthority:         make(map[string]string),
 		analysisRun:             &analysisRunController{},
 		goScan:                  newGoScanController(),
 		executionTrust:          newExecutionTrustStore(),
@@ -143,6 +109,10 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		agentRuns:               newAgentRunController(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
+	}
+	service.configured.Store(configured)
+	if root := manager.Root(); root != "" {
+		service.loadProjectConfiguration(root)
 	}
 	return service, nil
 }
@@ -188,9 +158,39 @@ func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash 
 	return s.manager.ValidateMutableRequest(id, revision, targetFile, baseFileHash)
 }
 
-// AnalyzeProject runs import analysis under its own deadline.
-func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Analysis, error) {
-	return s.analyzeProjectKnowledge(ctx, root)
+// ImportProject indexes root for activation. It asks root's analyze model for
+// a project overview only when that model is local or the caller confirmed
+// its remote provider; otherwise it records the deterministic inventory, and
+// a later analysis writes the overview.
+func (s *Service) ImportProject(ctx context.Context, root string, confirmRemote bool) (*project.Analysis, error) {
+	target := s.importConfiguration(root)
+	runtime := target.runtimes.analyze
+	if !runtime.effective.RemoteProvider || confirmRemote {
+		return s.analyzeProjectKnowledge(ctx, root, target)
+	}
+	timed, cancel := context.WithTimeout(ctx, target.importTimeout)
+	defer cancel()
+	snapshot, err := project.ScanProject(timed, root)
+	if err != nil {
+		return nil, err
+	}
+	analysis, err := project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).AnalyzeSnapshot(timed, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	analysis.Report.Failure = importWithoutOverview
+	analysis.Summary = importWithoutOverview
+	return analysis, project.StoreProjectAnalysisReport(analysis.Path, analysis.Report)
+}
+
+const importWithoutOverview = "The project overview was not requested from the remote analyze model. Run an analysis to write it."
+
+// importConfiguration is the configuration root will run with once active.
+func (s *Service) importConfiguration(root string) *configuration {
+	if target := s.projectConfiguration(root); target != nil && (!usesDaemonConfiguration(target) || s.conf().config != s.global) {
+		return target
+	}
+	return s.conf()
 }
 
 // RestoreProject reopens a previously imported project from local persisted
@@ -199,21 +199,21 @@ func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
 	if _, err := agentstate.Open(root); err != nil {
 		return nil, fmt.Errorf("inspect saved agent journal: %w", err)
 	}
-	runtime := s.runtimes.analyze
+	runtime := s.conf().runtimes.analyze
 	return project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Restore(root)
 }
 
 // EffectiveModels returns safe metadata for every configured prompt scope.
 func (s *Service) EffectiveModels() []EffectiveModel {
-	return []EffectiveModel{s.runtimes.analyze.effective, s.runtimes.bug.effective, s.runtimes.function.effective}
+	return []EffectiveModel{s.conf().runtimes.analyze.effective, s.conf().runtimes.bug.effective, s.conf().runtimes.function.effective}
 }
 
 // CurrentModelCatalog returns only the safe effective metadata needed for
 // model destination display and remote-confirmation decisions.
 func (s *Service) CurrentModelCatalog() ModelCatalog {
 	catalog := ModelCatalog{Scopes: make(map[string]EffectiveModel, 3)}
-	if s.config != nil {
-		catalog.ConfigFile = s.config.Source
+	if s.conf().config != nil {
+		catalog.ConfigFile = s.conf().config.Source
 	}
 	for _, profile := range s.EffectiveModels() {
 		catalog.Scopes[profile.Scope] = profile
@@ -224,7 +224,7 @@ func (s *Service) CurrentModelCatalog() ModelCatalog {
 // RequireRemoteConfirmation prevents accidental prompt delivery to the actual
 // selected scope's non-local provider.
 func (s *Service) RequireRemoteConfirmation(scope config.ModelScope, confirmed bool) error {
-	runtime, ok := s.runtimes.forScope(string(scope))
+	runtime, ok := s.conf().runtimes.forScope(string(scope))
 	if !ok {
 		return fmt.Errorf("unknown model scope %q", scope)
 	}
@@ -241,7 +241,7 @@ func requireModelRuntimeConfirmation(runtime modelRuntime, confirmed bool) error
 // ContextManifest previews the safe prompt context for one selected file.
 func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
 	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
-	return s.contextManifestForRuntime(manifest, s.runtimes.function), err
+	return s.contextManifestForRuntime(manifest, s.conf().runtimes.function), err
 }
 
 // AnalysisContextManifest previews the one-file context used for semantic analysis.
@@ -254,7 +254,7 @@ func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextMan
 	if err != nil {
 		return project.ContextManifest{}, err
 	}
-	return s.contextManifestForRuntime(semanticInstructionManifest(*indexedFile, instructions), s.runtimes.bug), nil
+	return s.contextManifestForRuntime(semanticInstructionManifest(*indexedFile, instructions), s.conf().runtimes.bug), nil
 }
 
 func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {
@@ -312,9 +312,9 @@ func (s *Service) retryAgentRequest(ctx context.Context, runtime modelRuntime, r
 		if ctx.Err() != nil || runtimeRequestTerminal(runtime, err) || attempt == runtime.effective.MaxRetries {
 			break
 		}
-		wait := s.retryBase << attempt
-		if wait > s.retryMax {
-			wait = s.retryMax
+		wait := s.conf().retryBase << attempt
+		if wait > s.conf().retryMax {
+			wait = s.conf().retryMax
 		}
 		timer := time.NewTimer(wait)
 		select {

@@ -171,7 +171,9 @@ func TestPromptHandlersConfirmOnlyTheirOwnRemoteScope(t *testing.T) {
 
 	importResponse := httptest.NewRecorder()
 	projectHandler.Import(importResponse, httptest.NewRequest(http.MethodPost, "/api/projects/import", bytes.NewBufferString(`{"project_path":"`+root+`"}`)))
-	if importResponse.Code != http.StatusBadRequest || bugCalls != 0 || strings.Contains(importResponse.Body.String(), "hidden") {
+	// Without consent for the remote analyze model, import records only the
+	// deterministic inventory.
+	if importResponse.Code != http.StatusOK || bugCalls != 0 || strings.Contains(importResponse.Body.String(), "hidden") || !strings.Contains(importResponse.Body.String(), "not requested from the remote analyze model") {
 		t.Fatalf("unconfirmed remote import = %d %s, bug calls %d", importResponse.Code, importResponse.Body.String(), bugCalls)
 	}
 

@@ -85,7 +85,7 @@ func TestReviewSecurityFileRejectsConsentAndStaleResultsWithoutPublishing(t *tes
 		}
 	}()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	service.runtimes.analyze.effective.RemoteProvider = true
+	service.conf().runtimes.analyze.effective.RemoteProvider = true
 	request := securityReviewRequestFor(t, service, "")
 	request.ConfirmRemoteProvider = false
 	if _, err := service.ReviewSecurityFile(context.Background(), request); err == nil || calls != 0 {
@@ -159,7 +159,7 @@ func TestReviewSecurityFileRollsBackCanceledOrStalePublication(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(root, ".mini-orcaignore"), []byte("main.go\n"), 0644)
 		}, want: project.ErrExcludedFile},
 		{name: "provider", change: func(service *Service, _ string, _ context.CancelFunc) {
-			service.runtimes.analyze.effective.ProviderOrigin = "https://changed.example"
+			service.conf().runtimes.analyze.effective.ProviderOrigin = "https://changed.example"
 		}, want: project.ErrRevisionConflict},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -228,7 +228,7 @@ func TestReviewSecurityFilePreservesSourceLinesAndRejectsRuntimeTransition(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.runtimes.analyze.effective.RemoteProvider = true
+	service.conf().runtimes.analyze.effective.RemoteProvider = true
 	if _, _, err := service.executeSecurityReview(context.Background(), snapshot, nil); !errors.Is(err, project.ErrRevisionConflict) || calls != 1 {
 		t.Fatalf("runtime transition error = %v, provider calls = %d", err, calls)
 	}

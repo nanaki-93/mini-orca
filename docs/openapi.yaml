@@ -793,6 +793,64 @@ paths:
               schema: {$ref: '#/components/schemas/ProjectAnalysis'}
         '400': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
+  /api/projects/current/setup:
+    get:
+      tags: [Projects]
+      description: The project's configuration as setup edits it. Secrets are reported only as api_key_set.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Project setup, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetup'}}}}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Projects]
+      description: Write the project's .mini-orca/config.yaml (0600, kept out of Git) and apply it without a restart. Refused with 409 while work runs.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetupRequest'}}}}
+      responses:
+        '200': {description: The saved setup, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetup'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/setup/skip:
+    post:
+      tags: [Projects]
+      description: Keep the daemon's configuration for the project and stop offering setup.
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [project_id, project_revision], properties: {project_id: {type: string}, project_revision: {type: string}}}}}}
+      responses:
+        '200': {description: The setup with state skipped, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectSetup'}}}}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/setup/test-model:
+    post:
+      tags: [Projects]
+      description: Send one short request, recorded as an agent run, to a model as setup would configure it for a scope.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, project_revision, scope, model]
+              properties:
+                project_id: {type: string}
+                project_revision: {type: string}
+                scope: {type: string, enum: [analyze, bug, code]}
+                model: {$ref: '#/components/schemas/SetupModel'}
+      responses:
+        '200':
+          description: The test outcome; a failed request is ok false with its reason.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, latency_ms]
+                properties:
+                  ok: {type: boolean}
+                  model: {type: string}
+                  latency_ms: {type: integer}
+                  reason: {type: string}
+                  detail: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/restore:
     post:
       tags: [Projects]
@@ -1633,12 +1691,61 @@ components:
             analyze: {$ref: '#/components/schemas/ScopedModel'}
             bug: {$ref: '#/components/schemas/ScopedModel'}
             code: {$ref: '#/components/schemas/ScopedModel'}
+    SetupModel:
+      type: object
+      required: [provider, model]
+      properties:
+        provider: {type: string, enum: ['', openai, gemini, vertex, agy, pi]}
+        model: {type: string}
+        api_base_url: {type: string}
+        api_key: {type: string, writeOnly: true, description: Empty keeps the configured key for the same provider.}
+        api_key_set: {type: boolean, readOnly: true}
+        clear_api_key: {type: boolean, writeOnly: true}
+        vertex_project: {type: string}
+        vertex_location: {type: string}
+        cli_path: {type: string}
+        reasoning_effort: {type: string}
+        temperature: {type: number}
+        max_tokens: {type: integer}
+        context_max_tokens: {type: integer}
+    SetupRoles:
+      type: object
+      required: [creation, testing, review]
+      properties:
+        creation: {type: string, enum: [analyze, bug, code]}
+        testing: {type: string, enum: [analyze, bug, code]}
+        review: {type: string, enum: [analyze, bug, code]}
+    ProjectSetupRequest:
+      type: object
+      required: [project_id, project_revision, models, roles, limits]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        models:
+          type: object
+          required: [analyze, bug, code]
+          properties:
+            analyze: {$ref: '#/components/schemas/SetupModel'}
+            bug: {$ref: '#/components/schemas/SetupModel'}
+            code: {$ref: '#/components/schemas/SetupModel'}
+        roles: {$ref: '#/components/schemas/SetupRoles'}
+        limits: {$ref: '#/components/schemas/AgentLimits'}
+    ProjectSetup:
+      allOf:
+        - {$ref: '#/components/schemas/ProjectSetupRequest'}
+        - type: object
+          required: [state, config_file, daemon_config_file]
+          properties:
+            state: {type: string, enum: [needed, skipped, configured, invalid]}
+            config_file: {type: string}
+            daemon_config_file: {type: string}
+            error: {type: string}
     ProjectImportRequest:
       type: object
       required: [project_path]
       properties:
         project_path: {type: string, description: Absolute path selected by the local user.}
-        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
+        confirm_remote_provider: {type: boolean, description: 'Allows the project overview request to a non-loopback analyze model; without it, import records only the deterministic inventory.'}
     ProjectRestoreRequest:
       type: object
       required: [project_path]

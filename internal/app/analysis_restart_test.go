@@ -160,7 +160,7 @@ func TestSavedAnalysisDetectsLiveChangesOutsideSelectedFiles(t *testing.T) {
 			case "policy":
 				err = os.WriteFile(filepath.Join(root, ".mini-orca", "context-policy.json"), []byte(`{"exclude":["helper.go"]}`), 0600)
 			case "provider":
-				s.runtimes.analyze.effective.Model = "replacement"
+				s.conf().runtimes.analyze.effective.Model = "replacement"
 			case "goals":
 				_, err = s.SaveFeatureGoals(context.Background(), featureRequestFor(t, s, "Changed goals."))
 			}

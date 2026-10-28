@@ -74,9 +74,9 @@ func workflowWithReviewer(t *testing.T, handler http.HandlerFunc) (*Service, str
 	s, root, session := workflowService(t, [3]func() string{func() string { return workflowImplementation }, func() string { return workflowTests }, func() string { return workflowApproval }})
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	profile := s.runtimes.function.profile
+	profile := s.conf().runtimes.function.profile
 	profile.APIBaseURL = server.URL
-	s.runtimes.function = newModelRuntime(profile, time.Minute, 0)
+	s.conf().runtimes.function = newModelRuntime(profile, time.Minute, 0)
 	return s, root, session
 }
 
@@ -214,8 +214,8 @@ func TestWorkflowSpecialistsShareCallBudgetAndRepairCap(t *testing.T) {
 				},
 			})
 			if limited {
-				s.agentRuntime.Limits.ModelCalls = 4
-				s.agentRuntime.Limits.ConcurrentCalls = 2
+				s.conf().agentRuntime.Limits.ModelCalls = 4
+				s.conf().agentRuntime.Limits.ConcurrentCalls = 2
 			}
 			request := workflowRequest(session)
 			request.AutoRepair = true

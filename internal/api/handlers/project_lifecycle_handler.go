@@ -10,7 +10,6 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -42,11 +41,7 @@ func (h *ProjectHandler) Import(w http.ResponseWriter, r *http.Request) {
 		api.WriteRequestError(w, err, "invalid project import request", "Provide a JSON project_path.")
 		return
 	}
-	if err := h.service.RequireRemoteConfirmation(config.AnalyzeModelScope, request.ConfirmRemoteProvider); err != nil {
-		api.WriteAppError(w, api.BadRequest("remote provider confirmation required", "Confirm use of the remote analyze provider before continuing.", err))
-		return
-	}
-	analysis, err := h.service.AnalyzeProject(r.Context(), request.ProjectPath)
+	analysis, err := h.service.ImportProject(r.Context(), request.ProjectPath, request.ConfirmRemoteProvider)
 	if err != nil {
 		if writeContextError(w, "project import", err) {
 			return

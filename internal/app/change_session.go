@@ -406,7 +406,7 @@ func (s *Service) changeMessageRuntime(ctx context.Context, request ChangeMessag
 		return modelRuntime{}, err
 	}
 	runtime, _ := s.selectedRuntime(config.CodeModelScope, profile)
-	if genTimeout := duration(s.runtimes.function.effective.Timeout); genTimeout > duration(runtime.effective.Timeout) {
+	if genTimeout := duration(s.conf().runtimes.function.effective.Timeout); genTimeout > duration(runtime.effective.Timeout) {
 		runtime.effective.Timeout = genTimeout.String()
 	}
 	return runtime, requireModelRuntimeConfirmation(runtime, request.ConfirmRemoteProvider)

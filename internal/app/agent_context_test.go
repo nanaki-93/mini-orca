@@ -25,7 +25,7 @@ func enableChangeCompaction(t *testing.T, service *Service, root string) *Change
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.agentRuntime.Context = settings
+	service.conf().agentRuntime.Context = settings
 	session := openChangeFixture(t, service, "main.go", "new.go")
 	for i := range 5 {
 		session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: fmt.Sprintf("Exact user constraint %d", i), CreatedAt: time.Now()}, ChangeMessage{Role: "assistant", Content: strings.Repeat("Earlier advisory explanation. ", 60), CreatedAt: time.Now()})
@@ -85,7 +85,7 @@ func TestChangeCompactionRejectsMandatoryOverflowBeforeSummarizing(t *testing.T)
 	defer server.Close()
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	session := enableChangeCompaction(t, service, root)
-	service.runtimes.function.effective.ContextMaxTokens = 10
+	service.conf().runtimes.function.effective.ContextMaxTokens = 10
 	_, err := service.SendChangeMessage(t.Context(), session.ID, ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Add a helper."})
 	if err == nil || !strings.Contains(err.Error(), "mandatory context") {
 		t.Fatalf("overflow=%v", err)

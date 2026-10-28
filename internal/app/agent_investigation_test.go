@@ -68,11 +68,11 @@ func TestPlanInvestigationUsesToolsWithoutCreatingOrApprovingChanges(t *testing.
 func TestPlanInvestigationRejectsConsentStaleAndUnexpectedScopeBeforeDispatch(t *testing.T) {
 	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	request := planInvestigationRequest(t, s)
-	s.runtimes.function.effective.RemoteProvider = true
+	s.conf().runtimes.function.effective.RemoteProvider = true
 	if _, err := s.InvestigatePlan(t.Context(), request); err == nil || !strings.Contains(err.Error(), "confirmation") {
 		t.Fatal(err)
 	}
-	s.runtimes.function.effective.RemoteProvider = false
+	s.conf().runtimes.function.effective.RemoteProvider = false
 	for _, alter := range []func(*PlanInvestigationRequest){
 		func(r *PlanInvestigationRequest) { r.ProjectRevision = "stale" },
 		func(r *PlanInvestigationRequest) { r.Sources = nil },
@@ -169,7 +169,7 @@ func TestPlanInvestigationCompletionOnlyProfilesReceiveBoundedCapturedSource(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := s.runtimes.function
+	runtime := s.conf().runtimes.function
 	runtime.profile.Provider = config.PiProvider
 	input, err := s.planInvestigationInput(t.Context(), p, runtime)
 	if err != nil || input.Investigation != nil || input.Schema == nil || len(input.Messages) != 1 || !strings.Contains(input.Messages[0].Content, "package main") {

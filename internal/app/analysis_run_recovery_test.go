@@ -244,8 +244,8 @@ func TestAnalysisRecoverSeparatesConfigurationBlockersFromRecoverableStages(t *t
 	server, calls := analysisResponseServer(t, emptyAnalysisReply)
 	s, root := newSemanticAnalysisService(t, server.URL, 0)
 	limits := AnalysisRunLimits{100, 30, 2}
-	client := s.runtimes.bug.client
-	s.runtimes.bug.client = nil
+	client := s.conf().runtimes.bug.client
+	s.conf().runtimes.bug.client = nil
 	startAndCompleteAnalysis(t, s, analysisRunPreviewFor(t, s, limits, nil))
 	if calls.Load() != 2 {
 		t.Fatalf("unconfigured semantic dispatched: calls=%d", calls.Load())
@@ -274,7 +274,7 @@ func TestAnalysisRecoverSeparatesConfigurationBlockersFromRecoverableStages(t *t
 		t.Fatalf("mixed stages=%+v", stages)
 	}
 	// Configuring the model turns the configured-unavailable stage into recoverable work.
-	s.runtimes.bug.client = client
+	s.conf().runtimes.bug.client = client
 	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryAvailable, 1, 2, "")
 	configured := recoveryPreviewFor(t, s, limits, nil)
 	if configured.ExpectedModelRequests != 2 || configured.Files[0].Stages[0].MaxModelRequests != 2 {

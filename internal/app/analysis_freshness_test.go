@@ -194,13 +194,13 @@ func TestAnalysisCoverageWithResolvedModelSurvivesResumeAndRestart(t *testing.T)
 		t.Fatalf("performance results=%+v error=%v", results, err)
 	}
 	report := results.Performance[0]
-	if report.Model != "resolved-model-version" || report.ConfiguredModel != s.runtimes.analyze.profile.Model || report.Status != "completed" {
+	if report.Model != "resolved-model-version" || report.ConfiguredModel != s.conf().runtimes.analyze.profile.Model || report.Status != "completed" {
 		t.Fatalf("lost requested or returned model provenance: %+v", report)
 	}
 	// A real model-selection change still invalidates the reviews, even when
 	// its new name happens to match the previous provider's reported model.
-	s.runtimes.analyze.profile.Model = "resolved-model-version"
-	s.runtimes.analyze.effective.Model = "resolved-model-version"
+	s.conf().runtimes.analyze.profile.Model = "resolved-model-version"
+	s.conf().runtimes.analyze.effective.Model = "resolved-model-version"
 	overview, err = s.ProjectOverview()
 	if err != nil {
 		t.Fatal(err)
@@ -316,11 +316,11 @@ func transitionAnalysisProject(t *testing.T, s *Service, transition string) *Ser
 		if err != nil {
 			t.Fatal(err)
 		}
-		restarted, err := New(scopedTestConfig(s.runtimes.bug.profile.APIBaseURL), manager)
+		restarted, err := New(scopedTestConfig(s.conf().runtimes.bug.profile.APIBaseURL), manager)
 		if err != nil {
 			t.Fatal(err)
 		}
-		restarted.runtimes = s.runtimes
+		restarted.conf().runtimes = s.conf().runtimes
 		s = restarted
 	case "switch back":
 		other := t.TempDir()
@@ -431,7 +431,7 @@ func TestAnalysisFreshnessRecoversPreviouslyStaledFinishedResults(t *testing.T) 
 			case "policy":
 				err = os.WriteFile(filepath.Join(root, ".mini-orcaignore"), []byte("ignored.go\n"), 0600)
 			case "provider":
-				s.runtimes.analyze.effective.Model = "replacement"
+				s.conf().runtimes.analyze.effective.Model = "replacement"
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -460,7 +460,7 @@ func newAnalysisFreshnessService(t *testing.T, baseURL string, includeHelper boo
 	s, root := newSemanticAnalysisServiceFixture(t, baseURL, 0, includeHelper)
 	// Persist the imported summary so restoration exercises the same two service
 	// entry points as POST /api/projects/restore, including a fresh disk scan.
-	runtime := s.runtimes.analyze
+	runtime := s.conf().runtimes.analyze
 	if err := project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, runtime.effective.Profile, runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).StoreLocalInventory(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}

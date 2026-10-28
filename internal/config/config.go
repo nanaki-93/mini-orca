@@ -122,18 +122,14 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// LoadConfig reads the first configuration file Find locates for the daemon's
-// working directory and executable, or returns the built-in local defaults
-// when there is none. Source records which file was read.
+// LoadConfig reads the first daemon configuration file Find locates, or
+// returns the built-in local defaults when there is none. Source records
+// which file was read.
 func LoadConfig() (*Config, error) {
-	workDir, err := os.Getwd()
-	if err != nil {
-		workDir = "."
-	}
 	executable, _ := os.Executable()
-	path := Find(workDir, executable)
+	path := Find(executable)
 	if path == "" {
-		logging.Warn("No config.yaml found; using built-in local model defaults", "searched", Candidates(workDir, executable))
+		logging.Warn("No config.yaml found; using built-in local model defaults until a project configures its own", "searched", Candidates(executable))
 		return Default(), nil
 	}
 	cfg, err := LoadFromYAML(path)

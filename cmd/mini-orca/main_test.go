@@ -120,3 +120,29 @@ func TestConfigNoteNamesTheRunningDaemonsConfiguration(t *testing.T) {
 		server.Close()
 	}
 }
+
+func TestConfigurationNoteNamesTheProjectFileFirst(t *testing.T) {
+	home, project, install := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+	t.Setenv("MINI_ORCA_CONFIG", "")
+	binary := filepath.Join(install, daemonBinary)
+	if note := configurationNote(project, binary); !strings.Contains(note, "built-in local defaults") || !strings.Contains(note, ".mini-orca/config.yaml") {
+		t.Fatalf("no configuration: %q", note)
+	}
+	if err := os.WriteFile(filepath.Join(install, "config.yaml"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if note := configurationNote(project, binary); !strings.HasPrefix(note, "Configuration: "+filepath.Join(install, "config.yaml")) || !strings.Contains(note, "set this project up") {
+		t.Fatalf("daemon configuration: %q", note)
+	}
+	if err := os.MkdirAll(filepath.Join(project, ".mini-orca"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".mini-orca", "config.yaml"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if note := configurationNote(project, binary); note != "Project configuration: "+filepath.Join(project, ".mini-orca", "config.yaml") {
+		t.Fatalf("project configuration: %q", note)
+	}
+}

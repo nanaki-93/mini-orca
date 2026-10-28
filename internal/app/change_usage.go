@@ -77,7 +77,7 @@ func (s *Service) estimateStageCosts(session *ChangeSession) {
 	}
 	for i := range session.Workflow.Stages {
 		if usage := session.Workflow.Stages[i].Usage; usage != nil {
-			session.Workflow.Stages[i].Cost = agentCost(*usage, s.agentRuntime.Telemetry.Prices)
+			session.Workflow.Stages[i].Cost = agentCost(*usage, s.conf().agentRuntime.Telemetry.Prices)
 		}
 	}
 }
@@ -101,7 +101,7 @@ func (s *Service) ChangeUsage(ctx context.Context) (*ChangeUsageReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	prices := s.agentRuntime.Telemetry.Prices
+	prices := s.conf().agentRuntime.Telemetry.Prices
 	report := &ChangeUsageReport{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Currency: prices.Currency, PriceVersion: prices.Version, Tasks: []ChangeUsageRow{}}
 	rows := map[string]*ChangeUsageRow{}
 	for _, budget := range journalBudgets(history, index.ProjectID) {
