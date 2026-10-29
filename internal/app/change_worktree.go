@@ -115,27 +115,31 @@ func (s *Service) createTaskWorktree(ctx context.Context, repository *GitReposit
 	return result.Path, branch, nil
 }
 
-// taskWorktreeSlug turns a task title into a short branch-safe name.
+// taskWorktreeSlug turns a task title into a short branch-safe name: its first
+// words in lower-case letters and digits, joined by dashes, within 24 bytes.
 func taskWorktreeSlug(title string) string {
-	var slug strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(title) {
-		switch {
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
-			slug.WriteRune(r)
-			dash = false
-		case !dash && slug.Len() > 0:
-			slug.WriteByte('-')
-			dash = true
+	const limit = 24
+	words := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	})
+	slug := ""
+	for _, word := range words {
+		next := word
+		if slug != "" {
+			next = slug + "-" + word
 		}
-		if slug.Len() >= 40 {
+		if len(next) > limit {
+			if slug == "" {
+				slug = word[:limit]
+			}
 			break
 		}
+		slug = next
 	}
-	if name := strings.Trim(slug.String(), "-"); name != "" {
-		return name
+	if slug == "" {
+		return "task"
 	}
-	return "task"
+	return slug
 }
 
 // openChangeInTaskWorktree captures the task in the new checkout under its

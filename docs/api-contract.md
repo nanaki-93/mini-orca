@@ -1375,7 +1375,8 @@ model access. Creation returns its path without changing the active project.
 
 A task can get its own worktree: `POST /api/projects/current/changes` with
 `worktree: true` and `confirm_execution: true` (and the usual task fields and
-this checkout's identity) creates branch `orca/<title slug>-<6 hex>` and
+this checkout's identity) creates branch `orca/<title slug>-<6 hex>` (the
+slug is the title's first words, within 24 characters) and
 `.worktrees/<same name>` from the current HEAD under the creation guards above,
 then captures the task there with the worktree's own project identity. It needs
 a Git repository on a branch with a commit, and the task's paths must have no

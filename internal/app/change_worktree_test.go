@@ -103,7 +103,8 @@ func TestTaskWorktreeSlug(t *testing.T) {
 		"Fix: Run ignores errors!": "fix-run-ignores-errors",
 		"  ¿¿ ":                    "task",
 		"Résumé parser":            "r-sum-parser",
-		strings.Repeat("a", 60):    strings.Repeat("a", 40),
+		strings.Repeat("a", 60):    strings.Repeat("a", 24),
+		"Fix: Request body read without a size limit": "fix-request-body-read",
 	} {
 		if got := taskWorktreeSlug(title); got != want {
 			t.Fatalf("slug(%q) = %q, want %q", title, got, want)
