@@ -103,6 +103,26 @@ export class FakeDaemon {
     return { deleted: task.id };
   }
 
+  /** What re-analyzing a stale task decides; tests choose. */
+  reanalysisOutcome: 'still_valid' | 'not_valid' = 'still_valid';
+
+  /** Re-analyzes like the daemon: only a stale task; valid ones are captured again, the rest deleted. */
+  private reanalyze(id: string, body: Record<string, unknown>) {
+    const session = this.sessions.get(decodeURIComponent(id));
+    if (!session) throw new Error('This task no longer exists; refresh the task list.');
+    if (body.revision !== session.revision || body.hash !== session.hash) throw new Error('The task changed since it was loaded.');
+    if (session.freshness === 'current') throw new Error('this task matches the current files; only an out-of-date task is re-analyzed');
+    if (this.reanalysisOutcome === 'not_valid') {
+      this.deleted.add(session.id);
+      this.sessions.delete(session.id);
+      return { outcome: 'not_valid', reason: 'ServeAsset now rejects nested paths.', deleted: session.id, dismissed_issues: (session.finding_targets ?? []).length, warnings: [] };
+    }
+    const reason = 'ServeAsset still accepts nested paths.';
+    const refreshed: ChangeSession = { ...session, revision: session.revision + 1, hash: 'sha256:empty', freshness: 'current', stale_reason: undefined, changes: [], checks: [], reviewed_files: [], reviewed_hash: undefined, comments: [], workflow: undefined, messages: [{ role: 'assistant', content: `Re-analyzed against the current files: the issue is still present. ${reason}` }] };
+    this.sessions.set(session.id, refreshed);
+    return { outcome: 'still_valid', reason, session: refreshed, warnings: [] };
+  }
+
   private readonly gets: [RegExp, () => unknown][] = [
     [/^\/status$/, () => ({ status: 'ok', version: '9.9.9' })],
     [/^\/api\/models\/current$/, () => data.models],
@@ -135,6 +155,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes\/([^/]+)\/workflow$/, (body, m) => this.update(m[1], body, s => this.startRun(s, body))],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/apply$/, (body, m) => this.apply(m[1], body)],
     [/^\/api\/projects\/current\/changes\/([^/]+)\/delete$/, (body, m) => this.deleteTask(m[1], body)],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/reanalyze$/, (body, m) => this.reanalyze(m[1], body)],
     [/^\/api\/projects\/current\/agent-settings\/control$/, body => this.controlSettings(body)],
     [/^\/api\/projects\/current\/setup$/, body => this.saveSetup(body)],
     [/^\/api\/projects\/current\/setup\/timeouts$/, body => (this.setup = { ...this.setup, state: 'configured', timeouts: body.timeouts as ProjectSetup['timeouts'] })],
@@ -305,6 +326,7 @@ export class FakeDaemon {
       updated_at: data.ago(0),
       acceptance_criteria: (body.acceptance_criteria as string[] | undefined) ?? [],
       targets: paths.map(path => ({ path, hash: '', exists: data.indexedPaths.includes(path) })),
+      finding_targets: body.finding_targets as ChangeSession['finding_targets'],
       changes: [],
       messages: [],
       checks: [],

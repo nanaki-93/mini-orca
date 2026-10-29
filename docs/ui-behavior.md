@@ -62,8 +62,16 @@ every guard when the action arrives.
 - **Stale.** A task is stale only when a file it depends on changed: its
   targets and read context, the other files of the target packages, or a build
   manifest above them. The task then reads Stale, names the changed file and
-  offers no Apply; plan it again on the current source. Changes elsewhere keep
-  the task current.
+  offers no Apply and no run; changes elsewhere keep the task current.
+- **Re-analyze.** A stale task's primary action. After one confirmation (and
+  remote consent for a remote Bug model) a model checks whether the issue is
+  still present in the current files. Still valid: the task is captured again
+  at the current source with its title, plan, criteria, scope and linked
+  issues; its old proposal, checks, approval, comments and conversation are
+  dropped, a note records the decision, and the agents can start. Not valid:
+  the task is deleted and its linked issues are dismissed; the task list opens.
+  The model's reason is shown either way. **Fix with agents** links the task to
+  its issue so this, Apply & commit and merging update the issue.
 
 ## Review and apply
 

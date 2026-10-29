@@ -12,6 +12,7 @@ import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { navigate } from '@/lib/router';
+import { ReanalyzeTask } from './ReanalyzeTask';
 import { RunAgents } from './RunAgents';
 
 export function TaskOverview({ session }: { session: LoadedSession }) {
@@ -97,7 +98,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
       </div>
       {ended && workflow.reason ? (
         <div className="card-body">
-          <Callout {...endedCallout(workflow.status)} icon={ShieldAlert} action={<RunAgents session={session} size="sm" />}>
+          <Callout {...endedCallout(workflow.status)} icon={ShieldAlert} action={session.freshness !== 'current' ? <ReanalyzeTask session={session} variant="secondary" size="sm" /> : <RunAgents session={session} size="sm" />}>
             {workflow.reason}
           </Callout>
         </div>
@@ -121,6 +122,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
 /** How an ended run reads: a revision after it is not a failure. */
 function endedCallout(status: string): { tone: 'neutral' | 'info' | 'danger'; title: string } {
   if (status === 'canceled') return { tone: 'neutral', title: 'Stopped' };
+  if (status === 'stale') return { tone: 'info', title: 'Its files changed during this run' };
   if (status === 'outdated') return { tone: 'info', title: 'The proposal changed after this run' };
   return { tone: 'danger', title: 'The run did not finish' };
 }

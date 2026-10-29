@@ -102,11 +102,35 @@ test('checks from an earlier project tree must run again before approval', async
   await expect(page.getByText('These checks ran on an earlier version of the project')).toBeVisible();
 });
 
-test('a stale task names the file that changed', async ({ page, daemon }) => {
+test('a stale task names the file that changed and is re-analyzed', async ({ page, daemon }) => {
   const session = daemon.sessions.get('chg-1')!;
   daemon.sessions.set('chg-1', { ...session, freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' });
   await page.goto('/#/tasks/chg-1');
-  await expect(page.getByText('Out of date: go.mod changed since this proposal was made. Start it again to continue.')).toBeVisible();
+  await expect(page.getByText('Out of date: go.mod changed since this proposal was made. Re-analyze it against the current files, or delete it.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /run agents again/i })).toHaveCount(0);
+  await page.locator('header.task-header').getByRole('button', { name: 'Re-analyze' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('A model checks whether the issue is still present in the current files.');
+  await dialog.getByRole('button', { name: 'Re-analyze' }).click();
+
+  await expect(page.getByText('Still valid: the task now matches the current files. Run the agents when ready.')).toBeVisible();
+  expect(daemon.mutations('/reanalyze')[0].body).toMatchObject({ project_id: 'p1', revision: session.revision, hash: session.hash, confirm_remote_provider: false });
+  await expect(page.locator('header.task-header').getByRole('button', { name: 'Run agents again' })).toHaveCount(0);
+  await expect(page.locator('header.task-header').getByRole('button', { name: 'Start agents' })).toBeEnabled();
+  await expect(page.getByText('Out of date:')).toHaveCount(0);
+});
+
+test('a stale task that is no longer valid is deleted', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, freshness: 'stale', stale_reason: 'internal/api/handlers/webui.go changed since this proposal was made' });
+  daemon.reanalysisOutcome = 'not_valid';
+  await page.goto('/#/tasks/chg-1');
+  await page.locator('header.task-header').getByRole('button', { name: 'Re-analyze' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Re-analyze' }).click();
+
+  await expect(page.getByText(`No longer valid: “${session.title}” was deleted.`)).toBeVisible();
+  await expect(page).toHaveURL(/#\/tasks$/);
+  await expect(page.getByRole('link', { name: new RegExp(session.title) })).toHaveCount(0);
 });
 
 test('Apply names the running tasks whose files it changes', async ({ page, daemon }) => {

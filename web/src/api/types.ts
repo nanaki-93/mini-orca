@@ -381,6 +381,17 @@ export interface TaskEntry extends ChangeHistoryEntry {
   branch?: string;
 }
 
+/** What re-analyzing a stale task decided: refreshed (still_valid) or deleted (not_valid). */
+export interface ChangeReanalysis {
+  outcome: 'still_valid' | 'not_valid';
+  /** The model's explanation: a suggestion, not a verified finding. */
+  reason: string;
+  session?: ChangeSession;
+  deleted?: string;
+  dismissed_issues?: number;
+  warnings: string[];
+}
+
 export interface ChangeMutationResult extends ProjectIdentity {
   session_id: string;
   state: string;
@@ -398,6 +409,7 @@ export interface SourceAnchor {
 
 export interface Finding {
   id: string;
+  project_id?: string;
   source: string;
   confidence?: string;
   severity: string;

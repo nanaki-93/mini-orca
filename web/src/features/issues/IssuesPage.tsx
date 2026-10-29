@@ -138,13 +138,17 @@ export function IssuesPage() {
 
 const CATEGORY_LABELS: Record<string, string> = { bugs: 'Bugs', bug: 'Bugs', performance: 'Performance', security: 'Security' };
 
-/** Opens the composer prefilled to fix a finding, with its test file in scope. */
+/**
+ * Opens the composer prefilled to fix a finding, with its test file in scope.
+ * The task links the finding, so merging or re-analyzing it updates the issue.
+ */
 function fixFinding(finding: Finding) {
   const path = finding.location?.path || finding.task_spec?.target_path || '';
   const paths = path ? [path] : [];
   const companion = companionTestPath(path);
   if (companion) paths.push(companion);
   openNewTask({
+    findingTargets: finding.project_id && finding.location?.path ? [{ project_id: finding.project_id, kind: 'semantic', id: finding.id, path: finding.location.path }] : undefined,
     title: `Fix: ${finding.title}`,
     kind: finding.category === 'security' ? 'security' : finding.category === 'performance' ? 'performance' : 'fix',
     description: `${finding.message}${finding.evidence ? `\n\nEvidence:\n${finding.evidence}` : ''}\n\nLocation: ${path}${finding.location?.start_line ? `:${finding.location.start_line}` : ''}`,

@@ -18,6 +18,7 @@ import { Badge, Button, Callout, EmptyState, IconButton, Input, Skeleton, cx } f
 import { KindTag, TaskStatusBadge } from '@/components/domain';
 import { FilesChanged } from '@/features/review/FilesChanged';
 import { ChecksPanel } from '@/features/review/ChecksPanel';
+import { ReanalyzeTask } from './ReanalyzeTask';
 import { RunAgents } from './RunAgents';
 import { TaskOverview } from './TaskOverview';
 import { ApprovalNotes, ApproveWithNotes, OverrideReview } from './ReviewDecision';
@@ -116,13 +117,14 @@ function DeleteTask({ session }: { session: LoadedSession }) {
 }
 
 /**
- * A run of the agents is on offer whenever none is active and the task is not
- * applied: as the primary action before the first run and while the agents
- * have to run again, otherwise beside the review step.
+ * A run of the agents is on offer whenever none is active and the task is
+ * neither applied nor stale: as the primary action before the first run and
+ * while the agents have to run again, otherwise beside the review step. A
+ * stale task is re-analyzed first.
  */
 function offersRunBesidePrimary(session: LoadedSession): boolean {
   const step = proposalReadiness(session).step;
-  return !workflowActive(session) && step !== 'applied' && step !== 'generate' && step !== 'agents';
+  return !workflowActive(session) && !['applied', 'generate', 'agents', 'stale'].includes(step);
 }
 
 /** The single most useful next step, as a button. */
@@ -142,6 +144,8 @@ function PrimaryAction({ session }: { session: LoadedSession }) {
     case 'generate':
     case 'agents':
       return <RunAgents session={session} variant="primary" />;
+    case 'stale':
+      return <ReanalyzeTask session={session} />;
     case 'review':
       return (
         <Button variant="primary" icon={FileDiff} onClick={() => navigate(`/tasks/${session.id}/files`)}>

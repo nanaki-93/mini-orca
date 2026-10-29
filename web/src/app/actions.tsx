@@ -5,7 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest } from '@/lib/workflow';
@@ -106,6 +106,8 @@ export interface DraftTask {
   criteria: string[];
   start: 'agents' | 'quick' | 'draft';
   autoRepair: boolean;
+  /** The issues this task fixes; only those whose file stays in scope are sent. */
+  findingTargets?: FindingTarget[];
 }
 
 export function useActions() {
@@ -181,6 +183,7 @@ export function useActions() {
           paths: draft.paths,
           acceptance_criteria: draft.criteria.length ? draft.criteria : ['Changes pass verification checks'],
           plan: draft.description.trim() ? { problem: draft.title.trim(), approach: draft.description.trim() } : undefined,
+          finding_targets: draft.findingTargets?.filter(target => draft.paths.includes(target.path)),
         });
       } catch (err) {
         fail('Could not create the task', err);
@@ -261,6 +264,54 @@ export function useActions() {
         }
       }),
     );
+  }
+
+  /**
+   * Asks the Bug model whether a stale task's issue is still present in the
+   * current files: a valid task is refreshed against them, the rest deleted.
+   */
+  async function reanalyze(session: LoadedSession): Promise<boolean> {
+    const model = client.getQueryData<ModelsCurrent>(keys.models)?.scopes?.bug;
+    const remote = Boolean(model?.remote_provider);
+    const linked = session.finding_targets?.length ?? 0;
+    const ok = await confirm({
+      title: 'Re-analyze this task?',
+      body: (
+        <div className="stack">
+          {session.stale_reason ? <p>Out of date: {session.stale_reason}.</p> : null}
+          <p>A model checks whether the issue is still present in the current files.</p>
+          <p className="small">
+            <strong>Still valid:</strong> the task is refreshed against the current files and can run again; its old proposal, checks and conversation are dropped.
+            <br />
+            <strong>Not valid:</strong> the task is deleted{linked ? ` and its ${linked === 1 ? 'linked issue is' : `${linked} linked issues are`} dismissed` : ''}.
+          </p>
+          {remote ? <p className="small muted">Sends the task and its files to {model?.model || 'the Bug model'} at {model?.provider_origin || 'a remote provider'}.</p> : null}
+        </div>
+      ),
+      confirmLabel: 'Re-analyze',
+    });
+    if (!ok) return false;
+    const result = await guarded('Re-analyzing…', async () => {
+      try {
+        return await api.post<ChangeReanalysis>(changePath(session, '/reanalyze'), { ...changeIdentity(session), confirm_remote_provider: remote });
+      } catch (err) {
+        fail('Re-analysis failed', err);
+        return null;
+      }
+    });
+    if (!result) return false;
+    if (result.outcome === 'still_valid' && result.session) {
+      setSession(result.session, session);
+      toast('Still valid: the task now matches the current files. Run the agents when ready.', 'success', result.reason);
+    } else {
+      navigate('/tasks');
+      void client.invalidateQueries({ queryKey: ['changes'] });
+      void client.invalidateQueries({ queryKey: ['findings'] });
+      const dismissed = result.dismissed_issues ? ` and ${plural(result.dismissed_issues, 'linked issue')} dismissed` : '';
+      toast(`No longer valid: “${session.title || session.id}” was deleted${dismissed}.`, 'info', result.reason);
+    }
+    for (const warning of result.warnings ?? []) toast(warning, 'warning');
+    return true;
   }
 
   async function cancelAgents(session: LoadedSession) {
@@ -796,7 +847,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, reanalyze, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

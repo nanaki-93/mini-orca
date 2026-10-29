@@ -278,7 +278,7 @@ export function parseCommits(text: string | undefined): { sha: string; subject: 
 export function workflowBlocker(session: { state: string; freshness: string; kind: string; workflow?: ChangeWorkflow; targets?: { path: string }[] } | null, trusted: boolean, isTestPath: (path: string) => boolean): string {
   if (!session) return 'Select a task first.';
   if (session.state === 'applied') return 'This task is already applied.';
-  if (session.freshness && session.freshness !== 'current') return 'The project changed since this task was captured.';
+  if (session.freshness && session.freshness !== 'current') return 'Its files changed since this task was captured. Re-analyze it first.';
   if (session.kind === 'instructions') return 'Instruction edits use the manual proposal flow.';
   if (session.workflow && ['running', 'canceling'].includes(session.workflow.status)) return 'Agents are already working on this task.';
   if (!(session.targets ?? []).some(target => isTestPath(target.path))) return 'Add a test file to the scope so the testing agent can write tests.';

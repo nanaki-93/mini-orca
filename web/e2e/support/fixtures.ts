@@ -162,9 +162,9 @@ export const otherTasks: ChangeHistoryEntry[] = [
 ];
 
 export const findings: Finding[] = [
-  { id: 'f1', source: 'deterministic', severity: 'high', title: 'Request body read without a size limit', message: 'io.ReadAll on r.Body.', location: { path: 'internal/api/handlers/change_handler.go', start_line: 88 }, status: 'open', category: 'security' },
-  { id: 'f2', source: 'ai', severity: 'medium', title: 'Retry loop ignores cancellation', message: 'time.Sleep without ctx.Done().', location: { path: 'internal/llm/client.go', start_line: 212 }, status: 'open', category: 'bug' },
-  { id: 'f3', source: 'vet', severity: 'low', title: 'Unchecked Close error', message: 'A failed Close can lose data.', location: { path: 'internal/storage/store.go', start_line: 64 }, status: 'dismissed', category: 'bug' },
+  { id: 'f1', project_id: 'p1', source: 'deterministic', severity: 'high', title: 'Request body read without a size limit', message: 'io.ReadAll on r.Body.', location: { path: 'internal/api/handlers/change_handler.go', start_line: 88 }, status: 'open', category: 'security' },
+  { id: 'f2', project_id: 'p1', source: 'ai', severity: 'medium', title: 'Retry loop ignores cancellation', message: 'time.Sleep without ctx.Done().', location: { path: 'internal/llm/client.go', start_line: 212 }, status: 'open', category: 'bug' },
+  { id: 'f3', project_id: 'p1', source: 'vet', severity: 'low', title: 'Unchecked Close error', message: 'A failed Close can lose data.', location: { path: 'internal/storage/store.go', start_line: 64 }, status: 'dismissed', category: 'bug' },
 ];
 
 export const overview: Overview = {

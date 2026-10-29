@@ -56,7 +56,7 @@ label everywhere:
 | filled ring | Needs review / Changes requested / Revised | Agents finished, or the proposal was revised after their run; the human decides (Revised: run the agents again). |
 | spinner | Agents working / Canceling | A run is active. |
 | red ring | Failed / Interrupted | The run stopped; the reason and recovery are on the task. |
-| dotted ring | Stale | The project changed since the proposal; plan again. |
+| dotted ring | Stale | A file the task depends on changed; re-analyze it (refreshed if still valid, otherwise deleted). |
 | dashed ring | Draft | No run yet. |
 | check | Applied / Committed | Written to the checkout. |
 | struck ring | Canceled / Undone | Ended without applying. |

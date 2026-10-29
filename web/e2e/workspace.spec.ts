@@ -202,7 +202,7 @@ test('a dark palette is chosen in Appearance and kept', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'oled');
 });
 
-test('issues are triaged from the keyboard and filtered by kind', async ({ page }) => {
+test('issues are triaged from the keyboard, filtered by kind and fixed in a linked task', async ({ page, daemon }) => {
   await page.goto('/#/issues');
   await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row')).toHaveCount(3);
   await page.keyboard.press('j');
@@ -220,4 +220,7 @@ test('issues are triaged from the keyboard and filtered by kind', async ({ page 
   await page.keyboard.press('f');
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByPlaceholder('What should change?')).toHaveValue('Fix: Request body read without a size limit');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible();
+  expect(daemon.mutations('/changes')[0].body).toMatchObject({ finding_targets: [{ project_id: 'p1', kind: 'semantic', id: 'f1', path: 'internal/api/handlers/change_handler.go' }] });
 });

@@ -101,7 +101,7 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     const undo = session.undo ?? { available: true, reason: '' };
     return { ...result, canUndo: undo.available, step: 'applied', message: undo.available ? 'Applied. Undo verifies the files are unchanged before restoring them.' : `Applied. ${undo.reason || 'Undo is not available for this task.'}` };
   }
-  if (session.freshness !== 'current') return { ...result, step: 'stale', message: session.stale_reason ? `Out of date: ${session.stale_reason}. Start it again to continue.` : 'The project changed since this proposal was made. Start it again to continue.' };
+  if (session.freshness !== 'current') return { ...result, step: 'stale', message: `${session.stale_reason ? `Out of date: ${session.stale_reason}.` : 'The project changed since this proposal was made.'} Re-analyze it against the current files, or delete it.` };
   if (['undone', 'reverted', 'recovery_required'].includes(session.state)) return { ...result, step: 'recovery', message: `This task is ${session.state.replace('_', ' ')}.` };
   result.editable = true;
   const edits = session.changes ?? [];

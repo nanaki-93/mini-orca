@@ -56,7 +56,7 @@ describe('proposalReadiness', () => {
   });
 
   it('names the changed file of a stale proposal and outdates checks from an earlier tree', () => {
-    expect(proposalReadiness(session({ freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' })).message).toBe('Out of date: go.mod changed since this proposal was made. Start it again to continue.');
+    expect(proposalReadiness(session({ freshness: 'stale', stale_reason: 'go.mod changed since this proposal was made' })).message).toBe('Out of date: go.mod changed since this proposal was made. Re-analyze it against the current files, or delete it.');
     const outdated = session({ ...reviewed, checks: [check('tests', 'passed')], checks_outdated: true });
     expect(proposalReadiness(outdated)).toMatchObject({ step: 'checks', checksPassed: false, canApprove: false });
     expect(proposalReadiness(outdated).message).toMatch(/changed since checks ran/);
