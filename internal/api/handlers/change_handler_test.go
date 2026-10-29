@@ -7,6 +7,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -241,5 +242,55 @@ func TestInstructionPreviewIncludesScopedRecommendationsWithoutProviderOrWrites(
 		if response.Code == http.StatusOK {
 			t.Fatalf("unsafe or stale preview accepted: %s", query)
 		}
+	}
+}
+
+// The Web UI stops a long revision by closing its request: the daemon must
+// cancel the model call and keep the proposal as it was.
+func TestChangeHTTPClosedRevisionRequestCancelsTheModelCall(t *testing.T) {
+	entered, canceled := make(chan struct{}), make(chan struct{})
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A read body lets the server notice the daemon closing the call.
+		_, _ = io.Copy(io.Discard, r.Body)
+		close(entered)
+		<-r.Context().Done()
+		close(canceled)
+	}))
+	defer provider.Close()
+	h := newChangeHandlerFixture(t, provider.URL)
+	index, _ := h.manager.Index()
+	session, err := h.service.OpenChangeSession(context.Background(), app.ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Title: "Document behavior", Kind: "fix", Paths: []string{"README.md"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /changes/{sessionID}/messages", func(w http.ResponseWriter, r *http.Request) {
+		defer close(finished)
+		h.Message(w, r)
+	})
+	daemon := httptest.NewServer(mux)
+	defer daemon.Close()
+	body, _ := json.Marshal(app.ChangeMessageRequest{ChangeIdentity: app.ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}, Message: "Document behavior.", Profile: "code"})
+	ctx, stop := context.WithCancel(context.Background())
+	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, daemon.URL+"/changes/"+session.ID+"/messages", bytes.NewReader(body))
+	sent := make(chan error, 1)
+	go func() {
+		response, err := http.DefaultClient.Do(request)
+		if err == nil {
+			response.Body.Close()
+		}
+		sent <- err
+	}()
+	<-entered
+	stop()
+	if err := <-sent; err == nil {
+		t.Fatal("the stopped request still received a response")
+	}
+	<-canceled
+	<-finished
+	stored, err := h.service.ChangeSession(context.Background(), session.ID)
+	if err != nil || stored.Revision != session.Revision || len(stored.Messages) != 0 || len(stored.Changes) != 0 {
+		t.Fatalf("a stopped revision changed the proposal: %+v, %v", stored, err)
 	}
 }

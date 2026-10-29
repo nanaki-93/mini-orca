@@ -3,7 +3,7 @@ import { fuzzyScore, rankItems } from './fuzzy';
 import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
-import { companionTestPath, isTestPath, newFilePath, timeAgo } from './util';
+import { companionTestPath, formatElapsed, isTestPath, newFilePath, timeAgo } from './util';
 import { changeOverlaps, parseCommits, workflowBlocker, workflowDestinations } from './workflow';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
@@ -60,6 +60,10 @@ describe('util and workflow', () => {
     expect(companionTestPath('a/b.go')).toBe('a/b_test.go');
     expect(companionTestPath('a/b_test.go')).toBe('');
     expect(timeAgo('2026-01-01T00:00:00Z', Date.parse('2026-01-01T00:05:00Z'))).toMatch(/5m/);
+    expect(formatElapsed(0)).toBe('0:00');
+    expect(formatElapsed(7_900)).toBe('0:07');
+    expect(formatElapsed(125_000)).toBe('2:05');
+    expect(formatElapsed(-5)).toBe('0:00');
   });
 
   it('accepts only a relative file path as a new file', () => {

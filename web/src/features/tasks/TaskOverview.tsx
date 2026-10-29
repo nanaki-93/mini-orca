@@ -1,13 +1,13 @@
 // The task's conversation: what was asked, what the agents did stage by
 // stage, what reviewers said, and a box to ask for a revision.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bot, CornerDownLeft, FileText, Gavel, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
 import type { LoadedSession } from '@/api/types';
-import { useActions, useBusy } from '@/app/actions';
+import { useActions, useBusy, usePendingRevision } from '@/app/actions';
 import { openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { activeOverride, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
-import { formatDuration, plural, timeAgo } from '@/lib/util';
+import { formatDuration, formatElapsed, plural, timeAgo } from '@/lib/util';
 import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
@@ -222,9 +222,11 @@ function Revise({ session }: { session: LoadedSession }) {
   const [withComments, setWithComments] = useState(true);
   const actions = useActions();
   const busy = useBusy();
+  const pending = usePendingRevision();
   const ready = proposalReadiness(session);
   const comments = openComments(session).length;
   if (!ready.editable || workflowActive(session)) return null;
+  const revising = pending?.sessionId === session.id ? pending : null;
   const sendComments = comments > 0 && withComments;
   const submit = async () => {
     if (await actions.refine(session, text, sendComments)) setText('');
@@ -251,12 +253,35 @@ function Revise({ session }: { session: LoadedSession }) {
         </label>
       ) : null}
       <div className="row">
-        <span className="xs faint">A revision creates a new version; earlier review marks and checks no longer apply.</span>
+        {revising ? <RevisionProgress since={revising.since} onStop={() => void actions.stopRevision(session)} /> : <span className="xs faint">A revision creates a new version; earlier review marks and checks no longer apply.</span>}
         <span className="spacer" />
         <Button variant="secondary" icon={CornerDownLeft} onClick={() => void submit()} disabled={(!text.trim() && !sendComments) || Boolean(busy)} loading={busy === 'Generating…'} kbd="mod+Enter">
           {(session.changes ?? []).length ? 'Revise' : 'Generate'}
         </Button>
       </div>
     </section>
+  );
+}
+
+/** How long the agent has worked on a revision, with Stop: the request can take minutes. */
+function RevisionProgress({ since, onStop }: { since: number; onStop: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <span className="revise-progress" role="status">
+      <span className="small">
+        Agent working ·{' '}
+        <span className="mono" aria-live="off">
+          {formatElapsed(now - since)}
+        </span>
+      </span>
+      <span className="xs faint">This can take a few minutes.</span>
+      <Button size="sm" variant="ghost" icon={Square} onClick={onStop}>
+        Stop
+      </Button>
+    </span>
   );
 }

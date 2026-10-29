@@ -941,6 +941,14 @@
   background: var(--surface);
 }
 
+.revise-progress {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
 .revise .textarea {
   border: 0;
   background: transparent;

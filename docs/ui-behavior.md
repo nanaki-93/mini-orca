@@ -43,7 +43,9 @@ every guard when the action arrives.
   that finishes is announced with its spend.
 - **Revise.** A revision request goes to the Code profile (remote consent when
   needed) and creates a new version: earlier view marks, checks and approval no
-  longer apply.
+  longer apply. While the agent works, the revise box shows how long it has
+  been working and **Stop**, which asks first, cancels the model call and keeps
+  the current version.
 - **Stale.** A task is stale only when a file it depends on changed: its
   targets and read context, the other files of the target packages, or a build
   manifest above them. The task then reads Stale, names the changed file and

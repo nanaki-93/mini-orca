@@ -49,6 +49,12 @@ export function formatDuration(ms: number): string {
   return `${minutes}m ${Math.round(seconds % 60)}s`;
 }
 
+/** Formats a running time as m:ss ("0:07", "2:05"). */
+export function formatElapsed(ms: number): string {
+  const seconds = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 export function durationBetween(start?: string, end?: string): number {
   const a = Date.parse(start ?? '');
   const b = Date.parse(end ?? '');

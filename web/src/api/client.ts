@@ -82,7 +82,7 @@ export function createApi(fetchImpl: Fetch = (...args) => fetch(...args), writeT
   }
   return {
     get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
-    post: <T>(path: string, body: unknown = {}) => request<T>(path, { method: 'POST', body }),
+    post: <T>(path: string, body: unknown = {}, signal?: AbortSignal) => request<T>(path, { method: 'POST', body, signal }),
     patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
     del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   };

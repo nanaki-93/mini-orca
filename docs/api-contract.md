@@ -707,7 +707,9 @@ not exist yet is captured as a new file. Code prompts list the exact captured
 write paths, marking new files. A proposal, from a model or `changes` in a
 message body, that writes any other path (including read context), empties a
 file or is not UTF-8 text is rejected with an error naming the path; a captured
-path spelled with `./` or repeated separators counts as that path. A manual instruction proposal adds
+path spelled with `./` or repeated separators counts as that path. A
+`/messages` request makes its model call within the request: closing the
+request cancels the call and saves nothing. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
 
 A session stays current while the files it depends on are unchanged, not the

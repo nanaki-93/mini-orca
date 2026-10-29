@@ -32,6 +32,33 @@ export function useBusy(): string {
   );
 }
 
+// ------------------------------------------------------------ revision state
+
+/** A revision request in flight: when it started and how to stop waiting for it. */
+export interface PendingRevision {
+  sessionId: string;
+  since: number;
+  stop: () => void;
+}
+
+let pendingRevision: PendingRevision | null = null;
+const revisionListeners = new Set<() => void>();
+function setPendingRevision(next: PendingRevision | null) {
+  pendingRevision = next;
+  revisionListeners.forEach(fn => fn());
+}
+
+/** The revision a task is waiting for, so its page can show the time and Stop. */
+export function usePendingRevision(): PendingRevision | null {
+  return useSyncExternalStore(
+    fn => {
+      revisionListeners.add(fn);
+      return () => revisionListeners.delete(fn);
+    },
+    () => pendingRevision,
+  );
+}
+
 const changePath = (session: LoadedSession, suffix: string) => withWorktree('/api/projects/current/changes/' + encodeURIComponent(session.id) + suffix, session.checkout.worktreePath);
 
 /**
@@ -249,16 +276,36 @@ export function useActions() {
     if (!consent.ok) return false;
     return Boolean(
       await guarded('Generating…', async () => {
+        // The model call runs inside this request; stopping closes it, and the
+        // daemon cancels the call and saves nothing.
+        const controller = new AbortController();
+        setPendingRevision({ sessionId: session.id, since: Date.now(), stop: () => controller.abort() });
         try {
-          setSession(await api.post<ChangeSession>(changePath(session, '/messages'), { ...changeIdentity(session), message: text, profile: 'code', confirm_remote_provider: consent.remote, include_comments: includeComments || undefined }), session);
+          setSession(await api.post<ChangeSession>(changePath(session, '/messages'), { ...changeIdentity(session), message: text, profile: 'code', confirm_remote_provider: consent.remote, include_comments: includeComments || undefined }, controller.signal), session);
           toast('Proposal updated. Review the new diff.', 'success');
           return true;
         } catch (err) {
-          fail('Generation failed', err);
+          if (controller.signal.aborted) {
+            // A revision that finished as Stop was pressed is kept: show the saved version.
+            void client.invalidateQueries({ queryKey: keys.session(session.id) });
+            toast('Revision stopped.', 'info');
+          } else {
+            fail('Generation failed', err);
+          }
           return false;
+        } finally {
+          setPendingRevision(null);
         }
       }),
     );
+  }
+
+  /** Stops waiting for the task's revision; the daemon then cancels the model call. */
+  async function stopRevision(session: LoadedSession) {
+    const pending = pendingRevision;
+    if (pending?.sessionId !== session.id) return;
+    if (!(await confirm({ title: 'Stop the revision?', body: 'The agent stops and this version stays as it is. Nothing is applied.', confirmLabel: 'Stop revision', cancelLabel: 'Keep waiting', danger: true }))) return;
+    pending.stop();
   }
 
   // ---------------------------------------------------------------- review
@@ -738,7 +785,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, cancelAgents, refine, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

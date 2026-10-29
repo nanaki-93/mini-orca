@@ -135,6 +135,28 @@ test('line comments become the brief of the next revision', async ({ page, daemo
   await expect(page.getByRole('button', { name: /Revise with/ })).toHaveCount(0);
 });
 
+test('a revision that takes long shows its time and can be stopped', async ({ page }) => {
+  let sent = 0;
+  // The agent never answers this revision: only Stop ends the wait.
+  await page.route(url => url.pathname.endsWith('/changes/chg-1/messages'), () => {
+    sent++;
+  });
+  await page.goto('/#/tasks/chg-1');
+  const revise = page.getByRole('region', { name: 'Ask for a revision' });
+  await revise.getByLabel('Revision request').fill('Also reject backslashes.');
+  await revise.getByRole('button', { name: /^Revise/ }).click();
+  const progress = revise.getByRole('status');
+  await expect(progress).toContainText(/Agent working · 0:0\d/);
+  await expect(revise.getByRole('button', { name: /^Revise/ })).toBeDisabled();
+
+  await progress.getByRole('button', { name: 'Stop' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Stop revision' }).click();
+  await expect(page.getByText('Revision stopped.')).toBeVisible();
+  await expect(progress).toHaveCount(0);
+  await expect(revise.getByLabel('Revision request')).toHaveValue('Also reject backslashes.');
+  expect(sent).toBe(1);
+});
+
 test('a comment can be deleted before it is sent', async ({ page, daemon }) => {
   const session = daemon.sessions.get('chg-1')!;
   daemon.sessions.set('chg-1', { ...session, comments: [{ id: 'cm-1', path: 'internal/api/handlers/webui.go', side: 'new', line: 42, excerpt: 'if name == "" || strings.Contains(name, "/") {', text: 'Prefer path.Clean.', hash: session.hash, created_at: session.updated_at }] });
