@@ -146,9 +146,13 @@ func TestAnalysisRunPublishesBatchResultsWhileFeatureRequestRuns(t *testing.T) {
 				t.Fatal(err)
 			}
 			waitForTestSignal(t, started, "independent feature request")
-			completed := min(test.batch, len(preview.Files))
-			run := waitForAnalysisFileCount(t, s, completed)
-			if run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning || run.WindowFilesCompleted != completed {
+			// Saved results are published when the run is admitted and use no batch.
+			completed, dispatched := min(test.batch, len(preview.Files)), min(test.batch, len(preview.Files))
+			if test.cached {
+				completed, dispatched = len(preview.Files), 0
+			}
+			run := waitForAnalysisFileCount(t, s, dispatched)
+			if run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning || run.WindowFilesCompleted != dispatched {
 				t.Fatalf("file results delayed by feature request: files=%d status=%s features=%+v", run.WindowFilesCompleted, run.Status, run.Features)
 			}
 			for i, section := range run.Sections {

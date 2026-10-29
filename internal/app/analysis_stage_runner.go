@@ -150,10 +150,15 @@ func (s *Service) analyzeFileStage(ctx context.Context, request analysisFileStag
 		return rejectedAnalysisStage(ctx, request.Stage, result.Progress.Attempts, err)
 	}
 	if result.Progress.FindingCount != nil {
-		identity := strings.Join([]string{request.Run.ProjectID, request.Run.ProjectRevision, request.File.Path, request.File.ContentHash, string(request.Stage)}, "\x00")
-		result.Progress.ReportID = fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+		result.Progress.ReportID = analysisReportID(request.Run.ProjectID, request.Run.ProjectRevision, request.File.Path, request.File.ContentHash, request.Stage)
 	}
 	return result, nil
+}
+
+// analysisReportID names the report a stage's evidence came from.
+func analysisReportID(projectID, revision, path, contentHash string, stage AnalysisStage) string {
+	identity := strings.Join([]string{projectID, revision, path, contentHash, string(stage)}, "\x00")
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
 }
 
 func (s *Service) prepareAnalysisFileStage(request analysisFileStageRequest, authority analysisFileStageAuthority) (*analysisFileStageExecution, error) {

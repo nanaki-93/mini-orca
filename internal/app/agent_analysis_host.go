@@ -13,18 +13,14 @@ func captureAnalysisGraph(run *AnalysisRun) agentruntime.AnalysisGraphInput {
 	id := run.Identity
 	input := agentruntime.AnalysisGraphInput{Snapshot: agentruntime.AnalysisSnapshot{ProjectID: id.ProjectID, ProjectRevision: id.ProjectRevision, RunID: id.ID, Generation: id.Generation, QueueID: id.QueueID, PolicyFingerprint: id.PolicyFingerprint, ProviderFingerprint: id.ProviderFingerprint}}
 	remaining := run.Plan.Limits.BatchFiles - run.WindowFilesCompleted
-	// Work stays in file order. Retained files read saved reports, so they ride
-	// along without using the batch.
 	for i, file := range run.Files {
+		if remaining <= 0 {
+			break
+		}
 		if analysisFileFinished(file) {
 			continue
 		}
-		if !run.Plan.Files[i].Retained {
-			if remaining <= 0 {
-				break
-			}
-			remaining--
-		}
+		remaining--
 		for j, stage := range file.Stages {
 			if analysisStageNeedsWork(stage.Status) {
 				input.Work = append(input.Work, agentruntime.AnalysisWork{Ordinal: len(input.Work), FileIndex: i, StageIndex: j, Stage: string(stage.Stage), FileHash: file.ContentHash})

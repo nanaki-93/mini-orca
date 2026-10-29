@@ -36,7 +36,7 @@ test('the dashboard explains a failed run and retries only what failed', async (
 
   await page.getByRole('button', { name: 'Retry failed' }).click();
   const dialog = page.getByRole('alertdialog');
-  await expect(dialog).toContainText('Retries the failed and stale stages of 2 files');
+  await expect(dialog).toContainText('Retries the failed, stale and canceled stages of 2 files');
   await expect(dialog).toContainText('The other 2 files keep their saved results.');
   await dialog.getByRole('button', { name: 'Analyze' }).click();
   await expect(page.getByText('Analysis started.')).toBeVisible();
@@ -54,6 +54,17 @@ test('a retry keeps the rest of the project on the dashboard', async ({ page, da
   const progress = page.getByRole('region', { name: 'Progress' });
   await expect(progress).toContainText('This run analyzed 2 files again; the other 2 files keep their saved results');
   await expect(page.getByRole('region', { name: 'Files' }).getByRole('row')).toHaveCount(5);
+});
+
+test('a canceled retry can be retried, and the saved results stay done', async ({ page, daemon }) => {
+  const run = analysisRun('canceled');
+  run.files = (run.files ?? []).map(file => ({ ...file, stages: file.stages.map(stage => (stage.status === 'failed' ? { ...stage, status: 'canceled', reason: 'Analysis canceled by the user.' } : stage)) }));
+  daemon.serveRun(run);
+  await page.goto('/#/analysis');
+  await expect(page.getByRole('region', { name: 'Progress' })).toContainText('0stages failed');
+  await page.getByRole('button', { name: 'Retry canceled' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Analyze' }).click();
+  expect(daemon.mutations('/analysis/preview')[0].body).toMatchObject({ retry_stale_failed: true });
 });
 
 test('a running analysis can be paused and resumed with a fresh preview', async ({ page, daemon }) => {

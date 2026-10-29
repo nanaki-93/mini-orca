@@ -405,3 +405,55 @@ func TestAnalysisRetryKeepsTheWholeProjectAnalysis(t *testing.T) {
 		}
 	}
 }
+
+// While a retry runs, every other file already shows its saved results, and
+// canceling the retry does not turn them into canceled work.
+func TestAnalysisRetryShowsSavedResultsAtOnceAndCancelKeepsThem(t *testing.T) {
+	ctx := context.Background()
+	var gate atomic.Bool
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	server, _ := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if gate.Load() {
+			started <- struct{}{}
+			<-release
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, _ := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	startAndCompleteAnalysis(t, s, analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil))
+	seedRetrySemanticReport(t, s, "main.go", "failed")
+
+	gate.Store(true)
+	run, err := s.StartAnalysisRun(ctx, analysisStartFor(retryPreviewFor(t, s, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "retried request")
+	running, err := s.currentTestAnalysisRun(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stage := range analysisStages {
+		if kept := analysisRunStage(t, running, "helper.go", stage); kept.Status != AnalysisStageCompletedEmpty || !kept.Cached {
+			t.Fatalf("retained %s not shown as done during the retry: %+v", stage, kept)
+		}
+	}
+	if retried := analysisRunStage(t, running, "main.go", AnalysisStageSemantic); retried.Status != AnalysisStageRunning {
+		t.Fatalf("retried stage = %+v", retried)
+	}
+	if done := analysisRunStage(t, running, "main.go", AnalysisStagePerformance); done.Status != AnalysisStageCompletedEmpty || !done.Cached {
+		t.Fatalf("saved stage of the retried file = %+v", done)
+	}
+	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: run.Identity, Action: AnalysisRunCancel}); err != nil {
+		t.Fatal(err)
+	}
+	gate.Store(false)
+	close(release)
+	canceled := completedAnalysisRun(t, s)
+	if canceled.Status != AnalysisRunCanceled || analysisRunStage(t, canceled, "helper.go", AnalysisStageSemantic).Status != AnalysisStageCompletedEmpty || analysisRunStage(t, canceled, "main.go", AnalysisStageSemantic).Status != AnalysisStageCanceled {
+		t.Fatalf("cancel changed saved results: %+v", canceled.Files)
+	}
+	if again := retryPreviewFor(t, s, nil); !reflect.DeepEqual(previewPaths(again), []string{"main.go"}) || !previewRetained(again, "helper.go") {
+		t.Fatalf("after cancel, retry = %v", previewPaths(again))
+	}
+}

@@ -385,12 +385,13 @@ bounds. Start echoes limits/refresh, `retry_stale_failed`, `stale_only`, `stale_
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
-only eligible files with stale or failed producer evidence or durable failed stages
-are selected. A failed refresh overrides older cached evidence and is retried even when an
+only eligible files with stale or failed producer evidence, durable failed stages,
+or stages a canceled or stopped run left unfinished are selected (so canceling a
+retry keeps its work due). A failed refresh overrides older cached evidence and is retried even when an
 older report remains available. A later saved review supersedes that failure.
 Fresh stages reuse their caches; files with no prior analysis are
-retained, not analyzed, unless another stage on that file qualifies it. Missing, partial,
-canceled and ineligible stages alone do not qualify a file. This option cannot be
+retained, not analyzed, unless another stage on that file qualifies it. Missing, partial and
+ineligible stages alone do not qualify a file. This option cannot be
 combined with `refresh`. The selection is part of both admission fingerprints;
 resume echoes the option and retains the admitted file set even after reports
 become fresh. Excluded files remain accounted for in the inventory. An empty
@@ -400,10 +401,15 @@ Scoped runs (`retry_stale_failed`, `stale_only`, `stale_path`, `recover_incomple
 still cover the whole project, so a retry never drops earlier results. Every
 eligible file the scope does not select stays in `files` with `retained: true`
 and `max_model_requests: 0` on each stage: stages with a current saved report
-are read back from it (they count findings once and report `cached: true`), and
-the others keep their earlier outcome in `carried` (`failed`, `stale`, `skipped`
-for never-analyzed, `canceled` or `unavailable`) with its reason. Retained files
-are never dispatched and do not count toward `batch_files`. Run status and
+are read back from it, and the others keep their earlier outcome in `carried`
+(`failed`, `stale`, `skipped` for never-analyzed, `canceled` or `unavailable`)
+with its reason. Retained files are never dispatched.
+
+In every run, each stage the plan reuses (`cached: true`) is settled from its
+saved report when the run is admitted: it is reported completed (with
+`cached: true` and its finding count) from the first read, does not count
+toward `batch_files`, and pause, cancel or interruption cannot change it. Only
+stages that need a model or a rules scan are queued. Run status and
 section coverage therefore describe the project, not only the retried files.
 Runs saved before retention excluded those files with a scope reason; they are
 still read, resumed and reported as before.

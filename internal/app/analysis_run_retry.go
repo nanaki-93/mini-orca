@@ -19,7 +19,8 @@ type analysisScopedSelection uint8
 const (
 	analysisSelectAll analysisScopedSelection = iota
 	analysisSelectStale
-	// analysisSelectStaleFailed keeps the established retry_stale_failed contract.
+	// analysisSelectStaleFailed retries stale and failed stages, and stages a
+	// canceled or stopped run left unfinished: canceling a retry keeps them due.
 	analysisSelectStaleFailed
 	// analysisSelectIncomplete selects every recoverable stage for recover_incomplete.
 	analysisSelectIncomplete
@@ -57,7 +58,7 @@ func (mode analysisScopedSelection) selects(status string, configured bool) bool
 	case analysisSelectStale:
 		return status == "stale"
 	case analysisSelectStaleFailed:
-		return status == "stale" || status == "failed"
+		return status == "stale" || status == "failed" || status == "canceled" || status == "interrupted"
 	case analysisSelectIncomplete:
 		return analysisStageRecoveryFor(status, configured) == analysisStageRecoverable
 	default:

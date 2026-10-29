@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -188,53 +187,6 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 		return nil, err
 	}
 	return preview, nil
-}
-
-func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, models *AnalysisModels) (bool, string, time.Time, error) {
-	switch stage {
-	case AnalysisStageSemantic:
-		cache, err := project.NewFileAnalysisCache(s.manager.Root())
-		if err != nil {
-			return false, "", time.Time{}, err
-		}
-		report, err := cache.WithPolicy(policy).Load(semanticCacheInputForRuntime(&analysis, &file, file.ContentHash, policy.Version(), s.analysisModelRuntime(stage, models)))
-		if err != nil {
-			return false, "", time.Time{}, err
-		}
-		status := report.Status
-		if status == project.AnalysisStatusFresh && !analysisSemanticCacheUsable(report) {
-			status = project.AnalysisStatusStale
-		}
-		return analysisSemanticCacheUsable(report), status, report.GeneratedAt, nil
-	case AnalysisStagePerformance:
-		return s.analysisPerformanceCacheState(analysis, file, policy, models)
-	default:
-		input := analysisSecurityCacheInput(analysis, file, s.analysisModelRuntime(stage, models), policy.Version())
-		if stage == AnalysisStageSecurityRules {
-			input = securityRulesInput(securityRulesSnapshot{analysis: analysis, file: file, policyVersion: policy.Version()})
-		}
-		report, err := s.loadSecurityFileReport(s.manager.Root(), input)
-		if err != nil || report == nil {
-			return false, "", time.Time{}, err
-		}
-		return securityStageCacheUsable(report), report.Status, report.GeneratedAt, nil
-	}
-}
-
-func (s *Service) analysisPerformanceCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, models *AnalysisModels) (bool, string, time.Time, error) {
-	report, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy)
-	if err != nil || report == nil {
-		return false, "", time.Time{}, err
-	}
-	cached := analysisPerformanceCacheUsable(report, analysis, s.analysisModelRuntime(AnalysisStagePerformance, models))
-	status := report.Status
-	if status == "completed" && !cached {
-		status = "stale"
-	}
-	if cached && report.Warning != "" {
-		status = "partial"
-	}
-	return cached, status, report.GeneratedAt, nil
 }
 
 func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *AnalysisRunPreview, sources bool) error {

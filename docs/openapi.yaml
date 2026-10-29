@@ -2442,7 +2442,7 @@ components:
           required: [size_bytes, stages]
           properties:
             size_bytes: {type: integer, format: int64, minimum: 0}
-            retained: {type: boolean, description: 'Outside a scoped run (retry, stale-only, recovery, one stale file): saved reports are read back, other stages keep their earlier outcome, no model request is sent and the file does not count toward batch_files.'}
+            retained: {type: boolean, description: 'Outside a scoped run (retry, stale-only, recovery, one stale file): saved reports are read back when the run is admitted, other stages keep their earlier outcome, and no model request is sent.'}
             stages: {type: array, items: {$ref: '#/components/schemas/AnalysisStagePlan'}}
     AnalysisExcludedFile:
       type: object

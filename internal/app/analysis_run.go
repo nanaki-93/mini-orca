@@ -99,8 +99,12 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return nil, err
 		}
 	}
+	run := newAnalysisRun(*preview)
+	if err := s.recordSavedAnalysisStages(run); err != nil {
+		return nil, err
+	}
 	c.root = s.manager.Root()
-	c.run = newAnalysisRun(*preview)
+	c.run = run
 	if err := s.saveAnalysisRunLocked(false); err != nil {
 		return cloneAnalysisRun(c.run), err
 	}
@@ -610,7 +614,9 @@ func (s *Service) recordAnalysisStageLocked(ctx context.Context, identity Analys
 	}
 
 	recordAnalysisResult(c.run, fileIndex, stageIndex, result)
-	countAnalysisFileFinished(c.run, fileIndex)
+	if analysisFileFinished(c.run.Files[fileIndex]) {
+		c.run.WindowFilesCompleted++
+	}
 	if err := s.saveAnalysisRunLocked(false); err != nil {
 		return false
 	}
@@ -674,7 +680,9 @@ func (s *Service) failExhaustedAnalysisStageLocked(fileIndex, stageIndex int) er
 	stage := &c.run.Files[fileIndex].Stages[stageIndex]
 	stage.Status = AnalysisStageFailed
 	stage.Reason = "The stage exhausted its total attempt allowance."
-	countAnalysisFileFinished(c.run, fileIndex)
+	if analysisFileFinished(c.run.Files[fileIndex]) {
+		c.run.WindowFilesCompleted++
+	}
 	return s.saveAnalysisRunLocked(false)
 }
 

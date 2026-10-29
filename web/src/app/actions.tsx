@@ -41,7 +41,7 @@ const changePath = (session: LoadedSession, suffix: string) => withWorktree('/ap
 const ANALYSIS_LIMITS = { batch_files: 64, budget_seconds: 1800, max_attempts_per_stage: 2 };
 
 export interface AnalysisOptions {
-  /** Retry only stages that failed or went stale. */
+  /** Retry only stages that failed, went stale or were canceled. */
   retryFailed?: boolean;
   /** Analyze again even where saved results are current. */
   refresh?: boolean;
@@ -495,7 +495,7 @@ export function useActions() {
         const providers = preview.providers ?? [];
         const remote = providers.filter(p => p.remote_confirmation_required).map(p => `${p.model?.model || p.model?.scope} at ${p.model?.provider_origin || 'remote provider'}`);
         const security = Boolean(preview.security_review_intent_required);
-        const what = options.retryFailed ? 'Retries the failed and stale stages of' : options.refresh ? 'Analyzes again, ignoring saved results,' : resume ? 'Resumes the analysis of' : 'Analyzes';
+        const what = options.retryFailed ? 'Retries the failed, stale and canceled stages of' : options.refresh ? 'Analyzes again, ignoring saved results,' : resume ? 'Resumes the analysis of' : 'Analyzes';
         const files = preview.files ?? [];
         const kept = files.filter(file => file.retained).length;
         const ok = await confirm({

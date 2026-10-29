@@ -49,6 +49,8 @@ function AnalysisHeader({ run }: { run: AnalysisRunSummary | null }) {
   const busy = Boolean(useBusy());
   const active = runActive(run);
   const failed = runProgress(run).failed > 0;
+  // A canceled run (a canceled retry included) leaves canceled stages that a retry picks up.
+  const canceled = (run?.files ?? []).some(file => file.stages.some(stage => stage.status === 'canceled' || stage.status === 'interrupted'));
   const when = run?.updated_at ? timeAgo(run.updated_at) : '';
   return (
     <div className="page-head">
@@ -81,7 +83,11 @@ function AnalysisHeader({ run }: { run: AnalysisRunSummary | null }) {
           <Tip label="Analyze every file again, ignoring saved results">
             <Button icon={RefreshCw} variant="ghost" onClick={() => void actions.runAnalysis(project, worktreePath, { refresh: true })} disabled={busy}>Re-analyze all</Button>
           </Tip>
-          {failed ? <Button icon={RotateCcw} onClick={() => void actions.runAnalysis(project, worktreePath, { retryFailed: true })} disabled={busy}>Retry failed</Button> : null}
+          {failed || canceled ? (
+            <Tip label="Analyze again only the stages that failed, went stale or were canceled; every other file keeps its results">
+              <Button icon={RotateCcw} onClick={() => void actions.runAnalysis(project, worktreePath, { retryFailed: true })} disabled={busy}>{failed ? 'Retry failed' : 'Retry canceled'}</Button>
+            </Tip>
+          ) : null}
           <Button icon={Play} variant="primary" onClick={() => void actions.runAnalysis(project, worktreePath)} disabled={busy}>{run ? 'Analyze changes' : 'Analyze project'}</Button>
         </>
       ) : null}

@@ -199,9 +199,9 @@ type AnalysisStagePlan struct {
 }
 
 // A scoped run (retry, stale-only, recovery or one stale file) still covers the
-// whole project: files outside its scope are Retained. Their saved reports are
-// read back and their other stages keep the earlier outcome; no model request
-// is sent for them and they do not count toward the batch limit.
+// whole project: files outside its scope are Retained. When the run is admitted
+// their saved reports are read back and their other stages keep the earlier
+// outcome; no model request is ever sent for them.
 type AnalysisPlannedFile struct {
 	AnalysisFileIdentity
 	SizeBytes int64               `json:"size_bytes"`

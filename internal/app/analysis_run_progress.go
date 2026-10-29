@@ -195,14 +195,6 @@ func nextAnalysisStage(run *AnalysisRun) (int, int, bool) {
 	return 0, 0, false
 }
 
-// countAnalysisFileFinished counts a finished file toward the batch limit.
-// Retained files only read back saved reports, so they never count.
-func countAnalysisFileFinished(run *AnalysisRun, fileIndex int) {
-	if !run.Plan.Files[fileIndex].Retained && analysisFileFinished(run.Files[fileIndex]) {
-		run.WindowFilesCompleted++
-	}
-}
-
 func analysisFileFinished(file AnalysisRunFile) bool {
 	for _, stage := range file.Stages {
 		if analysisStageNeedsWork(stage.Status) {
