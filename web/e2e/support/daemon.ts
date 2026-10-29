@@ -97,7 +97,7 @@ export class FakeDaemon {
     const task = this.tasks().find(entry => entry.id === decodeURIComponent(id));
     if (!task) throw new Error('This task no longer exists; refresh the task list.');
     if (body.revision !== task.revision || body.hash !== task.hash) throw new Error('The task changed since it was loaded.');
-    if (task.workflow_status === 'running') throw new Error('This task cannot be deleted yet: stop its agents before deleting it.');
+    if (task.workflow_status === 'running') throw new Error('This task is in use: stop its agents before deleting it.');
     this.deleted.add(task.id);
     this.sessions.delete(task.id);
     return { deleted: task.id };

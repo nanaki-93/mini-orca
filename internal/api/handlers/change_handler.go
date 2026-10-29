@@ -181,6 +181,21 @@ func (h *ChangeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, map[string]string{"deleted": id})
 }
 
+// Reanalyze re-checks a stale task's issue against the current files: a task
+// still valid is captured again, one that is not is deleted.
+func (h *ChangeHandler) Reanalyze(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeReanalysisRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.ReanalyzeChange(r.Context(), r.PathValue("sessionID"), request)
+	if err != nil {
+		writeWorkflowError(w, "task re-analysis failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, value)
+}
+
 func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	var request app.ChangeApplyRequest
 	if !decodeWorkflowBody(w, r, &request) {

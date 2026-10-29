@@ -29,28 +29,15 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	root := s.manager.Root()
-	policy, err := project.NewContextPolicy(root)
-	if err != nil {
-		return nil, err
-	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChangeMessage{}, Instructions: map[string]string{}, Checks: []CheckResult{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
-	session.FindingTargets = append([]project.FindingTarget(nil), request.FindingTargets...)
-	if err := captureChangeScope(root, session, request.Paths); err != nil {
-		return nil, err
-	}
-	session.Git, err = captureChangeGit(ctx, root)
+	session, err := s.captureChangeSession(ctx, root, index, request)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.captureChangePromptSnapshot(ctx, root, session, request.Plan); err != nil {
-		return nil, err
-	}
-	session.Hash = changeProposalHash(session.Changes)
+	session.ID = "change-" + hex.EncodeToString(nonce[:])
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	history, err := listChangeSessions(root)
@@ -66,6 +53,31 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if err := storeChangeSession(root, session); err != nil {
 		return nil, err
 	}
+	return session, nil
+}
+
+// captureChangeSession captures a new draft task, without an ID, from the
+// files under root as they are now: its targets, read context, freshness
+// scope, Git identity and prompt snapshot.
+func (s *Service) captureChangeSession(ctx context.Context, root string, index *project.ProjectIndex, request ChangeCreateRequest) (*ChangeSession, error) {
+	policy, err := project.NewContextPolicy(root)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	session := &ChangeSession{SchemaVersion: 1, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChangeMessage{}, Instructions: map[string]string{}, Checks: []CheckResult{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
+	session.FindingTargets = append([]project.FindingTarget(nil), request.FindingTargets...)
+	if err := captureChangeScope(root, session, request.Paths); err != nil {
+		return nil, err
+	}
+	session.Git, err = captureChangeGit(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.captureChangePromptSnapshot(ctx, root, session, request.Plan); err != nil {
+		return nil, err
+	}
+	session.Hash = changeProposalHash(session.Changes)
 	return session, nil
 }
 

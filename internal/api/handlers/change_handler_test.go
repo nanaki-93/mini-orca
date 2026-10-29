@@ -294,3 +294,31 @@ func TestChangeHTTPClosedRevisionRequestCancelsTheModelCall(t *testing.T) {
 		t.Fatalf("a stopped revision changed the proposal: %+v, %v", stored, err)
 	}
 }
+
+func TestChangeHTTPReanalyzeAnswersWithTheDecision(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"still_valid":false,"reason":"Run now handles the case."}`}}}})
+	}))
+	defer provider.Close()
+	h := newChangeHandlerFixture(t, provider.URL)
+	index, _ := h.manager.Index()
+	session, err := h.service.OpenChangeSession(context.Background(), app.ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Title: "Fix: Run", Kind: "fix", Paths: []string{"main.go"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := app.ChangeReanalysisRequest{ChangeIdentity: app.ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}}
+	if w := workflowResponse(t, h.Reanalyze, "POST", "/changes/id/reanalyze", session.ID, request); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "matches the current files") {
+		t.Fatalf("current task = %d %s", w.Code, w.Body)
+	}
+	if w := workflowResponse(t, h.Reanalyze, "POST", "/changes/id/reanalyze", "change-"+strings.Repeat("0", 32), request); w.Code != http.StatusNotFound {
+		t.Fatalf("missing task = %d %s", w.Code, w.Body)
+	}
+	if err := os.WriteFile(filepath.Join(h.manager.Root(), "main.go"), []byte("package main\n\nfunc Run() { println() }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	w := workflowResponse(t, h.Reanalyze, "POST", "/changes/id/reanalyze", session.ID, request)
+	var result app.ChangeReanalysis
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Outcome != app.ReanalysisNotValid || result.Deleted != session.ID || result.Reason != "Run now handles the case." {
+		t.Fatalf("re-analysis = %d %s", w.Code, w.Body)
+	}
+}

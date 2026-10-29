@@ -9,7 +9,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-// ErrChangeInUse reports a task that cannot be deleted yet.
+// ErrChangeInUse reports a task that cannot be deleted or re-analyzed yet.
 var ErrChangeInUse = errors.New("task is in use")
 
 // DeleteChange removes a task's history from the checkout. The request names
@@ -33,6 +33,15 @@ func (s *Service) DeleteChange(ctx context.Context, id string, request ChangeIde
 	if request.ProjectID != session.ProjectID || request.Revision != session.Revision || request.Hash != session.Hash {
 		return project.ErrRevisionConflict
 	}
+	if err := requireDeletableChange(root, session); err != nil {
+		return err
+	}
+	return s.removeChangeLocked(root, session)
+}
+
+// requireDeletableChange refuses a task with running agents and the task whose
+// latest Apply can still be undone.
+func requireDeletableChange(root string, session *ChangeSession) error {
 	if isChangePipelineActive(session.Workflow) {
 		return fmt.Errorf("%w: stop its agents before deleting it", ErrChangeInUse)
 	}
@@ -40,17 +49,23 @@ func (s *Service) DeleteChange(ctx context.Context, id string, request ChangeIde
 	if err != nil {
 		return err
 	}
-	if journal != nil && journal.Session.ID == id && journal.State != "undone" {
+	if journal != nil && journal.Session.ID == session.ID && journal.State != "undone" {
 		return fmt.Errorf("%w: its latest Apply can still be undone; undo it or apply another task first", ErrChangeInUse)
 	}
-	path, err := changeMetadataPath(root, id+".json")
+	return nil
+}
+
+// removeChangeLocked deletes a task that requireDeletableChange admitted.
+// Caller holds jobLifecycleMu and changesMu.
+func (s *Service) removeChangeLocked(root string, session *ChangeSession) error {
+	path, err := changeMetadataPath(root, session.ID+".json")
 	if err != nil {
 		return err
 	}
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("delete task: %w", err)
 	}
-	delete(s.changeAuthority, session.ProjectID+"/"+id)
-	s.publishEvent(Event{Kind: "workflow", SessionID: id, Title: session.Title, Status: "deleted"})
+	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
+	s.publishEvent(Event{Kind: "workflow", SessionID: session.ID, Title: session.Title, Status: "deleted"})
 	return nil
 }

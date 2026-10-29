@@ -146,6 +146,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/review-override` | Override the model reviewers' rejection of the current checked hash with a reason; approves nothing. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
 | POST | `/api/projects/current/changes/{sessionID}/delete` | Delete a task that is not running and whose Apply cannot be undone; stale tasks included. Publishes a `workflow` event with status `deleted`. |
+| POST | `/api/projects/current/changes/{sessionID}/reanalyze` | Re-check an out-of-date task's issue against the current files: still valid captures it again, not valid deletes it and dismisses its linked issues. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
 | POST | `/api/projects/current/changes/{sessionID}/verify` | Explicitly verify the latest applied change with fresh identity and trust. |
 | GET | `/api/projects/current/instructions` | Preview applicable AGENTS.md content, origins and instruction presets. |
@@ -727,6 +728,24 @@ may then carry either the captured `project_revision` or the current one, and
 checks run under the current execution trust. `scope_version: 1` marks such
 sessions. Sessions captured before it have no scope and keep the whole-tree
 fingerprint and their captured revision.
+
+`POST /api/projects/current/changes/{sessionID}/reanalyze` re-checks a stale
+draft. The body names the version shown (`project_id`, `revision`, `hash`;
+`project_revision` is not checked, as for delete) and `confirm_remote_provider`
+for a remote Bug model. The daemon captures the task again from the current
+files (its title, kind, plan, criteria, write and read paths and finding
+targets; plan citations that no longer match their source are dropped) and
+sends one Bug-model request with that context and the task's intent, asking
+whether the problem is still present. The answer is a model suggestion
+(`reason`, at most 1024 bytes). `outcome: still_valid` stores the recaptured
+task under the same ID at the next revision: no proposal, checks, approval,
+comments, plan approval or workflow, and one assistant message recording the
+decision; the agents can then run. `outcome: not_valid` deletes the task, as
+delete would, and dismisses its finding targets that belong to this checkout;
+`dismissed_issues` counts them and `warnings` reports a dismissal that failed.
+A current task returns 400; running agents and an Apply that can still be undone
+return 409, as does a task or source file that changed before the answer was
+saved. Nothing is written when the request fails or is canceled.
 
 The whole-tree fingerprint still guards checks. Every check copy must equal the
 tree it was copied from and hold the captured sources and scope, and the

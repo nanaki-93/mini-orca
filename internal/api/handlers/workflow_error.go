@@ -30,7 +30,7 @@ func writeWorkflowError(w http.ResponseWriter, operation string, err error) {
 		return
 	}
 	if errors.Is(err, app.ErrChangeInUse) {
-		api.WriteAppError(w, api.Conflict(operation, "This task cannot be deleted yet: "+strings.TrimPrefix(err.Error(), app.ErrChangeInUse.Error()+": ")+".", err))
+		api.WriteAppError(w, api.Conflict(operation, "This task is in use: "+strings.TrimPrefix(err.Error(), app.ErrChangeInUse.Error()+": ")+".", err))
 		return
 	}
 	if errors.Is(err, os.ErrNotExist) {

@@ -396,6 +396,19 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/reanalyze:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Re-check an out-of-date task's issue against the current files with the Bug model (one request; remote models need confirm_remote_provider). still_valid captures the task again at the current source with its title, kind, plan, criteria, scope and linked issues, drops its proposal, checks, approval, comments and conversation, and adds a note; not_valid deletes the task and dismisses its linked issues in this checkout. The body names the task version shown (project_revision is not checked). A task that matches the current files returns 400; running agents, an Apply that can still be undone, or a task or file that changed during the request return 409. Publishes a `workflow` event with status `reanalyzed` or `deleted`.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeReanalysisRequest'}}}}
+      responses:
+        '200': {description: The decision and its effect, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeReanalysis'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/commit:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2637,6 +2650,22 @@ components:
         project_revision: {type: string}
         revision: {type: integer, minimum: 0}
         hash: {type: string}
+    ChangeReanalysisRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          properties:
+            confirm_remote_provider: {type: boolean}
+    ChangeReanalysis:
+      type: object
+      required: [outcome, reason, warnings]
+      properties:
+        outcome: {type: string, enum: [still_valid, not_valid]}
+        reason: {type: string, maxLength: 1024, description: The model's explanation; a suggestion, not a verified finding.}
+        session: {$ref: '#/components/schemas/ChangeSession', description: The task captured again; only for still_valid.}
+        deleted: {type: string, description: The deleted task's ID; only for not_valid.}
+        dismissed_issues: {type: integer, minimum: 0, description: Linked issues of this checkout that were dismissed.}
+        warnings: {type: array, items: {type: string}}
     ChangeReviewRequest:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
