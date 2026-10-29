@@ -118,8 +118,9 @@ accent stays readable.
 ### Task composer
 
 Title, optional description, kind (fix, feature, performance, security), the
-files agents may change (up to eight; a companion test is suggested for every Go
-file and a test file is required to start agents) and "done when" criteria.
+files agents may change (up to eight, searched or typed as a new file's path; a
+companion test is suggested for every Go file and a test file is required to
+start agents) and "done when" criteria.
 **Save draft** and **Start agents** (`⌘↵`) are explicit; starting lists every
 remote model destination for consent first.
 

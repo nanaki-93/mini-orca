@@ -32,7 +32,7 @@ test('creates a draft task with a scope and criteria', async ({ page, daemon }) 
   await page.keyboard.press('c');
   const dialog = page.getByRole('dialog');
   await dialog.getByPlaceholder('What should change?').fill('Return 404 for missing assets');
-  await dialog.getByPlaceholder('Search files to add…').fill('webui');
+  await dialog.getByLabel('Search files to add').fill('webui');
   await dialog.getByRole('option', { name: /internal\/api\/handlers\/webui\.go/ }).first().click();
   await dialog.getByPlaceholder(/e\.g\. Empty input/).fill('Missing assets return 404');
   await dialog.getByRole('button', { name: 'Add' }).click();
@@ -43,6 +43,24 @@ test('creates a draft task with a scope and criteria', async ({ page, daemon }) 
   expect(create.body).toMatchObject({ project_id: 'p1', title: 'Return 404 for missing assets', acceptance_criteria: ['Missing assets return 404'] });
   expect(create.body?.paths).toContain('internal/api/handlers/webui.go');
   await expect(page).toHaveURL(/#\/tasks\/chg-100/);
+});
+
+test('a task scope can name a file that does not exist yet', async ({ page, daemon }) => {
+  await page.goto('/#/tasks');
+  await page.keyboard.press('c');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('What should change?').fill('Move the shared test helpers into their own file');
+  await dialog.getByLabel('Search files to add').fill('webui_test');
+  await expect(dialog.getByRole('option', { name: /New file/ })).toHaveCount(0);
+  await dialog.getByRole('option', { name: /internal\/api\/handlers\/webui_test\.go/ }).click();
+  await dialog.getByLabel('Search files to add').fill('./internal/api/handlers/helpers_test.go');
+  await dialog.getByRole('option', { name: 'New file internal/api/handlers/helpers_test.go' }).click();
+  await expect(dialog.getByRole('listitem').filter({ hasText: 'helpers_test.go' })).toContainText('new file');
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+
+  await expect(page.getByText('Draft saved.')).toBeVisible();
+  const [create] = daemon.mutations('/changes');
+  expect(create.body?.paths).toEqual(['internal/api/handlers/webui_test.go', 'internal/api/handlers/helpers_test.go']);
 });
 
 test('branches explain why a worktree cannot be merged yet', async ({ page }) => {

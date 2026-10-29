@@ -59,6 +59,21 @@ export function isTestPath(path: string): boolean {
   return /_test\.go$/.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) || /(^|\/)test_[^/]+\.py$/.test(path);
 }
 
+/**
+ * Returns the project-relative path a typed query names as a new file
+ * ("./cmd/util_test.go" is cmd/util_test.go), or '' when it cannot name one:
+ * absolute, escaping, empty or dot segments, a trailing slash, control
+ * characters, or a last segment without an extension. The daemon still applies
+ * the write and context policy when the task is created.
+ */
+export function newFilePath(query: string): string {
+  const path = query.trim().replace(/^(\.\/)+/, '');
+  if (!path || path.length > 512 || path.startsWith('/') || path.includes('\\') || /[\u0000-\u001f\u007f]/.test(path)) return '';
+  const segments = path.split('/');
+  if (segments.some(segment => segment === '' || segment === '.' || segment === '..')) return '';
+  return /^[^.].*\.[^.]+$/.test(segments[segments.length - 1]) ? path : '';
+}
+
 /** Returns the companion Go test path for a source file, or '' when none applies. */
 export function companionTestPath(path: string): string {
   return path.endsWith('.go') && !path.endsWith('_test.go') ? path.slice(0, -3) + '_test.go' : '';

@@ -25,7 +25,10 @@ every guard when the action arrives.
 ## Tasks
 
 - **Create.** A task needs a title; scope (up to eight files) and "done when"
-  criteria are explicit. **Save draft** stores it without model work.
+  criteria are explicit. A file that does not exist yet joins the scope by
+  typing its path (**New file**); agents can write only the files in scope,
+  and a run whose proposal writes another file fails naming it. **Save
+  draft** stores it without model work.
 - **Start agents.** Requires a test file in scope and a trusted project. The
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.

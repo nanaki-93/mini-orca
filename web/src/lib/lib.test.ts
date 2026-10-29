@@ -3,7 +3,7 @@ import { fuzzyScore, rankItems } from './fuzzy';
 import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
-import { companionTestPath, isTestPath, timeAgo } from './util';
+import { companionTestPath, isTestPath, newFilePath, timeAgo } from './util';
 import { changeOverlaps, parseCommits, workflowBlocker, workflowDestinations } from './workflow';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
@@ -60,6 +60,15 @@ describe('util and workflow', () => {
     expect(companionTestPath('a/b.go')).toBe('a/b_test.go');
     expect(companionTestPath('a/b_test.go')).toBe('');
     expect(timeAgo('2026-01-01T00:00:00Z', Date.parse('2026-01-01T00:05:00Z'))).toMatch(/5m/);
+  });
+
+  it('accepts only a relative file path as a new file', () => {
+    expect(newFilePath(' cmd/util_test.go ')).toBe('cmd/util_test.go');
+    expect(newFilePath('./cmd/util_test.go')).toBe('cmd/util_test.go');
+    expect(newFilePath('README.md')).toBe('README.md');
+    for (const rejected of ['', 'util', 'cmd/', '/etc/passwd.go', '../x.go', 'cmd/../x.go', 'cmd//x.go', 'cmd/./x.go', 'a\\b.go', 'cmd/.env', 'cmd/x.', 'cmd/x\n.go', 'a/' + 'b'.repeat(512) + '.go']) {
+      expect(newFilePath(rejected), rejected).toBe('');
+    }
   });
 
   it('parses commits and explains workflow blockers', () => {

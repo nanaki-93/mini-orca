@@ -3,13 +3,13 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowUp, FileSearch, FlaskConical, Play, Plus, Save, X } from 'lucide-react';
+import { ArrowUp, FilePlus, FileSearch, FlaskConical, Play, Plus, Save, X } from 'lucide-react';
 import { useIndex, useProject, useTrust } from '@/api/hooks';
 import { useActions, useBusy, type DraftTask } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { setUI, useUI } from '@/app/store';
 import { rankItems } from '@/lib/fuzzy';
-import { companionTestPath, dirname, basename, isTestPath, plural, unique } from '@/lib/util';
+import { companionTestPath, dirname, basename, isTestPath, newFilePath, plural, unique } from '@/lib/util';
 import { Button, Highlight, Kbd, Segmented, Textarea, cx } from '@/components/ui';
 import { FileIcon, KINDS } from '@/components/domain';
 
@@ -135,13 +135,17 @@ function ScopePicker({ files, selected, known, onAdd, onRemove }: { files: strin
   const [q, setQ] = useState('');
   const [cursor, setCursor] = useState(0);
   const results = useMemo(() => (q.trim() ? rankItems(files.filter(f => !selected.includes(f)), q, f => f, 8) : []), [files, q, selected]);
+  // A typed path no file has yet can join the scope as a new file.
+  const created = newFilePath(q);
+  const createOption = created && !known.has(created) && !selected.includes(created) ? created : '';
+  const options = [...results.map(r => r.item), ...(createOption ? [createOption] : [])];
   const hasTest = selected.some(isTestPath);
   const suggestion = !hasTest ? selected.map(companionTestPath).find(Boolean) : '';
 
   function pick(index: number) {
-    const hit = results[index];
-    if (!hit) return;
-    onAdd(hit.item);
+    const path = options[index];
+    if (!path) return;
+    onAdd(path);
     setQ('');
     setCursor(0);
   }
@@ -173,7 +177,7 @@ function ScopePicker({ files, selected, known, onAdd, onRemove }: { files: strin
         <FileSearch size={14} className="input-icon" aria-hidden />
         <input
           className="input has-icon"
-          placeholder="Search files to add…"
+          placeholder="Search files to add, or type a new file's path…"
           value={q}
           onChange={e => {
             setQ(e.target.value);
@@ -182,20 +186,20 @@ function ScopePicker({ files, selected, known, onAdd, onRemove }: { files: strin
           onKeyDown={e => {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
-              setCursor(c => Math.min(c + 1, results.length - 1));
+              setCursor(c => Math.min(c + 1, options.length - 1));
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
               setCursor(c => Math.max(c - 1, 0));
-            } else if (e.key === 'Enter' && results.length) {
+            } else if (e.key === 'Enter' && options.length) {
               e.preventDefault();
               pick(cursor);
             }
           }}
           aria-label="Search files to add"
           aria-controls="scope-results"
-          aria-activedescendant={results.length ? `scope-r-${cursor}` : undefined}
+          aria-activedescendant={options.length ? `scope-r-${cursor}` : undefined}
         />
-        {results.length ? (
+        {options.length ? (
           <ul className="scope-results" id="scope-results" role="listbox">
             {results.map((r, i) => (
               <li key={r.item} id={`scope-r-${i}`} role="option" aria-selected={i === cursor} className={cx('scope-result', i === cursor && 'is-active')} onMouseDown={e => e.preventDefault()} onClick={() => pick(i)}>
@@ -206,6 +210,14 @@ function ScopePicker({ files, selected, known, onAdd, onRemove }: { files: strin
                 {companionTestPath(r.item) ? <span className="xs faint">+ test</span> : null}
               </li>
             ))}
+            {createOption ? (
+              <li id={`scope-r-${results.length}`} role="option" aria-selected={results.length === cursor} className={cx('scope-result', results.length === cursor && 'is-active')} onMouseDown={e => e.preventDefault()} onClick={() => pick(results.length)}>
+                <FilePlus size={14} aria-hidden />
+                <span className="truncate">
+                  New file <span className="mono">{createOption}</span>
+                </span>
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>
