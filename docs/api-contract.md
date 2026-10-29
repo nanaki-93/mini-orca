@@ -1004,12 +1004,17 @@ establish a code failure. Their evidence remains available for an explicit retry
 Timeout reasons distinguish a model-stage deadline, a focused check deadline and
 the total workflow deadline, with the relevant configuration setting where applicable.
 
-`resume_from` accepts `create` (default), `test`, or `review`. Test-stage retry
-reuses the current implementation; critic retry requires live, passing check
-authority for the exact current proposal and reuses those checks without running
-generation or tests. Keep the model selections for reused stages; changing their
-models requires restarting from that stage. Restored historical checks cannot
-authorize that shortcut.
+`resume_from` accepts `create` (default), `test`, `checks` or `review`. Test-stage
+retry reuses the current implementation. A `checks` start keeps the whole current
+proposal — implementation and tests, including a version revised by hand or in
+the conversation — calls no writing model, runs the checks as the test stage and
+then the reviewers; an automatic repair after it starts from creation. It
+refuses `include_comments`, which would mark the comments sent unread. Critic
+retry requires live, passing check authority for the exact current proposal and
+reuses those checks without running generation or tests. Keep the model
+selections for reused stages (creation for `test` and `checks`, creation and
+testing for `review`); changing their models requires restarting from that
+stage. Restored historical checks cannot authorize that shortcut.
 
 `stream_output` defaults to false. Explicitly enabling it captures the choice in
 workflow history and requests incremental text from every selected model role.

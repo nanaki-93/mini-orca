@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 )
@@ -216,6 +217,8 @@ func TestAgentMigrationNamesSavedStagesAndRejectsInvalidGraphEntry(t *testing.T)
 		if err := validateResumedModels(session, models, invalid); err == nil {
 			t.Fatal("invalid resume index accepted")
 		}
+	}
+	for _, invalid := range []agentruntime.ChangeNode{"", "lint", agentruntime.ChangeHumanReview} {
 		if err := (&Service{}).executeChangeGraph(t.Context(), nil, invalid, ""); err == nil {
 			t.Fatal("invalid graph entry accepted")
 		}

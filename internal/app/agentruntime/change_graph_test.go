@@ -61,7 +61,7 @@ func TestChangeGraphOrdersTypedNodesAndPersistsBeforeHostDispatch(t *testing.T) 
 }
 
 func TestChangeGraphResumeAndFailureDoNotRepeatEarlierNodes(t *testing.T) {
-	for _, start := range []ChangeNode{ChangeCreate, ChangeTests, ChangeReview} {
+	for _, start := range []ChangeNode{ChangeCreate, ChangeTests, ChangeVerify, ChangeReview} {
 		for _, fail := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/fail=%t", start, fail), func(t *testing.T) {
 				ctx, _ := budgetContext(t, nil)
@@ -178,7 +178,8 @@ func TestChangeGraphPersistenceFailureStopsSuccessors(t *testing.T) {
 
 func TestChangeGraphInvalidAdmissionDispatchesNothing(t *testing.T) {
 	for _, alter := range []func(*ChangeGraphInput){
-		func(r *ChangeGraphInput) { r.Start = ChangeVerify },
+		func(r *ChangeGraphInput) { r.Start = ChangeHumanReview },
+		func(r *ChangeGraphInput) { r.Start = "lint" },
 		func(r *ChangeGraphInput) { r.Models[1] = "" },
 		func(r *ChangeGraphInput) { r.Snapshot.Revision = -1 },
 		func(r *ChangeGraphInput) { r.Snapshot.Hash = strings.Repeat("x", 513) },

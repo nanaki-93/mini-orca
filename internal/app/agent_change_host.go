@@ -17,8 +17,8 @@ func graphChangeIdentity(snapshot agentruntime.ChangeSnapshot) ChangeIdentity {
 	return ChangeIdentity{ProjectID: snapshot.ProjectID, ProjectRevision: snapshot.ProjectRevision, Revision: snapshot.Revision, Hash: snapshot.Hash}
 }
 
-func (s *Service) executeChangeGraph(ctx context.Context, job *changeWorkflowJob, startStage int, message string) error {
-	if startStage < 0 || startStage > 2 {
+func (s *Service) executeChangeGraph(ctx context.Context, job *changeWorkflowJob, start agentruntime.ChangeNode, message string) error {
+	if !agentruntime.ValidChangeStart(start) {
 		return fmt.Errorf("invalid checked-change start stage")
 	}
 	s.changesMu.Lock()
@@ -28,7 +28,7 @@ func (s *Service) executeChangeGraph(ctx context.Context, job *changeWorkflowJob
 	}
 	var input agentruntime.ChangeGraphInput
 	if err == nil {
-		input = agentruntime.ChangeGraphInput{Snapshot: changeGraphSnapshot(session), Start: []agentruntime.ChangeNode{agentruntime.ChangeCreate, agentruntime.ChangeTests, agentruntime.ChangeReview}[startStage], Models: [3]string{job.models.Create, job.models.Test, job.models.Review}}
+		input = agentruntime.ChangeGraphInput{Snapshot: changeGraphSnapshot(session), Start: start, Models: [3]string{job.models.Create, job.models.Test, job.models.Review}}
 	}
 	s.changesMu.Unlock()
 	if err != nil {
@@ -104,12 +104,18 @@ func (s *Service) loadChangeGraphSnapshot(ctx context.Context, job *changeWorkfl
 
 func (s *Service) runChangeGraphVerification(ctx context.Context, job *changeWorkflowJob, input agentruntime.ChangeNodeInput) (agentruntime.ChangeNodeResult, error) {
 	s.changesMu.Lock()
-	_, err := s.loadChangeGraphSnapshot(ctx, job, input.Snapshot)
+	session, err := s.loadChangeGraphSnapshot(ctx, job, input.Snapshot)
 	s.changesMu.Unlock()
 	if err != nil {
 		return agentruntime.ChangeNodeResult{}, err
 	}
-	session, err := s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: graphChangeIdentity(input.Snapshot), CheckOptions: CheckOptions{RunTests: true, RunLint: true}})
+	if session.Workflow.Stages[1].Status == "pending" {
+		// A checks start: the test stage runs the checks on the kept proposal.
+		if _, err := s.beginChangeWorkflowStage(ctx, job, 1, graphChangeIdentity(input.Snapshot)); err != nil {
+			return agentruntime.ChangeNodeResult{}, err
+		}
+	}
+	session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: graphChangeIdentity(input.Snapshot), CheckOptions: CheckOptions{RunTests: true, RunLint: true}})
 	if err != nil {
 		return agentruntime.ChangeNodeResult{}, err
 	}

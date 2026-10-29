@@ -2905,7 +2905,7 @@ components:
           properties:
             stream_output: {type: boolean, default: false, description: Opt into bounded private model streaming; every selected provider must support it.}
             plan_hash: {type: string, description: Required matching plan.hash for planned sessions; explicitly approves captured intent.}
-            resume_from: {type: string, enum: [create, test, review], default: create}
+            resume_from: {type: string, enum: [create, test, checks, review], default: create, description: "Where the run starts: create writes the change again; test keeps the implementation; checks keeps the whole proposal and runs the checks, then the reviewers; review needs live passing checks for this hash."}
             auto_repair: {type: boolean, default: false, description: Opt into up to two automatic repairs within approved scope.}
             message: {type: string, maxLength: 8192, description: Required unless include_comments sends the open line comments.}
             include_comments: {type: boolean, description: Send the open line comments as a repair brief; the request and brief stay within 8192 bytes.}
@@ -2996,7 +2996,7 @@ components:
         id: {type: string}
         status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
         attempt: {type: integer, minimum: 1}
-        resume_from: {type: string, enum: [create, test, review]}
+        resume_from: {type: string, enum: [create, test, checks, review]}
         reason: {type: string}
         auto_repair: {type: boolean}
         auto_repair_attempts: {type: integer}

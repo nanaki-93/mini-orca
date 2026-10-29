@@ -118,7 +118,7 @@ type changeWorkflowContextKey struct{}
 type changeWorkflowJob struct {
 	root, sessionID, id string
 	models              ChangeWorkflowModels
-	startStage          int
+	start               workflowStart
 	specialists         []string
 	autoRepair          bool
 	cancel              context.CancelFunc

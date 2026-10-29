@@ -87,10 +87,16 @@ func validateChangeGraph(input ChangeGraphInput, host ChangeNodeHost) ([]ChangeN
 	if err := validateGraphLabels(input.Models[:]...); err != nil {
 		return nil, err
 	}
-	if input.Start != ChangeCreate && input.Start != ChangeTests && input.Start != ChangeReview {
-		return nil, fmt.Errorf("change graph must start at creation, testing or review")
+	if !ValidChangeStart(input.Start) {
+		return nil, fmt.Errorf("change graph must start at creation, testing, verification or review")
 	}
 	return slices.Clone(changeNodes[slices.Index(changeNodes, input.Start):]), nil
+}
+
+// ValidChangeStart reports whether a run may enter the graph at node: any node
+// before the human-review handoff, which needs the review's verdict.
+func ValidChangeStart(node ChangeNode) bool {
+	return node != ChangeHumanReview && slices.Contains(changeNodes, node)
 }
 
 func validateChangeSnapshot(identity ChangeSnapshot) error {

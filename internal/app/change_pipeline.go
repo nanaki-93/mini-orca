@@ -57,7 +57,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 		return nil, err
 	}
 	cleanedMessages := stripWorkflowTestMessages(session.Messages)
-	startStage, err := s.admitWorkflowSession(ctx, session, request, len(cleanedMessages))
+	start, err := s.admitWorkflowSession(ctx, session, request, len(cleanedMessages))
 	if err != nil {
 		return nil, err
 	}
@@ -73,32 +73,36 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	request.Message = message
 	refreshChangeScopeSuggestions(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
-	w := s.prepareWorkflowRun(session, request, startStage, cleanedMessages)
+	w := s.prepareWorkflowRun(session, request, start, cleanedMessages)
 	if err := storeChangeSession(root, session); err != nil {
 		release()
 		return nil, err
 	}
-	if startStage != 2 {
+	if start != startReview {
 		delete(s.changeAuthority, session.ProjectID+"/"+id)
 	}
-	s.launchChangeWorkflow(agentCtx, release, root, id, w, request, startStage, retryMessage)
+	s.launchChangeWorkflow(agentCtx, release, root, id, w, request, start, retryMessage)
 	return session, nil
 }
 
-// admitWorkflowSession checks the session may start this run and returns the
-// stage it starts from.
-func (s *Service) admitWorkflowSession(ctx context.Context, session *ChangeSession, request ChangeWorkflowRequest, messages int) (int, error) {
+// admitWorkflowSession checks the session may start this run and returns
+// where it starts.
+func (s *Service) admitWorkflowSession(ctx context.Context, session *ChangeSession, request ChangeWorkflowRequest, messages int) (workflowStart, error) {
 	if err := s.admitChangeWorkflow(ctx, session, request, messages); err != nil {
-		return 0, err
+		return workflowStart{}, err
 	}
 	if err := approveWorkflowPlan(session, request.PlanHash); err != nil {
-		return 0, err
+		return workflowStart{}, err
 	}
-	startStage, err := s.workflowResumeStage(session, request.ResumeFrom)
+	start, err := s.workflowStartFor(session, request.ResumeFrom)
 	if err != nil {
-		return 0, err
+		return workflowStart{}, err
 	}
-	return startStage, validateResumedModels(session, request.Models, startStage)
+	if start == startChecks && request.IncludeComments {
+		// They would be marked sent although no agent writes code.
+		return workflowStart{}, fmt.Errorf("a checks start writes no code; send line comments with a run that writes the change or its tests")
+	}
+	return start, validateResumedModels(session, request.Models, start.kept)
 }
 
 // workflowRequestMessage is the run's request with any line-comment brief.
@@ -111,8 +115,8 @@ func workflowRequestMessage(session *ChangeSession, request ChangeWorkflowReques
 }
 
 // launchChangeWorkflow starts the admitted run's worker under its total deadline.
-func (s *Service) launchChangeWorkflow(agentCtx context.Context, release context.CancelFunc, root, sessionID string, w *ChangeWorkflow, request ChangeWorkflowRequest, startStage int, message string) {
-	budget := s.changeWorkflowTimeout(agentCtx, request.Models, startStage, request.AutoRepair)
+func (s *Service) launchChangeWorkflow(agentCtx context.Context, release context.CancelFunc, root, sessionID string, w *ChangeWorkflow, request ChangeWorkflowRequest, start workflowStart, message string) {
+	budget := s.changeWorkflowTimeout(agentCtx, request.Models, start.firstModelStage(), request.AutoRepair)
 	workCtx, cancelTimeout := context.WithTimeoutCause(agentCtx, budget, &workflowTimeoutError{limit: budget})
 	cancel := func() { cancelTimeout(); release() }
 	workCtx, interrupt := context.WithCancelCause(workCtx)
@@ -120,7 +124,7 @@ func (s *Service) launchChangeWorkflow(agentCtx context.Context, release context
 	if request.StreamOutput {
 		workCtx = agentruntime.WithStreaming(workCtx)
 	}
-	job := &changeWorkflowJob{root: root, sessionID: sessionID, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, startStage: startStage, cancel: cancel, interrupt: interrupt, done: make(chan struct{})}
+	job := &changeWorkflowJob{root: root, sessionID: sessionID, id: w.ID, models: request.Models, specialists: workflowSpecialistIDs(w), autoRepair: request.AutoRepair, start: start, cancel: cancel, interrupt: interrupt, done: make(chan struct{})}
 	s.changeWorkflow.mu.Lock()
 	s.changeWorkflow.setJob(job)
 	s.changeWorkflow.mu.Unlock()
@@ -170,7 +174,7 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 	defer job.cancel()
 	defer close(job.done)
 	currentMessage := message
-	if job.startStage == 0 {
+	if job.start == startCreate {
 		currentMessage = s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)
 	}
 	limit := 0
@@ -193,11 +197,11 @@ func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob,
 				}
 				currentMessage = nextMsg
 			}
-			startStage := 0
+			start := startCreate // A repair always writes the change again.
 			if attempt == 0 {
-				startStage = job.startStage
+				start = job.start
 			}
-			attemptErr := s.executeChangeGraph(ctx, job, startStage, currentMessage)
+			attemptErr := s.executeChangeGraph(ctx, job, start.node, currentMessage)
 			if attempt < limit {
 				repair, err := s.shouldAutoRepairWorkflow(ctx, job, attemptErr)
 				if err != nil || repair {

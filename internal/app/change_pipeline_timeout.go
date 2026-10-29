@@ -61,6 +61,7 @@ func workflowDeadlineCause(ctx context.Context, err error) error {
 
 // A run must accommodate every remaining model call, including optional repairs.
 // Provider retries share each model's deadline; they do not multiply this budget.
+// startStage is the first model stage the run may call.
 func (s *Service) changeWorkflowTimeout(ctx context.Context, models ChangeWorkflowModels, startStage int, autoRepair bool) time.Duration {
 	var full, remaining time.Duration
 	for stage, profile := range models.selections() {
