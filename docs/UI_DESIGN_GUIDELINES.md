@@ -53,7 +53,7 @@ label everywhere:
 
 | Glyph | Label | Meaning |
 | --- | --- | --- |
-| filled ring | Needs review / Changes requested | Agents finished; the human decides. |
+| filled ring | Needs review / Changes requested / Revised | Agents finished, or the proposal was revised after their run; the human decides (Revised: run the agents again). |
 | spinner | Agents working / Canceling | A run is active. |
 | red ring | Failed / Interrupted | The run stopped; the reason and recovery are on the task. |
 | dotted ring | Stale | The project changed since the proposal; plan again. |
@@ -64,9 +64,10 @@ label everywhere:
 ### Review gate
 
 Apply is offered only when every condition holds, and the gate lists them in
-this order with their current state: **Agents finished**, **Reviewers** (the
-recorded verdict, else the specialists' verdicts; "Overridden by you" after an
-override), **Files viewed** (every
+this order with their current state: **Agents finished** (a run of this
+version that reached a verdict; a revision after it does not count),
+**Reviewers** (the recorded verdict on this version, else the specialists'
+verdicts; "Overridden by you" after an override), **Files viewed** (every
 changed file viewed at the current proposal hash), **Checks** (every required
 check passed) and **Your approval** of this exact version. The gate is derived
 from daemon state; the daemon re-checks every condition when Apply is requested.

@@ -170,6 +170,11 @@ test('a task revised in the conversation runs the agents again on that version',
   await expect(page.getByText('Proposal updated. Review the new diff.')).toBeVisible();
   const run = page.getByRole('region', { name: 'Agent run' });
   await expect(run.getByText('The proposal changed after this run')).toBeVisible();
+  // A revision after the run is not a failure, and the old run no longer counts.
+  await expect(header.getByText('Revised')).toBeVisible();
+  const gate = page.getByRole('complementary', { name: 'Review gate' });
+  await expect(gate.getByText('Not run on this version')).toBeVisible();
+  await expect(gate.getByText('Run after the agents')).toBeVisible();
 
   await run.getByRole('button', { name: 'Run agents again' }).click();
   const dialog = page.getByRole('alertdialog');

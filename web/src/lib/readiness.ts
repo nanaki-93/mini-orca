@@ -199,7 +199,9 @@ export function taskStatus(entry: Pick<ChangeHistoryEntry, 'state' | 'freshness'
   if (entry.freshness && entry.freshness !== 'current') return { status: 'stale', label: 'Stale', tone: 'warning' };
   if (wf === 'awaiting_human_review') return { status: 'needs_you', label: 'Needs review', tone: 'accent' };
   if (wf === 'changes_requested') return { status: 'needs_you', label: 'Changes requested', tone: 'warning' };
-  if (wf === 'failed' || wf === 'stale' || wf === 'outdated' || wf === 'interrupted') return { status: 'failed', label: wf === 'interrupted' ? 'Interrupted' : 'Failed', tone: 'danger' };
+  // The proposal changed after the last run: the agents run again, not failed.
+  if (wf === 'outdated') return { status: 'needs_you', label: 'Revised', tone: 'accent' };
+  if (wf === 'failed' || wf === 'stale' || wf === 'interrupted') return { status: 'failed', label: wf === 'interrupted' ? 'Interrupted' : 'Failed', tone: 'danger' };
   if (wf === 'canceled') return { status: 'canceled', label: 'Canceled', tone: 'neutral' };
   if (entry.revision > 0 && entry.hash) return { status: 'needs_you', label: 'Needs review', tone: 'accent' };
   return { status: 'draft', label: 'Draft', tone: 'neutral' };

@@ -60,9 +60,13 @@ export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[
   }));
 }
 
-/** The reviewers' overall verdict: the daemon's aggregate, else derived from the specialists. */
-export function reviewVerdict(workflow: ChangeWorkflow | undefined): 'approve' | 'changes_requested' | 'pending' | 'none' {
+/**
+ * The reviewers' overall verdict: the daemon's aggregate, else derived from the
+ * specialists. A verdict on an earlier version, given with `hash`, is 'none'.
+ */
+export function reviewVerdict(workflow: ChangeWorkflow | undefined, hash?: string): 'approve' | 'changes_requested' | 'pending' | 'none' {
   if (!workflow) return 'none';
+  if (hash !== undefined && workflow.review && workflow.review.proposal_hash !== hash) return 'none';
   const aggregate = workflow.review?.verdict;
   if (aggregate === 'approve' || aggregate === 'changes_requested') return aggregate;
   const specialists = workflow.specialists ?? [];
@@ -87,8 +91,14 @@ const RUN_LABELS: Record<string, string> = {
   canceled: 'Stopped',
   interrupted: 'Interrupted',
   stale: 'Outdated',
-  outdated: 'Outdated',
+  outdated: 'Not run on this version',
 };
+
+/** Whether the agents finished with this version: a manual proposal has no run to wait for. */
+export function agentsFinished(session: { changes?: unknown[] | null; workflow?: ChangeWorkflow }): boolean {
+  if (!(session.changes ?? []).length) return false;
+  return !session.workflow || ['awaiting_human_review', 'changes_requested'].includes(session.workflow.status);
+}
 
 /** How far the agent run got, worded for the review gate. */
 export function agentRunLabel(workflow: ChangeWorkflow | undefined, hasChanges: boolean): string {

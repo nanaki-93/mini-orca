@@ -12,7 +12,7 @@ import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
 import { canOverrideReview, checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
-import { activeOverride, agentRunLabel, reviewVerdict } from '@/lib/workflow';
+import { activeOverride, agentRunLabel, agentsFinished, reviewVerdict } from '@/lib/workflow';
 import { basename, plural, shortHash, timeAgo } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, IconButton, Input, Skeleton, cx } from '@/components/ui';
 import { KindTag, TaskStatusBadge } from '@/components/domain';
@@ -176,11 +176,11 @@ function ReviewRail({ session }: { session: LoadedSession }) {
   const progress = reviewProgress(session);
   const checks = checkSummary(session.checks, session.checks_outdated);
   const workflow = session.workflow;
-  const verdict = reviewVerdict(workflow);
+  const verdict = reviewVerdict(workflow, session.hash);
   const overridden = Boolean(activeOverride(workflow, session.hash));
-  const reviewers = overridden ? 'Overridden by you' : verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents';
+  const reviewers = overridden ? 'Overridden by you' : verdict === 'approve' ? 'Approved' : verdict === 'changes_requested' ? 'Changes requested' : verdict === 'pending' ? 'Pending' : workflow ? 'Run after the agents' : (session.changes ?? []).length ? 'Not part of a manual proposal' : 'Run after the agents';
   const steps: { label: string; done: boolean; active: boolean; detail: ReactNode; onClick?: () => void }[] = [
-    { label: 'Agents finished', done: Boolean((session.changes ?? []).length) && !workflowActive(session), active: ready.step === 'agents' || ready.step === 'generate', detail: agentRunLabel(workflow, Boolean((session.changes ?? []).length)) },
+    { label: 'Agents finished', done: agentsFinished(session), active: ready.step === 'agents' || ready.step === 'generate', detail: agentRunLabel(workflow, Boolean((session.changes ?? []).length)) },
     { label: 'Reviewers', done: verdict === 'approve' || overridden, active: false, detail: reviewers },
     { label: 'Files viewed', done: ready.filesReviewed, active: ready.step === 'review', detail: `${progress.reviewed} of ${progress.total}`, onClick: () => navigate(`/tasks/${session.id}/files`) },
     { label: 'Checks', done: ready.checksPassed, active: ready.step === 'checks', detail: checks.label, onClick: () => navigate(`/tasks/${session.id}/checks`) },
