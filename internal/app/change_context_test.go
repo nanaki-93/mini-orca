@@ -62,3 +62,59 @@ func TestGuidedChangeRequestsSolutionWithoutRepeatingCause(t *testing.T) {
 		})
 	}
 }
+
+func TestChangeProposalRejectionNamesThePath(t *testing.T) {
+	session := &ChangeSession{
+		Targets: []ChangeTarget{{Path: "cmd/master_test.go", Exists: true, Content: "package cmd\n"}},
+		Plan:    &ChangePlan{ReadTargets: []ChangeTarget{{Path: "cmd/master.go", Exists: true, Content: "package cmd\n"}}},
+	}
+	for _, test := range []struct {
+		name, path, content, want string
+	}{
+		{"new file outside scope", "cmd/util_test.go", "package cmd\n", `proposal wrote "cmd/util_test.go", outside the task's files (a new file must be in the task's scope)`},
+		{"read-only context", "./cmd/master.go", "package cmd\n", `proposal wrote "./cmd/master.go", which the task only reads; only the task's files can change`},
+		{"escaping path", "../cmd/master_test.go", "package cmd\n", `proposal wrote "../cmd/master_test.go", outside the task's files`},
+		{"deletion", "cmd/master_test.go", "", "proposal emptied cmd/master_test.go; deleting files is not supported"},
+		{"binary content", "cmd/master_test.go", "package cmd\x00\n", "proposal for cmd/master_test.go is not UTF-8 text"},
+		{"control characters", "cmd/\nevil.go", "package cmd\n", `proposal wrote "cmd/\nevil.go"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := buildChangeEdits(session, []ChangeEditInput{{Path: test.path, Content: test.content}})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+	long := strings.Repeat("é", 200) + ".go"
+	_, err := buildChangeEdits(session, []ChangeEditInput{{Path: long, Content: "package cmd\n"}})
+	if err == nil || len(err.Error()) > 220 || !strings.Contains(err.Error(), "…") {
+		t.Fatalf("long path was not bounded: %v", err)
+	}
+}
+
+func TestChangeProposalAcceptsCleanedCapturedPaths(t *testing.T) {
+	session := &ChangeSession{Targets: []ChangeTarget{{Path: "cmd/util_test.go"}}}
+	edits, err := buildChangeEdits(session, []ChangeEditInput{{Path: "./cmd/util_test.go", Content: "package cmd\n"}})
+	if err != nil || len(edits) != 1 || edits[0].Path != "cmd/util_test.go" {
+		t.Fatalf("cleaned captured path was not accepted as the target: %+v, %v", edits, err)
+	}
+	_, err = buildChangeEdits(session, []ChangeEditInput{{Path: "cmd/util_test.go", Content: "package cmd\n"}, {Path: "cmd//util_test.go", Content: "package cmd\n\n"}})
+	if err == nil || err.Error() != "proposal repeated cmd/util_test.go" {
+		t.Fatalf("two spellings of one target were accepted: %v", err)
+	}
+}
+
+func TestChangePromptListsTheWritablePaths(t *testing.T) {
+	session := &ChangeSession{Kind: "fix", Targets: []ChangeTarget{
+		{Path: "cmd/master_test.go", Exists: true, Content: "package cmd\n"},
+		{Path: "cmd/util_test.go"},
+	}}
+	messages, err := changeStageMessages(session, "Move the helpers into util_test.go", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Write only these exact paths: cmd/master_test.go, cmd/util_test.go (new file). Any other path, including a new helper file, rejects the whole proposal"
+	if !strings.Contains(messages[0].Content, want) {
+		t.Fatalf("system prompt does not list the writable paths:\n%s", messages[0].Content)
+	}
+}

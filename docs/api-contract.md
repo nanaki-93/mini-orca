@@ -702,7 +702,12 @@ executes no project code and does not write AGENTS.md.
 A change creation body carries `project_id`, `project_revision`, `kind`
 (`fix`, `performance`, `security`, `feature`, `instructions`), `title`, `paths` and optional
 `acceptance_criteria` and `plan`. Source paths must satisfy the context and write
-policies; creation is supported, while deletion is unavailable. A manual instruction proposal adds
+policies; creation is supported, while deletion is unavailable. A path that does
+not exist yet is captured as a new file. Code prompts list the exact captured
+write paths, marking new files. A proposal, from a model or `changes` in a
+message body, that writes any other path (including read context), empties a
+file or is not UTF-8 text is rejected with an error naming the path; a captured
+path spelled with `./` or repeated separators counts as that path. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
 
 A session stays current while the files it depends on are unchanged, not the

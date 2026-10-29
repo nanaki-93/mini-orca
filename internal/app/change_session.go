@@ -369,11 +369,15 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 	edits := []ChangeEdit{}
 	seen := map[string]bool{}
 	for _, input := range inputs {
-		if seen[input.Path] {
-			return nil, fmt.Errorf("proposal repeated a target")
+		target, err := proposalTarget(session, input.Path)
+		if err != nil {
+			return nil, err
 		}
-		seen[input.Path] = true
-		edit, err := makeChangeEdit(session, input.Path, input.Content)
+		if seen[target.Path] {
+			return nil, fmt.Errorf("proposal repeated %s", target.Path)
+		}
+		seen[target.Path] = true
+		edit, err := makeChangeEdit(session, target.Path, input.Content)
 		if err != nil {
 			return nil, err
 		}
