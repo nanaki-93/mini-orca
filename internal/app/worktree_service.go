@@ -82,6 +82,7 @@ func (s *Service) openWorktreeService(canonical, root string) (*Service, *projec
 	if existing := s.worktrees[canonical]; existing != nil {
 		return existing, existing.manager, nil
 	}
+	child.owner = s
 	s.worktrees[canonical] = child
 	return child, manager, nil
 }

@@ -357,8 +357,10 @@ explicit reset before new work; reset follows current configuration defaults.
 The Web UI shows the effective roles and budgets in **Settings → Models &
 agents**; skill validation grants no tools or execution authority.
 
-Each checkout has its own settings. New task worktrees use configured budgets and
-skills until explicitly edited. When the Web UI starts agents it turns the
+Each checkout has its own settings. A task created in its own worktree starts
+with the settings saved in the checkout that created it (when they were saved
+for the same configuration); other worktrees use configured budgets and skills
+until explicitly edited. When the Web UI starts agents it turns the
 checkout's role assignments into explicit workflow model choices. Remote workflow confirmation lists the selected role destinations and
 captured paths; changing either invalidates that confirmation. Unknown model
 metadata supplies no remote consent. Canceling a settings request may race a

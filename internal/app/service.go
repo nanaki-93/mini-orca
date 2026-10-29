@@ -63,6 +63,7 @@ type Service struct {
 	agentRuns                       *agentRunController
 	worktreesMu                     sync.Mutex
 	worktrees                       map[string]*Service
+	owner                           *Service // The service that opened this worktree's; nil for the active project.
 	manager                         *project.Manager
 	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
 	discoverAgyModels               func(context.Context, string) ([]llm.AgyModel, error)

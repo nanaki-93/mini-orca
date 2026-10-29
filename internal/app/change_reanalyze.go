@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -146,8 +147,9 @@ func (s *Service) loadStaleChange(ctx context.Context, root, id string, identity
 }
 
 // recaptureRequest restates a task's intent for capture at the current
-// source. Citations quote the source they were made from, so only those that
-// still match it are kept.
+// source. Read context that was deleted or is now excluded is left out, and
+// citations quote the source they were made from, so only those that still
+// match it are kept.
 func recaptureRequest(root string, session *ChangeSession) ChangeCreateRequest {
 	paths := make([]string, 0, len(session.Targets))
 	for _, target := range session.Targets {
@@ -156,21 +158,24 @@ func recaptureRequest(root string, session *ChangeSession) ChangeCreateRequest {
 	request := ChangeCreateRequest{Kind: session.Kind, Title: session.Title, Paths: paths, AcceptanceCriteria: session.AcceptanceCriteria, FindingTargets: session.FindingTargets}
 	if session.Plan != nil {
 		plan := cloneChangePlanInput(session.Plan.ChangePlanInput)
-		plan.Citations = currentPlanCitations(root, plan.Citations)
+		plan.ReadPaths = slices.DeleteFunc(plan.ReadPaths, func(path string) bool { return currentSource(root, path) == nil })
+		plan.Citations = slices.DeleteFunc(plan.Citations, func(citation PlanEvidence) bool {
+			source := currentSource(root, citation.Path)
+			return source == nil || validatePlanCitation(citation, source.Content) != nil
+		})
 		request.Plan = &plan
 	}
 	return request
 }
 
-func currentPlanCitations(root string, citations []PlanEvidence) []PlanEvidence {
-	var kept []PlanEvidence
-	for _, citation := range citations {
-		source, err := captureChangeTarget(root, citation.Path)
-		if err == nil && source.Exists && validatePlanCitation(citation, source.Content) == nil {
-			kept = append(kept, citation)
-		}
+// currentSource is the file at path as it is now, or nil when it does not
+// exist or cannot be captured.
+func currentSource(root, path string) *ChangeTarget {
+	source, err := captureChangeTarget(root, path)
+	if err != nil || !source.Exists {
+		return nil
 	}
-	return kept
+	return &source
 }
 
 func reanalysisMessages(session *ChangeSession, changed, text string) ([]llm.ChatMessage, error) {
@@ -260,28 +265,32 @@ func (s *Service) removeReanalyzedChangeLocked(p *preparedReanalysis, reason str
 		return nil, err
 	}
 	result := &ChangeReanalysis{Outcome: ReanalysisNotValid, Reason: reason, Deleted: p.session.ID, Warnings: []string{}}
-	dismissed, err := dismissFindingTargets(p.root, p.session.ProjectID, p.session.FindingTargets)
-	result.DismissedIssues = dismissed
-	if err != nil {
-		result.Warnings = append(result.Warnings, "The task was deleted, but its linked issues could not be dismissed: "+err.Error()+". Dismiss them from Issues.")
-	}
-	if dismissed > 0 {
-		s.notifyEvent("findings")
+	for checkout := s; checkout != nil; checkout = checkout.owner {
+		dismissed, err := checkout.dismissFindingTargets(p.session.FindingTargets)
+		result.DismissedIssues += dismissed
+		if err != nil {
+			result.Warnings = append(result.Warnings, "The task was deleted, but its linked issues could not be dismissed: "+err.Error()+". Dismiss them from Issues.")
+		}
+		if dismissed > 0 {
+			checkout.notifyEvent("findings")
+		}
 	}
 	return result, nil
 }
 
-func dismissFindingTargets(root, projectID string, targets []project.FindingTarget) (int, error) {
-	owned := make([]project.FindingTarget, 0, len(targets))
-	for _, target := range targets {
-		if target.ProjectID == projectID {
-			owned = append(owned, target)
-		}
+// dismissFindingTargets dismisses the targets whose issues this checkout
+// owns: a task in its own worktree links the issues of the checkout that
+// created it.
+func (s *Service) dismissFindingTargets(targets []project.FindingTarget) (int, error) {
+	index, err := s.manager.Index()
+	if err != nil {
+		return 0, err
 	}
+	owned := slices.DeleteFunc(slices.Clone(targets), func(target project.FindingTarget) bool { return target.ProjectID != index.ProjectID })
 	if len(owned) == 0 {
 		return 0, nil
 	}
-	store, err := project.NewFindingStore(root)
+	store, err := project.NewFindingStore(s.manager.Root())
 	if err != nil {
 		return 0, err
 	}

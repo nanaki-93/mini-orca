@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 )
@@ -39,8 +40,9 @@ const taskBranchPrefix = "orca/"
 
 // OpenChangeInWorktree creates a branch and worktree from the current HEAD and
 // captures the task there. The worktree inherits this checkout's execution
-// trust when it runs the same commands. A task that cannot be captured leaves
-// no worktree or branch behind.
+// trust when it runs the same commands, and its saved agent settings. A task
+// that cannot be captured leaves no worktree or branch behind, even when the
+// request is canceled.
 func (s *Service) OpenChangeInWorktree(ctx context.Context, request ChangeOpenRequest) (*ChangeOpened, error) {
 	repository, err := s.taskWorktreeBase(ctx, request)
 	if err != nil {
@@ -104,6 +106,10 @@ func (s *Service) createTaskWorktree(ctx context.Context, repository *GitReposit
 		return "", "", err
 	}
 	if result.State != "created" {
+		// git worktree add creates the branch before checking it out.
+		if cleanup := deleteUnusedTaskBranch(ctx, repository.Root, branch, repository.Head); cleanup != nil {
+			return "", "", fmt.Errorf("create the task's worktree: %s (branch %s was kept: %v)", result.Error, branch, cleanup)
+		}
 		return "", "", fmt.Errorf("create the task's worktree: %s", result.Error)
 	}
 	if result.Error != "" {
@@ -160,6 +166,9 @@ func (s *Service) openChangeInTaskWorktree(ctx context.Context, opened *ChangeOp
 	if !shared {
 		opened.Warnings = append(opened.Warnings, "The new worktree runs other check commands than this checkout; allow them for it before starting the agents.")
 	}
+	if shared, err := s.shareAgentSettings(ctx, child); err != nil || !shared {
+		opened.Warnings = append(opened.Warnings, "The new worktree uses the configured agent roles and budget, not the ones saved in this checkout's Settings; set them there before starting the agents.")
+	}
 	request.ProjectID, request.ProjectRevision = index.ProjectID, index.ProjectRevision
 	return child.OpenChangeSession(ctx, request)
 }
@@ -180,9 +189,62 @@ func (s *Service) shareExecutionTrust(ctx context.Context, child *Service, revis
 	return err == nil, err
 }
 
+// shareAgentSettings gives a new task worktree the agent roles, budget and
+// skill choices saved in this checkout, so its runs use what Settings shows.
+// Settings saved for another configuration are not shared.
+func (s *Service) shareAgentSettings(ctx context.Context, child *Service) (bool, error) {
+	store, _, err := s.agentJournal(s.manager.Root())
+	if err != nil {
+		return false, err
+	}
+	saved, err := store.Settings(ctx)
+	if err != nil || saved.Values == nil {
+		return err == nil, err
+	}
+	configuration, err := child.agentConfiguration(child.conf().agentRuntime)
+	if err != nil || configuration != saved.Configuration {
+		return false, err
+	}
+	child.jobLifecycleMu.Lock()
+	defer child.jobLifecycleMu.Unlock()
+	target, _, err := child.agentJournal(child.manager.Root())
+	if err != nil {
+		return false, err
+	}
+	current, err := target.Settings(ctx)
+	if err != nil {
+		return false, err
+	}
+	if _, err := target.SaveSettings(ctx, current.Version, configuration, saved.Values); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// cleanupContext keeps a rollback running after the request that needed it
+// was canceled, within a bound.
+func cleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+}
+
+// deleteUnusedTaskBranch deletes a branch made for a task worktree that was
+// not created; it still points at the HEAD it was made from.
+func deleteUnusedTaskBranch(ctx context.Context, root, branch, head string) error {
+	ctx, cancel := cleanupContext(ctx)
+	defer cancel()
+	if _, err := gitRead(ctx, root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); gitops.ExitCode(err, 1) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return gitops.DeleteMergedBranch(ctx, root, gitops.GitIdentity{Branch: branch, Head: head})
+}
+
 // discardTaskWorktree removes a worktree created for a task that could not be
 // captured, and its branch, which has no commits of its own.
 func (s *Service) discardTaskWorktree(ctx context.Context, root, path string) error {
+	ctx, cancel := cleanupContext(ctx)
+	defer cancel()
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
 	trees, err := readGitWorktrees(ctx, root)

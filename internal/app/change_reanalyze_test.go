@@ -154,6 +154,28 @@ func TestReanalyzeDeletesATaskThatIsNoLongerValidAndDismissesItsIssues(t *testin
 	}
 }
 
+func TestReanalyzeLeavesOutReadContextThatNoLongerExists(t *testing.T) {
+	var calls atomic.Int32
+	var prompt atomic.Value
+	service, root := newSemanticAnalysisServiceWithHelper(t, reanalysisProvider(t, &calls, &prompt, nil, `{"still_valid":true,"reason":"Run still drops the error."}`), 0)
+	index, _ := service.manager.Index()
+	session, err := service.OpenChangeSession(context.Background(), ChangeCreateRequest{
+		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: "fix", Title: "Fix: Run ignores errors",
+		Paths: []string{"main.go"}, AcceptanceCriteria: []string{"Run reports print errors."},
+		Plan: &ChangePlanInput{Problem: "Run ignores errors.", Approach: "Return them.", ReadPaths: []string{"helper.go"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "helper.go")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.ReanalyzeChange(context.Background(), session.ID, ChangeReanalysisRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil || result.Outcome != ReanalysisStillValid || len(result.Session.Plan.ReadPaths) != 0 || len(result.Session.Plan.ReadTargets) != 0 || calls.Load() != 1 {
+		t.Fatalf("re-analysis = %+v, %v", result, err)
+	}
+}
+
 func TestReanalyzeSavesNothingWhenTheFilesOrTheAnswerAreNotUsable(t *testing.T) {
 	root := ""
 	var calls atomic.Int32

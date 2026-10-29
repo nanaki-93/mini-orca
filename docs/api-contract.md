@@ -734,14 +734,16 @@ draft. The body names the version shown (`project_id`, `revision`, `hash`;
 `project_revision` is not checked, as for delete) and `confirm_remote_provider`
 for a remote Bug model. The daemon captures the task again from the current
 files (its title, kind, plan, criteria, write and read paths and finding
-targets; plan citations that no longer match their source are dropped) and
+targets; read context that was deleted or is now excluded, and plan citations
+that no longer match their source, are dropped) and
 sends one Bug-model request with that context and the task's intent, asking
 whether the problem is still present. The answer is a model suggestion
 (`reason`, at most 1024 bytes). `outcome: still_valid` stores the recaptured
 task under the same ID at the next revision: no proposal, checks, approval,
 comments, plan approval or workflow, and one assistant message recording the
 decision; the agents can then run. `outcome: not_valid` deletes the task, as
-delete would, and dismisses its finding targets that belong to this checkout;
+delete would, and dismisses its finding targets that belong to this checkout
+or, for a task in its own worktree, to the checkout that created it;
 `dismissed_issues` counts them and `warnings` reports a dismissal that failed.
 A current task returns 400; running agents and an Apply that can still be undone
 return 409, as does a task or source file that changed before the answer was
@@ -1382,11 +1384,13 @@ then captures the task there with the worktree's own project identity. It needs
 a Git repository on a branch with a commit, and the task's paths must have no
 uncommitted or untracked changes here, since the worktree would not have them
 (400 names the first such path). The worktree is trusted to run checks when this
-checkout is trusted and the worktree's command scope is identical; otherwise
-`warnings` says it needs its own consent. The response is the task plus
+checkout is trusted and the worktree's command scope is identical, and it gets
+the agent settings saved here when they were saved for the same configuration;
+otherwise `warnings` says what it lacks. The response is the task plus
 `worktree_path`, `branch` and `warnings`; later requests for the task carry
-`worktree_path`. If the task cannot be captured, the worktree and branch are
-removed again (or the error names the worktree that was kept).
+`worktree_path`. If the task cannot be captured, or the checkout fails after Git
+made the branch, the worktree and branch are removed again, even when the
+request was canceled (or the error names what was kept).
 
 Project endpoints accept an optional `worktree_path` query parameter, an absolute
 path to another registered worktree of the active repository. Membership is

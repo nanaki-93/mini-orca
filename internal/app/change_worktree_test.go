@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
@@ -143,5 +144,99 @@ func TestMergeCanKeepTheWorktreeAndDiscardDropsABranchWithoutCommits(t *testing.
 	}
 	if _, err := gitRead(context.Background(), root, "show-ref", "--verify", "--quiet", "refs/heads/codex/fix"); !gitops.ExitCode(err, 1) {
 		t.Fatalf("the integrated branch was kept: %v", err)
+	}
+}
+
+func TestTaskWorktreeSharesSavedAgentSettings(t *testing.T) {
+	service, _, _ := gitWorkflowFixture(t)
+	control := settingsControl(t, service)
+	control.Values.Roles.Review = "bug"
+	control.Values.Limits.ModelCalls = 3
+	if _, err := service.ControlAgentSettings(context.Background(), control); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := service.OpenChangeInWorktree(context.Background(), worktreeTaskRequest(t, service, "main.go"))
+	if err != nil || len(opened.Warnings) != 0 {
+		t.Fatalf("open = %+v, %v", opened, err)
+	}
+	child, _, err := service.WorktreeService(context.Background(), opened.WorktreePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := child.AgentSettings(context.Background(), settingsQuery(t, child))
+	if err != nil || view.State != "overridden" || view.Roles.Review != "bug" || view.Limits.ModelCalls != 3 {
+		t.Fatalf("worktree settings = %+v, %v", view, err)
+	}
+}
+
+func TestTaskWorktreeRollbackSurvivesACanceledRequestAndAFailedCheckout(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	path := createWorkflowWorktree(t, service, request)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := service.discardTaskWorktree(canceled, root, path); err != nil {
+		t.Fatalf("rollback stopped with the request: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("the worktree was kept: %v", err)
+	}
+
+	// A required smudge filter that fails stops the checkout after Git made
+	// the branch; the branch goes too.
+	if err := os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go filter=broken\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, root, "add", ".gitattributes")
+	testGit(t, root, "commit", "-m", "Filter Go files")
+	testGit(t, root, "config", "filter.broken.smudge", "false")
+	testGit(t, root, "config", "filter.broken.required", "true")
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	trustedGitRequest(t, service)
+	if _, err := service.OpenChangeInWorktree(context.Background(), worktreeTaskRequest(t, service, "main.go")); err == nil {
+		t.Fatal("a failed checkout created the task")
+	}
+	if got := testGit(t, root, "branch", "--list", "orca/*"); got != "" {
+		t.Fatalf("a failed checkout left its branch: %s", got)
+	}
+}
+
+func TestReanalyzingATaskInItsOwnWorktreeDismissesTheIssueWhereItLives(t *testing.T) {
+	var calls atomic.Int32
+	var prompt atomic.Value
+	service, root := newSemanticAnalysisService(t, reanalysisProvider(t, &calls, &prompt, nil, `{"still_valid":false,"reason":"Fixed on the main branch."}`), 0)
+	initializeChangeGit(t, service, root)
+	trustedGitRequest(t, service)
+	_, _, input, err := service.workspaceState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := project.NewFindingStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reported, err := store.ReconcileSource(input, project.FindingSourceAI, []project.UnifiedFinding{{Source: project.FindingSourceAI, Confidence: project.FindingConfidenceSuggested, Severity: "medium", Title: "Run ignores errors", Message: "Run ignores the error from fmt.Println.", Location: project.FindingLocation{Path: "main.go", StartLine: 5, EndLine: 5}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := worktreeTaskRequest(t, service, "main.go")
+	request.FindingTargets = []project.FindingTarget{{ProjectID: input.ProjectID, Kind: "semantic", ID: reported[0].ID, Path: "main.go"}}
+	opened, err := service.OpenChangeInWorktree(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := service.WorktreeService(context.Background(), opened.WorktreePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editMain(t, opened.WorktreePath, editedMain)
+	result, err := child.ReanalyzeChange(context.Background(), opened.ID, ChangeReanalysisRequest{ChangeIdentity: changeIdentity(opened.ChangeSession)})
+	if err != nil || result.Outcome != ReanalysisNotValid || result.DismissedIssues != 1 || len(result.Warnings) != 0 {
+		t.Fatalf("re-analysis = %+v, %v", result, err)
+	}
+	findings, err := store.Load(input)
+	if err != nil || len(findings) != 1 || findings[0].Status != project.FindingStatusDismissed {
+		t.Fatalf("the main checkout's issue = %+v, %v", findings, err)
 	}
 }
