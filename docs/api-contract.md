@@ -114,9 +114,9 @@ untrusted networks.
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
-| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree and branch. |
+| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree and branch unless `keep_worktree`. |
 | POST | `/api/projects/current/git/cleanup-merged` | Reconcile an external merge and safely remove the integrated worktree and branch. |
-| POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch. |
+| POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch unless the current branch contains its commits. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
 | POST | `/api/projects/current/changes/{sessionID}/commit` | Retry the latest failed proposal commit without reapplying source. |
@@ -129,7 +129,7 @@ untrusted networks.
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
 | POST | `/api/projects/current/plans/investigate` | Investigate captured read/write scope and return validated citations and model suggestions for explicit acceptance. |
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
-| POST | `/api/projects/current/changes` | Capture a task and 1–64 explicit text paths (planned tasks: 1–8). |
+| POST | `/api/projects/current/changes` | Capture a task and 1–64 explicit text paths (planned tasks: 1–8), here or with `worktree` in a new branch and worktree created for it. |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
 | GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck its scoped freshness and whether its checks describe the current tree. |
 | POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
@@ -1373,6 +1373,20 @@ It runs `git worktree add` from the captured HEAD; uncommitted content is not co
 A local inventory marked AI-unavailable allows the new checkout to reopen without
 model access. Creation returns its path without changing the active project.
 
+A task can get its own worktree: `POST /api/projects/current/changes` with
+`worktree: true` and `confirm_execution: true` (and the usual task fields and
+this checkout's identity) creates branch `orca/<title slug>-<6 hex>` and
+`.worktrees/<same name>` from the current HEAD under the creation guards above,
+then captures the task there with the worktree's own project identity. It needs
+a Git repository on a branch with a commit, and the task's paths must have no
+uncommitted or untracked changes here, since the worktree would not have them
+(400 names the first such path). The worktree is trusted to run checks when this
+checkout is trusted and the worktree's command scope is identical; otherwise
+`warnings` says it needs its own consent. The response is the task plus
+`worktree_path`, `branch` and `warnings`; later requests for the task carry
+`worktree_path`. If the task cannot be captured, the worktree and branch are
+removed again (or the error names the worktree that was kept).
+
 Project endpoints accept an optional `worktree_path` query parameter, an absolute
 path to another registered worktree of the active repository. Membership is
 rechecked on each request; unrelated, missing and pruned paths are rejected.
@@ -1414,7 +1428,10 @@ If saving completion fails, `state` remains `merged`, `warnings` explains the
 failure, and the worktree and its task history are retained. Retrying the guarded
 merge after fixing storage saves completion even if Git has already merged the HEAD.
 
-The daemon then stops the source implementation worker,
+With `keep_worktree: true` the merge stops here: findings are completed, and
+the worktree and its branch stay (`removed_worktree` and `removed_branch` are
+omitted) until `cleanup-merged` removes them. Otherwise the daemon then stops
+the source implementation worker,
 rechecks the source identity and clean state, verifies its commit is in the current
 branch, and removes the source checkout with `git worktree remove` without force.
 After checkout removal, the source branch is deleted only if its captured commit
@@ -1458,8 +1475,10 @@ Refreshing never removes a worktree or completes findings.
 Discard takes the selected worktree `path`, `source_head` and `source_branch` plus
 the usual mutation identity, confirmation and execution trust. It rechecks the
 clean source and branch, stops its worker, and removes the checkout and private
-task history without merging or forcing deletion. The source branch and current
-checkout remain unchanged. Locked, stale, dirty and nested checkouts are protected
+task history without merging or forcing deletion. The current checkout remains
+unchanged. The source branch is kept when it has commits the current branch
+lacks; otherwise nothing would be lost, so it is deleted with the same guards as
+after a merge and returned as `removed_branch` (a failure is a warning). Locked, stale, dirty and nested checkouts are protected
 by the same removal guards as merge cleanup. Success returns `state: discarded`
 and `removed_worktree`; removal failure returns `state: failed` with `error`.
 Discard reopens linked in-progress findings, including applied but unmerged fixes,

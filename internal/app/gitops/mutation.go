@@ -21,6 +21,9 @@ type GitMutationRequest struct {
 	SourceHead       string `json:"source_head,omitempty"`
 	SourceBranch     string `json:"source_branch,omitempty"`
 	MergeHead        string `json:"merge_head,omitempty"`
+	// KeepWorktree keeps a merged worktree and its branch; by default a
+	// merge removes both.
+	KeepWorktree bool `json:"keep_worktree,omitempty"`
 }
 
 type GitMutationResult struct {

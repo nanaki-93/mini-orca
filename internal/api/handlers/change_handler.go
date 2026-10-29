@@ -89,12 +89,19 @@ func (h *ChangeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
+// Open captures a task in this checkout or, with worktree, in a new branch and
+// worktree created for it.
 func (h *ChangeHandler) Open(w http.ResponseWriter, r *http.Request) {
-	var request app.ChangeCreateRequest
+	var request app.ChangeOpenRequest
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
-	value, err := h.service.OpenChangeSession(r.Context(), request)
+	if request.Worktree {
+		value, err := h.service.OpenChangeInWorktree(r.Context(), request)
+		respondWorkflow(w, value, err)
+		return
+	}
+	value, err := h.service.OpenChangeSession(r.Context(), request.ChangeCreateRequest)
 	respondWorkflow(w, value, err)
 }
 

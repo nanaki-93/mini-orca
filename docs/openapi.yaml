@@ -194,10 +194,10 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
     post:
       tags: [Chat]
-      description: Capture a task and one to eight explicit Go/Markdown paths.
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeCreateRequest'}}}}
+      description: Capture a task and one to eight explicit Go/Markdown paths in this checkout or, with worktree, in a new branch (orca/<title slug>-<random>) and worktree under .worktrees/ created from the current HEAD. A worktree task needs confirm_execution and execution trust, a Git repository on a branch with a commit, and task files without uncommitted changes here; the worktree inherits this checkout's execution trust when it runs the same commands, and the task is captured with the worktree's project identity. A task that cannot be captured leaves no worktree or branch.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeOpenRequest'}}}}
       responses:
-        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '200': {description: The task; with worktree, also where it lives, content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/ChangeSession'}, {$ref: '#/components/schemas/ChangeOpened'}]}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/recovery:
@@ -472,7 +472,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Merge the reviewed committed worktree head into the current clean branch after all saved tasks are applied and committed, mark linked findings Done, then remove the clean source worktree and its local task history without force and delete the captured branch if it is unchanged and unused by another checkout. Completion persistence failures retain the worktree and return warnings; cleanup failures preserve completion and the merged state. Removal receipts independently confirm checkout and branch deletion.
+      description: Merge the reviewed committed worktree head into the current clean branch after all saved tasks are applied and committed, mark linked findings Done, then (unless keep_worktree) remove the clean source worktree and its local task history without force and delete the captured branch if it is unchanged and unused by another checkout. Completion persistence failures retain the worktree and return warnings; cleanup failures preserve completion and the merged state. Removal receipts independently confirm checkout and branch deletion.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -494,7 +494,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Remove the confirmed clean source worktree and its local task history without merging or forcing deletion, and reopen linked in-progress findings not owned by another task. Includes applied but unmerged fixes. Requires source_head and source_branch; retains the branch and current checkout. Status persistence failures return warnings alongside the removal receipt.
+      description: Remove the confirmed clean source worktree and its local task history without merging or forcing deletion, and reopen linked in-progress findings not owned by another task. Includes applied but unmerged fixes. Requires source_head and source_branch; keeps the current checkout, and keeps the branch unless the current branch already contains its commits (then it is deleted and returned as removed_branch). Status persistence failures return warnings alongside the removal receipt.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed removal outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -2884,6 +2884,22 @@ components:
         paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
         acceptance_criteria: {type: array, maxItems: 16, items: {type: string, maxLength: 1024}}
         finding_targets: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/FindingTarget'}}
+    ChangeOpenRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeCreateRequest'}
+        - type: object
+          properties:
+            worktree: {type: boolean, description: Capture the task in a new branch and worktree created for it from the current HEAD.}
+            confirm_execution: {type: boolean, description: Required true with worktree; checking out the worktree can run repository filters.}
+    ChangeOpened:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeSession'}
+        - type: object
+          required: [worktree_path, branch, warnings]
+          properties:
+            worktree_path: {type: string, description: Absolute path of the task's worktree; later requests for the task carry it as worktree_path.}
+            branch: {type: string}
+            warnings: {type: array, items: {type: string}, description: For example that the worktree runs other check commands and needs its own trust.}
     InstructionProposalRequest:
       description: ChangeCreateRequest fields plus content; exactly one AGENTS.md path and instructions kind.
       allOf:
@@ -3337,6 +3353,7 @@ components:
             source_head: {type: string, description: Reviewed source worktree HEAD for merge or preview or discard or cleanup-merged}
             source_branch: {type: string, description: Required source branch identity for discard or cleanup-merged}
             merge_head: {type: string, description: Identified MERGE_HEAD for abort}
+            keep_worktree: {type: boolean, description: Merge only; keep the merged worktree and its branch instead of removing them.}
     GitMutationResult:
       type: object
       required: [state, warnings]
@@ -3344,7 +3361,7 @@ components:
         state: {type: string, enum: [created, switched, merged, discarded, conflicts, aborted, failed]}
         path: {type: string}
         removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard or cleanup-merged completed}
-        removed_branch: {type: string, description: Reviewed source branch returned only after guarded deletion following successful merge or cleanup-merged}
+        removed_branch: {type: string, description: Reviewed source branch returned only after guarded deletion following successful merge, cleanup-merged, or discard of a branch the current branch contains}
         completed: {type: array, description: "Finding completions persisted by this merge or cleanup, independent of later cleanup success", items: {$ref: '#/components/schemas/FindingCompletion'}}
         repository: {$ref: '#/components/schemas/GitRepository'}
         index: {$ref: '#/components/schemas/ProjectIndex'}

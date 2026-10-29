@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
 )
 
 func commitRecoveryEdit(t *testing.T, root, content string) string {
@@ -102,8 +104,9 @@ func TestCleanupRetainsUnfinishedPlanEvenWhenBaseIsIntegrated(t *testing.T) {
 	if err != nil || result.RemovedWorktree != path || result.State != "discarded" {
 		t.Fatalf("explicit discard of unfinished task was blocked: %+v %v", result, err)
 	}
-	if head := testGit(t, service.manager.Root(), "rev-parse", "codex/fix"); head != request.SourceHead {
-		t.Fatal("discard lost the task branch")
+	// The branch had no commits of its own: the current branch keeps them all.
+	if _, err := gitRead(context.Background(), service.manager.Root(), "show-ref", "--verify", "--quiet", "refs/heads/codex/fix"); !gitops.ExitCode(err, 1) || result.RemovedBranch != "codex/fix" {
+		t.Fatalf("discard kept a branch without commits of its own: %+v %v", result, err)
 	}
 }
 

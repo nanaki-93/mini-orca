@@ -110,3 +110,43 @@ func TestGitMutationsRejectUnconfirmedAndUnknownFields(t *testing.T) {
 		}
 	}
 }
+
+func TestChangeOpenHTTPCreatesTheTaskInItsOwnWorktree(t *testing.T) {
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	root := fixture.manager.Root()
+	git := func(args ...string) {
+		t.Helper()
+		flags := []string{"-C", root, "-c", "core.hooksPath=" + os.DevNull, "-c", "commit.gpgSign=false", "-c", "user.name=Test", "-c", "user.email=test@example.com"}
+		if out, err := exec.Command("git", append(flags, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git: %v %s", err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".mini-orca/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-b", "main")
+	git("add", "main.go", ".gitignore")
+	git("commit", "-m", "Initial")
+	if _, err := fixture.service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	index, _ := fixture.manager.Index()
+	if _, err := fixture.service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	body := map[string]any{"project_id": index.ProjectID, "project_revision": index.ProjectRevision, "kind": "fix", "title": "Fix Run", "paths": []string{"main.go"}, "worktree": true, "confirm_execution": true}
+	response := workflowResponse(t, fixture.Open, "POST", "/api/projects/current/changes", "", body)
+	var opened struct {
+		app.ChangeSession
+		WorktreePath string   `json:"worktree_path"`
+		Branch       string   `json:"branch"`
+		Warnings     []string `json:"warnings"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &opened) != nil || opened.ID == "" || opened.Title != "Fix Run" || !strings.HasPrefix(opened.Branch, "orca/fix-run-") || !strings.HasPrefix(opened.WorktreePath, filepath.Join(root, ".worktrees")) {
+		t.Fatalf("open in a worktree = %d %s", response.Code, response.Body)
+	}
+	delete(body, "worktree")
+	if response := workflowResponse(t, fixture.Open, "POST", "/api/projects/current/changes", "", body); response.Code != http.StatusOK || strings.Contains(response.Body.String(), "worktree_path") {
+		t.Fatalf("open in this checkout = %d %s", response.Code, response.Body)
+	}
+}

@@ -53,7 +53,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
 	result := s.completeGitMutation(repository.Root, "merged", err)
 	if result.State == "merged" {
-		s.completeMergedWorktree(ctx, repository.Root, source, completed, result)
+		s.completeMergedWorktree(ctx, repository.Root, source, completed, result, !request.KeepWorktree)
 	}
 	return result, nil
 }
@@ -82,7 +82,7 @@ func (s *Service) CleanupMergedWorktree(ctx context.Context, request GitMutation
 	}
 	s.invalidateWholeTreeJobs()
 	result := s.completeGitMutation(repository.Root, "merged", nil)
-	s.completeMergedWorktree(ctx, repository.Root, source, completed, result)
+	s.completeMergedWorktree(ctx, repository.Root, source, completed, result, true)
 	return result, nil
 }
 
@@ -99,12 +99,17 @@ func requireFinishedWorktreeTasks(path string) error {
 	return nil
 }
 
-func (s *Service) completeMergedWorktree(ctx context.Context, root string, source *GitWorktree, completed []project.FindingCompletion, result *GitMutationResult) {
+// completeMergedWorktree marks the merged findings done, then removes the
+// worktree and its branch unless they are kept.
+func (s *Service) completeMergedWorktree(ctx context.Context, root string, source *GitWorktree, completed []project.FindingCompletion, result *GitMutationResult, remove bool) {
 	if err := gitops.CompleteMergedFindings(ctx, root, source.Head, completed); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but findings could not be marked Done: %v. Worktree %s and its task history were retained.", err, source.Path))
 		return
 	}
 	result.Completed = completed
+	if !remove {
+		return
+	}
 	if err := s.removeGitWorktree(ctx, root, source, gitops.WorktreeMerged); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but worktree %s was not removed: %v. Refresh Worktrees and retry cleanup after resolving the issue.", source.Path, err))
 		return

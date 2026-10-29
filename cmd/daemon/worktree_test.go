@@ -199,7 +199,8 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 		}
 		got = call("POST", "/api/projects/current/git/discard-worktree", string(body), "")
 		var result app.GitMutationResult
-		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "discarded" || result.RemovedWorktree != created.Path || result.RemovedBranch != "" || len(result.Warnings) != 0 {
+		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "discarded" || result.RemovedWorktree != created.Path || result.RemovedBranch != "codex/fix" || len(result.Warnings) != 0 {
+			// The branch had no commits of its own, so it went with the worktree.
 			t.Fatalf("explicit discard receipt: %d %s", got.Code, got.Body.String())
 		}
 		if _, err := os.Stat(created.Path); !os.IsNotExist(err) {

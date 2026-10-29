@@ -97,13 +97,33 @@ func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationReq
 	result := &GitMutationResult{State: "discarded", Path: source.Path, Repository: repository, Warnings: []string{}}
 	if err := s.removeGitWorktree(ctx, repository.Root, source, gitops.WorktreeDiscarded); err != nil {
 		result.State, result.Error = "failed", err.Error()
-	} else {
-		result.RemovedWorktree = source.Path
-		if err := s.reopenDiscardedWorktreeFindings(ctx, repository.Root, repository.ProjectID, targets); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Worktree discarded, but linked issues could not be reopened: %v. Refresh Issues and retry their status update.", err))
-		}
+		return result, nil
+	}
+	result.RemovedWorktree = source.Path
+	if err := s.reopenDiscardedWorktreeFindings(ctx, repository.Root, repository.ProjectID, targets); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Worktree discarded, but linked issues could not be reopened: %v. Refresh Issues and retry their status update.", err))
+	}
+	switch deleted, err := deleteBranchWithoutOwnCommits(ctx, repository.Root, source.GitIdentity); {
+	case err != nil:
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Worktree discarded, but branch %s was retained: %v.", source.Branch, err))
+	case deleted:
+		result.RemovedBranch = source.Branch
 	}
 	return result, nil
+}
+
+// deleteBranchWithoutOwnCommits deletes a discarded worktree's branch only
+// when the current branch already contains its commits, so nothing is lost;
+// a branch with commits of its own is kept.
+func deleteBranchWithoutOwnCommits(ctx context.Context, root string, source gitops.GitIdentity) (bool, error) {
+	_, err := gitRead(ctx, root, "merge-base", "--is-ancestor", source.Head, "HEAD")
+	if gitops.ExitCode(err, 1) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, gitops.DeleteMergedBranch(ctx, root, source)
 }
 
 func (s *Service) reopenDiscardedWorktreeFindings(ctx context.Context, root, projectID string, targets []project.FindingTarget) error {
