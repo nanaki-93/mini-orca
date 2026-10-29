@@ -113,3 +113,8 @@ export function languageOf(path: string): string {
 export function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
+
+/** How open line comments travel with a run that writes code. */
+export function commentsBrief(count: number): string {
+  return `Your ${plural(count, 'line comment')} ${count === 1 ? 'goes' : 'go'} to the agents as a repair brief.`;
+}

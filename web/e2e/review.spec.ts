@@ -2,7 +2,7 @@
 // apply it, with the review gate tracking each step.
 
 import { expect, test } from './support/daemon';
-import { rejectedTask } from './support/fixtures';
+import { agentSettings, rejectedTask } from './support/fixtures';
 
 test('reviews, approves and applies a task through the gate', async ({ page, daemon }) => {
   await page.goto('/#/tasks/chg-1');
@@ -155,6 +155,59 @@ test('a revision that takes long shows its time and can be stopped', async ({ pa
   await expect(progress).toHaveCount(0);
   await expect(revise.getByLabel('Revision request')).toHaveValue('Also reject backslashes.');
   expect(sent).toBe(1);
+});
+
+test('a task revised in the conversation runs the agents again on that version', async ({ page, daemon }) => {
+  await page.goto('/#/tasks/chg-1');
+  const header = page.locator('header.task-header');
+  // A run is always on offer, beside the review step.
+  await expect(header.getByRole('button', { name: 'Review files' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Run agents again' })).toBeEnabled();
+
+  const revise = page.getByRole('region', { name: 'Ask for a revision' });
+  await revise.getByLabel('Revision request').fill('Also reject backslashes.');
+  await revise.getByRole('button', { name: /^Revise/ }).click();
+  await expect(page.getByText('Proposal updated. Review the new diff.')).toBeVisible();
+  const run = page.getByRole('region', { name: 'Agent run' });
+  await expect(run.getByText('The proposal changed after this run')).toBeVisible();
+
+  await run.getByRole('button', { name: 'Run agents again' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByRole('heading', { name: 'Run the agents again?' })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Check and review this version/ })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Run agents' }).click();
+  await expect(header.getByRole('button', { name: 'Stop agents' })).toBeVisible();
+  expect(daemon.mutations('/workflow')[0].body).toMatchObject({ resume_from: 'checks', revision: 4, hash: 'sha256:9f2c1a7be4-r4', auto_repair: true });
+  // The kept tests are only run: the test stage says so.
+  await expect(run.getByText('Run the checks')).toBeVisible();
+});
+
+test('a changed creation model makes the agents write the change again', async ({ page, daemon }) => {
+  daemon.serve('/api/projects/current/agent-settings', () => agentSettings(1, { creation: 'code', testing: 'code', review: 'analyze' }, null));
+  await page.goto('/#/tasks/chg-1');
+  await page.locator('header.task-header').getByRole('button', { name: 'Run agents again' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByRole('radio', { name: /Check and review this version/ })).toBeDisabled();
+  await expect(dialog.getByRole('radio', { name: /Write new tests/ })).toBeDisabled();
+  await expect(dialog.getByText('The creation model changed since the last run, so the agents write the change again.').first()).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Write the change again/ })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  expect(daemon.mutations('/workflow')).toEqual([]);
+});
+
+test('line comments go to the agents only with a start that writes code', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  daemon.sessions.set('chg-1', { ...session, comments: [{ id: 'cm-1', path: 'internal/api/handlers/webui.go', side: 'new', line: 42, excerpt: 'if name == "" || strings.Contains(name, "/") {', text: 'Prefer path.Clean.', hash: session.hash, created_at: session.updated_at }] });
+  await page.goto('/#/tasks/chg-1');
+  await page.locator('header.task-header').getByRole('button', { name: 'Run agents again' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('Your 1 line comment stays open: this start writes no code.');
+  await dialog.getByRole('radio', { name: /Write new tests/ }).check();
+  await expect(dialog).toContainText('Your 1 line comment goes to the agents as a repair brief.');
+  await dialog.getByRole('button', { name: 'Run agents' }).click();
+  await expect(page.locator('header.task-header').getByRole('button', { name: 'Stop agents' })).toBeVisible();
+  expect(daemon.mutations('/workflow')[0].body).toMatchObject({ resume_from: 'test', include_comments: true });
 });
 
 test('a comment can be deleted before it is sent', async ({ page, daemon }) => {

@@ -263,6 +263,8 @@ export interface ChangeWorkflow {
   status: string;
   reason?: string;
   attempt?: number;
+  /** Where this run started: create (the default), test, checks or review. */
+  resume_from?: string;
   auto_repair?: boolean;
   auto_repair_attempts?: number;
   stages: WorkflowStage[];

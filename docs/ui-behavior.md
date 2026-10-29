@@ -33,6 +33,18 @@ every guard when the action arrives.
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.
   A security task adds a security specialist.
+- **Run again.** Whenever no run is active and the task is not applied, the
+  task page offers **Run agents again** (beside the review step, or as the
+  primary action when the agents must run before human review, and on a run
+  that ended); when the daemon would refuse a run, the button stays visible,
+  disabled, and says why. With a proposal, the confirmation asks where to start:
+  **Check and review this version** keeps the code and tests as they are,
+  including a version revised in the Conversation, and runs the checks, then
+  the reviewers (chosen first when the proposal has tests); **Write new tests**
+  keeps the implementation; **Write the change again** has the creation agent
+  revise it. Starts that keep the proposal need the creation model of the last
+  run and say so otherwise. Open line comments go with a start that writes
+  code and stay open with "Check and review".
 - **Watch.** The Conversation shows each stage with its model and duration and
   each specialist's verdict and findings. **Stop agents** asks first and applies
   nothing.
@@ -43,7 +55,8 @@ every guard when the action arrives.
   that finishes is announced with its spend.
 - **Revise.** A revision request goes to the Code profile (remote consent when
   needed) and creates a new version: earlier view marks, checks and approval no
-  longer apply. While the agent works, the revise box shows how long it has
+  longer apply, and the last agent run reads outdated until the agents run
+  again. While the agent works, the revise box shows how long it has
   been working and **Stop**, which asks first, cancels the model call and keeps
   the current version.
 - **Stale.** A task is stale only when a file it depends on changed: its

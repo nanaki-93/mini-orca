@@ -42,14 +42,17 @@ export interface StageView {
 }
 
 export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[] {
+  // A checks start keeps the tests: its test stage only runs the checks,
+  // until a repair has the testing agent write them again.
+  const checksOnly = workflow?.resume_from === 'checks' && !workflow.auto_repair_attempts;
   return (workflow?.stages ?? []).map(stage => ({
     name: stage.name,
-    label: STAGE_LABELS[stage.name] ?? stage.name,
-    actor: STAGE_ACTORS[stage.name] ?? '',
+    label: checksOnly && stage.name === 'test' ? 'Run the checks' : STAGE_LABELS[stage.name] ?? stage.name,
+    actor: checksOnly && stage.name === 'test' ? 'Checks' : STAGE_ACTORS[stage.name] ?? '',
     status: stage.status || 'pending',
     tone: phaseTone(stage.status),
     reason: stage.reason ?? '',
-    model: stage.model?.model ?? '',
+    model: checksOnly && stage.name === 'test' ? '' : stage.model?.model ?? '',
     durationMs: durationBetween(stage.started_at, stage.finished_at),
     startedAt: stage.started_at,
     usage: stage.usage,
@@ -189,7 +192,7 @@ export function workflowDestinations(settings: AgentSettings | null | undefined,
   return { selections, destinations, confirmed, local };
 }
 
-export function workflowRequest(identity: ProjectIdentity & { revision: number; hash: string }, message: string, choice: DestinationChoice, options: { autoRepair?: boolean; confirmSecurity?: boolean; planHash?: string; includeComments?: boolean } = {}) {
+export function workflowRequest(identity: ProjectIdentity & { revision: number; hash: string }, message: string, choice: DestinationChoice, options: { autoRepair?: boolean; confirmSecurity?: boolean; planHash?: string; includeComments?: boolean; start?: RunStart } = {}) {
   return {
     ...identity,
     message,
@@ -199,7 +202,40 @@ export function workflowRequest(identity: ProjectIdentity & { revision: number; 
     auto_repair: Boolean(options.autoRepair),
     plan_hash: options.planHash || undefined,
     include_comments: options.includeComments || undefined,
+    resume_from: options.start && options.start !== 'create' ? options.start : undefined,
   };
+}
+
+/** Where a run of the agents starts on a task that already has a proposal. */
+export type RunStart = 'checks' | 'test' | 'create';
+
+export interface RunStartOption {
+  value: RunStart;
+  label: string;
+  detail: string;
+  /** Why the daemon would refuse this start, or ''. */
+  blocked: string;
+}
+
+/**
+ * The starts a run offers, and the one chosen first. Without a proposal the
+ * agents write it from the brief and there is nothing to choose. With one, the
+ * first choice keeps it as it is (checks, then reviewers) unless it has no
+ * tests yet. Keeping the proposal keeps the creation stage, so the daemon
+ * requires its model unchanged since the last run.
+ */
+export function runStartOptions(session: { changes?: { path: string }[] | null; workflow?: ChangeWorkflow }, createModel: string, isTestPath: (path: string) => boolean): { options: RunStartOption[]; initial: RunStart } {
+  const changes = session.changes ?? [];
+  if (!changes.length) return { options: [], initial: 'create' };
+  const kept = session.workflow?.stages.find(stage => stage.name === 'create')?.model?.profile;
+  const blocked = session.workflow && kept !== createModel ? 'The creation model changed since the last run, so the agents write the change again.' : '';
+  const options: RunStartOption[] = [
+    { value: 'checks', label: 'Check and review this version', detail: 'Keeps the code and tests as they are: runs the checks, then the reviewers.', blocked },
+    { value: 'test', label: 'Write new tests, then check and review', detail: 'Keeps the implementation; the testing agent rewrites the test files.', blocked },
+    { value: 'create', label: 'Write the change again', detail: 'The creation agent revises the code from the brief, the conversation and this version, then tests, checks and review follow.', blocked: '' },
+  ];
+  const initial: RunStart = blocked ? 'create' : changes.some(change => isTestPath(change.path)) ? 'checks' : 'test';
+  return { options, initial };
 }
 
 /** The guarded merge (or preview) request for a worktree into the main checkout. */

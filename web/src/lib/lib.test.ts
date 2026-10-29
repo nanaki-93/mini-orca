@@ -4,7 +4,7 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, formatElapsed, isTestPath, newFilePath, timeAgo } from './util';
-import { changeOverlaps, parseCommits, workflowBlocker, workflowDestinations } from './workflow';
+import { changeOverlaps, parseCommits, runStartOptions, workflowBlocker, workflowDestinations, workflowRequest, workflowStages } from './workflow';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
 import { QueryClient } from '@tanstack/react-query';
@@ -82,6 +82,49 @@ describe('util and workflow', () => {
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, false, isTestPath)).toMatch(/Trust/);
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, true, isTestPath)).toBe('');
     expect(workflowBlocker(null, true, isTestPath)).toMatch(/Select/);
+  });
+});
+
+describe('running the agents again', () => {
+  const stages = (create: string) => [
+    { name: 'create', status: 'completed', model: { scope: 'bug', profile: create, model: 'creator' } },
+    { name: 'test', status: 'completed', model: { scope: 'code', profile: 'code', model: 'tester' } },
+    { name: 'review', status: 'failed', model: { scope: 'analyze', profile: 'analyze', model: 'critic' } },
+    { name: 'human_review', status: 'blocked' },
+  ];
+  const revised = { changes: [{ path: 'a.go' }, { path: 'a_test.go' }], workflow: { id: 'wf', status: 'outdated', stages: stages('bug') } };
+
+  it('keeps a revised proposal by default and writes it from the brief when there is none', () => {
+    expect(runStartOptions({ changes: [] }, 'bug', isTestPath)).toEqual({ options: [], initial: 'create' });
+    const starts = runStartOptions(revised, 'bug', isTestPath);
+    expect(starts.initial).toBe('checks');
+    expect(starts.options.map(option => [option.value, option.blocked])).toEqual([['checks', ''], ['test', ''], ['create', '']]);
+    // A proposal without tests starts by writing them.
+    expect(runStartOptions({ ...revised, changes: [{ path: 'a.go' }] }, 'bug', isTestPath).initial).toBe('test');
+    // A manual proposal has no earlier run whose models must match.
+    expect(runStartOptions({ changes: revised.changes }, 'code', isTestPath).initial).toBe('checks');
+  });
+
+  it('writes the change again when the kept creation model changed', () => {
+    const starts = runStartOptions(revised, 'code', isTestPath);
+    expect(starts.initial).toBe('create');
+    expect(starts.options.filter(option => option.blocked).map(option => option.value)).toEqual(['checks', 'test']);
+    expect(starts.options[0].blocked).toMatch(/creation model changed/);
+  });
+
+  it('sends where the run starts, leaving the default unset', () => {
+    const choice = { selections: { create: 'bug', test: 'code', review: 'analyze' }, destinations: [], confirmed: [], local: [] };
+    const identity = { project_id: 'p', project_revision: 'r', revision: 4, hash: 'h' };
+    expect(workflowRequest(identity, 'Fix it', choice, { start: 'checks' }).resume_from).toBe('checks');
+    expect(workflowRequest(identity, 'Fix it', choice, { start: 'create' }).resume_from).toBeUndefined();
+    expect(workflowRequest(identity, 'Fix it', choice).resume_from).toBeUndefined();
+  });
+
+  it('names a checks start\'s test stage for what it does until a repair', () => {
+    const run = { id: 'wf', status: 'running', resume_from: 'checks', stages: stages('bug') };
+    expect(workflowStages(run)[1]).toMatchObject({ label: 'Run the checks', actor: 'Checks', model: '' });
+    expect(workflowStages({ ...run, auto_repair_attempts: 1 })[1]).toMatchObject({ label: 'Write and run tests', model: 'tester' });
+    expect(workflowStages({ ...run, resume_from: undefined })[1].label).toBe('Write and run tests');
   });
 });
 

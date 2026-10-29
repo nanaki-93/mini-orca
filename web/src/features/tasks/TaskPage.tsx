@@ -4,7 +4,7 @@
 import { useState, type ReactNode } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, Play, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Trash2, Upload,
+  ArrowLeft, CheckCircle2, Circle, ExternalLink, FileDiff, FlaskConical, GitBranch, GitCommitHorizontal, MessageSquare, RotateCcw, ShieldCheck, Square, ThumbsDown, ThumbsUp, Trash2, Upload,
 } from 'lucide-react';
 import { useProject, useSession, useTrust, useUsage } from '@/api/hooks';
 import { costCaveat, costLabel, usageLabel } from '@/lib/usage';
@@ -12,12 +12,13 @@ import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
 import { canOverrideReview, checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
-import { activeOverride, agentRunLabel, reviewVerdict, workflowBlocker } from '@/lib/workflow';
-import { basename, isTestPath, plural, shortHash, timeAgo } from '@/lib/util';
-import { Badge, Button, Callout, EmptyState, IconButton, Input, Skeleton, Tip, cx } from '@/components/ui';
+import { activeOverride, agentRunLabel, reviewVerdict } from '@/lib/workflow';
+import { basename, plural, shortHash, timeAgo } from '@/lib/util';
+import { Badge, Button, Callout, EmptyState, IconButton, Input, Skeleton, cx } from '@/components/ui';
 import { KindTag, TaskStatusBadge } from '@/components/domain';
 import { FilesChanged } from '@/features/review/FilesChanged';
 import { ChecksPanel } from '@/features/review/ChecksPanel';
+import { RunAgents } from './RunAgents';
 import { TaskOverview } from './TaskOverview';
 import { ApprovalNotes, ApproveWithNotes, OverrideReview } from './ReviewDecision';
 
@@ -91,6 +92,7 @@ function TaskHeader({ session }: { session: LoadedSession }) {
         </div>
       </div>
       <PrimaryAction session={session} />
+      {offersRunBesidePrimary(session) ? <RunAgents session={session} /> : null}
       <DeleteTask session={session} />
     </header>
   );
@@ -113,13 +115,22 @@ function DeleteTask({ session }: { session: LoadedSession }) {
   );
 }
 
+/**
+ * A run of the agents is on offer whenever none is active and the task is not
+ * applied: as the primary action before the first run and while the agents
+ * have to run again, otherwise beside the review step.
+ */
+function offersRunBesidePrimary(session: LoadedSession): boolean {
+  const step = proposalReadiness(session).step;
+  return !workflowActive(session) && step !== 'applied' && step !== 'generate' && step !== 'agents';
+}
+
 /** The single most useful next step, as a button. */
 function PrimaryAction({ session }: { session: LoadedSession }) {
   const actions = useActions();
   const busy = useBusy();
   const trust = useTrust().data;
   const ready = proposalReadiness(session);
-  const blocker = workflowBlocker(session, Boolean(trust?.trusted), isTestPath);
   if (workflowActive(session)) {
     return (
       <Button variant="secondary" icon={Square} onClick={() => void actions.cancelAgents(session)} disabled={session.workflow?.status === 'canceling' || Boolean(busy)}>
@@ -129,15 +140,8 @@ function PrimaryAction({ session }: { session: LoadedSession }) {
   }
   switch (ready.step) {
     case 'generate':
-      return (
-        <Tip label={blocker || 'Agents write the change, tests, and review it'}>
-          <span>
-            <Button variant="primary" icon={Play} onClick={() => void actions.startAgents(session, { autoRepair: true })} disabled={Boolean(blocker) || Boolean(busy)}>
-              Start agents
-            </Button>
-          </span>
-        </Tip>
-      );
+    case 'agents':
+      return <RunAgents session={session} variant="primary" />;
     case 'review':
       return (
         <Button variant="primary" icon={FileDiff} onClick={() => navigate(`/tasks/${session.id}/files`)}>
@@ -160,14 +164,6 @@ function PrimaryAction({ session }: { session: LoadedSession }) {
       return ready.canUndo ? (
         <Button variant="secondary" icon={RotateCcw} onClick={() => void actions.undo(session)} disabled={Boolean(busy)}>
           Undo
-        </Button>
-      ) : null;
-    case 'agents':
-    case 'stale':
-    case 'recovery':
-      return session.workflow && ['failed', 'canceled', 'changes_requested', 'interrupted'].includes(session.workflow.status) && !blocker ? (
-        <Button variant="secondary" icon={Play} onClick={() => void actions.startAgents(session, { autoRepair: true })} disabled={Boolean(busy)}>
-          Run agents again
         </Button>
       ) : null;
     default:

@@ -735,6 +735,51 @@ mark {
   background: var(--warning-soft);
 }
 
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-list legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.choice input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.choice.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--accent-soft);
+}
+
+.choice.is-disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .tooltip {
   z-index: 60;
   padding: 5px 8px;

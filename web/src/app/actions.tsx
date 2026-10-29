@@ -8,9 +8,10 @@ import { api, errorMessage, query, withWorktree } from '@/api/client';
 import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, ExecutionTrust, Finding, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
-import { changeOverlaps, mergeRequest, workflowDestinations, workflowRequest } from '@/lib/workflow';
+import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest } from '@/lib/workflow';
 import { navigate } from '@/lib/router';
-import { plural } from '@/lib/util';
+import { commentsBrief, isTestPath, plural } from '@/lib/util';
+import { RunStartChoice } from '@/components/domain';
 import { keys } from '@/api/hooks';
 
 // ------------------------------------------------------------------ busy state
@@ -213,11 +214,21 @@ export function useActions() {
     }
     const choice = workflowDestinations(settings, client.getQueryData<ModelsCurrent>(keys.models));
     const security = session.kind === 'security';
+    const starts = runStartOptions(session, choice.selections.create, isTestPath);
+    let start = starts.initial; // The choice below updates it while the dialog is open.
+    const again = starts.options.length > 0;
     const ok = await confirm({
-      title: 'Start the agents?',
+      title: again ? 'Run the agents again?' : 'Start the agents?',
       body: (
         <div className="stack">
-          <p>Agents write the change, write and run tests in an isolated copy of the project, then specialist reviewers check it. Nothing reaches your files until you review and apply it.</p>
+          {again ? (
+            <>
+              <RunStartChoice options={starts.options} initial={starts.initial} comments={comments} onChange={value => (start = value)} />
+              <p className="small muted">Checks run in an isolated copy of the project. Nothing reaches your files until you review and apply the result.{options.autoRepair ? ' A failed check or a rejecting review starts an automatic repair of the code (up to two).' : ''}</p>
+            </>
+          ) : (
+            <p>Agents write the change, write and run tests in an isolated copy of the project, then specialist reviewers check it. Nothing reaches your files until you review and apply it.</p>
+          )}
           {choice.destinations.length ? (
             <div className="consent-list">
               <div className="small strong">Sends code to remote models</div>
@@ -231,16 +242,16 @@ export function useActions() {
             <p className="small muted">All selected models run locally.</p>
           )}
           {security ? <p className="small">This is a security task: a security specialist reviews it.</p> : null}
-          {comments ? <p className="small">Your {plural(comments, 'line comment')} {comments === 1 ? 'goes' : 'go'} to the agents as a repair brief.</p> : null}
+          {comments && !again ? <p className="small">{commentsBrief(comments)}</p> : null}
         </div>
       ),
-      confirmLabel: 'Start agents',
+      confirmLabel: again ? 'Run agents' : 'Start agents',
     });
     if (!ok) return false;
     return Boolean(
       await guarded('Starting agents…', async () => {
         try {
-          const body = workflowRequest(changeIdentity(session), message, choice, { autoRepair: options.autoRepair, confirmSecurity: security, planHash: session.plan?.hash, includeComments: comments > 0 });
+          const body = workflowRequest(changeIdentity(session), message, choice, { autoRepair: options.autoRepair, confirmSecurity: security, planHash: session.plan?.hash, includeComments: comments > 0 && start !== 'checks', start });
           setSession(await api.post<ChangeSession>(changePath(session, '/workflow'), body), session);
           toast('Agents started. Progress updates live.', 'info');
           return true;

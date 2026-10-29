@@ -12,6 +12,7 @@ import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { navigate } from '@/lib/router';
+import { RunAgents } from './RunAgents';
 
 export function TaskOverview({ session }: { session: LoadedSession }) {
   return (
@@ -96,7 +97,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
       </div>
       {ended && workflow.reason ? (
         <div className="card-body">
-          <Callout tone={workflow.status === 'canceled' ? 'neutral' : 'danger'} icon={ShieldAlert} title={workflow.status === 'canceled' ? 'Stopped' : 'The run did not finish'}>
+          <Callout {...endedCallout(workflow.status)} icon={ShieldAlert} action={<RunAgents session={session} size="sm" />}>
             {workflow.reason}
           </Callout>
         </div>
@@ -115,6 +116,13 @@ function AgentRun({ session }: { session: LoadedSession }) {
       </ol>
     </section>
   );
+}
+
+/** How an ended run reads: a revision after it is not a failure. */
+function endedCallout(status: string): { tone: 'neutral' | 'info' | 'danger'; title: string } {
+  if (status === 'canceled') return { tone: 'neutral', title: 'Stopped' };
+  if (status === 'outdated') return { tone: 'info', title: 'The proposal changed after this run' };
+  return { tone: 'danger', title: 'The run did not finish' };
 }
 
 function Stage({ stage, specialists }: { stage: StageView; specialists: SpecialistView[] }) {

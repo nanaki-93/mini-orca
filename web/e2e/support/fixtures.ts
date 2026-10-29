@@ -75,9 +75,9 @@ export function reviewTask(): ChangeSession {
       id: 'wf-1',
       status: 'awaiting_human_review',
       stages: [
-        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16), usage: spend(2, 18_400, 2_100), cost: estimate(0.061) },
-        { name: 'test', status: 'completed', started_at: ago(16), finished_at: ago(11), usage: spend(1, 9_800, 1_300), cost: estimate(0.034) },
-        { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7), usage: spend(3, 31_000, 1_900), cost: estimate(0.099) },
+        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16), model: stageModel('bug'), usage: spend(2, 18_400, 2_100), cost: estimate(0.061) },
+        { name: 'test', status: 'completed', started_at: ago(16), finished_at: ago(11), model: stageModel('code'), usage: spend(1, 9_800, 1_300), cost: estimate(0.034) },
+        { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7), model: stageModel('analyze'), usage: spend(3, 31_000, 1_900), cost: estimate(0.099) },
         { name: 'human_review', status: 'waiting', started_at: ago(7) },
       ],
       review: { proposal_hash: 'sha256:9f2c1a7be4', verdict: 'approve', summary: 'Safe and tested.', findings: [] },
@@ -106,6 +106,11 @@ export function rejectedTask(): ChangeSession {
       ],
     },
   };
+}
+
+/** The model a stage ran with; the daemon records the role's selection as its profile. */
+export function stageModel(selection: string): Model {
+  return { ...models.scopes[selection], profile: selection };
 }
 
 function spend(calls: number, input: number, output: number): BudgetUsage {
