@@ -33,13 +33,14 @@ every guard when the action arrives.
   (`orca/<title>-<suffix>`) and worktree from HEAD by default (**Work in its
   own worktree**), so several tasks run, apply and commit in parallel; the task
   then opens in that checkout. It needs Git, a commit and trust, and the
-  task's files must be committed (the daemon names a file that is not);
-  unticking it, or a task created while a worktree is selected, keeps the task
-  in the selected checkout. The worktree runs checks under the same trust when
-  its commands are the same; otherwise a warning asks to allow them. A task
-  page shows its own checkout, but the workspace pages (sidebar, `g` keys and
-  the Tasks crumb) keep the checkout chosen in the top bar, so opening a task
-  in its own worktree does not switch Issues or Analysis to it.
+  task's files must be committed (the daemon names a file that is not).
+  Unticking it, or creating a task while a worktree is selected, keeps the task
+  in the selected checkout. The worktree runs checks under this checkout's
+  trust when its commands are the same, and with the agent roles and budget
+  saved here; otherwise a warning says what to set. A task page shows its own
+  checkout, but the workspace pages (sidebar, `g` keys and the Tasks crumb)
+  keep the checkout chosen in the top bar, so opening a task in its own
+  worktree does not switch Issues or Analysis to it.
 - **Start agents.** Requires a test file in scope and a trusted project. The
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.
@@ -200,7 +201,9 @@ every guard when the action arrives.
 - **Delete the worktree and its branch after merging** (on by default, kept per
   browser) applies to every merge. Off, a merged worktree and its branch stay;
   **Remove worktree** deletes a clean worktree with nothing left to merge and
-  all its tasks applied, together with its branch, after confirmation.
+  all its tasks applied, together with its branch, after confirmation; when it
+  has applied tasks (merged with this setting off, or merged in another Git
+  tool) their linked issues are marked done, as a merge would.
 - Merging needs execution trust (Git can run filters and merge drivers). The
   merge preview lists commits and the diff; the confirmation names overlapping
   paths. Overlap is a review hint, not a proven conflict.

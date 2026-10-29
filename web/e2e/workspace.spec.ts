@@ -158,6 +158,21 @@ test('a merge keeps or removes the worktree as Branches says, for every merge', 
   await expect(page.getByRole('listitem').filter({ hasText: 'mo/chg-7' })).toHaveCount(0);
 });
 
+test('a worktree merged outside Mini-Orca is cleaned up with its issues marked done', async ({ page, daemon }) => {
+  const applied = { id: 'chg-8', project_id: 'p1', project_revision: 'r1', kind: 'fix', title: 'Escape asset names', revision: 2, hash: 'h8', state: 'applied', freshness: 'current', updated_at: '2026-10-29T00:00:00Z', commit: { state: 'committed', oid: 'cc33' } };
+  daemon.addWorktree({ path: '/work/.mini-orca/wt/chg-8', head: 'cc33', branch: 'mo/chg-8', integration: 'merged', mergeable: false, dirty: false, sessions: [applied], completed: [applied] });
+  await page.goto('/#/git');
+  await page.getByRole('listitem').filter({ hasText: 'mo/chg-8' }).click();
+  const detail = page.getByRole('complementary', { name: 'Worktree' });
+  await expect(detail.getByText('Merged', { exact: true })).toBeVisible();
+  await detail.getByRole('button', { name: 'Remove worktree' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('Its linked issues are marked done, and the history of its 1 applied task goes with it.');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove worktree' }).click();
+  await expect(page.getByText('Removed mo/chg-8.')).toBeVisible();
+  expect(daemon.mutations('/cleanup-merged')[0].body).toMatchObject({ path: '/work/.mini-orca/wt/chg-8', source_head: 'cc33', source_branch: 'mo/chg-8' });
+  expect(daemon.mutations('/discard-worktree')).toHaveLength(0);
+});
+
 test('by default a merge removes the worktree and its branch', async ({ page, daemon }) => {
   await page.goto('/#/git');
   await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();

@@ -107,7 +107,12 @@ export class FakeDaemon {
 
   private readonly created = new Set<string>();
 
-  /** Removes a worktree like discard: the body names the reviewed head and branch. */
+  /** Adds a worktree for this test. */
+  addWorktree(tree: GitWorktree): void {
+    this.worktrees.push(tree);
+  }
+
+  /** Removes a worktree like discard or cleanup-merged: the body names the reviewed head and branch. */
   private discardWorktree(body: Record<string, unknown>) {
     const tree = this.worktrees.find(entry => entry.path === body.path);
     if (!tree || body.source_head !== tree.head || body.source_branch !== tree.branch || body.confirm !== true || body.confirm_execution !== true) throw new Error('worktree branch changed; refresh Git status before discarding');
@@ -203,6 +208,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
     [/^\/api\/projects\/current\/git\/merge$/, body => this.mergeWorktree(body)],
     [/^\/api\/projects\/current\/git\/discard-worktree$/, body => this.discardWorktree(body)],
+    [/^\/api\/projects\/current\/git\/cleanup-merged$/, body => ({ ...this.discardWorktree(body), state: 'merged' })],
   ];
 
   private async handle(route: Route): Promise<void> {

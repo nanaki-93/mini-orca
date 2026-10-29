@@ -837,19 +837,24 @@ export function useActions() {
     });
   }
 
-  /** Removes a worktree whose commits the main branch already has, with its branch. */
+  /**
+   * Removes a worktree whose commits the main branch already has, with its
+   * branch. One with applied tasks goes through cleanup-merged, which also
+   * marks their linked issues done (as after a merge made outside Mini-Orca);
+   * one without tasks is discarded.
+   */
   async function removeWorktree(workspace: GitWorkspace, worktree: GitWorktree, main: Project) {
     const tasks = worktreeTasks(worktree).length;
     const ok = await confirm({
       title: `Remove the worktree ${worktree.branch || worktree.path}?`,
-      body: `Deletes its checkout and its branch; ${workspace.branch || 'the main branch'} already has all its commits.${tasks ? ` The history of its ${plural(tasks, 'applied task')} goes with it.` : ''}`,
+      body: `Deletes its checkout and its branch; ${workspace.branch || 'the main branch'} already has all its commits.${tasks ? ` Its linked issues are marked done, and the history of its ${plural(tasks, 'applied task')} goes with it.` : ''}`,
       confirmLabel: 'Remove worktree',
       danger: true,
     });
     if (!ok) return;
     await guarded('Removing worktree…', async () => {
       try {
-        const result = await api.post<{ state: string; error?: string; warnings?: string[] }>('/api/projects/current/git/discard-worktree', mergeRequest(workspace, worktree, main));
+        const result = await api.post<{ state: string; error?: string; warnings?: string[] }>(`/api/projects/current/git/${tasks ? 'cleanup-merged' : 'discard-worktree'}`, mergeRequest(workspace, worktree, main));
         if (result.state === 'failed') toast('Could not remove the worktree', 'danger', result.error);
         else toast(`Removed ${worktree.branch || worktree.path}.`, 'success');
         for (const warning of result.warnings ?? []) toast(warning, 'warning');
