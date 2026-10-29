@@ -4,7 +4,8 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, formatElapsed, isTestPath, newFilePath, timeAgo } from './util';
-import { changeOverlaps, parseCommits, runStartOptions, workflowBlocker, workflowDestinations, workflowRequest, workflowStages } from './workflow';
+import { changeOverlaps, ownWorktreeBlocker, parseCommits, runStartOptions, workflowBlocker, workflowDestinations, workflowRequest, workflowStages, worktreeRemovable, worktreeTasks } from './workflow';
+import type { ChangeHistoryEntry, GitWorkspace, GitWorktree } from '@/api/types';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
 import { QueryClient } from '@tanstack/react-query';
@@ -82,6 +83,33 @@ describe('util and workflow', () => {
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, false, isTestPath)).toMatch(/Trust/);
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, true, isTestPath)).toBe('');
     expect(workflowBlocker(null, true, isTestPath)).toMatch(/Select/);
+  });
+});
+
+describe('task worktrees', () => {
+  const task = (id: string, extra: Partial<ChangeHistoryEntry> = {}): ChangeHistoryEntry => ({ id, project_id: 'p', project_revision: 'r', kind: 'fix', title: id, revision: 1, hash: 'h', state: 'draft', freshness: 'current', updated_at: '', ...extra });
+  const tree = (extra: Partial<GitWorktree> = {}): GitWorktree => ({ path: '/p/.worktrees/a', head: 'aa', branch: 'orca/a', integration: 'merged', dirty: false, sessions: [], ...extra });
+  const done = task('done', { state: 'applied', commit: { state: 'committed', oid: 'c1' } });
+
+  it('lists each task of a worktree once', () => {
+    expect(worktreeTasks(tree({ sessions: [task('a'), done], completed: [done] })).map(t => t.id)).toEqual(['a', 'done']);
+  });
+
+  it('removes only a clean worktree whose work the main branch has', () => {
+    expect(worktreeRemovable(tree())).toBe(true);
+    expect(worktreeRemovable(tree({ sessions: [done], completed: [done] }))).toBe(true);
+    expect(worktreeRemovable(tree({ sessions: [task('draft')] }))).toBe(false);
+    for (const extra of [{ integration: 'up_to_date' }, { integration: 'behind' }, { dirty: true }, { locked: true }, { error: 'x' }, { branch: '' }, { current: true }]) {
+      expect(worktreeRemovable(tree(extra)), JSON.stringify(extra)).toBe(false);
+    }
+  });
+
+  it('says why a task cannot get its own worktree', () => {
+    const git = { available: true, branch: 'main', head: 'aa' } as GitWorkspace;
+    expect(ownWorktreeBlocker(git, true)).toBe('');
+    expect(ownWorktreeBlocker(git, false)).toMatch(/trust/);
+    expect(ownWorktreeBlocker({ ...git, head: '' }, true)).toMatch(/commit/);
+    expect(ownWorktreeBlocker(undefined, true)).toMatch(/Git repository/);
   });
 });
 

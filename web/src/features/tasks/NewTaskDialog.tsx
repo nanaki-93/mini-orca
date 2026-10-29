@@ -3,19 +3,21 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowUp, FilePlus, FileSearch, FlaskConical, Play, Plus, Save, X } from 'lucide-react';
-import { useIndex, useProject, useTrust } from '@/api/hooks';
+import { ArrowUp, FilePlus, FileSearch, FlaskConical, GitBranch, Play, Plus, Save, X } from 'lucide-react';
+import { useGitWorkspace, useIndex, useProject, useTrust } from '@/api/hooks';
 import { useActions, useBusy, type DraftTask } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { setUI, useUI } from '@/app/store';
 import { rankItems } from '@/lib/fuzzy';
 import { companionTestPath, dirname, basename, isTestPath, newFilePath, plural, unique } from '@/lib/util';
-import { Button, Highlight, Kbd, Segmented, Textarea, cx } from '@/components/ui';
+import { Button, Highlight, Kbd, Segmented, Textarea, Tip, cx } from '@/components/ui';
 import { FileIcon, KINDS } from '@/components/domain';
+import { ownWorktreeBlocker } from '@/lib/workflow';
 
 export const MAX_TASK_PATHS = 8;
 
-const EMPTY: DraftTask = { title: '', kind: 'fix', description: '', paths: [], criteria: [], start: 'agents', autoRepair: true };
+// A new task gets its own worktree by default, so several run in parallel.
+const EMPTY: DraftTask = { title: '', kind: 'fix', description: '', paths: [], criteria: [], start: 'agents', autoRepair: true, worktree: true };
 
 export function NewTaskDialog() {
   const prefill = useUI(s => s.newTask);
@@ -39,9 +41,13 @@ function Composer({ prefill }: { prefill: Partial<DraftTask> }) {
   const trust = useTrust().data;
   const files = useIndex().data?.files ?? [];
   const { worktreePath } = useCheckout();
+  const git = useGitWorkspace().data;
   const actions = useActions();
   const busy = useBusy();
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  // Only the main checkout makes worktrees; a task opened in one stays there.
+  const worktreeBlocker = worktreePath ? '' : ownWorktreeBlocker(git, Boolean(trust?.trusted));
+  const ownWorktree = !worktreePath && !worktreeBlocker && draft.worktree;
 
   useEffect(() => titleRef.current?.focus(), []);
 
@@ -68,7 +74,7 @@ function Composer({ prefill }: { prefill: Partial<DraftTask> }) {
     if (!draft.title.trim()) return setError('Give the task a title.');
     if (!draft.paths.length) return setError('Choose at least one file the agents may change.');
     if (start === 'agents' && !hasTest) return setError('Agents verify their work with tests: add a test file to the scope, or save a draft.');
-    const id = await actions.createTask(project, worktreePath, { ...draft, start });
+    const id = await actions.createTask(project, worktreePath, { ...draft, worktree: ownWorktree, start });
     if (id) setUI({ newTask: null });
   }
 
@@ -114,10 +120,24 @@ function Composer({ prefill }: { prefill: Partial<DraftTask> }) {
         ) : null}
       </div>
       <div className="composer-foot">
-        <label className="check-label">
-          <input type="checkbox" checked={draft.autoRepair} onChange={e => update({ autoRepair: e.target.checked })} />
-          Let agents repair failing checks (up to 2 tries)
-        </label>
+        <div className="composer-options">
+          <label className="check-label">
+            <input type="checkbox" checked={draft.autoRepair} onChange={e => update({ autoRepair: e.target.checked })} />
+            Let agents repair failing checks (up to 2 tries)
+          </label>
+          {worktreePath ? (
+            <span className="check-label" title={worktreePath}>
+              <GitBranch size={13} aria-hidden /> In the worktree {basename(worktreePath)}
+            </span>
+          ) : (
+            <Tip label={worktreeBlocker || 'A new branch and worktree from HEAD, so this task runs beside the others; merge it from Branches'}>
+              <label className="check-label">
+                <input type="checkbox" checked={ownWorktree} disabled={Boolean(worktreeBlocker)} onChange={e => update({ worktree: e.target.checked })} />
+                Work in its own worktree
+              </label>
+            </Tip>
+          )}
+        </div>
         <span className="spacer" />
         {!trust?.trusted ? <span className="xs muted">Checks need trust · Settings</span> : null}
         <Button variant="ghost" icon={Save} onClick={() => void submit('draft')} disabled={Boolean(busy)}>

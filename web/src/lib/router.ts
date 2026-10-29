@@ -38,6 +38,11 @@ function subscribe(callback: () => void): () => void {
   return () => window.removeEventListener('hashchange', callback);
 }
 
+/** The route now, for code outside React rendering. */
+export function currentRoute(): Route {
+  return current();
+}
+
 export function useRoute(): Route {
   return useSyncExternalStore(subscribe, current, current);
 }

@@ -348,6 +348,13 @@ export interface ChangeSession extends ProjectIdentity {
   updated_at: string;
 }
 
+/** A task the daemon captured in the worktree it created for it. */
+export interface ChangeOpened extends ChangeSession {
+  worktree_path: string;
+  branch: string;
+  warnings: string[];
+}
+
 /** A change session as the UI tracks it: where it lives and its checkout identity. */
 export interface LoadedSession extends ChangeSession {
   checkout: CheckoutRef;

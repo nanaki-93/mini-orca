@@ -5,12 +5,13 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeOpened, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
-import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest } from '@/lib/workflow';
-import { navigate } from '@/lib/router';
-import { commentsBrief, isTestPath, plural } from '@/lib/util';
+import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
+import { currentRoute, navigate } from '@/lib/router';
+import { getUI } from '@/app/store';
+import { commentsBrief, isTestPath, plural, unique } from '@/lib/util';
 import { RunStartChoice } from '@/components/domain';
 import { keys } from '@/api/hooks';
 
@@ -106,6 +107,8 @@ export interface DraftTask {
   criteria: string[];
   start: 'agents' | 'quick' | 'draft';
   autoRepair: boolean;
+  /** Capture the task in a new branch and worktree of its own (from the main checkout). */
+  worktree: boolean;
   /** The issues this task fixes; only those whose file stays in scope are sent. */
   findingTargets?: FindingTarget[];
 }
@@ -172,33 +175,44 @@ export function useActions() {
 
   // ---------------------------------------------------------------- tasks
 
+  /**
+   * Captures a task in the selected checkout or, from the main checkout with
+   * `draft.worktree`, in a new branch and worktree the daemon creates for it.
+   */
   async function createTask(project: Project, worktreePath: string, draft: DraftTask): Promise<string | null> {
+    const own = draft.worktree && !worktreePath;
     const created = await guarded('Creating task…', async () => {
+      const body = {
+        project_id: project.project_id,
+        project_revision: project.project_revision,
+        kind: draft.kind,
+        title: draft.title.trim(),
+        paths: draft.paths,
+        acceptance_criteria: draft.criteria.length ? draft.criteria : ['Changes pass verification checks'],
+        plan: draft.description.trim() ? { problem: draft.title.trim(), approach: draft.description.trim() } : undefined,
+        finding_targets: draft.findingTargets?.filter(target => draft.paths.includes(target.path)),
+      };
       try {
-        return await api.post<ChangeSession>(withWorktree('/api/projects/current/changes', worktreePath), {
-          project_id: project.project_id,
-          project_revision: project.project_revision,
-          kind: draft.kind,
-          title: draft.title.trim(),
-          paths: draft.paths,
-          acceptance_criteria: draft.criteria.length ? draft.criteria : ['Changes pass verification checks'],
-          plan: draft.description.trim() ? { problem: draft.title.trim(), approach: draft.description.trim() } : undefined,
-          finding_targets: draft.findingTargets?.filter(target => draft.paths.includes(target.path)),
-        });
+        if (own) return await api.post<ChangeOpened>('/api/projects/current/changes', { ...body, worktree: true, confirm_execution: true });
+        return await api.post<ChangeSession>(withWorktree('/api/projects/current/changes', worktreePath), body);
       } catch (err) {
-        fail('Could not create the task', err);
+        fail(own ? 'Could not create the task in its own worktree' : 'Could not create the task', err);
         return null;
       }
     });
     if (!created) return null;
-    const loaded: LoadedSession = { ...created, checkout: { project_id: created.project_id || project.project_id, project_revision: created.project_revision || project.project_revision, worktreePath } };
+    const opened = own ? (created as ChangeOpened) : null;
+    const checkout = opened ? opened.worktree_path : worktreePath;
+    const loaded: LoadedSession = { ...created, checkout: { project_id: created.project_id || project.project_id, project_revision: created.project_revision || project.project_revision, worktreePath: checkout } };
     client.setQueryData(keys.session(created.id), loaded);
     void client.invalidateQueries({ queryKey: ['changes'] });
-    navigate(`/tasks/${created.id}`, { wt: worktreePath || undefined });
+    if (opened) void client.invalidateQueries({ queryKey: ['git'] });
+    for (const warning of opened?.warnings ?? []) toast(warning, 'warning');
+    navigate(`/tasks/${created.id}`, { wt: checkout || undefined });
     const prompt = draft.title.trim() + (draft.description.trim() ? `\n\nSpecification:\n${draft.description.trim()}` : '');
     if (draft.start === 'agents') await startAgents(loaded, { message: prompt, autoRepair: draft.autoRepair });
     else if (draft.start === 'quick') await refine(loaded, prompt);
-    else toast('Draft saved.', 'success');
+    else toast(opened ? `Draft saved. It has its own worktree on ${opened.branch}.` : 'Draft saved.', 'success');
     return created.id;
   }
 
@@ -307,8 +321,9 @@ export function useActions() {
       navigate('/tasks');
       void client.invalidateQueries({ queryKey: ['changes'] });
       void client.invalidateQueries({ queryKey: ['findings'] });
+      const removed = await guarded('Removing its worktree…', () => removeEmptyWorktrees([session.checkout.worktreePath]));
       const dismissed = result.dismissed_issues ? ` and ${plural(result.dismissed_issues, 'linked issue')} dismissed` : '';
-      toast(`No longer valid: “${session.title || session.id}” was deleted${dismissed}.`, 'info', result.reason);
+      toast(`No longer valid: “${session.title || session.id}” was deleted${dismissed}${removed?.length ? ', with its worktree' : ''}.`, 'info', result.reason);
     }
     for (const warning of result.warnings ?? []) toast(warning, 'warning');
     return true;
@@ -729,11 +744,12 @@ export function useActions() {
   async function deleteTasks(tasks: DeletableTask[], leave?: () => void): Promise<number> {
     if (!tasks.length) return 0;
     const one = tasks.length === 1;
+    const worktrees = tasks.some(task => task.worktreePath) ? ' A worktree left with nothing to merge is removed with its branch.' : '';
     const ok = await confirm({
       title: one ? 'Delete this task?' : `Delete ${tasks.length} tasks?`,
       body: one
-        ? `“${tasks[0].title || tasks[0].id}” and its conversation, proposals and comments are removed. Project files are not changed.`
-        : `Their conversations, proposals and comments are removed. Project files are not changed. ${tasks.slice(0, 5).map(t => `“${t.title || t.id}”`).join(', ')}${tasks.length > 5 ? ` and ${tasks.length - 5} more` : ''}.`,
+        ? `“${tasks[0].title || tasks[0].id}” and its conversation, proposals and comments are removed. Project files are not changed.${worktrees}`
+        : `Their conversations, proposals and comments are removed. Project files are not changed.${worktrees} ${tasks.slice(0, 5).map(t => `“${t.title || t.id}”`).join(', ')}${tasks.length > 5 ? ` and ${tasks.length - 5} more` : ''}.`,
       confirmLabel: one ? 'Delete task' : `Delete ${tasks.length} tasks`,
       danger: true,
     });
@@ -751,7 +767,9 @@ export function useActions() {
       }
       if (deleted.length) leave?.();
       void client.invalidateQueries({ queryKey: ['changes'] });
-      if (deleted.length) toast(one ? 'Task deleted.' : `${plural(deleted.length, 'task')} deleted.`, 'success');
+      const removed = await removeEmptyWorktrees(tasks.filter(task => deleted.includes(task.id)).map(task => task.worktreePath));
+      const worktreeNote = removed.length ? ` ${removed.length === 1 ? 'Its worktree was' : `${removed.length} worktrees were`} removed too.` : '';
+      if (deleted.length) toast((one ? 'Task deleted.' : `${plural(deleted.length, 'task')} deleted.`) + worktreeNote, 'success');
       if (failures.length) toast(`Could not delete ${plural(failures.length, 'task')}`, 'danger', failures.join('\n'));
       return deleted.length;
     })) ?? 0;
@@ -795,17 +813,19 @@ export function useActions() {
     }
   }
 
+  /** Merges a worktree; the Branches page setting decides whether the worktree and branch go too. */
   async function merge(workspace: GitWorkspace, worktree: GitWorktree, main: Project) {
     const overlap = worktree.overlap_paths ?? [];
+    const remove = getUI().removeWorktreeOnMerge;
     const ok = await confirm({
       title: `Merge ${worktree.branch || 'worktree'} into ${workspace.branch || 'the current branch'}?`,
-      body: `Merges ${worktree.head.slice(0, 7)}, marks its linked issues done, then removes the worktree and its branch.${overlap.length ? ` ${plural(overlap.length, 'path')} changed on both branches: ${overlap.slice(0, 3).join(', ')}${overlap.length > 3 ? ', …' : ''}.` : ''} Conflicts stop the merge so you can resolve or abort it. Running tasks keep going unless the merge changes their files.`,
+      body: `Merges ${worktree.head.slice(0, 7)}, marks its linked issues done, then ${remove ? 'removes the worktree and its branch' : 'keeps the worktree and its branch (remove them here later)'}.${overlap.length ? ` ${plural(overlap.length, 'path')} changed on both branches: ${overlap.slice(0, 3).join(', ')}${overlap.length > 3 ? ', …' : ''}.` : ''} Conflicts stop the merge so you can resolve or abort it. Running tasks keep going unless the merge changes their files.`,
       confirmLabel: 'Merge',
     });
     if (!ok) return;
     await guarded('Merging…', async () => {
       try {
-        const result = await api.post<{ state: string; warnings?: string[] }>('/api/projects/current/git/merge', mergeRequest(workspace, worktree, main));
+        const result = await api.post<{ state: string; warnings?: string[] }>('/api/projects/current/git/merge', { ...mergeRequest(workspace, worktree, main), keep_worktree: remove ? undefined : true });
         if (result?.state === 'conflicts') toast('The merge stopped with conflicts. Resolve them in your editor, or abort.', 'warning');
         else toast(`Merged ${worktree.branch || worktree.path}.`, 'success');
         for (const warning of result?.warnings ?? []) toast(warning, 'warning');
@@ -814,6 +834,63 @@ export function useActions() {
         fail('Merge failed', err);
       }
     });
+  }
+
+  /** Removes a worktree whose commits the main branch already has, with its branch. */
+  async function removeWorktree(workspace: GitWorkspace, worktree: GitWorktree, main: Project) {
+    const tasks = worktreeTasks(worktree).length;
+    const ok = await confirm({
+      title: `Remove the worktree ${worktree.branch || worktree.path}?`,
+      body: `Deletes its checkout and its branch; ${workspace.branch || 'the main branch'} already has all its commits.${tasks ? ` The history of its ${plural(tasks, 'applied task')} goes with it.` : ''}`,
+      confirmLabel: 'Remove worktree',
+      danger: true,
+    });
+    if (!ok) return;
+    await guarded('Removing worktree…', async () => {
+      try {
+        const result = await api.post<{ state: string; error?: string; warnings?: string[] }>('/api/projects/current/git/discard-worktree', mergeRequest(workspace, worktree, main));
+        if (result.state === 'failed') toast('Could not remove the worktree', 'danger', result.error);
+        else toast(`Removed ${worktree.branch || worktree.path}.`, 'success');
+        for (const warning of result.warnings ?? []) toast(warning, 'warning');
+        leaveRemovedCheckout([worktree.path]);
+      } catch (err) {
+        fail('Could not remove the worktree', err);
+      }
+      await refreshAll();
+    });
+  }
+
+  /**
+   * Removes the worktrees in `paths` that were left with no tasks and nothing
+   * to merge, such as the one created for a task just deleted. Returns their
+   * branches; a worktree that cannot be removed stays and is reported.
+   */
+  async function removeEmptyWorktrees(paths: string[]): Promise<string[]> {
+    const wanted = unique(paths.filter(Boolean));
+    if (!wanted.length) return [];
+    const removed: string[] = [];
+    try {
+      const main = await api.get<Project>('/api/projects/current');
+      const workspace = await api.get<GitWorkspace>('/api/projects/current/git/workspace' + query({ project_id: main.project_id, project_revision: main.project_revision }));
+      for (const tree of workspace.worktrees ?? []) {
+        if (!wanted.includes(tree.path) || worktreeTasks(tree).length || !worktreeRemovable(tree)) continue;
+        const result = await api.post<{ state: string; error?: string; removed_worktree?: string }>('/api/projects/current/git/discard-worktree', mergeRequest(workspace, tree, main));
+        if (result.removed_worktree) removed.push(tree.path);
+        else toast(`The worktree ${tree.branch || tree.path} was kept`, 'warning', result.error);
+      }
+    } catch (err) {
+      toast('A worktree left without tasks was kept', 'warning', errorMessage(err));
+    }
+    leaveRemovedCheckout(removed);
+    void client.invalidateQueries({ queryKey: ['git'] });
+    return removed;
+  }
+
+  /** Returns to the main checkout when the selected one was removed. */
+  function leaveRemovedCheckout(paths: string[]) {
+    const route = currentRoute();
+    const wt = route.params.get('wt');
+    if (wt && paths.includes(wt)) navigate(route.path.startsWith('/tasks/') ? '/tasks' : route.path, { wt: undefined }, { replace: true });
   }
 
   async function abortMerge(workspace: GitWorkspace, main: Project) {
@@ -847,7 +924,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, reanalyze, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, reanalyze, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, removeWorktree, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

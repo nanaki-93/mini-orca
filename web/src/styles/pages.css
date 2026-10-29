@@ -522,12 +522,19 @@
 
 .composer-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 12px 18px;
   border-top: 1px solid var(--border);
   background: var(--surface-2);
   border-radius: 0 0 12px 12px;
+}
+
+.composer-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .scope {

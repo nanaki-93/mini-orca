@@ -1,7 +1,7 @@
 // Agent workflow presentation and request shaping. Consent is captured per
 // request: every remote destination the run will use is listed and confirmed.
 
-import type { AgentSettings, BudgetUsage, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity } from '@/api/types';
+import type { AgentSettings, BudgetUsage, ChangeHistoryEntry, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity } from '@/api/types';
 import { durationBetween } from './util';
 import { phaseTone, type PhaseTone } from './readiness';
 
@@ -246,6 +246,35 @@ export function runStartOptions(session: { changes?: { path: string }[] | null; 
   ];
   const initial: RunStart = blocked ? 'create' : changes.some(change => isTestPath(change.path)) ? 'checks' : 'test';
   return { options, initial };
+}
+
+/** Why a new task cannot get its own worktree from the main checkout, or ''. */
+export function ownWorktreeBlocker(git: GitWorkspace | undefined, trusted: boolean): string {
+  if (!git?.available) return 'Own worktrees need a Git repository.';
+  if (!git.branch || !git.head) return 'Own worktrees need a branch with a commit.';
+  if (!trusted) return 'Creating a worktree needs trust (Settings → Trust), since Git can run repository filters.';
+  return '';
+}
+
+/** The tasks saved on a worktree, once each: its history includes the integrated ones. */
+export function worktreeTasks(tree: GitWorktree): ChangeHistoryEntry[] {
+  const seen = new Set<string>();
+  return [...(tree.sessions ?? []), ...(tree.completed ?? [])].filter(task => !seen.has(task.id) && Boolean(seen.add(task.id)));
+}
+
+function integrated(task: ChangeHistoryEntry): boolean {
+  return task.state === 'applied' && task.commit?.state === 'committed';
+}
+
+/**
+ * Whether a worktree can be removed without losing work: a clean, unlocked
+ * branch checkout whose commits the main branch already has (integration
+ * `merged`, which includes a branch with no commits of its own) and whose
+ * tasks are all applied and committed.
+ */
+export function worktreeRemovable(tree: GitWorktree): boolean {
+  if (tree.current || tree.locked || tree.prunable || tree.dirty || tree.error || !tree.branch) return false;
+  return tree.integration === 'merged' && worktreeTasks(tree).every(integrated);
 }
 
 /** The guarded merge (or preview) request for a worktree into the main checkout. */

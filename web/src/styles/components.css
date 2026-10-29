@@ -437,6 +437,11 @@
   accent-color: var(--accent);
 }
 
+.check-label:has(input:disabled) {
+  color: var(--faint);
+  cursor: default;
+}
+
 .segmented {
   display: inline-flex;
   padding: 2px;

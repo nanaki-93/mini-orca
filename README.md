@@ -37,7 +37,7 @@ browser workspace is built for three jobs: **start a task and watch the agents**
 | **Code** | `g c` | IDE-style explorer: virtualized tree, editor tabs, highlighted source, issue markers, line links, Explain and “New task with this file”. |
 | **Issues** | `g i` | Findings by status and severity with evidence and **Fix with agents**. |
 | **Docs** | `g d` | The generated handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
-| **Branches** | `g b` | Agent worktrees, merge preview (commits and diff) and guarded merge or abort. |
+| **Branches** | `g b` | Task worktrees (each new task gets its own by default), merge preview (commits and diff), guarded merge or abort, and removal of merged worktrees. |
 | **Settings** | `g s` | Project, execution trust, models and agents, analysis, appearance. |
 
 `Ctrl+K` / `Cmd+K` opens the command palette (files, tasks, issues, commands);

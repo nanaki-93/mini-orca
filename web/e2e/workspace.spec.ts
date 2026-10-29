@@ -38,11 +38,47 @@ test('creates a draft task with a scope and criteria', async ({ page, daemon }) 
   await dialog.getByRole('button', { name: 'Add' }).click();
   await dialog.getByRole('button', { name: 'Save draft' }).click();
 
-  await expect(page.getByText('Draft saved.')).toBeVisible();
+  await expect(page.getByText('Draft saved. It has its own worktree on orca/return-404-for-missing-assets-a1b2c3.')).toBeVisible();
   const [create] = daemon.mutations('/changes');
-  expect(create.body).toMatchObject({ project_id: 'p1', title: 'Return 404 for missing assets', acceptance_criteria: ['Missing assets return 404'] });
+  expect(create.body).toMatchObject({ project_id: 'p1', title: 'Return 404 for missing assets', acceptance_criteria: ['Missing assets return 404'], worktree: true, confirm_execution: true });
   expect(create.body?.paths).toContain('internal/api/handlers/webui.go');
-  await expect(page).toHaveURL(/#\/tasks\/chg-100/);
+  await expect(page).toHaveURL(/#\/tasks\/chg-100\?wt=%2Fwork%2Fmini-orca%2F.worktrees%2Freturn-404-for-missing-assets-a1b2c3$/);
+  await expect(page.getByRole('complementary', { name: 'Review gate' }).getByText('return-404-for-missing-assets-a1b2c3')).toBeVisible();
+});
+
+test('a task can stay in the main checkout instead of its own worktree', async ({ page, daemon }) => {
+  await page.goto('/#/tasks');
+  await page.keyboard.press('c');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('What should change?').fill('Return 404 for missing assets');
+  await dialog.getByLabel('Search files to add').fill('webui');
+  await dialog.getByRole('option', { name: /internal\/api\/handlers\/webui\.go/ }).first().click();
+  const own = dialog.getByRole('checkbox', { name: 'Work in its own worktree' });
+  await expect(own).toBeChecked();
+  await own.uncheck();
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+
+  await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+  expect(daemon.mutations('/changes')[0].body?.worktree).toBeUndefined();
+  await expect(page).toHaveURL(/#\/tasks\/chg-100$/);
+});
+
+test('deleting a task removes the worktree created for it', async ({ page, daemon }) => {
+  await page.goto('/#/tasks');
+  await page.keyboard.press('c');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('What should change?').fill('Drop the unused helper');
+  await dialog.getByLabel('Search files to add').fill('webui');
+  await dialog.getByRole('option', { name: /internal\/api\/handlers\/webui\.go/ }).first().click();
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page).toHaveURL(/wt=/);
+
+  await page.getByRole('button', { name: 'Delete task' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('A worktree left with nothing to merge is removed with its branch.');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete task' }).click();
+  await expect(page.getByText('Task deleted. Its worktree was removed too.')).toBeVisible();
+  expect(daemon.mutations('/discard-worktree')[0].body).toMatchObject({ path: '/work/mini-orca/.worktrees/drop-the-unused-helper-a1b2c3', source_branch: 'orca/drop-the-unused-helper-a1b2c3', source_head: '41030b7e' });
+  await expect(page).toHaveURL(/#\/tasks$/);
 });
 
 test('a task scope can name a file that does not exist yet', async ({ page, daemon }) => {
@@ -74,6 +110,42 @@ test('branches explain why a worktree cannot be merged yet', async ({ page }) =>
   await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();
   await expect(detail.getByRole('button', { name: 'Merge into main' })).toBeEnabled();
   await expect(detail.getByText('1 overlapping file')).toBeVisible();
+});
+
+test('a merge keeps or removes the worktree as Branches says, for every merge', async ({ page, daemon }) => {
+  await page.goto('/#/git');
+  const removeOnMerge = page.getByRole('checkbox', { name: 'Delete the worktree and its branch after merging' });
+  await expect(removeOnMerge).toBeChecked();
+  await removeOnMerge.uncheck();
+  await page.reload();
+  await expect(removeOnMerge).not.toBeChecked();
+
+  await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();
+  const detail = page.getByRole('complementary', { name: 'Worktree' });
+  await detail.getByRole('button', { name: 'Merge into main' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('keeps the worktree and its branch');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Merge' }).click();
+  await expect(page.getByText('Merged mo/chg-7.')).toBeVisible();
+  expect(daemon.mutations('/git/merge')[0].body).toMatchObject({ path: '/work/.mini-orca/wt/chg-7', keep_worktree: true });
+
+  // The kept worktree has nothing left to merge and can be removed later.
+  await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();
+  await detail.getByRole('button', { name: 'Remove worktree' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove worktree' }).click();
+  await expect(page.getByText('Removed mo/chg-7.')).toBeVisible();
+  expect(daemon.mutations('/discard-worktree')[0].body).toMatchObject({ path: '/work/.mini-orca/wt/chg-7', source_branch: 'mo/chg-7' });
+  await expect(page.getByRole('listitem').filter({ hasText: 'mo/chg-7' })).toHaveCount(0);
+});
+
+test('by default a merge removes the worktree and its branch', async ({ page, daemon }) => {
+  await page.goto('/#/git');
+  await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();
+  await page.getByRole('complementary', { name: 'Worktree' }).getByRole('button', { name: 'Merge into main' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('then removes the worktree and its branch');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Merge' }).click();
+  await expect(page.getByText('Merged mo/chg-7.')).toBeVisible();
+  expect(daemon.mutations('/git/merge')[0].body?.keep_worktree).toBeUndefined();
+  await expect(page.getByRole('listitem').filter({ hasText: 'mo/chg-7' })).toHaveCount(0);
 });
 
 test('issues label where each finding comes from', async ({ page }) => {

@@ -30,6 +30,8 @@ export interface UIState {
   darkPalette: DarkPalette;
   diffLayout: DiffLayout;
   wrapLines: boolean;
+  /** Whether merging a worktree also removes it and its branch; one choice for every merge. */
+  removeWorktreeOnMerge: boolean;
 }
 
 const PREFS_KEY = 'mini-orca.prefs.v2';
@@ -52,6 +54,7 @@ let state: UIState = {
   darkPalette: 'midnight',
   diffLayout: 'unified',
   wrapLines: false,
+  removeWorktreeOnMerge: true,
   ...pick(loadPrefs()),
 };
 
@@ -62,6 +65,7 @@ function pick(prefs: Partial<UIState>): Partial<UIState> {
   if (prefs.diffLayout === 'split' || prefs.diffLayout === 'unified') out.diffLayout = prefs.diffLayout;
   if (typeof prefs.wrapLines === 'boolean') out.wrapLines = prefs.wrapLines;
   if (typeof prefs.sidebarCollapsed === 'boolean') out.sidebarCollapsed = prefs.sidebarCollapsed;
+  if (typeof prefs.removeWorktreeOnMerge === 'boolean') out.removeWorktreeOnMerge = prefs.removeWorktreeOnMerge;
   return out;
 }
 
@@ -74,7 +78,7 @@ export function getUI(): UIState {
 export function setUI(patch: Partial<UIState>): void {
   state = { ...state, ...patch };
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: state.theme, darkPalette: state.darkPalette, diffLayout: state.diffLayout, wrapLines: state.wrapLines, sidebarCollapsed: state.sidebarCollapsed }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: state.theme, darkPalette: state.darkPalette, diffLayout: state.diffLayout, wrapLines: state.wrapLines, sidebarCollapsed: state.sidebarCollapsed, removeWorktreeOnMerge: state.removeWorktreeOnMerge }));
   } catch {
     // Preferences are a convenience; the UI works without storage.
   }

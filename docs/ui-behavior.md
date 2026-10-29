@@ -29,6 +29,14 @@ every guard when the action arrives.
   typing its path (**New file**); agents can write only the files in scope,
   and a run whose proposal writes another file fails naming it. **Save
   draft** stores it without model work.
+- **Own worktree.** From the main checkout a new task gets its own branch
+  (`orca/<title>-<suffix>`) and worktree from HEAD by default (**Work in its
+  own worktree**), so several tasks run, apply and commit in parallel; the task
+  then opens in that checkout. It needs Git, a commit and trust, and the
+  task's files must be committed (the daemon names a file that is not);
+  unticking it, or a task created while a worktree is selected, keeps the task
+  in the selected checkout. The worktree runs checks under the same trust when
+  its commands are the same; otherwise a warning asks to allow them.
 - **Start agents.** Requires a test file in scope and a trusted project. The
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.
@@ -113,7 +121,9 @@ every guard when the action arrives.
 - **Delete a task.** The task page offers Delete (a button when the task is
   stale, an icon otherwise); the task list deletes every task of the "Failed or
   stale" or "Drafts" group at once, or the selected one with Delete. One
-  confirmation names the tasks; project files never change. Tasks with running
+  confirmation names the tasks; project files never change. A worktree left
+  with no tasks and no commits of its own is removed with its branch (as after
+  a re-analysis that deletes the task), and the main checkout is selected again. Tasks with running
   agents, and the task whose latest Apply can still be undone, are kept.
 - **Undo.** Covers only the latest Apply in a checkout and restores files only
   when they still match the applied version; a commit stays in history.
@@ -182,6 +192,12 @@ every guard when the action arrives.
 
 - A worktree can merge only when every task on it is applied and committed and
   the main checkout is clean; otherwise the page says which condition is missing.
+  A worktree whose commits the main branch already has reads **No new commits**
+  (none yet) or **Merged**.
+- **Delete the worktree and its branch after merging** (on by default, kept per
+  browser) applies to every merge. Off, a merged worktree and its branch stay;
+  **Remove worktree** deletes a clean worktree with nothing left to merge and
+  all its tasks applied, together with its branch, after confirmation.
 - Merging needs execution trust (Git can run filters and merge drivers). The
   merge preview lists commits and the diff; the confirmation names overlapping
   paths. Overlap is a review hint, not a proven conflict.

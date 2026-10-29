@@ -2,19 +2,19 @@
 // branch, and a merge preview before integrating it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, GitBranch, GitCommitHorizontal, GitMerge, ShieldOff } from 'lucide-react';
+import { AlertTriangle, GitBranch, GitCommitHorizontal, GitMerge, ShieldOff, Trash2 } from 'lucide-react';
 import { useGitWorkspace, useMainProject, useTrust } from '@/api/hooks';
 import type { GitWorktree, MergePreview } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, setParam, useRoute } from '@/lib/router';
 import { parseGitDiff } from '@/lib/diff';
-import { parseCommits } from '@/lib/workflow';
+import { parseCommits, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
 import { basename, languageOf, plural, shortHash } from '@/lib/util';
-import { Badge, Button, Callout, EmptyState, Skeleton, Spinner, cx } from '@/components/ui';
+import { Badge, Button, Callout, EmptyState, Skeleton, Spinner, Tip, cx } from '@/components/ui';
 import { TaskStatusBadge } from '@/components/domain';
 import type { Tone } from '@/lib/util';
 import { DiffView } from '@/features/review/DiffView';
-import { useUI } from '@/app/store';
+import { setUI, useUI } from '@/app/store';
 
 export function GitPage() {
   const route = useRoute();
@@ -24,6 +24,7 @@ export function GitPage() {
   const actions = useActions();
   const busy = useBusy();
   const trees = (git?.worktrees ?? []).filter(t => !t.current);
+  const removeOnMerge = useUI(s => s.removeWorktreeOnMerge);
   const selectedPath = route.params.get('path') ?? trees[0]?.path ?? '';
   const selected = trees.find(t => t.path === selectedPath) ?? null;
 
@@ -37,9 +38,15 @@ export function GitPage() {
           <div className="page-head">
             <div className="grow">
               <h1 className="page-title">Branches</h1>
-              <p className="page-sub">Agents can work in separate Git worktrees. Review their branch here and merge it into <span className="mono">{git.branch}</span>.</p>
+              <p className="page-sub">Each task works in its own Git worktree. Review its branch here and merge it into <span className="mono">{git.branch}</span>.</p>
             </div>
           </div>
+          <Tip label="Applies to every merge. Off: the worktree and its branch stay after the merge, and Remove worktree deletes them later.">
+            <label className="check-label">
+              <input type="checkbox" checked={removeOnMerge} onChange={e => setUI({ removeWorktreeOnMerge: e.target.checked })} />
+              Delete the worktree and its branch after merging
+            </label>
+          </Tip>
           {git.merge_head ? (
             <Callout tone="danger" icon={AlertTriangle} title="A merge is in progress" action={main ? <Button variant="danger" size="sm" onClick={() => void actions.abortMerge(git, main)} disabled={Boolean(busy)}>Abort merge</Button> : undefined}>
               {git.conflicts.length ? `Resolve ${plural(git.conflicts.length, 'conflicted file')} in your editor and commit, or abort: ${git.conflicts.slice(0, 4).join(', ')}` : 'Finish the merge in your editor and commit, or abort it.'}
@@ -66,7 +73,7 @@ export function GitPage() {
                   <span className="list-title truncate">{tree.branch || basename(tree.path)}</span>
                   <span className="spacer" />
                   <IntegrationBadge tree={tree} />
-                  <span className="xs muted">{plural((tree.sessions ?? []).length + (tree.completed ?? []).length, 'task')}</span>
+                  <span className="xs muted">{plural(worktreeTasks(tree).length, 'task')}</span>
                 </button>
               ))}
             </div>
@@ -78,15 +85,19 @@ export function GitPage() {
   );
 }
 
-/** The worktree's relation to the main branch, as the daemon's gitops reports it. */
+/**
+ * The worktree's relation to the main branch, as the daemon's gitops reports
+ * it. `merged` means the main branch has every commit of the worktree, which
+ * is also true of a new worktree with no commits yet; `up_to_date` means the
+ * worktree is ahead.
+ */
 function integrationInfo(tree: GitWorktree): { label: string; tone: Tone } {
   if (tree.error) return { label: 'Unavailable', tone: 'danger' };
   if (tree.dirty) return { label: 'Uncommitted changes', tone: 'warning' };
-  if (tree.integration === 'merged') return { label: 'Merged', tone: 'success' };
+  if (tree.integration === 'merged') return (tree.completed ?? []).length ? { label: 'Merged', tone: 'success' } : { label: 'No new commits', tone: 'neutral' };
   if (tree.integration === 'unrelated') return { label: 'Unrelated history', tone: 'danger' };
   if (tree.integration === 'behind') return { label: (tree.overlap_paths ?? []).length ? plural(tree.overlap_paths!.length, 'overlapping file') : 'Main moved ahead', tone: 'warning' };
   if (tree.mergeable) return { label: 'Ready to merge', tone: 'accent' };
-  if (tree.integration === 'up_to_date') return { label: 'No new commits', tone: 'neutral' };
   return { label: 'Work in progress', tone: 'neutral' };
 }
 
@@ -96,9 +107,8 @@ function IntegrationBadge({ tree }: { tree: GitWorktree }) {
 }
 
 function notMergeableReason(tree: GitWorktree): string {
-  if (tree.integration === 'merged') return 'This branch is already part of the main branch.';
   if (tree.dirty) return 'Commit or discard the uncommitted changes in this worktree before merging.';
-  if (tree.integration === 'up_to_date') return 'This branch has no commits that the main branch lacks yet.';
+  if (tree.integration === 'merged') return (tree.completed ?? []).length ? 'This branch is already part of the main branch.' : 'This branch has no commits that the main branch lacks yet.';
   return 'Merge becomes available when the tasks on this branch are applied and committed.';
 }
 
@@ -129,7 +139,7 @@ function WorktreeDetail({ tree, trusted }: { tree: GitWorktree; trusted: boolean
 
   const files = useMemo(() => parseGitDiff(preview?.diff), [preview]);
   const commits = parseCommits(preview?.commits);
-  const tasks = [...(tree.sessions ?? []), ...(tree.completed ?? [])];
+  const tasks = worktreeTasks(tree);
 
   return (
     <aside className="detail-pane detail-wide" aria-label="Worktree">
@@ -142,11 +152,15 @@ function WorktreeDetail({ tree, trusted }: { tree: GitWorktree; trusted: boolean
           <Button variant="primary" icon={GitMerge} onClick={() => void actions.merge(git, tree, main)} disabled={!trusted || Boolean(busy) || Boolean(git.merge_head)} loading={busy === 'Merging…'}>
             Merge into {git.branch}
           </Button>
+        ) : worktreeRemovable(tree) ? (
+          <Button variant="secondary" icon={Trash2} onClick={() => void actions.removeWorktree(git, tree, main)} disabled={!trusted || Boolean(busy) || Boolean(git.merge_head)} loading={busy === 'Removing worktree…'}>
+            Remove worktree
+          </Button>
         ) : null}
       </div>
       <div className="xs faint mono truncate">{tree.path}</div>
       {!tree.mergeable ? <p className="small muted">{notMergeableReason(tree)}</p> : null}
-      {!trusted && tree.mergeable ? <Callout tone="warning" icon={ShieldOff} title="Merging needs trust">Merges can run repository filters and merge drivers. Allow checks in Settings first.</Callout> : null}
+      {!trusted && (tree.mergeable || worktreeRemovable(tree)) ? <Callout tone="warning" icon={ShieldOff} title={tree.mergeable ? 'Merging needs trust' : 'Removing needs trust'}>Git can run repository filters and merge drivers. Allow checks in Settings first.</Callout> : null}
       {tree.integration === 'behind' && (tree.overlap_paths ?? []).length ? (
         <Callout tone="warning" icon={AlertTriangle} title={`${plural(tree.overlap_paths!.length, 'file')} changed on both branches`}>{tree.overlap_paths!.join(', ')}</Callout>
       ) : null}

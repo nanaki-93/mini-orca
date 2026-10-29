@@ -42,7 +42,7 @@ this document owns how the interface is organized, looks and responds.
 | **Issues** | `g i` | Findings with status, severity and category filters; the selected finding's problem, evidence, source and fix. |
 | **Analysis** | `g a` | The last or running analysis: progress, why stages failed, results per section, the models used and each file's stages; analyze, retry failed, pause, resume and cancel. |
 | **Docs** | `g d` | The handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
-| **Branches** | `g b` | The main checkout and agent worktrees with their tasks, integration state, merge preview and merge. |
+| **Branches** | `g b` | The main checkout and task worktrees with their tasks, integration state, merge preview and merge (removing the worktree and branch unless switched off), and removal of a worktree with nothing left to merge. |
 | **Setup** | — | The project's first-run wizard: models, agents & budget, checks, analysis. Opens once for a project without its own configuration; Settings → Project reopens it. |
 | **Settings** | `g s` | Project, trust, models and agents, analysis, usage, appearance. |
 

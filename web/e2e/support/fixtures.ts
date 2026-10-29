@@ -220,7 +220,7 @@ export function gitWorkspace(): GitWorkspace {
     conflicts: [],
     worktrees: [
       { path: project.path, head: '41030b7e', branch: 'main', current: true, integration: 'current', sessions: [] },
-      { path: '/work/.mini-orca/wt/chg-2', head: 'aa11', branch: 'mo/chg-2', integration: 'up_to_date', mergeable: false, sessions: [otherTasks[0]] },
+      { path: '/work/.mini-orca/wt/chg-2', head: 'aa11', branch: 'mo/chg-2', integration: 'merged', mergeable: false, sessions: [otherTasks[0]] },
       { path: '/work/.mini-orca/wt/chg-7', head: 'bb22', branch: 'mo/chg-7', integration: 'behind', mergeable: true, overlap_paths: ['internal/app/git_merge.go'], sessions: [] },
     ],
   };

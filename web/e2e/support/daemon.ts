@@ -4,7 +4,7 @@
 // mutation must carry the Web UI header and the current proposal identity.
 
 import { test as base, expect, type Page, type Route } from '@playwright/test';
-import type { ChangeHistoryEntry, ChangeSession, DaemonEvent, ProjectSetup } from '../../src/api/types';
+import type { ChangeHistoryEntry, ChangeSession, DaemonEvent, GitWorktree, ProjectSetup } from '../../src/api/types';
 import * as data from './fixtures';
 
 export interface RecordedRequest {
@@ -87,14 +87,49 @@ export class FakeDaemon {
     this.extraTasks.push(entry);
   }
 
-  private tasks() {
-    const own = [...this.sessions.values()].map(session => data.historyEntry(session));
-    return [...own, ...data.otherTasks, ...this.extraTasks].filter(task => !this.deleted.has(task.id));
+  /** The worktrees besides the main checkout; tasks created in their own worktree add one. */
+  private readonly worktrees: GitWorktree[] = data.gitWorkspace().worktrees;
+  /** Which worktree each task created in its own worktree lives in. */
+  private readonly taskWorktrees = new Map<string, string>();
+
+  /** The tasks of one checkout: the main one ('') or a worktree. */
+  private tasks(worktreePath = '') {
+    const own = [...this.sessions.values()].filter(session => (this.taskWorktrees.get(session.id) ?? '') === worktreePath).map(session => data.historyEntry(session));
+    const others = worktreePath ? [] : [...data.otherTasks, ...this.extraTasks];
+    return [...own, ...others].filter(task => !this.deleted.has(task.id));
+  }
+
+  /** The Git workspace with each created worktree's tasks, like the daemon reads them. */
+  private gitWorkspace() {
+    const worktrees = this.worktrees.map(tree => (tree.current || !this.created.has(tree.path) ? tree : { ...tree, sessions: this.tasks(tree.path) }));
+    return { ...data.gitWorkspace(), worktrees };
+  }
+
+  private readonly created = new Set<string>();
+
+  /** Removes a worktree like discard: the body names the reviewed head and branch. */
+  private discardWorktree(body: Record<string, unknown>) {
+    const tree = this.worktrees.find(entry => entry.path === body.path);
+    if (!tree || body.source_head !== tree.head || body.source_branch !== tree.branch || body.confirm !== true || body.confirm_execution !== true) throw new Error('worktree branch changed; refresh Git status before discarding');
+    this.worktrees.splice(this.worktrees.indexOf(tree), 1);
+    return { state: 'discarded', path: tree.path, removed_worktree: tree.path, removed_branch: tree.branch, warnings: [] };
+  }
+
+  /** Merges a mergeable worktree; keep_worktree keeps it, now merged, with its branch. */
+  private mergeWorktree(body: Record<string, unknown>) {
+    const tree = this.worktrees.find(entry => entry.path === body.path);
+    if (!tree?.mergeable || body.source_head !== tree.head) throw new Error('choose an existing worktree from this repository');
+    this.worktrees.splice(this.worktrees.indexOf(tree), 1);
+    if (body.keep_worktree === true) {
+      this.worktrees.push({ ...tree, integration: 'merged', mergeable: false, overlap_paths: undefined });
+      return { state: 'merged', warnings: [] };
+    }
+    return { state: 'merged', removed_worktree: tree.path, removed_branch: tree.branch, warnings: [] };
   }
 
   /** Deletes a task like the daemon: the body names the version shown; running tasks are kept. */
   private deleteTask(id: string, body: Record<string, unknown>) {
-    const task = this.tasks().find(entry => entry.id === decodeURIComponent(id));
+    const task = [...this.tasks(), ...[...this.created].flatMap(path => this.tasks(path))].find(entry => entry.id === decodeURIComponent(id));
     if (!task) throw new Error('This task no longer exists; refresh the task list.');
     if (body.revision !== task.revision || body.hash !== task.hash) throw new Error('The task changed since it was loaded.');
     if (task.workflow_status === 'running') throw new Error('This task is in use: stop its agents before deleting it.');
@@ -130,7 +165,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current$/, () => data.project],
     [/^\/api\/projects\/current\/index$/, () => ({ ...data.project, files: data.indexedPaths.map(path => ({ path, content_hash: 'h', language: 'go', line_count: 3 })) })],
     [/^\/api\/projects\/current\/execution-trust$/, () => ({ ...data.project, trusted: true, commands: [['go', 'test', './...']] })],
-    [/^\/api\/projects\/current\/git\/workspace$/, () => data.gitWorkspace()],
+    [/^\/api\/projects\/current\/git\/workspace$/, () => this.gitWorkspace()],
     [/^\/api\/projects\/current\/changes$/, () => this.tasks()],
     [/^\/api\/projects\/current\/changes\/recovery$/, () => ({ ...data.project, session_id: '', state: '', hash: '', undo_available: false, warnings: [] })],
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
@@ -166,6 +201,8 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/analysis\/run$/, () => this.setRun('running')],
     [/^\/api\/projects\/current\/analysis\/run\/control$/, body => this.setRun(body.action === 'pause' ? 'paused' : body.action === 'cancel' ? 'canceled' : 'running')],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
+    [/^\/api\/projects\/current\/git\/merge$/, body => this.mergeWorktree(body)],
+    [/^\/api\/projects\/current\/git\/discard-worktree$/, body => this.discardWorktree(body)],
   ];
 
   private async handle(route: Route): Promise<void> {
@@ -191,6 +228,7 @@ export class FakeDaemon {
         if (override) return json(route, 200, override());
         const session = url.pathname.match(/^\/api\/projects\/current\/changes\/([^/]+)$/);
         if (session && this.sessions.has(decodeURIComponent(session[1]))) return json(route, 200, this.sessions.get(decodeURIComponent(session[1])));
+        if (url.pathname === '/api/projects/current/changes' && url.searchParams.get('worktree_path')) return json(route, 200, this.tasks(url.searchParams.get('worktree_path')!));
         const found = this.gets.find(([pattern]) => pattern.test(url.pathname));
         return found ? json(route, 200, found[1]()) : json(route, 404, { message: `no fake for GET ${url.pathname}` });
       }
@@ -311,8 +349,10 @@ export class FakeDaemon {
     return { ...data.project, session_id: updated.id, state: 'applied', hash: updated.hash, undo_available: true, warnings: [], commit: updated.commit };
   }
 
+  /** Creates a task like the daemon; with worktree, in a new branch and worktree of its own. */
   private createTask(body: Record<string, unknown>): ChangeSession {
     const id = `chg-${this.nextId++}`;
+    if (body.worktree === true && body.confirm_execution !== true) throw new Error('confirm the Git action and execution of repository filters or merge drivers');
     const paths = (body.paths as string[] | undefined) ?? [];
     const session: ChangeSession = {
       ...data.project,
@@ -332,7 +372,13 @@ export class FakeDaemon {
       checks: [],
     };
     this.sessions.set(id, session);
-    return session;
+    if (body.worktree !== true) return session;
+    const name = `${String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}-a1b2c3`;
+    const path = `${data.project.path}/.worktrees/${name}`;
+    this.taskWorktrees.set(id, path);
+    this.created.add(path);
+    this.worktrees.push({ path, head: '41030b7e', branch: `orca/${name}`, integration: 'merged', mergeable: false, dirty: false, sessions: [] });
+    return { ...session, worktree_path: path, branch: `orca/${name}`, warnings: [] } as ChangeSession;
   }
 }
 
