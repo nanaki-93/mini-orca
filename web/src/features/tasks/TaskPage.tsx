@@ -11,6 +11,7 @@ import { costCaveat, costLabel, usageLabel } from '@/lib/usage';
 import type { LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, useRoute } from '@/lib/router';
+import { openWorkspace } from '@/app/checkout';
 import { canOverrideReview, checkSummary, effectiveEdits, proposalReadiness, reviewProgress, workflowActive } from '@/lib/readiness';
 import { activeOverride, agentRunLabel, agentsFinished, reviewVerdict } from '@/lib/workflow';
 import { basename, plural, shortHash, timeAgo } from '@/lib/util';
@@ -107,7 +108,7 @@ function DeleteTask({ session }: { session: LoadedSession }) {
   const stale = session.freshness !== 'current';
   const run = async () => {
     const task = { id: session.id, title: session.title, worktreePath: session.checkout.worktreePath, project_id: session.project_id, project_revision: session.project_revision, revision: session.revision, hash: session.hash };
-    await actions.deleteTasks([task], () => navigate('/tasks'));
+    await actions.deleteTasks([task], () => openWorkspace('/tasks'));
   };
   return stale ? (
     <Button variant="secondary" icon={Trash2} onClick={() => void run()} disabled={Boolean(busy)}>Delete task</Button>

@@ -178,6 +178,7 @@
 .main {
   display: grid;
   grid-template-rows: var(--topbar) minmax(0, 1fr) var(--statusbar);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   margin: var(--gutter) var(--gutter) var(--gutter) 0;
@@ -194,6 +195,12 @@
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+}
+
+/* The search stays centered while there is room; the crumbs keep their
+   (bounded) width and the search shrinks first. */
+.topbar > .crumbs {
+  min-width: min-content;
 }
 
 .crumbs {
@@ -228,15 +235,17 @@
 }
 
 .topbar-title {
+  max-width: min(280px, 30vw);
   color: var(--text-2);
   font-weight: 500;
 }
 
 .checkout-btn {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
-  max-width: 280px;
+  max-width: min(240px, 30vw);
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--border);
@@ -256,6 +265,7 @@
   align-items: center;
   gap: 8px;
   width: min(440px, 38vw);
+  min-width: 0;
   height: 30px;
   padding: 0 6px 0 10px;
   border: 1px solid var(--border);

@@ -10,7 +10,7 @@ import { useRoute, navigate } from '@/lib/router';
 import { useFindings, useGitWorkspace, useMainProject, useModels, useOverview, useProject, useSession, useStatus, useTasks, useTrust } from '@/api/hooks';
 import type { Connection } from '@/api/events';
 import { useBusy } from '@/app/actions';
-import { useCheckout } from '@/app/checkout';
+import { openWorkspace, useCheckout } from '@/app/checkout';
 import { openNewTask, openPalette, setUI, useUI } from '@/app/store';
 import { taskStatus } from '@/lib/readiness';
 import { runActive, runProgress } from '@/lib/analysis';
@@ -85,7 +85,7 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
         <nav className="nav" aria-label="Workspace">
           {items.map(item => (
             <Tip key={item.path} label={<span className="row">{item.label} <span className="row">{formatKeys(item.keys).map(k => <Kbd key={k}>{k}</Kbd>)}</span></span>} side="right">
-              <a href={`#${item.path}`} className={cx('nav-item', active(item.path) && 'is-active')} aria-current={active(item.path) ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.path); }}>
+              <a href={`#${item.path}`} className={cx('nav-item', active(item.path) && 'is-active')} aria-current={active(item.path) ? 'page' : undefined} onClick={event => { event.preventDefault(); openWorkspace(item.path); }}>
                 <item.icon size={16} aria-hidden />
                 <span className="sidebar-label">{item.label}</span>
                 {item.count ? <span className={cx('nav-count', item.tone && `nav-count-${item.tone}`)}>{item.count}</span> : null}
@@ -95,7 +95,7 @@ export function Shell({ children, connection }: { children: ReactNode; connectio
         </nav>
         <div className="spacer" />
         <nav className="nav" aria-label="Preferences">
-          <a href="#/settings" className={cx('nav-item', active('/settings') && 'is-active')} onClick={event => { event.preventDefault(); navigate('/settings'); }}>
+          <a href="#/settings" className={cx('nav-item', active('/settings') && 'is-active')} onClick={event => { event.preventDefault(); openWorkspace('/settings'); }}>
             <Settings size={16} aria-hidden />
             <span className="sidebar-label">Settings</span>
           </a>
@@ -185,7 +185,7 @@ function TopBar() {
         <span className="topbar-sep" aria-hidden>/</span>
         {taskId ? (
           <>
-            <button type="button" className="crumb-link" onClick={() => navigate('/tasks')}>
+            <button type="button" className="crumb-link" onClick={() => openWorkspace('/tasks')}>
               {title}
             </button>
             <span className="topbar-sep" aria-hidden>/</span>

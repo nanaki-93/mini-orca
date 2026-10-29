@@ -373,13 +373,24 @@ export class FakeDaemon {
     };
     this.sessions.set(id, session);
     if (body.worktree !== true) return session;
-    const name = `${String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}-a1b2c3`;
+    const name = `${taskSlug(String(body.title))}-a1b2c3`;
     const path = `${data.project.path}/.worktrees/${name}`;
     this.taskWorktrees.set(id, path);
     this.created.add(path);
     this.worktrees.push({ path, head: '41030b7e', branch: `orca/${name}`, integration: 'merged', mergeable: false, dirty: false, sessions: [] });
     return { ...session, worktree_path: path, branch: `orca/${name}`, warnings: [] } as ChangeSession;
   }
+}
+
+/** The daemon's branch name for a task: its first words, within 24 characters. */
+function taskSlug(title: string): string {
+  let slug = '';
+  for (const word of title.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)) {
+    const next = slug ? `${slug}-${word}` : word;
+    if (next.length > 24) return slug || word.slice(0, 24);
+    slug = next;
+  }
+  return slug || 'task';
 }
 
 function json(route: Route, status: number, payload: unknown) {

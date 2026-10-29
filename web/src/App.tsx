@@ -9,6 +9,7 @@ import { useDaemonEvents } from '@/api/events';
 import { useSetup } from '@/api/hooks';
 import { Shell } from '@/layout/Shell';
 import { navigate, useRoute } from '@/lib/router';
+import { openWorkspace } from '@/app/checkout';
 import { openNewTask, openPalette, setUI, useUI } from '@/app/store';
 import { formatKeys, useShortcuts, type Shortcut } from '@/app/shortcuts';
 import { InboxPage } from '@/features/inbox/InboxPage';
@@ -57,14 +58,14 @@ function Workspace() {
       { keys: 'c', label: 'New task', group: 'General', run: () => openNewTask() },
       { keys: '?', label: 'Keyboard shortcuts', group: 'General', run: () => setUI({ shortcutsOpen: true }) },
       { keys: '/', label: 'Search', group: 'General', run: () => openPalette() },
-      { keys: 'g h', label: 'Inbox', group: 'Go to', run: () => navigate('/') },
-      { keys: 'g t', label: 'Tasks', group: 'Go to', run: () => navigate('/tasks') },
-      { keys: 'g c', label: 'Code', group: 'Go to', run: () => navigate('/code') },
-      { keys: 'g i', label: 'Issues', group: 'Go to', run: () => navigate('/issues') },
-      { keys: 'g a', label: 'Analysis', group: 'Go to', run: () => navigate('/analysis') },
-      { keys: 'g d', label: 'Docs', group: 'Go to', run: () => navigate('/docs') },
-      { keys: 'g b', label: 'Branches', group: 'Go to', run: () => navigate('/git') },
-      { keys: 'g s', label: 'Settings', group: 'Go to', run: () => navigate('/settings') },
+      { keys: 'g h', label: 'Inbox', group: 'Go to', run: () => openWorkspace('/') },
+      { keys: 'g t', label: 'Tasks', group: 'Go to', run: () => openWorkspace('/tasks') },
+      { keys: 'g c', label: 'Code', group: 'Go to', run: () => openWorkspace('/code') },
+      { keys: 'g i', label: 'Issues', group: 'Go to', run: () => openWorkspace('/issues') },
+      { keys: 'g a', label: 'Analysis', group: 'Go to', run: () => openWorkspace('/analysis') },
+      { keys: 'g d', label: 'Docs', group: 'Go to', run: () => openWorkspace('/docs') },
+      { keys: 'g b', label: 'Branches', group: 'Go to', run: () => openWorkspace('/git') },
+      { keys: 'g s', label: 'Settings', group: 'Go to', run: () => openWorkspace('/settings') },
     ],
     [],
   );

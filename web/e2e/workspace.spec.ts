@@ -38,12 +38,33 @@ test('creates a draft task with a scope and criteria', async ({ page, daemon }) 
   await dialog.getByRole('button', { name: 'Add' }).click();
   await dialog.getByRole('button', { name: 'Save draft' }).click();
 
-  await expect(page.getByText('Draft saved. It has its own worktree on orca/return-404-for-missing-assets-a1b2c3.')).toBeVisible();
+  await expect(page.getByText('Draft saved. It has its own worktree on orca/return-404-for-missing-a1b2c3.')).toBeVisible();
   const [create] = daemon.mutations('/changes');
   expect(create.body).toMatchObject({ project_id: 'p1', title: 'Return 404 for missing assets', acceptance_criteria: ['Missing assets return 404'], worktree: true, confirm_execution: true });
   expect(create.body?.paths).toContain('internal/api/handlers/webui.go');
-  await expect(page).toHaveURL(/#\/tasks\/chg-100\?wt=%2Fwork%2Fmini-orca%2F.worktrees%2Freturn-404-for-missing-assets-a1b2c3$/);
-  await expect(page.getByRole('complementary', { name: 'Review gate' }).getByText('return-404-for-missing-assets-a1b2c3')).toBeVisible();
+  await expect(page).toHaveURL(/#\/tasks\/chg-100\?wt=%2Fwork%2Fmini-orca%2F.worktrees%2Freturn-404-for-missing-a1b2c3$/);
+  await expect(page.getByRole('complementary', { name: 'Review gate' }).getByText('return-404-for-missing-a1b2c3')).toBeVisible();
+});
+
+test('a task in its own worktree does not switch the workspace pages', async ({ page }) => {
+  await page.goto('/#/issues');
+  await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row')).toHaveCount(3);
+  await page.keyboard.press('j');
+  await page.keyboard.press('f');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save draft' }).click();
+  await expect(page).toHaveURL(/#\/tasks\/chg-100\?wt=/);
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('worktree');
+
+  await page.keyboard.press('g');
+  await page.keyboard.press('i');
+  await expect(page).toHaveURL(/#\/issues$/);
+  await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row')).toHaveCount(3);
+  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /Tasks/ }).click();
+  await expect(page).toHaveURL(/#\/tasks$/);
+  await page.getByRole('listitem').filter({ hasText: 'Fix: Request body read without a size limit' }).click();
+  await expect(page).toHaveURL(/#\/tasks\/chg-100\?wt=/);
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'Tasks' }).click();
+  await expect(page).toHaveURL(/#\/tasks$/);
 });
 
 test('a task can stay in the main checkout instead of its own worktree', async ({ page, daemon }) => {

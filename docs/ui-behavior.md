@@ -36,7 +36,10 @@ every guard when the action arrives.
   task's files must be committed (the daemon names a file that is not);
   unticking it, or a task created while a worktree is selected, keeps the task
   in the selected checkout. The worktree runs checks under the same trust when
-  its commands are the same; otherwise a warning asks to allow them.
+  its commands are the same; otherwise a warning asks to allow them. A task
+  page shows its own checkout, but the workspace pages (sidebar, `g` keys and
+  the Tasks crumb) keep the checkout chosen in the top bar, so opening a task
+  in its own worktree does not switch Issues or Analysis to it.
 - **Start agents.** Requires a test file in scope and a trusted project. The
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.

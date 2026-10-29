@@ -11,6 +11,7 @@ import { canOverrideReview, changeIdentity, openComments, proposalReadiness, wor
 import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
 import { currentRoute, navigate } from '@/lib/router';
 import { getUI } from '@/app/store';
+import { forgetCheckouts, openWorkspace } from '@/app/checkout';
 import { commentsBrief, isTestPath, plural, unique } from '@/lib/util';
 import { RunStartChoice } from '@/components/domain';
 import { keys } from '@/api/hooks';
@@ -318,7 +319,7 @@ export function useActions() {
       setSession(result.session, session);
       toast('Still valid: the task now matches the current files. Run the agents when ready.', 'success', result.reason);
     } else {
-      navigate('/tasks');
+      openWorkspace('/tasks');
       void client.invalidateQueries({ queryKey: ['changes'] });
       void client.invalidateQueries({ queryKey: ['findings'] });
       const removed = await guarded('Removing its worktree…', () => removeEmptyWorktrees([session.checkout.worktreePath]));
@@ -886,11 +887,12 @@ export function useActions() {
     return removed;
   }
 
-  /** Returns to the main checkout when the selected one was removed. */
+  /** Leaves a removed checkout: its pages return to the main one, a task page to the task list. */
   function leaveRemovedCheckout(paths: string[]) {
+    forgetCheckouts(paths);
     const route = currentRoute();
     const wt = route.params.get('wt');
-    if (wt && paths.includes(wt)) navigate(route.path.startsWith('/tasks/') ? '/tasks' : route.path, { wt: undefined }, { replace: true });
+    if (wt && paths.includes(wt)) openWorkspace(route.path.startsWith('/tasks/') ? '/tasks' : route.path);
   }
 
   async function abortMerge(workspace: GitWorkspace, main: Project) {
