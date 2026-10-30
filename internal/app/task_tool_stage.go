@@ -130,6 +130,7 @@ func toolTaskPrompt(root string, session *ChangeSession, role toolRole, message 
 		prompt.WriteString("\nFiles the task names (a starting point; change others when the task needs it): " + strings.Join(named, ", ") + "\n")
 	}
 	prompt.WriteString(budgetBrief(root, session.Targets))
+	prompt.WriteString(toolInstructionsBrief(root, named))
 	if len(session.Changes) > 0 {
 		prompt.WriteString("\nThe worktree already holds the current version of the change. Its diff:\n")
 		prompt.WriteString(proposalDiffText(session.Changes, 24*1024))
@@ -145,6 +146,34 @@ func toolTaskPrompt(root string, session *ChangeSession, role toolRole, message 
 		prompt.WriteString("\nPinned regression tests to keep: " + strings.Join(pinned, ", ") + "\n")
 	}
 	return prompt.String()
+}
+
+// maxToolInstructionBytes bounds the AGENTS.md guidance in the first prompt;
+// the agent can read the files themselves.
+const maxToolInstructionBytes = 16 * 1024
+
+// toolInstructionsBrief gives the AGENTS.md files that govern the task's
+// files, nearest last, as the one-shot coder gets them.
+func toolInstructionsBrief(root string, files []string) string {
+	var brief strings.Builder
+	seen := map[string]bool{}
+	for _, file := range files {
+		effective, err := project.ResolveInstructions(root, file)
+		if err != nil {
+			continue
+		}
+		for _, guide := range effective.Files {
+			if seen[guide.Path] || brief.Len()+len(guide.Content) > maxToolInstructionBytes {
+				continue
+			}
+			seen[guide.Path] = true
+			brief.WriteString("\n--- " + guide.Path + " ---\n" + strings.TrimSpace(guide.Content) + "\n")
+		}
+	}
+	if brief.Len() == 0 {
+		return ""
+	}
+	return "\nProject guidance (AGENTS.md) for these files; follow it:" + brief.String()
 }
 
 // storeToolProposal makes what the agent left in the worktree the task's

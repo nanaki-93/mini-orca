@@ -68,7 +68,7 @@ func toolWorkflow(t *testing.T, coder, tester []fakePiStep) (*ChangeSession, str
 		t.Fatal(err)
 	}
 	t.Cleanup(configured.CancelChangeWorkflows)
-	for name, content := range map[string]string{"go.mod": "module example.test/toolflow\n\ngo 1.22\n", "calc.go": toolCalcSource, "calc_test.go": toolCalcTest} {
+	for name, content := range map[string]string{"go.mod": "module example.test/toolflow\n\ngo 1.22\n", "calc.go": toolCalcSource, "calc_test.go": toolCalcTest, "AGENTS.md": "# Toolflow\n\nKeep functions small.\n"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ func TestAWorktreeTaskOnPiIsWrittenAndTestedByToolUsingAgents(t *testing.T) {
 	}
 
 	coderRun := fakePiLog(t, dir, "coder")
-	if !strings.Contains(coderRun.Prompt, "Task (feature): Add Sub") || !strings.Contains(coderRun.Prompt, "1. Sub returns a minus b.") || !strings.Contains(coderRun.Results[2], "All required checks pass.") {
+	if !strings.Contains(coderRun.Prompt, "Project guidance (AGENTS.md) for these files; follow it:\n--- AGENTS.md ---\n# Toolflow") || !strings.Contains(coderRun.Prompt, "Task (feature): Add Sub") || !strings.Contains(coderRun.Prompt, "1. Sub returns a minus b.") || !strings.Contains(coderRun.Results[2], "All required checks pass.") {
 		t.Fatalf("coder run = %+v", coderRun)
 	}
 	testerRun := fakePiLog(t, dir, "tester")
