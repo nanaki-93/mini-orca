@@ -5,13 +5,14 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeOpened, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, IssueTaskDraft, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeOpened, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitMutationResult, GitWorkspace, IssueTaskDraft, MergeChecks, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
 import { currentRoute, navigate } from '@/lib/router';
 import { getUI, openNewTask } from '@/app/store';
 import { forgetCheckouts, openWorkspace } from '@/app/checkout';
+import { mergeToCheck, runMergeChecks } from '@/app/mergeChecks';
 import { commentsBrief, isTestPath, plural, unique } from '@/lib/util';
 import { RunStartChoice } from '@/components/domain';
 import { keys } from '@/api/hooks';
@@ -871,15 +872,23 @@ export function useActions() {
     if (!ok) return;
     await guarded('Merging…', async () => {
       try {
-        const result = await api.post<{ state: string; warnings?: string[] }>('/api/projects/current/git/merge', { ...mergeRequest(workspace, worktree, main), keep_worktree: remove ? undefined : true });
+        const result = await api.post<GitMutationResult>('/api/projects/current/git/merge', { ...mergeRequest(workspace, worktree, main), keep_worktree: remove ? undefined : true });
         if (result?.state === 'conflicts') toast('The merge stopped with conflicts. Resolve them in your editor, or abort.', 'warning');
         else toast(`Merged ${worktree.branch || worktree.path}.`, 'success');
         for (const warning of result?.warnings ?? []) toast(warning, 'warning');
         await refreshAll();
+        const merged = mergeToCheck(result);
+        if (merged) void runMergeChecks(worktree.branch || worktree.path, merged, reportMergeChecks);
       } catch (err) {
         fail('Merge failed', err);
       }
     });
+  }
+
+  function reportMergeChecks(result: MergeChecks) {
+    if (result.outcome === 'passed') toast('The checks pass on the merged result.', 'success');
+    else if (result.outcome === 'failed') toast('Checks failed after the merge', 'danger', result.summary);
+    else toast('The merged result could not be checked', 'warning', result.summary);
   }
 
   /**

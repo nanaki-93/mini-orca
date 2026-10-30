@@ -211,6 +211,14 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 		}
 	}
 	index, _ = manager.Index()
+	for body, status := range map[string]int{
+		`{"project_id":"` + index.ProjectID + `","project_revision":"stale","from":"` + strings.Repeat("a", 40) + `","to":"` + strings.Repeat("b", 40) + `"}`: http.StatusConflict,
+		`{"project_id":"` + index.ProjectID + `","project_revision":"` + index.ProjectRevision + `","from":"--help","to":"HEAD"}`:                             http.StatusBadRequest,
+	} {
+		if got := call("POST", "/api/projects/current/git/merge-checks", body, ""); got.Code != status {
+			t.Fatalf("merge checks %s: %d %s", body, got.Code, got.Body.String())
+		}
+	}
 	if _, err := service.TrustProjectExecution(context.Background(), index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}

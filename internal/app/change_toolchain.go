@@ -60,8 +60,13 @@ type checkRun struct {
 	revision    string
 	fingerprint string
 	session     *ChangeSession
-	baseDir     string
-	baseErr     error
+	// revert turns a copy of root into the tree before the change; nil when
+	// root is that tree (a task in the main checkout holds no proposal).
+	revert func(dir string) error
+	// baseKey names that tree for the baseline cache, besides fingerprint.
+	baseKey string
+	baseDir string
+	baseErr error
 }
 
 func (run *checkRun) cleanup() {
@@ -89,9 +94,8 @@ func (run *checkRun) base() (string, error) {
 	if err == nil && fingerprint != run.fingerprint {
 		err = fmt.Errorf("%w: the project changed while checks ran", project.ErrRevisionConflict)
 	}
-	if err == nil && ownsWorktree(run.session) {
-		// The worktree holds the proposal; its base is the tree without it.
-		err = revertProposalInTree(dir, run.session)
+	if err == nil && run.revert != nil {
+		err = run.revert(dir)
 	}
 	run.baseErr = err
 	return dir, err
@@ -138,7 +142,7 @@ func (b *checkBaselines) put(key string, result baselineResult) {
 
 // baseline runs a command on the tree before the proposal, once per tree.
 func (run *checkRun) baseline(profile toolchain.Profile, name string, command []string) (baselineResult, bool) {
-	key := run.fingerprint + "\x00" + profile.Dir + "\x00" + strings.Join(command, "\x00")
+	key := run.fingerprint + "\x00" + run.baseKey + "\x00" + profile.Dir + "\x00" + strings.Join(command, "\x00")
 	if result, ok := run.s.checkBaselines.get(key); ok {
 		return result, true
 	}

@@ -492,6 +492,15 @@ paths:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/merge-checks:
+    post:
+      tags: [Projects]
+      description: "Run the tests and lint of every subproject a merge changed on a copy of the merged checkout, after the merge. from is the commit the branch was on before the merge (previous_head of the merge result) and to the merged commit the checkout is on now. A failure is compared with the same command on the commit before the merge: failures that already happened there pass as known_failures. Runs project code, so it needs execution trust for the current revision; never changes the checkout."
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MergeChecksRequest'}}}}
+      responses:
+        '200': {description: The checks of the merged result, content: {application/json: {schema: {$ref: '#/components/schemas/MergeChecks'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/cleanup-merged:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -2951,7 +2960,7 @@ components:
         output: {type: string}
         exit_code: {type: integer}
         duration_ms: {type: integer, minimum: 0}
-        outcome: {type: string, enum: [failed_before_change, already_passes, could_not_execute], description: Go new-test baseline observation; separate from candidate checks and root-cause proof.}
+        outcome: {type: string, enum: [failed_before_change, already_passes, could_not_execute, known_failures, also_failed_before, not_affected], description: "New-test baseline observation (failed_before_change, already_passes, could_not_execute), or how a failure compares with the tree before the change: known_failures passes because every failure already happened there, also_failed_before still blocks because the new failures could not be told apart. not_affected marks the subprojects no changed file is in."}
     ChangeCreateRequest:
       description: Supplying plan requires at least one acceptance criterion. Legacy sessions without a plan remain supported.
       type: object
@@ -3444,6 +3453,7 @@ components:
       required: [state, warnings]
       properties:
         state: {type: string, enum: [created, switched, merged, discarded, conflicts, aborted, failed]}
+        previous_head: {type: string, description: The commit the branch was on before a completed merge, for POST git/merge-checks}
         path: {type: string}
         removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard or cleanup-merged completed}
         removed_branch: {type: string, description: Reviewed source branch returned only after guarded deletion following successful merge, cleanup-merged, or discard of a branch the current branch contains}
@@ -3452,6 +3462,24 @@ components:
         index: {$ref: '#/components/schemas/ProjectIndex'}
         error: {type: string}
         warnings: {type: array, items: {type: string}}
+    MergeChecksRequest:
+      type: object
+      required: [project_id, project_revision, from, to]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        from: {type: string, pattern: '^[0-9a-f]{40}([0-9a-f]{24})?$', description: The commit before the merge}
+        to: {type: string, pattern: '^[0-9a-f]{40}([0-9a-f]{24})?$', description: The merged commit the checkout is on}
+    MergeChecks:
+      type: object
+      required: [from, to, outcome, summary, changed_paths, checks]
+      properties:
+        from: {type: string}
+        to: {type: string}
+        outcome: {type: string, enum: [passed, failed, unavailable]}
+        summary: {type: string}
+        changed_paths: {type: integer, minimum: 0}
+        checks: {type: array, items: {$ref: '#/components/schemas/ChangeCheckResult'}}
     GitMergePreview:
       type: object
       required: [target, source, path, diff, commits]

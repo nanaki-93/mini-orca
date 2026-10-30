@@ -13,6 +13,10 @@ export interface RecordedRequest {
   body: Record<string, unknown> | null;
 }
 
+/** The main branch's commits before and after a merge in the fake. */
+const MAIN_BEFORE_MERGE = '41030b7e00000000000000000000000000000000';
+const MERGED_HEAD = '5e7a9c1d00000000000000000000000000000000';
+
 /** The fake daemon's launch token, written into the document like the daemon's. */
 export const WRITE_TOKEN = 'e2e-write-token';
 
@@ -125,11 +129,32 @@ export class FakeDaemon {
     const tree = this.worktrees.find(entry => entry.path === body.path);
     if (!tree?.mergeable || body.source_head !== tree.head) throw new Error('choose an existing worktree from this repository');
     this.worktrees.splice(this.worktrees.indexOf(tree), 1);
+    const merged = { state: 'merged', previous_head: MAIN_BEFORE_MERGE, repository: { head: MERGED_HEAD, branch: 'main' }, index: { project_id: data.project.project_id, project_revision: data.project.project_revision }, warnings: [] };
     if (body.keep_worktree === true) {
       this.worktrees.push({ ...tree, integration: 'merged', mergeable: false, overlap_paths: undefined });
-      return { state: 'merged', warnings: [] };
+      return merged;
     }
-    return { state: 'merged', removed_worktree: tree.path, removed_branch: tree.branch, warnings: [] };
+    return { ...merged, removed_worktree: tree.path, removed_branch: tree.branch };
+  }
+
+  /** What the checks after a merge report; tests choose. */
+  mergeChecksOutcome: 'passed' | 'failed' = 'passed';
+
+  /** Checks a merge like the daemon: the commits must be the ones the merge reported. */
+  private checkMerge(body: Record<string, unknown>) {
+    if (body.from !== MAIN_BEFORE_MERGE || body.to !== MERGED_HEAD) throw new Error('the checkout is no longer on the merged commit');
+    const failed = this.mergeChecksOutcome === 'failed';
+    const tests = failed
+      ? { name: 'tests', required: true, state: 'failed', command: ['go', 'test', './...'], output: 'New failures: example/app.TestServe. Already failing before this change: example/app.TestLegacy.', duration_ms: 2100 }
+      : { name: 'tests', required: true, state: 'passed', outcome: 'known_failures', command: ['go', 'test', './...'], output: 'Only failures that already happened before this change (example/app.TestLegacy); they do not block this task.', duration_ms: 2100 };
+    return {
+      from: body.from,
+      to: body.to,
+      outcome: this.mergeChecksOutcome,
+      summary: failed ? 'Failed on the merged result: tests. The merge stays in place: fix it in a new task, or revert the merge commit.' : 'The tests and lint of the merged subprojects pass on the merged result.',
+      changed_paths: 2,
+      checks: [tests, { name: 'lint', required: true, state: 'passed', command: ['go', 'vet', './...'], duration_ms: 800 }, { name: 'other subprojects', required: false, state: 'skipped', outcome: 'not_affected', output: 'Not run, since no changed file is in them: web.' }],
+    };
   }
 
   /** Deletes a task like the daemon: the body names the version shown; running tasks are kept. */
@@ -210,6 +235,7 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/analysis\/run\/control$/, body => this.setRun(body.action === 'pause' ? 'paused' : body.action === 'cancel' ? 'canceled' : 'running')],
     [/^\/api\/projects\/current\/git\/merge-preview$/, () => ({ commits: 'bb22 Merge preview lists overlapping files', diff: '' })],
     [/^\/api\/projects\/current\/git\/merge$/, body => this.mergeWorktree(body)],
+    [/^\/api\/projects\/current\/git\/merge-checks$/, body => this.checkMerge(body)],
     [/^\/api\/projects\/current\/git\/discard-worktree$/, body => this.discardWorktree(body)],
     [/^\/api\/projects\/current\/git\/cleanup-merged$/, body => ({ ...this.discardWorktree(body), state: 'merged' })],
   ];

@@ -61,14 +61,21 @@ export function ChecksPanel({ session }: { session: LoadedSession }) {
               {summary.passed} passed · {summary.failed} failed · {checks.filter(c => c.required).length} required
             </span>
           </div>
-          <ul className="checks">
-            {[...checks].sort(order).map(check => (
-              <CheckRow key={check.name} check={check} />
-            ))}
-          </ul>
+          <CheckList checks={checks} />
         </div>
       )}
     </div>
+  );
+}
+
+/** Checks with failures first, each opening to its command and output. */
+export function CheckList({ checks }: { checks: Check[] }) {
+  return (
+    <ul className="checks">
+      {[...checks].sort(order).map(check => (
+        <CheckRow key={check.name} check={check} />
+      ))}
+    </ul>
   );
 }
 

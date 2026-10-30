@@ -114,7 +114,8 @@ untrusted networks.
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
-| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree and branch unless `keep_worktree`. |
+| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree and branch unless `keep_worktree`. The result names `previous_head`, the commit before the merge. |
+| POST | `/api/projects/current/git/merge-checks` | Run the tests and lint of the subprojects a merge changed (`from` → `to`) on a copy of the merged checkout; failures that already happened before the merge pass as `known_failures`. Needs execution trust; never changes the checkout. |
 | POST | `/api/projects/current/git/cleanup-merged` | Reconcile an external merge and safely remove the integrated worktree and branch. |
 | POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch unless the current branch contains its commits. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |

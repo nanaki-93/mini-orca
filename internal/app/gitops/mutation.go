@@ -27,7 +27,10 @@ type GitMutationRequest struct {
 }
 
 type GitMutationResult struct {
-	State           string                      `json:"state"`
+	State string `json:"state"`
+	// PreviousHead is the commit the branch was on before a merge, for the
+	// checks of the merged result.
+	PreviousHead    string                      `json:"previous_head,omitempty"`
 	Path            string                      `json:"path,omitempty"`
 	RemovedWorktree string                      `json:"removed_worktree,omitempty"`
 	RemovedBranch   string                      `json:"removed_branch,omitempty"`

@@ -2,7 +2,7 @@
 // branch, and a merge preview before integrating it.
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, GitBranch, GitCommitHorizontal, GitMerge, ShieldOff, Trash2 } from 'lucide-react';
+import { AlertTriangle, FlaskConical, GitBranch, GitCommitHorizontal, GitMerge, ShieldOff, Trash2, X } from 'lucide-react';
 import { useGitWorkspace, useMainProject, useTrust } from '@/api/hooks';
 import type { GitWorktree, MergePreview } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
@@ -10,11 +10,13 @@ import { navigate, setParam, useRoute } from '@/lib/router';
 import { parseGitDiff } from '@/lib/diff';
 import { parseCommits, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
 import { basename, languageOf, plural, shortHash } from '@/lib/util';
-import { Badge, Button, Callout, EmptyState, Skeleton, Spinner, Tip, cx } from '@/components/ui';
+import { Badge, Button, Callout, EmptyState, IconButton, Skeleton, Spinner, Tip, cx } from '@/components/ui';
 import { TaskStatusBadge } from '@/components/domain';
 import type { Tone } from '@/lib/util';
 import { DiffView } from '@/features/review/DiffView';
+import { CheckList } from '@/features/review/ChecksPanel';
 import { setUI, useUI } from '@/app/store';
+import { dismissMergeChecks, useMergeChecks } from '@/app/mergeChecks';
 
 export function GitPage() {
   const route = useRoute();
@@ -52,6 +54,7 @@ export function GitPage() {
               {git.conflicts.length ? `Resolve ${plural(git.conflicts.length, 'conflicted file')} in your editor and commit, or abort: ${git.conflicts.slice(0, 4).join(', ')}` : 'Finish the merge in your editor and commit, or abort it.'}
             </Callout>
           ) : null}
+          <MergeChecksCard />
           <div className="card">
             <div className="card-head">
               <GitBranch size={15} aria-hidden />
@@ -82,6 +85,43 @@ export function GitPage() {
       </div>
       {selected && main ? <WorktreeDetail tree={selected} trusted={Boolean(trust?.trusted)} /> : null}
     </div>
+  );
+}
+
+const MERGE_OUTCOME: Record<string, { label: string; tone: Tone }> = {
+  passed: { label: 'Passed', tone: 'success' },
+  failed: { label: 'Failed', tone: 'danger' },
+  unavailable: { label: 'Could not run', tone: 'warning' },
+};
+
+/**
+ * The tests and lint of the subprojects the last merge changed, run on the
+ * merged result; known failures from before the merge do not fail it.
+ */
+function MergeChecksCard() {
+  const checks = useMergeChecks();
+  if (!checks) return null;
+  const outcome = checks.result ? MERGE_OUTCOME[checks.result.outcome] ?? { label: checks.result.outcome, tone: 'neutral' as Tone } : null;
+  return (
+    <section className="card" aria-label="Checks after the merge">
+      <div className="card-head">
+        <FlaskConical size={15} aria-hidden />
+        <span className="strong grow truncate">Checks after merging {checks.branch}</span>
+        {checks.status === 'running' ? <Spinner size={14} /> : null}
+        {outcome ? <Badge tone={outcome.tone}>{outcome.label}</Badge> : null}
+        {checks.status !== 'running' ? <IconButton icon={X} label="Dismiss the merge checks" size="sm" onClick={dismissMergeChecks} /> : null}
+      </div>
+      <div className="card-body stack">
+        {checks.status === 'running' ? <p className="muted small">Running the tests and lint of the subprojects the merge changed on the merged result…</p> : null}
+        {checks.status === 'error' ? <p className="small tone-danger">The checks could not run: {checks.error}</p> : null}
+        {checks.result ? (
+          <>
+            <p className="small">{checks.result.summary}</p>
+            <CheckList checks={checks.result.checks} />
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

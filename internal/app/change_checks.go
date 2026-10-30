@@ -191,6 +191,11 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 		return nil, "", err
 	}
 	run := &checkRun{s: s, ctx: ctx, root: root, revision: revision, fingerprint: fingerprint, session: session}
+	if ownsWorktree(session) {
+		// The worktree holds the proposal; its base is the tree without it.
+		run.revert = func(dir string) error { return revertProposalInTree(dir, session) }
+		run.baseKey = "worktree base " + session.Worktree.Base
+	}
 	defer run.cleanup()
 	checks, err := s.runProfileChecks(run, workspace, options)
 	return checks, fingerprint, err

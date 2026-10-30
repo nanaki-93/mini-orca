@@ -182,6 +182,29 @@ test('by default a merge removes the worktree and its branch', async ({ page, da
   await expect(page.getByText('Merged mo/chg-7.')).toBeVisible();
   expect(daemon.mutations('/git/merge')[0].body?.keep_worktree).toBeUndefined();
   await expect(page.getByRole('listitem').filter({ hasText: 'mo/chg-7' })).toHaveCount(0);
+
+  // The tests of what the merge changed run on the merged result.
+  const checks = page.getByRole('region', { name: 'Checks after the merge' });
+  await expect(checks).toContainText('Checks after merging mo/chg-7');
+  await expect(checks).toContainText('Passed');
+  await expect(checks).toContainText('Only failures from before the change');
+  await expect(page.getByText('The checks pass on the merged result.')).toBeVisible();
+  expect(daemon.mutations('/git/merge-checks')[0].body).toMatchObject({ project_id: 'p1', from: '41030b7e00000000000000000000000000000000', to: '5e7a9c1d00000000000000000000000000000000' });
+  await checks.getByRole('button', { name: 'Dismiss the merge checks' }).click();
+  await expect(checks).toHaveCount(0);
+});
+
+test('a merge whose result fails its tests says so and keeps the merge', async ({ page, daemon }) => {
+  daemon.mergeChecksOutcome = 'failed';
+  await page.goto('/#/git');
+  await page.getByRole('listitem').filter({ hasText: 'mo/chg-7' }).click();
+  await page.getByRole('complementary', { name: 'Worktree' }).getByRole('button', { name: 'Merge into main' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Merge' }).click();
+  const checks = page.getByRole('region', { name: 'Checks after the merge' });
+  await expect(checks).toContainText('Failed');
+  await expect(checks).toContainText('fix it in a new task, or revert the merge commit');
+  await expect(checks.getByText('New failures: example/app.TestServe.')).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Checks failed after the merge' })).toBeVisible();
 });
 
 test('issues label where each finding comes from', async ({ page }) => {

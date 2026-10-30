@@ -71,6 +71,17 @@ func (h *GitHandler) Merge(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.MergeGitWorktree(r.Context(), request)
 	respondGit(w, value, err)
 }
+
+// MergeChecks runs the tests and lint of the subprojects a merge changed on
+// the merged checkout, comparing failures with the commit before the merge.
+func (h *GitHandler) MergeChecks(w http.ResponseWriter, r *http.Request) {
+	var request app.MergeChecksRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.CheckMerge(r.Context(), request)
+	respondGit(w, value, err)
+}
 func (h *GitHandler) AbortMerge(w http.ResponseWriter, r *http.Request) {
 	var request app.GitMutationRequest
 	if !decodeWorkflowBody(w, r, &request) {

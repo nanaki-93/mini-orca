@@ -53,6 +53,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
 	result := s.completeGitMutation(repository.Root, "merged", err)
 	if result.State == "merged" {
+		result.PreviousHead = repository.Head
 		s.completeMergedWorktree(ctx, repository.Root, source, completed, result, !request.KeepWorktree)
 	}
 	return result, nil

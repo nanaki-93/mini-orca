@@ -119,6 +119,26 @@ export interface FileChange {
 }
 
 /** GET findings/{id}/task: the task the daemon drafts to fix one issue. */
+/** A Git mutation's outcome; a merge also names the commit it started from. */
+export interface GitMutationResult {
+  state: string;
+  previous_head?: string;
+  repository?: { head: string; branch: string };
+  index?: ProjectIdentity;
+  error?: string;
+  warnings?: string[];
+}
+
+/** The tests and lint of the subprojects a merge changed, run on the merged result. */
+export interface MergeChecks {
+  from: string;
+  to: string;
+  outcome: 'passed' | 'failed' | 'unavailable' | string;
+  summary: string;
+  changed_paths: number;
+  checks: Check[];
+}
+
 export interface IssueTaskDraft {
   kind: string;
   title: string;
