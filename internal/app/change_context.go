@@ -353,7 +353,7 @@ func parseChangeResponse(output string, session *ChangeSession) (string, []Chang
 	if err := decoder.Decode(&response); err != nil {
 		return "", nil, fmt.Errorf("decode change proposal: %w", err)
 	}
-	if decoder.Decode(new(any)) != io.EOF || strings.TrimSpace(response.Explanation) == "" || len(response.Explanation) > 4096 || len(response.Changes) == 0 || len(response.Changes) > maxChangePaths {
+	if decoder.Decode(new(any)) != io.EOF || strings.TrimSpace(response.Explanation) == "" || len(response.Explanation) > 4096 || len(response.Changes) == 0 || len(response.Changes) > maxStoredTaskPaths {
 		return "", nil, fmt.Errorf("invalid change proposal response")
 	}
 	changes, err := buildChangeEdits(session, response.Changes)

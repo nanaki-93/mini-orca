@@ -112,7 +112,7 @@ func validateChangeInputShape(input *ChangeInput) error {
 			return fmt.Errorf("invalid human input identity")
 		}
 	}
-	if input.NodeID != "human_review" || input.Action != "review_proposal" || input.Schema != agentruntime.ConfirmationSchema || input.Revision < 0 || input.ExpiresAt.IsZero() || len(input.Scope) == 0 || len(input.Scope) > maxChangePaths {
+	if input.NodeID != "human_review" || input.Action != "review_proposal" || input.Schema != agentruntime.ConfirmationSchema || input.Revision < 0 || input.ExpiresAt.IsZero() || len(input.Scope) == 0 || len(input.Scope) > maxStoredTaskPaths {
 		return fmt.Errorf("invalid human input checkpoint")
 	}
 	return nil

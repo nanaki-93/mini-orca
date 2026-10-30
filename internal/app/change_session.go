@@ -82,8 +82,8 @@ func (s *Service) captureChangeSession(ctx context.Context, root string, index *
 }
 
 func validateChangeCreateRequest(request ChangeCreateRequest) error {
-	if len(request.Paths) == 0 || len(request.Paths) > maxChangePaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
-		return fmt.Errorf("provide a task title, kind and one to %d paths", maxChangePaths)
+	if len(request.Paths) == 0 || len(request.Paths) > maxTaskPaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
+		return fmt.Errorf("provide a task title, kind and one to %d paths", maxTaskPaths)
 	}
 	return validateChangeCriteria(request.AcceptanceCriteria)
 }
@@ -375,7 +375,7 @@ func (s *Service) updateChangeProposal(ctx context.Context, id string, request C
 }
 
 func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]ChangeEdit, error) {
-	if len(inputs) == 0 || len(inputs) > maxChangePaths {
+	if len(inputs) == 0 || len(inputs) > maxStoredTaskPaths {
 		return nil, fmt.Errorf("provide one to sixty-four file changes")
 	}
 	edits := []ChangeEdit{}

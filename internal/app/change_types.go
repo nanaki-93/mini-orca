@@ -9,9 +9,14 @@ import (
 )
 
 const (
-	maxChangePaths    = 64
-	maxChangeBytes    = 256 * 1024
-	maxChangeMessages = 40
+	// maxTaskPaths is how many files a new task may name, the same limit
+	// the Web UI and plan investigation use.
+	maxTaskPaths = 8
+	// maxStoredTaskPaths bounds tasks read from disk: the API accepted up to
+	// 64 paths before it matched the UI, and those tasks stay readable.
+	maxStoredTaskPaths = 64
+	maxChangeBytes     = 256 * 1024
+	maxChangeMessages  = 40
 )
 
 type ChangeTarget = archgate.ChangeTarget

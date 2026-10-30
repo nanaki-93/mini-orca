@@ -98,6 +98,33 @@ func TestTaskFilesWithRetiredFieldsStillLoad(t *testing.T) {
 	}
 }
 
+func TestNewTaskAcceptsAtMostEightPathsLikeTheUI(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	var paths []string
+	for i := 0; i < 9; i++ {
+		name := fmt.Sprintf("file%d.go", i)
+		if err := os.WriteFile(filepath.Join(root, name), []byte("package main\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, name)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	index, err := service.manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: "feature", Title: "Wide task", Paths: paths}
+	if _, err := service.OpenChangeSession(context.Background(), request); err == nil || !strings.Contains(err.Error(), "one to 8 paths") {
+		t.Fatalf("nine paths: %v", err)
+	}
+	request.Paths = paths[:8]
+	if _, err := service.OpenChangeSession(context.Background(), request); err != nil {
+		t.Fatalf("eight paths: %v", err)
+	}
+}
+
 func openChangeFixture(t *testing.T, service *Service, paths ...string) *ChangeSession {
 	t.Helper()
 	index, err := service.manager.Index()

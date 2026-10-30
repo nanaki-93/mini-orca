@@ -161,8 +161,8 @@ func (s *Service) preparePlanInvestigation(ctx context.Context, request PlanInve
 }
 
 func validatePlanInvestigationRequest(request PlanInvestigationRequest) error {
-	if request.ProjectID == "" || request.ProjectRevision == "" || len(request.Paths) == 0 || len(request.Paths) > 8 {
-		return fmt.Errorf("provide a project identity and 1–8 write paths")
+	if request.ProjectID == "" || request.ProjectRevision == "" || len(request.Paths) == 0 || len(request.Paths) > maxTaskPaths {
+		return fmt.Errorf("provide a project identity and 1–%d write paths", maxTaskPaths)
 	}
 	if err := validateChangePlanInput(request.Plan); err != nil {
 		return err
