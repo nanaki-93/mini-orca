@@ -88,10 +88,10 @@ func failedCheckDirective(check CheckResult) string {
 	case name == "architecture boundaries":
 		return "Remove forbidden cross-layer imports and call the owning domain/service interface instead."
 	case name == "complexity gate":
-		return "Decompose complex or oversized functions into smaller cohesive helpers within the complexity budget."
+		return "Bring every file and function the complexity gate names within its budget, using the numbers it reports: extract helpers from long or complex functions, and move cohesive parts of an over-long file into the sibling files the task already holds. What was already over may stay over but must not grow."
 	case name == "secret & hygiene gate":
 		return "Remove hardcoded tokens/keys and unresolved conflict markers; inject secrets from configuration or environment."
-	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "format:") || name == "lint":
+	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "syntax:") || strings.HasPrefix(name, "format:") || name == "lint":
 		return "Fix syntax, formatting, and static analysis diagnostics using sibling file declarations."
 	case name == "tests" || name == "regression baseline":
 		return "Align implementation logic with failing test assertions without weakening pinned regression tests."
@@ -206,7 +206,7 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	}
 	testEdits := make([]ChangeEdit, 0, len(edits))
 	for _, edit := range edits {
-		if isTestFilePath(edit.Path) {
+		if isTestEditPath(session, edit.Path) {
 			testEdits = append(testEdits, edit)
 		}
 	}

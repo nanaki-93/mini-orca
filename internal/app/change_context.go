@@ -18,6 +18,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/rules"
 	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
@@ -33,7 +34,7 @@ func changeContextByteLimit(runtime modelRuntime) int {
 }
 
 func captureChangeTarget(root, path string) (ChangeTarget, error) {
-	target := ChangeTarget{Path: path, Mode: 0644}
+	target := ChangeTarget{Path: path, Mode: 0644, Test: rules.NewResolver(root).IsTestFile(path)}
 	full, err := project.ResolveWritePath(root, path)
 	if err != nil {
 		return target, err
@@ -99,13 +100,14 @@ func composeChangeStagePromptContext(root string, session *ChangeSession, stageZ
 		}
 		if changeTarget(session, target.Path) == nil {
 			text.WriteString("\nRead-only context " + target.Path + ":\n" + target.Content + "\n")
-		} else if omitTestBodies && isTestFilePath(target.Path) {
+		} else if omitTestBodies && isTestTarget(target) {
 			text.WriteString("\nCaptured test target " + target.Path + " (handled by Stage 2 testing agent):\n" + summarizeTestTargetDecls(target) + "\n")
 		} else {
 			text.WriteString("\nCaptured target " + target.Path + ":\n" + target.Content + "\n")
 		}
 		manifest.Included = append(manifest.Included, project.ContextFile{Path: target.Path, Hash: target.Hash, SizeBytes: int64(len(target.Content))})
 	}
+	text.WriteString(budgetBrief(root, session.Targets))
 	if text.Len() < 12000 {
 		if siblingDecls := samePackageGoDecls(root, session); siblingDecls != "" && text.Len()+len(siblingDecls) <= maxChangeBytes {
 			text.WriteString(siblingDecls)
@@ -119,7 +121,7 @@ func composeChangeStagePromptContext(root string, session *ChangeSession, stageZ
 
 func hasNonTestTarget(targets []ChangeTarget) bool {
 	for _, target := range targets {
-		if !isTestFilePath(target.Path) {
+		if !isTestTarget(target) {
 			return true
 		}
 	}
@@ -282,7 +284,7 @@ func changeStageMessages(session *ChangeSession, message, text string, stageZero
 	}
 	previous := make([]ChangeEditInput, 0, len(session.Changes))
 	for _, edit := range session.Changes {
-		if omitTestBodies && isTestFilePath(edit.Path) {
+		if omitTestBodies && isTestEditPath(session, edit.Path) {
 			continue
 		}
 		previous = append(previous, ChangeEditInput{Path: edit.Path, Content: edit.Content})

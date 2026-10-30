@@ -193,3 +193,44 @@ func TestFindingStoreDismissedTargetsPersistAcrossProducerTypesAndReopen(t *test
 		t.Fatalf("expected 2 dismissed targets after reopening perfTarget, got %+v, err=%v", dismissed, err)
 	}
 }
+
+func TestRulesFindingsAreRefreshedInPlaceAndSurviveAnalysisResets(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewFindingStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := FindingInput{ProjectID: "project", ProjectRevision: "r1", FileHashes: map[string]string{"big.py": "h1"}}
+	debt := func(evidence string) UnifiedFinding {
+		return UnifiedFinding{Category: FindingCategoryMaintainability, Source: FindingSourceRules, Confidence: FindingConfidenceToolReported,
+			Severity: "low", Rule: "code-budget", Title: "Refactor big.py", Message: "big.py is over its budgets.", Evidence: evidence,
+			FileHash: "h1", Location: FindingLocation{Path: "big.py"}}
+	}
+	if err := store.RecordFindings(input, FindingSourceRules, []UnifiedFinding{debt("file has 900 lines (max 800)")}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Load(input)
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("findings = %+v, %v", loaded, err)
+	}
+	if err := store.SetStatus(loaded[0].ID, FindingStatusDismissed); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordFindings(input, FindingSourceRules, []UnifiedFinding{debt("file has 950 lines (max 800)")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearExcept(nil); err != nil {
+		t.Fatal(err)
+	}
+	again, err := store.Load(input)
+	if err != nil || len(again) != 1 || again[0].ID != loaded[0].ID || again[0].Status != FindingStatusDismissed ||
+		again[0].Evidence != "file has 950 lines (max 800)" || !again[0].DetectedAt.Equal(loaded[0].DetectedAt) {
+		t.Fatalf("refreshed finding = %+v, %v", again, err)
+	}
+	invalid := debt("x")
+	invalid.Source = FindingSourceAI
+	invalid.Confidence = FindingConfidenceSuggested
+	if err := store.RecordFindings(input, FindingSourceAI, []UnifiedFinding{invalid}); err == nil {
+		t.Fatal("an AI finding was accepted with the maintainability category")
+	}
+}

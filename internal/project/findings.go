@@ -24,6 +24,13 @@ const (
 	FindingSourceParser = "parser"
 	FindingSourceVet    = "vet"
 	FindingSourceTest   = "test"
+	// FindingSourceRules marks code over the budgets AGENTS.md declares. These
+	// findings come from task checks, not analysis runs, and survive them.
+	FindingSourceRules = "rules"
+
+	// FindingCategoryMaintainability is code to refactor, such as a file over
+	// its line budget. Only the rules source uses it.
+	FindingCategoryMaintainability FindingCategory = "maintainability"
 
 	FindingConfidenceSuggested    = "suggested"
 	FindingConfidenceToolReported = "tool_reported"
@@ -176,6 +183,48 @@ func (s *FindingStore) ReconcileSource(input FindingInput, source string, report
 	return cloneFindings(current), nil
 }
 
+// RecordFindings adds or refreshes findings of one source without retiring
+// the others it has. A finding that comes back keeps its triage and first
+// detection time; a retired one opens again.
+func (s *FindingStore) RecordFindings(input FindingInput, source string, reported []UnifiedFinding) error {
+	if !validFindingSource(source) || input.ProjectID == "" || input.ProjectRevision == "" {
+		return fmt.Errorf("finding source or project identity is invalid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	document, err := s.loadLocked(true)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]int, len(document.Findings))
+	for index, finding := range document.Findings {
+		byID[finding.ID] = index
+	}
+	for _, finding := range reported {
+		if finding.Source != source {
+			return fmt.Errorf("finding source does not match the recorded source")
+		}
+		finding = normalizeFinding(finding, input)
+		if err := validateFinding(finding); err != nil {
+			return err
+		}
+		index, known := byID[finding.ID]
+		if !known {
+			byID[finding.ID] = len(document.Findings)
+			document.Findings = append(document.Findings, finding)
+			continue
+		}
+		prior := document.Findings[index]
+		if prior.Status != FindingStatusRetired {
+			finding.Status = prior.Status
+		}
+		finding.DetectedAt = prior.DetectedAt
+		document.Findings[index] = finding
+	}
+	sort.Slice(document.Findings, func(i, j int) bool { return document.Findings[i].ID < document.Findings[j].ID })
+	return s.storeLocked(document)
+}
+
 func unseenFindingStatus(status string) string {
 	if status == FindingStatusInProgress {
 		return FindingStatusInProgress
@@ -205,13 +254,6 @@ func (s *FindingStore) SetStatus(id, status string) error {
 	return fmt.Errorf("finding not found")
 }
 
-// Clear removes persisted findings and completion records for the project root.
-func (s *FindingStore) Clear() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.clearLocked()
-}
-
 func (s *FindingStore) clearLocked() error {
 	path, err := storage.MetadataPath(s.root, findingStorePath)
 	if err != nil {
@@ -223,19 +265,25 @@ func (s *FindingStore) clearLocked() error {
 	return nil
 }
 
-// ClearExcept removes persisted findings except those that are currently in progress.
+// ClearExcept removes persisted findings except those that are currently in
+// progress and those from the rules source, which no analysis run reproduces.
 func (s *FindingStore) ClearExcept(keep []FindingTarget) error {
-	if len(keep) == 0 {
-		return s.Clear()
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	document, err := s.loadLocked(true)
 	if err != nil {
 		return err
 	}
+	if len(keep) == 0 {
+		// Nothing is in progress: completion records go with the findings.
+		document.Completed, document.Dismissed = nil, nil
+	}
 	retained := make([]UnifiedFinding, 0)
 	for _, finding := range document.Findings {
+		if finding.Source == FindingSourceRules {
+			retained = append(retained, finding)
+			continue
+		}
 		if finding.Status == FindingStatusInProgress || findingMatchesAnyTarget(finding, keep) {
 			if finding.Status == FindingStatusOpen || finding.Status == FindingStatusRetired {
 				finding.Status = FindingStatusInProgress
@@ -339,7 +387,8 @@ func findingMatchesInput(finding UnifiedFinding, input FindingInput) bool {
 }
 
 func validateFinding(finding UnifiedFinding) error {
-	if finding.Category != FindingCategoryUnclassified && !finding.Category.Valid() {
+	maintainability := finding.Source == FindingSourceRules && finding.Category == FindingCategoryMaintainability
+	if finding.Category != FindingCategoryUnclassified && !finding.Category.Valid() && !maintainability {
 		return fmt.Errorf("finding category is invalid")
 	}
 	if !validFindingIdentity(finding) {
@@ -398,7 +447,7 @@ func validPersistedGoTestCandidate(candidate *GoTestCandidateSpec) bool {
 }
 
 func validFindingSource(value string) bool {
-	return value == FindingSourceAI || value == FindingSourceParser || value == FindingSourceVet || value == FindingSourceTest
+	return value == FindingSourceAI || value == FindingSourceParser || value == FindingSourceVet || value == FindingSourceTest || value == FindingSourceRules
 }
 func validFindingConfidence(source, confidence string) bool {
 	if source == FindingSourceAI {

@@ -106,7 +106,7 @@ func changeHasCode(edits []ChangeEdit) bool {
 }
 
 func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journal *changeJournal, revision string) ([]CheckResult, error) {
-	checks := changeSourceChecks(root, journal.Session.Changes)
+	checks, _ := changeSourceChecks(root, journal.Session.Targets, journal.Session.Changes)
 	// Documentation-only changes have nothing to execute: their source checks
 	// are the verification.
 	if !requiredChecksPassed(checks) || !changeHasCode(journal.Session.Changes) {

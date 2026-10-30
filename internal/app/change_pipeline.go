@@ -153,7 +153,7 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 	}
 	hasTestTarget := false
 	for _, target := range session.Targets {
-		hasTestTarget = hasTestTarget || isTestFilePath(target.Path)
+		hasTestTarget = hasTestTarget || isTestTarget(target)
 	}
 	if !hasTestTarget {
 		return fmt.Errorf("include a test path (e.g. _test.go, .test.ts, test_*.py) in the captured scope for the testing agent")

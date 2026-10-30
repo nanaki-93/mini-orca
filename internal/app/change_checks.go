@@ -14,6 +14,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/rules"
 	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
@@ -34,7 +35,8 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 			return nil, err
 		}
 	}
-	checks := changeSourceChecks(root, session.Changes)
+	checks, budgets := changeSourceChecks(root, session.Targets, session.Changes)
+	s.recordBudgetDebt(budgets)
 	var checked string // The whole-tree fingerprint the checks describe.
 	if requiredChecksPassed(checks) && (request.RunTests || request.RunLint) {
 		executed, fingerprint, err := s.checkChangeWorkspace(ctx, root, session, request.CheckOptions)
@@ -137,16 +139,19 @@ func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 	}
 	for _, check := range checks {
 		if check.Name == "regression baseline" && (check.State == CheckPassed || check.Outcome != "" && check.State != CheckCanceled) {
-			session.PinnedTests = changeTestEdits(session.Changes)
+			session.PinnedTests = changeTestEdits(session)
 		}
 	}
 }
 
-func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
+// changeSourceChecks runs the checks that read the proposed files without
+// executing anything. It also returns how each file stands against its
+// budgets, so already over-budget files can be tracked as refactor issues.
+func changeSourceChecks(root string, targets []ChangeTarget, edits []ChangeEdit) ([]CheckResult, []archgate.BudgetReport) {
 	checks := []CheckResult{}
 	for _, edit := range edits {
 		if filepath.Ext(edit.Path) != ".go" {
-			checks = append(checks, CheckResult{Name: "text: " + edit.Path, Required: true, State: CheckPassed})
+			checks = append(checks, archgate.SyntaxCheck(targets, edit))
 			continue
 		}
 		parsed := parseGoSource(edit.Path, edit.Content)
@@ -159,11 +164,12 @@ func changeSourceChecks(root string, edits []ChangeEdit) []CheckResult {
 		}
 		checks = append(checks, check)
 	}
-	checks = append(checks, archgate.ChangeArchitectureAndComplexityChecks(root, edits)...)
+	gates, budgets := archgate.ChangeArchitectureAndComplexityChecks(root, targets, edits)
+	checks = append(checks, gates...)
 	if len(edits) > 0 {
 		checks = append(checks, archgate.CheckChangeSecretAndHygiene(edits))
 	}
-	return checks
+	return checks, budgets
 }
 
 // checkChangeWorkspace runs checks in an isolated copy and returns the
@@ -430,37 +436,24 @@ func stageChangeEdits(workspace string, edits []ChangeEdit) error {
 	return nil
 }
 
-func isTestFilePath(path string) bool {
-	lower := strings.ToLower(filepath.ToSlash(path))
-	base := filepath.Base(lower)
-	if strings.HasSuffix(lower, "_test.go") || strings.HasSuffix(lower, "_test.py") || (strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py")) {
-		return true
-	}
-	for _, suffix := range []string{
-		".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx",
-		".test.js", ".spec.js", ".test.jsx", ".spec.jsx",
-		".test.mjs", ".spec.mjs", ".test.cjs", ".spec.cjs",
-		"test.kt", "tests.kt", "spec.kt", "test.java", "tests.java",
-		"_test.rs", "_test.rb", "_spec.rb", "test.php", "test.cs", "tests.cs",
-		"test.swift", "tests.swift", "_test.c", "_test.cpp", "_test.cc",
-	} {
-		if strings.HasSuffix(base, suffix) {
-			return true
-		}
-	}
-	parts := strings.Split(lower, "/")
-	for _, part := range parts[:len(parts)-1] {
-		if part == "test" || part == "tests" || part == "__tests__" || part == "spec" || part == "specs" {
-			return true
-		}
-	}
-	return false
+// isTestTarget reports a test file in the task scope, by convention or by a
+// test_files pattern of the project's AGENTS.md.
+func isTestTarget(target ChangeTarget) bool {
+	return target.Test || rules.IsConventionalTestFile(target.Path)
 }
 
-func changeTestEdits(edits []ChangeEdit) []ChangeEdit {
+// isTestEditPath reports whether a proposed file is a test file.
+func isTestEditPath(session *ChangeSession, path string) bool {
+	if target := changeTarget(session, path); target != nil {
+		return isTestTarget(*target)
+	}
+	return rules.IsConventionalTestFile(path)
+}
+
+func changeTestEdits(session *ChangeSession) []ChangeEdit {
 	result := []ChangeEdit{}
-	for _, edit := range edits {
-		if isTestFilePath(edit.Path) {
+	for _, edit := range session.Changes {
+		if isTestEditPath(session, edit.Path) {
 			result = append(result, edit)
 		}
 	}
@@ -469,7 +462,7 @@ func changeTestEdits(edits []ChangeEdit) []ChangeEdit {
 
 func newChangeTestEdits(session *ChangeSession) []ChangeEdit {
 	result := []ChangeEdit{}
-	for _, edit := range changeTestEdits(session.Changes) {
+	for _, edit := range changeTestEdits(session) {
 		if target := changeTarget(session, edit.Path); target != nil && !target.Exists {
 			result = append(result, edit)
 		}

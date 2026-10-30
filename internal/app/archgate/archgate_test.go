@@ -5,55 +5,37 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project/rules"
 )
 
-func TestArchitecturePolicyDeduplicationAndFileLineBudgetWithoutFunctions(t *testing.T) {
-	root := t.TempDir()
-	agentsMd := strings.Join([]string{
-		"# Agent Contract",
-		"- `internal/api` must never import `internal/storage` or `internal/llm`.",
-		"- `cmd` must never import `storage`.",
-		"- src/ui/ must never import src/db/.",
-		"1. Max function complexity: 12",
-		"2. Max function lines: 80",
-		"3. Max file lines: 5",
-	}, "\n")
-	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(agentsMd), 0644); err != nil {
+func gateCheck(t *testing.T, checks []CheckResult) CheckResult {
+	t.Helper()
+	for _, check := range checks {
+		if check.Name == "complexity gate" {
+			return check
+		}
+	}
+	t.Fatalf("no complexity gate in %+v", checks)
+	return CheckResult{}
+}
+
+func writeAgents(t *testing.T, root, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	rules, budgets := loadArchitecturePolicy(root)
-	if budgets.maxComplexity != 12 || budgets.maxFunctionLines != 80 || budgets.maxFileLines != 5 {
-		t.Fatalf("expected maxComplexity=12 maxFunctionLines=80 maxFileLines=5, got %+v", budgets)
-	}
-	var apiRuleCount, cmdRuleCount, uiRuleCount int
-	for _, r := range rules {
-		switch r.sourcePrefix {
-		case "internal/api":
-			apiRuleCount++
-		case "cmd":
-			cmdRuleCount++
-		case "src/ui":
-			uiRuleCount++
-		}
-	}
-	if apiRuleCount != 1 || cmdRuleCount != 1 || uiRuleCount != 1 {
-		t.Fatalf("expected deduplicated internal/api rule and parsed single-segment/un-backticked rules, got %+v", rules)
-	}
+}
 
-	checks := ChangeArchitectureAndComplexityChecks(root, []ChangeEdit{
-		{
-			Path:    "src/constants.ts",
-			Content: "export const A = 1;\nexport const B = 2;\nexport const C = 3;\nexport const D = 4;\nexport const E = 5;\nexport const F = 6;\n",
-		},
-	})
-	var complexityFailed bool
-	for _, check := range checks {
-		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "file has 6 lines (max 5)") {
-			complexityFailed = true
-		}
-	}
-	if !complexityFailed {
-		t.Fatalf("expected maxFileLines budget to be enforced even when file has no callable functions, got %+v", checks)
+func TestFileLineBudgetAppliesToFilesWithoutFunctions(t *testing.T) {
+	root := t.TempDir()
+	writeAgents(t, root, "# Agent Contract\n- `src/ui` must never import `src/db`.\n3. Max file lines: 5\n")
+	checks, _ := ChangeArchitectureAndComplexityChecks(root, nil, []ChangeEdit{{
+		Path:    "src/constants.ts",
+		Content: "export const A = 1;\nexport const B = 2;\nexport const C = 3;\nexport const D = 4;\nexport const E = 5;\nexport const F = 6;\n",
+	}})
+	if gate := gateCheck(t, checks); gate.State != CheckFailed || !strings.Contains(gate.Output, "file has 6 lines (max 5)") {
+		t.Fatalf("gate = %+v", gate)
 	}
 }
 
@@ -73,9 +55,9 @@ func TestFileLineCountIgnoresTheFinalNewline(t *testing.T) {
 			t.Errorf("countLines(%q) = %d, want %d", test.content, got, test.lines)
 		}
 	}
-	budget := architectureQualityBudgets{maxFileLines: 2}
-	if violations := fileLineBudgetViolations(ChangeEdit{Path: "a.ts", Content: "a\nb\n"}, budget); len(violations) != 0 {
-		t.Fatalf("a two-line file broke a two-line budget: %v", violations)
+	report := measureBudgets(rules.Budgets{FileLines: 2}, ChangeEdit{Path: "a.ts", Content: "a\nb\n"}, "", false)
+	if len(report.Over) != 0 {
+		t.Fatalf("a two-line file broke a two-line budget: %+v", report.Over)
 	}
 }
 
@@ -85,7 +67,8 @@ func TestTargetProjectsGetOnlyTheirOwnImportRules(t *testing.T) {
 		{Path: "internal/api/handler.go", Content: "package api\nimport _ \"example.test/target/internal/storage\"\n"},
 		{Path: "internal/app/service.go", Content: "package app\nimport _ \"google.golang.org/adk/v2/runner\"\n"},
 	}
-	for _, check := range ChangeArchitectureAndComplexityChecks(root, edits) {
+	checks, _ := ChangeArchitectureAndComplexityChecks(root, nil, edits)
+	for _, check := range checks {
 		if check.Name == "architecture boundaries" && check.State != CheckPassed {
 			t.Fatalf("a project without import rules got Mini-Orca's own: %+v", check)
 		}
@@ -93,13 +76,13 @@ func TestTargetProjectsGetOnlyTheirOwnImportRules(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("- `internal/api` must never import `internal/storage`.\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	checks := ChangeArchitectureAndComplexityChecks(root, edits)
+	checks, _ = ChangeArchitectureAndComplexityChecks(root, nil, edits)
 	if len(checks) == 0 || checks[0].State != CheckFailed || !strings.Contains(checks[0].Output, "internal/api must never import internal/storage") || strings.Contains(checks[0].Output, "adk") {
 		t.Fatalf("declared rule = %+v", checks)
 	}
 }
 
-func TestNonGoFilesAreNotJudgedByAWholeFileKeywordCount(t *testing.T) {
+func TestNonGoFunctionsAreMeasuredOneByOne(t *testing.T) {
 	var ts strings.Builder
 	for i := 0; i < 20; i++ {
 		ts.WriteString("export function f" + string(rune('a'+i)) + "(x: number) { if (x > 0) { return 1; } return 0; }\n")
@@ -107,16 +90,51 @@ func TestNonGoFilesAreNotJudgedByAWholeFileKeywordCount(t *testing.T) {
 	edits := []ChangeEdit{
 		{Path: "src/many.ts", Content: ts.String()},
 		{Path: "deploy/config.yaml", Content: "# if this case for while catch\nsteps:\n  - if: always\n  - for: each\n"},
+		{Path: "src/Lib.hs", Content: "module Lib where\nf x = if x then 1 else 2\n"},
 	}
-	checks := ChangeArchitectureAndComplexityChecks(t.TempDir(), edits)
-	var gate CheckResult
-	for _, check := range checks {
-		if check.Name == "complexity gate" {
-			gate = check
+	checks, _ := ChangeArchitectureAndComplexityChecks(t.TempDir(), nil, edits)
+	gate := gateCheck(t, checks)
+	if gate.State != CheckPassed || !strings.Contains(gate.Output, "not checked in src/Lib.hs") || strings.Contains(gate.Output, "src/many.ts") || strings.Contains(gate.Output, "deploy/config.yaml") {
+		t.Fatalf("gate = %+v", gate)
+	}
+
+	branchy := "def pick(x):\n" + strings.Repeat("    if x:\n        return 1\n", 16) + "    return 0\n"
+	checks, _ = ChangeArchitectureAndComplexityChecks(t.TempDir(), nil, []ChangeEdit{{Path: "app/pick.py", Content: branchy}})
+	if gate := gateCheck(t, checks); gate.State != CheckFailed || !strings.Contains(gate.Output, "app/pick.py: line 1: function pick has cyclomatic complexity 17 (max 15)") {
+		t.Fatalf("python gate = %+v", gate)
+	}
+}
+
+func TestBudgetsRatchetOnWhatTheFileWasBeforeTheTask(t *testing.T) {
+	root := t.TempDir()
+	writeAgents(t, root, "```mini-orca\nbudgets:\n  file_lines: 4\n  function_complexity: 3\n```\n")
+	legacy := "def old(x):\n    if x and x > 1 or x < 0:\n        return 1\n    return 2\n\ndef small():\n    return 0\n"
+	target := ChangeTarget{Path: "app/legacy.py", Exists: true, Content: legacy}
+
+	// The task changes small() only: the file and old() were already over.
+	untouched := strings.Replace(legacy, "return 0", "return 1", 1)
+	checks, reports := ChangeArchitectureAndComplexityChecks(root, []ChangeTarget{target}, []ChangeEdit{{Path: target.Path, Content: untouched}})
+	if gate := gateCheck(t, checks); gate.State != CheckPassed || !strings.Contains(gate.Output, "app/legacy.py: file has 7 lines (max 4)") || !strings.Contains(gate.Output, "function old has cyclomatic complexity 4 (max 3)") {
+		t.Fatalf("debt gate = %+v", gate)
+	}
+	if len(reports) != 1 || len(reports[0].Debt) != 2 || len(reports[0].Over) != 0 {
+		t.Fatalf("debt report = %+v", reports)
+	}
+
+	// Growing the file or the over-budget function fails.
+	grown := legacy + "\ndef more():\n    return 3\n"
+	worse := strings.Replace(legacy, "if x and", "if x and x != 5 and", 1)
+	for name, content := range map[string]string{"file": grown, "function": worse} {
+		checks, _ := ChangeArchitectureAndComplexityChecks(root, []ChangeTarget{target}, []ChangeEdit{{Path: target.Path, Content: content}})
+		if gate := gateCheck(t, checks); gate.State != CheckFailed {
+			t.Fatalf("%s grew and passed: %+v", name, gate)
 		}
 	}
-	if gate.State != CheckPassed || !strings.Contains(gate.Output, "not checked") || !strings.Contains(gate.Output, "src/many.ts") || strings.Contains(gate.Output, "deploy/config.yaml") {
-		t.Fatalf("non-Go complexity gate = %+v", gate)
+
+	// A new file gets no allowance.
+	checks, reports = ChangeArchitectureAndComplexityChecks(root, []ChangeTarget{{Path: "app/new.py"}}, []ChangeEdit{{Path: "app/new.py", Content: legacy}})
+	if gate := gateCheck(t, checks); gate.State != CheckFailed || !reports[0].OverFileLines() {
+		t.Fatalf("new file gate = %+v", gate)
 	}
 }
 
@@ -153,7 +171,11 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 	if len(prodEdits) == 0 {
 		t.Fatal("expected production Go files in repository")
 	}
-	checks := ChangeArchitectureAndComplexityChecks(repoRoot, prodEdits)
+	resolver := rules.NewResolver(repoRoot)
+	if own := resolver.For("internal/app/service.go"); len(own.Imports) < 15 || len(resolver.Problems()) > 0 {
+		t.Fatalf("Mini-Orca's AGENTS.md rules = %+v, problems %+v", own, resolver.Problems())
+	}
+	checks, _ := ChangeArchitectureAndComplexityChecks(repoRoot, nil, prodEdits)
 	for _, check := range checks {
 		if check.State != CheckPassed {
 			t.Fatalf("repository check %q failed:\n%s", check.Name, check.Output)
@@ -165,7 +187,7 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 		}
 	}
 
-	violationChecks := ChangeArchitectureAndComplexityChecks(repoRoot, []ChangeEdit{
+	violationChecks, _ := ChangeArchitectureAndComplexityChecks(repoRoot, nil, []ChangeEdit{
 		{
 			Path:    "internal/project/diff/bad.go",
 			Content: "package diff\nimport _ \"github.com/nanaki-93/mini-orca/v2/internal/project/symbols\"\n",
@@ -239,7 +261,7 @@ func TestAgentRuntimeImportBoundary(t *testing.T) {
 	} {
 		t.Run(test.path+"/"+test.imported, func(t *testing.T) {
 			edit := ChangeEdit{Path: test.path, Content: "package fixture\nimport _ \"" + test.imported + "\"\n"}
-			checks := ChangeArchitectureAndComplexityChecks(repoRoot, []ChangeEdit{edit})
+			checks, _ := ChangeArchitectureAndComplexityChecks(repoRoot, nil, []ChangeEdit{edit})
 			violations := adkBoundaryViolations(edit.Path, extractEditImports(edit.Path, edit.Content, nil))
 			allowed := len(checks) > 0 && checks[0].State == CheckPassed && len(violations) == 0
 			if allowed != test.allowed {

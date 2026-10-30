@@ -227,6 +227,20 @@ paths:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/rules:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    get:
+      tags: [Chat]
+      description: Measure each file of a task against the budgets and import rules of its AGENTS.md files — the proposal where the task changed the file, the file as it is otherwise. No provider request and no project code runs.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Rules and budget state per task file, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeRules'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/resume:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -922,7 +936,7 @@ paths:
         - {$ref: '#/components/parameters/ProjectRevision'}
         - name: source
           in: query
-          schema: {type: string, enum: [ai, parser, vet, test]}
+          schema: {type: string, enum: [ai, parser, vet, test, rules]}
         - name: confidence
           in: query
           schema: {type: string, enum: [suggested, tool_reported]}
@@ -938,6 +952,16 @@ paths:
       responses:
         '200': {description: Sanitized findings with their provenance and lifecycle, content: {application/json: {schema: {$ref: '#/components/schemas/FindingsResponse'}}}}
         '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/rules:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Test file patterns and the AGENTS.md files that declare code rules
+      responses:
+        '200': {description: The project's code rules for the Web UI, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectRules'}}}}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/findings/{findingID}:
@@ -1902,8 +1926,8 @@ components:
       required: [id, source, confidence, severity, title, message, project_id, project_revision, location, status, freshness, detected_at]
       properties:
         id: {type: string}
-        category: {$ref: '#/components/schemas/FindingCategory'}
-        source: {type: string, enum: [ai, parser, vet, test]}
+        category: {type: string, enum: [bugs, performance, security, maintainability], description: A FindingCategory; maintainability is used only by the rules source.}
+        source: {type: string, enum: [ai, parser, vet, test, rules], description: rules marks a file a task found already over its AGENTS.md budgets (category maintainability); one finding per file, refreshed by later tasks and kept across analysis runs.}
         confidence: {type: string, enum: [suggested, tool_reported]}
         severity: {type: string, enum: [low, medium, high]}
         title: {type: string}
@@ -2822,6 +2846,64 @@ components:
         exists: {type: boolean}
         content: {type: string}
         mode: {type: integer}
+        test: {type: boolean, description: A test file by convention or by a test_files pattern of the project's AGENTS.md when the target was captured.}
+    ProjectRules:
+      type: object
+      required: [project_id, project_revision, test_patterns, guides, problems]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        test_patterns: {type: array, items: {type: string}, description: "Project-relative, case-insensitive globs: * stays within a path segment, ** spans segments, a glob without a slash matches the file name anywhere."}
+        guides: {type: array, items: {type: string}, description: Indexed AGENTS.md files.}
+        problems: {type: array, items: {$ref: '#/components/schemas/RulesProblem'}}
+    RulesProblem:
+      type: object
+      required: [path, message]
+      properties:
+        path: {type: string}
+        message: {type: string}
+    CodeBudgets:
+      type: object
+      properties:
+        file_lines: {type: integer}
+        function_lines: {type: integer}
+        function_complexity: {type: integer}
+    BudgetFinding:
+      type: object
+      required: [kind, value, limit]
+      properties:
+        kind: {type: string, enum: [file_lines, function_lines, function_complexity]}
+        function: {type: string}
+        line: {type: integer}
+        value: {type: integer}
+        base: {type: integer, description: The value before the task; absent for a new file or function.}
+        limit: {type: integer}
+    ChangeRules:
+      type: object
+      required: [session_id, revision, files, problems]
+      properties:
+        session_id: {type: string}
+        revision: {type: integer}
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, budgets, lines, test, proposed]
+            properties:
+              path: {type: string}
+              budgets: {$ref: '#/components/schemas/CodeBudgets'}
+              lines: {type: integer}
+              base_lines: {type: integer}
+              not_checked: {type: string, description: Why the file's functions could not be measured.}
+              over: {type: array, items: {$ref: '#/components/schemas/BudgetFinding'}, description: Made worse by the task; the complexity gate fails.}
+              debt: {type: array, items: {$ref: '#/components/schemas/BudgetFinding'}, description: Already over before the task and not grown.}
+              test: {type: boolean}
+              proposed: {type: boolean}
+              imports:
+                type: array
+                items: {type: object, properties: {from: {type: string}, never: {type: array, items: {type: string}}}}
+              sources: {type: array, items: {type: string}}
+        problems: {type: array, items: {$ref: '#/components/schemas/RulesProblem'}}
     ChangeEdit:
       type: object
       properties:

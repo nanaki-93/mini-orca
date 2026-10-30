@@ -17,7 +17,7 @@ func workflowSpecialistSelection(session *ChangeSession) []string {
 	roles := []string{"correctness"}
 	sources, goSource := 0, false
 	for _, target := range session.Targets {
-		if !isTestFilePath(target.Path) {
+		if !isTestTarget(target) {
 			sources++
 			goSource = goSource || strings.HasSuffix(target.Path, ".go")
 		}

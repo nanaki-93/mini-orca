@@ -28,30 +28,55 @@ paths, with diff review, explicit Apply and guarded Undo.
 - `cmd/` owns startup, configuration wiring and command entry points (`daemon`, `engineering-insight-eval`, `agent-eval`, `agent-inspect`).
 - `internal/api/` owns HTTP decoding, local request policy and error responses (`internal/api/handlers`). Handlers must never import `internal/storage` or `internal/llm` directly; always call `internal/app` service methods.
 - `internal/app/` owns workflow orchestration, model calls and guarded changes, with isolated domain subpackages for architecture/complexity checks (`internal/app/archgate`), sandboxed workspace and check execution (`internal/app/sandbox`), pure change source/hash/metadata path helpers (`internal/app/changes`), Git repository/worktree/merge operations (`internal/app/gitops`), and feature suggestion parsing/history (`internal/app/features`).
-- `internal/project/` owns project facts, indexing, context policy and composition, with isolated domain subpackages for unified diff/impact analysis (`internal/project/diff`), multi-language import extraction (`internal/project/symbols`), heuristic code insight (`internal/project/insight`), engineering handbook generation (`internal/project/handbook`), deterministic security rules (`internal/project/securityrules`), and `AGENTS.md` instruction catalog/preset suggestions (`internal/project/instructions`). It must never import `internal/app` or `internal/api`.
+- `internal/project/` owns project facts, indexing, context policy and composition, with isolated domain subpackages for unified diff/impact analysis (`internal/project/diff`), multi-language import extraction (`internal/project/symbols`), heuristic code insight (`internal/project/insight`), engineering handbook generation (`internal/project/handbook`), deterministic security rules (`internal/project/securityrules`), `AGENTS.md` instruction catalog/preset suggestions (`internal/project/instructions`), the code rules AGENTS.md files declare (`internal/project/rules`), and language-neutral parsing of functions, spans and complexity (`internal/project/syntax`, go/ast for Go, a pure-Go tree-sitter runtime for the rest). It must never import `internal/app` or `internal/api`.
 - `internal/storage/` owns durable file primitives; domain stores own their schemas. `internal/textutil` holds dependency-free text helpers, such as truncation that keeps whole UTF-8 characters.
 - `internal/app/agentruntime/` owns SDK adapters, native graphs and tools; it is the only ADK import boundary. `internal/app/agentstate/` owns private durable runtime records. Both remain leaf packages; `internal/app` retains consent, admission and mutation authority.
 - `internal/llm/` owns provider transport; `internal/config/` owns configuration.
 - `internal/insighteval/` and `internal/agenteval/` own engineering-insight and synthetic task/trajectory evaluation, separate from normal app use. Replay evidence must not be presented as live model quality or cost improvement.
 - `web/` owns the browser workspace (React + TypeScript): server state through TanStack Query, pages under `src/features`, shared pieces under `src/components`. Its built bundle in `internal/api/handlers/webui/dist` is embedded by `internal/api/handlers`.
 
-Import boundaries, enforced by the architecture gate and by
-`TestRepositoryArchitectureBoundaries` (one rule per line):
+Code rules, read by Mini-Orca's gates for every task and by
+`TestRepositoryArchitectureBoundaries`. Paths are relative to this file; an
+AGENTS.md in a subdirectory may add rules and override budgets for its files.
 
-- `internal/app` must never import `internal/api`.
-- `internal/app/agentruntime` must never import `internal/project` or `internal/storage`.
-- `internal/app/agentstate` must never import `internal/app`, `internal/project` or `internal/llm`.
-- `internal/app/archgate` must never import `internal/app/sandbox`, `internal/app/gitops`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
-- `internal/app/sandbox` must never import `internal/app/gitops`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
-- `internal/app/gitops` must never import `internal/app/archgate`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
-- `internal/app/features` must never import `internal/app/archgate` or `internal/app/gitops`.
-- `internal/app/changes` must never import `internal/app/archgate`, `internal/app/gitops` or `internal/llm`.
-- `internal/project/diff` must never import `internal/project/symbols`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
-- `internal/project/symbols` must never import `internal/project/diff`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
-- `internal/project/insight` must never import `internal/project/diff`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
-- `internal/project/handbook` must never import `internal/project/diff`, `internal/project/securityrules`, `internal/project/instructions` or `internal/llm`.
-- `internal/project/securityrules` must never import `internal/project/diff`, `internal/project/handbook`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
-- `internal/project/instructions` must never import `internal/project/diff`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/storage` or `internal/llm`.
+```mini-orca
+budgets:
+  function_complexity: 15
+imports:
+  - from: internal/app
+    never: [internal/api]
+  - from: internal/app/agentruntime
+    never: [internal/project, internal/storage]
+  - from: internal/app/agentstate
+    never: [internal/app, internal/project, internal/llm]
+  - from: internal/app/archgate
+    never: [internal/app/sandbox, internal/app/gitops, internal/app/features, internal/app/changes, internal/llm, internal/storage]
+  - from: internal/app/sandbox
+    never: [internal/app/gitops, internal/app/features, internal/app/changes, internal/llm, internal/storage]
+  - from: internal/app/gitops
+    never: [internal/app/archgate, internal/app/features, internal/app/changes, internal/llm, internal/storage]
+  - from: internal/app/features
+    never: [internal/app/archgate, internal/app/gitops]
+  - from: internal/app/changes
+    never: [internal/app/archgate, internal/app/gitops, internal/llm]
+  - from: internal/project/diff
+    never: [internal/project/symbols, internal/project/insight, internal/project/handbook, internal/project/securityrules, internal/project/instructions, internal/storage, internal/llm]
+  - from: internal/project/symbols
+    never: [internal/project/diff, internal/project/insight, internal/project/handbook, internal/project/securityrules, internal/project/instructions, internal/storage, internal/llm]
+  - from: internal/project/insight
+    never: [internal/project/diff, internal/project/handbook, internal/project/securityrules, internal/project/instructions, internal/storage, internal/llm]
+  - from: internal/project/handbook
+    never: [internal/project/diff, internal/project/securityrules, internal/project/instructions, internal/llm]
+  - from: internal/project/securityrules
+    never: [internal/project/diff, internal/project/handbook, internal/project/instructions, internal/storage, internal/llm]
+  - from: internal/project/instructions
+    never: [internal/project/diff, internal/project/insight, internal/project/handbook, internal/project/securityrules, internal/storage, internal/llm]
+  - from: internal/project/rules
+    never: [internal/project/diff, internal/project/symbols, internal/project/syntax, internal/project/insight, internal/project/handbook, internal/storage, internal/llm]
+  - from: internal/project/syntax
+    never: [internal/project/diff, internal/project/symbols, internal/project/rules, internal/project/insight, internal/project/handbook, internal/storage, internal/llm]
+```
+
 - Only `internal/app/agentruntime` imports `google.golang.org/adk` and `google.golang.org/genai`, and it never imports its parent `internal/app` (`TestAgentRuntimeImportBoundary`).
 
 ## Workspace & commit conventions

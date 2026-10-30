@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -368,19 +369,21 @@ func TestPolyglotArchitectureBoundariesQualityBudgetsAndEcosystemRunners(t *test
 	if err != nil || requiredChecksPassed(checked.Checks) {
 		t.Fatalf("expected the polyglot architecture check to fail, got %+v, err=%v", checked, err)
 	}
-	// TypeScript functions are not measured until a parser covers them; the
-	// gate says so instead of failing on a whole-file keyword count.
-	var archFailed, complexityNotChecked bool
+	// TypeScript functions are measured one by one, like Go's.
+	var archFailed, complexityMeasured, parsed bool
 	for _, check := range checked.Checks {
 		if check.Name == "architecture boundaries" && check.State == CheckFailed && strings.Contains(check.Output, "src/db") {
 			archFailed = true
 		}
-		if check.Name == "complexity gate" && check.State == CheckPassed && strings.Contains(check.Output, "not checked in src/ui/view.ts") {
-			complexityNotChecked = true
+		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "function renderView has cyclomatic complexity 7 (max 5, 1 before this task)") {
+			complexityMeasured = true
+		}
+		if check.Name == "syntax: src/ui/view.ts" && check.State == CheckPassed && !check.Required {
+			parsed = true
 		}
 	}
-	if !archFailed || !complexityNotChecked {
-		t.Fatalf("expected the polyglot boundary to fail and TypeScript complexity to be reported as not checked, got %+v", checked.Checks)
+	if !archFailed || !complexityMeasured || !parsed {
+		t.Fatalf("expected the polyglot boundary to fail and TypeScript to be parsed and measured, got %+v", checked.Checks)
 	}
 }
 
@@ -462,5 +465,57 @@ func TestRerunningChecksPreservesCriticRejectionAndBlocksApproval(t *testing.T) 
 	}
 	if _, err := s.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatalf("expected ReviewChange to remain blocked after rerunning deterministic checks on a critic-rejected proposal")
+	}
+}
+
+func TestAFileAlreadyOverBudgetMayChangeWithoutGrowingAndOpensOneIssue(t *testing.T) {
+	legacy := "def a():\n    return 1\n\ndef b():\n    return 2\n"
+	reply := `{"explanation":"Return 3 from b.","changes":[{"path":"legacy.py","content":` + strconv.Quote(strings.Replace(legacy, "return 2", "return 3", 1)) + `}]}`
+	server := changeProvider(t, func() string { return reply })
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "legacy.py"), []byte(legacy), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("```mini-orca\nbudgets:\n  file_lines: 3\n```\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "legacy", Path: root, Type: "python"}); err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(scopedTestConfig(server.URL), manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		session := prepareChangeFixture(t, service, "legacy.py")
+		checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
+		if err != nil || !requiredChecksPassed(checked.Checks) {
+			t.Fatalf("checks = %+v, %v", checked, err)
+		}
+		rules, err := service.ChangeCodeRules(context.Background(), session.ID)
+		if err != nil || len(rules.Files) != 1 || !rules.Files[0].Proposed || rules.Files[0].Budgets.FileLines != 3 || len(rules.Files[0].Debt) != 1 || rules.Files[0].Sources[0] != "AGENTS.md" {
+			t.Fatalf("task rules = %+v, %v", rules, err)
+		}
+	}
+	projectRules, err := service.ProjectCodeRules()
+	if err != nil || !slices.Contains(projectRules.Guides, "AGENTS.md") || !slices.Contains(projectRules.TestPatterns, "test_*.py") || len(projectRules.Problems) != 0 {
+		t.Fatalf("project rules = %+v, %v", projectRules, err)
+	}
+	findings, err := service.ListFindings(FindingFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var debt []project.UnifiedFinding
+	for _, finding := range findings {
+		if finding.Source == project.FindingSourceRules {
+			debt = append(debt, finding)
+		}
+	}
+	if len(debt) != 1 || debt[0].Location.Path != "legacy.py" || debt[0].Category != project.FindingCategoryMaintainability || !strings.Contains(debt[0].Evidence, "file has 5 lines (max 3)") {
+		t.Fatalf("debt issues = %+v", debt)
 	}
 }

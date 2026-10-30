@@ -2,17 +2,14 @@ package archgate
 
 import (
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/rules"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 )
 
@@ -23,8 +20,6 @@ const (
 	CheckSkipped     = "skipped"
 	CheckCanceled    = "canceled"
 	CheckUnavailable = "unavailable"
-
-	maxFunctionComplexity = 15
 )
 
 // CheckResult is one parser, formatter, lint, or test result. Command is a
@@ -54,6 +49,9 @@ type ChangeTarget struct {
 	Exists  bool   `json:"exists"`
 	Content string `json:"content"`
 	Mode    uint32 `json:"mode"`
+	// Test marks a test file, by convention or by the test_files patterns of
+	// the project's AGENTS.md when the target was captured.
+	Test bool `json:"test,omitempty"`
 }
 
 // ChangeEdit holds one proposed file edit and its computed unified diff.
@@ -66,28 +64,12 @@ type ChangeEdit struct {
 	Diff     diff.UnifiedDiff `json:"diff"`
 }
 
-type architectureImportRule struct {
-	sourcePrefix string
-	forbidden    []string
-}
-
-type architectureQualityBudgets struct {
-	maxComplexity    int
-	maxFunctionLines int
-	maxFileLines     int
-}
-
 type parsedEditFacts struct {
 	lang       string
 	rawImports []string
 }
 
-var (
-	backtickSpanPattern    = regexp.MustCompile("`([^`]+)`")
-	plainPathTokenPattern  = regexp.MustCompile(`([A-Za-z0-9_./-]+)`)
-	budgetNumberPattern    = regexp.MustCompile(`(\d+)`)
-	commonJSRequirePattern = regexp.MustCompile(`\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)`)
-)
+var commonJSRequirePattern = regexp.MustCompile(`\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 
 // HasGoSourceEdits reports whether any edit in the slice targets a .go file.
 func HasGoSourceEdits(edits []ChangeEdit) bool {
@@ -100,19 +82,31 @@ func HasGoSourceEdits(edits []ChangeEdit) bool {
 }
 
 // ChangeArchitectureAndComplexityChecks evaluates proposed edits against the
-// import boundary rules and complexity / line budgets that the project's own
-// AGENTS.md declares. A project that declares none gets no import rules.
-func ChangeArchitectureAndComplexityChecks(root string, edits []ChangeEdit) []CheckResult {
+// import rules and budgets the project's AGENTS.md files declare (see
+// internal/project/rules). targets hold the files before the task, so budgets
+// ratchet: what was already over a budget may stay so if it does not grow. A
+// project that declares no import rules gets none.
+func ChangeArchitectureAndComplexityChecks(root string, targets []ChangeTarget, edits []ChangeEdit) ([]CheckResult, []BudgetReport) {
 	if len(edits) == 0 {
-		return nil
+		return nil, nil
 	}
 	factsByPath := extractAllEditFacts(edits)
-	rules, budgets := loadArchitecturePolicy(root)
-	checks := []CheckResult{checkArchitectureBoundaries(edits, rules, factsByPath)}
-	if changeHasCodeSource(edits, factsByPath) || budgets.maxFileLines > 0 {
-		checks = append(checks, checkFunctionComplexityAndBudgets(edits, budgets, factsByPath))
+	resolver := rules.NewResolver(root)
+	checks := []CheckResult{checkArchitectureBoundaries(edits, resolver, factsByPath)}
+	reports := BudgetReports(root, targets, edits)
+	if changeHasCodeSource(edits, factsByPath) || anyFileLineBudget(reports) {
+		checks = append(checks, budgetCheck(reports))
 	}
-	return checks
+	return checks, reports
+}
+
+func anyFileLineBudget(reports []BudgetReport) bool {
+	for _, report := range reports {
+		if report.Budgets.FileLines > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
@@ -130,133 +124,10 @@ func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
 	return facts
 }
 
-func loadArchitecturePolicy(root string) ([]architectureImportRule, architectureQualityBudgets) {
-	var rules []architectureImportRule
-	budgets := architectureQualityBudgets{maxComplexity: maxFunctionComplexity}
-	if strings.TrimSpace(root) == "" {
-		return rules, budgets
-	}
-	data, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
-	if err != nil {
-		return rules, budgets
-	}
-	for _, raw := range strings.Split(string(data), "\n") {
-		if parsed, ok := parseAgentsImportRuleLine(raw); ok {
-			rules = appendUniqueImportRule(rules, parsed)
-		}
-		parseAgentsBudgetLine(raw, &budgets)
-	}
-	return rules, budgets
-}
-
-func appendUniqueImportRule(rules []architectureImportRule, candidate architectureImportRule) []architectureImportRule {
-	if candidate.sourcePrefix == "" || len(candidate.forbidden) == 0 {
-		return rules
-	}
-	for i := range rules {
-		if rules[i].sourcePrefix == candidate.sourcePrefix {
-			for _, f := range candidate.forbidden {
-				if !slices.Contains(rules[i].forbidden, f) {
-					rules[i].forbidden = append(rules[i].forbidden, f)
-				}
-			}
-			return rules
-		}
-	}
-	return append(rules, architectureImportRule{
-		sourcePrefix: candidate.sourcePrefix,
-		forbidden:    append([]string(nil), candidate.forbidden...),
-	})
-}
-
-func parseAgentsBudgetLine(line string, budgets *architectureQualityBudgets) {
-	lower := strings.ToLower(line)
-	for _, spec := range []struct {
-		phrase string
-		target *int
-	}{
-		{"max function complexity", &budgets.maxComplexity},
-		{"max function lines", &budgets.maxFunctionLines},
-		{"max file lines", &budgets.maxFileLines},
-	} {
-		idx := strings.Index(lower, spec.phrase)
-		if idx < 0 {
-			continue
-		}
-		match := budgetNumberPattern.FindStringSubmatch(lower[idx+len(spec.phrase):])
-		if len(match) != 2 {
-			continue
-		}
-		if val, err := strconv.Atoi(match[1]); err == nil && val > 0 {
-			*spec.target = val
-		}
-	}
-}
-
-func parseAgentsImportRuleLine(line string) (architectureImportRule, bool) {
-	lower := strings.ToLower(line)
-	idx := strings.Index(lower, "must never import")
-	if idx < 0 {
-		return architectureImportRule{}, false
-	}
-	before := extractRulePaths(line[:idx])
-	afterClause := line[idx+len("must never import"):]
-	if semi := strings.IndexByte(afterClause, ';'); semi >= 0 {
-		afterClause = afterClause[:semi]
-	}
-	after := extractRulePaths(afterClause)
-	if len(before) == 0 || len(after) == 0 {
-		return architectureImportRule{}, false
-	}
-	source := normalizeRulePathPrefix(before[0])
-	forbidden := normalizeRulePaths(after)
-	if source == "" || len(forbidden) == 0 {
-		return architectureImportRule{}, false
-	}
-	return architectureImportRule{
-		sourcePrefix: source,
-		forbidden:    forbidden,
-	}, true
-}
-
-func extractRulePaths(segment string) []string {
-	var out []string
-	for _, m := range backtickSpanPattern.FindAllStringSubmatch(segment, -1) {
-		candidate := strings.Trim(strings.TrimSpace(m[1]), ".,;:")
-		if candidate != "" && !strings.ContainsAny(candidate, " \t") {
-			out = append(out, candidate)
-		}
-	}
-	if len(out) > 0 {
-		return out
-	}
-	for _, tokenMatch := range plainPathTokenPattern.FindAllStringSubmatch(segment, -1) {
-		tok := strings.Trim(strings.TrimSpace(tokenMatch[1]), ".,;:-")
-		if strings.Contains(tok, "/") || strings.Contains(tok, ".") {
-			out = append(out, tok)
-		}
-	}
-	return out
-}
-
-func normalizeRulePathPrefix(raw string) string {
-	return strings.Trim(filepath.ToSlash(strings.TrimSpace(raw)), "/")
-}
-
-func normalizeRulePaths(items []string) []string {
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if norm := normalizeRulePathPrefix(item); norm != "" && !slices.Contains(out, norm) {
-			out = append(out, norm)
-		}
-	}
-	return out
-}
-
-func checkArchitectureBoundaries(edits []ChangeEdit, rules []architectureImportRule, factsByPath map[string]parsedEditFacts) CheckResult {
+func checkArchitectureBoundaries(edits []ChangeEdit, resolver *rules.Resolver, factsByPath map[string]parsedEditFacts) CheckResult {
 	var violations []string
 	for _, edit := range edits {
-		violations = append(violations, editArchitectureViolations(edit, rules, factsByPath[edit.Path])...)
+		violations = append(violations, editArchitectureViolations(edit, resolver.For(edit.Path).Imports, factsByPath[edit.Path])...)
 	}
 	if len(violations) > 0 {
 		return CheckResult{
@@ -274,7 +145,7 @@ func checkArchitectureBoundaries(edits []ChangeEdit, rules []architectureImportR
 	}
 }
 
-func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule, facts parsedEditFacts) []string {
+func editArchitectureViolations(edit ChangeEdit, importRules []rules.ImportRule, facts parsedEditFacts) []string {
 	slashPath := strings.TrimPrefix(filepath.ToSlash(edit.Path), "./")
 	imports := extractEditImports(edit.Path, edit.Content, facts.rawImports)
 	if len(imports) == 0 {
@@ -282,14 +153,14 @@ func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule,
 	}
 	var violations []string
 	seen := map[string]bool{}
-	for _, rule := range rules {
-		if !pathMatchesPrefix(slashPath, rule.sourcePrefix) {
+	for _, rule := range importRules {
+		if !pathMatchesPrefix(slashPath, rule.From) {
 			continue
 		}
 		for _, imp := range imports {
-			for _, forbidden := range rule.forbidden {
+			for _, forbidden := range rule.Never {
 				if importMatchesForbidden(imp, forbidden) {
-					msg := fmt.Sprintf("%s imports %q: violates architecture boundary (%s must never import %s)", slashPath, imp, rule.sourcePrefix, forbidden)
+					msg := fmt.Sprintf("%s imports %q: violates architecture boundary (%s must never import %s)", slashPath, imp, rule.From, forbidden)
 					if !seen[msg] {
 						seen[msg] = true
 						violations = append(violations, msg)
@@ -379,37 +250,6 @@ func changeHasCodeSource(edits []ChangeEdit, factsByPath map[string]parsedEditFa
 	return false
 }
 
-func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQualityBudgets, factsByPath map[string]parsedEditFacts) CheckResult {
-	var violations, notChecked []string
-	for _, edit := range edits {
-		violations = append(violations, fileLineBudgetViolations(edit, budgets)...)
-		switch {
-		case filepath.Ext(edit.Path) == ".go":
-			violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content, budgets)...)
-		case hasFunctions(factsByPath[edit.Path].lang):
-			notChecked = append(notChecked, filepath.ToSlash(edit.Path))
-		}
-	}
-	note := ""
-	if len(notChecked) > 0 {
-		note = fmt.Sprintf("Function complexity and length not checked in %s: no parser for that language yet; file lines were checked.", strings.Join(notChecked, ", "))
-	}
-	if len(violations) > 0 {
-		return CheckResult{
-			Name:     "complexity gate",
-			Required: true,
-			State:    CheckFailed,
-			Output:   strings.TrimSpace(strings.Join(violations, "\n") + "\n" + note),
-		}
-	}
-	return CheckResult{
-		Name:     "complexity gate",
-		Required: true,
-		State:    CheckPassed,
-		Output:   strings.TrimSpace(fmt.Sprintf("All proposed files are within the budgets (function complexity <= %d). %s", budgets.maxComplexity, note)),
-	}
-}
-
 // dataLanguages have no functions to measure.
 var dataLanguages = map[string]bool{
 	"Text": true, "Markdown": true, "YAML": true, "JSON": true, "TOML": true, "INI": true, "Config": true,
@@ -417,21 +257,9 @@ var dataLanguages = map[string]bool{
 	"Terraform": true, "HCL": true, "Dockerfile": true, "Makefile": true, "CMake": true,
 }
 
-// hasFunctions reports a programming language whose functions a parser
-// could measure; Go is measured, the others are reported as not checked.
+// hasFunctions reports a programming language with functions to measure.
 func hasFunctions(lang string) bool {
 	return lang != "" && !dataLanguages[lang]
-}
-
-func fileLineBudgetViolations(edit ChangeEdit, budgets architectureQualityBudgets) []string {
-	if budgets.maxFileLines <= 0 {
-		return nil
-	}
-	lines := countLines(edit.Content)
-	if lines <= budgets.maxFileLines {
-		return nil
-	}
-	return []string{fmt.Sprintf("%s: file has %d lines (max %d); split into cohesive modules", filepath.ToSlash(edit.Path), lines, budgets.maxFileLines)}
 }
 
 // countLines counts lines as editors and wc -l do: a final newline ends the
@@ -445,55 +273,4 @@ func countLines(content string) int {
 		lines++
 	}
 	return lines
-}
-
-func goEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, content, 0)
-	if err != nil || file == nil {
-		return nil
-	}
-	var violations []string
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		startLine := fset.Position(fn.Pos()).Line
-		endLine := fset.Position(fn.End()).Line
-		complexity := astFunctionComplexity(fn.Body)
-		if complexity > budgets.maxComplexity {
-			violations = append(violations, fmt.Sprintf("%s:%d: function %s has cyclomatic complexity %d (max %d); split into smaller helpers", filepath.ToSlash(path), startLine, fn.Name.Name, complexity, budgets.maxComplexity))
-		}
-		if budgets.maxFunctionLines > 0 && (endLine-startLine+1) > budgets.maxFunctionLines {
-			violations = append(violations, fmt.Sprintf("%s:%d: function %s has %d lines (max %d); split into smaller helpers", filepath.ToSlash(path), startLine, fn.Name.Name, endLine-startLine+1, budgets.maxFunctionLines))
-		}
-	}
-	return violations
-}
-
-func astFunctionComplexity(body *ast.BlockStmt) int {
-	complexity := 1
-	ast.Inspect(body, func(node ast.Node) bool {
-		if isComplexityBranchNode(node) {
-			complexity++
-		}
-		return true
-	})
-	return complexity
-}
-
-func isComplexityBranchNode(node ast.Node) bool {
-	switch n := node.(type) {
-	case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt:
-		return true
-	case *ast.CaseClause:
-		return len(n.List) > 0
-	case *ast.CommClause:
-		return n.Comm != nil
-	case *ast.BinaryExpr:
-		return n.Op == token.LAND || n.Op == token.LOR
-	default:
-		return false
-	}
 }

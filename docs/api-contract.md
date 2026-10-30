@@ -82,6 +82,7 @@ untrusted networks.
 | POST | `/api/projects/current/analysis/run/control` | Pause, resume or cancel the exact run generation. |
 | GET | `/api/projects/current/analysis/results` | Read Bugs, Performance or Security evidence using full run identity; optional captured-file filter. |
 | GET | `/api/projects/current/findings` | List source-free verified findings and AI suggestions with provenance, filters, and freshness. |
+| GET | `/api/projects/current/rules` | Test file patterns (conventions plus AGENTS.md `test_files`), the indexed AGENTS.md files and any rules block that could not be read. |
 | PATCH | `/api/projects/current/findings/{findingID}` | Record an explicit user triage status for one finding. |
 | GET | `/api/projects/current/scan` | Read an explicitly started Go scan for `project_revision` from a temporary copied workspace. |
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
@@ -130,6 +131,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes` | Capture a task and 1–64 explicit text paths (planned tasks: 1–8), here or with `worktree` in a new branch and worktree created for it. |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
 | GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck its scoped freshness and whether its checks describe the current tree. |
+| GET | `/api/projects/current/changes/{sessionID}/rules` | Measure each task file against the budgets and import rules of its AGENTS.md files (the proposal where the task changed it); nothing runs. |
 | POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
 | POST | `/api/projects/current/changes/{sessionID}/messages` | Generate a scoped proposal or explicitly request bounded check-driven repair. |
 | POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
