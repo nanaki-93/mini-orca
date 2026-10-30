@@ -515,4 +515,12 @@ func TestAFileAlreadyOverBudgetMayChangeWithoutGrowingAndOpensOneIssue(t *testin
 	if len(debt) != 1 || debt[0].Location.Path != "legacy.py" || debt[0].Category != project.FindingCategoryMaintainability || !strings.Contains(debt[0].Evidence, "file has 5 lines (max 3)") {
 		t.Fatalf("debt issues = %+v", debt)
 	}
+	draft, err := service.DraftIssueTask(debt[0].ID)
+	if err != nil || draft.Kind != "fix" || draft.Title != debt[0].Title || !slices.Equal(draft.Paths, []string{"legacy.py", "test_legacy.py"}) ||
+		!strings.Contains(draft.AcceptanceCriteria[0], "splitting it into cohesive sibling files") || len(draft.FindingTargets) != 1 || draft.FindingTargets[0].ID != debt[0].ID {
+		t.Fatalf("refactor task draft = %+v, %v", draft, err)
+	}
+	if _, err := service.DraftIssueTask("finding:missing"); err == nil {
+		t.Fatal("a missing issue was drafted")
+	}
 }

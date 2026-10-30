@@ -1,7 +1,9 @@
 package rules
 
 import (
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -66,4 +68,38 @@ var conventionalTestFiles = []string{
 	"*_test.rs", "*_test.rb", "*_spec.rb", "*test.php", "*test.cs", "*tests.cs",
 	"*test.swift", "*tests.swift", "*_test.c", "*_test.cpp", "*_test.cc", "*_test.dart", "*_test.exs",
 	"**/test/**", "**/tests/**", "**/__tests__/**", "**/spec/**", "**/specs/**",
+}
+
+// CompanionTest names where a test for a source file conventionally lives,
+// preferring one that exists under root, or "" when the language keeps
+// tests elsewhere (in the same file, or with no single place).
+func CompanionTest(root, file string) string {
+	file = strings.TrimPrefix(filepath.ToSlash(file), "./")
+	dir, name := path.Split(file)
+	ext := path.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	var candidates []string
+	switch strings.ToLower(ext) {
+	case ".go":
+		candidates = []string{dir + stem + "_test.go"}
+	case ".py":
+		candidates = []string{dir + "test_" + stem + ".py", dir + "tests/test_" + stem + ".py", "tests/test_" + stem + ".py"}
+	case ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs":
+		candidates = []string{dir + stem + ".test" + ext, dir + stem + ".spec" + ext, dir + "__tests__/" + stem + ".test" + ext}
+	case ".java", ".kt", ".scala":
+		if strings.Contains(file, "src/main/") {
+			candidates = []string{strings.Replace(dir, "src/main/", "src/test/", 1) + stem + "Test" + ext}
+		}
+	case ".rb":
+		candidates = []string{"spec/" + strings.TrimPrefix(dir, "lib/") + stem + "_spec.rb", "test/" + strings.TrimPrefix(dir, "lib/") + stem + "_test.rb"}
+	}
+	if len(candidates) == 0 || IsConventionalTestFile(file) {
+		return ""
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(candidate))); err == nil && info.Mode().IsRegular() {
+			return candidate
+		}
+	}
+	return candidates[0]
 }

@@ -282,6 +282,14 @@ func TestProjectWorkspaceAPIsAreRevisionGuardedAndSourceFree(t *testing.T) {
 		{name: "triage", call: func(response *httptest.ResponseRecorder) {
 			handler.UpdateFindingStatus(response, httptest.NewRequest(http.MethodPatch, "/api/projects/current/findings/finding:test", bytes.NewBufferString(`{"project_revision":"stale","status":"dismissed"}`)))
 		}},
+		{name: "issue task", call: func(response *httptest.ResponseRecorder) {
+			handler.IssueTask(response, httptest.NewRequest(http.MethodGet, "/api/projects/current/findings/finding:test/task?project_revision=stale", nil))
+		}},
+		{name: "issue task for an unlisted issue", call: func(response *httptest.ResponseRecorder) {
+			request := httptest.NewRequest(http.MethodGet, "/api/projects/current/findings/missing/task?project_revision="+index.ProjectRevision, nil)
+			request.SetPathValue("findingID", "missing")
+			handler.IssueTask(response, request)
+		}},
 	} {
 		t.Run(call.name, func(t *testing.T) {
 			response := httptest.NewRecorder()

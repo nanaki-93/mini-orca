@@ -118,6 +118,16 @@ export interface FileChange {
   diff: FileDiff;
 }
 
+/** GET findings/{id}/task: the task the daemon drafts to fix one issue. */
+export interface IssueTaskDraft {
+  kind: string;
+  title: string;
+  description: string;
+  paths: string[];
+  acceptance_criteria: string[];
+  finding_targets?: FindingTarget[];
+}
+
 export interface ChangeTarget {
   path: string;
   hash: string;

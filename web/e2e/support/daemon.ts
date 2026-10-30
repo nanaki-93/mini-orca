@@ -4,7 +4,7 @@
 // mutation must carry the Web UI header and the current proposal identity.
 
 import { test as base, expect, type Page, type Route } from '@playwright/test';
-import type { ChangeHistoryEntry, ChangeSession, DaemonEvent, GitWorktree, ProjectSetup } from '../../src/api/types';
+import type { ChangeHistoryEntry, ChangeSession, DaemonEvent, Finding, GitWorktree, ProjectSetup } from '../../src/api/types';
 import * as data from './fixtures';
 
 export interface RecordedRequest {
@@ -238,6 +238,8 @@ export class FakeDaemon {
         const session = url.pathname.match(/^\/api\/projects\/current\/changes\/([^/]+)$/);
         if (session && this.sessions.has(decodeURIComponent(session[1]))) return json(route, 200, this.sessions.get(decodeURIComponent(session[1])));
         if (url.pathname === '/api/projects/current/changes' && url.searchParams.get('worktree_path')) return json(route, 200, this.tasks(url.searchParams.get('worktree_path')!));
+        const issue = url.pathname.match(/^\/api\/projects\/current\/findings\/([^/]+)\/task$/);
+        if (issue) return json(route, 200, this.issueTask(decodeURIComponent(issue[1])));
         const found = this.gets.find(([pattern]) => pattern.test(url.pathname));
         return found ? json(route, 200, found[1]()) : json(route, 404, { message: `no fake for GET ${url.pathname}` });
       }
@@ -249,6 +251,32 @@ export class FakeDaemon {
     } catch (err) {
       return json(route, 409, { user_message: (err as Error).message });
     }
+  }
+
+  /**
+   * Drafts a task for a listed issue like the daemon: its file and that
+   * file's Go test, a kind from the category, and the criteria for the kind.
+   */
+  private issueTask(id: string) {
+    const listed = (this.overrides.get('/api/projects/current/findings')?.() ?? { findings: data.findings }) as { findings: Finding[] };
+    const finding = listed.findings.find(entry => entry.id === id);
+    if (!finding) throw new Error('the issue is no longer listed; refresh the issues');
+    const file = finding.location?.path || finding.task_spec?.target_path || '';
+    const refactor = finding.category === 'maintainability';
+    const paths = file ? [file] : [];
+    if (file.endsWith('.go') && !file.endsWith('_test.go')) paths.push(file.replace(/\.go$/, '_test.go'));
+    return {
+      kind: finding.category === 'security' ? 'security' : finding.category === 'performance' ? 'performance' : 'fix',
+      title: refactor ? finding.title : `Fix: ${finding.title}`,
+      description: `${finding.message}${finding.evidence ? `\n\nEvidence:\n${finding.evidence}` : ''}${file ? `\n\nLocation: ${file}${finding.location?.start_line ? `:${finding.location.start_line}` : ''}` : ''}`,
+      paths,
+      acceptance_criteria: finding.task_spec?.acceptance_criteria?.length
+        ? finding.task_spec.acceptance_criteria
+        : refactor
+          ? [`Bring ${file} within the budgets of its AGENTS.md, splitting it into cohesive sibling files where needed`, 'Keep its behavior and public interface; existing tests pass unchanged']
+          : [`Resolve “${finding.title}” without breaking existing callers`, 'Add a regression test that fails before the fix'],
+      finding_targets: finding.project_id && finding.location?.path ? [{ project_id: finding.project_id, kind: 'semantic', id: finding.id, path: finding.location.path }] : undefined,
+    };
   }
 
   /** Saves setup like the daemon: models, roles, budget and time limits; secrets are never echoed. */

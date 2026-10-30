@@ -5,12 +5,12 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage, query, withWorktree } from '@/api/client';
-import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeOpened, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
+import type { AgentPreferences, AgentSettings, AnalysisFileSelection, AnalysisRunSummary, ProjectSetup, SetupModel, SetupModelTest, SetupScope, SetupTimeouts, ChangeHistoryEntry, ChangeMutationResult, ChangeOpened, ChangeReanalysis, ChangeSession, ExecutionTrust, Finding, FindingTarget, GitWorkspace, IssueTaskDraft, GitWorktree, LoadedSession, MergePreview, ModelsCurrent, Project } from '@/api/types';
 import { useFeedback } from '@/components/overlays';
 import { canOverrideReview, changeIdentity, openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
 import { changeOverlaps, mergeRequest, runStartOptions, workflowDestinations, workflowRequest, worktreeRemovable, worktreeTasks } from '@/lib/workflow';
 import { currentRoute, navigate } from '@/lib/router';
-import { getUI } from '@/app/store';
+import { getUI, openNewTask } from '@/app/store';
 import { forgetCheckouts, openWorkspace } from '@/app/checkout';
 import { commentsBrief, isTestPath, plural, unique } from '@/lib/util';
 import { RunStartChoice } from '@/components/domain';
@@ -616,6 +616,21 @@ export function useActions() {
     });
   }
 
+  /**
+   * Opens the composer with the task the daemon drafts for an issue: its
+   * file and conventional test, criteria and the linked finding, so merging
+   * the task marks the issue fixed.
+   */
+  async function fixIssue(project: Project | undefined, worktreePath: string, finding: Finding) {
+    if (!project) return;
+    try {
+      const draft = await api.get<IssueTaskDraft>(withWorktree(`/api/projects/current/findings/${encodeURIComponent(finding.id)}/task` + query({ project_revision: project.project_revision }), worktreePath));
+      openNewTask({ findingTargets: draft.finding_targets?.length ? draft.finding_targets : undefined, title: draft.title, kind: draft.kind, description: draft.description, paths: draft.paths, criteria: draft.acceptance_criteria });
+    } catch (err) {
+      fail('Could not draft a task for this issue', err);
+    }
+  }
+
   async function triageFinding(project: Project, worktreePath: string, finding: Finding, status: 'dismissed' | 'open') {
     await guarded('Updating issue…', async () => {
       try {
@@ -958,7 +973,7 @@ export function useActions() {
     });
   }
 
-  return { guarded, createTask, startAgents, reanalyze, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, removeWorktree, abortMerge, explainFile };
+  return { guarded, createTask, startAgents, reanalyze, cancelAgents, refine, stopRevision, markViewed, runChecks, addComment, deleteComment, approve, overrideReview, reject, apply, undo, setTrust, reindex, openProject, fixIssue, triageFinding, deleteTasks, saveSetup, saveTimeouts, skipSetup, testSetupModel, saveAnalysisSelection, runAnalysis, controlAnalysis, controlAgentSettings, previewMerge, merge, removeWorktree, abortMerge, explainFile };
 }
 
 export interface FileExplanation {

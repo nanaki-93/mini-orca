@@ -289,6 +289,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("GET /api/projects/current/findings", projectHandler.Findings)
 	mux.HandleFunc("GET /api/projects/current/rules", projectHandler.Rules)
 	mux.HandleFunc("PATCH /api/projects/current/findings/{findingID}", projectHandler.UpdateFindingStatus)
+	mux.HandleFunc("GET /api/projects/current/findings/{findingID}/task", projectHandler.IssueTask)
 	mux.HandleFunc("GET /api/projects/current/scan", projectHandler.GoScanProgress)
 	mux.HandleFunc("POST /api/projects/current/scan", projectHandler.StartGoScan)
 	mux.HandleFunc("DELETE /api/projects/current/scan", projectHandler.CancelGoScan)

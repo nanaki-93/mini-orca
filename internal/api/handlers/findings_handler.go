@@ -43,6 +43,19 @@ func (h *ProjectHandler) Findings(w http.ResponseWriter, r *http.Request) {
 	}{ProjectID: findingsProjectID(h.manager), ProjectRevision: r.URL.Query().Get("project_revision"), Findings: findings, Completed: completed})
 }
 
+// IssueTask drafts the task that fixes one issue, for the composer.
+func (h *ProjectHandler) IssueTask(w http.ResponseWriter, r *http.Request) {
+	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
+		return
+	}
+	task, err := h.service.DraftIssueTask(r.PathValue("findingID"))
+	if err != nil {
+		writeProjectError(w, "issue task draft failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, task)
+}
+
 // UpdateFindingStatus changes only user triage for one deterministic finding.
 func (h *ProjectHandler) UpdateFindingStatus(w http.ResponseWriter, r *http.Request) {
 	var request findingStatusRequest

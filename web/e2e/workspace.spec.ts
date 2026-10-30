@@ -337,6 +337,8 @@ test('issues are triaged from the keyboard, filtered by kind and fixed in a link
   await page.keyboard.press('f');
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByPlaceholder('What should change?')).toHaveValue('Fix: Request body read without a size limit');
+  // The daemon drafts the task, so every language gets its own test file convention.
+  expect(daemon.requests.filter(request => request.path === '/api/projects/current/findings/f1/task')).toHaveLength(1);
   await page.getByRole('dialog').getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Draft saved.')).toBeVisible();
   expect(daemon.mutations('/changes')[0].body).toMatchObject({ finding_targets: [{ project_id: 'p1', kind: 'semantic', id: 'f1', path: 'internal/api/handlers/change_handler.go' }] });

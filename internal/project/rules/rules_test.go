@@ -168,3 +168,32 @@ func TestGuidesDeclareCheckCommandsForTheirSubproject(t *testing.T) {
 		t.Fatalf("shell syntax accepted: %+v, %+v", bad, resolver.Problems())
 	}
 }
+
+func TestCompanionTestsFollowEachLanguageAndPreferExistingFiles(t *testing.T) {
+	root := t.TempDir()
+	for _, existing := range []string{"web/src/lib/util.spec.ts", "tests/test_models.py"} {
+		full := filepath.Join(root, filepath.FromSlash(existing))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for file, want := range map[string]string{
+		"internal/app/service.go":       "internal/app/service_test.go",
+		"web/src/lib/util.ts":           "web/src/lib/util.spec.ts",
+		"web/src/App.tsx":               "web/src/App.test.tsx",
+		"app/models.py":                 "tests/test_models.py",
+		"app/views.py":                  "app/test_views.py",
+		"core/src/main/java/a/Foo.java": "core/src/test/java/a/FooTest.java",
+		"lib/parser.rb":                 "spec/parser_spec.rb",
+		"src/lib.rs":                    "",
+		"internal/app/service_test.go":  "",
+		"README.md":                     "",
+	} {
+		if got := CompanionTest(root, file); got != want {
+			t.Errorf("CompanionTest(%q) = %q, want %q", file, got, want)
+		}
+	}
+}

@@ -954,6 +954,32 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/findings/{findingID}/task:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+      - {in: path, name: findingID, required: true, schema: {type: string}}
+    get:
+      tags: [Projects]
+      summary: Draft the task that fixes one issue; nothing is saved
+      parameters:
+        - {$ref: '#/components/parameters/ProjectRevision'}
+      responses:
+        '200':
+          description: A task draft for the composer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kind, title, description, paths, acceptance_criteria]
+                properties:
+                  kind: {type: string, enum: [fix, security, performance]}
+                  title: {type: string}
+                  description: {type: string}
+                  paths: {type: array, items: {type: string}, description: The issue's file and its conventional test (an existing one when there is one).}
+                  acceptance_criteria: {type: array, items: {type: string}}
+                  finding_targets: {type: array, items: {$ref: '#/components/schemas/FindingTarget'}}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/rules:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
