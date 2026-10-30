@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -37,7 +38,7 @@ func (s *Service) verifyChangeWithChecks(ctx context.Context, id string, identit
 	if err != nil {
 		return nil, err
 	}
-	if changeHasGo(journal.Session.Changes) {
+	if archgate.HasGoSourceEdits(journal.Session.Changes) {
 		if err := s.requireProjectExecutionTrust(ctx, identity.ProjectRevision); err != nil {
 			return nil, err
 		}
@@ -98,15 +99,6 @@ func changeHasCode(edits []ChangeEdit) bool {
 		switch strings.ToLower(filepath.Ext(edit.Path)) {
 		case ".md", ".markdown", ".mdx", ".txt", ".rst", ".adoc":
 		default:
-			return true
-		}
-	}
-	return false
-}
-
-func changeHasGo(edits []ChangeEdit) bool {
-	for _, edit := range edits {
-		if filepath.Ext(edit.Path) == ".go" {
 			return true
 		}
 	}

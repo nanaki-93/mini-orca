@@ -87,7 +87,6 @@ var (
 	plainPathTokenPattern  = regexp.MustCompile(`([A-Za-z0-9_./-]+)`)
 	budgetNumberPattern    = regexp.MustCompile(`(\d+)`)
 	commonJSRequirePattern = regexp.MustCompile(`\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)`)
-	branchKeywordPattern   = regexp.MustCompile(`\b(if|elif|for|while|case|catch)\b`)
 )
 
 // HasGoSourceEdits reports whether any edit in the slice targets a .go file.
@@ -98,11 +97,6 @@ func HasGoSourceEdits(edits []ChangeEdit) bool {
 		}
 	}
 	return false
-}
-
-// ChangeHasGo is retained as an alias for HasGoSourceEdits.
-func ChangeHasGo(edits []ChangeEdit) bool {
-	return HasGoSourceEdits(edits)
 }
 
 // ChangeArchitectureAndComplexityChecks evaluates proposed edits against the
@@ -373,7 +367,7 @@ func extractGoEditImports(path, content string) []string {
 }
 
 func changeHasCodeSource(edits []ChangeEdit, factsByPath map[string]parsedEditFacts) bool {
-	if ChangeHasGo(edits) {
+	if HasGoSourceEdits(edits) {
 		return true
 	}
 	for _, edit := range edits {
@@ -386,29 +380,47 @@ func changeHasCodeSource(edits []ChangeEdit, factsByPath map[string]parsedEditFa
 }
 
 func checkFunctionComplexityAndBudgets(edits []ChangeEdit, budgets architectureQualityBudgets, factsByPath map[string]parsedEditFacts) CheckResult {
-	var violations []string
+	var violations, notChecked []string
 	for _, edit := range edits {
 		violations = append(violations, fileLineBudgetViolations(edit, budgets)...)
-		if filepath.Ext(edit.Path) == ".go" {
+		switch {
+		case filepath.Ext(edit.Path) == ".go":
 			violations = append(violations, goEditComplexityViolations(edit.Path, edit.Content, budgets)...)
-		} else if f := factsByPath[edit.Path]; f.lang != "" && f.lang != "Markdown" && f.lang != "Text" {
-			violations = append(violations, genericEditComplexityViolations(edit.Path, edit.Content, budgets)...)
+		case hasFunctions(factsByPath[edit.Path].lang):
+			notChecked = append(notChecked, filepath.ToSlash(edit.Path))
 		}
+	}
+	note := ""
+	if len(notChecked) > 0 {
+		note = fmt.Sprintf("Function complexity and length not checked in %s: no parser for that language yet; file lines were checked.", strings.Join(notChecked, ", "))
 	}
 	if len(violations) > 0 {
 		return CheckResult{
 			Name:     "complexity gate",
 			Required: true,
 			State:    CheckFailed,
-			Output:   strings.Join(violations, "\n"),
+			Output:   strings.TrimSpace(strings.Join(violations, "\n") + "\n" + note),
 		}
 	}
 	return CheckResult{
 		Name:     "complexity gate",
 		Required: true,
 		State:    CheckPassed,
-		Output:   fmt.Sprintf("All proposed files are within the cyclomatic complexity budget (<= %d).", budgets.maxComplexity),
+		Output:   strings.TrimSpace(fmt.Sprintf("All proposed files are within the budgets (function complexity <= %d). %s", budgets.maxComplexity, note)),
 	}
+}
+
+// dataLanguages have no functions to measure.
+var dataLanguages = map[string]bool{
+	"Text": true, "Markdown": true, "YAML": true, "JSON": true, "TOML": true, "INI": true, "Config": true,
+	"XML": true, "HTML": true, "CSS": true, "SCSS": true, "GraphQL": true, "Protobuf": true,
+	"Terraform": true, "HCL": true, "Dockerfile": true, "Makefile": true, "CMake": true,
+}
+
+// hasFunctions reports a programming language whose functions a parser
+// could measure; Go is measured, the others are reported as not checked.
+func hasFunctions(lang string) bool {
+	return lang != "" && !dataLanguages[lang]
 }
 
 func fileLineBudgetViolations(edit ChangeEdit, budgets architectureQualityBudgets) []string {
@@ -458,38 +470,6 @@ func goEditComplexityViolations(path, content string, budgets architectureQualit
 		}
 	}
 	return violations
-}
-
-func genericEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 {
-		return nil
-	}
-	var violations []string
-	complexity := genericSpanComplexity(lines, 1, len(lines))
-	if complexity > budgets.maxComplexity {
-		violations = append(violations, fmt.Sprintf("%s:1: file has cyclomatic complexity %d (max %d); split into smaller modules", filepath.ToSlash(path), complexity, budgets.maxComplexity))
-	}
-	return violations
-}
-
-func genericSpanComplexity(lines []string, startLine, endLine int) int {
-	if startLine < 1 || startLine > len(lines) {
-		return 1
-	}
-	if endLine < startLine || endLine > len(lines) {
-		endLine = min(len(lines), startLine+40)
-	}
-	complexity := 1
-	for i := startLine - 1; i < endLine; i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		complexity += len(branchKeywordPattern.FindAllString(trimmed, -1))
-		complexity += strings.Count(trimmed, "&&") + strings.Count(trimmed, "||")
-	}
-	return complexity
 }
 
 func astFunctionComplexity(body *ast.BlockStmt) int {

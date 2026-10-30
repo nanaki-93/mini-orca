@@ -366,19 +366,21 @@ func TestPolyglotArchitectureBoundariesQualityBudgetsAndEcosystemRunners(t *test
 	}
 	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
 	if err != nil || requiredChecksPassed(checked.Checks) {
-		t.Fatalf("expected polyglot architecture and complexity checks to fail, got %+v, err=%v", checked, err)
+		t.Fatalf("expected the polyglot architecture check to fail, got %+v, err=%v", checked, err)
 	}
-	var archFailed, complexityFailed bool
+	// TypeScript functions are not measured until a parser covers them; the
+	// gate says so instead of failing on a whole-file keyword count.
+	var archFailed, complexityNotChecked bool
 	for _, check := range checked.Checks {
 		if check.Name == "architecture boundaries" && check.State == CheckFailed && strings.Contains(check.Output, "src/db") {
 			archFailed = true
 		}
-		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "(max 5)") {
-			complexityFailed = true
+		if check.Name == "complexity gate" && check.State == CheckPassed && strings.Contains(check.Output, "not checked in src/ui/view.ts") {
+			complexityNotChecked = true
 		}
 	}
-	if !archFailed || !complexityFailed {
-		t.Fatalf("expected both polyglot architecture boundaries and custom complexity budget to fail, got %+v", checked.Checks)
+	if !archFailed || !complexityNotChecked {
+		t.Fatalf("expected the polyglot boundary to fail and TypeScript complexity to be reported as not checked, got %+v", checked.Checks)
 	}
 }
 

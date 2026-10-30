@@ -99,6 +99,27 @@ func TestTargetProjectsGetOnlyTheirOwnImportRules(t *testing.T) {
 	}
 }
 
+func TestNonGoFilesAreNotJudgedByAWholeFileKeywordCount(t *testing.T) {
+	var ts strings.Builder
+	for i := 0; i < 20; i++ {
+		ts.WriteString("export function f" + string(rune('a'+i)) + "(x: number) { if (x > 0) { return 1; } return 0; }\n")
+	}
+	edits := []ChangeEdit{
+		{Path: "src/many.ts", Content: ts.String()},
+		{Path: "deploy/config.yaml", Content: "# if this case for while catch\nsteps:\n  - if: always\n  - for: each\n"},
+	}
+	checks := ChangeArchitectureAndComplexityChecks(t.TempDir(), edits)
+	var gate CheckResult
+	for _, check := range checks {
+		if check.Name == "complexity gate" {
+			gate = check
+		}
+	}
+	if gate.State != CheckPassed || !strings.Contains(gate.Output, "not checked") || !strings.Contains(gate.Output, "src/many.ts") || strings.Contains(gate.Output, "deploy/config.yaml") {
+		t.Fatalf("non-Go complexity gate = %+v", gate)
+	}
+}
+
 func TestRepositoryArchitectureBoundaries(t *testing.T) {
 	repoRoot, err := filepath.Abs("../../..")
 	if err != nil {

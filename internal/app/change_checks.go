@@ -392,7 +392,7 @@ func parseTaskRunnerTargets(content string) (string, string) {
 }
 
 func workspaceHasGo(workspace string, edits []ChangeEdit) bool {
-	if changeHasGo(edits) {
+	if archgate.HasGoSourceEdits(edits) {
 		return true
 	}
 	info, err := os.Stat(filepath.Join(workspace, "go.mod"))
