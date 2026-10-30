@@ -119,20 +119,10 @@ func (s *Service) projectDocs(analysis *project.Analysis, index *project.Project
 	return &built, nil
 }
 
+// persistProjectDocs rebuilds the handbook from the current index. Its status
+// is the project overview's: an analysis run does not write the overview, so
+// a completed run never makes the handbook fresh on its own.
 func (s *Service) persistProjectDocs() {
-	s.persistProjectDocsWithStatus("")
-}
-
-func (s *Service) persistProjectDocsForRun(runStatus AnalysisRunStatus) {
-	switch runStatus {
-	case AnalysisRunCompleted, AnalysisRunCompletedEmpty, AnalysisRunPartial:
-		s.persistProjectDocsWithStatus(project.ProjectAnalysisStatusFresh)
-	default:
-		s.persistProjectDocsWithStatus("")
-	}
-}
-
-func (s *Service) persistProjectDocsWithStatus(statusOverride string) {
 	analysis, err := s.manager.Analysis()
 	if err != nil {
 		return
@@ -142,9 +132,6 @@ func (s *Service) persistProjectDocsWithStatus(statusOverride string) {
 		return
 	}
 	docs := project.BuildProjectDocs(*analysis, index)
-	if statusOverride != "" {
-		docs.Status = statusOverride
-	}
 	_ = project.StoreProjectDocsReport(s.manager.Root(), docs)
 }
 

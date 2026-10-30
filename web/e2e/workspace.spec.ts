@@ -202,6 +202,15 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
+test('the handbook says when the project overview is missing and shows recorded decisions', async ({ page }) => {
+  await page.goto('/#/docs/decisions');
+  await expect(page.getByText('No project overview yet')).toBeVisible();
+  await expect(page.getByText(/Sections below come from indexed facts only/)).toBeVisible();
+  const decision = page.locator('.doc-card', { hasText: 'Embed the Web UI in the daemon' });
+  await expect(decision).toContainText('Architecture');
+  await expect(decision).toContainText('Tradeoff: Every UI change needs a rebuilt bundle.');
+});
+
 test('usage lists what agents spent per task and the task shows its own spend', async ({ page }) => {
   await page.goto('/#/settings/usage');
   const table = page.getByRole('table', { name: 'Usage by task' });

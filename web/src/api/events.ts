@@ -13,9 +13,9 @@ export type Connection = 'connecting' | 'live' | 'offline';
 
 const INVALIDATES: Record<string, string[][]> = {
   workflow: [['session'], ['changes'], ['git'], ['usage'], ['quarantine']],
-  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['usage']],
+  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['fileSummary'], ['usage']],
   findings: [['findings'], ['overview']],
-  analysis: [['overview'], ['findings'], ['usage']],
+  analysis: [['overview'], ['findings'], ['fileSummary'], ['usage']],
   features: [['overview']],
   scan: [['scan']],
   agent_settings: [['settings']],

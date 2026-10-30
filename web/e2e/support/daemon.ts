@@ -180,7 +180,8 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/analysis\/selection$/, () => this.selection],
     [/^\/api\/projects\/current\/usage$/, () => data.usage(this.sessions.get('chg-1')!)],
     [/^\/api\/projects\/current\/quarantine$/, () => ({ files: [], skipped: [] })],
-    [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'go', line_count: 3, content: data.fileSource })],
+    [/^\/api\/projects\/current\/files\/info$/, () => ({ path: 'internal/api/handlers/webui.go', content_hash: 'h', language: 'Go', line_count: 3, content: data.fileSource })],
+    [/^\/api\/projects\/current\/files\/analysis$/, () => ({ path: 'internal/api/handlers/webui.go', status: 'fresh', purpose: 'Serves the embedded Web UI bundle.', responsibilities: ['Return index.html for client routes'], side_effects: ['Reads the embedded files'], generated_at: new Date().toISOString() })],
   ];
 
   private readonly posts: [RegExp, Handler][] = [

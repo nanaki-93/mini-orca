@@ -4,16 +4,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, Copy, FileCode2, Folder, FolderOpen, Lightbulb, ListCollapse, PanelRight, Plus, RefreshCw, Search, Sparkles, X } from 'lucide-react';
-import { useFile, useFindings, useIndex, useProject } from '@/api/hooks';
-import type { Finding } from '@/api/types';
-import { useActions, useBusy, type FileAnalysis, type FileExplanation } from '@/app/actions';
+import { useFile, useFileSummary, useFindings, useIndex, useProject } from '@/api/hooks';
+import type { FileInfo, Finding } from '@/api/types';
+import { useActions, useBusy, type FileExplanation } from '@/app/actions';
 import { useCheckout } from '@/app/checkout';
 import { openNewTask, openPalette } from '@/app/store';
 import { setParam, useRoute } from '@/lib/router';
 import { highlightLines } from '@/lib/highlight';
 import { ancestors, buildTree, visibleRows } from '@/lib/tree';
 import { rankItems } from '@/lib/fuzzy';
-import { basename, companionTestPath, dirname, languageOf, plural } from '@/lib/util';
+import { basename, companionTestPath, dirname, explainable, languageOf, plural, timeAgo } from '@/lib/util';
 import { Badge, Button, EmptyState, Highlight, IconButton, Input, Kbd, Skeleton, cx } from '@/components/ui';
 import { FileIcon, SeverityBadge, isOpenFinding } from '@/components/domain';
 import { useFeedback } from '@/components/overlays';
@@ -228,18 +228,20 @@ function Editor({ path, line, inspector }: { path: string; line: number; inspect
           </div>
         )}
       </div>
-      {inspector && info ? <Inspector path={path} findings={findings} hash={info.content_hash} /> : null}
+      {inspector && info ? <Inspector path={path} findings={findings} file={info} /> : null}
     </div>
   );
 }
 
-function Inspector({ path, findings, hash }: { path: string; findings: Finding[]; hash: string }) {
+function Inspector({ path, findings, file }: { path: string; findings: Finding[]; file: FileInfo }) {
   const project = useProject().data;
   const { worktreePath } = useCheckout();
   const actions = useActions();
   const busy = useBusy();
   const { toast } = useFeedback();
-  const [result, setResult] = useState<{ kind: 'explanation'; value: FileExplanation } | { kind: 'analysis'; value: FileAnalysis } | null>(null);
+  const summary = useFileSummary(path).data;
+  const canExplain = explainable(file);
+  const [result, setResult] = useState<FileExplanation | null>(null);
   useEffect(() => setResult(null), [path]);
 
   const newTask = () => {
@@ -254,23 +256,30 @@ function Inspector({ path, findings, hash }: { path: string; findings: Finding[]
         <div className="xs faint truncate" title={path}>{dirname(path) || 'project root'}</div>
         <div className="row-wrap">
           <Button size="sm" variant="primary" icon={Plus} onClick={newTask}>New task with this file</Button>
-          <Button size="sm" icon={Sparkles} onClick={async () => { if (project) setResult((await actions.explainFile(project, worktreePath, { path, content_hash: hash })) ?? null); }} disabled={!project || Boolean(busy)} loading={busy === 'Explaining…'}>Explain</Button>
+          <Button size="sm" icon={Sparkles} onClick={async () => { if (project) setResult((await actions.explainFile(project, worktreePath, { path, content_hash: file.content_hash })) ?? null); }} disabled={!project || !canExplain || Boolean(busy)} loading={busy === 'Explaining…'} title={canExplain ? undefined : 'Explain works on source files'}>Explain</Button>
           <IconButton icon={Copy} label="Copy path" size="sm" onClick={() => { void navigator.clipboard?.writeText(path); toast('Path copied.', 'success'); }} />
         </div>
       </div>
-      {result?.kind === 'explanation' ? (
+      {result ? (
         <div className="inspector-section stack">
           <div className="row"><Lightbulb size={14} aria-hidden /><span className="strong small">Explanation</span><Badge tone="accent">AI</Badge></div>
-          {result.value.summary ? <p className="small">{result.value.summary}</p> : null}
-          {result.value.behavior?.length ? <ul className="small">{result.value.behavior.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
-          {result.value.error_behavior?.length ? (<><div className="xs muted">Errors and edge cases</div><ul className="small">{result.value.error_behavior.map((b, i) => <li key={i}>{b}</li>)}</ul></>) : null}
+          {result.summary ? <p className="small">{result.summary}</p> : null}
+          {result.behavior?.length ? <ul className="small">{result.behavior.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
+          {result.error_behavior?.length ? (<><div className="xs muted">Errors and edge cases</div><ul className="small">{result.error_behavior.map((b, i) => <li key={i}>{b}</li>)}</ul></>) : null}
         </div>
-      ) : result?.kind === 'analysis' && result.value.purpose ? (
-        <div className="inspector-section stack">
-          <div className="row"><Lightbulb size={14} aria-hidden /><span className="strong small">Analysis</span><Badge tone="accent">AI</Badge></div>
-          <p className="small">{result.value.purpose}</p>
-          {result.value.responsibilities?.length ? <ul className="small">{result.value.responsibilities.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
-        </div>
+      ) : null}
+      {summary?.purpose && (summary.status === 'fresh' || summary.status === 'stale') ? (
+        <section className="inspector-section stack" aria-label="File summary">
+          <div className="row">
+            <span className="strong small grow">Summary</span>
+            {summary.status === 'stale' ? <Badge tone="warning">Out of date</Badge> : <Badge tone="accent">AI</Badge>}
+          </div>
+          <p className="small">{summary.purpose}</p>
+          {summary.responsibilities?.length ? <ul className="small">{summary.responsibilities.map((r, i) => <li key={i}>{r}</li>)}</ul> : null}
+          {summary.dependencies?.length ? (<><div className="xs muted">Depends on</div><ul className="small">{summary.dependencies.map((d, i) => <li key={i}>{d}</li>)}</ul></>) : null}
+          {summary.side_effects?.length ? (<><div className="xs muted">Side effects</div><ul className="small">{summary.side_effects.map((e, i) => <li key={i}>{e}</li>)}</ul></>) : null}
+          {summary.generated_at ? <div className="xs faint">From the analysis {timeAgo(summary.generated_at)}</div> : null}
+        </section>
       ) : null}
       <FileStages path={path} />
       <div className="inspector-section">

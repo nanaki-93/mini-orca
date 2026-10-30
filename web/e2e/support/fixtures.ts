@@ -172,9 +172,10 @@ export const overview: Overview = {
   analysis_coverage: { fresh: 402, stale: 21, missing: 8 },
   analysis_run: { status: 'completed', updated_at: ago(180) },
   docs: {
-    status: 'ready',
+    status: 'unavailable',
     context: { purpose: 'A local-first coding assistant.', goal_pursuit: ['Deterministic indexing'], topology: 'Loopback daemon', stack: ['Go', 'React'] },
     components: [{ name: 'App service', layer: 'application', path: 'internal/app', summary: 'Workflow orchestration.' }],
+    decisions: [{ title: 'Embed the Web UI in the daemon', category: 'Architecture', decision: 'Serve the built bundle from the binary.', tradeoff: 'Every UI change needs a rebuilt bundle.' }],
   },
 };
 

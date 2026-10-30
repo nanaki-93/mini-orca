@@ -56,8 +56,8 @@ export function DocsPage({ section }: { section: string }) {
             <>
               {docs.status && docs.status !== 'fresh' && docs.status !== 'completed' ? (
                 <div className="docs-notice">
-                  <Callout tone="warning" title={DOCS_STATUS_TITLES[docs.status] ?? 'The handbook is incomplete'}>
-                    Sections below come from indexed facts only. Run project analysis to write the full handbook.
+                  <Callout tone="warning" title={DOCS_STATUS_TITLES[docs.status] ?? 'The project overview is incomplete'}>
+                    {DOCS_STATUS_DETAILS[docs.status] ?? 'Sections below come from indexed facts only.'}
                   </Callout>
                 </div>
               ) : null}
@@ -111,10 +111,9 @@ function DocsSection({ docs, section }: { docs: ProjectDocs; section: string }) 
           <h1>Decisions</h1>
           {(docs.decisions ?? []).length ? (docs.decisions ?? []).map(d => (
             <section key={d.title} className="doc-card">
-              <div className="row"><h2 className="grow">{d.title}</h2>{d.status ? <Badge>{d.status}</Badge> : null}</div>
-              {d.context ? <p><span className="muted">Context: </span>{d.context}</p> : null}
+              <div className="row"><h2 className="grow">{d.title}</h2>{d.category ? <Badge>{d.category}</Badge> : null}</div>
               {d.decision ? <p><span className="muted">Decision: </span>{d.decision}</p> : null}
-              {d.consequences ? <p><span className="muted">Consequences: </span>{d.consequences}</p> : null}
+              {d.tradeoff ? <p><span className="muted">Tradeoff: </span>{d.tradeoff}</p> : null}
             </section>
           )) : <p className="muted">No decisions were recorded yet.</p>}
         </article>
@@ -209,10 +208,16 @@ function Components({ components }: { components: DocsComponent[] }) {
   );
 }
 
+// The handbook's status is the project overview's: the model-written purpose,
+// architecture and flows. Analysis runs refresh the indexed sections only.
 const DOCS_STATUS_TITLES: Record<string, string> = {
-  failed: 'AI analysis did not complete',
-  stale: 'The handbook is out of date',
-  partial: 'The handbook is partial',
-  missing: 'No handbook yet',
-  running: 'Analysis is writing the handbook',
+  unavailable: 'No project overview yet',
+  failed: 'The project overview could not be written',
+  stale: 'The project overview is out of date',
+};
+
+const DOCS_STATUS_DETAILS: Record<string, string> = {
+  unavailable: 'Sections below come from indexed facts only. The model-written overview of purpose, architecture and flows has not been written for this project.',
+  failed: 'Sections below come from indexed facts only. The analyze model did not return a usable overview.',
+  stale: 'The overview was written for an older version of the code; the indexed sections are current.',
 };

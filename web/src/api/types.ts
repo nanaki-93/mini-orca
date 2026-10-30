@@ -473,6 +473,17 @@ export interface MergePreview {
   state?: string;
 }
 
+/** The summary an analysis run cached for one file; reading it never calls a model. */
+export interface FileSummary {
+  path: string;
+  status: 'fresh' | 'stale' | 'missing' | 'failed' | 'running' | string;
+  purpose?: string;
+  responsibilities?: string[];
+  dependencies?: string[];
+  side_effects?: string[];
+  generated_at?: string;
+}
+
 export interface DocsComponent {
   name: string;
   layer?: string;
@@ -489,7 +500,7 @@ export interface ProjectDocs {
   dependencies?: { name: string; kind?: string; version?: string; source?: string; summary?: string }[];
   components?: DocsComponent[];
   scenarios?: { title: string; trigger?: string; summary?: string; invariant?: string; steps?: { phase?: string; layer?: string; title: string; detail?: string; path?: string }[] }[];
-  decisions?: { title: string; status?: string; context?: string; decision?: string; consequences?: string }[];
+  decisions?: { title: string; category?: string; decision?: string; tradeoff?: string }[];
   runbook?: { label: string; command: string; description?: string }[];
   glossary?: { term: string; definition: string }[];
   updated_at?: string;

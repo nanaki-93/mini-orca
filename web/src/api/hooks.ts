@@ -4,7 +4,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
-  AgentSettings, AnalysisFileSelection, AvailableModels, ProjectSetup, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo,
+  AgentSettings, AnalysisFileSelection, AvailableModels, ProjectSetup, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo, FileSummary,
   FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, QuarantineReport, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
@@ -27,6 +27,7 @@ export const keys = {
   overview: (wt: string) => ['overview', wt] as const,
   settings: (wt: string) => ['settings', wt] as const,
   file: (wt: string, path: string) => ['file', wt, path] as const,
+  fileSummary: (wt: string, path: string) => ['fileSummary', wt, path] as const,
   usage: (wt: string) => ['usage', wt] as const,
   quarantine: (wt: string) => ['quarantine', wt] as const,
 };
@@ -225,6 +226,19 @@ export function useAgentSettings(worktreePath: string, identity: { project_id: s
     queryKey: [...keys.settings(worktreePath), identity?.project_revision],
     queryFn: () => api.get<AgentSettings>(withWorktree('/api/projects/current/agent-settings' + query({ project_id: identity!.project_id, project_revision: identity!.project_revision }), worktreePath)),
     enabled: Boolean(identity?.project_id),
+    retry: false,
+  });
+}
+
+/** The summary the last analysis run cached for a file. Reading it never calls a model. */
+export function useFileSummary(path: string | undefined) {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.fileSummary(worktreePath, path ?? ''), project?.project_revision],
+    queryFn: () => api.get<FileSummary>(withWorktree('/api/projects/current/files/analysis' + query({ path, project_revision: project!.project_revision }), worktreePath)),
+    enabled: Boolean(path && project),
+    staleTime: 30_000,
     retry: false,
   });
 }

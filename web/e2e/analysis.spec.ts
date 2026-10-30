@@ -86,6 +86,10 @@ test('a running analysis can be paused and resumed with a fresh preview', async 
 test('the code inspector shows how analysis went for the open file', async ({ page, daemon }) => {
   daemon.serveRun(analysisRun());
   await page.goto('/#/code?file=internal%2Fapi%2Fhandlers%2Fwebui.go');
+  const summary = page.getByLabel('File summary');
+  await expect(summary).toContainText('Serves the embedded Web UI bundle.');
+  await expect(summary).toContainText('Reads the embedded files');
+  expect(daemon.requests.filter(r => r.method === 'POST' && r.path.includes('/files/'))).toEqual([]);
   const stages = page.getByLabel('Analysis of this file');
   await expect(stages).toContainText('Bugs');
   await expect(stages).toContainText('2 findings');

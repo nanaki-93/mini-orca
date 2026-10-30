@@ -914,16 +914,13 @@ export function useActions() {
     });
   }
 
+  // Explains a source file in any language with the code model and its read-only tools.
   async function explainFile(project: Project, worktreePath: string, file: { path: string; content_hash: string }) {
-    const isGo = file.path.endsWith('.go');
-    const consent = await confirmRemote(isGo ? 'code' : 'bug', `Explaining ${file.path}`);
+    const consent = await confirmRemote('code', `Explaining ${file.path}`);
     if (!consent.ok) return null;
     return guarded('Explaining…', async () => {
       try {
-        if (isGo && file.content_hash) {
-          return { kind: 'explanation' as const, value: await api.post<FileExplanation>(withWorktree('/api/projects/current/files/explanation', worktreePath), { project_id: project.project_id, project_revision: project.project_revision, base_file_hash: file.content_hash, target_path: file.path, confirm_remote_provider: consent.remote }) };
-        }
-        return { kind: 'analysis' as const, value: await api.post<FileAnalysis>(withWorktree('/api/projects/current/files/analysis', worktreePath), { path: file.path, project_revision: project.project_revision, refresh: true, confirm_remote_provider: consent.remote }) };
+        return await api.post<FileExplanation>(withWorktree('/api/projects/current/files/explanation', worktreePath), { project_id: project.project_id, project_revision: project.project_revision, base_file_hash: file.content_hash, target_path: file.path, confirm_remote_provider: consent.remote });
       } catch (err) {
         fail('Explanation failed', err);
         return null;
@@ -940,10 +937,4 @@ export interface FileExplanation {
   inputs?: string[];
   outputs?: string[];
   error_behavior?: string[];
-}
-
-export interface FileAnalysis {
-  status?: string;
-  purpose?: string;
-  responsibilities?: string[];
 }
