@@ -1,0 +1,31 @@
+{
+  "go-sum-evens": {
+    "write": {
+      "stats/stats.go": "package stats\n\n// SumEvens returns the sum of the even numbers in xs.\nfunc SumEvens(xs []int) int {\n\ttotal := 0\n\tfor _, x := range xs {\n\t\tif x%2 != 0 {\n\t\t\tcontinue\n\t\t}\n\t\ttotal += x\n\t}\n\treturn total\n}\n"
+    }
+  },
+  "go-move-format": {
+    "write": {
+      "shop/cart.go": "package shop\n\n// Cart holds items and their prices in cents.\ntype Cart struct {\n\titems map[string]int\n}\n\n// Add adds qty items at price cents each.\nfunc (c *Cart) Add(item string, qty, price int) {\n\tif c.items == nil {\n\t\tc.items = map[string]int{}\n\t}\n\tc.items[item] += qty * price\n}\n\n// Total is the cart's total in cents.\nfunc (c *Cart) Total() int {\n\ttotal := 0\n\tfor _, cents := range c.items {\n\t\ttotal += cents\n\t}\n\treturn total\n}\n\n// Receipt is the total as text.\nfunc (c *Cart) Receipt() string {\n\treturn \"Total: \" + FormatCents(c.Total())\n}\n",
+      "shop/money.go": "package shop\n\nimport \"fmt\"\n\n// FormatCents formats an amount in cents as dollars, such as $0.05.\nfunc FormatCents(cents int) string {\n\treturn fmt.Sprintf(\"$%d.%02d\", cents/100, cents%100)\n}\n"
+    }
+  },
+  "py-slugify": {
+    "write": {
+      "textkit/slug.py": "import re\n\n\ndef slugify(text):\n    \"\"\"Return text as a URL slug.\"\"\"\n    words = re.findall(r\"[a-z0-9]+\", text.lower())\n    return \"-\".join(words)\n"
+    }
+  },
+  "js-dedupe-key": {
+    "write": {
+      "src/dedupe.js": "// dedupe returns the items of list without repeats, keeping the first of\n// each. Items with equal keys are repeats; the key defaults to the item.\nexport function dedupe(list, key = item => item) {\n  const seen = new Set();\n  return list.filter(item => {\n    const k = key(item);\n    if (seen.has(k)) return false;\n    seen.add(k);\n    return true;\n  });\n}\n"
+    }
+  },
+  "go-remove-legacy": {
+    "write": {
+      "geo/point.go": "package geo\n\nimport \"math\"\n\n// Point is a point in the plane.\ntype Point struct{ X, Y float64 }\n\n// Distance is the distance between a and b.\nfunc Distance(a, b Point) float64 {\n\treturn math.Hypot(b.X-a.X, b.Y-a.Y)\n}\n\n// Midpoint is the point halfway between a and b.\nfunc Midpoint(a, b Point) Point {\n\treturn Point{(a.X + b.X) / 2, (a.Y + b.Y) / 2}\n}\n"
+    },
+    "delete": [
+      "geo/legacy.go"
+    ]
+  }
+}

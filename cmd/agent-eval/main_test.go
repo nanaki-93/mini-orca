@@ -59,3 +59,21 @@ func TestAgentEvaluationLiveDisclosurePrecedesAnyRequest(t *testing.T) {
 		t.Fatal(status, diagnostics.String())
 	}
 }
+
+func TestTheCoderSuiteIsLiveOnlyAndDisclosesBeforeDispatch(t *testing.T) {
+	for _, args := range [][]string{{"--suite", "coder"}, {"--suite", "coders", "--mode", "live"}, {"--suite", "coder", "--mode", "live"}} {
+		var output, diagnostics bytes.Buffer
+		if status := run(t.Context(), args, &output, &diagnostics); status != 2 || output.Len() != 0 {
+			t.Fatal(args, status, output.String(), diagnostics.String())
+		}
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("model_scopes:\n  analyze: {provider: pi, model: openai-codex/gpt-5.5}\n  bug: {provider: pi, model: openai-codex/gpt-5.5}\n  code: {provider: pi, model: openai-codex/gpt-5.5}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output, diagnostics bytes.Buffer
+	status := run(t.Context(), []string{"--suite", "coder", "--mode", "live", "--config", path}, &output, &diagnostics)
+	if status != 2 || output.Len() != 0 || !strings.Contains(diagnostics.String(), `"openai-codex/gpt-5.5" (pi)`) || !strings.Contains(diagnostics.String(), "hidden tests run on this machine") || !strings.Contains(diagnostics.String(), "--confirm-live") {
+		t.Fatal(status, diagnostics.String())
+	}
+}

@@ -1,0 +1,156 @@
+{
+  "version": "coder-tasks-v1",
+  "cases": [
+    {
+      "id": "go-sum-evens",
+      "language": "go",
+      "kind": "fix",
+      "title": "SumEvens counts negative odd numbers",
+      "request": "SumEvens in stats/stats.go adds negative odd numbers to the total, for example SumEvens([]int{-3, 2}) returns -1. Fix it so only even numbers are added.",
+      "paths": [
+        "stats/stats.go",
+        "stats/stats_test.go"
+      ],
+      "criteria": [
+        "SumEvens ignores odd numbers, negative ones included.",
+        "SumEvens of no numbers is 0."
+      ],
+      "files": {
+        "go.mod": "module example.test/stats\n\ngo 1.22\n",
+        "stats/stats.go": "package stats\n\n// SumEvens returns the sum of the even numbers in xs.\nfunc SumEvens(xs []int) int {\n\ttotal := 0\n\tfor _, x := range xs {\n\t\tif x%2 == 1 {\n\t\t\tcontinue\n\t\t}\n\t\ttotal += x\n\t}\n\treturn total\n}\n",
+        "stats/stats_test.go": "package stats\n\nimport \"testing\"\n\nfunc TestSumEvens(t *testing.T) {\n\tif got := SumEvens([]int{1, 2, 3, 4}); got != 6 {\n\t\tt.Fatalf(\"SumEvens = %d, want 6\", got)\n\t}\n}\n"
+      },
+      "hidden": {
+        "stats/stats_hidden_test.go": "package stats\n\nimport \"testing\"\n\nfunc TestSumEvensHidden(t *testing.T) {\n\tfor _, c := range []struct {\n\t\tin   []int\n\t\twant int\n\t}{{[]int{-3, 2}, 2}, {[]int{-4, -3, -1, 6}, 2}, {nil, 0}, {[]int{1, 3, 5}, 0}} {\n\t\tif got := SumEvens(c.in); got != c.want {\n\t\t\tt.Errorf(\"SumEvens(%v) = %d, want %d\", c.in, got, c.want)\n\t\t}\n\t}\n}\n"
+      },
+      "test": [
+        "go",
+        "test",
+        "./..."
+      ]
+    },
+    {
+      "id": "go-move-format",
+      "language": "go",
+      "kind": "fix",
+      "title": "Move the money formatting into its own file and fix small amounts",
+      "request": "formatCents in shop/cart.go prints 5 cents as $0.5. Move it into a new file shop/money.go as the exported FormatCents, make amounts below ten cents print with a leading zero ($0.05), and keep Cart.Receipt using it.",
+      "paths": [
+        "shop/cart.go",
+        "shop/cart_test.go"
+      ],
+      "criteria": [
+        "FormatCents is declared in shop/money.go and formatCents no longer exists.",
+        "FormatCents(5) is $0.05 and FormatCents(1234) is $12.34.",
+        "Cart.Receipt formats its total with FormatCents."
+      ],
+      "files": {
+        "go.mod": "module example.test/shop\n\ngo 1.22\n",
+        "shop/cart.go": "package shop\n\nimport \"fmt\"\n\n// Cart holds items and their prices in cents.\ntype Cart struct {\n\titems map[string]int\n}\n\n// Add adds qty items at price cents each.\nfunc (c *Cart) Add(item string, qty, price int) {\n\tif c.items == nil {\n\t\tc.items = map[string]int{}\n\t}\n\tc.items[item] += qty * price\n}\n\n// Total is the cart's total in cents.\nfunc (c *Cart) Total() int {\n\ttotal := 0\n\tfor _, cents := range c.items {\n\t\ttotal += cents\n\t}\n\treturn total\n}\n\n// Receipt is the total as text.\nfunc (c *Cart) Receipt() string {\n\treturn \"Total: \" + formatCents(c.Total())\n}\n\nfunc formatCents(cents int) string {\n\treturn fmt.Sprintf(\"$%d.%d\", cents/100, cents%100)\n}\n",
+        "shop/cart_test.go": "package shop\n\nimport \"testing\"\n\nfunc TestReceipt(t *testing.T) {\n\tvar c Cart\n\tc.Add(\"pen\", 2, 150)\n\tif got := c.Receipt(); got != \"Total: $3.0\" && got != \"Total: $3.00\" {\n\t\tt.Fatalf(\"Receipt = %q\", got)\n\t}\n}\n"
+      },
+      "hidden": {
+        "shop/money_hidden_test.go": "package shop\n\nimport (\n\t\"os\"\n\t\"strings\"\n\t\"testing\"\n)\n\nfunc TestFormatCentsHidden(t *testing.T) {\n\tfor cents, want := range map[int]string{5: \"$0.05\", 1234: \"$12.34\", 100: \"$1.00\", 0: \"$0.00\"} {\n\t\tif got := FormatCents(cents); got != want {\n\t\t\tt.Errorf(\"FormatCents(%d) = %q, want %q\", cents, got, want)\n\t\t}\n\t}\n\tdata, err := os.ReadFile(\"money.go\")\n\tif err != nil || !strings.Contains(string(data), \"func FormatCents(\") {\n\t\tt.Fatalf(\"money.go does not declare FormatCents: %v\", err)\n\t}\n\tcart, _ := os.ReadFile(\"cart.go\")\n\tif strings.Contains(string(cart), \"func formatCents(\") {\n\t\tt.Fatal(\"formatCents is still in cart.go\")\n\t}\n\tvar c Cart\n\tc.Add(\"pen\", 1, 5)\n\tif got := c.Receipt(); got != \"Total: $0.05\" {\n\t\tt.Fatalf(\"Receipt = %q\", got)\n\t}\n}\n"
+      },
+      "test": [
+        "go",
+        "test",
+        "./..."
+      ]
+    },
+    {
+      "id": "py-slugify",
+      "language": "python",
+      "kind": "fix",
+      "title": "slugify keeps punctuation and repeated separators",
+      "request": "slugify in textkit/slug.py keeps punctuation and turns repeated spaces into repeated hyphens: slugify('Hello,  World!') returns 'hello,--world!'. It should return 'hello-world': lowercase letters and digits, words joined by single hyphens, no hyphen at either end.",
+      "paths": [
+        "textkit/slug.py",
+        "tests/test_slug.py"
+      ],
+      "criteria": [
+        "Punctuation is dropped.",
+        "Runs of spaces, hyphens and underscores become one hyphen.",
+        "No hyphen at the start or the end."
+      ],
+      "files": {
+        "AGENTS.md": "# textkit\n\n```mini-orca\nchecks:\n  test: python3 -m unittest discover -s tests -t . -q\n```\n",
+        "textkit/__init__.py": "",
+        "textkit/slug.py": "def slugify(text):\n    \"\"\"Return text as a URL slug.\"\"\"\n    return text.lower().replace(\" \", \"-\")\n",
+        "tests/__init__.py": "",
+        "tests/test_slug.py": "import unittest\n\nfrom textkit.slug import slugify\n\n\nclass SlugTest(unittest.TestCase):\n    def test_words(self):\n        self.assertEqual(slugify(\"Hello World\"), \"hello-world\")\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "hidden": {
+        "tests/test_hidden.py": "import unittest\n\nfrom textkit.slug import slugify\n\n\nclass HiddenSlugTest(unittest.TestCase):\n    def test_cases(self):\n        for text, want in [(\"Hello,  World!\", \"hello-world\"), (\"  --Mini Orca__v2-- \", \"mini-orca-v2\"), (\"\", \"\"), (\"A\", \"a\")]:\n            self.assertEqual(slugify(text), want, text)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "test": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-t",
+        ".",
+        "-q"
+      ]
+    },
+    {
+      "id": "js-dedupe-key",
+      "language": "javascript",
+      "kind": "feature",
+      "title": "dedupe by a key",
+      "request": "Give dedupe in src/dedupe.js an optional second argument, a key function: items whose keys are equal are repeats. Keep the first of each and the original order. Without a key function it keeps working as today.",
+      "paths": [
+        "src/dedupe.js",
+        "test/dedupe.test.js"
+      ],
+      "criteria": [
+        "dedupe(list, key) keeps the first item for each key, in order.",
+        "dedupe(list) without a key behaves as before."
+      ],
+      "files": {
+        "package.json": "{\n  \"name\": \"dedupe\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": { \"test\": \"node --test\" }\n}\n",
+        "src/dedupe.js": "// dedupe returns the items of list without repeats, keeping the first of each.\nexport function dedupe(list) {\n  return [...new Set(list)];\n}\n",
+        "test/dedupe.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { dedupe } from '../src/dedupe.js';\n\ntest('drops repeats', () => {\n  assert.deepEqual(dedupe([1, 2, 1, 3]), [1, 2, 3]);\n});\n"
+      },
+      "hidden": {
+        "test/hidden.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { dedupe } from '../src/dedupe.js';\n\ntest('dedupes by key, keeping the first in order', () => {\n  const people = [{ id: 2, n: 'a' }, { id: 1, n: 'b' }, { id: 2, n: 'c' }];\n  assert.deepEqual(dedupe(people, p => p.id), [{ id: 2, n: 'a' }, { id: 1, n: 'b' }]);\n  assert.deepEqual(dedupe(['A', 'a', 'b'], s => s.toLowerCase()), ['A', 'b']);\n  assert.deepEqual(dedupe([3, 3, 1]), [3, 1]);\n  assert.deepEqual(dedupe([]), []);\n});\n"
+      },
+      "test": [
+        "node",
+        "--test"
+      ]
+    },
+    {
+      "id": "go-remove-legacy",
+      "language": "go",
+      "kind": "feature",
+      "title": "Drop the legacy distance and add Midpoint",
+      "request": "geo/legacy.go holds OldDistance, which nothing uses any more. Delete that file, and add Midpoint(a, b Point) Point to geo/point.go, returning the point halfway between a and b.",
+      "paths": [
+        "geo/point.go",
+        "geo/legacy.go",
+        "geo/point_test.go"
+      ],
+      "criteria": [
+        "geo/legacy.go is deleted.",
+        "Midpoint returns the point halfway between a and b."
+      ],
+      "files": {
+        "go.mod": "module example.test/geo\n\ngo 1.22\n",
+        "geo/point.go": "package geo\n\nimport \"math\"\n\n// Point is a point in the plane.\ntype Point struct{ X, Y float64 }\n\n// Distance is the distance between a and b.\nfunc Distance(a, b Point) float64 {\n\treturn math.Hypot(b.X-a.X, b.Y-a.Y)\n}\n",
+        "geo/legacy.go": "package geo\n\n// OldDistance is the distance between a and b without the square root.\n//\n// Deprecated: use Distance.\nfunc OldDistance(a, b Point) float64 {\n\treturn (b.X-a.X)*(b.X-a.X) + (b.Y - a.Y)\n}\n",
+        "geo/point_test.go": "package geo\n\nimport \"testing\"\n\nfunc TestDistance(t *testing.T) {\n\tif got := Distance(Point{0, 0}, Point{3, 4}); got != 5 {\n\t\tt.Fatalf(\"Distance = %v\", got)\n\t}\n}\n"
+      },
+      "hidden": {
+        "geo/hidden_test.go": "package geo\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestMidpointHidden(t *testing.T) {\n\tif got := Midpoint(Point{0, 0}, Point{4, -2}); got != (Point{2, -1}) {\n\t\tt.Fatalf(\"Midpoint = %v\", got)\n\t}\n\tif _, err := os.Stat(\"legacy.go\"); !os.IsNotExist(err) {\n\t\tt.Fatalf(\"legacy.go still exists: %v\", err)\n\t}\n}\n"
+      },
+      "test": [
+        "go",
+        "test",
+        "./..."
+      ]
+    }
+  ]
+}

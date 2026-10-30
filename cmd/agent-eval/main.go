@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/agenteval"
@@ -24,6 +25,7 @@ func main() {
 
 type commandOptions struct {
 	mode, configPath, caseID string
+	suite, coders            string
 	confirm                  bool
 	requests                 int
 	input, output            int64
@@ -34,6 +36,8 @@ func parseOptions(args []string, diagnostics io.Writer) (commandOptions, error) 
 	flags := flag.NewFlagSet("agent-eval", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
 	flags.StringVar(&options.mode, "mode", "replay", "replay or live; replay sends only to its owned loopback fixture")
+	flags.StringVar(&options.suite, "suite", "agent", "agent (the investigator corpus) or coder (the tool-using and one-shot coders on small tasks in several languages; live only)")
+	flags.StringVar(&options.coders, "coders", agenteval.CoderTools+","+agenteval.CoderOneShot, "coder suite: the coders to run and compare")
 	flags.StringVar(&options.configPath, "config", "", "live model configuration; uses the function scope")
 	flags.StringVar(&options.caseID, "case", "", "one fixed corpus case; empty selects all eligible cases")
 	flags.BoolVar(&options.confirm, "confirm-live", false, "confirm sending only the embedded synthetic corpus to the configured provider")
@@ -48,6 +52,12 @@ func parseOptions(args []string, diagnostics io.Writer) (commandOptions, error) 
 	}
 	if options.mode != "live" && options.mode != "replay" {
 		return options, fmt.Errorf("mode must be replay or live")
+	}
+	if options.suite != "agent" && options.suite != "coder" {
+		return options, fmt.Errorf("suite must be agent or coder")
+	}
+	if options.suite == "coder" && options.mode != "live" {
+		return options, fmt.Errorf("the coder suite runs live models: add --mode live")
 	}
 	if options.mode == "replay" && (options.configPath != "" || options.confirm) {
 		return options, fmt.Errorf("replay does not accept live configuration or confirmation")
@@ -66,6 +76,9 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) int 
 		}
 		fmt.Fprintln(diagnostics, err)
 		return 2
+	}
+	if options.suite == "coder" {
+		return runCoderSuite(ctx, options, output, diagnostics)
 	}
 	input, err := evaluationOptions(options, diagnostics)
 	if err != nil {
@@ -123,4 +136,53 @@ func evaluationOptions(options commandOptions, diagnostics io.Writer) (agenteval
 	}
 	result.Confirmed = true
 	return result, nil
+}
+
+// runCoderSuite compares the coders on the embedded coder corpus. Each task
+// runs in a scratch Git repository; the coders' code and the hidden tests
+// run on this machine, so the disclosure precedes any model request.
+func runCoderSuite(ctx context.Context, options commandOptions, output, diagnostics io.Writer) int {
+	if options.configPath == "" {
+		fmt.Fprintln(diagnostics, "the coder suite requires --config")
+		return 2
+	}
+	cfg, err := config.LoadFromYAML(options.configPath)
+	if err != nil {
+		fmt.Fprintln(diagnostics, "load evaluation configuration failed")
+		return 2
+	}
+	version, digest := agenteval.CoderCorpusIdentity()
+	coders := strings.Split(options.coders, ",")
+	fmt.Fprintf(diagnostics, "Coder suite: embedded corpus %s (%s). Coders: %s, on the bug profile's model %q (%s). Each task runs in a scratch Git repository; the coders' changes and the tasks' hidden tests run on this machine (go, python3 and node as the tasks need).\n",
+		version, digest, strings.Join(coders, ", "), cfg.ModelScopes.Bug.Model, cfg.ModelScopes.Bug.Provider)
+	if !options.confirm {
+		fmt.Fprintln(diagnostics, "inspect this disclosure and add --confirm-live to dispatch")
+		return 2
+	}
+	trust, err := os.MkdirTemp("", "mini-orca-coder-eval-trust-")
+	if err != nil {
+		fmt.Fprintln(diagnostics, err)
+		return 2
+	}
+	defer os.RemoveAll(trust)
+	// The scratch projects' execution trust never reaches the user's own store.
+	if err := os.Setenv("MINI_ORCA_TRUST_DIR", trust); err != nil {
+		fmt.Fprintln(diagnostics, err)
+		return 2
+	}
+	receipt, err := agenteval.RunCoders(ctx, agenteval.CoderOptions{Config: cfg, CaseID: options.caseID, Coders: coders, Confirmed: true})
+	if err != nil {
+		fmt.Fprintln(diagnostics, err)
+		return 2
+	}
+	encoder := json.NewEncoder(output)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(receipt); err != nil {
+		fmt.Fprintln(diagnostics, "write evaluation receipt failed")
+		return 2
+	}
+	if receipt.ToolsAtLeastAsGood != nil && !*receipt.ToolsAtLeastAsGood {
+		return 1
+	}
+	return 0
 }
