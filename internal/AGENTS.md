@@ -17,7 +17,8 @@ the backend guide for changes to `cmd/`.
   `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`;
   `internal/app/archgate`, `internal/app/sandbox`, `internal/app/changes`,
   `internal/app/gitops`, `internal/app/features`).
-  Subpackages must respect the acyclic import rules enforced by `internal/app/archgate`.
+  Subpackages must respect the acyclic import rules declared in the root `AGENTS.md`
+  and enforced by `internal/app/archgate`.
 - Keep ADK imports in `internal/app/agentruntime`; pass admitted host operations
   into that leaf package. Its parent `app` retains consent, retries, source
   identity, publication and Apply/Undo authority. Keep SDK types out of wire DTOs

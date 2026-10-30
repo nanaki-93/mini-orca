@@ -77,73 +77,6 @@ type architectureQualityBudgets struct {
 	maxFileLines     int
 }
 
-var defaultArchitectureImportRules = []architectureImportRule{
-	{
-		sourcePrefix: "internal/api",
-		forbidden:    []string{"internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project",
-		forbidden:    []string{"internal/app", "internal/api"},
-	},
-	{
-		sourcePrefix: "internal/project/diff",
-		forbidden:    []string{"internal/project/symbols", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project/symbols",
-		forbidden:    []string{"internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project/insight",
-		forbidden:    []string{"internal/project/diff", "internal/project/handbook", "internal/project/securityrules", "internal/project/instructions", "internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project/handbook",
-		forbidden:    []string{"internal/project/diff", "internal/project/securityrules", "internal/project/instructions", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project/securityrules",
-		forbidden:    []string{"internal/project/diff", "internal/project/handbook", "internal/project/instructions", "internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/project/instructions",
-		forbidden:    []string{"internal/project/diff", "internal/project/insight", "internal/project/handbook", "internal/project/securityrules", "internal/storage", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/app",
-		forbidden:    []string{"internal/api"},
-	},
-	{
-		sourcePrefix: "internal/app/agentruntime",
-		forbidden:    []string{"internal/project", "internal/storage"},
-	},
-	{
-		sourcePrefix: "internal/app/agentstate",
-		forbidden:    []string{"internal/app", "internal/project", "internal/llm"},
-	},
-	{
-		sourcePrefix: "internal/app/archgate",
-		forbidden:    []string{"internal/app/sandbox", "internal/app/gitops", "internal/app/features", "internal/app/changes", "internal/llm", "internal/storage"},
-	},
-	{
-		sourcePrefix: "internal/app/sandbox",
-		forbidden:    []string{"internal/app/gitops", "internal/app/features", "internal/app/changes", "internal/llm", "internal/storage"},
-	},
-	{
-		sourcePrefix: "internal/app/gitops",
-		forbidden:    []string{"internal/app/archgate", "internal/app/features", "internal/app/changes", "internal/llm", "internal/storage"},
-	},
-	{
-		sourcePrefix: "internal/app/features",
-		forbidden:    []string{"internal/app/archgate", "internal/app/gitops"},
-	},
-	{
-		sourcePrefix: "internal/app/changes",
-		forbidden:    []string{"internal/app/archgate", "internal/app/gitops", "internal/llm"},
-	},
-}
-
 type parsedEditFacts struct {
 	lang       string
 	rawImports []string
@@ -172,8 +105,9 @@ func ChangeHasGo(edits []ChangeEdit) bool {
 	return HasGoSourceEdits(edits)
 }
 
-// ChangeArchitectureAndComplexityChecks evaluates proposed edits against
-// architecture import boundary rules and cyclomatic complexity / line budgets.
+// ChangeArchitectureAndComplexityChecks evaluates proposed edits against the
+// import boundary rules and complexity / line budgets that the project's own
+// AGENTS.md declares. A project that declares none gets no import rules.
 func ChangeArchitectureAndComplexityChecks(root string, edits []ChangeEdit) []CheckResult {
 	if len(edits) == 0 {
 		return nil
@@ -204,9 +138,6 @@ func extractAllEditFacts(edits []ChangeEdit) map[string]parsedEditFacts {
 
 func loadArchitecturePolicy(root string) ([]architectureImportRule, architectureQualityBudgets) {
 	var rules []architectureImportRule
-	for _, r := range defaultArchitectureImportRules {
-		rules = appendUniqueImportRule(rules, r)
-	}
 	budgets := architectureQualityBudgets{maxComplexity: maxFunctionComplexity}
 	if strings.TrimSpace(root) == "" {
 		return rules, budgets
@@ -355,7 +286,7 @@ func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule,
 	if len(imports) == 0 {
 		return nil
 	}
-	violations := agentRuntimeImportViolations(slashPath, imports)
+	var violations []string
 	seen := map[string]bool{}
 	for _, rule := range rules {
 		if !pathMatchesPrefix(slashPath, rule.sourcePrefix) {
@@ -374,29 +305,6 @@ func editArchitectureViolations(edit ChangeEdit, rules []architectureImportRule,
 		}
 	}
 	return violations
-}
-
-// SDK types stay behind the runtime boundary. Match the parent package exactly
-// so a runtime adapter can still use the independent agentstate store.
-func agentRuntimeImportViolations(path string, imports []string) []string {
-	if !hasRuntimeBoundary(path) {
-		return nil
-	}
-	isRuntime := pathMatchesPrefix(path, "internal/app/agentruntime")
-	var violations []string
-	for _, imported := range imports {
-		if isRuntime && (imported == "internal/app" || strings.HasSuffix(imported, "/internal/app")) {
-			violations = append(violations, fmt.Sprintf("%s imports %q: agentruntime must not import its app parent", path, imported))
-		}
-		if !isRuntime && (importMatchesForbidden(imported, "google.golang.org/adk") || importMatchesForbidden(imported, "google.golang.org/genai")) {
-			violations = append(violations, fmt.Sprintf("%s imports %q: ADK and GenAI imports belong in internal/app/agentruntime", path, imported))
-		}
-	}
-	return violations
-}
-
-func hasRuntimeBoundary(path string) bool {
-	return pathMatchesPrefix(path, "internal") || pathMatchesPrefix(path, "cmd")
 }
 
 func pathMatchesPrefix(slashPath, prefix string) bool {

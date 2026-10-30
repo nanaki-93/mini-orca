@@ -35,6 +35,25 @@ paths, with diff review, explicit Apply and guarded Undo.
 - `internal/insighteval/` and `internal/agenteval/` own engineering-insight and synthetic task/trajectory evaluation, separate from normal app use. Replay evidence must not be presented as live model quality or cost improvement.
 - `web/` owns the browser workspace (React + TypeScript): server state through TanStack Query, pages under `src/features`, shared pieces under `src/components`. Its built bundle in `internal/api/handlers/webui/dist` is embedded by `internal/api/handlers`.
 
+Import boundaries, enforced by the architecture gate and by
+`TestRepositoryArchitectureBoundaries` (one rule per line):
+
+- `internal/app` must never import `internal/api`.
+- `internal/app/agentruntime` must never import `internal/project` or `internal/storage`.
+- `internal/app/agentstate` must never import `internal/app`, `internal/project` or `internal/llm`.
+- `internal/app/archgate` must never import `internal/app/sandbox`, `internal/app/gitops`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
+- `internal/app/sandbox` must never import `internal/app/gitops`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
+- `internal/app/gitops` must never import `internal/app/archgate`, `internal/app/features`, `internal/app/changes`, `internal/llm` or `internal/storage`.
+- `internal/app/features` must never import `internal/app/archgate` or `internal/app/gitops`.
+- `internal/app/changes` must never import `internal/app/archgate`, `internal/app/gitops` or `internal/llm`.
+- `internal/project/diff` must never import `internal/project/symbols`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
+- `internal/project/symbols` must never import `internal/project/diff`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
+- `internal/project/insight` must never import `internal/project/diff`, `internal/project/handbook`, `internal/project/securityrules`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
+- `internal/project/handbook` must never import `internal/project/diff`, `internal/project/securityrules`, `internal/project/instructions` or `internal/llm`.
+- `internal/project/securityrules` must never import `internal/project/diff`, `internal/project/handbook`, `internal/project/instructions`, `internal/storage` or `internal/llm`.
+- `internal/project/instructions` must never import `internal/project/diff`, `internal/project/insight`, `internal/project/handbook`, `internal/project/securityrules`, `internal/storage` or `internal/llm`.
+- Only `internal/app/agentruntime` imports `google.golang.org/adk` and `google.golang.org/genai`, and it never imports its parent `internal/app` (`TestAgentRuntimeImportBoundary`).
+
 ## Workspace & commit conventions
 
 - Before editing or creating files in a subdirectory or submodule, check for a local `AGENTS.md`; local instructions override root rules for module style and tests.

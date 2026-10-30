@@ -79,6 +79,26 @@ func TestFileLineCountIgnoresTheFinalNewline(t *testing.T) {
 	}
 }
 
+func TestTargetProjectsGetOnlyTheirOwnImportRules(t *testing.T) {
+	root := t.TempDir()
+	edits := []ChangeEdit{
+		{Path: "internal/api/handler.go", Content: "package api\nimport _ \"example.test/target/internal/storage\"\n"},
+		{Path: "internal/app/service.go", Content: "package app\nimport _ \"google.golang.org/adk/v2/runner\"\n"},
+	}
+	for _, check := range ChangeArchitectureAndComplexityChecks(root, edits) {
+		if check.Name == "architecture boundaries" && check.State != CheckPassed {
+			t.Fatalf("a project without import rules got Mini-Orca's own: %+v", check)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("- `internal/api` must never import `internal/storage`.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	checks := ChangeArchitectureAndComplexityChecks(root, edits)
+	if len(checks) == 0 || checks[0].State != CheckFailed || !strings.Contains(checks[0].Output, "internal/api must never import internal/storage") || strings.Contains(checks[0].Output, "adk") {
+		t.Fatalf("declared rule = %+v", checks)
+	}
+}
+
 func TestRepositoryArchitectureBoundaries(t *testing.T) {
 	repoRoot, err := filepath.Abs("../../..")
 	if err != nil {
@@ -118,6 +138,11 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 			t.Fatalf("repository check %q failed:\n%s", check.Name, check.Output)
 		}
 	}
+	for _, edit := range prodEdits {
+		if violations := adkBoundaryViolations(edit.Path, extractEditImports(edit.Path, edit.Content, nil)); len(violations) > 0 {
+			t.Fatalf("repository ADK boundary:\n%s", strings.Join(violations, "\n"))
+		}
+	}
 
 	violationChecks := ChangeArchitectureAndComplexityChecks(repoRoot, []ChangeEdit{
 		{
@@ -142,7 +167,32 @@ func TestRepositoryArchitectureBoundaries(t *testing.T) {
 	}
 }
 
+// adkBoundaryViolations checks Mini-Orca's own runtime boundary, which no
+// target project shares: SDK types stay in internal/app/agentruntime, and that
+// leaf never imports its parent internal/app (the independent agentstate store
+// is allowed).
+func adkBoundaryViolations(path string, imports []string) []string {
+	if !pathMatchesPrefix(path, "internal") && !pathMatchesPrefix(path, "cmd") {
+		return nil
+	}
+	isRuntime := pathMatchesPrefix(path, "internal/app/agentruntime")
+	var violations []string
+	for _, imported := range imports {
+		if isRuntime && (imported == "internal/app" || strings.HasSuffix(imported, "/internal/app")) {
+			violations = append(violations, path+" imports "+imported+": agentruntime must not import its app parent")
+		}
+		if !isRuntime && (importMatchesForbidden(imported, "google.golang.org/adk") || importMatchesForbidden(imported, "google.golang.org/genai")) {
+			violations = append(violations, path+" imports "+imported+": ADK and GenAI imports belong in internal/app/agentruntime")
+		}
+	}
+	return violations
+}
+
 func TestAgentRuntimeImportBoundary(t *testing.T) {
+	repoRoot, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
 		path, imported string
 		allowed        bool
@@ -167,11 +217,12 @@ func TestAgentRuntimeImportBoundary(t *testing.T) {
 		{"main.go", "google.golang.org/adk/v2/runner", true},
 	} {
 		t.Run(test.path+"/"+test.imported, func(t *testing.T) {
-			checks := ChangeArchitectureAndComplexityChecks("", []ChangeEdit{{
-				Path: test.path, Content: "package fixture\nimport _ \"" + test.imported + "\"\n",
-			}})
-			if len(checks) == 0 || (checks[0].State == CheckPassed) != test.allowed {
-				t.Fatalf("allowed=%v, checks=%+v", test.allowed, checks)
+			edit := ChangeEdit{Path: test.path, Content: "package fixture\nimport _ \"" + test.imported + "\"\n"}
+			checks := ChangeArchitectureAndComplexityChecks(repoRoot, []ChangeEdit{edit})
+			violations := adkBoundaryViolations(edit.Path, extractEditImports(edit.Path, edit.Content, nil))
+			allowed := len(checks) > 0 && checks[0].State == CheckPassed && len(violations) == 0
+			if allowed != test.allowed {
+				t.Fatalf("allowed=%v, checks=%+v, ADK boundary=%v", test.allowed, checks, violations)
 			}
 		})
 	}
