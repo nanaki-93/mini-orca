@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -38,7 +39,13 @@ MODELS
 	if err := os.WriteFile(agyCommand, []byte(agyScript), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Claude Code has no catalog command: an installed executable lists its aliases.
+	claudeCommand := filepath.Join(t.TempDir(), "fake-claude")
+	if err := os.WriteFile(claudeCommand, []byte("#!/bin/sh\nexit 8\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
+	cfg.ModelScopes.Bug = config.ModelProfileConfig{Provider: config.ClaudeProvider, CLIPath: claudeCommand, Model: "sonnet"}
 	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: agyCommand, Model: "configured-agy"}
 	cfg.ModelScopes.Code = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: command, Model: "local-server/default"}
 	service, err := app.New(cfg, manager)
@@ -55,13 +62,13 @@ MODELS
 			continue
 		}
 		var catalog app.AvailableModels
-		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" {
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" || catalog.Claude.Status != "ready" {
 			t.Fatalf("catalog response = %d: %s", response.Code, response.Body.String())
 		}
-		if len(catalog.Defaults) != 3 || len(catalog.Models) != 5 || catalog.Models[0].ID != "agy:gemini-new-high" || catalog.Models[len(catalog.Models)-1].ID != "pi:local-server/qwen" {
+		if len(catalog.Defaults) != 3 || len(catalog.Models) != 9 || catalog.Models[0].ID != "agy:gemini-new-high" || catalog.Models[4].ID != "claude:sonnet" || catalog.Models[len(catalog.Models)-1].ID != "pi:local-server/qwen" {
 			t.Fatalf("missing catalog data: %+v", catalog)
 		}
-		if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), command) || strings.Contains(response.Body.String(), agyCommand) {
+		if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), command) || strings.Contains(response.Body.String(), agyCommand) || strings.Contains(response.Body.String(), claudeCommand) {
 			t.Fatal("catalog exposed credentials or executable path")
 		}
 	}
@@ -71,16 +78,16 @@ MODELS
 	response := httptest.NewRecorder()
 	NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available", nil))
 	var catalog app.AvailableModels
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "ready" || len(catalog.Models) != 4 {
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "ready" || len(catalog.Models) != 8 {
 		t.Fatalf("configured models lost when Pi unavailable: %s", response.Body.String())
 	}
-	if err := os.Remove(agyCommand); err != nil {
+	if err := errors.Join(os.Remove(agyCommand), os.Remove(claudeCommand)); err != nil {
 		t.Fatal(err)
 	}
 	response = httptest.NewRecorder()
 	NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available", nil))
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "unavailable" || len(catalog.Models) != 3 {
-		t.Fatalf("configured models lost when both CLIs unavailable: %s", response.Body.String())
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "unavailable" || catalog.Claude.Status != "unavailable" || len(catalog.Models) != 3 {
+		t.Fatalf("configured models lost when every CLI is unavailable: %s", response.Body.String())
 	}
 }
 

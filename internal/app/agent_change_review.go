@@ -121,7 +121,7 @@ func validateSpecialistReport(report ChangeSpecialistReview) error {
 		return fmt.Errorf("specialist advice cannot claim verified evidence")
 	}
 	switch report.Status {
-	case "pending", "running", "failed", "canceled", "stale", "interrupted", "skipped":
+	case "pending", "running", "failed", "canceled", "stale", "interrupted", "skipped", "paused":
 		if report.Review != nil {
 			return fmt.Errorf("incomplete specialist has a completed review")
 		}

@@ -22,6 +22,7 @@ func (s *Service) AvailableModels(ctx context.Context) (AvailableModels, error) 
 	}{
 		{provider: config.PiProvider, name: "Pi", status: &catalog.Pi},
 		{provider: config.AgyProvider, name: "Agy", status: &catalog.Agy},
+		{provider: config.ClaudeProvider, name: "Claude Code", status: &catalog.Claude},
 	}
 	var wg sync.WaitGroup
 	wg.Add(len(discoveries))
@@ -96,6 +97,16 @@ func (s *Service) discoverModelChoices(ctx context.Context, provider config.Mode
 		choices := make([]ModelChoice, 0, len(models))
 		for _, model := range models {
 			choices = append(choices, s.catalogModelChoice("agy:"+model.ID, model.Name, "agy", "agy", "unknown"))
+		}
+		return choices, nil
+	case config.ClaudeProvider:
+		models, err := s.discoverClaudeModels(ctx, s.cliExecutable(provider))
+		if err != nil {
+			return nil, err
+		}
+		choices := make([]ModelChoice, 0, len(models))
+		for _, model := range models {
+			choices = append(choices, s.catalogModelChoice("claude:"+model.ID, model.Name, "anthropic", "claude", "remote"))
 		}
 		return choices, nil
 	default:

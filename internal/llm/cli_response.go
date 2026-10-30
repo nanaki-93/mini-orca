@@ -20,6 +20,8 @@ type cliResponseDecoder struct {
 	response *ChatResponse
 	started  bool
 	finished bool
+	// claude follows Claude Code's stream; its completion has no tools.
+	claude *claudeStream
 }
 
 type agyStepEvent struct {
@@ -35,14 +37,20 @@ func decodeCLIResponse(profile config.ModelProfile, output []byte) (*ChatRespons
 			continue
 		}
 		var err error
-		if profile.Provider == config.AgyProvider {
+		switch profile.Provider {
+		case config.AgyProvider:
 			err = decoder.agyEvent(scanner.Bytes())
-		} else {
+		case config.ClaudeProvider:
+			err = decoder.claudeEvent(scanner.Bytes())
+		default:
 			err = decoder.piEvent(scanner.Bytes())
 		}
 		if err != nil {
 			return nil, err
 		}
+	}
+	if decoder.claude != nil && decoder.claude.limit != nil && !decoder.finished {
+		return nil, decoder.claude.limit
 	}
 	if scanner.Err() != nil || !decoder.started || !decoder.finished || decoder.response == nil {
 		return nil, unusableCLIResponse("incomplete CLI response")
@@ -62,6 +70,7 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		Result struct {
 			Status   string `json:"status"`
 			Response string `json:"response"`
+			Error    string `json:"error"`
 			Usage    struct {
 				Input  int `json:"input_tokens"`
 				Output int `json:"output_tokens"`
@@ -82,6 +91,11 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 	case "step_update":
 		return d.agyStep(event.Step)
 	case "result":
+		if d.started && event.Result.Status != "SUCCESS" {
+			if limit := planLimitFromText(config.AgyProvider, event.Result.Error); limit != nil {
+				return limit
+			}
+		}
 		if !d.started || d.finished || event.Result.Status != "SUCCESS" {
 			return unusableCLIResponse("agy did not complete successfully")
 		}
@@ -189,6 +203,11 @@ func (d *cliResponseDecoder) piMessage(data json.RawMessage) error {
 func piCompletionError(stopReason, message string) error {
 	if stopReason == "error" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(message)), "your authentication token has expired.") {
 		return fmt.Errorf("llm client: %w: %w", ErrRequestRejected, ErrPiAuthenticationExpired)
+	}
+	if stopReason == "error" {
+		if limit := planLimitFromText(config.PiProvider, message); limit != nil {
+			return limit
+		}
 	}
 	return unusableCLIResponse("pi assistant response did not complete normally")
 }

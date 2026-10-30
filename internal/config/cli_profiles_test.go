@@ -60,7 +60,7 @@ func TestCLIProfilesRejectAmbiguousOrUnsupportedSettings(t *testing.T) {
 		{"NUL executable", func(p *ModelProfileConfig) { p.CLIPath = "agy\x00" }, "command name"},
 		{"agy effort", func(p *ModelProfileConfig) { p.ReasoningEffort = "minimal" }, "unsupported by agy"},
 		{"context budget", func(p *ModelProfileConfig) { n := 0; p.ContextMaxTokens = &n }, "context_max_tokens"},
-		{"HTTP executable", func(p *ModelProfileConfig) { p.Provider = OpenAIProvider; p.CLIPath = "agy" }, "requires an agy or pi"},
+		{"HTTP executable", func(p *ModelProfileConfig) { p.Provider = OpenAIProvider; p.CLIPath = "agy" }, "requires an agy, pi or claude"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := Default()

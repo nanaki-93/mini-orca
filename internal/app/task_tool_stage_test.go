@@ -44,9 +44,20 @@ func piScope(model string) config.ModelProfileConfig {
 	return config.ModelProfileConfig{Provider: config.PiProvider, Model: model, CLIPath: os.Args[0]}
 }
 
-// toolWorkflow runs a workflow whose creation and testing stages are pi
-// agents played by the test binary, in a task with its own worktree.
-func toolWorkflow(t *testing.T, coder, tester []fakePiStep) (*ChangeSession, string, *reviewRecorder, string) {
+// toolFlow is a workflow in a task with its own worktree whose creation and
+// testing stages are CLI agents played by the test binary.
+type toolFlow struct {
+	service  *Service
+	id       string
+	dir      string
+	reviews  *reviewRecorder
+	worktree string
+	request  ChangeWorkflowRequest
+}
+
+// startToolFlow starts the workflow on pi agents and an HTTP reviewer;
+// configure may give the stages other models.
+func startToolFlow(t *testing.T, coder, tester []fakePiStep, configure func(*config.Config)) *toolFlow {
 	t.Helper()
 	dir := t.TempDir()
 	for role, steps := range map[string][]fakePiStep{"coder": coder, "tester": tester} {
@@ -55,14 +66,17 @@ func toolWorkflow(t *testing.T, coder, tester []fakePiStep) (*ChangeSession, str
 			t.Fatal(err)
 		}
 	}
-	t.Setenv(fakePiEnv, "1")
-	t.Setenv("MINI_ORCA_FAKE_PI_DIR", dir)
+	t.Setenv(fakeCLIEnv, "1")
+	t.Setenv(fakeCLIDirEnv, dir)
 	reviews := &reviewRecorder{}
 	server := reviews.serve(t)
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	cfg := scopedTestConfig(server.URL)
 	cfg.ModelScopes.Bug, cfg.ModelScopes.Analyze = piScope("fake/coder"), piScope("fake/tester")
 	cfg.ModelScopes.Code.Model = "reviewer"
+	if configure != nil {
+		configure(cfg)
+	}
 	configured, err := New(cfg, service.manager)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +104,30 @@ func toolWorkflow(t *testing.T, coder, tester []fakePiStep) (*ChangeSession, str
 	if _, err := child.StartChangeWorkflow(context.Background(), opened.ID, workflow); err != nil {
 		t.Fatal(err)
 	}
-	return finishedWorkflow(t, child, opened.ID), dir, reviews, opened.WorktreePath
+	return &toolFlow{service: child, id: opened.ID, dir: dir, reviews: reviews, worktree: opened.WorktreePath, request: workflow}
+}
+
+func (f *toolFlow) finished(t *testing.T) *ChangeSession {
+	t.Helper()
+	return finishedWorkflow(t, f.service, f.id)
+}
+
+// resume runs the workflow again from its pause.
+func (f *toolFlow) resume(t *testing.T, paused *ChangeSession) {
+	t.Helper()
+	request := f.request
+	request.ChangeIdentity, request.ResumeFrom = changeIdentity(paused), paused.Workflow.Pause.ResumeFrom
+	if _, err := f.service.StartChangeWorkflow(context.Background(), f.id, request); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// toolWorkflow runs a workflow whose creation and testing stages are pi
+// agents played by the test binary, in a task with its own worktree.
+func toolWorkflow(t *testing.T, coder, tester []fakePiStep) (*ChangeSession, string, *reviewRecorder, string) {
+	t.Helper()
+	flow := startToolFlow(t, coder, tester, nil)
+	return flow.finished(t), flow.dir, flow.reviews, flow.worktree
 }
 
 func fakePiLog(t *testing.T, dir, role string) fakePiRecord {

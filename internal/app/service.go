@@ -67,6 +67,7 @@ type Service struct {
 	manager                         *project.Manager
 	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
 	discoverAgyModels               func(context.Context, string) ([]llm.AgyModel, error)
+	discoverClaudeModels            func(context.Context, string) ([]llm.ClaudeModel, error)
 	jobLifecycleMu                  sync.Mutex
 	changesMu                       sync.Mutex
 	changeAuthority                 map[string]string
@@ -102,6 +103,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		worktrees:               make(map[string]*Service),
 		discoverPiModels:        llm.DiscoverPiModels,
 		discoverAgyModels:       llm.DiscoverAgyModels,
+		discoverClaudeModels:    llm.DiscoverClaudeModels,
 		manager:                 manager,
 		changeAuthority:         make(map[string]string),
 		analysisRun:             &analysisRunController{},
@@ -323,7 +325,8 @@ func executeAgentAttempt(ctx context.Context, runtime modelRuntime, request agen
 }
 
 func runtimeRequestTerminal(runtime modelRuntime, err error) bool {
-	return errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
+	// A plan's usage limit lasts until it resets: retrying only spends the wait.
+	return errors.Is(err, llm.ErrPlanLimit) || errors.Is(err, agentstate.ErrPersistence) || errors.Is(err, agentruntime.ErrBudgetExceeded) || errors.Is(err, agentruntime.ErrPolicyDenied) || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) ||
 		((runtime.profile.IsCLI() || runtime.profile.IsGoogle()) && errors.Is(err, llm.ErrRequestRejected))
 }
 

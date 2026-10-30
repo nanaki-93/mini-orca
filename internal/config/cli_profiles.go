@@ -13,12 +13,14 @@ const (
 	OpenAIProvider ModelProvider = "openai"
 	AgyProvider    ModelProvider = "agy"
 	PiProvider     ModelProvider = "pi"
+	// ClaudeProvider runs Claude Code (the claude CLI) on its subscription login.
+	ClaudeProvider ModelProvider = "claude"
 	GeminiProvider ModelProvider = "gemini"
 	VertexProvider ModelProvider = "vertex"
 )
 
 func (p ModelProfile) IsCLI() bool {
-	return p.Provider == AgyProvider || p.Provider == PiProvider
+	return p.Provider == AgyProvider || p.Provider == PiProvider || p.Provider == ClaudeProvider
 }
 
 func resolveCLIProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
@@ -60,6 +62,9 @@ func validateCLIModel(scope ModelScope, provider ModelProvider, model string) er
 	if provider == AgyProvider && !ValidAgyModelID(model) {
 		return fmt.Errorf("model_scopes.%s.model must be a slug from agy models, not a display name", scope)
 	}
+	if provider == ClaudeProvider && !ValidClaudeModelID(model) {
+		return fmt.Errorf("model_scopes.%s.model must be a Claude Code model alias or name, such as sonnet or claude-sonnet-5", scope)
+	}
 	return nil
 }
 
@@ -80,6 +85,14 @@ var agyModelIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 func ValidAgyModelID(model string) bool {
 	return len(model) <= 512 && agyModelIDPattern.MatchString(model)
+}
+
+var claudeModelIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*(\[[a-z0-9]+\])?$`)
+
+// ValidClaudeModelID accepts Claude Code's aliases (sonnet, opus[1m]) and full
+// model names.
+func ValidClaudeModelID(model string) bool {
+	return len(model) <= 128 && claudeModelIDPattern.MatchString(model)
 }
 
 func validCLIEffort(provider ModelProvider, effort string) bool {

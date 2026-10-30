@@ -7,15 +7,20 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
 func TestPiAgentRunsOfferOnlyTheRunsToolServer(t *testing.T) {
 	directory := t.TempDir()
-	args, err := preparePiAgent(directory, config.ModelProfile{Provider: config.PiProvider, Model: "openai-codex/gpt-5.5", ReasoningEffort: "none"}, "Be careful.")
+	launch, _, err := preparePiAgent(directory, config.ModelProfile{Provider: config.PiProvider, Model: "openai-codex/gpt-5.5", ReasoningEffort: "none"}, AgentRun{System: "Be careful.", MCPURL: "http://127.0.0.1:1/mcp", MCPToken: "secret-token", ToolTimeout: time.Minute})
 	if err != nil {
 		t.Fatal(err)
+	}
+	args := launch.args
+	if !slices.Contains(launch.env, "MINI_ORCA_MCP_TOKEN=secret-token") || !slices.Contains(launch.env, "MINI_ORCA_TOOL_TIMEOUT=60") {
+		t.Fatal("the token and limits reach the extension through its environment")
 	}
 	for _, pair := range [][2]string{{"--mode", "json"}, {"--tools", "mcp__mini_orca__*"}, {"--model", "openai-codex/gpt-5.5"}, {"--thinking", "off"}} {
 		if index := slices.Index(args, pair[0]); index < 0 || args[index+1] != pair[1] {
@@ -39,10 +44,10 @@ func TestPiAgentRunsOfferOnlyTheRunsToolServer(t *testing.T) {
 	}
 }
 
-func decodeAgentEvents(t *testing.T, model string, lines ...string) (*agentEventDecoder, error) {
+func decodeAgentEvents(t *testing.T, model string, lines ...string) (*piAgentStream, error) {
 	t.Helper()
-	decoder := &agentEventDecoder{profile: config.ModelProfile{Provider: config.PiProvider, Model: model}, result: &AgentRunResult{UsageKnown: true}}
-	return decoder, decoder.read(strings.NewReader(strings.Join(lines, "\n") + "\n"))
+	decoder := &piAgentStream{profile: config.ModelProfile{Provider: config.PiProvider, Model: model}, run: &AgentRunResult{UsageKnown: true}}
+	return decoder, readAgentStream(strings.NewReader(strings.Join(lines, "\n")+"\n"), decoder, config.PiProvider)
 }
 
 func TestAnAgentRunCountsTurnsToolsAndUsage(t *testing.T) {
@@ -58,7 +63,7 @@ func TestAnAgentRunCountsTurnsToolsAndUsage(t *testing.T) {
 		`{"type":"turn_end"}`,
 		`{"type":"agent_end","willRetry":false}`,
 	)
-	result := decoder.result
+	result := decoder.run
 	if err != nil || !decoder.started || decoder.failure != nil || result.Turns != 2 || result.ToolCalls != 2 || result.ToolErrors != 1 || result.Final != "Done." {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
@@ -70,8 +75,8 @@ func TestAnAgentRunCountsTurnsToolsAndUsage(t *testing.T) {
 func TestAnAgentRunReportsProviderFailures(t *testing.T) {
 	decoder, _ := decodeAgentEvents(t, "gpt-5.5", `{"type":"agent_start"}`,
 		`{"type":"message_end","message":{"role":"assistant","model":"gpt-5.5","stopReason":"error","errorMessage":"Your authentication token has expired. Please sign in.","content":[]}}`)
-	if !errors.Is(decoder.failure, ErrPiAuthenticationExpired) || decoder.result.UsageKnown {
-		t.Fatalf("failure = %v, usage known %v", decoder.failure, decoder.result.UsageKnown)
+	if !errors.Is(decoder.failure, ErrPiAuthenticationExpired) || decoder.run.UsageKnown {
+		t.Fatalf("failure = %v, usage known %v", decoder.failure, decoder.run.UsageKnown)
 	}
 	if _, err := decodeAgentEvents(t, "gpt-5.5", `{"type":"agent_start"}`, `{"type":"message_end","message":{"role":"assistant","model":"other-model","stopReason":"stop","content":[]}}`); err == nil {
 		t.Fatal("a different model was accepted")
@@ -79,7 +84,9 @@ func TestAnAgentRunReportsProviderFailures(t *testing.T) {
 	if _, err := decodeAgentEvents(t, "gpt-5.5", `not json`); err == nil {
 		t.Fatal("a malformed event was accepted")
 	}
-	if NewClient(config.ModelProfile{Provider: config.AgyProvider}).SupportsAgentRuns() || !NewClient(config.ModelProfile{Provider: config.PiProvider}).SupportsAgentRuns() {
-		t.Fatal("only pi runs agents today")
+	for provider, supported := range map[config.ModelProvider]bool{config.PiProvider: true, config.ClaudeProvider: true, config.AgyProvider: true, config.OpenAIProvider: false, config.GeminiProvider: false} {
+		if NewClient(config.ModelProfile{Provider: provider}).SupportsAgentRuns() != supported {
+			t.Fatalf("%s runs agents: %v", provider, !supported)
+		}
 	}
 }

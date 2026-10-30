@@ -149,6 +149,7 @@ func boundedChangeFile(file *os.File) error {
 
 func storeChangeSession(root string, session *ChangeSession) error {
 	refreshChangeReviewDiff(session)
+	settleWorkflowPause(session.Workflow)
 	if err := validateStoredChange(*session); err != nil {
 		return err
 	}

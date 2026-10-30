@@ -76,14 +76,14 @@ func ResolveModelProfile(scope ModelScope, configured ModelProfileConfig) (Model
 }
 
 func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
-	if configured.Provider == AgyProvider || configured.Provider == PiProvider {
+	if configured.Provider == AgyProvider || configured.Provider == PiProvider || configured.Provider == ClaudeProvider {
 		return resolveCLIProfile(scope, configured)
 	}
 	if configured.Provider == GeminiProvider || configured.Provider == VertexProvider {
 		return resolveGoogleProfile(scope, configured)
 	}
 	if configured.Provider != "" && configured.Provider != OpenAIProvider {
-		return ModelProfile{}, fmt.Errorf("model_scopes.%s.provider must be openai, gemini, vertex, agy, or pi", scope)
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s.provider must be openai, gemini, vertex, agy, pi, or claude", scope)
 	}
 	if hasGoogleSettings(configured) {
 		return ModelProfile{}, fmt.Errorf("model_scopes.%s: Google backend settings require a native Google provider", scope)
@@ -93,7 +93,7 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 
 func resolveHTTPProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
 	if configured.CLIPath != "" {
-		return ModelProfile{}, fmt.Errorf("model_scopes.%s.cli_path requires an agy or pi provider", scope)
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s.cli_path requires an agy, pi or claude provider", scope)
 	}
 	if strings.TrimSpace(configured.APIBaseURL) == "" {
 		if profileConfigHasValues(configured) {

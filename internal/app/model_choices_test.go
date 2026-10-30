@@ -41,8 +41,14 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T)
 		}
 		return []llm.AgyModel{{ID: "gemini-new-high", Name: "Gemini New (High)"}}, nil
 	}
+	s.discoverClaudeModels = func(_ context.Context, executable string) ([]llm.ClaudeModel, error) {
+		if executable != "claude" {
+			t.Fatalf("Claude executable = %q", executable)
+		}
+		return []llm.ClaudeModel{{ID: "sonnet", Name: "Claude Sonnet"}}, nil
+	}
 	catalog, err := s.AvailableModels(context.Background())
-	if err != nil || len(catalog.Models) != 6 || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" {
+	if err != nil || len(catalog.Models) != 7 || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" || catalog.Claude.Status != "ready" {
 		t.Fatalf("catalog = %+v, %v", catalog, err)
 	}
 	if catalog.Defaults["analyze"] != catalog.Defaults["bug"] || catalog.Defaults["bug"] == catalog.Defaults["code"] {
@@ -55,6 +61,9 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T)
 		}
 		if choice.Source == "pi" && (choice.Location != locations[choice.ID] || choice.Model.ProviderOrigin != "cli://pi" || !choice.Model.RemoteProvider) {
 			t.Fatalf("Pi location/consent metadata = %+v", choice)
+		}
+		if choice.Source == "claude" && (choice.ID != "claude:sonnet" || choice.Location != "remote" || choice.Model.ProviderOrigin != "cli://claude" || !choice.Model.RemoteProvider) {
+			t.Fatalf("Claude catalog/consent metadata = %+v", choice)
 		}
 		if choice.Source == "agy" && (choice.ID != "agy:gemini-new-high" || choice.Name != "Gemini New (High)" || choice.Location != "unknown" || choice.Model.ProviderOrigin != "cli://agy" || !choice.Model.RemoteProvider || choice.Model.ReasoningEffort != "") {
 			t.Fatalf("Agy catalog/consent metadata = %+v", choice)
@@ -69,13 +78,13 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T)
 	piDiscovery := s.discoverPiModels
 	s.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) { return nil, errors.New("private-token") }
 	partial, err := s.AvailableModels(context.Background())
-	if err != nil || len(partial.Models) != 3 || partial.Pi.Status != "unavailable" || partial.Agy.Status != "ready" || strings.Contains(partial.Pi.Message, "private-token") {
+	if err != nil || len(partial.Models) != 4 || partial.Pi.Status != "unavailable" || partial.Agy.Status != "ready" || strings.Contains(partial.Pi.Message, "private-token") {
 		t.Fatalf("partial catalog = %+v, %v", partial, err)
 	}
 	s.discoverPiModels = piDiscovery
 	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return nil, errors.New("private-token") }
 	partial, err = s.AvailableModels(context.Background())
-	if err != nil || len(partial.Models) != 5 || partial.Pi.Status != "ready" || partial.Agy.Status != "unavailable" || strings.Contains(partial.Agy.Message, "private-token") {
+	if err != nil || len(partial.Models) != 6 || partial.Pi.Status != "ready" || partial.Agy.Status != "unavailable" || strings.Contains(partial.Agy.Message, "private-token") {
 		t.Fatalf("partial Agy catalog = %+v, %v", partial, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

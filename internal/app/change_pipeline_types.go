@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -119,8 +120,25 @@ type ChangeWorkflow struct {
 	Review             *ChangeWorkflowReview    `json:"review,omitempty"`
 	Override           *ChangeWorkflowOverride  `json:"override,omitempty"`
 	Specialists        []ChangeSpecialistReview `json:"specialists,omitempty"`
-	StartedAt          time.Time                `json:"started_at"`
-	UpdatedAt          time.Time                `json:"updated_at"`
+	// Pause is set while the run waits for a subscription plan's usage limit
+	// to reset (status paused).
+	Pause     *ChangeWorkflowPause `json:"pause,omitempty"`
+	StartedAt time.Time            `json:"started_at"`
+	UpdatedAt time.Time            `json:"updated_at"`
+}
+
+// ChangeWorkflowPause says where a run stopped at a plan's usage limit and
+// how to continue it. Nothing the stage left half done was kept.
+type ChangeWorkflowPause struct {
+	// Stage is the stage that reached the limit: create, test or review.
+	Stage string `json:"stage"`
+	// ResumeFrom is the resume_from that continues the run: create, test,
+	// checks or review.
+	ResumeFrom string `json:"resume_from"`
+	// Provider is the CLI whose plan reached its limit.
+	Provider string `json:"provider"`
+	// ResumesAt is when the plan's limit resets, when the CLI said so.
+	ResumesAt time.Time `json:"resumes_at,omitempty"`
 }
 
 type changeWorkflowContextKey struct{}
@@ -245,9 +263,12 @@ func validateStoredWorkflow(w *ChangeWorkflow) error {
 		return err
 	}
 	switch w.Status {
-	case "running", "canceling", "failed", "canceled", "stale", "interrupted", "outdated", "changes_requested", "awaiting_human_review":
+	case "running", "canceling", "failed", "canceled", "stale", "interrupted", "outdated", "changes_requested", "awaiting_human_review", "paused":
 	default:
 		return fmt.Errorf("corrupt workflow status")
+	}
+	if err := validateWorkflowPause(w); err != nil {
+		return err
 	}
 	if err := validateWorkflowStages(w); err != nil {
 		return err
@@ -274,6 +295,30 @@ func validateWorkflowStages(w *ChangeWorkflow) error {
 		if w.Stages[i].Model == nil || w.Stages[i].Model.Profile != profile {
 			return fmt.Errorf("corrupt workflow model provenance")
 		}
+	}
+	return nil
+}
+
+// settleWorkflowPause drops the pause of a run that is no longer paused: it
+// was restored, outdated or went stale while it waited.
+func settleWorkflowPause(w *ChangeWorkflow) {
+	if w != nil && w.Status != "paused" {
+		w.Pause = nil
+	}
+}
+
+// validateWorkflowPause accepts a pause only on a paused run, naming a stage
+// and a start that continues it.
+func validateWorkflowPause(w *ChangeWorkflow) error {
+	pause := w.Pause
+	if pause == nil {
+		if w.Status == "paused" {
+			return fmt.Errorf("corrupt workflow pause")
+		}
+		return nil
+	}
+	if w.Status != "paused" || !slices.Contains([]string{"create", "test", "review"}, pause.Stage) || !slices.Contains([]string{"create", "test", "checks", "review"}, pause.ResumeFrom) || pause.Provider == "" || len(pause.Provider) > 32 {
+		return fmt.Errorf("corrupt workflow pause")
 	}
 	return nil
 }

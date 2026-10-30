@@ -2,15 +2,13 @@ package llm
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,12 +18,22 @@ import (
 // ErrAgentRunsUnsupported marks a provider that cannot run a tool-using agent.
 var ErrAgentRunsUnsupported = errors.New("this model's provider cannot run a tool-using agent")
 
+// errStopAgentRun ends the CLI process without failing the run: the stream
+// decoder has already recorded why (for example, the turn limit).
+var errStopAgentRun = errors.New("stop the agent run")
+
+// toolServerName is the name every CLI knows the run's tool server by.
+const toolServerName = "mini-orca"
+
 // AgentRun is one tool-using model run inside a CLI. The CLI's own tools are
 // off; the model's only tools are those of the MCP server the run names.
 type AgentRun struct {
 	System, Prompt string
 	// MCPURL and MCPToken reach the run's tool server.
 	MCPURL, MCPToken string
+	// ToolNames are the tool server's tools. CLIs that list a server's tools
+	// up front get only these, and a call to any other tool ends the run.
+	ToolNames []string
 	// MaxTurns ends the run after that many model turns.
 	MaxTurns int
 	// ToolTimeout bounds one tool call.
@@ -49,37 +57,21 @@ type AgentRunResult struct {
 
 const maxAgentOutputBytes = 256 << 20
 
-// piToolExtension registers the run's tool server with pi and blocks every
-// other tool, so the model can act only through Mini-Orca's gates.
-const piToolExtension = `// Mini-Orca's tools for one agent run: the run's MCP server, and nothing else.
-export default function (pi) {
-	const url = process.env.MINI_ORCA_MCP_URL;
-	const token = process.env.MINI_ORCA_MCP_TOKEN;
-	const maxTurns = Number(process.env.MINI_ORCA_MAX_TURNS || "0");
-	const timeout = Number(process.env.MINI_ORCA_TOOL_TIMEOUT || "900");
-	if (!url || !token) throw new Error("Mini-Orca's tool server is not configured for this run");
-	pi.registerMcpServer("mini-orca", { url, headers: { Authorization: "Bearer " + token }, exposure: "direct", timeout, description: "Mini-Orca's tools for this task" });
-	pi.on("tool_call", async (event) => {
-		if (!String(event.toolName).startsWith("mcp__mini_orca__")) {
-			return { block: true, reason: "Only Mini-Orca's tools are available in this run." };
-		}
-	});
-	let turns = 0;
-	pi.on("turn_end", async (_event, ctx) => {
-		turns++;
-		if (maxTurns > 0 && turns >= maxTurns) ctx.abort();
-	});
-}
-`
-
 // SupportsAgentRuns reports whether the provider can run a tool-using agent.
 func (c *Client) SupportsAgentRuns() bool {
-	return c.profile.Provider == config.PiProvider
+	switch c.profile.Provider {
+	case config.PiProvider, config.ClaudeProvider, config.AgyProvider:
+		return true
+	default:
+		return false
+	}
 }
 
 // RunAgent runs the model in its CLI until it ends its turn, reaches
 // MaxTurns, or ctx ends. The result is returned with an error too when the
-// run used the model before failing, so its usage can be charged.
+// run used the model before failing, so its usage can be charged. A run that
+// stops because the subscription plan reached its limit returns a
+// *PlanLimitError.
 func (c *Client) RunAgent(ctx context.Context, run AgentRun) (*AgentRunResult, error) {
 	if !c.SupportsAgentRuns() {
 		return nil, ErrAgentRunsUnsupported
@@ -96,55 +88,57 @@ func (c *Client) RunAgent(ctx context.Context, run AgentRun) (*AgentRunResult, e
 		return nil, fmt.Errorf("llm client: cannot create private CLI working directory")
 	}
 	defer os.RemoveAll(directory)
-	args, err := preparePiAgent(directory, c.profile, run.System)
+	if run.ToolTimeout <= 0 {
+		run.ToolTimeout = 15 * time.Minute
+	}
+	var launch agentLaunch
+	var stream agentStream
+	switch c.profile.Provider {
+	case config.ClaudeProvider:
+		launch, stream, err = prepareClaudeAgent(directory, c.profile, run)
+	case config.AgyProvider:
+		launch, stream, err = prepareAgyAgent(ctx, directory, c.profile, run)
+	default:
+		launch, stream, err = preparePiAgent(directory, c.profile, run)
+	}
 	if err != nil {
 		return nil, err
 	}
-	timeout := int(run.ToolTimeout.Seconds())
-	if timeout <= 0 {
-		timeout = 900
-	}
-	env := append(os.Environ(), "MINI_ORCA_MCP_URL="+run.MCPURL, "MINI_ORCA_MCP_TOKEN="+run.MCPToken,
-		"MINI_ORCA_MAX_TURNS="+strconv.Itoa(max(run.MaxTurns, 0)), "MINI_ORCA_TOOL_TIMEOUT="+strconv.Itoa(timeout))
-	result, err := runAgentProcess(ctx, executable, directory, args, env, run.Prompt, c.profile)
+	launch.executable, launch.directory, launch.provider = executable, directory, c.profile.Provider
+	result, err := runAgentProcess(ctx, launch, stream)
 	if result != nil && run.MaxTurns > 0 && result.Turns >= run.MaxTurns {
 		result.TurnLimit = true
 	}
 	return result, err
 }
 
-func preparePiAgent(directory string, profile config.ModelProfile, system string) ([]string, error) {
-	if err := writeCLIFile(directory, "system.txt", system); err != nil {
-		return nil, err
-	}
-	settings := `{"retry":{"enabled":false,"provider":{"maxRetries":0}},"compaction":{"enabled":false}}`
-	if err := writeCLIFile(directory, ".pi/settings.json", settings); err != nil {
-		return nil, err
-	}
-	if err := writeCLIFile(directory, "mini-orca-tools.ts", piToolExtension); err != nil {
-		return nil, err
-	}
-	args := []string{"--mode", "json", "--no-session", "--no-extensions", "--extension", "builtin:mcp", "--extension", filepath.Join(directory, "mini-orca-tools.ts"),
-		"--tools", "mcp__mini_orca__*", "--exclude-tools", "codemode,tool_search,list_mcp_resources,list_mcp_resource_templates,read_mcp_resource",
-		"--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files", "--approve",
-		"--system-prompt", filepath.Join(directory, "system.txt"), "--model", profile.Model}
-	if profile.ReasoningEffort != "" {
-		effort := profile.ReasoningEffort
-		if effort == "none" {
-			effort = "off"
-		}
-		args = append(args, "--thinking", effort)
-	}
-	return args, nil
+// agentLaunch is how one CLI is started for an agent run.
+type agentLaunch struct {
+	executable, directory string
+	args, env             []string
+	input                 string
+	provider              config.ModelProvider
 }
 
-func runAgentProcess(ctx context.Context, executable, directory string, args, env []string, prompt string, profile config.ModelProfile) (*AgentRunResult, error) {
+// agentStream follows one CLI's event stream during an agent run.
+type agentStream interface {
+	// event reads one line of the stream. An error ends the run; errStopAgentRun
+	// ends it without failing it.
+	event(line []byte) error
+	// end decides the run's outcome after the CLI exited with exit and wrote
+	// stderr. It is not called when the stream itself failed.
+	end(exit error, stderr string) error
+	result() *AgentRunResult
+}
+
+func runAgentProcess(ctx context.Context, launch agentLaunch, stream agentStream) (*AgentRunResult, error) {
 	owned, cancel := context.WithCancel(ctx)
 	defer cancel()
-	process := exec.CommandContext(owned, executable, args...)
-	process.Dir, process.Env = directory, env
-	process.Stdin = strings.NewReader(prompt)
-	stderr := &cliOutputBuffer{limit: 64 * 1024, cancel: cancel}
+	process := exec.CommandContext(owned, launch.executable, launch.args...)
+	process.Dir, process.Env = launch.directory, launch.env
+	process.Stdin = strings.NewReader(launch.input)
+	// A long run may write more diagnostics than a completion; keep the start.
+	stderr := &cliOutputBuffer{limit: 64 * 1024, cancel: cancel, keepHead: true}
 	process.Stderr = stderr
 	process.WaitDelay = time.Second
 	if err := configureCLIProcess(process); err != nil {
@@ -155,138 +149,69 @@ func runAgentProcess(ctx context.Context, executable, directory string, args, en
 		return nil, fmt.Errorf("llm client: cannot read the CLI's output")
 	}
 	if err := process.Start(); err != nil {
-		return nil, cliProcessError(profile.Provider, err)
+		return nil, cliProcessError(launch.provider, err)
 	}
-	decoder := agentEventDecoder{profile: profile, result: &AgentRunResult{Model: profile.Model, UsageKnown: true}}
-	readErr := decoder.read(io.LimitReader(stdout, maxAgentOutputBytes))
+	readErr := readAgentStream(io.LimitReader(stdout, maxAgentOutputBytes), stream, launch.provider)
 	if readErr != nil {
 		cancel()
 	}
 	err = process.Wait()
 	if process.Process != nil {
 		if cleanupErr := process.Cancel(); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrProcessDone) {
-			return decoder.result, fmt.Errorf("llm client: CLI process-group cleanup failed")
+			return stream.result(), fmt.Errorf("llm client: CLI process-group cleanup failed")
 		}
 	}
 	switch {
 	case ctx.Err() != nil:
-		return decoder.result, fmt.Errorf("llm client: agent run ended: %w", context.Cause(ctx))
+		return stream.result(), fmt.Errorf("llm client: agent run ended: %w", context.Cause(ctx))
+	case errors.Is(readErr, errStopAgentRun):
+		return stream.result(), stream.end(nil, stderr.buffer.String())
 	case readErr != nil:
-		return decoder.result, readErr
-	case decoder.failure != nil:
-		return decoder.result, decoder.failure
-	case err != nil:
-		return decoder.result, cliProcessError(profile.Provider, err)
-	case !decoder.started:
-		return decoder.result, unusableCLIResponse("pi did not start the agent run")
+		return stream.result(), readErr
 	}
-	return decoder.result, nil
+	return stream.result(), stream.end(err, stderr.buffer.String())
 }
 
-// agentEventDecoder follows pi's JSON event stream: turns, tool calls and
-// the usage of every assistant message.
-type agentEventDecoder struct {
-	profile config.ModelProfile
-	result  *AgentRunResult
-	started bool
-	failure error
-}
-
-func (d *agentEventDecoder) read(stream io.Reader) error {
-	scanner := bufio.NewScanner(stream)
+func readAgentStream(output io.Reader, stream agentStream, provider config.ModelProvider) error {
+	scanner := bufio.NewScanner(output)
 	scanner.Buffer(make([]byte, 64*1024), maxProviderResponseBytes)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(strings.TrimSpace(string(line))) == 0 {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
 			continue
 		}
-		if err := d.event(line); err != nil {
+		if err := stream.event(line); err != nil {
 			return err
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return unusableCLIResponse("pi's event stream exceeded its limits")
+	if scanner.Err() != nil {
+		return unusableCLIResponse(fmt.Sprintf("%s's event stream exceeded its limits", provider))
 	}
 	return nil
 }
 
-func (d *agentEventDecoder) event(data []byte) error {
-	var event struct {
-		Type    string          `json:"type"`
-		Message json.RawMessage `json:"message"`
-		IsError bool            `json:"isError"`
-	}
-	if json.Unmarshal(data, &event) != nil {
-		return unusableCLIResponse("malformed pi event")
-	}
-	switch event.Type {
-	case "agent_start":
-		d.started = true
-	case "turn_end":
-		d.result.Turns++
-	case "tool_execution_end":
-		d.result.ToolCalls++
-		if event.IsError {
-			d.result.ToolErrors++
+// ownTool reports whether a CLI's name for a tool names one of the run's tool
+// server's tools. CLIs prefix MCP tools with the server's name in their own
+// way (mcp__mini-orca__read_file, mcp__mini_orca__read_file, mini-orca/read_file).
+// Without a list of tools, any tool under the server's name is the run's.
+func ownTool(name string, tools map[string]bool) bool {
+	prefixed := false
+	for _, server := range []string{toolServerName, strings.ReplaceAll(toolServerName, "-", "_")} {
+		if index := strings.LastIndex(name, server); index >= 0 {
+			name, prefixed = strings.TrimLeft(name[index+len(server):], "_/:."), true
+			break
 		}
-	case "message_end":
-		return d.message(event.Message)
 	}
-	return nil
+	if len(tools) == 0 {
+		return prefixed && name != ""
+	}
+	return tools[name]
 }
 
-func (d *agentEventDecoder) message(data json.RawMessage) error {
-	var role struct {
-		Role string `json:"role"`
+func toolSet(names []string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
 	}
-	if json.Unmarshal(data, &role) != nil {
-		return unusableCLIResponse("malformed pi message")
-	}
-	// User and tool-result messages echo context; only the model's turns count.
-	if role.Role != "assistant" {
-		return nil
-	}
-	var message struct {
-		StopReason   string `json:"stopReason"`
-		ErrorMessage string `json:"errorMessage"`
-		Model        string `json:"model"`
-		Content      []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		Usage *struct {
-			Input  int `json:"input"`
-			Output int `json:"output"`
-			Total  int `json:"totalTokens"`
-		} `json:"usage"`
-	}
-	if json.Unmarshal(data, &message) != nil {
-		return unusableCLIResponse("malformed pi assistant message")
-	}
-	if !matchesPiModel(d.profile.Model, message.Model) {
-		return unusableCLIResponse("pi returned a different model than configured; use an exact model ID")
-	}
-	if message.Usage == nil {
-		d.result.UsageKnown = false
-	} else {
-		d.result.Usage.PromptTokens += message.Usage.Input
-		d.result.Usage.CompletionTokens += message.Usage.Output
-		d.result.Usage.TotalTokens += message.Usage.Total
-	}
-	var text strings.Builder
-	for _, block := range message.Content {
-		if block.Type == "text" {
-			text.WriteString(block.Text)
-		}
-	}
-	if strings.TrimSpace(text.String()) != "" {
-		d.result.Final = text.String()
-	}
-	switch message.StopReason {
-	case "error":
-		d.failure = piCompletionError(message.StopReason, message.ErrorMessage)
-	case "stop", "toolUse", "aborted", "length":
-		d.failure = nil
-	}
-	return nil
+	return set
 }

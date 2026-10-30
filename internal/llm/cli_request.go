@@ -76,12 +76,14 @@ func prepareCLIInvocation(profile config.ModelProfile, messages []ChatMessage, f
 		return cliInvocation{}, err
 	}
 	invocation := cliInvocation{directory: directory, input: prompt}
-	if profile.Provider == config.PiProvider {
+	switch profile.Provider {
+	case config.PiProvider:
 		invocation.args, err = preparePi(directory, profile, system)
-	} else {
+	case config.ClaudeProvider:
+		invocation.args, err = prepareClaude(directory, profile, system)
+	default:
 		invocation.args, err = prepareAgy(directory, profile, system)
-		input, _ := json.Marshal(map[string]any{"event": "user", "message": map[string]string{"content": prompt}})
-		invocation.input = string(input) + "\n"
+		invocation.input = agyUserMessage(prompt)
 	}
 	return invocation, err
 }
@@ -145,6 +147,12 @@ func prepareAgy(directory string, profile config.ModelProfile, system string) ([
 		args = append(args, "--effort", profile.ReasoningEffort)
 	}
 	return args, nil
+}
+
+// agyUserMessage is the prompt as one line of agy's stream-json input.
+func agyUserMessage(prompt string) string {
+	input, _ := json.Marshal(map[string]any{"event": "user", "message": map[string]string{"content": prompt}})
+	return string(input) + "\n"
 }
 
 func writeCLIFile(directory, name, content string) error {

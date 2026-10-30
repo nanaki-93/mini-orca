@@ -367,6 +367,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 			runErr = s.verifyChangeCurrent(ctx, job.root, session)
 		}
 		runErr = workflowDeadlineCause(ctx, runErr)
+		var limit *llm.PlanLimitError
 		if runErr == nil {
 			w.Stages[2].Status = "completed"
 			w.Status = "changes_requested"
@@ -375,6 +376,9 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 			}
 		} else {
 			w.Status, w.Reason = workflowFailure(runErr, session.Checks)
+			if errors.As(runErr, &limit) {
+				s.pauseChangeWorkflow(session, limit)
+			}
 			stopChangeWorkflowStages(w)
 			if !errors.Is(runErr, errWorkflowChecksFailed) && !s.hasLivePassingChecks(session) {
 				delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
@@ -393,6 +397,43 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 		s.notifyWorkflow(ctx, session, "")
 	} else {
 		s.notifyEvent("workflow")
+	}
+}
+
+// pauseChangeWorkflow keeps a run that stopped at a plan's usage limit
+// resumable from the stage that reached it.
+func (s *Service) pauseChangeWorkflow(session *ChangeSession, limit *llm.PlanLimitError) {
+	w := session.Workflow
+	stage := "create"
+	for _, candidate := range w.Stages[:3] {
+		if candidate.Status == "running" {
+			stage = candidate.Name
+			break
+		}
+	}
+	resume := stage
+	switch {
+	case stage == "test" && len(session.Changes) == 0:
+		resume = "create"
+	case stage == "review" && !s.hasLivePassingChecks(session):
+		resume = "checks"
+	}
+	w.Status = "paused"
+	w.Reason = fmt.Sprintf("The %s reached its usage limit during the %s stage. Nothing was lost: resume when the limit resets, or choose another model for that stage.", limit.Plan(), workflowStageLabel(stage))
+	w.Pause = &ChangeWorkflowPause{Stage: stage, ResumeFrom: resume, Provider: string(limit.Provider)}
+	if !limit.ResetsAt.IsZero() {
+		w.Pause.ResumesAt = limit.ResetsAt.UTC()
+	}
+}
+
+func workflowStageLabel(stage string) string {
+	switch stage {
+	case "create":
+		return "creation"
+	case "test":
+		return "testing"
+	default:
+		return stage
 	}
 }
 

@@ -320,6 +320,8 @@ type cliCapture struct {
 	Input       string
 	System      string
 	Settings    string
+	// AnthropicEnv lists the API-key and cloud settings the CLI could see.
+	AnthropicEnv []string
 }
 
 func cliFixture(t *testing.T, provider config.ModelProvider, mode string) (config.ModelProfile, string) {
@@ -364,12 +366,18 @@ func TestCLIHelperProcess(t *testing.T) {
 	directory, _ := os.Getwd()
 	info, _ := os.Stat(directory)
 	agentFile := ".agents/agents/mini-orca/agent.md"
-	if os.Getenv("MINI_ORCA_TEST_PROVIDER") == "pi" {
+	if provider := os.Getenv("MINI_ORCA_TEST_PROVIDER"); provider == "pi" || provider == "claude" {
 		agentFile = "system.txt"
 	}
 	system, _ := os.ReadFile(filepath.Join(directory, agentFile))
 	settings, _ := os.ReadFile(filepath.Join(directory, ".pi/settings.json"))
-	capture, _ := json.Marshal(cliCapture{os.Args[4:], directory, uint32(info.Mode().Perm()), string(input), string(system), string(settings)})
+	var anthropic []string
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "ANTHROPIC_") || strings.HasPrefix(entry, "CLAUDE_CODE_USE_") {
+			anthropic = append(anthropic, entry)
+		}
+	}
+	capture, _ := json.Marshal(cliCapture{os.Args[4:], directory, uint32(info.Mode().Perm()), string(input), string(system), string(settings), anthropic})
 	if os.WriteFile(os.Getenv("MINI_ORCA_TEST_CAPTURE"), capture, 0600) != nil {
 		os.Exit(99)
 	}
@@ -395,6 +403,9 @@ func TestCLIHelperProcess(t *testing.T) {
 		fmt.Fprint(os.Stderr, strings.Repeat("x", 64*1024+1))
 	default:
 		fmt.Print(cliFixtureOutput(config.ModelProvider(os.Getenv("MINI_ORCA_TEST_PROVIDER")), mode))
+		if strings.HasPrefix(mode, "plan-limit") {
+			os.Exit(1)
+		}
 	}
 	os.Exit(0)
 }
@@ -422,6 +433,12 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 		content = `null`
 	case "extra-property":
 		content = `{"answer":"done","toolAction":"Completing task"}`
+	}
+	if provider == config.ClaudeProvider {
+		return claudeFixtureOutput(mode, content)
+	}
+	if provider == config.AgyProvider && (strings.HasPrefix(mode, "agent") || strings.HasPrefix(mode, "plan-limit")) {
+		return agyAgentFixture(mode)
 	}
 	if provider == config.AgyProvider {
 		// Agy reports its global catalog even when the custom agent denies these tools.

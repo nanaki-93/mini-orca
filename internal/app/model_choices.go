@@ -28,6 +28,7 @@ type AvailableModels struct {
 	Defaults map[string]string `json:"defaults"`
 	Pi       ModelDiscovery    `json:"pi"`
 	Agy      ModelDiscovery    `json:"agy"`
+	Claude   ModelDiscovery    `json:"claude"`
 }
 
 type ModelDiscovery struct {
@@ -49,6 +50,9 @@ func configuredModelID(profile config.ModelProfile) (string, error) {
 func cliModelSelection(selection string) (config.ModelProvider, string, bool) {
 	if model, ok := strings.CutPrefix(selection, "agy:"); ok {
 		return config.AgyProvider, model, config.ValidAgyModelID(model)
+	}
+	if model, ok := strings.CutPrefix(selection, "claude:"); ok {
+		return config.ClaudeProvider, model, config.ValidClaudeModelID(model)
 	}
 	if model, ok := strings.CutPrefix(selection, "pi:"); ok {
 		provider, id, found := strings.Cut(model, "/")

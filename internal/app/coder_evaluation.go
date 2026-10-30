@@ -61,7 +61,7 @@ func RunCoder(ctx context.Context, cfg *config.Config, task CoderTask, tools boo
 	defer service.CancelChangeWorkflows()
 	runtime := service.workflowStageRuntime(0, string(config.BugModelScope))
 	if tools && !toolStageAvailable(session, runtime) {
-		return nil, errors.New("the bug profile's model cannot run a tool-using agent; use a pi model")
+		return nil, errors.New("the bug profile's model cannot run a tool-using agent; use a pi, claude or agy model")
 	}
 	runCtx, cancel, err := service.workflowAgentContext(ctx, ChangeWorkflowModels{Create: string(config.BugModelScope), Test: string(config.BugModelScope), Review: string(config.BugModelScope)})
 	if err != nil {

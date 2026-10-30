@@ -218,4 +218,5 @@ func (s *Service) restoreChangeWorkflow(session *ChangeSession) {
 	if w.Status == "interrupted" || w.Status == "failed" || w.Status == "stale" {
 		stopChangeWorkflowStages(w)
 	}
+	settleWorkflowPause(w)
 }

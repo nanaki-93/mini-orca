@@ -30,7 +30,7 @@ func TestTheCoderEvaluationRunsEitherCoderOnAScratchProject(t *testing.T) {
 	if err != nil || oneShot.Tools || len(oneShot.Changes) != 1 || oneShot.Changes[0].Content != withSub || oneShot.Usage.ModelCalls != 1 || oneShot.Stage != nil {
 		t.Fatalf("one-shot attempt = %+v, %v", oneShot, err)
 	}
-	if _, err := RunCoder(context.Background(), scopedTestConfig(server.URL), coderEvaluationTask(), true); err == nil || !strings.Contains(err.Error(), "use a pi model") {
+	if _, err := RunCoder(context.Background(), scopedTestConfig(server.URL), coderEvaluationTask(), true); err == nil || !strings.Contains(err.Error(), "use a pi, claude or agy model") {
 		t.Fatalf("a tool run on a model without tools = %v", err)
 	}
 
@@ -44,8 +44,8 @@ func TestTheCoderEvaluationRunsEitherCoderOnAScratchProject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "coder.json"), steps, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(fakePiEnv, "1")
-	t.Setenv("MINI_ORCA_FAKE_PI_DIR", dir)
+	t.Setenv(fakeCLIEnv, "1")
+	t.Setenv(fakeCLIDirEnv, dir)
 	cfg := scopedTestConfig(server.URL)
 	cfg.ModelScopes.Bug = piScope("fake/coder")
 	tools, err := RunCoder(context.Background(), cfg, coderEvaluationTask(), true)

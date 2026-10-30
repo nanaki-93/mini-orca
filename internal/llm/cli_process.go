@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,11 +23,18 @@ type cliOutputBuffer struct {
 	limit    int
 	cancel   context.CancelFunc
 	exceeded bool
+	// keepHead keeps the first limit bytes and drops the rest instead of
+	// ending the process.
+	keepHead bool
 }
 
 func (b *cliOutputBuffer) Write(data []byte) (int, error) {
-	if len(data) > b.limit-b.buffer.Len() {
+	if room := b.limit - b.buffer.Len(); len(data) > room {
 		b.exceeded = true
+		if b.keepHead {
+			b.buffer.Write(data[:room])
+			return len(data), nil
+		}
 		b.cancel()
 		return 0, errCLIOutputLimit
 	}
@@ -44,7 +52,7 @@ func runCLI(ctx context.Context, profile config.ModelProfile, invocation cliInvo
 	timed, cancel := providerRequestContext(ctx)
 	defer cancel()
 	process := exec.CommandContext(timed, executable, invocation.args...)
-	process.Dir = invocation.directory
+	process.Dir, process.Env = invocation.directory, cliEnvironment(profile.Provider, nil)
 	process.Stdin = strings.NewReader(invocation.input)
 	stdout := &cliOutputBuffer{limit: maxProviderResponseBytes, cancel: cancel}
 	stderr := &cliOutputBuffer{limit: 64 * 1024, cancel: cancel}
@@ -67,9 +75,39 @@ func runCLI(ctx context.Context, profile config.ModelProfile, invocation cliInvo
 		return nil, fmt.Errorf("llm client: CLI request ended: %w", timed.Err())
 	}
 	if err != nil {
+		if limit := reportedPlanLimit(profile, stdout.buffer.Bytes(), stderr.buffer.String()); limit != nil {
+			return nil, limit
+		}
 		return nil, cliProcessError(profile.Provider, err)
 	}
 	return stdout.buffer.Bytes(), nil
+}
+
+// reportedPlanLimit finds a plan limit that a failed CLI reported in its
+// event stream or, failing that, in its diagnostics.
+func reportedPlanLimit(profile config.ModelProfile, stdout []byte, stderr string) *PlanLimitError {
+	var limit *PlanLimitError
+	if _, err := decodeCLIResponse(profile, stdout); errors.As(err, &limit) {
+		return limit
+	}
+	return planLimitFromText(profile.Provider, stderr)
+}
+
+// cliEnvironment is the environment a CLI runs with: the daemon's, plus
+// extra. Claude Code would bill an API key or a cloud account if one were in
+// the environment, so those settings are removed: it runs on its plan login.
+func cliEnvironment(provider config.ModelProvider, extra []string) []string {
+	if provider != config.ClaudeProvider && len(extra) == 0 {
+		return nil
+	}
+	environment := os.Environ()
+	if provider == config.ClaudeProvider {
+		environment = slices.DeleteFunc(environment, func(entry string) bool {
+			name, _, _ := strings.Cut(entry, "=")
+			return strings.HasPrefix(name, "ANTHROPIC_") || strings.HasPrefix(name, "CLAUDE_CODE_USE_") || name == "AWS_BEARER_TOKEN_BEDROCK"
+		})
+	}
+	return append(environment, extra...)
 }
 
 func cliProcessError(provider config.ModelProvider, err error) error {

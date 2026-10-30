@@ -1705,11 +1705,11 @@ components:
       type: string
       minLength: 1
       maxLength: 644
-      pattern: '^(analyze|bug|code|configured:[0-9a-fA-F]{64}|pi:[^/]+/.+|agy:[a-zA-Z0-9][a-zA-Z0-9._-]{0,511})$'
+      pattern: '^(analyze|bug|code|configured:[0-9a-fA-F]{64}|pi:[^/]+/.+|agy:[a-zA-Z0-9][a-zA-Z0-9._-]{0,511}|claude:[a-zA-Z0-9][a-zA-Z0-9._-]{0,119}(\[[a-z0-9]+\])?)$'
       description: Opaque ID returned by the available model catalog. Legacy analyze, bug and code profile names remain supported. Catalog membership is rechecked before admission; endpoints, executable paths and credentials cannot be supplied.
     AvailableModels:
       type: object
-      required: [models, defaults, pi, agy]
+      required: [models, defaults, pi, agy, claude]
       properties:
         models:
           type: array
@@ -1725,6 +1725,9 @@ components:
           $ref: '#/components/schemas/ModelDiscovery'
         agy:
           $ref: '#/components/schemas/ModelDiscovery'
+        claude:
+          $ref: '#/components/schemas/ModelDiscovery'
+          description: Claude Code has no catalog command; ready means its executable is installed, and the choices are its model aliases. Whether the signed-in plan includes a model shows when a run starts.
     ModelDiscovery:
       type: object
       required: [status]
@@ -1737,8 +1740,8 @@ components:
       properties:
         id: {$ref: '#/components/schemas/ModelSelection'}
         name: {type: string}
-        provider: {type: string, description: Transport provider for configured or Agy models; Pi provider ID for Pi models.}
-        source: {type: string, enum: [configured, pi, agy]}
+        provider: {type: string, description: Transport provider for configured or Agy models; Pi provider ID for Pi models; anthropic for Claude Code models.}
+        source: {type: string, enum: [configured, pi, agy, claude]}
         location: {type: string, enum: [local, remote, unknown], description: Pi location is inferred from catalog baseUrl metadata; Agy location is unknown because its catalog omits endpoints. It does not waive CLI prompt consent or verify availability of the endpoint.}
         model: {$ref: '#/components/schemas/ScopedModel'}
     ModelCatalog:
@@ -1757,7 +1760,7 @@ components:
       type: object
       required: [provider, model]
       properties:
-        provider: {type: string, enum: ['', openai, gemini, vertex, agy, pi]}
+        provider: {type: string, enum: ['', openai, gemini, vertex, agy, pi, claude]}
         model: {type: string}
         api_base_url: {type: string}
         api_key: {type: string, writeOnly: true, description: Empty keeps the configured key for the same provider.}
@@ -3111,7 +3114,7 @@ components:
       required: [id, status, evidence, model]
       properties:
         id: {type: string, enum: [correctness, architecture, test_quality, security, performance]}
-        status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped]}
+        status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, paused]}
         reason: {type: string}
         evidence: {type: string, enum: [model_advice, unmeasured], description: Performance specialist advice is always unmeasured; other reviews are model advice.}
         model: {$ref: '#/components/schemas/ScopedModel'}
@@ -3129,7 +3132,7 @@ components:
         stream_output: {type: boolean, default: false}
         input: {$ref: '#/components/schemas/ChangeInput'}
         id: {type: string}
-        status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
+        status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review, paused], description: "paused: a stage's subscription plan reached its usage limit; see pause."}
         attempt: {type: integer, minimum: 1}
         resume_from: {type: string, enum: [create, test, checks, review]}
         reason: {type: string}
@@ -3147,13 +3150,13 @@ components:
               started_at: {type: string, format: date-time}
               finished_at: {type: string, format: date-time}
               name: {type: string, enum: [create, test, review, human_review]}
-              status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting]}
+              status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting, paused]}
               model: {$ref: '#/components/schemas/ScopedModel'}
               usage: {$ref: '#/components/schemas/AgentUsage'}
               cost: {$ref: '#/components/schemas/AgentCostEstimate'}
               tools:
                 type: object
-                description: "The stage's latest run as a tool-using agent in the task's worktree (create and test stages on a CLI that serves Mini-Orca's tools, pi today); absent for a one-shot proposal."
+                description: "The stage's latest run as a tool-using agent in the task's worktree (create and test stages on pi, Claude Code or agy); absent for a one-shot proposal."
                 required: [calls, turns, finished]
                 properties:
                   calls: {type: integer, minimum: 0}
@@ -3170,6 +3173,15 @@ components:
             proposal_hash: {type: string}
             reason: {type: string, minLength: 1, maxLength: 1024}
             at: {type: string, format: date-time}
+        pause:
+          type: object
+          description: Set while the run is paused because a stage's subscription plan reached its usage limit. Nothing the stage left half done was kept; start the workflow again with resume_from to continue.
+          required: [stage, resume_from, provider]
+          properties:
+            stage: {type: string, enum: [create, test, review], description: The stage that reached the limit}
+            resume_from: {type: string, enum: [create, test, checks, review], description: The resume_from that continues the run}
+            provider: {type: string, description: The CLI whose plan reached its limit (claude, agy or pi)}
+            resumes_at: {type: string, format: date-time, description: When the plan's limit resets, when the CLI said so}
         specialists:
           type: array
           maxItems: 5
