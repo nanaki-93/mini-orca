@@ -72,7 +72,6 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	}
 	markCommentsSent(session.Comments, sent, session.Revision)
 	request.Message = message
-	refreshChangeScopeSuggestions(root, session)
 	retryMessage := workflowRetryMessage(request.Message, session.Workflow, session.Checks)
 	w := s.prepareWorkflowRun(session, request, start, cleanedMessages)
 	if err := storeChangeSession(root, session); err != nil {
@@ -253,9 +252,6 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	if session.Workflow == nil || session.Workflow.ID != job.id {
 		return false, project.ErrRevisionConflict
 	}
-	if len(session.ScopeSuggestions) > 0 {
-		return false, nil
-	}
 	if errors.Is(runErr, errWorkflowChecksFailed) {
 		return workflowChecksRepairable(session.Checks), nil
 	}
@@ -308,13 +304,6 @@ func (s *Service) prepareWorkflowAutoRepair(ctx context.Context, job *changeWork
 	if _, err := s.loadChangeGraphSnapshot(ctx, job, changeGraphSnapshot(session)); err != nil {
 		return "", err
 	}
-	refreshChangeScopeSuggestions(job.root, session)
-	if len(session.ScopeSuggestions) > 0 {
-		return "", fmt.Errorf("approve suggested scope before repairing")
-	}
-	probe, lessons := probeWorkflowFriction(session.Workflow, session.Checks)
-	session.Workflow.ProbeSummary = probe
-	session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
 	retryMsg := workflowRetryMessage(baseMessage, session.Workflow, session.Checks)
 	session.Messages = stripWorkflowTestMessages(session.Messages)
 	session.Workflow.AutoRepairAttempts = attempt
@@ -387,12 +376,6 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 			if !errors.Is(runErr, errWorkflowChecksFailed) && !s.hasLivePassingChecks(session) {
 				delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 			}
-		}
-		if probe, lessons := probeWorkflowFriction(w, session.Checks); probe != "" || len(lessons) > 0 {
-			if w.ProbeSummary == "" {
-				w.ProbeSummary = probe
-			}
-			w.HarnessLessons = mergeHarnessLessons(w.HarnessLessons, lessons)
 		}
 		w.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
 		err = storeChangeSession(job.root, session)

@@ -3045,8 +3045,6 @@ components:
         reason: {type: string}
         auto_repair: {type: boolean}
         auto_repair_attempts: {type: integer}
-        probe_summary: {type: string, description: Optional Harness² Propose-Probe-Compose diagnostic summary of check or critic friction.}
-        harness_lessons: {type: array, items: {type: string}, description: Optional reusable Harness² lessons extracted from verification or critic loops.}
         models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
         stages:
           type: array
@@ -3099,7 +3097,6 @@ components:
         state: {type: string, enum: [draft, applied, undone, prepared, undoing, recovery_required]}
         freshness: {type: string, enum: [current, stale]}
         plan: {$ref: '#/components/schemas/ChangePlan'}
-        scope_suggestions: {type: array, items: {type: string}, description: Failed-check suggestions requiring a newly reviewed plan; never implicit scope changes for planned sessions.}
         reviewed_files: {type: array, uniqueItems: true, items: {type: string}}
         file_review_hash: {type: string}
         last_reviewed_hash: {type: string}

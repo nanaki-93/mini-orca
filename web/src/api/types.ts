@@ -340,7 +340,6 @@ export interface ChangeSession extends ProjectIdentity {
   repair_attempts?: number;
   workflow?: ChangeWorkflow;
   plan?: ChangePlan;
-  scope_suggestions?: string[];
   finding_targets?: FindingTarget[];
   git?: GitIdentity;
   commit?: ChangeCommit;

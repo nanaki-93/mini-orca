@@ -184,34 +184,6 @@ func TestRunnerRegressionBaselineTreatsAnyFailureAsReproduced(t *testing.T) {
 	}
 }
 
-func TestPlannedFailureSuggestsScopeWithoutCapturingIt(t *testing.T) {
-	s, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
-	if err := os.WriteFile(filepath.Join(root, "outside_test.go"), []byte("package main\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Reindex(); err != nil {
-		t.Fatal(err)
-	}
-	session := openChangeFixture(t, s, "main.go", "main_test.go")
-	if err := captureChangePlan(root, session, &ChangePlanInput{Problem: "Regression", Approach: "Correct Run"}); err != nil {
-		t.Fatal(err)
-	}
-	before := append([]ChangeTarget(nil), session.Targets...)
-	session.Checks = []CheckResult{{Name: "tests", Required: true, State: CheckFailed, Output: "./outside_test.go:10: undefined: Missing"}}
-	refreshChangeScopeSuggestions(root, session)
-	if !reflect.DeepEqual(before, session.Targets) || len(session.ScopeSuggestions) == 0 || session.ScopeSuggestions[0] != "outside_test.go" {
-		t.Fatalf("failure silently changed approved scope: %+v", session)
-	}
-	if err := validateStoredPlan(session); err != nil {
-		t.Fatal(err)
-	}
-	session.Checks = []CheckResult{{Name: "tests", Required: true, State: CheckPassed}}
-	refreshChangeScopeSuggestions(root, session)
-	if len(session.ScopeSuggestions) != 0 {
-		t.Fatal("passing checks retained stale expansion request")
-	}
-}
-
 func TestCriticRetryCannotReuseHistoricalCheckAuthority(t *testing.T) {
 	s, _, session := workflowService(t, [3]func() string{
 		func() string { return workflowImplementation }, func() string { return workflowTests }, func() string { return workflowApproval },

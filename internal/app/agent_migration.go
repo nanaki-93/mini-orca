@@ -23,6 +23,13 @@ func decodeAgentHistory(data []byte, value any) error {
 var errNewerTask = errors.New("task file was written by a newer Mini-Orca")
 
 func decodeCompatibleChangeHistory(data []byte, id string) (*ChangeSession, error) {
+	if !jsontext.Value(data).IsValid() {
+		return nil, fmt.Errorf("decode change history: history must contain one unambiguous JSON value")
+	}
+	data, err := dropRetiredChangeFields(data)
+	if err != nil {
+		return nil, fmt.Errorf("decode change history: %w", err)
+	}
 	var session ChangeSession
 	if err := decodeAgentHistory(data, &session); err != nil {
 		return nil, fmt.Errorf("decode change history: %w", err)
@@ -37,6 +44,50 @@ func decodeCompatibleChangeHistory(data []byte, id string) (*ChangeSession, erro
 		return nil, err
 	}
 	return &session, nil
+}
+
+// Older task files may carry fields that are no longer written: scope
+// suggestions, and the workflow's probe summary and harness lessons. They are
+// dropped on read, so such a task still loads and its next save omits them.
+var (
+	retiredChangeKeys   = []string{"scope_suggestions"}
+	retiredWorkflowKeys = []string{"probe_summary", "harness_lessons"}
+)
+
+func dropRetiredChangeFields(data []byte) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	dropped := dropKeys(fields, retiredChangeKeys)
+	if raw := fields["workflow"]; len(raw) > 0 && string(raw) != "null" {
+		var workflow map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &workflow); err != nil {
+			return nil, err
+		}
+		if dropKeys(workflow, retiredWorkflowKeys) {
+			encoded, err := json.Marshal(workflow)
+			if err != nil {
+				return nil, err
+			}
+			fields["workflow"], dropped = encoded, true
+		}
+	}
+	if !dropped {
+		return data, nil
+	}
+	return json.Marshal(fields)
+}
+
+func dropKeys(fields map[string]json.RawMessage, keys []string) bool {
+	dropped := false
+	for _, key := range keys {
+		if _, found := fields[key]; found {
+			delete(fields, key)
+			dropped = true
+		}
+	}
+	return dropped
 }
 
 func decodeCompatibleAnalysisHistory(data []byte) (*AnalysisRun, error) {

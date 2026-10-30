@@ -49,7 +49,6 @@ func (s *Service) UpdateChangePlan(ctx context.Context, id string, request Chang
 		return nil, err
 	}
 	session.ContextManifest = s.contextManifestForRuntime(manifest, s.conf().runtimes.function)
-	session.ScopeSuggestions = nil
 	session.LastReviewedHash, session.FileReviewHash = "", ""
 	session.LastReviewedChanges, session.ReviewedFiles = nil, nil
 	session.Revision++

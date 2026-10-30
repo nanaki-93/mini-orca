@@ -56,6 +56,48 @@ func TestChangeHistoryLimitCountsOnlyConversationsAndRejectsCorruption(t *testin
 	}
 }
 
+func TestTaskFilesWithRetiredFieldsStillLoad(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	session := openChangeFixture(t, service, "main.go")
+	path := filepath.Join(root, ".mini-orca", "changes", session.ID+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	fields["scope_suggestions"] = json.RawMessage(`["outside_test.go"]`)
+	fields["workflow"] = json.RawMessage(`{"probe_summary":"Fix tests.","harness_lessons":["Keep tests."]}`)
+	older, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleaned, err := dropRetiredChangeFields(older)
+	if err != nil || strings.Contains(string(cleaned), "scope_suggestions") || strings.Contains(string(cleaned), "probe_summary") || strings.Contains(string(cleaned), "harness_lessons") {
+		t.Fatalf("retired fields kept: %s, %v", cleaned, err)
+	}
+	delete(fields, "workflow")
+	older, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, older, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadChangeSession(root, session.ID)
+	if err != nil || loaded.ID != session.ID {
+		t.Fatalf("a task saved with scope suggestions no longer loads: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{"schema_version":1,"scope_suggestions":[],"scope_suggestions":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadChangeSession(root, session.ID); err == nil {
+		t.Fatal("a duplicate retired key hid an ambiguous task file")
+	}
+}
+
 func openChangeFixture(t *testing.T, service *Service, paths ...string) *ChangeSession {
 	t.Helper()
 	index, err := service.manager.Index()

@@ -103,8 +103,6 @@ type ChangeWorkflow struct {
 	Models             ChangeWorkflowModels     `json:"models"`
 	AutoRepair         bool                     `json:"auto_repair,omitempty"`
 	AutoRepairAttempts int                      `json:"auto_repair_attempts,omitempty"`
-	ProbeSummary       string                   `json:"probe_summary,omitempty"`
-	HarnessLessons     []string                 `json:"harness_lessons,omitempty"`
 	Stages             []ChangeWorkflowStage    `json:"stages"`
 	Review             *ChangeWorkflowReview    `json:"review,omitempty"`
 	Override           *ChangeWorkflowOverride  `json:"override,omitempty"`

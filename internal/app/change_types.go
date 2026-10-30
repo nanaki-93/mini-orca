@@ -21,7 +21,6 @@ type ChangeEdit = archgate.ChangeEdit
 // and audits. Restored check/review evidence is cleared before reuse.
 type ChangeSession struct {
 	Plan                *ChangePlan             `json:"plan,omitempty"`
-	ScopeSuggestions    []string                `json:"scope_suggestions,omitempty"`
 	ReviewedFiles       []string                `json:"reviewed_files,omitempty"`
 	FileReviewHash      string                  `json:"file_review_hash,omitempty"`
 	LastReviewedChanges []ChangeEdit            `json:"last_reviewed_changes,omitempty"`

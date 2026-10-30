@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
-	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
@@ -59,7 +58,6 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	current.Checks, current.ChecksWorkspaceHash, current.UpdatedAt = checks, checked, time.Now().UTC()
 	revokeApproval(current)
 	current.CheckOptions = request.CheckOptions
-	refreshChangeScopeSuggestions(root, current)
 	if current.Workflow != nil {
 		reconcileWorkflowAfterChecks(current, checks, ctx.Value(changeWorkflowContextKey{}) != nil)
 	}
@@ -507,19 +505,7 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	if err := s.requireRepairableChange(session); err != nil {
 		return nil, root, err
 	}
-	refreshChangeScopeSuggestions(root, session)
-	if len(session.ScopeSuggestions) > 0 {
-		return nil, root, fmt.Errorf("approve suggested scope before repairing")
-	}
 	session.RepairAttempts++
-	if session.Workflow != nil {
-		if probeSummary, lessons := probeWorkflowFriction(session.Workflow, session.Checks); probeSummary != "" || len(lessons) > 0 {
-			if probeSummary != "" {
-				session.Workflow.ProbeSummary = probeSummary
-			}
-			session.Workflow.HarnessLessons = mergeHarnessLessons(session.Workflow.HarnessLessons, lessons)
-		}
-	}
 	if err := storeChangeSession(root, session); err != nil {
 		return nil, root, err
 	}
@@ -532,37 +518,6 @@ func (s *Service) requireRepairableChange(session *ChangeSession) error {
 		return fmt.Errorf("repair requires current failed checks and fewer than three attempts")
 	}
 	return nil
-}
-
-func refreshChangeScopeSuggestions(root string, session *ChangeSession) {
-	if session == nil {
-		return
-	}
-	session.ScopeSuggestions = nil
-	if len(session.Checks) == 0 || requiredChecksPassed(session.Checks) {
-		return
-	}
-	existingPaths := collectSessionTargetPaths(session)
-	failedOutputs := collectFailedCheckOutputs(session.Checks)
-	session.ScopeSuggestions = changes.ResolveExpandedTargetPaths(root, existingPaths, failedOutputs, isTestFilePath)
-}
-
-func collectSessionTargetPaths(session *ChangeSession) []string {
-	paths := make([]string, 0, len(session.Targets))
-	for _, t := range session.Targets {
-		paths = append(paths, t.Path)
-	}
-	return paths
-}
-
-func collectFailedCheckOutputs(checks []CheckResult) []string {
-	var out []string
-	for _, check := range checks {
-		if check.State != CheckPassed && check.State != CheckSkipped && strings.TrimSpace(check.Output) != "" {
-			out = append(out, check.Output)
-		}
-	}
-	return out
 }
 
 func changeCheckEvidence(checks []CheckResult) string {

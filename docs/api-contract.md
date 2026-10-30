@@ -1017,9 +1017,9 @@ automatic repairs through a conditional ADK graph. Each repair reserves the
 shared repair budget and persists its transition before another generation.
 Only actionable failed checks or completed rejecting reviews qualify; authority,
 timeout, cancellation and persistence failures never cause automatic regeneration.
-Failed checks can expose `scope_suggestions`, but checked-change
-workflows never silently add targets and automatic repair stops when expansion
-would be needed. Review the suggested scope in a new plan before generation.
+Checked-change workflows never add targets on their own. A proposal that
+writes outside the task's files fails and names that file; capture it in a new
+task to change it.
 Interrupted or unavailable required checks stop automatic repair: they do not
 establish a code failure. Their evidence remains available for an explicit retry.
 Timeout reasons distinguish a model-stage deadline, a focused check deadline and
