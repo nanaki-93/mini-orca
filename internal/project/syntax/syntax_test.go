@@ -177,3 +177,28 @@ func TestExtraDefinitionQueriesCompile(t *testing.T) {
 	cpp := Analyze("a.cpp", []byte("int Foo::bar(int x) {\n  return x > 0 ? 1 : 2;\n}\n"))
 	assertFunctions(t, cpp, []wantFunction{{"Foo::bar", 2, 1, 3}})
 }
+
+func TestOutlinesListDeclarationsWithTheirFirstLine(t *testing.T) {
+	ts := Outline("store.ts", []byte("export interface Item { id: string }\nexport class Store {\n  add(item: Item): void {\n    this.items.push(item);\n  }\n}\nexport function total(xs: number[]): number {\n  return 0;\n}\n"))
+	want := []Symbol{
+		{Kind: "interface", Name: "Item", Line: 1, Signature: "interface Item"},
+		{Kind: "class", Name: "Store", Line: 2, Signature: "class Store"},
+		{Kind: "method", Name: "Store.add", Line: 3, Signature: "add(item: Item): void"},
+		{Kind: "function", Name: "total", Line: 7, Signature: "function total(xs: number[]): number"},
+	}
+	if len(ts) != len(want) {
+		t.Fatalf("ts outline = %+v", ts)
+	}
+	for i := range want {
+		if ts[i] != want[i] {
+			t.Errorf("symbol %d = %+v, want %+v", i, ts[i], want[i])
+		}
+	}
+	goSymbols := Outline("p.go", []byte("package p\n\n// Limit caps runs.\nconst Limit = 3\n\ntype Runner struct{ n int }\n\nfunc (r *Runner) Run(ctx context.Context) error {\n\treturn nil\n}\n"))
+	if len(goSymbols) != 3 || goSymbols[0].Signature != "const Limit = 3" || goSymbols[1].Signature != "type Runner struct" || goSymbols[2].Name != "Runner.Run" || goSymbols[2].Signature != "func (r *Runner) Run(ctx context.Context) error" {
+		t.Fatalf("go outline = %+v", goSymbols)
+	}
+	if none := Outline("notes.unknownext", []byte("x")); none != nil {
+		t.Fatalf("unknown = %+v", none)
+	}
+}

@@ -13,12 +13,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/rules"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/syntax"
 	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
@@ -108,9 +108,9 @@ func composeChangeStagePromptContext(root string, session *ChangeSession, stageZ
 		manifest.Included = append(manifest.Included, project.ContextFile{Path: target.Path, Hash: target.Hash, SizeBytes: int64(len(target.Content))})
 	}
 	text.WriteString(budgetBrief(root, session.Targets))
-	if text.Len() < 12000 {
-		if siblingDecls := samePackageGoDecls(root, session); siblingDecls != "" && text.Len()+len(siblingDecls) <= maxChangeBytes {
-			text.WriteString(siblingDecls)
+	if text.Len() < 32*1024 {
+		if outlines := neighborOutlines(root, session); outlines != "" && text.Len()+len(outlines) <= maxChangeBytes {
+			text.WriteString(outlines)
 		}
 	}
 	if text.Len() > maxChangeBytes {
@@ -132,141 +132,21 @@ func summarizeTestTargetDecls(target ChangeTarget) string {
 	if !target.Exists || strings.TrimSpace(target.Content) == "" {
 		return "  (new test file)"
 	}
-	if filepath.Ext(target.Path) == ".go" {
-		if decls := extractGoDeclsFromText(target.Content); len(decls) > 0 {
-			joined := strings.Join(decls, "\n")
-			if len(joined) > 1600 {
-				return textutil.Truncate(joined, 1600) + "\n  ..."
-			}
-			return joined
+	if symbols := syntax.Outline(target.Path, []byte(target.Content)); len(symbols) > 0 {
+		var decls []string
+		for _, symbol := range symbols {
+			decls = append(decls, "  "+symbol.Signature)
 		}
+		joined := strings.Join(decls, "\n")
+		if len(joined) > 1600 {
+			return textutil.Truncate(joined, 1600) + "\n  ..."
+		}
+		return joined
 	}
 	if len(target.Content) <= 1200 {
 		return target.Content
 	}
 	return textutil.Truncate(target.Content, 1200) + "\n..."
-}
-
-func samePackageGoDecls(root string, session *ChangeSession) string {
-	policy, err := project.NewContextPolicy(root)
-	if err != nil {
-		return ""
-	}
-	var out strings.Builder
-	captured, goDirs := collectGoTargetDirs(session.Targets)
-	for _, dir := range goDirs {
-		appendDirGoDecls(root, dir, captured, policy, &out)
-	}
-	appendImportedLocalGoDecls(root, session.Targets, captured, policy, &out)
-	return out.String()
-}
-
-func appendImportedLocalGoDecls(root string, targets []ChangeTarget, captured map[string]bool, policy *project.ContextPolicy, out *strings.Builder) {
-	modPath := changes.ReadGoModulePath(root)
-	if modPath == "" {
-		return
-	}
-	var contents []string
-	for _, t := range targets {
-		if filepath.Ext(t.Path) == ".go" && t.Content != "" {
-			contents = append(contents, t.Content)
-		}
-	}
-	for _, dir := range changes.LocalImportedGoDirs(root, modPath, contents) {
-		appendDirGoDecls(root, dir, captured, policy, out)
-	}
-}
-
-type siblingDirFile struct {
-	name    string
-	relPath string
-	absPath string
-}
-
-func listSiblingDirFiles(root, dir string, captured map[string]bool, policy *project.ContextPolicy) []siblingDirFile {
-	absDir := root
-	if dir != "." {
-		absDir = filepath.Join(root, filepath.FromSlash(dir))
-	}
-	entries, err := os.ReadDir(absDir)
-	if err != nil {
-		return nil
-	}
-	var out []siblingDirFile
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		rel := entry.Name()
-		if dir != "." {
-			rel = dir + "/" + entry.Name()
-		}
-		if captured[rel] || !policy.Decide(rel).Include {
-			continue
-		}
-		out = append(out, siblingDirFile{
-			name:    entry.Name(),
-			relPath: rel,
-			absPath: filepath.Join(absDir, entry.Name()),
-		})
-	}
-	return out
-}
-
-func collectGoTargetDirs(targets []ChangeTarget) (map[string]bool, []string) {
-	captured := map[string]bool{}
-	var dirs []string
-	seenDirs := map[string]bool{}
-	for _, target := range targets {
-		captured[target.Path] = true
-		if filepath.Ext(target.Path) != ".go" {
-			continue
-		}
-		dir := filepath.ToSlash(filepath.Dir(target.Path))
-		if !seenDirs[dir] {
-			seenDirs[dir] = true
-			dirs = append(dirs, dir)
-		}
-	}
-	return captured, dirs
-}
-
-func appendDirGoDecls(root, dir string, captured map[string]bool, policy *project.ContextPolicy, out *strings.Builder) {
-	for _, f := range listSiblingDirFiles(root, dir, captured, policy) {
-		if !strings.HasSuffix(f.name, ".go") || strings.HasSuffix(f.name, "_test.go") {
-			continue
-		}
-		decls := extractGoFileDecls(f.absPath)
-		if len(decls) > 0 && out.Len() < 2048 {
-			if out.Len() == 0 {
-				out.WriteString("\nSame-package Go declarations (already defined in package; do not redeclare or emit in changes):\n")
-			}
-			out.WriteString("// " + f.relPath + "\n" + strings.Join(decls, "\n") + "\n")
-		}
-	}
-}
-
-func extractGoFileDecls(absPath string) []string {
-	data, err := os.ReadFile(absPath)
-	if err != nil || len(data) > 32768 {
-		return nil
-	}
-	return extractGoDeclsFromText(string(data))
-}
-
-func extractGoDeclsFromText(text string) []string {
-	var decls []string
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "const ") && !strings.HasPrefix(trimmed, "var ") && !strings.HasPrefix(trimmed, "type ") && !strings.HasPrefix(trimmed, "func ") {
-			continue
-		}
-		if idx := strings.Index(trimmed, "{"); idx > 0 {
-			trimmed = strings.TrimSpace(trimmed[:idx])
-		}
-		decls = append(decls, "  "+trimmed)
-	}
-	return decls
 }
 
 func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMessage, error) {
