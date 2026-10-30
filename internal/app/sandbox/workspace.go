@@ -66,30 +66,19 @@ func (copier *checkWorkspaceCopier) copyEntry(path, relative string, entry os.Di
 	if err != nil {
 		return err
 	}
-	if isCheckWorkspaceMetadata(relative) {
-		if info.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	}
-	if info.IsDir() {
-		skip, err := copier.skipper.skipDirectory(relative)
-		if err != nil {
-			return err
-		}
-		if skip {
-			return filepath.SkipDir
-		}
+	kind, err := copier.skipper.classify(relative, info)
+	switch {
+	case err != nil:
+		return err
+	case kind == entrySkipped:
+		return filepath.SkipDir
+	case kind == entryDirectory:
 		return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
-	}
-	if !isRegularCheckWorkspaceFile(info) {
+	case kind == entryIgnored:
 		return nil
 	}
-	if copier.files == checkLimits.maxWorkspaceFiles {
-		return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
-	}
-	if info.Size() > checkLimits.maxWorkspaceBytes-copier.bytes {
-		return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
+	if err := checkWorkspaceLimits(copier.files, copier.bytes, info.Size()); err != nil {
+		return err
 	}
 	return copier.copyFile(path, relative, info)
 }
@@ -197,6 +186,44 @@ type workspaceSkipper struct {
 	policy *project.ContextPolicy
 }
 
+// workspaceEntry is what the check copy and the fingerprint do with an entry.
+type workspaceEntry int
+
+const (
+	entryIgnored   workspaceEntry = iota // leave the file out
+	entrySkipped                         // leave the directory and everything below it out
+	entryDirectory                       // descend into the directory
+	entryFile                            // include the regular file
+)
+
+func (skipper *workspaceSkipper) classify(relative string, info os.FileInfo) (workspaceEntry, error) {
+	metadata := isCheckWorkspaceMetadata(relative)
+	switch {
+	case info.IsDir() && metadata:
+		return entrySkipped, nil
+	case info.IsDir():
+		skip, err := skipper.skipDirectory(relative)
+		if skip {
+			return entrySkipped, err
+		}
+		return entryDirectory, err
+	case metadata || !isRegularCheckWorkspaceFile(info):
+		return entryIgnored, nil
+	default:
+		return entryFile, nil
+	}
+}
+
+func checkWorkspaceLimits(files int, bytes, size int64) error {
+	if files == checkLimits.maxWorkspaceFiles {
+		return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
+	}
+	if size > checkLimits.maxWorkspaceBytes-bytes {
+		return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
+	}
+	return nil
+}
+
 func (skipper *workspaceSkipper) skipDirectory(relative string) (bool, error) {
 	if checkWorkspaceFixturePath(relative) {
 		return false, nil
@@ -261,30 +288,17 @@ func WorkspaceFingerprint(ctx context.Context, root string) (string, error) {
 		if err != nil {
 			return err
 		}
-		if isCheckWorkspaceMetadata(relative) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
+		kind, err := skipper.classify(relative, info)
+		switch {
+		case err != nil:
+			return err
+		case kind == entrySkipped:
+			return filepath.SkipDir
+		case kind != entryFile:
 			return nil
 		}
-		if info.IsDir() {
-			skip, err := skipper.skipDirectory(relative)
-			if err != nil {
-				return err
-			}
-			if skip {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !isRegularCheckWorkspaceFile(info) {
-			return nil
-		}
-		if files == checkLimits.maxWorkspaceFiles {
-			return fmt.Errorf("check workspace exceeds file limit of %d files", checkLimits.maxWorkspaceFiles)
-		}
-		if info.Size() > checkLimits.maxWorkspaceBytes-bytes {
-			return fmt.Errorf("check workspace exceeds byte limit of %d bytes", checkLimits.maxWorkspaceBytes)
+		if err := checkWorkspaceLimits(files, bytes, info.Size()); err != nil {
+			return err
 		}
 		copied, err := hashCheckWorkspaceFile(ctx, hash, path, relative, info, buffer, checkLimits.maxWorkspaceBytes-bytes)
 		if err != nil {
