@@ -226,6 +226,17 @@ export interface WorkflowStage {
   /** What the stage spent across attempts, and its estimated cost. */
   usage?: BudgetUsage;
   cost?: CostEstimate;
+  /** The stage's latest run as a tool-using agent; absent for a one-shot proposal. */
+  tools?: StageTools;
+}
+
+/** What a tool-using agent did in a stage. */
+export interface StageTools {
+  calls: number;
+  /** Calls per tool, most used first: "read_file 12, edit_file 4". */
+  summary?: string;
+  turns: number;
+  finished: boolean;
 }
 
 /** Model and tool calls and tokens an agent budget recorded. */

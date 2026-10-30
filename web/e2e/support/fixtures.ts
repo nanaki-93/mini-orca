@@ -75,7 +75,7 @@ export function reviewTask(): ChangeSession {
       id: 'wf-1',
       status: 'awaiting_human_review',
       stages: [
-        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16), model: stageModel('bug'), usage: spend(2, 18_400, 2_100), cost: estimate(0.061) },
+        { name: 'create', status: 'completed', started_at: ago(19), finished_at: ago(16), model: stageModel('bug'), usage: spend(2, 18_400, 2_100), cost: estimate(0.061), tools: { calls: 14, turns: 9, finished: true, summary: 'read_file 6, edit_file 4, search 2, run_checks 1, finish 1' } },
         { name: 'test', status: 'completed', started_at: ago(16), finished_at: ago(11), model: stageModel('code'), usage: spend(1, 9_800, 1_300), cost: estimate(0.034) },
         { name: 'review', status: 'completed', started_at: ago(11), finished_at: ago(7), model: stageModel('analyze'), usage: spend(3, 31_000, 1_900), cost: estimate(0.099) },
         { name: 'human_review', status: 'waiting', started_at: ago(7) },

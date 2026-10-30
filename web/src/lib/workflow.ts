@@ -1,8 +1,8 @@
 // Agent workflow presentation and request shaping. Consent is captured per
 // request: every remote destination the run will use is listed and confirmed.
 
-import type { AgentSettings, BudgetUsage, ChangeHistoryEntry, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity } from '@/api/types';
-import { durationBetween } from './util';
+import type { AgentSettings, BudgetUsage, ChangeHistoryEntry, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity, StageTools } from '@/api/types';
+import { durationBetween, plural } from './util';
 import { phaseTone, type PhaseTone } from './readiness';
 
 export const STAGE_LABELS: Record<string, string> = {
@@ -39,6 +39,16 @@ export interface StageView {
   startedAt?: string;
   usage?: BudgetUsage;
   cost?: CostEstimate;
+  /** How the stage's agent worked with tools, for a tool-using run. */
+  tools?: string;
+}
+
+/** "Worked with tools: 34 calls in 12 turns (read_file 12, …)", or "" for a one-shot stage. */
+export function stageToolsLabel(tools: StageTools | undefined): string {
+  if (!tools) return '';
+  const counts = tools.summary ? ` (${tools.summary})` : '';
+  const ended = tools.finished ? '' : '; stopped before finishing';
+  return `Worked with tools: ${plural(tools.calls, 'call')} in ${plural(tools.turns, 'turn')}${counts}${ended}`;
 }
 
 export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[] {
@@ -57,6 +67,7 @@ export function workflowStages(workflow: ChangeWorkflow | undefined): StageView[
     startedAt: stage.started_at,
     usage: stage.usage,
     cost: stage.cost,
+    tools: stageToolsLabel(stage.tools),
   }));
 }
 

@@ -244,6 +244,7 @@ test('usage lists what agents spent per task and the task shows its own spend', 
   await expect(page).toHaveURL(/#\/tasks\/chg-1/);
   await expect(page.getByRole('complementary', { name: 'Review gate' })).toContainText('6 calls · 65k tokens · $0.194');
   await expect(page.getByRole('region', { name: 'Agent run' })).toContainText('21k tokens · $0.061');
+  await expect(page.getByRole('region', { name: 'Agent run' })).toContainText('Worked with tools: 14 calls in 9 turns (read_file 6, edit_file 4, search 2, run_checks 1, finish 1)');
 });
 
 test('a finished agent run is announced with its spend', async ({ page, daemon }) => {

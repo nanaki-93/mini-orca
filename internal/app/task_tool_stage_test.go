@@ -142,6 +142,12 @@ func TestAWorktreeTaskOnPiIsWrittenAndTestedByToolUsingAgents(t *testing.T) {
 		t.Fatalf("tester run = %+v", testerRun)
 	}
 
+	if tools := finished.Workflow.Stages[0].Tools; tools == nil || tools.Calls != 4 || tools.Turns != 5 || !tools.Finished || tools.Summary != "edit_file 1, finish 1, read_file 1, run_checks 1" {
+		t.Fatalf("creation tools = %+v", tools)
+	}
+	if tools := finished.Workflow.Stages[1].Tools; tools == nil || tools.Calls != 3 {
+		t.Fatalf("testing tools = %+v", tools)
+	}
 	creation := finished.Workflow.Stages[0].Usage
 	if creation == nil || creation.ModelCalls != 5 || creation.InputTokens != 5000 || creation.OutputTokens != 250 {
 		t.Fatalf("creation usage = %+v", creation)

@@ -3151,6 +3151,15 @@ components:
               model: {$ref: '#/components/schemas/ScopedModel'}
               usage: {$ref: '#/components/schemas/AgentUsage'}
               cost: {$ref: '#/components/schemas/AgentCostEstimate'}
+              tools:
+                type: object
+                description: "The stage's latest run as a tool-using agent in the task's worktree (create and test stages on a CLI that serves Mini-Orca's tools, pi today); absent for a one-shot proposal."
+                required: [calls, turns, finished]
+                properties:
+                  calls: {type: integer, minimum: 0}
+                  summary: {type: string, description: "Calls per tool, most used first, such as read_file 12, edit_file 4"}
+                  turns: {type: integer, minimum: 0, description: Model turns the run took}
+                  finished: {type: boolean, description: Whether the agent ended with finish}
         review:
           $ref: '#/components/schemas/ChangeWorkflowReview'
         override:

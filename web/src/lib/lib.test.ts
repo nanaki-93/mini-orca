@@ -4,7 +4,7 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, explainable, formatElapsed, isTestPath, newFilePath, timeAgo } from './util';
-import { changeOverlaps, ownWorktreeBlocker, parseCommits, runStartOptions, workflowBlocker, workflowDestinations, workflowRequest, workflowStages, worktreeRemovable, worktreeTasks } from './workflow';
+import { changeOverlaps, ownWorktreeBlocker, parseCommits, runStartOptions, stageToolsLabel, workflowBlocker, workflowDestinations, workflowRequest, workflowStages, worktreeRemovable, worktreeTasks } from './workflow';
 import type { ChangeHistoryEntry, GitWorkspace, GitWorktree } from '@/api/types';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
@@ -164,6 +164,12 @@ describe('running the agents again', () => {
     expect(workflowStages(run)[1]).toMatchObject({ label: 'Run the checks', actor: 'Checks', model: '' });
     expect(workflowStages({ ...run, auto_repair_attempts: 1 })[1]).toMatchObject({ label: 'Write and run tests', model: 'tester' });
     expect(workflowStages({ ...run, resume_from: undefined })[1].label).toBe('Write and run tests');
+  });
+
+  it('says how a stage\'s agent worked with tools', () => {
+    expect(stageToolsLabel(undefined)).toBe('');
+    expect(stageToolsLabel({ calls: 34, turns: 12, finished: true, summary: 'read_file 20, edit_file 14' })).toBe('Worked with tools: 34 calls in 12 turns (read_file 20, edit_file 14)');
+    expect(stageToolsLabel({ calls: 1, turns: 1, finished: false })).toBe('Worked with tools: 1 call in 1 turn; stopped before finishing');
   });
 });
 

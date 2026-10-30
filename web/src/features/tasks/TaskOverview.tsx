@@ -148,6 +148,7 @@ function Stage({ stage, specialists }: { stage: StageView; specialists: Speciali
           ) : null}
           <span className="xs faint nowrap">{stage.durationMs ? formatDuration(stage.durationMs) : stageStatusLabel(stage)}</span>
         </div>
+        {stage.tools ? <p className="xs muted">{stage.tools}</p> : null}
         {stage.reason ? <p className="small muted">{stage.reason}</p> : null}
         {specialists.length ? (
           <div className="reviewers">

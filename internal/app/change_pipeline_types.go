@@ -61,6 +61,18 @@ type ChangeWorkflowStage struct {
 	// Usage is what the stage spent across attempts; Cost is estimated on read.
 	Usage *agentstate.BudgetUsage `json:"usage,omitempty"`
 	Cost  *AgentCostEstimate      `json:"cost,omitempty"`
+	// Tools describes the stage's latest run as a tool-using agent; nil for a
+	// one-shot proposal.
+	Tools *ChangeStageTools `json:"tools,omitempty"`
+}
+
+// ChangeStageTools is what a tool-using agent did in a stage.
+type ChangeStageTools struct {
+	Calls int `json:"calls"`
+	// Summary counts the calls per tool, most used first.
+	Summary  string `json:"summary,omitempty"`
+	Turns    int    `json:"turns"`
+	Finished bool   `json:"finished"`
 }
 
 // Findings block approval; notes are advisory and never change the verdict.
