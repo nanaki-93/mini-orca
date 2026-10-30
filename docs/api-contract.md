@@ -69,7 +69,7 @@ untrusted networks.
 | GET | `/ui` | Local Web UI (lite IDE): dashboard, explorer, guarded review, agent workflow, issues, docs, checks and Git merge review. |
 | GET | `/ui/assets/{path}` | Embedded Web UI stylesheet and ES modules (`.css`/`.js` only); same strict CSP, no directory listing. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog and `config_file`, the configuration file read (empty for built-in defaults). |
-| GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
+| GET | `/api/models/available` | Model choices from configured transports, Pi, Agy and Claude Code, with defaults and separate discovery statuses. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts; the project overview is requested from the project's analyze model only when it is local or `confirm_remote_provider` is true. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current` | Read the selected project summary without changing the active project. |
@@ -249,11 +249,17 @@ passive and sends no provider request. Native model names are configured explici
 available-model discovery remains the existing explicit Agy/Pi catalog operation.
 See [native Google configuration](../CONFIG.md#native-google-providers).
 
-Scopes can instead select `provider: agy` or `provider: pi` in local configuration.
-These CLI transports feed the same analysis and proposal workflows; they add no
-command-execution API. Catalog and provenance identify them as `cli://agy` or
-`cli://pi`, always with `remote_provider: true` and the same scope-specific
-confirmation requirement. CLI `temperature` and `max_tokens` metadata are
+Scopes can instead select `provider: agy`, `provider: pi` or `provider: claude`
+(Claude Code) in local configuration. These CLI transports feed the same analysis
+and proposal workflows; they add no command-execution API. Catalog and provenance
+identify them as `cli://agy`, `cli://pi` or `cli://claude`, always with
+`remote_provider: true` and the same scope-specific confirmation requirement.
+Catalog selections take the forms `agy:<slug>`, `pi:<provider>/<model>` and
+`claude:<alias>`; `claude` discovery is `ready` when the executable is installed
+and lists its aliases (`opus`, `sonnet`, `haiku`, `fable`). Each CLI runs on the
+subscription it signed in with; Claude Code runs without API-key environment
+variables or user settings, and a run that would still bill an API key is
+rejected before the model is called. CLI `temperature` and `max_tokens` metadata are
 `null` (unavailable), while HTTP values remain numeric. Executable paths and
 CLI credentials are not exposed. CLI responses must complete successfully;
 structured responses are also validated locally before entering domain parsers.
@@ -991,11 +997,12 @@ The testing agent may change only captured test
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
 
-For a task in its own worktree whose create or test model is a pi profile, that
-stage runs as a tool-using agent instead of returning file contents. Mini-Orca
-serves the run's tools over MCP on a loopback port with a one-time bearer token;
-pi starts in a private directory with no other extensions, no built-in tools and
-no context files, and its model can call only `read_file`, `list_files`, `search`,
+For a task in its own worktree whose create or test model is a pi, Claude Code or
+agy profile, that stage runs as a tool-using agent instead of returning file
+contents. Mini-Orca serves the run's tools over MCP on a loopback port with a
+one-time bearer token; the CLI starts in a private directory with no other
+extensions, MCP servers, built-in tools, skills or context files, a call to any
+other tool stops the run, and its model can call only `read_file`, `list_files`, `search`,
 `outline`, `find_definitions`, `find_references`, `edit_file`, `create_file`,
 `delete_file`, `rename_file`, `run_checks` and `finish`. Reads follow the context
 policy, writes the task's diff policy; the testing agent writes test files only
@@ -1044,6 +1051,17 @@ establish a code failure. Their evidence remains available for an explicit retry
 Timeout reasons distinguish a model-stage deadline, a focused check deadline and
 the total workflow deadline, with the relevant configuration setting where applicable.
 
+A CLI that reports its subscription plan's usage limit is not retried. The
+workflow stops with status `paused` (the stage that reached the limit, and its
+running reviewers, read `paused`) and `workflow.pause` names the `stage`, the
+`provider` whose plan reached its limit, `resumes_at` when the CLI said when the
+limit resets, and the `resume_from` that continues the run: the stage itself,
+`checks` for a review whose check authority did not survive, or `create` when
+the testing stage has no proposal to test. Nothing the stage left half done is
+kept, and its usage is charged. Start the workflow again with that
+`resume_from`, possibly with another model for the stage; a pause is dropped
+once the run leaves the `paused` status.
+
 `resume_from` accepts `create` (default), `test`, `checks` or `review`. Test-stage
 retry reuses the current implementation. A `checks` start keeps the whole current
 proposal — implementation and tests, including a version revised by hand or in
@@ -1067,8 +1085,8 @@ repair mode are exposed to clients. Timing is diagnostic, not a benchmark.
 Poll the existing guarded session GET for `workflow.status`, ordered `stages`,
 captured model metadata, and the review's `proposal_hash`, `verdict`, `summary`
 and `findings`. Status distinguishes `running`, `canceling`, `failed`, `canceled`,
-`stale`, `interrupted`, `outdated`, `changes_requested` and
-`awaiting_human_review`. The final human stage waits for explicit diff review;
+`stale`, `interrupted`, `outdated`, `changes_requested`,
+`awaiting_human_review` and `paused`. The final human stage waits for explicit diff review;
 model approval never sets `reviewed_hash`. Existing Review/Apply/Undo routes retain
 their identity and hash guards. Changing a proposal invalidates workflow review.
 

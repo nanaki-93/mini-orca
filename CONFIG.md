@@ -124,10 +124,12 @@ account or model has been used for this validation. See the
 
 ## CLI providers
 
-Install and sign in to [Antigravity CLI](https://www.antigravity.google/docs/cli/install/)
-or [Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md)
-as the user running the daemon. Choose a model supported by that CLI (`agy models`
-or `pi --list-models`). The daemon invokes the executable directly, without a
+Install and sign in to [Antigravity CLI](https://www.antigravity.google/docs/cli/install/),
+[Pi](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md)
+or [Claude Code](https://code.claude.com/docs/en/setup)
+as the user running the daemon. Choose a model supported by that CLI (`agy models`,
+`pi --list-models`, or a Claude Code alias such as `sonnet`, `opus`, `haiku` or
+`fable`, or a full Claude model name). The daemon invokes the executable directly, without a
 login shell. Make it available on the daemon's `PATH`, or set `cli_path` to an
 absolute executable path. It is not a shell command and accepts no extra arguments.
 
@@ -150,11 +152,27 @@ model_scopes:
     # cli_path: /absolute/path/to/pi
 ```
 
+Or run each stage on a different subscription, with no API key anywhere:
+
+```yaml
+model_scopes:
+  bug:          # Creation: Claude Code on your Claude plan
+    provider: claude
+    model: sonnet
+  code:         # Testing: agy on your Google AI plan
+    provider: agy
+    model: gemini-3.8-pro-high
+  analyze:      # Review: pi on the ChatGPT plan it signs in with
+    provider: pi
+    model: openai-codex/gpt-5.5
+```
+
 CLI and HTTP scopes can be mixed. CLI profiles use the CLI's own credentials
 and settings; omit `api_base_url`, `api_key`, `temperature`, `max_tokens`, and
 sampling options. Unsupported settings fail startup instead of being ignored.
 Context budgets still limit Mini-Orca's supplied context. Pi maps reasoning
-`none` to `off`; agy supports `low`, `medium`, `high`, `xhigh`, and `max`.
+`none` to `off`; agy and Claude Code support `low`, `medium`, `high`, `xhigh`,
+and `max` (Claude Code's `--effort`; available levels depend on the model).
 Use exact model identifiers, not Pi fuzzy patterns or thinking suffixes.
 For agy, copy the slug from `agy models`: for example, `gemini-3.8-flash-high`
 selects Gemini 3.8 Flash (High). Display names such as `Gemini 3.8 Flash` are
@@ -167,9 +185,12 @@ catalog without adding them to a scope in `config.yaml`. The picker reads
 `agy models` for exact slugs and display names, including model variants, and
 Pi's `get_available_models` RPC catalog, including custom local models from Pi's
 `models.json`. For each CLI it uses the first matching configured `cli_path`
-(Analyze, Bug, then Code), or `agy`/`pi` on the daemon's `PATH` if no scope
+(Analyze, Bug, then Code), or `agy`/`pi`/`claude` on the daemon's `PATH` if no scope
 uses that CLI. No prompt or project context is sent during discovery. Agy may
-contact its catalog service; Pi discovery uses its offline inventory.
+contact its catalog service; Pi discovery uses its offline inventory. Claude Code
+has no catalog command: when its executable is installed, the picker offers its
+aliases (`opus`, `sonnet`, `haiku`, `fable`), which follow the newest model of
+each family; whether your plan includes a model shows when a run starts.
 
 Use **Models → choose a model → Agy** to browse Agy directly. **Refresh models**
 reloads both catalogs after account or model changes. Each CLI's discovery
@@ -193,7 +214,12 @@ Mini-Orca's supplied source context. Pi runs in JSON print mode with tools,
 extensions, MCP, skills, context-file discovery and session saving disabled. Its
 temporary project settings disable automatic retries and compaction. Agy uses
 a temporary `mini-orca` agent with file, command, subagent and MCP tools disabled,
-slash expansion disabled, and JSON stdin/stdout. Agy also keeps `finish` disabled:
+slash expansion disabled, and JSON stdin/stdout. Claude Code runs in print mode
+(`-p --output-format stream-json`) with its built-in tools off (`--tools ""`),
+no MCP server (`--strict-mcp-config`), `dontAsk` permissions, only the empty
+directory's project settings (so no user hooks, plugins, skills, memory files or
+`apiKeyHelper`), slash commands and skills disabled, no saved session, Mini-Orca's
+system prompt, and one turn. Agy also keeps `finish` disabled:
 native schema completion depends on that tool, which user hooks can reject.
 These adapters require CLI versions supporting those options and the documented
 event formats.
@@ -212,15 +238,60 @@ transport callers without a deadline receive a five-minute fallback. Owned proce
 groups are stopped on completion or cancellation, and temporary prompt files are removed. CLI providers currently
 require Unix process-group support; HTTP providers retain their existing platforms.
 
-Both CLI providers always require remote-provider confirmation, even if Pi is
+CLI providers always require remote-provider confirmation, even if Pi is
 configured with a local model: Mini-Orca cannot independently verify the CLI's
-downstream destination. Metadata shows `cli://agy` or `cli://pi`, with
+downstream destination. Metadata shows `cli://agy`, `cli://pi` or `cli://claude`, with
 `temperature` and `max_tokens` set to `null` because those controls are unavailable.
 Existing Review, explicit Apply, and Undo still own source changes. Mini-Orca
 does not configure the CLI's credential storage or upstream retention; agy may
 retain its own conversation records under its normal settings. Application
 retry limits count CLI invocations; upstream retries internal to a CLI or its
 service are outside Mini-Orca's transport accounting.
+
+### Subscriptions, not API keys
+
+The CLIs run on the subscription their user signed in with: Claude Code on the
+Claude plan (`/login` with a Pro or Max account), agy on the Google AI plan, pi
+on the ChatGPT plan (or a local model). Mini-Orca never reads or copies a CLI's
+login. Claude Code would bill an API key or a cloud account found in its
+environment, so Mini-Orca starts it without any `ANTHROPIC_*`,
+`CLAUDE_CODE_USE_*` or Bedrock token variable, loads no user settings (where an
+`apiKeyHelper` could live), and stops a run before the model is called when
+Claude Code still reports an API-key source; sign out of the key and sign in with
+`/login`.
+
+When a CLI reports that its plan reached its usage limit (Claude Code's
+rejected rate limit or "limit reached" result, agy's exhausted quota, pi's usage
+limit), the request is not retried. A workflow **pauses** at that stage: its
+status is `paused`, with the stage, the CLI, the reset time when the CLI gave
+one, and the start that continues it. Nothing the stage left half done is kept.
+Resume the run when the limit resets, or choose another model for that stage.
+
+### Tool-using agents
+
+A task in its own worktree whose creation or testing model runs in pi, Claude
+Code or agy gets a tool-using agent for that stage. Its only tools are those of a
+per-run MCP server on a loopback port with a one-time token; a call to any other
+tool stops the run.
+
+- **pi** loads only Mini-Orca's extension, which registers the server and blocks
+  every other tool; the token reaches it through the environment.
+- **Claude Code** gets the server in a private `--mcp-config` file
+  (`--strict-mcp-config`, built-in tools off, `--allowedTools mcp__mini-orca`,
+  `dontAsk` permissions, `--max-turns`). A run that cannot connect to the server
+  stops before the model works.
+- **agy** gets the server in the run's private workspace
+  (`.agents/mcp_config.json`, limited to the run's tools) and a `mini-orca`
+  agent with no built-in tools, no command execution and no subagents. Headless
+  agy denies an MCP tool that would ask for approval, and Mini-Orca does not
+  skip agy's permissions, so allow Mini-Orca's server once in
+  `~/.gemini/antigravity-cli/settings.json`:
+
+  ```json
+  {"permissions": {"allow": ["mcp(mini-orca/*)"]}}
+  ```
+
+  A run whose tools agy denied fails with this instruction.
 
 ## Agent roles and run limits
 

@@ -41,7 +41,10 @@ every guard when the action arrives.
   checkout, but the workspace pages (sidebar, `g` keys and the Tasks crumb)
   keep the checkout chosen in the top bar, so opening a task in its own
   worktree does not switch Issues or Analysis to it.
-- **Start agents.** Requires a test file in scope and a trusted project. The
+- **Start agents.** Requires a trusted project, and a test file in scope unless
+  the task has its own worktree (there a testing agent on a CLI model creates
+  the test files it needs; the daemon refuses the run when the testing model
+  cannot). The
   confirmation lists every remote destination the Creation, Testing and Review
   roles will use; local-only runs say so. Repairs are opt-in and capped at two.
   A security task adds a security specialist.
@@ -57,6 +60,17 @@ every guard when the action arrives.
   revise it. Starts that keep the proposal need the creation model of the last
   run and say so otherwise. Open line comments go with a start that writes
   code and stay open with "Check and review".
+- **Paused at a plan limit.** When a stage's subscription plan (Claude, Google
+  AI or the one pi signs in with) reaches its usage limit, the run pauses
+  instead of failing: the Agent run card reads "Paused until the … plan's limit
+  resets at 15:30" (or "Paused: the … plan reached its usage limit" when the CLI
+  gave no time, and "the limit has reset, resume the run" once it has), the
+  stage that stopped reads Paused, the task list shows **Paused** with the
+  reason, and nothing half done is kept. **Resume agents** opens the same
+  confirmation with the start that continues the run chosen: **Continue the
+  review** (keeps the change and its passing checks), **Write new tests**, or
+  **Write the change again**. Another model can be chosen for the stage in the
+  role settings before resuming.
 - **Watch.** The Conversation shows each stage with its model and duration and
   each specialist's verdict and findings. **Stop agents** asks first and applies
   nothing.
@@ -127,7 +141,7 @@ every guard when the action arrives.
   stay with the approval and are cleared with it. **Reject proposal** ends a
   waiting workflow after confirmation.
 - **Agents with tools.** When a stage ran as a tool-using agent (a task in its
-  own worktree on a pi model), its timeline line says "Worked with tools: N calls
+  own worktree on a pi, Claude Code or agy model), its timeline line says "Worked with tools: N calls
   in M turns (read_file 12, …)", and "stopped before finishing" when the agent
   never called finish. The agent's report, with how each criterion is met, is its
   message in the conversation.
@@ -188,7 +202,8 @@ every guard when the action arrives.
   went and the remedy.
 - **Agent models.** Settings → Models & agents chooses the model each role runs
   with (writes the change, writes tests, reviews): a configured scope or a model
-  the Agy or Pi CLI lists, each marked local or remote. It also sets the budget
+  Claude Code, the Agy CLI or the Pi CLI lists, each marked local or remote, so
+  each role can run on a different subscription. It also sets the budget
   per run within the `config.yaml` ceilings. Save applies to new runs only;
   **Use the configuration** resets. When the models change under saved settings,
   they are marked out of date and analysis and agent runs wait for a reset; the

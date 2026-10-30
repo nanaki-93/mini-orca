@@ -132,14 +132,23 @@ checks:
   the outlines (declarations and signatures) of the files those files import
   and of their neighbors, in any language the parser knows, so they reuse what
   exists.
-- **Agents with tools.** On a pi model, the coder and the testing agent of a task
-  in its own worktree read and change the project through Mini-Orca's tools
-  instead of returning whole files. After each write a tool reports gofmt, parse
-  errors and the file's budgets; `run_checks` runs these checks and the touched
-  subprojects' tests on a copy. The agent ends with a report that maps its change
-  to the acceptance criteria. pi starts with no extensions but Mini-Orca's, no
-  built-in tools and no context files; a run that fails before finishing leaves the
-  worktree as the stored proposal. The reviewers read the proposal as a diff.
+- **Agents with tools.** On a model that runs in pi, Claude Code or agy, the
+  coder and the testing agent of a task in its own worktree read and change the
+  project through Mini-Orca's tools instead of returning whole files. After each
+  write a tool reports gofmt, parse errors and the file's budgets; `run_checks`
+  runs these checks and the touched subprojects' tests on a copy. The agent ends
+  with a report that maps its change to the acceptance criteria. Each CLI starts
+  with its own tools, extensions, skills and context files off, and only
+  Mini-Orca's tool server; a call to any other tool stops the run, and a run that
+  fails before finishing leaves the worktree as the stored proposal. The
+  reviewers read the proposal as a diff.
+- **Subscriptions, not API keys.** Each stage can run on a different
+  subscription: Claude Code on your Claude plan, agy on your Google AI plan, pi
+  on the ChatGPT plan (or a local model) it signs in with. Mini-Orca removes API
+  keys from Claude Code's environment and stops a run that would still bill one.
+  When a plan reaches its usage limit, the task **pauses** at that stage instead
+  of failing: nothing half done is kept, the task says when the limit resets, and
+  **Resume agents** continues from the stage that stopped.
 
 ## Run locally
 
@@ -231,7 +240,7 @@ in `web/`.
 | **Go 1.27.3+** (`gopkg.in/yaml.v3`) | Daemon, indexing, analysis orchestration and atomic `.mini-orca/` storage. |
 | **Google ADK Go v2.6.0 / GenAI Go v1.74.0** | Typed model and tool events, native graphs and sessions. |
 | **gotreesitter v0.56.0** | Pure-Go tree-sitter runtime (no CGO) with 206 embedded grammars for language-neutral syntax checks and function budgets. |
-| **Model providers** (OpenAI-compatible HTTP, Gemini, Vertex, `agy`, `pi`) | Explicit local or remote execution for `analyze`, `bug` and `code`; CLI profiles are completion-only. |
+| **Model providers** (OpenAI-compatible HTTP, Gemini, Vertex, `agy`, `pi`, `claude`) | Explicit local or remote execution for `analyze`, `bug` and `code`; the CLI profiles also run the tool-using agents. |
 | **React 19, TanStack Query, Radix UI, Vite** | The browser workspace. |
 
 ## Agent capabilities
@@ -243,8 +252,9 @@ and the [UI behavior contract](docs/ui-behavior.md).
 
 | Capability | Delivered behavior and boundary |
 | --- | --- |
-| Models and streaming | HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles provide completion, except pi, which also runs the tool-using coder and tester (below). Partial output never becomes an approved proposal. |
-| Task tools | A task in its own worktree whose creation or testing model runs in pi gets a tool-using agent for that stage. Its only tools are Mini-Orca's, served by a per-run MCP server on a loopback port with a one-time token: read, list, search, outline, definitions and references, edit by exact text, create, delete, rename, run the checks, finish. Every call passes the context policy and the task's diff policy; the testing agent writes test files only. The worktree's diff becomes the proposal. |
+| Models and streaming | HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles (pi, Claude Code, agy) provide completion and also run the tool-using coder and tester (below). Partial output never becomes an approved proposal. |
+| Plan limits | A CLI that reports its subscription plan's usage limit is not retried: the workflow pauses at that stage with the CLI and, when it said so, the reset time, and resumes from that stage. |
+| Task tools | A task in its own worktree whose creation or testing model runs in pi, Claude Code or agy gets a tool-using agent for that stage. Its only tools are Mini-Orca's, served by a per-run MCP server on a loopback port with a one-time token: read, list, search, outline, definitions and references, edit by exact text, create, delete, rename, run the checks, finish. Every call passes the context policy and the task's diff policy; the testing agent writes test files only. The worktree's diff becomes the proposal. |
 | Repository tools | Planning and file investigations use captured snippets, imports, search and impact evidence. Tools cannot widen their admitted scope or write source. |
 | Workflow graphs | Sequential stages, parallel specialist reviews, conditional branches, bounded repairs and durable human-input checkpoints run through ADK with host-owned checks and budgets. |
 | Sessions and artifacts | Private local journals and versioned evidence; restart keeps history and charges, not execution authority. |
@@ -307,8 +317,8 @@ profile's model, in its own worktree of a scratch repository; the suite then add
 the task's hidden tests and runs its test command. The receipt keeps each case's
 state, failing test names, changed files, model calls, tokens and tool calls, totals
 per coder, and whether the tool-using coder passed at least as many tasks (exit
-status 1 when not). It needs `go`, `python3` and `node` for the tasks, a pi model
-for the tool-using coder, and runs live only:
+status 1 when not). It needs `go`, `python3` and `node` for the tasks, a pi,
+Claude Code or agy model for the tool-using coder, and runs live only:
 
 ```sh
 go run ./cmd/agent-eval --suite coder --mode live --config config.yaml --confirm-live
@@ -317,7 +327,11 @@ go run ./cmd/agent-eval --suite coder --mode live --config config.yaml --case py
 
 To check that the pi installed on your machine reaches only Mini-Orca's tools,
 without using your plan, run it against a scripted local model:
-`MINI_ORCA_PI_SMOKE=1 go test ./internal/app -run TestRealPi -v`.
+`MINI_ORCA_PI_SMOKE=1 go test ./internal/app -run TestRealPi -v`. Claude Code
+and agy cannot use a local model, so their checks use a little of your plan for
+one small run each:
+`MINI_ORCA_CLAUDE_SMOKE=1 go test ./internal/app -run TestRealClaude -v` and
+`MINI_ORCA_AGY_SMOKE=<model slug from agy models> go test ./internal/app -run TestRealAgy -v`.
 
 Live mode sends only the embedded synthetic corpus to the configured **code**
 profile and excludes negative controls. It requires an explicit command and
