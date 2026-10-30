@@ -91,9 +91,9 @@ func failedCheckDirective(check CheckResult) string {
 		return "Bring every file and function the complexity gate names within its budget, using the numbers it reports: extract helpers from long or complex functions, and move cohesive parts of an over-long file into the sibling files the task already holds. What was already over may stay over but must not grow."
 	case name == "secret & hygiene gate":
 		return "Remove hardcoded tokens/keys and unresolved conflict markers; inject secrets from configuration or environment."
-	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "syntax:") || strings.HasPrefix(name, "format:") || name == "lint":
+	case strings.HasPrefix(name, "parse:") || strings.HasPrefix(name, "syntax:") || strings.HasPrefix(name, "format:") || name == "lint" || strings.HasPrefix(name, "lint:"):
 		return "Fix syntax, formatting, and static analysis diagnostics using sibling file declarations."
-	case name == "tests" || name == "regression baseline":
+	case name == "tests" || strings.HasPrefix(name, "tests:") || strings.HasPrefix(name, "regression baseline"):
 		return "Align implementation logic with failing test assertions without weakening pinned regression tests."
 	default:
 		return ""

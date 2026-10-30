@@ -11,6 +11,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/project/toolchain"
 )
 
 type ChangeVerification struct {
@@ -127,26 +128,27 @@ func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journ
 	if fingerprint != journal.PostWorkspaceHash {
 		return checks, project.ErrRevisionConflict
 	}
-	if !workspaceHasGo(workspace, journal.Session.Changes) {
-		return append(checks, s.verifyAppliedTaskRunner(ctx, workspace, revision)...), ctx.Err()
-	}
-	checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply tests", true, []string{"go", "test", "./..."}, false, true))
-	checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply vet", true, []string{"go", "vet", "./..."}, false, false))
-	return checks, ctx.Err()
+	return append(checks, s.verifyAppliedProfiles(ctx, root, workspace, revision, journal.Session.Changes)...), ctx.Err()
 }
 
-// verifyAppliedTaskRunner runs the project's declared test and check targets
-// for non-Go workspaces. Without a runner nothing executes, and the result says
-// so instead of reporting source checks alone as a verification.
-func (s *Service) verifyAppliedTaskRunner(ctx context.Context, workspace, revision string) []CheckResult {
-	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
-	if runner == "" || testTarget == "" {
-		return []CheckResult{{Name: "post-Apply tests", Required: true, State: CheckUnavailable, Outcome: "could_not_execute",
-			Output: "No executable test runner is configured or available for this workspace; no tests ran."}}
+// verifyAppliedProfiles runs the tests and lint of every subproject the
+// applied files belong to. Without a test command nothing executes, and the
+// result says so instead of reporting source checks alone as a verification.
+func (s *Service) verifyAppliedProfiles(ctx context.Context, root, workspace, revision string, edits []ChangeEdit) []CheckResult {
+	affected := toolchain.Affected(s.projectProfiles(root), changedPaths(edits))
+	var checks []CheckResult
+	for _, profile := range affected {
+		dir := filepath.Join(workspace, filepath.FromSlash(profile.Dir))
+		if len(profile.Test) > 0 {
+			checks = append(checks, s.runCheck(ctx, dir, revision, profileCheckName("post-Apply tests", profile), true, profile.Test, false, toolchain.ExecutesProjectCode(profile.Test)))
+		}
+		if len(profile.Lint) > 0 {
+			checks = append(checks, s.runCheck(ctx, dir, revision, profileCheckName("post-Apply lint", profile), true, profile.Lint, false, toolchain.ExecutesProjectCode(profile.Lint)))
+		}
 	}
-	checks := []CheckResult{s.runCheck(ctx, workspace, revision, "post-Apply tests", true, buildTaskRunnerArgv(runner, testTarget), false, true)}
-	if checkTarget != "" {
-		checks = append(checks, s.runCheck(ctx, workspace, revision, "post-Apply lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
+	if !anyTestCommand(affected) {
+		checks = append(checks, CheckResult{Name: "post-Apply tests", Required: true, State: CheckUnavailable, Outcome: "could_not_execute",
+			Output: "No test command covers the applied files; no tests ran."})
 	}
 	return checks
 }

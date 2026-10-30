@@ -166,7 +166,7 @@ func TestRegressionBaselinePreservesWhatWasActuallyObserved(t *testing.T) {
 		{"canceled", CheckResult{State: CheckCanceled}, CheckCanceled, "could_not_execute"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			classifyRegressionBaseline(&tc.check, goTestsFailed)
+			classifyRegressionBaseline(&tc.check, func(check CheckResult) bool { return newTestsReproduced(nil, check.Output) })
 			if tc.check.State != tc.state || tc.check.Outcome != tc.outcome || tc.check.Required {
 				t.Fatalf("misclassified evidence: %+v", tc.check)
 			}
@@ -174,13 +174,17 @@ func TestRegressionBaselinePreservesWhatWasActuallyObserved(t *testing.T) {
 	}
 }
 
-func TestRunnerRegressionBaselineTreatsAnyFailureAsReproduced(t *testing.T) {
+func TestRunnerRegressionBaselineTreatsAnUnreadableFailureAsReproduced(t *testing.T) {
+	reproduced := func(check CheckResult) bool { return newTestsReproduced(nil, check.Output) }
 	red := CheckResult{State: CheckFailed, ExitCode: 1, Output: "1 failed"}
-	classifyRegressionBaseline(&red, runnerTestsFailed)
+	classifyRegressionBaseline(&red, reproduced)
 	green := CheckResult{State: CheckPassed, ExitCode: 0}
-	classifyRegressionBaseline(&green, runnerTestsFailed)
+	classifyRegressionBaseline(&green, reproduced)
 	if red.State != CheckPassed || red.Outcome != "failed_before_change" || green.State != CheckSkipped || green.Outcome != "already_passes" {
 		t.Fatalf("runner baseline: red %+v, green %+v", red, green)
+	}
+	if newTestsReproduced([]string{"tests/test_a.py::test_old"}, "FAILED tests/test_a.py::test_old - boom\n") {
+		t.Fatal("a failure that happened without the new tests reproduced nothing")
 	}
 }
 

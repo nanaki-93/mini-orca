@@ -31,21 +31,10 @@ func newExecutionTrustStore() *executionTrustStore {
 	return &executionTrustStore{restorePending: true}
 }
 
-func projectCodeCommands(root, taskName string) ([][]string, error) {
+func (s *Service) projectCodeCommands(root, taskName string) ([][]string, error) {
 	if taskName == "" {
-		if !workspaceHasGo(root, nil) {
-			if runner, checkTarget, testTarget := detectDeclaredTaskRunner(root); runner != "" {
-				var cmds [][]string
-				if testTarget != "" {
-					cmds = append(cmds, buildTaskRunnerArgv(runner, testTarget))
-				}
-				if checkTarget != "" {
-					cmds = append(cmds, buildTaskRunnerArgv(runner, checkTarget))
-				}
-				if len(cmds) > 0 {
-					return cmds, nil
-				}
-			}
+		if commands := profileCommands(s.projectProfiles(root)); len(commands) > 0 {
+			return commands, nil
 		}
 		return [][]string{{"go", "test", "./..."}}, nil
 	}
@@ -86,7 +75,7 @@ func (s *Service) executionTrustScope(revision, taskName string) (string, *Execu
 	if revision == "" || revision != analysis.ProjectRevision {
 		return "", nil, project.ErrRevisionConflict
 	}
-	commands, err := projectCodeCommands(root, taskName)
+	commands, err := s.projectCodeCommands(root, taskName)
 	if err != nil {
 		return "", nil, err
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/format"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -138,7 +137,7 @@ func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 		return
 	}
 	for _, check := range checks {
-		if check.Name == "regression baseline" && (check.State == CheckPassed || check.Outcome != "" && check.State != CheckCanceled) {
+		if strings.HasPrefix(check.Name, "regression baseline") && (check.State == CheckPassed || check.Outcome != "" && check.State != CheckCanceled) {
 			session.PinnedTests = changeTestEdits(session)
 		}
 	}
@@ -188,12 +187,9 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	if err != nil {
 		return nil, "", err
 	}
-	var checks []CheckResult
-	if workspaceHasGo(workspace, session.Changes) {
-		checks, err = s.checkGoWorkspace(ctx, workspace, revision, session, options)
-	} else {
-		checks, err = s.checkNonGoWorkspace(ctx, workspace, revision, session, options)
-	}
+	run := &checkRun{s: s, ctx: ctx, root: root, revision: revision, fingerprint: fingerprint, session: session}
+	defer run.cleanup()
+	checks, err := s.runProfileChecks(run, workspace, options)
 	return checks, fingerprint, err
 }
 
@@ -230,194 +226,12 @@ func (s *Service) prepareCheckCopy(ctx context.Context, root, workspace string, 
 	return fingerprint, verifyCapturedSources(workspace, policy, session)
 }
 
-func (s *Service) checkGoWorkspace(ctx context.Context, workspace, revision string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
-	checks, err := s.changeRegressionBaseline(ctx, workspace, revision, session, options.RunTests)
-	if err != nil {
-		return nil, err
-	}
-	if err := stageChangeEdits(workspace, session.Changes); err != nil {
-		return nil, err
-	}
-	if options.RunLint {
-		checks = append(checks, s.runCheck(ctx, workspace, revision, "lint", true, []string{"go", "vet", "./..."}, false, false))
-		if archgate.HasOptionalGitleaks(workspace) {
-			checks = append(checks, s.runCheck(ctx, workspace, revision, "gitleaks", true, []string{"gitleaks", "detect", "--no-git", "--source", ".", "--redact"}, false, true))
-		}
-	}
-	if options.RunTests {
-		checks = append(checks, s.runCheck(ctx, workspace, revision, "tests", true, []string{"go", "test", "./..."}, false, true))
-	}
-	return checks, ctx.Err()
-}
-
-func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace, revision string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
-	runner, checkTarget, testTarget := detectExecutableTaskRunner(workspace)
-	checks := []CheckResult{}
-	newTests := newChangeTestEdits(session)
-	if options.RunTests && runner != "" && testTarget != "" && len(newTests) > 0 {
-		if err := stageChangeEdits(workspace, newTests); err != nil {
-			return nil, err
-		}
-		baseline := s.runCheck(ctx, workspace, revision, "regression baseline", false, buildTaskRunnerArgv(runner, testTarget), false, true)
-		classifyRegressionBaseline(&baseline, runnerTestsFailed)
-		checks = append(checks, baseline)
-	}
-	if err := stageChangeEdits(workspace, session.Changes); err != nil {
-		return nil, err
-	}
-	if options.RunLint {
-		if runner != "" && checkTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, revision, "lint", true, buildTaskRunnerArgv(runner, checkTarget), false, true))
-		} else {
-			checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
-		}
-	}
-	if options.RunTests {
-		if runner != "" && testTarget != "" {
-			checks = append(checks, s.runCheck(ctx, workspace, revision, "tests", true, buildTaskRunnerArgv(runner, testTarget), false, true))
-		} else {
-			msg := "No executable test runner is configured or available for this workspace."
-			if len(newTests) > 0 {
-				checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckUnavailable, Output: msg})
-			}
-			checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckUnavailable, Output: msg})
-		}
-	}
-	return checks, ctx.Err()
-}
-
-func buildTaskRunnerArgv(runner, target string) []string {
-	if runner == "npm" && target != "test" {
-		return []string{"npm", "run", target}
-	}
-	return []string{runner, target}
-}
-
-func detectExecutableTaskRunner(workspace string) (string, string, string) {
-	runner, checkTarget, testTarget := detectDeclaredTaskRunner(workspace)
-	if runner == "" {
-		return "", "", ""
-	}
-	if _, err := exec.LookPath(runner); err != nil {
-		return "", "", ""
-	}
-	return runner, checkTarget, testTarget
-}
-
-func detectDeclaredTaskRunner(workspace string) (string, string, string) {
-	for _, entry := range []struct {
-		files  []string
-		runner string
-	}{
-		{files: []string{"justfile", "Justfile"}, runner: "just"},
-		{files: []string{"Taskfile.yml", "Taskfile.yaml"}, runner: "task"},
-		{files: []string{"Makefile"}, runner: "make"},
-	} {
-		for _, name := range entry.files {
-			data, err := os.ReadFile(filepath.Join(workspace, name))
-			if err != nil {
-				continue
-			}
-			checkTarget, testTarget := parseTaskRunnerTargets(string(data))
-			if checkTarget != "" || testTarget != "" {
-				return entry.runner, checkTarget, testTarget
-			}
-		}
-	}
-	return detectEcosystemTaskRunner(workspace)
-}
-
-func detectEcosystemTaskRunner(workspace string) (string, string, string) {
-	if data, err := os.ReadFile(filepath.Join(workspace, "package.json")); err == nil {
-		if checkTarget, testTarget := parsePackageJSONTargets(string(data)); checkTarget != "" || testTarget != "" {
-			return "npm", checkTarget, testTarget
-		}
-	}
-	if _, err := os.Stat(filepath.Join(workspace, "Cargo.toml")); err == nil {
-		return "cargo", "check", "test"
-	}
-	if data, err := os.ReadFile(filepath.Join(workspace, "pyproject.toml")); err == nil {
-		text := string(data)
-		if strings.Contains(text, "pytest") {
-			return "pytest", "", "-q"
-		}
-	}
-	if _, err := os.Stat(filepath.Join(workspace, "pom.xml")); err == nil {
-		return "mvn", "test-compile", "test"
-	}
-	if _, err := os.Stat(filepath.Join(workspace, "build.gradle")); err == nil {
-		return "gradle", "check", "test"
-	}
-	if _, err := os.Stat(filepath.Join(workspace, "build.gradle.kts")); err == nil {
-		return "gradle", "check", "test"
-	}
-	return "", "", ""
-}
-
-func parsePackageJSONTargets(content string) (string, string) {
-	if !strings.Contains(content, `"scripts"`) {
-		return "", ""
-	}
-	var checkTarget, testTarget string
-	if strings.Contains(content, `"check"`) {
-		checkTarget = "check"
-	} else if strings.Contains(content, `"lint"`) {
-		checkTarget = "lint"
-	}
-	if strings.Contains(content, `"test"`) && !strings.Contains(content, "no test specified") {
-		testTarget = "test"
-	}
-	return checkTarget, testTarget
-}
-
-func parseTaskRunnerTargets(content string) (string, string) {
-	var checkTarget, testTarget string
-	for _, raw := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(raw)
-		if strings.HasPrefix(line, "#") || !strings.Contains(line, ":") {
-			continue
-		}
-		head := strings.TrimSpace(strings.SplitN(line, ":", 2)[0])
-		name := strings.Fields(head)
-		if len(name) == 0 {
-			continue
-		}
-		switch name[0] {
-		case "check":
-			checkTarget = "check"
-		case "lint":
-			if checkTarget == "" {
-				checkTarget = "lint"
-			}
-		case "test":
-			testTarget = "test"
-		}
-	}
-	return checkTarget, testTarget
-}
-
 func workspaceHasGo(workspace string, edits []ChangeEdit) bool {
 	if archgate.HasGoSourceEdits(edits) {
 		return true
 	}
 	info, err := os.Stat(filepath.Join(workspace, "go.mod"))
 	return err == nil && !info.IsDir()
-}
-
-func (s *Service) changeRegressionBaseline(ctx context.Context, workspace, revision string, session *ChangeSession, runTests bool) ([]CheckResult, error) {
-	checks := []CheckResult{}
-	newTests := newChangeTestEdits(session)
-	if !runTests || len(newTests) == 0 {
-		return checks, nil
-	}
-	checks = append(checks, s.runCheck(ctx, workspace, revision, existingTestBaselineCheck, true, []string{"go", "test", "./..."}, false, true))
-	if err := stageChangeEdits(workspace, newTests); err != nil {
-		return nil, err
-	}
-	baseline := s.runCheck(ctx, workspace, revision, "regression baseline", false, []string{"go", "test", "./..."}, false, true)
-	classifyRegressionBaseline(&baseline, goTestsFailed)
-	checks = append(checks, baseline)
-	return checks, nil
 }
 
 func stageChangeEdits(workspace string, edits []ChangeEdit) error {

@@ -21,8 +21,11 @@ import (
 const (
 	checkCopyBufferSize = 32 * 1024
 	MaxOutputBytes      = 8 * 1024
-	MaxWorkspaceFiles   = 4 * 1024
-	MaxWorkspaceBytes   = 64 * 1024 * 1024
+	// CaptureBytes is how much command output is read, so test reports can be
+	// parsed; stored diagnostics are still cut to MaxOutputBytes.
+	CaptureBytes      = 1024 * 1024
+	MaxWorkspaceFiles = 4 * 1024
+	MaxWorkspaceBytes = 64 * 1024 * 1024
 )
 
 type checkResourceLimits struct {
@@ -97,7 +100,7 @@ func runCommandWithEnvironment(ctx context.Context, directory string, command []
 		}
 	}
 	process.WaitDelay = checkLimits.pipeDrainWait
-	output := NewBoundedOutput(checkLimits.maxOutputBytes)
+	output := NewBoundedOutput(CaptureBytes)
 	process.Stdout = output
 	process.Stderr = output
 	if beforeStart != nil {

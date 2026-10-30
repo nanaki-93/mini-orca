@@ -42,6 +42,9 @@ AGENTS.md in a subdirectory may add rules and override budgets for its files.
 ```mini-orca
 budgets:
   function_complexity: 15
+checks:
+  test: go test ./...
+  lint: go vet ./...
 imports:
   - from: internal/app
     never: [internal/api]

@@ -31,8 +31,8 @@ func TestRunCheckCommandBoundsOutputAndPreservesExitCode(t *testing.T) {
 	if err == nil || result.ExitCode != 17 {
 		t.Fatalf("command result = %+v, err = %v", result, err)
 	}
-	if !result.Truncated || len(result.Output) != checkLimits.maxOutputBytes {
-		t.Fatalf("unbounded command result = %+v", result)
+	if len(result.Output) > CaptureBytes || len(result.Output) <= checkLimits.maxOutputBytes {
+		t.Fatalf("command output was not captured within its bound: %d bytes", len(result.Output))
 	}
 	output := SanitizeOutput(result.Output, result.Truncated, "/workspace", "/project")
 	if !strings.Contains(output, "[output truncated]") {
@@ -266,7 +266,10 @@ func TestCopyCheckWorkspaceExcludesCachesAndIgnoredOutputAndKeepsTrackedOutput(t
 			t.Fatalf("required copied path %q: %v", path, err)
 		}
 	}
-	for _, path := range []string{".git", ".worktrees", "node_modules", "desktop/build", ".mini-orca", "linked.go", "testdata/nested/.git", "testdata/nested/.hg", "testdata/nested/.svn", "testdata/nested/.mini-orca"} {
+	if info, err := os.Lstat(filepath.Join(destination, "node_modules")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("installed dependencies are linked, not copied: %v, %v", info, err)
+	}
+	for _, path := range []string{".git", ".worktrees", "desktop/build", ".mini-orca", "linked.go", "testdata/nested/.git", "testdata/nested/.hg", "testdata/nested/.svn", "testdata/nested/.mini-orca"} {
 		if _, err := os.Lstat(filepath.Join(destination, path)); !os.IsNotExist(err) {
 			t.Fatalf("excluded path %q has error %v", path, err)
 		}

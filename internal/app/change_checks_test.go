@@ -419,17 +419,14 @@ func TestNonGoRequiredTestsWithoutRunnerAreUnavailableAndBlockVerification(t *te
 	if requiredChecksPassed(checked.Checks) {
 		t.Fatalf("expected required checks not to pass without an executable test runner, got %+v", checked.Checks)
 	}
-	var testsUnavailable, baselineUnavailable bool
+	var testsUnavailable bool
 	for _, chk := range checked.Checks {
 		if chk.Name == "tests" && chk.Required && chk.State == CheckUnavailable {
 			testsUnavailable = true
 		}
-		if chk.Name == "regression baseline" && chk.Required && chk.State == CheckUnavailable {
-			baselineUnavailable = true
-		}
 	}
-	if !testsUnavailable || !baselineUnavailable {
-		t.Fatalf("expected tests and regression baseline checks to be unavailable, got %+v", checked.Checks)
+	if !testsUnavailable {
+		t.Fatalf("expected the tests check to be unavailable, got %+v", checked.Checks)
 	}
 	if _, err := service.ReviewChange(context.Background(), checked.ID, ChangeReviewRequest{ChangeIdentity: changeIdentity(checked)}); err == nil {
 		t.Fatalf("expected ReviewChange to fail when required tests did not execute")

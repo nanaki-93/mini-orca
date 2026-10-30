@@ -100,7 +100,7 @@ func (s *Service) restoreExecutionTrustLocked(ctx context.Context, root string, 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	commands, err := projectCodeCommands(root, "")
+	commands, err := s.projectCodeCommands(root, "")
 	if err != nil {
 		return err
 	}

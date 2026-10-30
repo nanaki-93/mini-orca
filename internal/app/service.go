@@ -75,6 +75,7 @@ type Service struct {
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
 	executionTrust                  *executionTrustStore
+	checkBaselines                  checkBaselines
 	events                          *eventBroker
 	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 	loadSecurityFileReport          func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)

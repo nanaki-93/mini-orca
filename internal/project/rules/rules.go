@@ -45,6 +45,71 @@ type Rules struct {
 	Sources []string `json:"sources,omitempty"`
 }
 
+// Checks are the commands an AGENTS.md declares for the subproject rooted at
+// its directory. Declared reports whether the field was set; a declared
+// empty command means the subproject has no such check.
+type Checks struct {
+	Test         []string
+	TestDeclared bool
+	Lint         []string
+	LintDeclared bool
+}
+
+// ChecksIn returns the check commands the AGENTS.md in dir (project-relative,
+// "" for the root) declares, if any.
+func (r *Resolver) ChecksIn(dir string) Checks {
+	g := r.load(dir)
+	if g == nil {
+		return Checks{}
+	}
+	var checks Checks
+	if test := g.declared.Checks.Test; test != nil {
+		checks.Test, checks.TestDeclared = SplitCommand(*test), true
+	}
+	if lint := g.declared.Checks.Lint; lint != nil {
+		checks.Lint, checks.LintDeclared = SplitCommand(*lint), true
+	}
+	return checks
+}
+
+// SplitCommand splits a declared check command into arguments. It honors
+// single and double quotes and refuses shell syntax, since checks run without
+// a shell.
+func SplitCommand(command string) []string {
+	var args []string
+	var current strings.Builder
+	var quote rune
+	inArg := false
+	for _, r := range command {
+		switch {
+		case quote != 0 && r == quote:
+			quote = 0
+		case quote != 0:
+			current.WriteRune(r)
+		case r == '\'' || r == '"':
+			quote, inArg = r, true
+		case r == ' ' || r == '\t':
+			if inArg {
+				args = append(args, current.String())
+				current.Reset()
+				inArg = false
+			}
+		case strings.ContainsRune("|&;<>()$`\n\\", r):
+			return nil
+		default:
+			current.WriteRune(r)
+			inArg = true
+		}
+	}
+	if quote != 0 {
+		return nil
+	}
+	if inArg {
+		args = append(args, current.String())
+	}
+	return args
+}
+
 // Problem is an AGENTS.md whose rules could not be read.
 type Problem struct {
 	Path    string `json:"path"`

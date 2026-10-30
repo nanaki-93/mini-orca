@@ -26,6 +26,12 @@ type block struct {
 	} `yaml:"budgets"`
 	Imports   []importDecl `yaml:"imports"`
 	TestFiles []string     `yaml:"test_files"`
+	// Checks are the commands that test and lint the subproject rooted at
+	// this AGENTS.md's directory. An empty string declares that there is none.
+	Checks struct {
+		Test *string `yaml:"test"`
+		Lint *string `yaml:"lint"`
+	} `yaml:"checks"`
 }
 
 type importDecl struct {
@@ -96,6 +102,11 @@ func validateBlock(parsed block) error {
 	for _, rule := range parsed.Imports {
 		if normalizePrefix(rule.From) == "" || len(normalizePaths(rule.Never)) == 0 {
 			return fmt.Errorf("every import rule in the %s block needs from and never", blockInfo)
+		}
+	}
+	for _, command := range []*string{parsed.Checks.Test, parsed.Checks.Lint} {
+		if command != nil && *command != "" && len(SplitCommand(*command)) == 0 {
+			return fmt.Errorf("the %s block has a check command that is not a plain argument list", blockInfo)
 		}
 	}
 	for _, glob := range parsed.TestFiles {

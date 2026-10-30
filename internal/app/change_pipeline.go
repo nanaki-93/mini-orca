@@ -258,14 +258,13 @@ func (s *Service) shouldAutoRepairWorkflow(ctx context.Context, job *changeWorkf
 	return session.Workflow.Review != nil && session.Workflow.Review.ProposalHash == session.Hash && session.Workflow.Review.Verdict == "changes_requested" && specialistsComplete(session.Workflow, session.Hash), nil
 }
 
-// existingTestBaselineCheck runs the project's tests on the unmodified copy.
-const existingTestBaselineCheck = "existing test baseline"
-
-// existingTestsFail reports a failure that predates the proposal: repairing
-// the proposal cannot fix it, so automatic repair would only spend budget.
+// existingTestsFail reports a failure that predates the proposal and that
+// Mini-Orca could not separate from new ones: repairing the proposal cannot
+// fix it, so automatic repair would only spend budget. Failures it could
+// separate never block (outcome known_failures).
 func existingTestsFail(checks []CheckResult) bool {
 	for _, check := range checks {
-		if check.Name == existingTestBaselineCheck && check.State == CheckFailed {
+		if check.Outcome == "also_failed_before" && check.State == CheckFailed {
 			return true
 		}
 	}
@@ -410,7 +409,7 @@ func workflowFailure(err error, checks []CheckResult) (string, string) {
 	case errors.Is(err, errWorkflowChecksFailed):
 		base := "Tests or source checks failed. Inspect the check evidence before running again."
 		if existingTestsFail(checks) {
-			base = "Tests already fail before this change (existing test baseline), so the agent cannot fix them. Fix or skip those tests, then run again."
+			base = "Checks already failed before this change and Mini-Orca could not tell which failures are new, so the agent cannot fix them. Fix or skip those checks, or declare a narrower command in AGENTS.md, then run again."
 		} else if !workflowChecksRepairable(checks) {
 			base = "Required checks did not complete. Inspect the check evidence and retry checks before changing code."
 		}

@@ -70,6 +70,13 @@ func (copier *checkWorkspaceCopier) copyEntry(path, relative string, entry os.Di
 	switch {
 	case err != nil:
 		return err
+	case kind == entrySkipped && linkedDependencyDir(path, relative):
+		// Installed dependencies are linked, not copied: tests need them,
+		// and they are too large to copy for every check.
+		if err := os.Symlink(path, filepath.Join(copier.destination, relative)); err != nil {
+			return err
+		}
+		return filepath.SkipDir
 	case kind == entrySkipped:
 		return filepath.SkipDir
 	case kind == entryDirectory:
@@ -232,6 +239,11 @@ func (skipper *workspaceSkipper) skipDirectory(relative string) (bool, error) {
 	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox",
 		".idea", ".vscode", ".fleet", ".zed", ".vs":
 		return true, nil
+	case ".venv", "venv":
+		if pythonEnvironment(filepath.Join(skipper.root, relative)) {
+			return true, nil
+		}
+		return false, nil
 	case "build", "dist", "target":
 		if skipper.policy == nil {
 			policy, err := project.NewContextPolicy(skipper.root)
@@ -244,6 +256,25 @@ func (skipper *workspaceSkipper) skipDirectory(relative string) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+// linkedDependencyDir reports a directory of installed dependencies that a
+// check copy links to instead of copying: node_modules and Python virtual
+// environments.
+func linkedDependencyDir(path, relative string) bool {
+	switch filepath.Base(relative) {
+	case "node_modules":
+		return true
+	case ".venv", "venv":
+		return pythonEnvironment(path)
+	default:
+		return false
+	}
+}
+
+func pythonEnvironment(path string) bool {
+	info, err := os.Stat(filepath.Join(path, "pyvenv.cfg"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func isCheckWorkspaceMetadata(relative string) bool {
@@ -329,6 +360,9 @@ func FingerprintWorkspace(ctx context.Context, root string) (string, error) {
 			return nil
 		}
 		info, err := entry.Info()
+		if err == nil && info.Mode()&os.ModeSymlink != 0 && linkedDependencyDir(path, entry.Name()) {
+			return nil
+		}
 		if err != nil || !isRegularCheckWorkspaceFile(info) {
 			return fmt.Errorf("check workspace contains a non-regular file")
 		}

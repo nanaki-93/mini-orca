@@ -29,14 +29,14 @@ func TestDaemonStoppedWorkflowsSayWhy(t *testing.T) {
 
 func TestPreExistingTestFailuresAreNotSentToRepair(t *testing.T) {
 	checks := []CheckResult{
-		{Name: existingTestBaselineCheck, Required: true, State: CheckFailed},
+		{Name: "tests: web", Required: true, State: CheckFailed, Outcome: "also_failed_before"},
 		{Name: "tests", Required: true, State: CheckFailed},
 	}
 	if workflowChecksRepairable(checks) {
-		t.Fatal("a failure on the unmodified copy cannot be repaired by changing the proposal")
+		t.Fatal("a failure that also happened before the change cannot be repaired by changing the proposal")
 	}
-	if _, reason := workflowFailure(errWorkflowChecksFailed, checks); !strings.Contains(reason, "Tests already fail before this change") {
-		t.Fatalf("the reason must say the tests failed before the change: %q", reason)
+	if _, reason := workflowFailure(errWorkflowChecksFailed, checks); !strings.Contains(reason, "Checks already failed before this change") {
+		t.Fatalf("the reason must say the checks failed before the change: %q", reason)
 	}
 	if !workflowChecksRepairable(checks[1:]) {
 		t.Fatal("a failure introduced by the proposal stays repairable")

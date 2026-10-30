@@ -1,6 +1,10 @@
 package app
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project/toolchain"
+)
 
 // classifyRegressionBaseline records what new tests did on the unmodified
 // project, from the raw state of that run. Baseline observations do not
@@ -20,15 +24,19 @@ func classifyRegressionBaseline(check *CheckResult, reproduced func(CheckResult)
 	}
 }
 
-// goTestsFailed separates a failing Go test from a package that did not
-// build: missing new APIs make feature tests fail to compile before the
-// implementation exists, which is not a reproduced behavioral regression.
-func goTestsFailed(check CheckResult) bool {
-	return strings.Contains(check.Output, "--- FAIL:") && !strings.Contains(check.Output, "[build failed]")
-}
-
-// runnerTestsFailed accepts any failure: a task runner reports only its exit
-// status, so a failed run is the only evidence available.
-func runnerTestsFailed(CheckResult) bool {
-	return true
+// newTestsReproduced reports whether a run of the old code with the new tests
+// added shows those tests failing. A Go package that does not build is not a
+// reproduction: missing new APIs make feature tests fail to compile before
+// the implementation exists. Failures that already happened without the new
+// tests (known) do not count. When the output names no failure, the failed
+// run is the only evidence there is, and it counts.
+func newTestsReproduced(known []string, output string) bool {
+	if strings.Contains(output, "[build failed]") {
+		return false
+	}
+	failures := toolchain.Failures(output)
+	if len(failures) == 0 {
+		return true
+	}
+	return len(toolchain.NewFailures(known, failures)) > 0
 }

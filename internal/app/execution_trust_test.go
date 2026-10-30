@@ -30,7 +30,7 @@ func TestProjectExecutionTrustDeniesCommandsUntilExplicitlyConfirmed(t *testing.
 		t.Fatal(err)
 	}
 	trust, err := service.ExecutionTrust(context.Background(), analysis.ProjectRevision, "")
-	if err != nil || trust.Trusted || len(trust.Commands) != 1 || strings.Join(trust.Commands[0], " ") != "go test ./..." {
+	if err != nil || trust.Trusted || len(trust.Commands) != 2 || strings.Join(trust.Commands[0], " ") != "go test ./..." || strings.Join(trust.Commands[1], " ") != "go vet ./..." {
 		t.Fatalf("initial trust = %+v, %v", trust, err)
 	}
 	if _, err := service.StartGoScan(context.Background(), analysis.ProjectRevision); err == nil || !strings.Contains(err.Error(), "trusted local execution") {

@@ -14,6 +14,9 @@ const OUTCOME_LABEL: Record<string, string> = {
   failed_before_change: 'Reproduced: failed before the change',
   already_passes: 'Already passed before the change',
   could_not_execute: 'Could not run',
+  known_failures: 'Only failures from before the change',
+  also_failed_before: 'Also failed before the change',
+  not_affected: 'Not affected',
 };
 
 export function ChecksPanel({ session }: { session: LoadedSession }) {
@@ -84,7 +87,7 @@ function CheckRow({ check }: { check: Check }) {
         <ChevronRight size={14} className={cx('chev', open && 'is-open', !hasDetail && 'is-hidden')} aria-hidden />
         <PhaseIcon tone={tone} />
         <span className="grow truncate">{check.name}</span>
-        {check.outcome ? <Badge tone={check.outcome === 'failed_before_change' ? 'success' : 'neutral'}>{OUTCOME_LABEL[check.outcome] ?? check.outcome}</Badge> : null}
+        {check.outcome ? <Badge tone={check.outcome === 'failed_before_change' ? 'success' : check.outcome === 'known_failures' || check.outcome === 'also_failed_before' ? 'warning' : 'neutral'}>{OUTCOME_LABEL[check.outcome] ?? check.outcome}</Badge> : null}
         {check.required ? <Badge>required</Badge> : <Badge tone="neutral">optional</Badge>}
         <span className="xs faint nowrap">{formatDuration(check.duration_ms ?? 0)}</span>
       </button>

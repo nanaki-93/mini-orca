@@ -141,3 +141,30 @@ func TestGlobs(t *testing.T) {
 		t.Fatal("absolute glob accepted")
 	}
 }
+
+func TestGuidesDeclareCheckCommandsForTheirSubproject(t *testing.T) {
+	root := t.TempDir()
+	writeGuide(t, root, "", "```mini-orca\nchecks:\n  test: go test ./...\n  lint: \"\"\n```\n")
+	writeGuide(t, root, "web", "```mini-orca\nchecks:\n  test: npx vitest run --reporter 'dot'\n```\n")
+	resolver := NewResolver(root)
+	rootChecks := resolver.ChecksIn("")
+	if !reflect.DeepEqual(rootChecks.Test, []string{"go", "test", "./..."}) || !rootChecks.LintDeclared || rootChecks.Lint != nil {
+		t.Fatalf("root checks = %+v", rootChecks)
+	}
+	web := resolver.ChecksIn("web")
+	if !reflect.DeepEqual(web.Test, []string{"npx", "vitest", "run", "--reporter", "dot"}) || web.LintDeclared {
+		t.Fatalf("web checks = %+v", web)
+	}
+	if none := resolver.ChecksIn("docs"); none.TestDeclared || none.LintDeclared {
+		t.Fatalf("docs checks = %+v", none)
+	}
+	for _, command := range []string{"go test ./... && rm -rf /", "echo $HOME", "make 'test"} {
+		if args := SplitCommand(command); args != nil {
+			t.Errorf("SplitCommand(%q) = %q, want refusal", command, args)
+		}
+	}
+	writeGuide(t, root, "bad", "```mini-orca\nchecks:\n  test: go test ./... | tee log\n```\n")
+	if bad := resolver.ChecksIn("bad"); bad.TestDeclared || len(resolver.Problems()) != 1 {
+		t.Fatalf("shell syntax accepted: %+v, %+v", bad, resolver.Problems())
+	}
+}
