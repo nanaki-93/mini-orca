@@ -179,6 +179,11 @@ func (s *Service) runWorkflowModelStage(ctx context.Context, job *changeWorkflow
 	if timed.Err() != nil {
 		return nil, context.Cause(timed)
 	}
+	if err == nil && stage < 2 {
+		// The fix-up step makes what this stage wrote fit the project's
+		// budgets; each of its model calls has its own time limit.
+		session, err = s.fitChangeToBudgets(ctx, job.root, session, runtime, stage == 1)
+	}
 	return session, err
 }
 
