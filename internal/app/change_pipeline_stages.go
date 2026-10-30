@@ -16,6 +16,10 @@ import (
 
 const workflowTestPrompt = "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured test file paths (such as _test.go, .test.ts, test_*.py, or tests/ files). Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
 
+// toolTestPrompt asks a testing agent with tools for tests; it starts like
+// workflowTestPrompt so the conversation cleanup recognizes it.
+const toolTestPrompt = "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Create or edit test files only; the implementation is fixed. Keep existing and pinned tests, run the checks, and finish with the tests you wrote and the criteria they cover."
+
 func stripWorkflowTestMessages(messages []ChangeMessage) []ChangeMessage {
 	if len(messages) == 0 {
 		return messages
@@ -160,20 +164,28 @@ func workflowTestStageMessage(stageMessage string) string {
 }
 
 func (s *Service) runWorkflowModelStage(ctx context.Context, job *changeWorkflowJob, session *ChangeSession, runtime modelRuntime, stage int, message string) (*ChangeSession, error) {
+	tools := stage < 2 && toolStageAvailable(session, runtime)
 	limit := duration(runtime.effective.Timeout)
-	if stage == 2 {
+	switch {
+	case tools:
+		limit = s.toolStageLimit(runtime)
+	case stage == 2:
 		limit *= time.Duration(s.workflowReviewWaves(ctx, len(job.specialists)))
 	}
 	timed, cancel := context.WithTimeoutCause(ctx, limit, &workflowTimeoutError{stage: []string{"Creation", "Testing", "Review"}[stage], limit: limit})
 	defer cancel()
 	var err error
-	switch stage {
-	case 0:
+	switch {
+	case tools && stage == 0:
+		session, err = s.runToolStage(timed, job, session, runtime, toolCoder, message)
+	case tools:
+		session, err = s.runToolStage(timed, job, session, runtime, toolTester, strings.Replace(workflowTestStageMessage(message), workflowTestPrompt, toolTestPrompt, 1))
+	case stage == 0:
 		isRepair := session.Workflow.AutoRepairAttempts > 0 || strings.Contains(message, "Previous check failures to resolve:")
 		session, err = s.generateChangeWithRuntime(timed, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message, Repair: isRepair}, runtime)
-	case 1:
+	case stage == 1:
 		session, err = s.generateWorkflowTests(timed, job.root, session, runtime, workflowTestStageMessage(message))
-	case 2:
+	default:
 		err = s.reviewWorkflowProposal(timed, job, session, runtime)
 	}
 	if timed.Err() != nil {

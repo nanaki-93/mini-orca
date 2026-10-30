@@ -8,6 +8,9 @@ import (
 
 // Fixture consent must never read or modify the developer's saved decisions.
 func TestMain(m *testing.M) {
+	if os.Getenv(fakePiEnv) == "1" {
+		os.Exit(fakePi())
+	}
 	dir, err := os.MkdirTemp("", "mini-orca-trust-tests-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

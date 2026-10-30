@@ -67,7 +67,11 @@ func (s *Service) changeWorkflowTimeout(ctx context.Context, models ChangeWorkfl
 	for stage, profile := range models.selections() {
 		runtime := s.workflowStageRuntime(stage, profile)
 		limit := duration(runtime.effective.Timeout)
-		if stage == 2 {
+		switch {
+		case stage < 2 && runtime.client != nil && runtime.client.SupportsAgentRuns():
+			// The stage may run as a tool-using agent.
+			limit = s.toolStageLimit(runtime)
+		case stage == 2:
 			limit *= time.Duration(s.workflowReviewWaves(ctx, len(workflowReviewRoles)))
 		}
 		full += limit

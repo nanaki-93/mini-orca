@@ -136,12 +136,17 @@ func validateSpecialistReport(report ChangeSpecialistReview) error {
 	return nil
 }
 
+// maxReviewDiffBytes bounds the diff the reviewers read beside the full files.
+const maxReviewDiffBytes = 32 * 1024
+
 func (s *Service) reviewWorkflowProposal(ctx context.Context, job *changeWorkflowJob, session *ChangeSession, runtime modelRuntime) error {
 	text, _, err := composeChangePromptContext(job.root, session)
 	if err != nil {
 		return err
 	}
-	messages, err := changeMessages(session, "Review the complete checked proposal against the task, captured source and acceptance criteria:\n"+changeCheckEvidence(session.Checks), text)
+	request := "Review the complete checked proposal against the task, captured source and acceptance criteria:\n" + changeCheckEvidence(session.Checks) +
+		"\n\nThe proposal as a diff against the files before the task:\n" + proposalDiffText(session.Changes, maxReviewDiffBytes)
+	messages, err := changeMessages(session, request, text)
 	if err != nil {
 		return err
 	}

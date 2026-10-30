@@ -151,7 +151,10 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 	if session.Kind == "security" && !request.ConfirmSecurity {
 		return fmt.Errorf("security workflow requires explicit review intent")
 	}
-	hasTestTarget := false
+	// A testing agent with tools creates the test files it needs; a one-shot
+	// one writes only the test files the task holds.
+	testRuntime := s.workflowStageRuntime(1, request.Models.Test)
+	hasTestTarget := toolStageAvailable(session, testRuntime)
 	for _, target := range session.Targets {
 		hasTestTarget = hasTestTarget || isTestTarget(target)
 	}
