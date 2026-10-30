@@ -117,6 +117,9 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 	if err := verifyChecksWorkspace(ctx, root, session); err != nil {
 		return nil, err
 	}
+	if ownsWorktree(session) {
+		return s.acceptWorktreeChange(ctx, root, session, request)
+	}
 	previous, err := readChangeJournal(root)
 	if err != nil {
 		return nil, err

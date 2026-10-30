@@ -54,6 +54,7 @@ type GitWorktree struct {
 	GitIdentity
 	Current      bool                 `json:"current"`
 	Locked       bool                 `json:"locked"`
+	LockReason   string               `json:"lock_reason,omitempty"`
 	Prunable     bool                 `json:"prunable"`
 	Dirty        *bool                `json:"dirty,omitempty"`
 	Mergeable    bool                 `json:"mergeable"`
@@ -91,7 +92,7 @@ func ReadWorktrees(ctx context.Context, root string) ([]GitWorktree, error) {
 			case "branch":
 				tree.Branch = strings.TrimPrefix(value, "refs/heads/")
 			case "locked":
-				tree.Locked = true
+				tree.Locked, tree.LockReason = true, value
 			case "prunable":
 				tree.Prunable = true
 			}

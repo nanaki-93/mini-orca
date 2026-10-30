@@ -115,12 +115,25 @@ func validateStoredTargets(targets []ChangeTarget) (map[string]bool, error) {
 func validateStoredEdits(edits []ChangeEdit, targets map[string]bool) error {
 	seen := map[string]bool{}
 	for _, edit := range edits {
-		if !targets[edit.Path] || seen[edit.Path] || len(edit.Content) > maxChangeBytes || edit.Hash != contentHash([]byte(edit.Content)) {
+		if !targets[edit.Path] || seen[edit.Path] || len(edit.Content) > maxChangeBytes || edit.Hash != contentHash([]byte(edit.Content)) || !validStoredEditStatus(edit, targets) {
 			return fmt.Errorf("corrupt stored proposal")
 		}
 		seen[edit.Path] = true
 	}
 	return nil
+}
+
+func validStoredEditStatus(edit ChangeEdit, targets map[string]bool) bool {
+	switch edit.Status {
+	case "", EditAdded, EditModified:
+		return edit.OldPath == ""
+	case EditDeleted:
+		return edit.OldPath == "" && edit.Content == ""
+	case EditRenamed:
+		return edit.OldPath != "" && edit.OldPath != edit.Path && targets[edit.OldPath]
+	default:
+		return false
+	}
 }
 
 func boundedChangeFile(file *os.File) error {

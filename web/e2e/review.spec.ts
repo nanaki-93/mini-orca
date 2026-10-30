@@ -257,3 +257,36 @@ test('a page from an earlier daemon launch is told to reload', async ({ page, da
   await expect(page.getByText("Reload the Web UI to get this daemon's write token.")).toBeVisible();
   expect(daemon.sessions.get('chg-1')!.reviewed_files).toEqual([]);
 });
+
+test('a task in its own worktree shows new, deleted and moved files and is accepted as a commit', async ({ page, daemon }) => {
+  const session = daemon.sessions.get('chg-1')!;
+  const changes = [
+    ...session.changes.map(change => (change.path.endsWith('mime.go') ? { ...change, status: 'added' as const } : change)),
+    { path: 'internal/api/handlers/legacy.go', status: 'deleted' as const, content: '', hash: 'h-legacy', diff: { lines: [{ kind: 'removed', old_line: 1, text: 'package handlers' }] } },
+    { path: 'internal/api/handlers/assets.go', status: 'renamed' as const, old_path: 'internal/api/handlers/static.go', content: 'package handlers\n', hash: 'h-assets', diff: { old_path: 'internal/api/handlers/static.go', new_path: 'internal/api/handlers/assets.go', lines: [{ kind: 'context', old_line: 1, new_line: 1, text: 'package handlers' }] } },
+  ];
+  daemon.sessions.set('chg-1', { ...session, changes, reviewed_files: changes.map(change => change.path), reviewed_hash: session.hash, worktree: { base: '41030b7e', branch: 'orca/reject-nested-a1b2c3' } });
+
+  await page.goto('/#/tasks/chg-1/files');
+  const files = page.getByRole('complementary', { name: 'Changed files' });
+  const diff = page.locator('.fc-diff-head');
+  await files.getByRole('button', { name: /legacy\.go/ }).click();
+  await expect(diff).toContainText('deleted');
+  await files.getByRole('button', { name: /assets\.go/ }).click();
+  await expect(diff).toContainText('renamed from internal/api/handlers/static.go');
+  await files.getByRole('button', { name: /mime\.go/ }).click();
+  await expect(diff).toContainText('new');
+
+  await page.getByRole('tab', { name: /conversation/i }).click();
+  const gate = page.getByRole('complementary', { name: 'Review gate' });
+  await expect(gate).toContainText('Ready to accept?');
+  await expect(gate.getByRole('button', { name: /apply/i })).toHaveCount(0);
+  await gate.getByRole('button', { name: 'Accept & commit' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('on orca/reject-nested-a1b2c3');
+  await dialog.getByRole('button', { name: 'Accept & commit' }).click();
+  await expect(page.getByText('Accepted and committed on orca/reject-nested-a1b2c3.')).toBeVisible();
+  expect(daemon.mutations('/apply')[0].body).toMatchObject({ confirm: true, head: '41030b7e', branch: 'orca/reject-nested-a1b2c3', revision: 3 });
+  await expect(gate).toContainText('Accepted');
+  await expect(gate.getByRole('button', { name: 'Merge from Branches' })).toBeVisible();
+});

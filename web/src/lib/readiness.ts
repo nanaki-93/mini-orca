@@ -97,6 +97,9 @@ export interface Readiness {
 export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailability }) | null | undefined): Readiness {
   const result: Readiness = { editable: false, filesReviewed: false, checksPassed: false, canApprove: false, canApply: false, canUndo: false, step: 'none', message: 'Select a task.' };
   if (!session) return result;
+  if (session.state === 'applied' && session.worktree) {
+    return { ...result, step: 'applied', message: `Accepted as a commit on ${session.worktree.branch}. Merge it from Branches, or remove the worktree to drop it.` };
+  }
   if (session.state === 'applied') {
     const undo = session.undo ?? { available: true, reason: '' };
     return { ...result, canUndo: undo.available, step: 'applied', message: undo.available ? 'Applied. Undo verifies the files are unchanged before restoring them.' : `Applied. ${undo.reason || 'Undo is not available for this task.'}` };
@@ -129,10 +132,10 @@ export function proposalReadiness(session: (ChangeSession & { undo?: UndoAvailab
     result.message = session.workflow?.reason || (rejectedByModel ? 'The reviewers requested changes. Run the agents again, or override the reviewers with a reason.' : 'The agent workflow has not reached human review.');
   } else if (!result.canApply) {
     result.step = 'approve';
-    result.message = 'Approve this exact version to enable Apply.';
+    result.message = session.worktree ? 'Approve this exact version to enable Accept.' : 'Approve this exact version to enable Apply.';
   } else {
     result.step = 'apply';
-    result.message = 'Approved. Apply writes these files to the checkout.';
+    result.message = session.worktree ? `Approved. Accept commits this version on ${session.worktree.branch}.` : 'Approved. Apply writes these files to the checkout.';
   }
   return result;
 }

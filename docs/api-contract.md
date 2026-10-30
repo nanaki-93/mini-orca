@@ -144,7 +144,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/comments/delete` | Delete an open line comment. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/review-override` | Override the model reviewers' rejection of the current checked hash with a reason; approves nothing. |
-| POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
+| POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery; for a task that owns its worktree, accept it as a commit on its branch (no Undo). |
 | POST | `/api/projects/current/changes/{sessionID}/delete` | Delete a task that is not running and whose Apply cannot be undone; stale tasks included. Publishes a `workflow` event with status `deleted`. |
 | POST | `/api/projects/current/changes/{sessionID}/reanalyze` | Re-check an out-of-date task's issue against the current files: still valid captures it again, not valid deletes it and dismisses its linked issues. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |

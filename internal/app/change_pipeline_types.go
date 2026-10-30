@@ -148,6 +148,16 @@ func (c *changeWorkflowController) getJob(sessionID string) *changeWorkflowJob {
 	return nil
 }
 
+// anyRunning reports a job that has not finished. The caller holds mu.
+func (c *changeWorkflowController) anyRunning() bool {
+	for _, job := range c.jobs {
+		if !job.finished {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *changeWorkflowController) setJob(job *changeWorkflowJob) {
 	if c.jobs == nil {
 		c.jobs = make(map[string]*changeWorkflowJob)

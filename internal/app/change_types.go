@@ -47,6 +47,7 @@ type ChangeSession struct {
 	Scope               []ChangeScopeFile       `json:"scope,omitempty"`
 	StaleReason         string                  `json:"stale_reason,omitempty"` // Set on read; never stored.
 	Git                 *GitIdentity            `json:"git,omitempty"`
+	Worktree            *ChangeWorktree         `json:"worktree,omitempty"`
 	Commit              *ChangeCommit           `json:"commit,omitempty"`
 	Revision            int64                   `json:"revision"`
 	Hash                string                  `json:"hash"`
@@ -96,6 +97,10 @@ type ChangeEditInput struct {
 	Path     string `json:"path"`
 	Content  string `json:"content"`
 	Summary  string `json:"summary,omitempty"`
+	// Delete removes the file and RenamedFrom moves a file to Path; both
+	// need a task in its own worktree.
+	Delete      bool   `json:"delete,omitempty"`
+	RenamedFrom string `json:"renamed_from,omitempty"`
 }
 
 type ChangeMessageRequest struct {

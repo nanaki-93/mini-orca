@@ -107,6 +107,10 @@ export interface FileDiff {
 
 export interface FileChange {
   path: string;
+  /** added, modified, deleted or renamed; absent in proposals that only add or modify files. */
+  status?: 'added' | 'modified' | 'deleted' | 'renamed';
+  /** Where a renamed file came from. */
+  old_path?: string;
   content: string;
   hash: string;
   summary?: string;
@@ -374,6 +378,8 @@ export interface ChangeSession extends ProjectIdentity {
   acceptance_criteria: string[];
   revision: number;
   hash: string;
+  /** Set when the task owns its worktree: its proposal is that worktree's diff against base, accepted as a commit on branch. */
+  worktree?: { base: string; branch: string };
   state: string;
   freshness: string;
   targets: ChangeTarget[];

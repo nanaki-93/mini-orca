@@ -19,7 +19,7 @@ import (
 )
 
 // A task created in its own worktree is served through that worktree's scope:
-// read, trusted to run checks, and re-analyzed there once its file changes.
+// read, trusted to run checks, and fed by edits made in that worktree.
 func TestTaskInItsOwnWorktreeIsServedThroughItsScope(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"still_valid":true,"reason":"README still lacks the usage section."}`}}}})
@@ -101,10 +101,14 @@ func TestTaskInItsOwnWorktreeIsServedThroughItsScope(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(opened.WorktreePath, "README.md"), []byte("# Fixture\nEdited in the worktree.\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	identity := map[string]any{"project_id": opened.ProjectID, "project_revision": opened.ProjectRevision, "revision": opened.Revision, "hash": opened.Hash}
-	reanalyzed := call("POST", "/api/projects/current/changes/"+opened.ID+"/reanalyze?"+scope, identity)
-	var result app.ChangeReanalysis
-	if reanalyzed.Code != http.StatusOK || json.Unmarshal(reanalyzed.Body.Bytes(), &result) != nil || result.Outcome != app.ReanalysisStillValid || result.Session == nil || !strings.Contains(result.Session.Targets[0].Content, "Edited in the worktree.") {
-		t.Fatalf("re-analysis through the worktree: %d %s", reanalyzed.Code, reanalyzed.Body)
+	// An edit made in the task's own worktree becomes part of its proposal.
+	adopted := call("GET", "/api/projects/current/changes/"+opened.ID+"?"+own+"&"+scope, nil)
+	var session app.ChangeSession
+	if adopted.Code != http.StatusOK || json.Unmarshal(adopted.Body.Bytes(), &session) != nil || session.Freshness != "current" || len(session.Changes) != 1 || !strings.Contains(session.Changes[0].Content, "Edited in the worktree.") || session.Worktree == nil {
+		t.Fatalf("worktree edit through its scope: %d %s", adopted.Code, adopted.Body)
+	}
+	identity := map[string]any{"project_id": session.ProjectID, "project_revision": session.ProjectRevision, "revision": session.Revision, "hash": session.Hash}
+	if reanalyzed := call("POST", "/api/projects/current/changes/"+opened.ID+"/reanalyze?"+scope, identity); reanalyzed.Code != http.StatusBadRequest {
+		t.Fatalf("re-analysis of a task in its own worktree: %d %s", reanalyzed.Code, reanalyzed.Body)
 	}
 }

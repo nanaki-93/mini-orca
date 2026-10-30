@@ -488,6 +488,10 @@ export function useActions() {
 
   async function apply(session: LoadedSession, project: Project | undefined, options: { commit: boolean; message: string }) {
     if (!proposalReadiness(session).canApply) return;
+    if (session.worktree) {
+      await accept(session, options.message);
+      return;
+    }
     const destination = session.checkout.worktreePath || project?.path || 'the current checkout';
     const commit = options.commit && Boolean(session.git?.head);
     if (commit && !options.message.trim()) {
@@ -511,6 +515,32 @@ export function useActions() {
         await refreshAll();
       } catch (err) {
         fail('Apply failed', err);
+      }
+    });
+  }
+
+  /** Accepts a task in its own worktree: its reviewed version is committed on the task branch. */
+  async function accept(session: LoadedSession, message: string) {
+    const branch = session.worktree!.branch;
+    if (!message.trim()) {
+      toast('Enter a commit message.', 'warning');
+      return;
+    }
+    const ok = await confirm({
+      title: 'Accept and commit?',
+      body: `Commits “${session.title || session.id}” on ${branch}, exactly as reviewed. Its files are already in the task's worktree; merge the branch from Branches when you are ready.`,
+      confirmLabel: 'Accept & commit',
+    });
+    if (!ok) return;
+    await guarded('Accepting…', async () => {
+      try {
+        const body = { ...changeIdentity(session), confirm: true, head: session.worktree!.base, branch, commit_message: message.trim() };
+        const result = await api.post<ChangeMutationResult>(changePath(session, '/apply'), body);
+        toast(`Accepted and committed on ${branch}.`, 'success');
+        for (const warning of result?.warnings ?? []) toast(warning, 'warning');
+        await refreshAll();
+      } catch (err) {
+        fail('Accept failed', err);
       }
     });
   }

@@ -24,6 +24,7 @@ func (s *Service) GitWorkspace(ctx context.Context, id, revision string) (*GitWo
 	if err != nil {
 		return nil, err
 	}
+	s.releaseStaleRunLocks(ctx, repository.Root, result.Worktrees)
 	for i := range result.Worktrees {
 		gitops.PopulateWorktree(ctx, repository, &result.Worktrees[i], listChangeSessions)
 	}

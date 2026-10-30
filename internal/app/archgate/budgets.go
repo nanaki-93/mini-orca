@@ -78,7 +78,14 @@ func BudgetReports(root string, targets []ChangeTarget, edits []ChangeEdit) []Bu
 	resolver := rules.NewResolver(root)
 	reports := make([]BudgetReport, 0, len(edits))
 	for _, edit := range edits {
+		if edit.Deleted() {
+			continue
+		}
 		base, hasBase := targetContent(targets, edit.Path)
+		if edit.OldPath != "" {
+			// A renamed file is measured against what it was before it moved.
+			base, hasBase = targetContent(targets, edit.OldPath)
+		}
 		reports = append(reports, measureBudgets(resolver.For(edit.Path).Budgets, edit, base, hasBase))
 	}
 	return reports

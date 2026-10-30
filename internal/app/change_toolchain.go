@@ -89,6 +89,10 @@ func (run *checkRun) base() (string, error) {
 	if err == nil && fingerprint != run.fingerprint {
 		err = fmt.Errorf("%w: the project changed while checks ran", project.ErrRevisionConflict)
 	}
+	if err == nil && ownsWorktree(run.session) {
+		// The worktree holds the proposal; its base is the tree without it.
+		err = revertProposalInTree(dir, run.session)
+	}
 	run.baseErr = err
 	return dir, err
 }

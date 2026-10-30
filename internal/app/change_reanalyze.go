@@ -136,6 +136,9 @@ func (s *Service) loadStaleChange(ctx context.Context, root, id string, identity
 	if isChangePipelineActive(session.Workflow) {
 		return nil, "", fmt.Errorf("%w: stop its agents before re-analyzing it", ErrChangeInUse)
 	}
+	if ownsWorktree(session) {
+		return nil, "", fmt.Errorf("a task in its own worktree is not re-analyzed: its worktree left the task's base commit on %s; put it back there, or remove the worktree from Branches and create the task again", session.Worktree.Branch)
+	}
 	staleErr := s.verifyChangeCurrent(ctx, root, session)
 	if staleErr == nil {
 		return nil, "", fmt.Errorf("this task matches the current files; only an out-of-date task is re-analyzed")

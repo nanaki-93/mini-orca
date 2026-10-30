@@ -18,6 +18,12 @@ import (
 )
 
 func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateRequest) (*ChangeSession, error) {
+	return s.openChangeSession(ctx, request, false)
+}
+
+// openChangeSession captures a task. ownWorktree marks a task opened in the
+// worktree created for it: its base is the worktree's current commit.
+func (s *Service) openChangeSession(ctx context.Context, request ChangeCreateRequest, ownWorktree bool) (*ChangeSession, error) {
 	index, err := s.manager.Index()
 	if err != nil {
 		return nil, err
@@ -38,6 +44,12 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	session.ID = "change-" + hex.EncodeToString(nonce[:])
+	if ownWorktree {
+		if session.Git == nil || session.Git.Head == "" || session.Git.Branch == "" {
+			return nil, fmt.Errorf("the task's worktree has no branch and commit to start from")
+		}
+		session.Worktree = &ChangeWorktree{Base: session.Git.Head, Branch: session.Git.Branch}
+	}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	history, err := listChangeSessions(root)
@@ -133,6 +145,11 @@ func (s *Service) verifyChangeTargetsCurrent(root string, session *ChangeSession
 	if policy.Version() != session.PolicyFingerprint {
 		return fmt.Errorf("%w: the context policy changed since this proposal was made", project.ErrRevisionConflict)
 	}
+	if ownsWorktree(session) {
+		// Its files hold the proposal and its base is a commit, so only the
+		// worktree's position can make it out of date.
+		return verifyWorktreeBase(context.Background(), root, session)
+	}
 	return verifyCapturedSources(root, policy, session)
 }
 
@@ -166,6 +183,9 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 	if err := s.verifyChangeTargetsCurrent(root, session); err != nil {
 		return err
 	}
+	if ownsWorktree(session) {
+		return verifyWorktreeProposal(ctx, root, session)
+	}
 	if session.ScopeVersion != 0 {
 		return verifySessionBranch(ctx, root, session.Git)
 	}
@@ -197,6 +217,11 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 	}
 	if s.manager.Root() != root || session.ProjectID != index.ProjectID {
 		return nil, project.ErrRevisionConflict
+	}
+	if ownsWorktree(session) && session.State == "draft" && !s.hasActiveWorkflowJob(root, session) {
+		if session, err = s.adoptWorktreeEdits(ctx, root, session); err != nil {
+			return nil, err
+		}
 	}
 	if session.State == "draft" {
 		var verifyErr error
@@ -352,8 +377,11 @@ func (s *Service) updateChangeProposal(ctx context.Context, id string, request C
 	if err != nil {
 		return nil, err
 	}
-	edits, err := buildChangeEdits(session, request.Changes)
+	edits, err := proposalEdits(root, session, request.Changes)
 	if err != nil {
+		return nil, err
+	}
+	if edits, err = setProposal(ctx, root, session, edits); err != nil {
 		return nil, err
 	}
 	session.Revision++
@@ -374,6 +402,16 @@ func (s *Service) updateChangeProposal(ctx context.Context, id string, request C
 	return session, nil
 }
 
+// proposalEdits validates file changes from an agent or a person: against
+// the diff policy for a task in its own worktree, against the captured
+// targets for a task in the main checkout.
+func proposalEdits(root string, session *ChangeSession, inputs []ChangeEditInput) ([]ChangeEdit, error) {
+	if ownsWorktree(session) {
+		return buildWorktreeEdits(root, session, inputs)
+	}
+	return buildChangeEdits(session, inputs)
+}
+
 func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]ChangeEdit, error) {
 	if len(inputs) == 0 || len(inputs) > maxStoredTaskPaths {
 		return nil, fmt.Errorf("provide one to sixty-four file changes")
@@ -381,6 +419,9 @@ func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]Chang
 	edits := []ChangeEdit{}
 	seen := map[string]bool{}
 	for _, input := range inputs {
+		if input.Delete || input.RenamedFrom != "" {
+			return nil, fmt.Errorf("deleting or renaming %s needs a task in its own worktree", boundedProposalPath(input.Path))
+		}
 		target, err := proposalTarget(session, input.Path)
 		if err != nil {
 			return nil, err
@@ -448,7 +489,7 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	if err != nil {
 		return nil, err
 	}
-	explanation, edits, err := parseChangeResponse(result.Content, session)
+	explanation, edits, err := parseChangeResponse(root, result.Content, session)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +508,9 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 		edits = preservePinnedTests(edits, session.PinnedTests)
 	} else {
 		edits = preservePinnedTests(edits, changeTestEdits(session))
+	}
+	if edits, err = setProposal(timed, root, session, edits); err != nil {
+		return nil, err
 	}
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)

@@ -192,7 +192,7 @@ func TestChangeProposalOmitsUnchangedAndFormattingOnlyFiles(t *testing.T) {
 		{Path: "helper.go", Exists: true, Content: "package main\nfunc Helper() {\n    println( 1 )\n}\n"},
 	}}
 	response := `{"explanation":"Fix two return values.","changes":[{"path":"main.go","content":"package main\n\nfunc First() int { return 4 }\n\nfunc Untouched() int { return 2 }\n\nfunc Last() int { return 5 }\n"},{"path":"helper.go","content":"package main\n\nfunc Helper() {\n\tprintln(1)\n}\n"}]}`
-	_, edits, err := parseChangeResponse(response, session)
+	_, edits, err := parseChangeResponse(t.TempDir(), response, session)
 	if err != nil || len(edits) != 1 || edits[0].Path != "main.go" {
 		t.Fatalf("formatting-only file entered proposal: %+v, %v", edits, err)
 	}

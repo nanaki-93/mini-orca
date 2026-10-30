@@ -194,7 +194,7 @@ function ReviewRail({ session }: { session: LoadedSession }) {
   return (
     <aside className="rail" aria-label="Review gate">
       <section className="rail-section">
-        <div className="rail-title">Ready to apply?</div>
+        <div className="rail-title">{session.worktree ? 'Ready to accept?' : 'Ready to apply?'}</div>
         <ol className="gate">
           {steps.map(step => (
             <li key={step.label} className={cx('gate-step', step.done && 'is-done', step.active && 'is-active')}>
@@ -258,10 +258,10 @@ function ApplyBox({ session }: { session: LoadedSession }) {
   if (session.state === 'applied') {
     return (
       <section className="rail-section">
-        <Callout tone="success" icon={ShieldCheck} title={session.commit?.state === 'committed' ? 'Applied and committed' : 'Applied'}>
+        <Callout tone="success" icon={ShieldCheck} title={session.worktree ? 'Accepted' : session.commit?.state === 'committed' ? 'Applied and committed' : 'Applied'}>
           {ready.message.replace(/^Applied\. /, '')}
         </Callout>
-        {session.checkout.worktreePath ? (
+        {session.checkout.worktreePath || session.worktree ? (
           <Button icon={ExternalLink} onClick={() => navigate('/git')}>
             Merge from Branches
           </Button>
@@ -270,6 +270,16 @@ function ApplyBox({ session }: { session: LoadedSession }) {
     );
   }
   if (!ready.editable) return null;
+  if (session.worktree && ready.canApply) {
+    return (
+      <section className="rail-section">
+        <Input value={message} onChange={e => setMessage(e.target.value)} aria-label="Commit message" maxLength={200} />
+        <Button variant="primary" icon={GitCommitHorizontal} onClick={() => void actions.apply(session, project, { commit: true, message })} disabled={Boolean(busy)} loading={busy === 'Accepting…'}>
+          Accept & commit
+        </Button>
+      </section>
+    );
+  }
   return (
     <section className="rail-section">
       {ready.canApply ? (

@@ -149,6 +149,9 @@ func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 func changeSourceChecks(root string, targets []ChangeTarget, edits []ChangeEdit) ([]CheckResult, []archgate.BudgetReport) {
 	checks := []CheckResult{}
 	for _, edit := range edits {
+		if edit.Deleted() {
+			continue
+		}
 		if filepath.Ext(edit.Path) != ".go" {
 			checks = append(checks, archgate.SyntaxCheck(targets, edit))
 			continue
@@ -219,6 +222,9 @@ func (s *Service) prepareCheckCopy(ctx context.Context, root, workspace string, 
 	if session.ScopeVersion == 0 {
 		return fingerprint, nil
 	}
+	if ownsWorktree(session) {
+		return fingerprint, verifyProposalInTree(workspace, session)
+	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
 		return "", err
@@ -236,6 +242,17 @@ func workspaceHasGo(workspace string, edits []ChangeEdit) bool {
 
 func stageChangeEdits(workspace string, edits []ChangeEdit) error {
 	for _, edit := range edits {
+		if edit.OldPath != "" {
+			if err := removeWorkspaceFile(workspace, edit.OldPath); err != nil {
+				return err
+			}
+		}
+		if edit.Deleted() {
+			if err := removeWorkspaceFile(workspace, edit.Path); err != nil {
+				return err
+			}
+			continue
+		}
 		path, err := project.ResolveWritePath(workspace, edit.Path)
 		if err != nil {
 			return err
@@ -246,6 +263,17 @@ func stageChangeEdits(workspace string, edits []ChangeEdit) error {
 		if err := os.WriteFile(path, []byte(edit.Content), 0600); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func removeWorkspaceFile(workspace, file string) error {
+	path, err := project.ResolveWritePath(workspace, file)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }

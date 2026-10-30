@@ -355,7 +355,7 @@ export class FakeDaemon {
       if (s.reviewed_hash !== s.hash) throw new Error('Approve this version first.');
       return { ...s, state: 'applied', commit: body.commit_message ? { state: 'committed', oid: 'c0ffee12', message: String(body.commit_message) } : undefined };
     });
-    return { ...data.project, session_id: updated.id, state: 'applied', hash: updated.hash, undo_available: true, warnings: [], commit: updated.commit };
+    return { ...data.project, session_id: updated.id, state: 'applied', hash: updated.hash, undo_available: !updated.worktree, warnings: [], commit: updated.commit };
   }
 
   /** Creates a task like the daemon; with worktree, in a new branch and worktree of its own. */
@@ -384,6 +384,7 @@ export class FakeDaemon {
     if (body.worktree !== true) return session;
     const name = `${taskSlug(String(body.title))}-a1b2c3`;
     const path = `${data.project.path}/.worktrees/${name}`;
+    session.worktree = { base: '41030b7e', branch: `orca/${name}` };
     this.taskWorktrees.set(id, path);
     this.created.add(path);
     this.worktrees.push({ path, head: '41030b7e', branch: `orca/${name}`, integration: 'merged', mergeable: false, dirty: false, sessions: [] });

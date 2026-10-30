@@ -170,7 +170,7 @@ func (s *Service) openChangeInTaskWorktree(ctx context.Context, opened *ChangeOp
 		opened.Warnings = append(opened.Warnings, "The new worktree uses the configured agent roles and budget, not the ones saved in this checkout's Settings; set them there before starting the agents.")
 	}
 	request.ProjectID, request.ProjectRevision = index.ProjectID, index.ProjectRevision
-	return child.OpenChangeSession(ctx, request)
+	return child.openChangeSession(ctx, request, true)
 }
 
 // shareExecutionTrust trusts a worktree created from this trusted checkout to

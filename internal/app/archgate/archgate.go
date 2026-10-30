@@ -56,12 +56,22 @@ type ChangeTarget struct {
 
 // ChangeEdit holds one proposed file edit and its computed unified diff.
 type ChangeEdit struct {
-	Criteria []int            `json:"criteria,omitempty"`
-	Path     string           `json:"path"`
-	Content  string           `json:"content"`
-	Hash     string           `json:"hash"`
-	Summary  string           `json:"summary,omitempty"`
-	Diff     diff.UnifiedDiff `json:"diff"`
+	Criteria []int  `json:"criteria,omitempty"`
+	Path     string `json:"path"`
+	// Status is added, modified, deleted or renamed; empty in proposals
+	// stored before it existed, whose edits add or modify their file. A
+	// deleted file has no content; a renamed one moved from OldPath.
+	Status  string           `json:"status,omitempty"`
+	OldPath string           `json:"old_path,omitempty"`
+	Content string           `json:"content"`
+	Hash    string           `json:"hash"`
+	Summary string           `json:"summary,omitempty"`
+	Diff    diff.UnifiedDiff `json:"diff"`
+}
+
+// Deleted reports an edit that removes its file.
+func (edit ChangeEdit) Deleted() bool {
+	return edit.Status == "deleted"
 }
 
 type parsedEditFacts struct {

@@ -87,10 +87,11 @@ func (s *Service) ChangeCodeRules(ctx context.Context, id string) (*ChangeRules,
 	}
 	resolver := rules.NewResolver(root)
 	result := &ChangeRules{SessionID: session.ID, Revision: session.Revision, Files: []ChangeRulesFile{}}
-	for i, report := range archgate.BudgetReports(root, session.Targets, edits) {
+	for _, report := range archgate.BudgetReports(root, session.Targets, edits) {
 		declared := resolver.For(report.Path)
+		target := changeTarget(session, report.Path)
 		result.Files = append(result.Files, ChangeRulesFile{
-			BudgetReport: report, Test: isTestTarget(session.Targets[i]), Proposed: proposedEdit(session, report.Path) != nil,
+			BudgetReport: report, Test: target != nil && isTestTarget(*target), Proposed: proposedEdit(session, report.Path) != nil,
 			Imports: declared.Imports, Sources: declared.Sources,
 		})
 	}

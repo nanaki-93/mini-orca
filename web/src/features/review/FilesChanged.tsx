@@ -3,7 +3,7 @@
 
 import { useMemo } from 'react';
 import { Check, Columns2, FileDiff, ListTree, MessageSquare, Rows3, WrapText } from 'lucide-react';
-import type { LoadedSession } from '@/api/types';
+import type { FileChange, LoadedSession } from '@/api/types';
 import { useActions, useBusy } from '@/app/actions';
 import { setUI, useUI } from '@/app/store';
 import { usePageKeys } from '@/app/shortcuts';
@@ -130,6 +130,7 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
               <span className="faint">{dirname(current.path) ? dirname(current.path) + '/' : ''}</span>
               <span className="strong">{basename(current.path)}</span>
             </span>
+            <FileStatus change={current} />
             <DiffCounts lines={current.diff?.lines ?? []} />
             <span className="spacer" />
             <IconButton icon={WrapText} label="Wrap lines" size="sm" active={wrap} onClick={() => setUI({ wrapLines: !wrap })} />
@@ -158,6 +159,14 @@ export function FilesChanged({ session }: { session: LoadedSession }) {
       ) : null}
     </div>
   );
+}
+
+/** Says when a file is new, deleted or moved; a modified file needs no label. */
+function FileStatus({ change }: { change: FileChange }) {
+  if (change.status === 'added') return <span className="badge badge-success">new</span>;
+  if (change.status === 'deleted') return <span className="badge badge-danger">deleted</span>;
+  if (change.status === 'renamed') return <span className="badge badge-info" title={`Renamed from ${change.old_path}`}>renamed from {change.old_path}</span>;
+  return null;
 }
 
 function DiffCounts({ lines }: { lines: { kind: string }[] }) {

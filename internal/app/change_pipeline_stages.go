@@ -205,7 +205,7 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
-	explanation, edits, err := parseChangeResponse(result.Content, session)
+	explanation, edits, err := parseChangeResponse(root, result.Content, session)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,11 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
-	current.Changes = mergeWorkflowTests(current.Changes, testEdits)
+	merged, err := setProposal(ctx, root, current, mergeWorkflowTests(append([]ChangeEdit(nil), current.Changes...), testEdits))
+	if err != nil {
+		return nil, err
+	}
+	current.Changes = merged
 	current.Hash, current.Revision = changeProposalHash(current.Changes), current.Revision+1
 	current.Checks, current.PinnedTests = []CheckResult{}, nil
 	revokeApproval(current)

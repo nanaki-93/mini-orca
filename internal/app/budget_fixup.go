@@ -79,7 +79,7 @@ func (s *Service) budgetFixupRound(ctx context.Context, root string, session *Ch
 	if err != nil {
 		return nil, err
 	}
-	explanation, edits, err := parseChangeResponse(result.Content, scoped)
+	explanation, edits, err := parseChangeResponse(root, result.Content, scoped)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +278,11 @@ func (s *Service) storeBudgetFixup(ctx context.Context, root string, session *Ch
 		current.Targets = append(current.Targets, target)
 		current.Instructions[target.Path] = instructions.Fingerprint
 	}
-	current.Changes = mergeWorkflowTests(current.Changes, edits)
+	merged, err := setProposal(ctx, root, current, mergeWorkflowTests(append([]ChangeEdit(nil), current.Changes...), edits))
+	if err != nil {
+		return nil, err
+	}
+	current.Changes = merged
 	current.Hash, current.Revision = changeProposalHash(current.Changes), current.Revision+1
 	current.Checks, current.PinnedTests = []CheckResult{}, nil
 	revokeApproval(current)

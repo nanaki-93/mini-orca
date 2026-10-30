@@ -173,6 +173,7 @@ func (s *Service) admitChangeWorkflow(ctx context.Context, session *ChangeSessio
 func (s *Service) runChangeWorkflow(ctx context.Context, job *changeWorkflowJob, message string) {
 	defer job.cancel()
 	defer close(job.done)
+	defer s.lockTaskWorktree(job)()
 	currentMessage := message
 	if job.start == startCreate {
 		currentMessage = s.probeUncheckedChangesBeforeWorkflow(ctx, job, message)

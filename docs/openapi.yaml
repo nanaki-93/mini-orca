@@ -391,7 +391,7 @@ paths:
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
-      description: Explicitly apply the current reviewed proposal with grouped recovery.
+      description: "Explicitly apply the current reviewed proposal with grouped recovery. For a task that owns its worktree (session.worktree), this accepts it instead: the reviewed proposal, already in the worktree's files, is committed on the task branch on top of its base (head names the base, branch the task branch); nothing is written, and there is no Undo."
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeApplyRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
@@ -2908,7 +2908,9 @@ components:
       type: object
       properties:
         path: {type: string}
-        content: {type: string}
+        status: {type: string, enum: [added, modified, deleted, renamed], description: Absent in proposals that only add or modify files. Deleting and renaming need a task that owns its worktree.}
+        old_path: {type: string, description: Where a renamed file came from.}
+        content: {type: string, description: Empty for a deleted file.}
         summary: {type: string, description: Advisory per-file rationale.}
         criteria: {type: array, maxItems: 16, items: {type: integer, minimum: 1}, description: Advisory references to one-based acceptance criteria; not coverage proof.}
         hash: {type: string}
@@ -3136,6 +3138,13 @@ components:
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, targets, changes, messages, checks]
       properties:
         git: {$ref: '#/components/schemas/GitIdentity'}
+        worktree:
+          type: object
+          required: [base, branch]
+          description: Set when the task owns the worktree created for it. Its proposal is the worktree's diff against base (new, deleted and renamed files included; edits made directly in the worktree are picked up as a new version), its freshness depends only on the worktree staying at base on branch, and accepting it commits on branch. The worktree is locked while agents run.
+          properties:
+            base: {type: string}
+            branch: {type: string}
         commit: {$ref: '#/components/schemas/ChangeCommit'}
         schema_version: {type: integer, enum: [1]}
         id: {type: string}
@@ -3450,6 +3459,7 @@ components:
                       path: {type: string}
                       current: {type: boolean}
                       locked: {type: boolean}
+                      lock_reason: {type: string, description: "Mini-Orca locks a task's worktree while agents run there; a lock it left behind is released when this list is read."}
                       prunable: {type: boolean}
                       dirty: {type: boolean, description: Omitted when status cannot be read}
                       mergeable: {type: boolean, description: Clean local branches with shared history and incoming commits; excludes current or locked or prunable worktrees and in-progress Git operations. Does not predict conflicts.}

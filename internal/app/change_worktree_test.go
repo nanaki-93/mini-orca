@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/gitops"
@@ -199,44 +198,5 @@ func TestTaskWorktreeRollbackSurvivesACanceledRequestAndAFailedCheckout(t *testi
 	}
 	if got := testGit(t, root, "branch", "--list", "orca/*"); got != "" {
 		t.Fatalf("a failed checkout left its branch: %s", got)
-	}
-}
-
-func TestReanalyzingATaskInItsOwnWorktreeDismissesTheIssueWhereItLives(t *testing.T) {
-	var calls atomic.Int32
-	var prompt atomic.Value
-	service, root := newSemanticAnalysisService(t, reanalysisProvider(t, &calls, &prompt, nil, `{"still_valid":false,"reason":"Fixed on the main branch."}`), 0)
-	initializeChangeGit(t, service, root)
-	trustedGitRequest(t, service)
-	_, _, input, err := service.workspaceState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := project.NewFindingStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reported, err := store.ReconcileSource(input, project.FindingSourceAI, []project.UnifiedFinding{{Source: project.FindingSourceAI, Confidence: project.FindingConfidenceSuggested, Severity: "medium", Title: "Run ignores errors", Message: "Run ignores the error from fmt.Println.", Location: project.FindingLocation{Path: "main.go", StartLine: 5, EndLine: 5}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := worktreeTaskRequest(t, service, "main.go")
-	request.FindingTargets = []project.FindingTarget{{ProjectID: input.ProjectID, Kind: "semantic", ID: reported[0].ID, Path: "main.go"}}
-	opened, err := service.OpenChangeInWorktree(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	child, _, err := service.WorktreeService(context.Background(), opened.WorktreePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	editMain(t, opened.WorktreePath, editedMain)
-	result, err := child.ReanalyzeChange(context.Background(), opened.ID, ChangeReanalysisRequest{ChangeIdentity: changeIdentity(opened.ChangeSession)})
-	if err != nil || result.Outcome != ReanalysisNotValid || result.DismissedIssues != 1 || len(result.Warnings) != 0 {
-		t.Fatalf("re-analysis = %+v, %v", result, err)
-	}
-	findings, err := store.Load(input)
-	if err != nil || len(findings) != 1 || findings[0].Status != project.FindingStatusDismissed {
-		t.Fatalf("the main checkout's issue = %+v, %v", findings, err)
 	}
 }
