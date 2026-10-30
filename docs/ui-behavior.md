@@ -108,7 +108,12 @@ every guard when the action arrives.
 - **Checks.** Running checks needs execution trust and runs in an isolated copy.
   Only required checks gate approval; an optional failure is a warning. When
   the project changed after checks ran, they read Outdated and must run again
-  before approval or Apply.
+  before approval or Apply. Tests and lint run per subproject the task touches
+  (“tests: web”); the others are listed as not affected. A check whose failures
+  all happened before the change too passes, labeled “Only failures from before
+  the change”; one with new failures names them; one that also failed before but
+  whose failures could not be told apart still blocks (“Also failed before the
+  change”).
 - **Reviewer findings.** Specialists separate blocking findings from advisory
   notes; only findings request changes, and notes are shown apart from them.
 - **Override reviewers.** When the reviewers rejected the current version and
@@ -121,6 +126,14 @@ every guard when the action arrives.
   waiting workflow input; it writes nothing. Optional notes (up to 2048 bytes)
   stay with the approval and are cleared with it. **Reject proposal** ends a
   waiting workflow after confirmation.
+- **Task in its own worktree.** The proposal is the worktree's diff against the
+  task's base commit; Files changed marks new, deleted and moved files. Edits
+  made in the worktree outside Mini-Orca become a new version of the proposal
+  (its checks and approval reset, and the conversation says so). A commit on
+  the task branch by someone else makes the task stale. While agents run, the
+  worktree is locked against removal. The gate reads **Ready to accept?**, and
+  **Accept & commit** commits the approved diff on the task branch (no Undo:
+  discard the worktree instead); re-analysis does not apply.
 - **Apply.** Writes the approved version to its checkout, optionally followed
   by a commit with the shown message. The confirmation names the destination,
   the branch for a commit, and the running tasks in that checkout whose files
@@ -197,7 +210,9 @@ every guard when the action arrives.
   retried stages run, canceling it leaves the saved results done, and the
   confirmation says how many files are retried and kept.
 - **Issues.** Dismiss and reopen are local triage. **Fix with agents** opens the
-  composer prefilled from the finding; nothing starts until the user does.
+  composer with the task the daemon drafts from the finding (its file, that
+  file's conventional test in its language, the kind and “done when” criteria);
+  nothing starts until the user does.
 - **Explain a file.** Sends the file's admitted context to a model after remote
   consent; the explanation is transient and cannot be applied.
 
@@ -219,3 +234,10 @@ every guard when the action arrives.
 - Conflicts stop the merge and leave it for the user's Git tool; **Abort merge**
   restores the branch after confirmation. A merged worktree's linked issues are
   marked done.
+- **Checks after the merge.** A completed merge runs the tests and lint of the
+  subprojects it changed on a copy of the merged checkout, in the background;
+  the Branches page shows them as **Checks after merging <branch>** (Passed,
+  Failed or Could not run) until dismissed, and a toast reports the outcome.
+  Failures that already happened before the merge do not fail it. A failure
+  never undoes the merge: the card says to fix it in a new task or revert the
+  merge commit.

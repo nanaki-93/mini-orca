@@ -24,6 +24,16 @@ guarded **Apply** and **Undo**.
   [Code rules](#code-rules)). A change that pushes a file past its budget is split
   into sibling files in the same task; a file already over may change without
   growing and gets one refactor issue.
+- **Work in its own worktree.** A new task gets its own branch and Git worktree
+  by default. The proposal is that worktree's diff against the commit the task
+  started from, so agents can add, rename and delete files; accepting it makes
+  one commit on the task branch, and Branches merges it.
+- **Test every language it touches.** Each subproject's tests and lint come from
+  its `AGENTS.md`, then its just/Task/make targets, then the ecosystem's defaults
+  (Go, npm/pnpm/yarn/bun, Cargo, Maven/Gradle wrappers, pytest, .NET). Only the
+  subprojects a task touches run; failures are read per test and compared with
+  the tree before the task, so a test that was already failing does not block an
+  unrelated fix. After a merge the same checks run on the merged result.
 - **Stay in control.** Nothing reaches your files until you have viewed every
   changed file, required checks pass, the workflow waits for you and you approve
   that exact version. Apply verifies the files first; Undo restores them only if
@@ -41,9 +51,9 @@ browser workspace is built for three jobs: **start a task and watch the agents**
 | **Tasks** | `g t` | Every task grouped by state (Needs you, Agents working, Failed or stale, Drafts, Done), with filters and `j`/`k` navigation. |
 | **Task** | — | A pull-request style page: **Conversation** (brief, code rules per file, live agent timeline with stages and reviewers, revise box), **Files changed** (tree with viewed marks, unified/split diff, “since last review”), **Checks**, and a **Ready to apply?** gate with Apply, commit and Undo. |
 | **Code** | `g c` | IDE-style explorer: virtualized tree, editor tabs, highlighted source, issue markers, line links, Explain and “New task with this file”. |
-| **Issues** | `g i` | Findings by status and severity with evidence and **Fix with agents**. |
+| **Issues** | `g i` | Findings by status and severity with evidence and **Fix with agents**, which opens the task the daemon drafts: the file, its conventional test in that language, and “done when” criteria. |
 | **Docs** | `g d` | The generated handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
-| **Branches** | `g b` | Task worktrees (each new task gets its own by default), merge preview (commits and diff), guarded merge or abort, and removal of merged worktrees. |
+| **Branches** | `g b` | Task worktrees (each new task gets its own by default), merge preview (commits and diff), guarded merge or abort, the checks of the merged result, and removal of merged worktrees. |
 | **Settings** | `g s` | Project, execution trust, models and agents, analysis, appearance. |
 
 `Ctrl+K` / `Cmd+K` opens the command palette (files, tasks, issues, commands);
@@ -57,7 +67,9 @@ dark and system themes are available.
 The task composer asks for a title, an optional description, the kind (fix,
 feature, performance, security), the files agents may change (up to eight; a
 companion test is suggested for Go, Python and JavaScript/TypeScript files) and
-“done when” criteria.
+“done when” criteria. **Work in its own worktree** (on by default) gives the
+task a branch and worktree; there agents may also create, move and delete
+files, and **Accept & commit** commits the reviewed diff on that branch.
 **Start agents** runs the native ADK workflow (create → tests → specialist
 reviews) after a confirmation that lists every remote model destination.
 Apply is enabled only when every changed file is viewed at the current version,
@@ -82,6 +94,9 @@ imports:
     never: [internal/api]
 test_files:
   - "e2e/**/*.ts"          # added to the usual conventions (*_test.go, *.test.ts, test_*.py, …)
+checks:
+  test: pnpm test          # run in this file's directory; overrides make/just/npm detection
+  lint: pnpm lint
 ```
 ````
 
@@ -105,6 +120,18 @@ test_files:
   file, in the same directory, and Mini-Orca checks that no function was lost
   and names the ones that changed while moving. The task page's **Code rules**
   card shows where every file stands.
+- **Checks per subproject.** `checks` declares the test and lint commands of
+  the subproject the `AGENTS.md` sits in (one command each, no shell syntax).
+  Without it Mini-Orca uses a `test` and `lint` (or `vet`, or `check`) target of
+  a justfile, Taskfile or Makefile there, then the ecosystem's defaults. The
+  commands are part of what execution trust lists. A failing check is compared
+  with the same command on the tree before the change: when every failing test
+  (or lint finding) already failed there, the check passes as “only failures
+  from before the change”; new ones are named and block.
+- **Context for the agents.** Besides the task's files, the writing agents get
+  the outlines (declarations and signatures) of the files those files import
+  and of their neighbors, in any language the parser knows, so they reuse what
+  exists.
 
 ## Run locally
 
