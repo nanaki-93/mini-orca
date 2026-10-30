@@ -60,6 +60,15 @@ every guard when the action arrives.
 - **Watch.** The Conversation shows each stage with its model and duration and
   each specialist's verdict and findings. **Stop agents** asks first and applies
   nothing.
+- **Code rules.** Under the brief, a Code rules card lists each task file with
+  budgets from its `AGENTS.md` files: its lines against the file budget, what
+  the proposal made go over (the complexity gate fails), what was already over
+  and may not grow (tracked as a Maintainability issue), functions the parser
+  could not measure, and any rules block that was not applied. A file over its
+  budget after Creation or Testing is split by a fix-up step; new sibling files
+  join the scope as new files, and the Conversation says what moved and which
+  functions changed while moving. Function complexity defaults to 15, so the
+  card appears for any task unless the guides turn every budget off.
 - **Spend.** Each stage of the agent run shows the tokens it spent and its
   estimated cost, the task's details show its total, and Settings → Usage
   lists every task's spend with the total. Estimates come from the daemon's

@@ -18,6 +18,12 @@ guarded **Apply** and **Undo**.
   write (up to eight) and "done when" criteria. A native ADK workflow writes the
   change, writes and runs tests in an isolated copy, and runs parallel specialist
   reviews within one shared budget; repairs are opt-in and capped at two.
+- **Keep the code within its rules.** `AGENTS.md` files declare budgets (file
+  lines, function lines and complexity), import boundaries and test file names;
+  every task is checked against them in any language the parser knows (see
+  [Code rules](#code-rules)). A change that pushes a file past its budget is split
+  into sibling files in the same task; a file already over may change without
+  growing and gets one refactor issue.
 - **Stay in control.** Nothing reaches your files until you have viewed every
   changed file, required checks pass, the workflow waits for you and you approve
   that exact version. Apply verifies the files first; Undo restores them only if
@@ -33,7 +39,7 @@ browser workspace is built for three jobs: **start a task and watch the agents**
 | --- | --- | --- |
 | **Inbox** | `g h` | What needs you now: tasks waiting for review, running agents, failures, branches ready to merge, open issues and analysis coverage. |
 | **Tasks** | `g t` | Every task grouped by state (Needs you, Agents working, Failed or stale, Drafts, Done), with filters and `j`/`k` navigation. |
-| **Task** | — | A pull-request style page: **Conversation** (brief, live agent timeline with stages and reviewers, revise box), **Files changed** (tree with viewed marks, unified/split diff, “since last review”), **Checks**, and a **Ready to apply?** gate with Apply, commit and Undo. |
+| **Task** | — | A pull-request style page: **Conversation** (brief, code rules per file, live agent timeline with stages and reviewers, revise box), **Files changed** (tree with viewed marks, unified/split diff, “since last review”), **Checks**, and a **Ready to apply?** gate with Apply, commit and Undo. |
 | **Code** | `g c` | IDE-style explorer: virtualized tree, editor tabs, highlighted source, issue markers, line links, Explain and “New task with this file”. |
 | **Issues** | `g i` | Findings by status and severity with evidence and **Fix with agents**. |
 | **Docs** | `g d` | The generated handbook: overview, components, dependencies, scenarios, decisions, runbook, glossary. |
@@ -50,7 +56,8 @@ dark and system themes are available.
 
 The task composer asks for a title, an optional description, the kind (fix,
 feature, performance, security), the files agents may change (up to eight; a
-companion test is suggested for every Go file) and “done when” criteria.
+companion test is suggested for Go, Python and JavaScript/TypeScript files) and
+“done when” criteria.
 **Start agents** runs the native ADK workflow (create → tests → specialist
 reviews) after a confirmation that lists every remote model destination.
 Apply is enabled only when every changed file is viewed at the current version,
@@ -58,6 +65,46 @@ required checks pass, the workflow is waiting for human review and you approved
 this exact version. Apply, Undo, trust, merge and remote model requests always
 ask for confirmation; navigation, previews and filters never start model work,
 checks or writes.
+
+## Code rules
+
+Mini-Orca reads the rules of a target project from its `AGENTS.md` files. A
+fenced `mini-orca` block declares them; paths are relative to that file:
+
+````markdown
+```mini-orca
+budgets:
+  file_lines: 800          # test files too
+  function_lines: 80
+  function_complexity: 15  # cyclomatic; 15 when no guide sets it, 0 turns it off
+imports:
+  - from: internal/app
+    never: [internal/api]
+test_files:
+  - "e2e/**/*.ts"          # added to the usual conventions (*_test.go, *.test.ts, test_*.py, …)
+```
+````
+
+- **Nearest wins.** An `AGENTS.md` in a subdirectory overrides the budgets it
+  sets for the files below it; import rules and test file patterns add up from
+  the root down. Guides without a block keep working through their
+  plain-language lines (`Max file lines: 800`, `` `a` must never import `b` ``).
+  A block that does not parse is reported on the task page and declares nothing.
+- **Any language.** Functions are found and measured with go/ast for Go and a
+  pure-Go tree-sitter runtime for the others (TypeScript, JavaScript, Python,
+  Java, Kotlin, Rust, C#, C/C++, Ruby, PHP, Swift, Scala and more). Where the
+  parser cannot outline functions, only file lines are checked and the gate says
+  so; it never fails code it cannot read.
+- **Ratchet.** The complexity gate compares each file with its version before
+  the task: functions the task did not change never fail, and a file or function
+  that was already over may stay over if it does not grow. Each such file gets
+  one refactor issue (Issues → Maintainability), refreshed by later tasks.
+- **Split in the same task.** The writing agents get each file's budgets and
+  current numbers. When what they write still breaks a budget, a fix-up step
+  (at most two rounds) moves cohesive code into up to two new sibling files per
+  file, in the same directory, and Mini-Orca checks that no function was lost
+  and names the ones that changed while moving. The task page's **Code rules**
+  card shows where every file stands.
 
 ## Run locally
 
@@ -137,6 +184,7 @@ in `web/`.
 | `internal/app/agentruntime` | ADK Go agents, model adapters, graphs, tools and plugins; the only package importing the SDK. |
 | `internal/app/agentstate` | Private durable sessions, invocations, budgets, checkpoints and artifacts. |
 | `internal/project` | Repository facts, indexing, context composition, handbook synthesis and `AGENTS.md` instructions. |
+| `internal/project/rules`, `internal/project/syntax` | Code rules from `AGENTS.md`; functions, spans and complexity in any supported language. |
 | `internal/storage` | Atomic durable file primitives under `.mini-orca/`; domain packages own their schemas. |
 | `internal/llm`, `internal/config` | HTTP/CLI/native Google transport, provider capabilities and the three model scopes. |
 | `internal/agenteval`, `internal/insighteval` | Evaluation harnesses, separate from ordinary use. |
@@ -147,6 +195,7 @@ in `web/`.
 | --- | --- |
 | **Go 1.27.3+** (`gopkg.in/yaml.v3`) | Daemon, indexing, analysis orchestration and atomic `.mini-orca/` storage. |
 | **Google ADK Go v2.6.0 / GenAI Go v1.74.0** | Typed model and tool events, native graphs and sessions. |
+| **gotreesitter v0.56.0** | Pure-Go tree-sitter runtime (no CGO) with 206 embedded grammars for language-neutral syntax checks and function budgets. |
 | **Model providers** (OpenAI-compatible HTTP, Gemini, Vertex, `agy`, `pi`) | Explicit local or remote execution for `analyze`, `bug` and `code`; CLI profiles are completion-only. |
 | **React 19, TanStack Query, Radix UI, Vite** | The browser workspace. |
 
