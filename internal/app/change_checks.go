@@ -254,7 +254,7 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace, revision s
 			return nil, err
 		}
 		baseline := s.runCheck(ctx, workspace, revision, "regression baseline", false, buildTaskRunnerArgv(runner, testTarget), false, true)
-		classifyNonGoRegressionBaseline(&baseline)
+		classifyRegressionBaseline(&baseline, runnerTestsFailed)
 		checks = append(checks, baseline)
 	}
 	if err := stageChangeEdits(workspace, session.Changes); err != nil {
@@ -279,20 +279,6 @@ func (s *Service) checkNonGoWorkspace(ctx context.Context, workspace, revision s
 		}
 	}
 	return checks, ctx.Err()
-}
-
-func classifyNonGoRegressionBaseline(check *CheckResult) {
-	check.Required = false
-	switch {
-	case check.State == CheckCanceled:
-		check.Outcome = "could_not_execute"
-	case check.State == CheckPassed && check.ExitCode == 0:
-		check.State, check.Outcome = CheckSkipped, "already_passes"
-	case check.State == CheckFailed:
-		check.State, check.Outcome = CheckPassed, "failed_before_change"
-	default:
-		check.State, check.Outcome = CheckUnavailable, "could_not_execute"
-	}
 }
 
 func buildTaskRunnerArgv(runner, target string) []string {
@@ -423,8 +409,8 @@ func (s *Service) changeRegressionBaseline(ctx context.Context, workspace, revis
 	if err := stageChangeEdits(workspace, newTests); err != nil {
 		return nil, err
 	}
-	baseline := s.runTaskTestCheck(ctx, workspace, revision, "regression baseline", []string{"go", "test", "./..."}, false)
-	classifyRegressionBaseline(&baseline)
+	baseline := s.runCheck(ctx, workspace, revision, "regression baseline", false, []string{"go", "test", "./..."}, false, true)
+	classifyRegressionBaseline(&baseline, goTestsFailed)
 	checks = append(checks, baseline)
 	return checks, nil
 }

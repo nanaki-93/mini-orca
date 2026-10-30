@@ -75,6 +75,36 @@ func TestChangeChecksRequireTrustAndProveNewTests(t *testing.T) {
 	}
 }
 
+func TestGoRegressionBaselineRecordsANewTestThatAlreadyPasses(t *testing.T) {
+	server := changeProvider(t, func() string {
+		return `{"explanation":"Add a guard test.","changes":[{"path":"main.go","content":"package main\n\nimport \"fmt\"\n\nfunc Run() { fmt.Println(\"run\") }\n\nfunc Ready() bool { return true }\n"},{"path":"green_test.go","content":"package main\n\nimport \"testing\"\n\nfunc TestRunExists(t *testing.T) { Run() }\n"}]}`
+	})
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/change\n\ngo 1.22\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	session := prepareChangeFixture(t, service, "main.go", "green_test.go")
+	if _, err := service.TrustProjectExecution(context.Background(), session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session), CheckOptions: CheckOptions{RunTests: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range checked.Checks {
+		if check.Name == "regression baseline" {
+			if check.State != CheckSkipped || check.Outcome != "already_passes" || check.Required {
+				t.Fatalf("a new test that passes before the change = %+v", check)
+			}
+			return
+		}
+	}
+	t.Fatalf("no regression baseline: %+v", checked.Checks)
+}
+
 func TestChangeFailedChecksRepairAndApprovalInvalidation(t *testing.T) {
 	var reply atomic.Value
 	reply.Store(`{"explanation":"Incomplete candidate.","changes":[{"path":"new.go","content":"package main\nfunc Broken( {\n"}]}`)

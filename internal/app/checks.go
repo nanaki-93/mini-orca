@@ -21,20 +21,6 @@ const (
 type CheckResult = archgate.CheckResult
 type CheckOptions = archgate.CheckOptions
 
-func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) CheckResult {
-	check, err := s.executeCheck(ctx, workspace, revision, CheckResult{Name: name, Required: true, Command: append([]string(nil), command...)}, true)
-	if check.State == CheckCanceled {
-		return check
-	}
-	passed := err == nil
-	if passed == expectPass {
-		check.State = CheckPassed
-	} else {
-		check.State = CheckFailed
-	}
-	return check
-}
-
 func parseGoSource(path, source string) CheckResult {
 	return sandbox.ParseGoSource(path, source)
 }

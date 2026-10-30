@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
+func TestCheckCancellationAndEvidenceSanitization(t *testing.T) {
 	service, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -14,7 +14,7 @@ func TestTaskTestCheckCancellationAndEvidenceSanitization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := service.runTaskTestCheck(ctx, t.TempDir(), analysis.ProjectRevision, "task", []string{"go", "test", "./..."}, true)
+	check := service.runCheck(ctx, t.TempDir(), analysis.ProjectRevision, "tests", true, []string{"go", "test", "./..."}, false, true)
 	if check.State != CheckCanceled {
 		t.Fatalf("canceled task check = %+v", check)
 	}

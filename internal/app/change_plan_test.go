@@ -166,11 +166,21 @@ func TestRegressionBaselinePreservesWhatWasActuallyObserved(t *testing.T) {
 		{"canceled", CheckResult{State: CheckCanceled}, CheckCanceled, "could_not_execute"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			classifyRegressionBaseline(&tc.check)
+			classifyRegressionBaseline(&tc.check, goTestsFailed)
 			if tc.check.State != tc.state || tc.check.Outcome != tc.outcome || tc.check.Required {
 				t.Fatalf("misclassified evidence: %+v", tc.check)
 			}
 		})
+	}
+}
+
+func TestRunnerRegressionBaselineTreatsAnyFailureAsReproduced(t *testing.T) {
+	red := CheckResult{State: CheckFailed, ExitCode: 1, Output: "1 failed"}
+	classifyRegressionBaseline(&red, runnerTestsFailed)
+	green := CheckResult{State: CheckPassed, ExitCode: 0}
+	classifyRegressionBaseline(&green, runnerTestsFailed)
+	if red.State != CheckPassed || red.Outcome != "failed_before_change" || green.State != CheckSkipped || green.Outcome != "already_passes" {
+		t.Fatalf("runner baseline: red %+v, green %+v", red, green)
 	}
 }
 
