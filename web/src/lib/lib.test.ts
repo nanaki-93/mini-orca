@@ -4,7 +4,7 @@ import { ancestors, buildTree, visibleRows } from './tree';
 import { buildHash, parseHash } from './router';
 import { escapeHtml, highlightLines } from './highlight';
 import { companionTestPath, explainable, formatElapsed, isTestPath, newFilePath, timeAgo } from './util';
-import { changeOverlaps, ownWorktreeBlocker, parseCommits, runStartOptions, stageToolsLabel, workflowBlocker, workflowDestinations, workflowRequest, workflowStages, worktreeRemovable, worktreeTasks } from './workflow';
+import { changeOverlaps, ownWorktreeBlocker, parseCommits, pauseTitle, runStartOptions, stageToolsLabel, workflowBlocker, workflowDestinations, workflowRequest, workflowStages, worktreeRemovable, worktreeTasks } from './workflow';
 import type { ChangeHistoryEntry, GitWorkspace, GitWorktree } from '@/api/types';
 import { limitErrors, modelLocation, roleModelOptions, selectedModel } from './agentSettings';
 import { applyEvent, finishedRun, parseFrames } from '@/api/events';
@@ -93,6 +93,9 @@ describe('util and workflow', () => {
     expect(workflowBlocker(s, true, isTestPath)).toMatch(/test file/);
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, false, isTestPath)).toMatch(/Trust/);
     expect(workflowBlocker({ ...s, targets: [{ path: 'a_test.go' }] }, true, isTestPath)).toBe('');
+    // In its own worktree, the testing agent creates the test files it needs.
+    expect(workflowBlocker({ ...s, worktree: { base: 'b', branch: 'mo/x' } }, true, isTestPath)).toBe('');
+    expect(workflowBlocker({ ...s, workflow: { id: 'w', status: 'paused', stages: [] } as never, targets: [{ path: 'a_test.go' }] }, true, isTestPath)).toBe('');
     expect(workflowBlocker(null, true, isTestPath)).toMatch(/Select/);
   });
 });
@@ -149,6 +152,26 @@ describe('running the agents again', () => {
     expect(starts.initial).toBe('create');
     expect(starts.options.filter(option => option.blocked).map(option => option.value)).toEqual(['checks', 'test']);
     expect(starts.options[0].blocked).toMatch(/creation model changed/);
+  });
+
+  it('continues a paused run where it stopped', () => {
+    const paused = (resume: string) => ({ ...revised, workflow: { ...revised.workflow, status: 'paused', pause: { stage: resume === 'checks' ? 'review' : resume, resume_from: resume, provider: 'claude' } } });
+    const review = runStartOptions(paused('review'), 'bug', isTestPath);
+    expect(review.initial).toBe('review');
+    expect(review.options.map(option => option.value)).toEqual(['review', 'checks', 'test', 'create']);
+    expect(runStartOptions(paused('test'), 'bug', isTestPath).initial).toBe('test');
+    expect(runStartOptions(paused('create'), 'bug', isTestPath).initial).toBe('create');
+    // A changed creation model still writes the change again.
+    expect(runStartOptions(paused('review'), 'code', isTestPath).initial).toBe('create');
+    expect(workflowRequest({ project_id: 'p', project_revision: 'r', revision: 1, hash: 'h' }, 'Fix', { selections: { create: 'bug', test: 'code', review: 'analyze' }, destinations: [], confirmed: [], local: [] }, { start: 'review' }).resume_from).toBe('review');
+  });
+
+  it('says when a paused run can continue', () => {
+    const now = new Date(2026, 9, 31, 10, 0);
+    expect(pauseTitle({ stage: 'create', resume_from: 'create', provider: 'claude' }, now)).toBe('Paused: the Claude plan reached its usage limit');
+    expect(pauseTitle({ stage: 'test', resume_from: 'test', provider: 'agy', resumes_at: new Date(2026, 9, 31, 15, 30).toISOString() }, now)).toMatch(/^Paused until the Google AI plan's limit resets at /);
+    expect(pauseTitle({ stage: 'test', resume_from: 'test', provider: 'pi', resumes_at: new Date(2026, 10, 2, 9, 0).toISOString() }, now)).toMatch(/resets on .+ at /);
+    expect(pauseTitle({ stage: 'test', resume_from: 'test', provider: 'claude', resumes_at: new Date(2026, 9, 31, 9, 0).toISOString() }, now)).toMatch(/has reset, resume the run/);
   });
 
   it('sends where the run starts, leaving the default unset', () => {
@@ -284,16 +307,18 @@ describe('agent settings', () => {
     models: [
       { id: 'configured:aa', name: 'gemini-2.5-pro', provider: 'gemini', source: 'configured', location: 'remote', model: scopes.analyze },
       { id: 'agy:gemini-3.8-pro', name: 'Gemini 3.8 Pro', provider: 'agy', source: 'agy', location: 'unknown', model: agy },
+      { id: 'claude:sonnet', name: 'Claude Sonnet', provider: 'anthropic', source: 'claude', location: 'remote', model: { scope: '', model: 'sonnet', remote_provider: true, provider_origin: 'cli://claude' } },
     ],
-    defaults: {}, pi: { status: 'unavailable' }, agy: { status: 'ready' },
+    defaults: {}, pi: { status: 'unavailable' }, agy: { status: 'ready' }, claude: { status: 'ready' },
   };
 
   it('offers the scopes, then listed CLI models, and keeps an unlisted selection', () => {
     const groups = roleModelOptions(scopes, catalog, ['bug', 'pi:local/llama'], { 'pi:local/llama': { scope: 'bug', model: 'llama' } });
-    expect(groups.map(g => g.label)).toEqual(['Configured in config.yaml', 'Agy models', 'Current selection']);
+    expect(groups.map(g => g.label)).toEqual(['Configured in config.yaml', 'Claude Code models', 'Agy models', 'Current selection']);
     expect(groups[0].options.map(o => o.label)).toEqual(['analyze · gemini-2.5-pro', 'bug · qwen3-coder', 'code · qwen3-coder']);
-    expect(groups[1].options[0]).toMatchObject({ id: 'agy:gemini-3.8-pro', label: 'Gemini 3.8 Pro (agy:gemini-3.8-pro)' });
-    expect(groups[2].options[0].label).toBe('llama (pi:local/llama)');
+    expect(groups[1].options[0]).toMatchObject({ id: 'claude:sonnet', label: 'Claude Sonnet (claude:sonnet)' });
+    expect(groups[2].options[0]).toMatchObject({ id: 'agy:gemini-3.8-pro', label: 'Gemini 3.8 Pro (agy:gemini-3.8-pro)' });
+    expect(groups[3].options[0].label).toBe('llama (pi:local/llama)');
     expect(modelLocation(selectedModel(groups, 'agy:gemini-3.8-pro'))).toEqual({ remote: true, label: 'remote · cli://agy' });
     expect(modelLocation(selectedModel(groups, 'bug')).label).toBe('local');
   });

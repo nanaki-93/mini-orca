@@ -29,6 +29,7 @@ export const PROVIDERS: ProviderInfo[] = [
   { id: 'vertex', label: 'Vertex AI', hint: 'Google Cloud Vertex AI: an Express API key, or a project and location.', key: 'optional', vertex: true, efforts: EFFORTS },
   { id: 'agy', label: 'Agy CLI', hint: 'Runs the installed agy command with your signed-in account.', cli: true, efforts: ['', 'low', 'medium', 'high', 'xhigh', 'max'] },
   { id: 'pi', label: 'Pi CLI', hint: 'Runs the installed pi command; models are “provider/model”.', cli: true, efforts: EFFORTS },
+  { id: 'claude', label: 'Claude Code', hint: 'Runs the installed claude command on your Claude plan (sign in with /login); never with an API key. Models are aliases such as sonnet or opus.', cli: true, efforts: ['', 'low', 'medium', 'high', 'xhigh', 'max'] },
 ];
 
 export const DEFAULT_ADDRESS = 'http://localhost:1234/v1';

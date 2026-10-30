@@ -115,6 +115,7 @@ describe('taskStatus', () => {
     expect(taskStatus({ ...entry, workflow_status: 'running', freshness: 'stale' }).status).toBe('running');
     expect(taskStatus({ ...entry, freshness: 'stale' }).status).toBe('stale');
     expect(taskStatus({ ...entry, workflow_status: 'interrupted' }).label).toBe('Interrupted');
+    expect(taskStatus({ ...entry, revision: 2, hash: 'x', workflow_status: 'paused' })).toEqual({ status: 'needs_you', label: 'Paused', tone: 'warning' });
     // A revision after the run needs the agents again; it is not a failure.
     expect(taskStatus({ ...entry, revision: 4, hash: 'x', workflow_status: 'outdated' })).toEqual({ status: 'needs_you', label: 'Revised', tone: 'accent' });
     expect(taskStatus({ ...entry, state: 'applied', commit: { state: 'committed' } as never }).label).toBe('Committed');

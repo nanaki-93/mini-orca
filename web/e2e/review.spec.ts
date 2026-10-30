@@ -2,7 +2,7 @@
 // apply it, with the review gate tracking each step.
 
 import { expect, test } from './support/daemon';
-import { agentSettings, rejectedTask } from './support/fixtures';
+import { agentSettings, pausedTask, rejectedTask } from './support/fixtures';
 
 test('reviews, approves and applies a task through the gate', async ({ page, daemon }) => {
   await page.goto('/#/tasks/chg-1');
@@ -209,6 +209,23 @@ test('a task revised in the conversation runs the agents again on that version',
   expect(daemon.mutations('/workflow')[0].body).toMatchObject({ resume_from: 'checks', revision: 4, hash: 'sha256:9f2c1a7be4-r4', auto_repair: true });
   // The kept tests are only run: the test stage says so.
   await expect(run.getByText('Run the checks')).toBeVisible();
+});
+
+test('a run paused at a plan limit says when it can continue and resumes where it stopped', async ({ page, daemon }) => {
+  daemon.sessions.set('chg-1', pausedTask());
+  await page.goto('/#/tasks/chg-1');
+  const run = page.getByRole('region', { name: 'Agent run' });
+  await expect(run.getByText(/^Paused until the Claude plan's limit resets at /)).toBeVisible();
+  await expect(run.getByText('Nothing was lost: resume when the limit resets').first()).toBeVisible();
+  await expect(page.locator('header.task-header').getByText('Paused')).toBeVisible();
+
+  await run.getByRole('button', { name: 'Resume agents' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByRole('heading', { name: 'Resume the agents?' })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Continue the review/ })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Resume agents' }).click();
+  await expect(page.locator('header.task-header').getByRole('button', { name: 'Stop agents' })).toBeVisible();
+  expect(daemon.mutations('/workflow')[0].body).toMatchObject({ resume_from: 'review' });
 });
 
 test('a changed creation model makes the agents write the change again', async ({ page, daemon }) => {

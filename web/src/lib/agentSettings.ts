@@ -38,8 +38,9 @@ export function modelLocation(model: Model | undefined): { remote: boolean; labe
 }
 
 /**
- * The choices for a role: the configured scopes first, then the models Agy and
- * Pi list. Configured catalog entries repeat the scopes, so they are left out.
+ * The choices for a role: the configured scopes first, then the models Claude
+ * Code, Agy and Pi list. Configured catalog entries repeat the scopes, so they
+ * are left out.
  * A current selection the lists do not hold stays selectable under its model.
  */
 export function roleModelOptions(scopes: ModelsCurrent['scopes'], catalog: AvailableModels | undefined, current: string[], known: Partial<Record<string, Model>>): ModelOptionGroup[] {
@@ -48,9 +49,10 @@ export function roleModelOptions(scopes: ModelsCurrent['scopes'], catalog: Avail
     return { id: scope, label: model?.model ? `${scope} · ${model.model}` : scope, model };
   });
   const groups: ModelOptionGroup[] = [{ label: 'Configured in config.yaml', options: configured }];
-  for (const source of ['agy', 'pi'] as const) {
+  const sources = { claude: 'Claude Code models', agy: 'Agy models', pi: 'Pi models' } as const;
+  for (const [source, label] of Object.entries(sources)) {
     const options = (catalog?.models ?? []).filter(choice => choice.source === source).map(choice => ({ id: choice.id, label: choice.name && choice.name !== choice.id ? `${choice.name} (${choice.id})` : choice.id, model: choice.model }));
-    if (options.length) groups.push({ label: source === 'agy' ? 'Agy models' : 'Pi models', options });
+    if (options.length) groups.push({ label, options });
   }
   const listed = new Set(groups.flatMap(group => group.options.map(option => option.id)));
   const extra = [...new Set(current)].filter(id => id && !listed.has(id)).map(id => ({ id, label: known[id]?.model ? `${known[id]!.model} (${id})` : id, model: known[id] }));

@@ -2,11 +2,11 @@
 // stage, what reviewers said, and a box to ask for a revision.
 
 import { useEffect, useState } from 'react';
-import { Bot, CornerDownLeft, FileText, Gavel, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
-import type { LoadedSession } from '@/api/types';
+import { Bot, CornerDownLeft, FileText, Gavel, Hourglass, ListChecks, MessageSquare, ShieldAlert, Square, User } from 'lucide-react';
+import type { ChangeWorkflow, LoadedSession } from '@/api/types';
 import { useActions, useBusy, usePendingRevision } from '@/app/actions';
 import { openComments, proposalReadiness, workflowActive } from '@/lib/readiness';
-import { activeOverride, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
+import { activeOverride, pauseTitle, stageStatusLabel, workflowSpecialists, workflowStages, type SpecialistView, type StageView } from '@/lib/workflow';
 import { formatDuration, formatElapsed, plural, timeAgo } from '@/lib/util';
 import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
@@ -82,7 +82,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
   const active = workflowActive(session);
   const actions = useActions();
   const busy = useBusy();
-  const ended = ['failed', 'canceled', 'stale', 'outdated', 'interrupted'].includes(workflow.status);
+  const ended = ['failed', 'canceled', 'stale', 'outdated', 'interrupted', 'paused'].includes(workflow.status);
   const override = activeOverride(workflow, session.hash);
   return (
     <section className="card" aria-label="Agent run">
@@ -100,7 +100,7 @@ function AgentRun({ session }: { session: LoadedSession }) {
       </div>
       {ended && workflow.reason ? (
         <div className="card-body">
-          <Callout {...endedCallout(workflow.status)} icon={ShieldAlert} action={session.freshness !== 'current' ? <ReanalyzeTask session={session} variant="secondary" size="sm" /> : <RunAgents session={session} size="sm" />}>
+          <Callout {...endedCallout(workflow)} icon={workflow.status === 'paused' ? Hourglass : ShieldAlert} action={session.freshness !== 'current' ? <ReanalyzeTask session={session} variant="secondary" size="sm" /> : <RunAgents session={session} size="sm" />}>
             {workflow.reason}
           </Callout>
         </div>
@@ -121,8 +121,10 @@ function AgentRun({ session }: { session: LoadedSession }) {
   );
 }
 
-/** How an ended run reads: a revision after it is not a failure. */
-function endedCallout(status: string): { tone: 'neutral' | 'info' | 'danger'; title: string } {
+/** How an ended run reads: a revision after it is not a failure, nor a pause at a plan's limit. */
+function endedCallout(workflow: ChangeWorkflow): { tone: 'neutral' | 'info' | 'danger'; title: string } {
+  const status = workflow.status;
+  if (status === 'paused') return { tone: 'info', title: pauseTitle(workflow.pause) };
   if (status === 'canceled') return { tone: 'neutral', title: 'Stopped' };
   if (status === 'stale') return { tone: 'info', title: 'Its files changed during this run' };
   if (status === 'outdated') return { tone: 'info', title: 'The proposal changed after this run' };

@@ -1,7 +1,7 @@
 // Agent workflow presentation and request shaping. Consent is captured per
 // request: every remote destination the run will use is listed and confirmed.
 
-import type { AgentSettings, BudgetUsage, ChangeHistoryEntry, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity, StageTools } from '@/api/types';
+import type { AgentSettings, BudgetUsage, ChangeHistoryEntry, ChangeWorkflow, CostEstimate, GitWorkspace, GitWorktree, ModelsCurrent, ProjectIdentity, StageTools, WorkflowPause } from '@/api/types';
 import { durationBetween, plural } from './util';
 import { phaseTone, type PhaseTone } from './readiness';
 
@@ -103,6 +103,7 @@ const RUN_LABELS: Record<string, string> = {
   interrupted: 'Interrupted',
   stale: 'Outdated',
   outdated: 'Not run on this version',
+  paused: 'Paused at a plan limit',
 };
 
 /** Whether the agents finished with this version: a manual proposal has no run to wait for. */
@@ -228,7 +229,7 @@ export function workflowRequest(identity: ProjectIdentity & { revision: number; 
 }
 
 /** Where a run of the agents starts on a task that already has a proposal. */
-export type RunStart = 'checks' | 'test' | 'create';
+export type RunStart = 'review' | 'checks' | 'test' | 'create';
 
 export interface RunStartOption {
   value: RunStart;
@@ -250,13 +251,28 @@ export function runStartOptions(session: { changes?: { path: string }[] | null; 
   if (!changes.length) return { options: [], initial: 'create' };
   const kept = session.workflow?.stages.find(stage => stage.name === 'create')?.model?.profile;
   const blocked = session.workflow && kept !== createModel ? 'The creation model changed since the last run, so the agents write the change again.' : '';
+  const pause = session.workflow?.status === 'paused' ? session.workflow.pause : undefined;
   const options: RunStartOption[] = [
+    ...(pause?.resume_from === 'review' ? [{ value: 'review' as const, label: 'Continue the review', detail: 'Keeps the change and its passing checks: only the reviewers run.', blocked }] : []),
     { value: 'checks', label: 'Check and review this version', detail: 'Keeps the code and tests as they are: runs the checks, then the reviewers.', blocked },
     { value: 'test', label: 'Write new tests, then check and review', detail: 'Keeps the implementation; the testing agent rewrites the test files.', blocked },
     { value: 'create', label: 'Write the change again', detail: 'The creation agent revises the code from the brief, the conversation and this version, then tests, checks and review follow.', blocked: '' },
   ];
-  const initial: RunStart = blocked ? 'create' : changes.some(change => isTestPath(change.path)) ? 'checks' : 'test';
+  // A paused run continues where it stopped.
+  const resumed = options.find(option => option.value === pause?.resume_from && !option.blocked);
+  const initial: RunStart = resumed ? resumed.value : blocked ? 'create' : changes.some(change => isTestPath(change.path)) ? 'checks' : 'test';
   return { options, initial };
+}
+
+/** The title of a paused run: when the plan's limit resets, when the CLI said. */
+export function pauseTitle(pause: WorkflowPause | undefined, now = new Date()): string {
+  const plan = { claude: 'Claude plan', agy: 'Google AI plan', pi: 'Pi subscription' }[pause?.provider ?? ''] ?? 'plan';
+  const resets = pause?.resumes_at ? new Date(pause.resumes_at) : undefined;
+  if (!resets || Number.isNaN(resets.getTime())) return `Paused: the ${plan} reached its usage limit`;
+  const time = resets.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const sameDay = resets.toDateString() === now.toDateString();
+  const when = sameDay ? `at ${time}` : `on ${resets.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at ${time}`;
+  return resets <= now ? `Paused: the ${plan}'s limit has reset, resume the run` : `Paused until the ${plan}'s limit resets ${when}`;
 }
 
 /** Why a new task cannot get its own worktree from the main checkout, or ''. */
@@ -315,13 +331,14 @@ export function parseCommits(text: string | undefined): { sha: string; subject: 
 }
 
 /** Explains why the agent workflow cannot start for this task, or ''. */
-export function workflowBlocker(session: { state: string; freshness: string; kind: string; workflow?: ChangeWorkflow; targets?: { path: string; test?: boolean }[] } | null, trusted: boolean, isTestPath: (path: string) => boolean): string {
+export function workflowBlocker(session: { state: string; freshness: string; kind: string; workflow?: ChangeWorkflow; targets?: { path: string; test?: boolean }[]; worktree?: unknown } | null, trusted: boolean, isTestPath: (path: string) => boolean): string {
   if (!session) return 'Select a task first.';
   if (session.state === 'applied') return 'This task is already applied.';
   if (session.freshness && session.freshness !== 'current') return 'Its files changed since this task was captured. Re-analyze it first.';
   if (session.kind === 'instructions') return 'Instruction edits use the manual proposal flow.';
   if (session.workflow && ['running', 'canceling'].includes(session.workflow.status)) return 'Agents are already working on this task.';
-  if (!(session.targets ?? []).some(target => target.test || isTestPath(target.path))) return 'Add a test file to the scope so the testing agent can write tests.';
+  // In its own worktree, a testing agent on a CLI creates the test files it needs.
+  if (!session.worktree && !(session.targets ?? []).some(target => target.test || isTestPath(target.path))) return 'Add a test file to the scope so the testing agent can write tests.';
   if (!trusted) return 'Allow this project to run checks (Settings → Trust) so agents can verify their work.';
   return '';
 }

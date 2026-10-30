@@ -55,7 +55,7 @@ function AgentRolesForm({ settings, worktreePath }: { settings: AgentSettings; w
   const dirty = !samePreferences(draft, saved);
   const valid = Object.keys(errors).length === 0;
   const badge = STATE_BADGES[settings.state] ?? STATE_BADGES.configured;
-  const discoveries = [catalog.data?.agy, catalog.data?.pi].filter(d => d?.status === 'unavailable').map(d => d!.message).filter(Boolean);
+  const discoveries = [catalog.data?.claude, catalog.data?.agy, catalog.data?.pi].filter(d => d?.status === 'unavailable').map(d => d!.message).filter(Boolean);
 
   const setRole = (role: AgentRole, id: string) => setDraft(d => ({ ...d, roles: { ...d.roles, [role]: id } }));
   const setLimit = (key: string, value: string) => setDraft(d => ({ ...d, limits: { ...d.limits, [key]: value === '' ? Number.NaN : Number(value) } }));

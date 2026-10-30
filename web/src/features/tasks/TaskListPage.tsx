@@ -142,7 +142,7 @@ export function TaskRow({ task, positions = [], active, onHover, compact }: { ta
       <span className="list-title truncate">
         <Highlight text={task.title || task.id} positions={positions.filter(p => p < (task.title || '').length)} />
       </span>
-      {!compact && task.workflow_reason && (status.status === 'failed' || status.status === 'canceled') ? <span className="list-reason truncate" title={task.workflow_reason}>{task.workflow_reason}</span> : null}
+      {!compact && task.workflow_reason && (status.status === 'failed' || status.status === 'canceled' || task.workflow_status === 'paused') ? <span className="list-reason truncate" title={task.workflow_reason}>{task.workflow_reason}</span> : null}
       <span className="spacer" />
       {task.worktreePath ? (
         <span className="chip" title={task.worktreePath}>

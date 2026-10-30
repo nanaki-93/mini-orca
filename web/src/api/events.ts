@@ -36,6 +36,7 @@ const FINISHED: Record<string, { message: string; tone: 'success' | 'warning' | 
   changes_requested: { message: 'Reviewers requested changes on “%”.', tone: 'warning' },
   failed: { message: 'The agent run on “%” failed.', tone: 'danger' },
   stale: { message: '“%” is out of date; its run stopped.', tone: 'warning' },
+  paused: { message: 'Agents paused on “%”: a subscription plan reached its usage limit.', tone: 'warning' },
 };
 
 /** The announcement for a workflow run that just ended, if it deserves one. */

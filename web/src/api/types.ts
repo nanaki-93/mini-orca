@@ -372,8 +372,22 @@ export interface ChangeWorkflow {
   override?: WorkflowOverride;
   specialists?: SpecialistReview[];
   input?: WorkflowInput;
+  /** Set while the run is paused because a stage's subscription plan reached its usage limit. */
+  pause?: WorkflowPause;
   started_at?: string;
   updated_at?: string;
+}
+
+/** Where a run stopped at a plan's usage limit, and how to continue it. */
+export interface WorkflowPause {
+  /** The stage that reached the limit: create, test or review. */
+  stage: string;
+  /** The resume_from that continues the run: create, test, checks or review. */
+  resume_from: string;
+  /** The CLI whose plan reached its limit: claude, agy or pi. */
+  provider: string;
+  /** When the plan's limit resets, when the CLI said so. */
+  resumes_at?: string;
 }
 
 export interface ChangeMessage {
@@ -722,7 +736,7 @@ export interface ModelChoice {
   id: string;
   name: string;
   provider: string;
-  source: 'configured' | 'agy' | 'pi' | string;
+  source: 'configured' | 'agy' | 'pi' | 'claude' | string;
   location: 'local' | 'remote' | 'unknown' | string;
   model: Model;
 }
@@ -737,6 +751,8 @@ export interface AvailableModels {
   defaults: Record<string, string>;
   pi: ModelDiscovery;
   agy: ModelDiscovery;
+  /** Claude Code: ready when it is installed; its choices are model aliases. */
+  claude: ModelDiscovery;
 }
 
 export interface DaemonStatus {
@@ -746,7 +762,7 @@ export interface DaemonStatus {
 
 // ---------------------------------------------------------------- project setup
 
-export type SetupProvider = '' | 'openai' | 'gemini' | 'vertex' | 'agy' | 'pi';
+export type SetupProvider = '' | 'openai' | 'gemini' | 'vertex' | 'agy' | 'pi' | 'claude';
 
 /** One model scope as setup edits it. Secrets are write-only: api_key_set says one is saved. */
 export interface SetupModel {

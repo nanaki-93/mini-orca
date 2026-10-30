@@ -108,6 +108,26 @@ export function rejectedTask(): ChangeSession {
   };
 }
 
+/** The same task paused in its review: the Claude plan reached its usage limit. */
+export function pausedTask(): ChangeSession {
+  const task = reviewTask();
+  const reason = 'The Claude plan reached its usage limit during the review stage. Nothing was lost: resume when the limit resets, or choose another model for that stage.';
+  return {
+    ...task,
+    workflow: {
+      ...task.workflow!,
+      status: 'paused',
+      reason,
+      input: undefined,
+      review: undefined,
+      specialists: undefined,
+      // The reset is in the browser's future, whatever the fixture clock says.
+      pause: { stage: 'review', resume_from: 'review', provider: 'claude', resumes_at: new Date(Date.now() + 90 * 60_000).toISOString() },
+      stages: task.workflow!.stages.map(stage => (stage.name === 'review' ? { ...stage, status: 'paused', reason, finished_at: undefined } : stage.name === 'human_review' ? { name: stage.name, status: 'blocked' } : stage)),
+    },
+  };
+}
+
 /** The model a stage ran with; the daemon records the role's selection as its profile. */
 export function stageModel(selection: string): Model {
   return { ...models.scopes[selection], profile: selection };
@@ -235,17 +255,21 @@ export const models: ModelsCurrent = {
   },
 };
 
-// The model catalog: the configured scopes' models plus what the Agy CLI lists.
+// The model catalog: the configured scopes' models plus what Claude Code and the Agy CLI list.
 const agyModel = (id: string): Model => ({ scope: '', profile: 'agy:' + id, model: id, provider_origin: 'cli://agy', remote_provider: true, reasoning_effort: 'medium' });
+const claudeModel = (id: string): Model => ({ scope: '', profile: 'claude:' + id, model: id, provider_origin: 'cli://claude', remote_provider: true });
 export const availableModels: AvailableModels = {
   models: [
     { id: 'configured:' + 'a'.repeat(64), name: 'gemini-2.5-pro', provider: 'gemini', source: 'configured', location: 'remote', model: { ...models.scopes.analyze, scope: '', profile: 'configured:' + 'a'.repeat(64) } },
     { id: 'agy:gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash', provider: 'agy', source: 'agy', location: 'unknown', model: agyModel('gemini-3.8-flash-medium') },
     { id: 'agy:gemini-3.8-pro-high', name: 'Gemini 3.8 Pro', provider: 'agy', source: 'agy', location: 'unknown', model: agyModel('gemini-3.8-pro-high') },
+    { id: 'claude:sonnet', name: 'Claude Sonnet', provider: 'anthropic', source: 'claude', location: 'remote', model: claudeModel('sonnet') },
+    { id: 'claude:opus', name: 'Claude Opus', provider: 'anthropic', source: 'claude', location: 'remote', model: claudeModel('opus') },
   ],
   defaults: { analyze: 'configured:' + 'a'.repeat(64) },
   pi: { status: 'unavailable', message: 'Pi models could not be loaded. Check that Pi is installed, signed in, and its model configuration is valid, then refresh models.' },
   agy: { status: 'ready' },
+  claude: { status: 'ready' },
 };
 
 /** The daemon's agent settings for `roles` and `limits`, resolved like the service does. */

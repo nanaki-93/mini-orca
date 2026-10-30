@@ -202,6 +202,8 @@ export function taskStatus(entry: Pick<ChangeHistoryEntry, 'state' | 'freshness'
   if (entry.freshness && entry.freshness !== 'current') return { status: 'stale', label: 'Stale', tone: 'warning' };
   if (wf === 'awaiting_human_review') return { status: 'needs_you', label: 'Needs review', tone: 'accent' };
   if (wf === 'changes_requested') return { status: 'needs_you', label: 'Changes requested', tone: 'warning' };
+  // A plan reached its usage limit: the run continues when you resume it.
+  if (wf === 'paused') return { status: 'needs_you', label: 'Paused', tone: 'warning' };
   // The proposal changed after the last run: the agents run again, not failed.
   if (wf === 'outdated') return { status: 'needs_you', label: 'Revised', tone: 'accent' };
   if (wf === 'failed' || wf === 'stale' || wf === 'interrupted') return { status: 'failed', label: wf === 'interrupted' ? 'Interrupted' : 'Failed', tone: 'danger' };

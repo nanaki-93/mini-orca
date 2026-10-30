@@ -20,7 +20,7 @@ export function RunAgents({ session, variant = 'secondary', size }: { session: L
     <Tip label={blocker || (first ? 'Agents write the change, tests, and review it' : 'Choose where the agents start: this version as it is, new tests, or the change written again')}>
       <span>
         <Button variant={variant} size={size} icon={Play} onClick={() => void actions.startAgents(session, { autoRepair: true })} disabled={Boolean(blocker) || Boolean(busy)}>
-          {first ? 'Start agents' : 'Run agents again'}
+          {session.workflow?.status === 'paused' ? 'Resume agents' : first ? 'Start agents' : 'Run agents again'}
         </Button>
       </span>
     </Tip>

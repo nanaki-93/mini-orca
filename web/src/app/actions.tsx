@@ -236,8 +236,9 @@ export function useActions() {
     const starts = runStartOptions(session, choice.selections.create, isTestPath);
     let start = starts.initial; // The choice below updates it while the dialog is open.
     const again = starts.options.length > 0;
+    const paused = session.workflow?.status === 'paused';
     const ok = await confirm({
-      title: again ? 'Run the agents again?' : 'Start the agents?',
+      title: paused ? 'Resume the agents?' : again ? 'Run the agents again?' : 'Start the agents?',
       body: (
         <div className="stack">
           {again ? (
@@ -264,7 +265,7 @@ export function useActions() {
           {comments && !again ? <p className="small">{commentsBrief(comments)}</p> : null}
         </div>
       ),
-      confirmLabel: again ? 'Run agents' : 'Start agents',
+      confirmLabel: paused ? 'Resume agents' : again ? 'Run agents' : 'Start agents',
     });
     if (!ok) return false;
     return Boolean(
