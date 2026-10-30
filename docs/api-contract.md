@@ -70,7 +70,6 @@ untrusted networks.
 | GET | `/ui/assets/{path}` | Embedded Web UI stylesheet and ES modules (`.css`/`.js` only); same strict CSP, no directory listing. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `code` model catalog and `config_file`, the configuration file read (empty for built-in defaults). |
 | GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
-| GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts; the project overview is requested from the project's analyze model only when it is local or `confirm_remote_provider` is true. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current` | Read the selected project summary without changing the active project. |
@@ -106,7 +105,6 @@ untrusted networks.
 | POST | `/api/projects/current/agent-settings/skills/validate` | Explicitly validate a configured skill's captured local text without executing resources. |
 | GET | `/api/projects/current/execution-trust` | Read remembered project trust bound to the current revision and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Save or revoke local execution trust for the current project path. |
-| POST | `/api/projects/current/bootstrap/exec` | Run `mise trust && mise install` and `lefthook install` in the active project root under explicit local execution trust. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file facts. |
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
 | GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file. |

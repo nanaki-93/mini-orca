@@ -41,9 +41,9 @@ func TestCLIProvidersAnalyzeAndProposeChangesWithScopeConsent(t *testing.T) {
 					t.Fatalf("%s was not gated", scope)
 				}
 			}
-			preview, err := service.AnalysisContextManifest("main.go")
-			if err != nil || preview.ProviderOrigin != "cli://"+string(provider) || !preview.RemoteProvider {
-				t.Fatalf("context preview = %+v, %v", preview, err)
+			preview := service.contextManifestForRuntime(project.ContextManifest{}, service.conf().runtimes.bug)
+			if preview.ProviderOrigin != "cli://"+string(provider) || !preview.RemoteProvider {
+				t.Fatalf("context provenance = %+v", preview)
 			}
 			if _, err := os.Stat(calls); !os.IsNotExist(err) {
 				t.Fatal("preview or catalog launched a process")

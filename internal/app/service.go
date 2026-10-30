@@ -239,25 +239,6 @@ func requireModelRuntimeConfirmation(runtime modelRuntime, confirmed bool) error
 	return nil
 }
 
-// ContextManifest previews the safe prompt context for one selected file.
-func (s *Service) ContextManifest(targetFile string) (project.ContextManifest, error) {
-	_, manifest, err := project.NewContextBuilder().BuildWithManifest(s.manager.Root(), targetFile)
-	return s.contextManifestForRuntime(manifest, s.conf().runtimes.function), err
-}
-
-// AnalysisContextManifest previews the one-file context used for semantic analysis.
-func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextManifest, error) {
-	indexedFile, err := s.manager.IndexedFile(targetFile)
-	if err != nil {
-		return project.ContextManifest{}, err
-	}
-	instructions, err := project.ResolveInstructions(s.manager.Root(), indexedFile.Path)
-	if err != nil {
-		return project.ContextManifest{}, err
-	}
-	return s.contextManifestForRuntime(semanticInstructionManifest(*indexedFile, instructions), s.conf().runtimes.bug), nil
-}
-
 func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {
 	return bindContextManifestModel(manifest, runtime.effective)
 }

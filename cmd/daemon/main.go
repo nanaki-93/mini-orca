@@ -271,8 +271,6 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	modelHandler := handlers.NewModelHandler(application)
 	mux.HandleFunc("GET /api/models/current", modelHandler.Current)
 	mux.HandleFunc("GET /api/models/available", modelHandler.Available)
-	contextHandler := handlers.NewContextHandler(application)
-	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 
 	analysisHandler := handlers.NewAnalysisHandler(application)
 	mux.HandleFunc("GET /api/projects/current/analysis/selection", analysisHandler.Selection)
@@ -294,7 +292,6 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("DELETE /api/projects/current/scan", projectHandler.CancelGoScan)
 	mux.HandleFunc("GET /api/projects/current/execution-trust", projectHandler.ExecutionTrust)
 	mux.HandleFunc("POST /api/projects/current/execution-trust", projectHandler.TrustProjectExecution)
-	mux.HandleFunc("POST /api/projects/current/bootstrap/exec", projectHandler.BootstrapExec)
 	mux.HandleFunc("GET /api/projects/current/index", projectHandler.Index)
 	mux.HandleFunc("GET /api/projects/current/files/info", projectHandler.FileInfo)
 	mux.HandleFunc("GET /api/projects/current/impact", projectHandler.Impact)
