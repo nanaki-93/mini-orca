@@ -126,6 +126,11 @@ every guard when the action arrives.
   waiting workflow input; it writes nothing. Optional notes (up to 2048 bytes)
   stay with the approval and are cleared with it. **Reject proposal** ends a
   waiting workflow after confirmation.
+- **Agents with tools.** When a stage ran as a tool-using agent (a task in its
+  own worktree on a pi model), its timeline line says "Worked with tools: N calls
+  in M turns (read_file 12, …)", and "stopped before finishing" when the agent
+  never called finish. The agent's report, with how each criterion is met, is its
+  message in the conversation.
 - **Task in its own worktree.** The proposal is the worktree's diff against the
   task's base commit; Files changed marks new, deleted and moved files. Edits
   made in the worktree outside Mini-Orca become a new version of the proposal

@@ -132,6 +132,14 @@ checks:
   the outlines (declarations and signatures) of the files those files import
   and of their neighbors, in any language the parser knows, so they reuse what
   exists.
+- **Agents with tools.** On a pi model, the coder and the testing agent of a task
+  in its own worktree read and change the project through Mini-Orca's tools
+  instead of returning whole files. After each write a tool reports gofmt, parse
+  errors and the file's budgets; `run_checks` runs these checks and the touched
+  subprojects' tests on a copy. The agent ends with a report that maps its change
+  to the acceptance criteria. pi starts with no extensions but Mini-Orca's, no
+  built-in tools and no context files; a run that fails before finishing leaves the
+  worktree as the stored proposal. The reviewers read the proposal as a diff.
 
 ## Run locally
 
@@ -235,7 +243,8 @@ and the [UI behavior contract](docs/ui-behavior.md).
 
 | Capability | Delivered behavior and boundary |
 | --- | --- |
-| Models and streaming | HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles provide completion only. Partial output never becomes an approved proposal. |
+| Models and streaming | HTTP and native Gemini/Vertex adapters preserve tool identities, schemas, cancellation and usage. CLI profiles provide completion, except pi, which also runs the tool-using coder and tester (below). Partial output never becomes an approved proposal. |
+| Task tools | A task in its own worktree whose creation or testing model runs in pi gets a tool-using agent for that stage. Its only tools are Mini-Orca's, served by a per-run MCP server on a loopback port with a one-time token: read, list, search, outline, definitions and references, edit by exact text, create, delete, rename, run the checks, finish. Every call passes the context policy and the task's diff policy; the testing agent writes test files only. The worktree's diff becomes the proposal. |
 | Repository tools | Planning and file investigations use captured snippets, imports, search and impact evidence. Tools cannot widen their admitted scope or write source. |
 | Workflow graphs | Sequential stages, parallel specialist reviews, conditional branches, bounded repairs and durable human-input checkpoints run through ADK with host-owned checks and budgets. |
 | Sessions and artifacts | Private local journals and versioned evidence; restart keeps history and charges, not execution authority. |
@@ -290,6 +299,25 @@ harness. A replay campaign passes when task cases pass and negative controls are
 detected; control cases retain their actual failed/incomplete/canceled states.
 Receipts omit source, paths, prompts, model answers, credentials and raw errors.
 Unavailable build metadata remains labeled `unavailable`.
+
+The **coder suite** compares the tool-using coder with the one-shot proposal on
+five small tasks in Go, Python and JavaScript (a fix, a move into a new file, a
+deletion, a feature). Each coder runs the creation stage once on the **bug**
+profile's model, in its own worktree of a scratch repository; the suite then adds
+the task's hidden tests and runs its test command. The receipt keeps each case's
+state, failing test names, changed files, model calls, tokens and tool calls, totals
+per coder, and whether the tool-using coder passed at least as many tasks (exit
+status 1 when not). It needs `go`, `python3` and `node` for the tasks, a pi model
+for the tool-using coder, and runs live only:
+
+```sh
+go run ./cmd/agent-eval --suite coder --mode live --config config.yaml --confirm-live
+go run ./cmd/agent-eval --suite coder --mode live --config config.yaml --case py-slugify --coders tools --confirm-live
+```
+
+To check that the pi installed on your machine reaches only Mini-Orca's tools,
+without using your plan, run it against a scripted local model:
+`MINI_ORCA_PI_SMOKE=1 go test ./internal/app -run TestRealPi -v`.
 
 Live mode sends only the embedded synthetic corpus to the configured **code**
 profile and excludes negative controls. It requires an explicit command and

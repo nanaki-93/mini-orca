@@ -990,6 +990,23 @@ reviewer remains a failed run rather than appearing as a user cancellation.
 The testing agent may change only captured test
 paths; its edits merge with the implementation. Checks use the isolated workspace
 and existing regression baseline rules. Tests and review never apply source.
+
+For a task in its own worktree whose create or test model is a pi profile, that
+stage runs as a tool-using agent instead of returning file contents. Mini-Orca
+serves the run's tools over MCP on a loopback port with a one-time bearer token;
+pi starts in a private directory with no other extensions, no built-in tools and
+no context files, and its model can call only `read_file`, `list_files`, `search`,
+`outline`, `find_definitions`, `find_references`, `edit_file`, `create_file`,
+`delete_file`, `rename_file`, `run_checks` and `finish`. Reads follow the context
+policy, writes the task's diff policy; the testing agent writes test files only
+(and so needs no test path in the task's scope). A run has budgets for tool
+calls (150 for the coder, 80 for the tester), changed files and check runs, and a
+turn limit; its time limit is four model timeouts plus two focused check timeouts.
+The worktree's diff becomes the next proposal version, the agent's `finish`
+report its conversation message, and `workflow.stages[i].tools` records its calls,
+the calls per tool, its turns and whether it finished. A run that fails before
+`finish` returns the worktree to the stored proposal. Every model turn is charged
+to the stage's usage. Reviewers also receive the proposal as a unified diff.
 There is one active change workflow per conversation. Each model call uses the
 largest of `timeouts.workflow_model_seconds` (900 seconds by default), the
 generation timeout and its selected scope's timeout; retries share that deadline.
