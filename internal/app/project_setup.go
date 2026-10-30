@@ -14,6 +14,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 // Project setup writes the project's own configuration file
@@ -446,7 +447,7 @@ func (s *Service) TestSetupModel(ctx context.Context, id, revision, scope string
 
 func truncateDetail(text string) string {
 	if len(text) > 300 {
-		return text[:300] + "…"
+		return textutil.Truncate(text, 300) + "…"
 	}
 	return text
 }

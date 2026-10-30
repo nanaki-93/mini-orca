@@ -15,6 +15,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/app/changes"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/sandbox"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 func (s *Service) CheckChange(ctx context.Context, id string, request ChangeCheckRequest) (*ChangeSession, error) {
@@ -573,10 +574,7 @@ func changeCheckEvidence(checks []CheckResult) string {
 		text.WriteString(check.Name + ": " + check.State + "\n" + sanitizeCheckOutput(check.Output, false, "", "") + "\n")
 	}
 	result := text.String()
-	if len(result) > 4096 {
-		result = result[:4096]
-	}
-	return result
+	return textutil.Truncate(result, 4096)
 }
 
 type workspaceIdentity struct {

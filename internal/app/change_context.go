@@ -18,6 +18,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/diff"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 func changeContextByteLimit(runtime modelRuntime) int {
@@ -133,7 +134,7 @@ func summarizeTestTargetDecls(target ChangeTarget) string {
 		if decls := extractGoDeclsFromText(target.Content); len(decls) > 0 {
 			joined := strings.Join(decls, "\n")
 			if len(joined) > 1600 {
-				return joined[:1600] + "\n  ..."
+				return textutil.Truncate(joined, 1600) + "\n  ..."
 			}
 			return joined
 		}
@@ -141,7 +142,7 @@ func summarizeTestTargetDecls(target ChangeTarget) string {
 	if len(target.Content) <= 1200 {
 		return target.Content
 	}
-	return target.Content[:1200] + "\n..."
+	return textutil.Truncate(target.Content, 1200) + "\n..."
 }
 
 func samePackageGoDecls(root string, session *ChangeSession) string {
@@ -333,7 +334,7 @@ func sanitizeEditSummary(raw string) string {
 		return ""
 	}
 	if len(trimmed) > 512 {
-		return strings.TrimSpace(trimmed[:512])
+		return strings.TrimSpace(textutil.Truncate(trimmed, 512))
 	}
 	return trimmed
 }
@@ -425,11 +426,7 @@ func proposalTarget(session *ChangeSession, raw string) (*ChangeTarget, error) {
 func boundedProposalPath(raw string) string {
 	const limit = 120
 	if len(raw) > limit {
-		cut := limit
-		for cut > 0 && !utf8.RuneStart(raw[cut]) {
-			cut--
-		}
-		raw = raw[:cut] + "…"
+		raw = textutil.Truncate(raw, limit) + "…"
 	}
 	return strconv.Quote(raw)
 }

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 // Line comments are the reviewer's requests on specific lines of a proposal.
@@ -116,7 +118,7 @@ func commentExcerpt(session *ChangeSession, path, side string, line int) (string
 			number = candidate.OldLine
 		}
 		if number == line && candidate.Kind != "hunk" && (side == commentSideNew) == (candidate.Kind != "removed") {
-			return truncateUTF8(candidate.Text, maxCommentExcerpt), nil
+			return textutil.Truncate(candidate.Text, maxCommentExcerpt), nil
 		}
 	}
 	return "", fmt.Errorf("line %d is not part of the %s version of %s", line, side, path)

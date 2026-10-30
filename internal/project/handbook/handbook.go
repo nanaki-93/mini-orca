@@ -12,6 +12,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project/insight"
 	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const (
@@ -771,7 +772,7 @@ func scenarioFromFlow(index int, flow string) ProjectDocsScenario {
 		diagram = flow
 		summary = extractMermaidSummary(flow)
 	} else if len(summary) > 72 {
-		title = summary[:68] + "..."
+		title = textutil.Truncate(summary, 68) + "..."
 	} else if summary != "" {
 		title = summary
 	}

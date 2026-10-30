@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/archgate"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const (
@@ -200,7 +201,7 @@ func SanitizeOutput(output string, truncated bool, workspace, root string) strin
 	output = checkAuthorization.ReplaceAllString(output, "[redacted]")
 	output = checkSecret.ReplaceAllString(output, "[redacted]")
 	if len(output) > checkLimits.maxOutputBytes {
-		output = output[:checkLimits.maxOutputBytes]
+		output = textutil.Truncate(output, checkLimits.maxOutputBytes)
 		truncated = true
 	}
 	if truncated {

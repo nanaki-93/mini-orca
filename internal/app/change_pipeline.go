@@ -12,6 +12,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 func workflowStageScope(stage int) config.ModelScope {
@@ -463,7 +464,7 @@ func firstCheckFailureLine(output string) string {
 		trimmed := strings.TrimSpace(raw)
 		if strings.Contains(trimmed, "--- FAIL:") || strings.HasPrefix(trimmed, "FAIL") || strings.Contains(trimmed, "Error:") || strings.Contains(trimmed, "undefined:") {
 			if len(trimmed) > 140 {
-				return trimmed[:140] + "…"
+				return textutil.Truncate(trimmed, 140) + "…"
 			}
 			return trimmed
 		}
@@ -471,7 +472,7 @@ func firstCheckFailureLine(output string) string {
 	for _, raw := range lines {
 		if trimmed := strings.TrimSpace(raw); trimmed != "" {
 			if len(trimmed) > 140 {
-				return trimmed[:140] + "…"
+				return textutil.Truncate(trimmed, 140) + "…"
 			}
 			return trimmed
 		}
@@ -488,7 +489,7 @@ func sanitizeWorkflowError(err error) string {
 		text = strings.TrimSpace(text[:idx])
 	}
 	if len(text) > 160 {
-		text = text[:160] + "…"
+		text = textutil.Truncate(text, 160) + "…"
 	}
 	return text
 }

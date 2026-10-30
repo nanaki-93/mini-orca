@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project/symbols"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const (
@@ -264,17 +265,17 @@ func contextSnippet(root, target, relative string) ([]byte, int, bool) {
 	}
 	originalSize := len(data)
 	if originalSize > int(limit) {
-		data = data[:limit]
+		data = []byte(textutil.Truncate(string(data), int(limit)))
 	}
 	return data, originalSize, true
 }
 
 func boundedContextData(data []byte, remaining, availableTokens int) []byte {
 	if len(data) > remaining {
-		data = data[:remaining]
+		data = []byte(textutil.Truncate(string(data), remaining))
 	}
 	if estimateTokens(string(data)) > availableTokens {
-		data = data[:min(len(data), availableTokens*4)]
+		data = []byte(textutil.Truncate(string(data), availableTokens*4))
 	}
 	return data
 }

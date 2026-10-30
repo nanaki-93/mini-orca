@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestRunCheckCommandHonorsCancellation(t *testing.T) {
@@ -569,4 +570,11 @@ func writeCheckWorkspaceBenchmarkFixture(b *testing.B, files, bytes int) string 
 		}
 	}
 	return root
+}
+
+func TestSanitizeOutputKeepsWholeCharactersWhenItTruncates(t *testing.T) {
+	output := SanitizeOutput("x"+strings.Repeat("é", checkLimits.maxOutputBytes), false, "", "")
+	if !utf8.ValidString(output) || !strings.Contains(output, "[output truncated]") {
+		t.Fatalf("truncated output is not valid UTF-8: %q", output[len(output)-40:])
+	}
 }

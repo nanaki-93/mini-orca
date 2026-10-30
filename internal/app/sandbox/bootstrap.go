@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 type BootstrapStep struct {
@@ -90,9 +92,7 @@ func runBootstrapCmd(ctx context.Context, dir, name string, args ...string) (str
 	defer cancel()
 	result, err := RunCommandWithStart(runCtx, dir, append([]string{name}, args...), true, nil)
 	text := strings.TrimSpace(result.Output)
-	if len(text) > 2048 {
-		text = text[:2048]
-	}
+	text = textutil.Truncate(text, 2048)
 	if err != nil {
 		if text == "" {
 			text = fmt.Sprintf("%s %s: %v", name, strings.Join(args, " "), err)

@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const workflowTestPrompt = "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured test file paths (such as _test.go, .test.ts, test_*.py, or tests/ files). Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
@@ -46,22 +47,11 @@ func workflowRetryMessage(message string, workflow *ChangeWorkflow, checks []Che
 	}
 	// The feedback is what the repair acts on, so the request gives way first;
 	// each keeps at least half of the budget.
-	message = truncateUTF8(message, max(maxWorkflowRetryMessage-len(extra), maxWorkflowRetryMessage/2))
-	return message + truncateUTF8(extra, maxWorkflowRetryMessage-len(message))
+	message = textutil.Truncate(message, max(maxWorkflowRetryMessage-len(extra), maxWorkflowRetryMessage/2))
+	return message + textutil.Truncate(extra, maxWorkflowRetryMessage-len(message))
 }
 
 const maxWorkflowRetryMessage = 8192
-
-// truncateUTF8 shortens s to at most n bytes without splitting a character.
-func truncateUTF8(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-	return s[:n]
-}
 
 func harnessProbeRetryDirective(message string, workflow *ChangeWorkflow, checks []CheckResult) string {
 	if strings.Contains(message, "Harness² Propose-Probe-Compose:") {
@@ -174,9 +164,7 @@ func failedWorkflowCheckEvidence(checks []CheckResult) string {
 		if output == "" {
 			output = check.State
 		}
-		if len(output) > 1500 {
-			output = output[len(output)-1500:]
-		}
+		output = textutil.TruncateTail(output, 1500)
 		text.WriteString(check.Name + " (" + check.State + "):\n" + output + "\n")
 	}
 	return strings.TrimSpace(text.String())
@@ -191,10 +179,7 @@ func workflowTestStageMessage(stageMessage string) string {
 	} {
 		if idx := strings.Index(stageMessage, marker); idx >= 0 {
 			combined := workflowTestPrompt + stageMessage[idx:]
-			if len(combined) > 8192 {
-				return combined[:8192]
-			}
-			return combined
+			return textutil.Truncate(combined, 8192)
 		}
 	}
 	return workflowTestPrompt

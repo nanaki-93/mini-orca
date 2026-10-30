@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const (
@@ -38,7 +40,7 @@ func SanitizeFindingText(value string, limit int) string {
 	if len(value) <= limit {
 		return value
 	}
-	return value[:limit-len("[truncated]")] + "[truncated]"
+	return textutil.Truncate(value, limit-len("[truncated]")) + "[truncated]"
 }
 
 // SanitizeBugTaskSpec applies the same secret redaction and text normalization

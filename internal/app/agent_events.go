@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentruntime"
 	"github.com/nanaki-93/mini-orca/v2/internal/app/agentstate"
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 const maxAgentPrivateText = 64 << 10
@@ -99,11 +99,7 @@ func boundAgentText(text string) (string, bool) {
 	if len(text) <= maxAgentPrivateText {
 		return text, false
 	}
-	end := maxAgentPrivateText
-	for end > 0 && !utf8.RuneStart(text[end]) {
-		end--
-	}
-	return text[:end], true
+	return textutil.Truncate(text, maxAgentPrivateText), true
 }
 
 func (s *Service) observeAgentRuns(ctx context.Context) context.Context {

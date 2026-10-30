@@ -7,7 +7,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/textutil"
 )
 
 // AgentScope is an admitted source span, never a grant to edit a file.
@@ -150,10 +151,7 @@ func (r *AgentEvidenceResult) add(scope AgentScope, kind, text, confidence strin
 		return
 	}
 	if len(text) > remaining {
-		text = text[:remaining]
-		for !utf8.ValidString(text) {
-			text = text[:len(text)-1]
-		}
+		text = textutil.Truncate(text, remaining)
 		r.Truncated = true
 	}
 	r.Evidence = append(r.Evidence, AgentEvidence{AgentScope: scope, Kind: kind, Text: text, Confidence: confidence})
