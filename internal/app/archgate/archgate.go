@@ -507,11 +507,24 @@ func fileLineBudgetViolations(edit ChangeEdit, budgets architectureQualityBudget
 	if budgets.maxFileLines <= 0 {
 		return nil
 	}
-	lines := strings.Count(edit.Content, "\n") + 1
+	lines := countLines(edit.Content)
 	if lines <= budgets.maxFileLines {
 		return nil
 	}
 	return []string{fmt.Sprintf("%s: file has %d lines (max %d); split into cohesive modules", filepath.ToSlash(edit.Path), lines, budgets.maxFileLines)}
+}
+
+// countLines counts lines as editors and wc -l do: a final newline ends the
+// last line rather than starting another one.
+func countLines(content string) int {
+	if content == "" {
+		return 0
+	}
+	lines := strings.Count(content, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		lines++
+	}
+	return lines
 }
 
 func goEditComplexityViolations(path, content string, budgets architectureQualityBudgets) []string {

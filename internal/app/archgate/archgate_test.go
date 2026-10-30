@@ -48,12 +48,34 @@ func TestArchitecturePolicyDeduplicationAndFileLineBudgetWithoutFunctions(t *tes
 	})
 	var complexityFailed bool
 	for _, check := range checks {
-		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "file has 7 lines (max 5)") {
+		if check.Name == "complexity gate" && check.State == CheckFailed && strings.Contains(check.Output, "file has 6 lines (max 5)") {
 			complexityFailed = true
 		}
 	}
 	if !complexityFailed {
 		t.Fatalf("expected maxFileLines budget to be enforced even when file has no callable functions, got %+v", checks)
+	}
+}
+
+func TestFileLineCountIgnoresTheFinalNewline(t *testing.T) {
+	for _, test := range []struct {
+		content string
+		lines   int
+	}{
+		{"", 0},
+		{"a", 1},
+		{"a\n", 1},
+		{"a\nb", 2},
+		{"a\nb\n", 2},
+		{"\n", 1},
+	} {
+		if got := countLines(test.content); got != test.lines {
+			t.Errorf("countLines(%q) = %d, want %d", test.content, got, test.lines)
+		}
+	}
+	budget := architectureQualityBudgets{maxFileLines: 2}
+	if violations := fileLineBudgetViolations(ChangeEdit{Path: "a.ts", Content: "a\nb\n"}, budget); len(violations) != 0 {
+		t.Fatalf("a two-line file broke a two-line budget: %v", violations)
 	}
 }
 
