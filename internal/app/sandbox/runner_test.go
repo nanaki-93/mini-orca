@@ -227,14 +227,17 @@ func checkHelperCommand(mode string, arguments ...string) []string {
 	return append([]string{os.Args[0], "-test.run=^TestCheckCommandHelperProcess$", "--", mode}, arguments...)
 }
 
-func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) {
+func TestCopyCheckWorkspaceExcludesCachesAndIgnoredOutputAndKeepsTrackedOutput(t *testing.T) {
 	source := t.TempDir()
 	destination := filepath.Join(t.TempDir(), "workspace")
 	for path, content := range map[string]string{
 		"main.go":                               "package fixture\n",
 		".git":                                  "gitdir: /outside/worktree\n",
 		"node_modules/dependency/index.js":      "cache",
-		"desktop/build/generated.txt":           "cache",
+		"desktop/build/generated.txt":           "ignored output",
+		".gitignore":                            "build/\n",
+		"internal/webui/dist/index.js":          "embedded bundle",
+		"target/classes/App.class":              "tracked output",
 		".worktrees/fix/main.go":                "package ignored\n",
 		".mini-orca/check.json":                 "metadata",
 		"testdata/node_modules/fixture.txt":     "required fixture",
@@ -257,7 +260,7 @@ func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) 
 	if err := CopyWorkspace(context.Background(), source, destination); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"main.go", "testdata/node_modules/fixture.txt"} {
+	for _, path := range []string{"main.go", "testdata/node_modules/fixture.txt", "internal/webui/dist/index.js", "target/classes/App.class"} {
 		if _, err := os.Stat(filepath.Join(destination, path)); err != nil {
 			t.Fatalf("required copied path %q: %v", path, err)
 		}
@@ -473,6 +476,33 @@ func TestWorkspaceFingerprintMatchesCopiedCheckWorkspace(t *testing.T) {
 	}
 	if direct != copied {
 		t.Fatalf("in-place fingerprint %s != copied fingerprint %s", direct, copied)
+	}
+}
+
+func TestWorkspaceFingerprintFollowsTrackedOutputAndIgnoresIgnoredOutput(t *testing.T) {
+	root := t.TempDir()
+	for path, content := range map[string]string{
+		".gitignore":        "build/\n",
+		"main.go":           "package main\n",
+		"build/app.bin":     "first build",
+		"webui/dist/app.js": "bundle v1",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0700); err != nil {
+			t.Fatal(err)
+		}
+		writeBenchmarkFile(t, root, path, content)
+	}
+	before, err := WorkspaceFingerprint(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBenchmarkFile(t, root, filepath.Join("build", "app.bin"), "second build")
+	if after, err := WorkspaceFingerprint(context.Background(), root); err != nil || after != before {
+		t.Fatalf("ignored build output changed the fingerprint: %s -> %s, %v", before, after, err)
+	}
+	writeBenchmarkFile(t, root, filepath.Join("webui", "dist", "app.js"), "bundle v2")
+	if after, err := WorkspaceFingerprint(context.Background(), root); err != nil || after == before {
+		t.Fatalf("tracked bundle did not change the fingerprint: %s -> %s, %v", before, after, err)
 	}
 }
 

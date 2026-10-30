@@ -210,6 +210,12 @@ func (p *ContextPolicy) Ignored(relative string) bool {
 	return ignoredPath(p.ignores, filepath.ToSlash(filepath.Clean(relative)), false)
 }
 
+// IgnoredDirectory reports whether .gitignore or .mini-orcaignore rules
+// exclude the directory, including rules that only match directories.
+func (p *ContextPolicy) IgnoredDirectory(relative string) bool {
+	return ignoredPath(p.ignores, filepath.ToSlash(filepath.Clean(relative)), true)
+}
+
 func hasSymlinkComponent(root, relative string) bool {
 	current := root
 	for _, part := range strings.Split(relative, "/") {

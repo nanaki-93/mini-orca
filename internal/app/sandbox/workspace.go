@@ -21,7 +21,7 @@ import (
 func CopyWorkspace(ctx context.Context, source, destination string) error {
 	copier := checkWorkspaceCopier{
 		ctx: ctx, source: source, destination: destination,
-		buffer: make([]byte, checkCopyBufferSize),
+		buffer: make([]byte, checkCopyBufferSize), skipper: workspaceSkipper{root: source},
 	}
 	if err := copier.copy(); err != nil {
 		if cleanupErr := os.RemoveAll(destination); cleanupErr != nil {
@@ -39,6 +39,7 @@ type checkWorkspaceCopier struct {
 	files       int
 	bytes       int64
 	buffer      []byte
+	skipper     workspaceSkipper
 }
 
 func (copier *checkWorkspaceCopier) copy() error {
@@ -72,7 +73,11 @@ func (copier *checkWorkspaceCopier) copyEntry(path, relative string, entry os.Di
 		return nil
 	}
 	if info.IsDir() {
-		if skipCheckWorkspaceDirectory(relative) {
+		skip, err := copier.skipper.skipDirectory(relative)
+		if err != nil {
+			return err
+		}
+		if skip {
 			return filepath.SkipDir
 		}
 		return os.MkdirAll(filepath.Join(copier.destination, relative), 0700)
@@ -182,16 +187,35 @@ func copyCheckWorkspaceFile(ctx context.Context, output io.Writer, input io.Read
 	}
 }
 
-// skipCheckWorkspaceDirectory leaves out generated output and editor state.
-// Neither the check copy nor the workspace fingerprint includes them, so an
-// IDE saving its own settings does not make running agent work stale.
-func skipCheckWorkspaceDirectory(relative string) bool {
+// workspaceSkipper leaves dependency caches and editor state out of the check
+// copy and the workspace fingerprint, so an IDE saving its own settings does
+// not make running agent work stale. Build output folders (build, dist,
+// target) are left out only when the project ignores them: a committed one,
+// such as an embedded web bundle, is part of the build.
+type workspaceSkipper struct {
+	root   string
+	policy *project.ContextPolicy
+}
+
+func (skipper *workspaceSkipper) skipDirectory(relative string) (bool, error) {
+	if checkWorkspaceFixturePath(relative) {
+		return false, nil
+	}
 	switch filepath.Base(relative) {
-	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", "build", "dist", "target",
+	case "node_modules", ".gradle", ".kotlin", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox",
 		".idea", ".vscode", ".fleet", ".zed", ".vs":
-		return !checkWorkspaceFixturePath(relative)
+		return true, nil
+	case "build", "dist", "target":
+		if skipper.policy == nil {
+			policy, err := project.NewContextPolicy(skipper.root)
+			if err != nil {
+				return false, fmt.Errorf("read ignore rules for the check workspace: %w", err)
+			}
+			skipper.policy = policy
+		}
+		return skipper.policy.IgnoredDirectory(relative), nil
 	default:
-		return false
+		return false, nil
 	}
 }
 
@@ -216,6 +240,7 @@ func checkWorkspaceFixturePath(relative string) bool {
 func WorkspaceFingerprint(ctx context.Context, root string) (string, error) {
 	hash := sha256.New()
 	buffer := make([]byte, checkCopyBufferSize)
+	skipper := workspaceSkipper{root: root}
 	var files int
 	var bytes int64
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -243,7 +268,11 @@ func WorkspaceFingerprint(ctx context.Context, root string) (string, error) {
 			return nil
 		}
 		if info.IsDir() {
-			if skipCheckWorkspaceDirectory(relative) {
+			skip, err := skipper.skipDirectory(relative)
+			if err != nil {
+				return err
+			}
+			if skip {
 				return filepath.SkipDir
 			}
 			return nil
