@@ -341,3 +341,40 @@ test('issues are triaged from the keyboard, filtered by kind and fixed in a link
   await expect(page.getByText('Draft saved.')).toBeVisible();
   expect(daemon.mutations('/changes')[0].body).toMatchObject({ finding_targets: [{ project_id: 'p1', kind: 'semantic', id: 'f1', path: 'internal/api/handlers/change_handler.go' }] });
 });
+
+test('a task shows its files against the code rules, and a budget issue opens a refactor task', async ({ page, daemon }) => {
+  daemon.serve('/api/projects/current/changes/chg-1/rules', () => ({
+    session_id: 'chg-1',
+    revision: 3,
+    problems: [],
+    files: [
+      { path: 'internal/api/handlers/webui.go', budgets: { file_lines: 800, function_complexity: 15 }, lines: 812, base_lines: 812, debt: [{ kind: 'file_lines', value: 812, base: 812, limit: 800 }], test: false, proposed: true, sources: ['AGENTS.md'] },
+      { path: 'internal/api/handlers/mime.go', budgets: { file_lines: 800, function_complexity: 15 }, lines: 40, over: [{ kind: 'function_complexity', function: 'mimeType', line: 3, value: 17, limit: 15 }], test: false, proposed: true, sources: ['AGENTS.md'] },
+    ],
+  }));
+  await page.goto('/#/tasks/chg-1');
+  const rules = page.getByRole('region', { name: 'Code rules' });
+  await expect(rules).toContainText('from AGENTS.md');
+  await expect(rules).toContainText('812 / 800 lines');
+  await expect(rules).toContainText('Already over');
+  await expect(rules).toContainText('812 lines (max 800)');
+  await expect(rules).toContainText('Over budget');
+  await expect(rules).toContainText('mimeType (line 3): complexity 17 (max 15)');
+
+  daemon.serve('/api/projects/current/findings', () => ({
+    project_id: 'p1',
+    project_revision: 'r42',
+    findings: [{ id: 'f9', project_id: 'p1', source: 'rules', category: 'maintainability', severity: 'low', title: 'Refactor internal/api/handlers/webui.go to fit its code budgets', message: 'It was already over the budgets in AGENTS.md when a task changed it.', evidence: 'file has 812 lines (max 800)', location: { path: 'internal/api/handlers/webui.go' }, status: 'open' }],
+  }));
+  await page.goto('/#/issues');
+  await expect(page.getByRole('table', { name: 'Issues' }).getByRole('row', { name: /Refactor internal/ })).toContainText('Code budget (AGENTS.md)');
+  await page.keyboard.press('j');
+  await page.keyboard.press('f');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByPlaceholder('What should change?')).toHaveValue('Refactor internal/api/handlers/webui.go to fit its code budgets');
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible();
+  const created = daemon.mutations('/changes')[0].body as { acceptance_criteria: string[]; paths: string[] };
+  expect(created.acceptance_criteria[0]).toContain('splitting it into cohesive sibling files');
+  expect(created.paths).toContain('internal/api/handlers/webui.go');
+});

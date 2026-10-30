@@ -12,6 +12,7 @@ import { costCaveat, costLabel, formatTokens, usageLabel } from '@/lib/usage';
 import { Badge, Button, Callout, PhaseIcon, Textarea, cx } from '@/components/ui';
 import { FileIcon } from '@/components/domain';
 import { navigate } from '@/lib/router';
+import { CodeRules } from './CodeRules';
 import { ReanalyzeTask } from './ReanalyzeTask';
 import { RunAgents } from './RunAgents';
 
@@ -19,6 +20,7 @@ export function TaskOverview({ session }: { session: LoadedSession }) {
   return (
     <div className="page-inner stack-lg">
       <Brief session={session} />
+      <CodeRules session={session} />
       {session.workflow ? <AgentRun session={session} /> : null}
       <Conversation session={session} />
       <Revise session={session} />

@@ -67,9 +67,7 @@ export function explainable(file: { language: string; binary?: boolean }): boole
   return !file.binary && language !== '' && language !== 'text' && language !== 'markdown';
 }
 
-export function isTestPath(path: string): boolean {
-  return /_test\.go$/.test(path) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) || /(^|\/)test_[^/]+\.py$/.test(path);
-}
+export { companionTestPath, isTestPath } from './rules';
 
 /**
  * Returns the project-relative path a typed query names as a new file
@@ -84,11 +82,6 @@ export function newFilePath(query: string): string {
   const segments = path.split('/');
   if (segments.some(segment => segment === '' || segment === '.' || segment === '..')) return '';
   return /^[^.].*\.[^.]+$/.test(segments[segments.length - 1]) ? path : '';
-}
-
-/** Returns the companion Go test path for a source file, or '' when none applies. */
-export function companionTestPath(path: string): string {
-  return path.endsWith('.go') && !path.endsWith('_test.go') ? path.slice(0, -3) + '_test.go' : '';
 }
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };

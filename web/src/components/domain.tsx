@@ -59,6 +59,7 @@ const SOURCE_LABELS: Record<string, string> = {
   parser: 'Verified by parser',
   test: 'Verified by a test',
   deterministic: 'Security rule',
+  rules: 'Code budget (AGENTS.md)',
 };
 
 /** Where a finding comes from; model output is never presented as verified. */

@@ -4,8 +4,8 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, query, withWorktree } from './client';
 import type {
-  AgentSettings, AnalysisFileSelection, AvailableModels, ProjectSetup, ChangeHistoryEntry, ChangeMutationResult, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo, FileSummary,
-  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, QuarantineReport, TaskEntry, UsageReport,
+  AgentSettings, AnalysisFileSelection, AvailableModels, ProjectSetup, ChangeHistoryEntry, ChangeMutationResult, ChangeRules, ChangeSession, DaemonStatus, ExecutionTrust, FileInfo, FileSummary,
+  FindingsResponse, GitWorkspace, LoadedSession, ModelsCurrent, Overview, Project, ProjectIndex, ProjectRules, QuarantineReport, TaskEntry, UsageReport,
 } from './types';
 import { undoFromRecovery } from '@/lib/readiness';
 import { useCheckout } from '@/app/checkout';
@@ -30,7 +30,35 @@ export const keys = {
   fileSummary: (wt: string, path: string) => ['fileSummary', wt, path] as const,
   usage: (wt: string) => ['usage', wt] as const,
   quarantine: (wt: string) => ['quarantine', wt] as const,
+  rules: (wt: string) => ['rules', wt] as const,
+  changeRules: (id: string) => ['changeRules', id] as const,
 };
+
+/** The project's test file patterns and the AGENTS.md files that declare rules. */
+export function useProjectRules() {
+  const { worktreePath } = useCheckout();
+  const project = useRevision();
+  return useQuery({
+    queryKey: [...keys.rules(worktreePath), project?.project_revision],
+    queryFn: () => api.get<ProjectRules>(withWorktree('/api/projects/current/rules', worktreePath)),
+    enabled: Boolean(project),
+    staleTime: 60_000,
+  });
+}
+
+/** A task's files measured against their budgets, for the proposal it holds now. */
+export function useChangeRules(session: LoadedSession | undefined) {
+  return useQuery({
+    queryKey: [...keys.changeRules(session?.id ?? ''), session?.revision, session?.hash, session?.targets?.length],
+    queryFn: () => {
+      const { checkout } = session!;
+      return api.get<ChangeRules>(withWorktree('/api/projects/current/changes/' + encodeURIComponent(session!.id) + '/rules' + query({ project_id: checkout.project_id, project_revision: checkout.project_revision }), checkout.worktreePath));
+    },
+    enabled: Boolean(session?.id),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
 
 /** Records the daemon set aside or skipped in the selected checkout. */
 export function useQuarantine() {

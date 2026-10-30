@@ -136,7 +136,7 @@ export function IssuesPage() {
   );
 }
 
-const CATEGORY_LABELS: Record<string, string> = { bugs: 'Bugs', bug: 'Bugs', performance: 'Performance', security: 'Security' };
+const CATEGORY_LABELS: Record<string, string> = { bugs: 'Bugs', bug: 'Bugs', performance: 'Performance', security: 'Security', maintainability: 'Maintainability' };
 
 /**
  * Opens the composer prefilled to fix a finding, with its test file in scope.
@@ -147,13 +147,18 @@ function fixFinding(finding: Finding) {
   const paths = path ? [path] : [];
   const companion = companionTestPath(path);
   if (companion) paths.push(companion);
+  const refactor = finding.category === 'maintainability';
   openNewTask({
     findingTargets: finding.project_id && finding.location?.path ? [{ project_id: finding.project_id, kind: 'semantic', id: finding.id, path: finding.location.path }] : undefined,
-    title: `Fix: ${finding.title}`,
+    title: refactor ? finding.title : `Fix: ${finding.title}`,
     kind: finding.category === 'security' ? 'security' : finding.category === 'performance' ? 'performance' : 'fix',
     description: `${finding.message}${finding.evidence ? `\n\nEvidence:\n${finding.evidence}` : ''}\n\nLocation: ${path}${finding.location?.start_line ? `:${finding.location.start_line}` : ''}`,
     paths,
-    criteria: finding.task_spec?.acceptance_criteria?.length ? finding.task_spec.acceptance_criteria : [`Resolve “${finding.title}” without breaking existing callers`, 'Add a regression test that fails before the fix'],
+    criteria: finding.task_spec?.acceptance_criteria?.length
+      ? finding.task_spec.acceptance_criteria
+      : refactor
+        ? [`Bring ${path} within the budgets of its AGENTS.md, splitting it into cohesive sibling files where needed`, 'Keep its behavior and public interface; existing tests pass unchanged']
+        : [`Resolve “${finding.title}” without breaking existing callers`, 'Add a regression test that fails before the fix'],
   });
 }
 

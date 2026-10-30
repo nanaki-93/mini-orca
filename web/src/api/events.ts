@@ -12,8 +12,9 @@ import { costLabel, usageLabel } from '@/lib/usage';
 export type Connection = 'connecting' | 'live' | 'offline';
 
 const INVALIDATES: Record<string, string[][]> = {
-  workflow: [['session'], ['changes'], ['git'], ['usage'], ['quarantine']],
-  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['fileSummary'], ['usage']],
+  // Task checks open refactor issues for files already over their budgets.
+  workflow: [['session'], ['changes'], ['git'], ['usage'], ['quarantine'], ['findings'], ['changeRules']],
+  project_index: [['project'], ['index'], ['changes'], ['session'], ['overview'], ['trust'], ['git'], ['file'], ['fileSummary'], ['usage'], ['rules'], ['changeRules']],
   findings: [['findings'], ['overview']],
   analysis: [['overview'], ['findings'], ['fileSummary'], ['usage']],
   features: [['overview']],

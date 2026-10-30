@@ -174,6 +174,8 @@ export class FakeDaemon {
     [/^\/api\/projects\/current\/changes$/, () => this.tasks()],
     [/^\/api\/projects\/current\/changes\/recovery$/, () => ({ ...data.project, session_id: '', state: '', hash: '', undo_available: false, warnings: [] })],
     [/^\/api\/projects\/current\/findings$/, () => ({ ...data.project, findings: data.findings })],
+    [/^\/api\/projects\/current\/rules$/, () => ({ ...data.project, test_patterns: ['*_test.go', '*.test.ts', '**/tests/**'], guides: ['AGENTS.md'], problems: [] })],
+    [/^\/api\/projects\/current\/changes\/([^/]+)\/rules$/, () => ({ session_id: 'chg-1', revision: 3, files: [], problems: [] })],
     [/^\/api\/projects\/current\/overview$/, () => ({ ...data.overview, analysis_run: this.run ?? data.overview.analysis_run })],
     [/^\/api\/projects\/current\/agent-settings$/, () => this.settings],
     [/^\/api\/projects\/current\/setup$/, () => this.setup],

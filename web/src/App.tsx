@@ -6,7 +6,8 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { FeedbackProvider, Modal } from '@/components/overlays';
 import { Kbd } from '@/components/ui';
 import { useDaemonEvents } from '@/api/events';
-import { useSetup } from '@/api/hooks';
+import { useProjectRules, useSetup } from '@/api/hooks';
+import { setTestPatterns } from '@/lib/rules';
 import { Shell } from '@/layout/Shell';
 import { navigate, useRoute } from '@/lib/router';
 import { openWorkspace } from '@/app/checkout';
@@ -50,6 +51,10 @@ export function App({ client }: { client?: QueryClient }) {
 
 function Workspace() {
   const connection = useDaemonEvents();
+  // Test files are classified as the daemon classifies them; the patterns are
+  // adopted during render so every page below uses them in this pass.
+  const testPatterns = useProjectRules().data?.test_patterns;
+  useMemo(() => setTestPatterns(testPatterns), [testPatterns]);
   const route = useRoute();
   const shortcuts = useMemo<Shortcut[]>(
     () => [
