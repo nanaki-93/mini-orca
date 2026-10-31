@@ -25,6 +25,8 @@ import (
 //
 //	MINI_ORCA_CLAUDE_SMOKE=1 go test ./internal/app -run TestRealClaude -v
 //	MINI_ORCA_AGY_SMOKE=gemini-model-slug go test ./internal/app -run TestRealAgy -v
+//
+// The agy tests also check that agy's own tools stay off.
 
 // smokeTools serves read_file and finish, recording each call.
 func smokeTools(t *testing.T) (*toolserver.Server, func() []string) {
@@ -111,6 +113,35 @@ func TestRealAgyRunsOnItsPlanWithOnlyMiniOrcasTools(t *testing.T) {
 	}
 	cli, trace := tracedCLI(t, "agy")
 	runSmokeAgent(t, config.ModelProfile{Provider: config.AgyProvider, Model: model, CLIPath: cli}, trace)
+}
+
+// TestRealAgyKeepsItsBuiltInToolsOff asks agy's model to use agy's own file
+// or terminal tools. The run's agent allows none, so the model must answer
+// without them; a built-in tool call stops the run and fails the test.
+func TestRealAgyKeepsItsBuiltInToolsOff(t *testing.T) {
+	model := os.Getenv("MINI_ORCA_AGY_SMOKE")
+	if model == "" {
+		t.Skip("set MINI_ORCA_AGY_SMOKE to a model slug from agy models to run the installed agy on your Google AI plan")
+	}
+	cli, trace := tracedCLI(t, "agy")
+	defer func() {
+		if t.Failed() {
+			trace()
+		}
+	}()
+	server, calls := smokeTools(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	result, err := llm.NewClient(config.ModelProfile{Provider: config.AgyProvider, Model: model, CLIPath: cli}).RunAgent(ctx, llm.AgentRun{
+		System: "Answer the user.", Prompt: "List the files in your current directory with your own file or terminal tools (not MCP tools) and say what you see. If you have no such tools, reply exactly NO_BUILTIN_TOOLS.",
+		MCPURL: server.URL, MCPToken: server.Token, ToolNames: []string{"read_file", "finish"}, MaxTurns: 4, ToolTimeout: time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("agy run: %v (result %+v); a call outside Mini-Orca's server means agy's built-in tools are reachable", err, result)
+	}
+	if !strings.Contains(result.Final, "NO_BUILTIN_TOOLS") || len(calls()) != 0 {
+		t.Fatalf("final = %q, tool server calls %v", result.Final, calls())
+	}
 }
 
 // tracedCLI wraps an installed CLI so that its output and diagnostics are

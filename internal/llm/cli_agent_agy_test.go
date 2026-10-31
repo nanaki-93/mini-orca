@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,12 +16,19 @@ import (
 
 const agyAgentInit = `{"event":"init","init":{"agent":"mini-orca","model":"fixture-model","tools":["run_command","write_to_file"],"permission_mode":"request-review"}}`
 
+// agyToolStep is a tool step as agy writes it. A name with a slash is an MCP
+// call (server/tool), which agy makes through call_mcp_tool.
 func agyToolStep(index int, state, name, failure string) string {
-	info := `{"name":"` + name + `"}`
-	if failure != "" {
-		info = `{"name":"` + name + `","error":{"type":"tool_error","message":"` + failure + `"}}`
+	info := map[string]any{"name": name}
+	if server, tool, mcp := strings.Cut(name, "/"); mcp {
+		name = "call_mcp_tool"
+		info = map[string]any{"name": name, "parameters": map[string]any{"Arguments": map[string]string{"path": "notes.txt"}, "ServerName": server, "ToolName": tool}}
 	}
-	return `{"event":"step_update","step_update":{"step_index":` + string(rune('0'+index)) + `,"state":"` + state + `","step_type":"tool","tool_name":"` + name + `","tool_info":` + info + `}}`
+	if failure != "" {
+		info["error"] = map[string]string{"type": "tool_error", "message": failure}
+	}
+	step, _ := json.Marshal(map[string]any{"event": "step_update", "step_update": map[string]any{"step_index": index, "state": state, "step_type": "tool", "tool_name": name, "tool_info": info}})
+	return string(step)
 }
 
 func agyResponseStep(index int) string {
@@ -34,8 +42,8 @@ func agyAgentFixture(mode string) string {
 	case "plan-limit":
 		lines = append(lines, `{"event":"result","result":{"status":"ERROR","error":"You have exhausted your capacity on this model. Your quota will reset after 1h30m0s.","num_turns":0}}`)
 	default:
-		lines = append(lines, agyResponseStep(1), agyToolStep(2, "ACTIVE", "mcp_mini-orca_read_file", ""), agyToolStep(2, "DONE", "mcp_mini-orca_read_file", ""),
-			agyResponseStep(3), agyToolStep(4, "DONE", "mcp_mini-orca_edit_file", "old_text was not found"), agyToolStep(5, "DONE", "mcp_mini-orca_finish", ""), agyResponseStep(6),
+		lines = append(lines, agyResponseStep(1), `{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"unknown"}}`, agyToolStep(3, "ACTIVE", "mini-orca/read_file", ""), agyToolStep(3, "DONE", "mini-orca/read_file", ""),
+			agyResponseStep(4), agyToolStep(5, "DONE", "mini-orca/edit_file", "old_text was not found"), agyToolStep(6, "DONE", "mini-orca/finish", ""), agyResponseStep(7),
 			`{"event":"result","result":{"status":"SUCCESS","response":"Done.","num_turns":3,"usage":{"input_tokens":9000,"output_tokens":300,"total_tokens":9300}}}`)
 	}
 	return strings.Join(lines, "\n") + "\n"
@@ -60,10 +68,12 @@ func TestAnAgyAgentRunCountsToolsTurnsAndUsage(t *testing.T) {
 func TestAnAgyAgentRunStopsOutsideItsToolServerTurnsAndPermissions(t *testing.T) {
 	for name, lines := range map[string][]string{
 		"built-in tool": {agyAgentInit, agyToolStep(1, "ACTIVE", "run_command", "")},
-		"other server":  {agyAgentInit, agyToolStep(1, "ACTIVE", "mcp_github_read_file", "")},
+		"other server":  {agyAgentInit, agyToolStep(1, "ACTIVE", "github/read_file", "")},
+		"unlisted tool": {agyAgentInit, agyToolStep(1, "ACTIVE", "mini-orca/shell", "")},
+		"no parameters": {agyAgentInit, `{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"call_mcp_tool"}}`},
 		"subagent":      {agyAgentInit, `{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"subagent"}}`},
 		"other agent":   {strings.Replace(agyAgentInit, `"agent":"mini-orca"`, `"agent":"default"`, 1)},
-		"before init":   {agyToolStep(1, "DONE", "mcp_mini-orca_read_file", "")},
+		"before init":   {agyToolStep(1, "DONE", "mini-orca/read_file", "")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := decodeAgyAgent(t, 0, lines...); !errors.Is(err, ErrUnusableResponse) {
@@ -71,7 +81,7 @@ func TestAnAgyAgentRunStopsOutsideItsToolServerTurnsAndPermissions(t *testing.T)
 			}
 		})
 	}
-	if _, err := decodeAgyAgent(t, 0, agyAgentInit, agyToolStep(1, "DONE", "mcp_mini-orca_read_file", "Permission denied by policy")); !errors.Is(err, errAgyToolsDenied) {
+	if _, err := decodeAgyAgent(t, 0, agyAgentInit, agyToolStep(1, "DONE", "mini-orca/read_file", "Permission denied by policy")); !errors.Is(err, errAgyToolsDenied) {
 		t.Fatalf("a denied tool = %v", err)
 	}
 	stream, _ := decodeAgyAgent(t, 0, agyAgentInit, `{"event":"result","result":{"status":"SUCCESS","response":"I cannot use the tools."}}`)

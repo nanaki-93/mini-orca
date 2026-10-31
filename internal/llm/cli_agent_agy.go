@@ -81,7 +81,12 @@ type agyAgentEvent struct {
 		Type     string `json:"step_type"`
 		ToolName string `json:"tool_name"`
 		Info     *struct {
-			Name  string `json:"name"`
+			Name string `json:"name"`
+			// Parameters name the server and tool of a call_mcp_tool step.
+			Parameters struct {
+				ServerName string `json:"ServerName"`
+				ToolName   string `json:"ToolName"`
+			} `json:"parameters"`
 			Error *struct {
 				Type    string `json:"type"`
 				Message string `json:"message"`
@@ -134,12 +139,8 @@ func (d *agyAgentStream) step(event agyAgentEvent) error {
 	case "subagent":
 		return unusableCLIResponse("agy started a subagent")
 	case "tool":
-		name := step.ToolName
-		if name == "" && step.Info != nil {
-			name = step.Info.Name
-		}
-		if !ownTool(name, d.tools) {
-			return foreignTool("agy", name)
+		if err := d.ownToolStep(event); err != nil {
+			return err
 		}
 		if step.State != "DONE" {
 			return nil
@@ -158,6 +159,34 @@ func (d *agyAgentStream) step(event agyAgentEvent) error {
 			d.run.Turns, d.run.TurnLimit = d.maxTurns, true
 			return errStopAgentRun
 		}
+	}
+	return nil
+}
+
+// agyMCPTool is the tool through which agy's model calls any MCP server's
+// tool, naming the server and the tool in its parameters.
+const agyMCPTool = "call_mcp_tool"
+
+// ownToolStep accepts a tool step only when it calls one of the run's tools
+// on Mini-Orca's server.
+func (d *agyAgentStream) ownToolStep(event agyAgentEvent) error {
+	step := event.Step
+	name := step.ToolName
+	if name == "" && step.Info != nil {
+		name = step.Info.Name
+	}
+	if name != agyMCPTool {
+		if ownTool(name, d.tools) {
+			return nil
+		}
+		return foreignTool("agy", name)
+	}
+	if step.Info == nil {
+		return foreignTool("agy", name)
+	}
+	call := step.Info.Parameters
+	if call.ServerName != toolServerName || call.ToolName == "" || (len(d.tools) > 0 && !d.tools[call.ToolName]) {
+		return foreignTool("agy", call.ServerName+"/"+call.ToolName)
 	}
 	return nil
 }

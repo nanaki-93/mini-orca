@@ -351,11 +351,12 @@ func fakeAgy(args fakeCLIArgs) int {
 	step := func(index int, state, kind, tool string, failed bool) {
 		update := map[string]any{"step_index": index, "state": state, "step_type": kind}
 		if tool != "" {
-			info := map[string]any{"name": "mcp_mini-orca_" + tool}
+			// agy calls every MCP tool through call_mcp_tool.
+			info := map[string]any{"name": "call_mcp_tool", "parameters": map[string]any{"ServerName": "mini-orca", "ToolName": tool, "Arguments": map[string]any{}}}
 			if failed {
 				info["error"] = map[string]string{"type": "tool_error", "message": "the tool reported an error"}
 			}
-			update["tool_name"], update["tool_info"] = "mcp_mini-orca_"+tool, info
+			update["tool_name"], update["tool_info"] = "call_mcp_tool", info
 		}
 		emitJSON(map[string]any{"event": "step_update", "step_update": update})
 	}

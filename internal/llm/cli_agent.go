@@ -156,21 +156,27 @@ func runAgentProcess(ctx context.Context, launch agentLaunch, stream agentStream
 	if readErr != nil {
 		cancel()
 	}
-	err = process.Wait()
+	exit := process.Wait()
+	var cleanupErr error
 	if process.Process != nil {
-		if cleanupErr := process.Cancel(); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrProcessDone) {
-			return stream.result(), fmt.Errorf("llm client: CLI process-group cleanup failed")
+		if err := process.Cancel(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			cleanupErr = fmt.Errorf("llm client: CLI process-group cleanup failed")
 		}
 	}
+	// A failed cleanup is reported beside the run's own outcome, not instead of it.
+	return stream.result(), errors.Join(agentOutcome(ctx, readErr, exit, stream, stderr.buffer.String()), cleanupErr)
+}
+
+func agentOutcome(ctx context.Context, readErr, exit error, stream agentStream, stderr string) error {
 	switch {
 	case ctx.Err() != nil:
-		return stream.result(), fmt.Errorf("llm client: agent run ended: %w", context.Cause(ctx))
+		return fmt.Errorf("llm client: agent run ended: %w", context.Cause(ctx))
 	case errors.Is(readErr, errStopAgentRun):
-		return stream.result(), stream.end(nil, stderr.buffer.String())
+		return stream.end(nil, stderr)
 	case readErr != nil:
-		return stream.result(), readErr
+		return readErr
 	}
-	return stream.result(), stream.end(err, stderr.buffer.String())
+	return stream.end(exit, stderr)
 }
 
 func readAgentStream(output io.Reader, stream agentStream, provider config.ModelProvider) error {
