@@ -3,7 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -56,9 +59,17 @@ func smokeTools(t *testing.T) (*toolserver.Server, func() []string) {
 }
 
 // runSmokeAgent runs one small agent run and checks that it used the tool
-// server's tools, and only those, and reported its turns and usage.
-func runSmokeAgent(t *testing.T, profile config.ModelProfile) {
+// server's tools, and only those, and reported its turns and usage. trace,
+// when set, shows what the CLI wrote if the run fails.
+func runSmokeAgent(t *testing.T, profile config.ModelProfile, trace func()) {
 	t.Helper()
+	if trace != nil {
+		defer func() {
+			if t.Failed() {
+				trace()
+			}
+		}()
+	}
 	server, calls := smokeTools(t)
 	client := llm.NewClient(profile)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -90,7 +101,7 @@ func TestRealClaudeCodeRunsOnItsPlanWithOnlyMiniOrcasTools(t *testing.T) {
 	if err != nil || !strings.Contains(strings.ToLower(response.Choices[0].Message.Content), "ok") {
 		t.Fatalf("completion = %+v, %v", response, err)
 	}
-	runSmokeAgent(t, profile)
+	runSmokeAgent(t, profile, nil)
 }
 
 func TestRealAgyRunsOnItsPlanWithOnlyMiniOrcasTools(t *testing.T) {
@@ -98,5 +109,35 @@ func TestRealAgyRunsOnItsPlanWithOnlyMiniOrcasTools(t *testing.T) {
 	if model == "" {
 		t.Skip("set MINI_ORCA_AGY_SMOKE to a model slug from agy models to run the installed agy on your Google AI plan")
 	}
-	runSmokeAgent(t, config.ModelProfile{Provider: config.AgyProvider, Model: model, CLIPath: "agy"})
+	cli, trace := tracedCLI(t, "agy")
+	runSmokeAgent(t, config.ModelProfile{Provider: config.AgyProvider, Model: model, CLIPath: cli}, trace)
+}
+
+// tracedCLI wraps an installed CLI so that its output and diagnostics are
+// also kept, and returns the wrapper and a func that logs them. The smoke
+// runs use only the test's own prompt and tools.
+func tracedCLI(t *testing.T, name string) (string, func()) {
+	t.Helper()
+	real, err := exec.LookPath(name)
+	if err != nil {
+		t.Fatalf("%s is not installed: %v", name, err)
+	}
+	dir := t.TempDir()
+	wrapper := filepath.Join(dir, name+"-traced")
+	script := fmt.Sprintf("#!/bin/bash\n%q \"$@\" 2> >(tee %q >&2) | tee %q\nexit ${PIPESTATUS[0]}\n", real, filepath.Join(dir, "stderr.txt"), filepath.Join(dir, "stream.jsonl"))
+	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return wrapper, func() {
+		for _, file := range []string{"stream.jsonl", "stderr.txt"} {
+			data, _ := os.ReadFile(filepath.Join(dir, file))
+			t.Logf("--- %s %s:", name, file)
+			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+				if len(line) > 600 {
+					line = line[:600] + "…"
+				}
+				t.Log(line)
+			}
+		}
+	}
 }

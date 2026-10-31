@@ -139,7 +139,7 @@ func (d *agyAgentStream) step(event agyAgentEvent) error {
 			name = step.Info.Name
 		}
 		if !ownTool(name, d.tools) {
-			return unusableCLIResponse("agy called a tool outside Mini-Orca's tool server")
+			return foreignTool("agy", name)
 		}
 		if step.State != "DONE" {
 			return nil

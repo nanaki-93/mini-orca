@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
@@ -206,6 +207,21 @@ func ownTool(name string, tools map[string]bool) bool {
 		return prefixed && name != ""
 	}
 	return tools[name]
+}
+
+// foreignTool stops a run whose model called a tool that is not the run's,
+// naming the tool (bounded and quoted: the model chose it) so the cause shows.
+func foreignTool(cli, name string) error {
+	label := []rune(strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return '?'
+	}, name))
+	if len(label) > 64 {
+		label = append(label[:64], '…')
+	}
+	return unusableCLIResponse(fmt.Sprintf("%s called %q, a tool outside Mini-Orca's tool server", cli, string(label)))
 }
 
 func toolSet(names []string) map[string]bool {

@@ -212,7 +212,7 @@ func (d *claudeStream) assistant(event claudeEvent) error {
 				return unusableCLIResponse("Claude Code attempted tool use")
 			}
 			if !strings.HasPrefix(block.Name, "mcp__"+toolServerName+"__") || !ownTool(block.Name, d.tools) {
-				return unusableCLIResponse("Claude Code called a tool outside Mini-Orca's tool server")
+				return foreignTool("Claude Code", block.Name)
 			}
 			d.run.ToolCalls++
 		}
