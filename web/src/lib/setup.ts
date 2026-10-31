@@ -1,7 +1,7 @@
 // Project setup: the providers a model scope can use, the fields each needs,
 // and how analysis exclusions group by folder.
 
-import type { SetupModel, SetupScope, SetupTimeouts } from '@/api/types';
+import type { AvailableModels, SetupModel, SetupScope, SetupTimeouts } from '@/api/types';
 
 export const SCOPES: { scope: SetupScope; label: string; use: string }[] = [
   { scope: 'analyze', label: 'Analyze', use: 'Project overview, performance and security review, and the specialist reviewers.' },
@@ -53,6 +53,22 @@ export function withProvider(model: SetupModel, provider: string): SetupModel {
     reasoning_effort: info.efforts && same ? model.reasoning_effort : undefined,
     context_max_tokens: same ? model.context_max_tokens : undefined,
   };
+}
+
+/**
+ * The models a CLI lists, as the model field takes them: the catalog's
+ * `agy:`, `pi:` or `claude:` selection prefix is not part of the model name.
+ */
+export function modelSuggestions(catalog: AvailableModels | undefined, model: SetupModel): string[] {
+  const source = model.provider || 'openai';
+  return (catalog?.models ?? []).filter(choice => choice.source === source).map(choice => (choice.id.startsWith(source + ':') ? choice.id.slice(source.length + 1) : choice.id));
+}
+
+/** The model field's hint for a provider whose names need explaining. */
+export function modelHint(model: SetupModel, listed: number): string | undefined {
+  if (model.provider === 'pi') return 'provider/model, for example anthropic/claude-sonnet';
+  if (model.provider === 'claude') return 'an alias (sonnet, opus, haiku, fable) or a full model name such as claude-sonnet-5';
+  return listed ? `${listed} listed by the CLI` : undefined;
 }
 
 /** What a scope still needs before it can be saved; the daemon checks the rest. */

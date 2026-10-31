@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_ADDRESS, folderGroups, modelProblem, withProvider } from './setup';
+import { DEFAULT_ADDRESS, folderGroups, modelHint, modelProblem, modelSuggestions, withProvider } from './setup';
 
 describe('setup', () => {
   it('drops the fields a new provider does not use and keeps the same provider’s', () => {
@@ -24,5 +24,15 @@ describe('setup', () => {
       { folder: 'vendor', files: ['vendor/a.go', 'vendor/b/c.go'] },
       { folder: '', files: ['README.md'] },
     ]);
+  });
+  it('suggests model names without the catalog prefix', () => {
+    const choice = (id: string, source: string) => ({ id, name: id, provider: source, source, location: 'remote', model: { scope: '', model: id } });
+    const catalog = { models: [choice('claude:sonnet', 'claude'), choice('claude:opus', 'claude'), choice('agy:gemini-3.8-pro-high', 'agy'), choice('pi:openai-codex/gpt-5.5', 'pi'), choice('configured:' + 'a'.repeat(64), 'configured')], defaults: {}, pi: { status: 'ready' }, agy: { status: 'ready' }, claude: { status: 'ready' } };
+    expect(modelSuggestions(catalog, { provider: 'claude', model: '' })).toEqual(['sonnet', 'opus']);
+    expect(modelSuggestions(catalog, { provider: 'agy', model: '' })).toEqual(['gemini-3.8-pro-high']);
+    expect(modelSuggestions(catalog, { provider: 'pi', model: '' })).toEqual(['openai-codex/gpt-5.5']);
+    expect(modelSuggestions(undefined, { provider: 'claude', model: '' })).toEqual([]);
+    expect(modelHint({ provider: 'claude', model: '' }, 4)).toMatch(/alias .* or a full model name such as claude-sonnet-5/);
+    expect(modelHint({ provider: 'agy', model: '' }, 3)).toBe('3 listed by the CLI');
   });
 });

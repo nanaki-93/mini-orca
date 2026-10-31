@@ -11,7 +11,7 @@ import { useAnalysisSelection, useAvailableModels, useMainProject, useSetup, use
 import { useActions, useBusy } from '@/app/actions';
 import { navigate, setParam, useRoute } from '@/lib/router';
 import { LIMITS, ROLES, limitErrors } from '@/lib/agentSettings';
-import { LIMIT_MAXIMA, PROVIDERS, SCOPES, SKIPPED_FOLDERS, folderGroups, modelProblem, providerOf, timeoutErrors, withProvider } from '@/lib/setup';
+import { LIMIT_MAXIMA, PROVIDERS, SCOPES, SKIPPED_FOLDERS, folderGroups, modelHint, modelProblem, modelSuggestions, providerOf, timeoutErrors, withProvider } from '@/lib/setup';
 import { plural } from '@/lib/util';
 import { Badge, Button, Callout, EmptyState, Field, Input, Select, Skeleton, cx } from '@/components/ui';
 import { AgentSettingsNotice } from '@/features/settings/AgentSettingsNotice';
@@ -143,7 +143,7 @@ function ModelsStep({ setup, models, onChange }: { setup: ProjectSetup; models: 
           label={label}
           use={use}
           model={models[scope]}
-          suggestions={(catalog?.models ?? []).filter(choice => choice.source === (models[scope].provider || 'openai')).map(choice => choice.id.replace(/^(agy|pi):/, ''))}
+          suggestions={modelSuggestions(catalog, models[scope])}
           copyFrom={i > 0 ? { label: SCOPES[0].label, model: models.analyze } : undefined}
           onChange={model => onChange({ ...models, [scope]: model })}
         />
@@ -193,7 +193,7 @@ function ModelCard({ setup, scope, label, use, model, suggestions, copyFrom, onC
             {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </Select>
         </Field>
-        <Field label="Model" htmlFor={id('model')} hint={info.id === 'pi' ? 'provider/model, for example anthropic/claude-sonnet' : suggestions.length ? `${suggestions.length} listed by the CLI` : undefined}>
+        <Field label="Model" htmlFor={id('model')} hint={modelHint(model, suggestions.length)}>
           <Input id={id('model')} value={model.model} onChange={e => set({ model: e.target.value })} list={suggestions.length ? id('models') : undefined} placeholder="model name" autoComplete="off" />
           {suggestions.length ? <datalist id={id('models')}>{suggestions.map(s => <option key={s} value={s} />)}</datalist> : null}
         </Field>
