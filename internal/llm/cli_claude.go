@@ -56,7 +56,7 @@ func prepareClaudeAgent(directory string, profile config.ModelProfile, run Agent
 	}
 	args := append(claudeArgs(directory, profile, run.MaxTurns), "--mcp-config", filepath.Join(directory, "mcp.json"), "--allowedTools", "mcp__"+toolServerName)
 	env := cliEnvironment(config.ClaudeProvider, []string{"MCP_TOOL_TIMEOUT=" + strconv.FormatInt(run.ToolTimeout.Milliseconds(), 10), "ENABLE_TOOL_SEARCH=false", "DISABLE_AUTOUPDATER=1"})
-	stream := &claudeStream{profile: profile, run: &AgentRunResult{Model: profile.Model}, agent: true, tools: toolSet(run.ToolNames)}
+	stream := &claudeStream{profile: profile, run: &AgentRunResult{Model: profile.Model}, agent: true, tools: toolSet(run.Tools)}
 	return agentLaunch{args: args, env: env, input: run.Prompt}, stream, nil
 }
 

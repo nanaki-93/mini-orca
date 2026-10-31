@@ -44,14 +44,15 @@ func agyAgentFixture(mode string) string {
 	default:
 		lines = append(lines, agyResponseStep(1), `{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"unknown"}}`, agyToolStep(3, "ACTIVE", "mini-orca/read_file", ""), agyToolStep(3, "DONE", "mini-orca/read_file", ""),
 			agyResponseStep(4), agyToolStep(5, "DONE", "mini-orca/edit_file", "old_text was not found"), agyToolStep(6, "DONE", "mini-orca/finish", ""), agyResponseStep(7),
-			`{"event":"result","result":{"status":"SUCCESS","response":"Done.","num_turns":3,"usage":{"input_tokens":9000,"output_tokens":300,"total_tokens":9300}}}`)
+			// agy counts one conversation turn per prompt, whatever the model did.
+			`{"event":"result","result":{"status":"SUCCESS","response":"Done.","num_turns":1,"usage":{"input_tokens":9000,"output_tokens":300,"total_tokens":9300}}}`)
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
 
 func decodeAgyAgent(t *testing.T, maxTurns int, lines ...string) (*agyAgentStream, error) {
 	t.Helper()
-	stream := &agyAgentStream{profile: config.ModelProfile{Provider: config.AgyProvider, Model: "fixture-model"}, run: &AgentRunResult{}, tools: toolSet([]string{"read_file", "edit_file", "finish"}), maxTurns: maxTurns, responses: map[int]bool{}}
+	stream := &agyAgentStream{profile: config.ModelProfile{Provider: config.AgyProvider, Model: "fixture-model"}, run: &AgentRunResult{}, tools: toolSet(testTools("read_file", "edit_file", "finish")), maxTurns: maxTurns, responses: map[int]bool{}}
 	return stream, readAgentStream(strings.NewReader(strings.Join(lines, "\n")+"\n"), stream, config.AgyProvider)
 }
 
@@ -98,7 +99,7 @@ func TestAgyAgentRunsGetTheirToolServerAsTheWorkspacesOnly(t *testing.T) {
 	directory := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 29*time.Minute+30*time.Second)
 	defer cancel()
-	launch, _, err := prepareAgyAgent(ctx, directory, config.ModelProfile{Provider: config.AgyProvider, Model: "gemini-pro", ReasoningEffort: "high"}, AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", ToolNames: []string{"read_file", "finish"}, ToolTimeout: 4 * time.Minute})
+	launch, _, err := prepareAgyAgent(ctx, directory, config.ModelProfile{Provider: config.AgyProvider, Model: "gemini-pro", ReasoningEffort: "high"}, AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", Tools: testTools("read_file", "finish"), ToolTimeout: 4 * time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +116,8 @@ func TestAgyAgentRunsGetTheirToolServerAsTheWorkspacesOnly(t *testing.T) {
 		t.Fatalf("mcp_config.json = %s", servers)
 	}
 	agent, _ := os.ReadFile(filepath.Join(directory, ".agents/agents/mini-orca/agent.md"))
-	for _, line := range []string{"tools: []", "subagent: false", "inheritMcp: true", "commandExecutionPolicy: off", "# System Prompt\nBe careful."} {
+	for _, line := range []string{"tools: []", "subagent: false", "inheritMcp: true", "commandExecutionPolicy: off", "# System Prompt\nBe careful.\n\n# Your tools\nCall each tool with call_mcp_tool, ServerName \"mini-orca\"",
+		"- read_file: The read_file tool.\n  Arguments schema: {\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}}}\n", "- finish: The finish tool."} {
 		if !strings.Contains(string(agent), line) {
 			t.Fatalf("agent.md lacks %q:\n%s", line, agent)
 		}
@@ -127,7 +129,7 @@ func TestAgyAgentRunsGetTheirToolServerAsTheWorkspacesOnly(t *testing.T) {
 
 func TestAnAgyAgentRunEndToEndThroughTheCLI(t *testing.T) {
 	profile, capture := cliFixture(t, config.AgyProvider, "agent")
-	result, err := NewClient(profile).RunAgent(context.Background(), AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", ToolNames: []string{"read_file", "edit_file", "finish"}})
+	result, err := NewClient(profile).RunAgent(context.Background(), AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", Tools: testTools("read_file", "edit_file", "finish")})
 	if err != nil || result.ToolCalls != 3 || result.Turns != 3 {
 		t.Fatalf("result = %+v, %v", result, err)
 	}

@@ -282,7 +282,10 @@ tool stops the run.
   stops before the model works.
 - **agy** gets the server in the run's private workspace
   (`.agents/mcp_config.json`, limited to the run's tools) and a `mini-orca`
-  agent with no built-in tools, no command execution and no subagents. Headless
+  agent with no built-in tools, no command execution and no subagents. agy's
+  model calls MCP tools through one `call_mcp_tool` tool, so the agent's prompt
+  lists each of Mini-Orca's tools with its arguments schema, and only a call
+  naming the `mini-orca` server and one of the run's tools is accepted. Headless
   agy denies an MCP tool that would ask for approval, and Mini-Orca does not
   skip agy's permissions, so allow Mini-Orca's server once in
   `~/.gemini/antigravity-cli/settings.json`:

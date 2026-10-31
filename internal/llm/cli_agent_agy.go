@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,8 +25,8 @@ const agyAgentFile = "---\nname: mini-orca\ndescription: Mini-Orca task agent\nt
 
 func prepareAgyAgent(ctx context.Context, directory string, profile config.ModelProfile, run AgentRun) (agentLaunch, agentStream, error) {
 	server := map[string]any{"serverUrl": run.MCPURL, "headers": map[string]string{"Authorization": "Bearer " + run.MCPToken}, "timeoutSeconds": int(run.ToolTimeout.Seconds())}
-	if len(run.ToolNames) > 0 {
-		server["enabledTools"] = run.ToolNames
+	if len(run.Tools) > 0 {
+		server["enabledTools"] = toolNames(run.Tools)
 	}
 	servers, err := json.Marshal(map[string]any{"mcpServers": map[string]any{toolServerName: server}})
 	if err != nil {
@@ -35,7 +36,7 @@ func prepareAgyAgent(ctx context.Context, directory string, profile config.Model
 	if err := writeCLIFile(directory, ".agents/mcp_config.json", string(servers)); err != nil {
 		return agentLaunch{}, nil, err
 	}
-	if err := writeCLIFile(directory, ".agents/agents/mini-orca/agent.md", agyAgentFile+run.System); err != nil {
+	if err := writeCLIFile(directory, ".agents/agents/mini-orca/agent.md", agyAgentFile+run.System+agyToolGuide(run.Tools)); err != nil {
 		return agentLaunch{}, nil, err
 	}
 	args := []string{"--input-format", "stream-json", "--output-format", "stream-json", "--agent", "mini-orca", "--disable-slash-commands",
@@ -43,8 +44,28 @@ func prepareAgyAgent(ctx context.Context, directory string, profile config.Model
 	if profile.ReasoningEffort != "" {
 		args = append(args, "--effort", profile.ReasoningEffort)
 	}
-	stream := &agyAgentStream{profile: profile, run: &AgentRunResult{Model: profile.Model}, tools: toolSet(run.ToolNames), maxTurns: run.MaxTurns, responses: map[int]bool{}}
+	stream := &agyAgentStream{profile: profile, run: &AgentRunResult{Model: profile.Model}, tools: toolSet(run.Tools), maxTurns: run.MaxTurns, responses: map[int]bool{}}
 	return agentLaunch{args: args, input: agyUserMessage(run.Prompt)}, stream, nil
+}
+
+// agyToolGuide lists the run's tools in the system prompt. agy shows its model
+// only call_mcp_tool and keeps each MCP tool's schema in a file the model
+// would read with agy's own file tools, which the run's agent does not have.
+func agyToolGuide(tools []AgentTool) string {
+	if len(tools) == 0 {
+		return ""
+	}
+	var guide strings.Builder
+	fmt.Fprintf(&guide, "\n\n# Your tools\nCall each tool with call_mcp_tool, ServerName %q, the ToolName below and Arguments that match its schema. These are your only tools, and everything you need to call them is here: do not look for their description files.\n", toolServerName)
+	for _, tool := range tools {
+		schema := tool.Schema
+		var compact bytes.Buffer
+		if json.Compact(&compact, schema) == nil {
+			schema = compact.Bytes()
+		}
+		fmt.Fprintf(&guide, "\n- %s: %s\n  Arguments schema: %s\n", tool.Name, strings.TrimSpace(tool.Description), schema)
+	}
+	return guide.String()
 }
 
 // agyPrintTimeout lets agy wait as long as the run may last; agy's own
@@ -199,7 +220,9 @@ func denied(text string) bool {
 func (d *agyAgentStream) finish(event agyAgentEvent) {
 	result := event.Result
 	d.finished = true
-	if result.NumTurns > 0 {
+	// agy's num_turns counts the conversation's turns (one per prompt), not
+	// the model's: the responses counted above are the model's turns.
+	if d.run.Turns == 0 {
 		d.run.Turns = result.NumTurns
 	}
 	if result.Usage != nil {

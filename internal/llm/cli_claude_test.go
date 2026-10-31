@@ -169,7 +169,7 @@ func TestPlanLimitTextIsRecognizedOnlyWhenItSaysSo(t *testing.T) {
 
 func decodeClaudeAgent(t *testing.T, tools []string, lines ...string) (*claudeStream, error) {
 	t.Helper()
-	stream := &claudeStream{profile: config.ModelProfile{Provider: config.ClaudeProvider, Model: "sonnet"}, run: &AgentRunResult{}, agent: true, tools: toolSet(tools)}
+	stream := &claudeStream{profile: config.ModelProfile{Provider: config.ClaudeProvider, Model: "sonnet"}, run: &AgentRunResult{}, agent: true, tools: toolSet(testTools(tools...))}
 	return stream, readAgentStream(strings.NewReader(strings.Join(lines, "\n")+"\n"), stream, config.ClaudeProvider)
 }
 
@@ -242,7 +242,7 @@ func TestClaudeAgentRunsGetOnlyTheRunsToolServer(t *testing.T) {
 func TestAClaudeAgentRunEndToEndThroughTheCLI(t *testing.T) {
 	profile, capture := cliFixture(t, config.ClaudeProvider, "agent")
 	profile.Model = "claude-fixture-model-1"
-	result, err := NewClient(profile).RunAgent(context.Background(), AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", ToolNames: []string{"read_file", "finish"}, MaxTurns: 10})
+	result, err := NewClient(profile).RunAgent(context.Background(), AgentRun{System: "Be careful.", Prompt: "Add Sub.", MCPURL: "http://127.0.0.1:9/mcp", MCPToken: "run-token", Tools: testTools("read_file", "finish"), MaxTurns: 10})
 	if err != nil || result.ToolCalls != 2 || result.Turns != 3 || result.TurnLimit {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
@@ -259,7 +259,7 @@ func TestAClaudeAgentRunEndToEndThroughTheCLI(t *testing.T) {
 }
 
 func TestToolNamesAreMatchedWithEachCLIsServerPrefix(t *testing.T) {
-	tools := toolSet([]string{"read_file", "finish"})
+	tools := toolSet(testTools("read_file", "finish"))
 	for name, own := range map[string]bool{
 		"mcp__mini-orca__read_file": true, "mcp__mini_orca__finish": true, "mini-orca/read_file": true, "read_file": true,
 		"mcp__mini-orca__shell": false, "mcp__github__read_file_x": false, "Bash": false, "mini-orca-evil/read_file": false, "": false,
@@ -290,4 +290,13 @@ func TestClaudeModelsAreItsAliasesWhenItIsInstalled(t *testing.T) {
 	if _, err := DiscoverClaudeModels(context.Background(), filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("a missing Claude Code listed models")
 	}
+}
+
+// testTools describes tools by name, each taking a path.
+func testTools(names ...string) []AgentTool {
+	tools := make([]AgentTool, 0, len(names))
+	for _, name := range names {
+		tools = append(tools, AgentTool{Name: name, Description: "The " + name + " tool.", Schema: json.RawMessage(`{"type": "object", "properties": {"path": {"type": "string"}}}`)})
+	}
+	return tools
 }

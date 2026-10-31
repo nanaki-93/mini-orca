@@ -72,16 +72,16 @@ func (s *Service) runToolAgent(ctx context.Context, root string, session *Change
 		system = toolTesterSystem
 	}
 	tools := run.tools()
-	names := make([]string, 0, len(tools))
+	described := make([]llm.AgentTool, 0, len(tools))
 	for _, tool := range tools {
-		names = append(names, tool.Name)
+		described = append(described, llm.AgentTool{Name: tool.Name, Description: tool.Description, Schema: tool.Schema})
 	}
 	server, err := toolserver.Start(ctx, "Mini-Orca's tools for one task. Work only through them and end with finish.", tools)
 	if err != nil {
 		return nil, nil, err
 	}
 	result, runErr := runtime.client.RunAgent(ctx, llm.AgentRun{System: system, Prompt: toolTaskPrompt(root, session, role, message), MCPURL: server.URL, MCPToken: server.Token,
-		ToolNames: names, MaxTurns: run.limits.calls + 10, ToolTimeout: s.conf().focusedCheckTimeout + 2*time.Minute})
+		Tools: described, MaxTurns: run.limits.calls + 10, ToolTimeout: s.conf().focusedCheckTimeout + 2*time.Minute})
 	server.Close()
 	if runErr != nil && run.finished() == nil {
 		// Nothing the agent left half done becomes the proposal.

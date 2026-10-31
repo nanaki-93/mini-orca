@@ -322,14 +322,15 @@ func fakeAgy(args fakeCLIArgs) int {
 	model := args.value("--model")
 	init := map[string]any{"event": "init", "init": map[string]any{"agent": "mini-orca", "model": model, "tools": []string{"run_command", "write_to_file"}, "permission_mode": "request-review"}}
 	usage := map[string]int{"input_tokens": 1000, "output_tokens": 50, "total_tokens": 1050}
-	result := func(status, response, failure string, turns int) map[string]any {
-		return map[string]any{"event": "result", "result": map[string]any{"status": status, "response": response, "error": failure, "num_turns": turns, "usage": usage}}
+	result := func(status, response, failure string) map[string]any {
+		// Like agy, one conversation turn per prompt, whatever the model did.
+		return map[string]any{"event": "result", "result": map[string]any{"status": status, "response": response, "error": failure, "num_turns": 1, "usage": usage}}
 	}
 	_, system, _ := strings.Cut(string(agent), "# System Prompt\n")
 	if strings.Contains(string(agent), "inheritMcp: false") {
 		recordFakeReview("agy")
 		emitJSON(init)
-		emitJSON(result("SUCCESS", fakeReview, "", 1))
+		emitJSON(result("SUCCESS", fakeReview, ""))
 		return 0
 	}
 	var servers struct {
@@ -360,24 +361,22 @@ func fakeAgy(args fakeCLIArgs) int {
 		}
 		emitJSON(map[string]any{"event": "step_update", "step_update": update})
 	}
-	turns := 0
 	for index, current := range run.steps {
-		turns++
 		step(2*index, "DONE", "agent_response", "", false)
 		switch {
 		case current.Exit != 0:
 			return current.Exit
 		case current.Limit:
 			run.useLimit(index)
-			emitJSON(result("ERROR", "", "You have exhausted your capacity on this model. Your quota will reset after 1h0m0s.", turns))
+			emitJSON(result("ERROR", "", "You have exhausted your capacity on this model. Your quota will reset after 1h0m0s."))
 			return 1
 		case current.Tool == "":
-			emitJSON(result("SUCCESS", current.Text, "", turns))
+			emitJSON(result("SUCCESS", current.Text, ""))
 			return 0
 		}
 		step(2*index+1, "ACTIVE", "tool", current.Tool, false)
 		step(2*index+1, "DONE", "tool", current.Tool, run.call(current))
 	}
-	emitJSON(result("SUCCESS", "", "", turns))
+	emitJSON(result("SUCCESS", "", ""))
 	return 0
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,13 +33,29 @@ type AgentRun struct {
 	System, Prompt string
 	// MCPURL and MCPToken reach the run's tool server.
 	MCPURL, MCPToken string
-	// ToolNames are the tool server's tools. CLIs that list a server's tools
-	// up front get only these, and a call to any other tool ends the run.
-	ToolNames []string
+	// Tools are the tool server's tools. CLIs that list a server's tools up
+	// front get only these, a CLI that does not show the model their schemas
+	// gets them in its prompt, and a call to any other tool ends the run.
+	Tools []AgentTool
 	// MaxTurns ends the run after that many model turns.
 	MaxTurns int
 	// ToolTimeout bounds one tool call.
 	ToolTimeout time.Duration
+}
+
+// AgentTool describes one of the tool server's tools.
+type AgentTool struct {
+	Name, Description string
+	// Schema is the JSON Schema of the tool's arguments.
+	Schema json.RawMessage
+}
+
+func toolNames(tools []AgentTool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }
 
 // AgentRunResult is what a run did, without its transcript.
@@ -230,10 +247,10 @@ func foreignTool(cli, name string) error {
 	return unusableCLIResponse(fmt.Sprintf("%s called %q, a tool outside Mini-Orca's tool server", cli, string(label)))
 }
 
-func toolSet(names []string) map[string]bool {
-	set := make(map[string]bool, len(names))
-	for _, name := range names {
-		set[name] = true
+func toolSet(tools []AgentTool) map[string]bool {
+	set := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		set[tool.Name] = true
 	}
 	return set
 }

@@ -28,6 +28,15 @@ import (
 //
 // The agy tests also check that agy's own tools stay off.
 
+// smokeSchema is the arguments schema of both smoke tools.
+var smokeSchema = json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"Project-relative path of the file to read."},"summary":{"type":"string","description":"One line on what was done."}},"additionalProperties":false}`)
+
+// smokeToolList describes the smoke tools to the CLI.
+var smokeToolList = []llm.AgentTool{
+	{Name: "read_file", Description: "Read a file of the task.", Schema: smokeSchema},
+	{Name: "finish", Description: "End the task with a summary.", Schema: smokeSchema},
+}
+
 // smokeTools serves read_file and finish, recording each call.
 func smokeTools(t *testing.T) (*toolserver.Server, func() []string) {
 	t.Helper()
@@ -44,10 +53,9 @@ func smokeTools(t *testing.T) (*toolserver.Server, func() []string) {
 			return "Finished.", nil
 		}
 	}
-	schema := json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"summary":{"type":"string"}},"additionalProperties":false}`)
 	server, err := toolserver.Start(context.Background(), "Smoke test tools.", []toolserver.Tool{
-		{Name: "read_file", Description: "Read a file of the task.", Schema: schema, ReadOnly: true, Call: record("read_file")},
-		{Name: "finish", Description: "End the task with a summary.", Schema: schema, Call: record("finish")},
+		{Name: "read_file", Description: smokeToolList[0].Description, Schema: smokeSchema, ReadOnly: true, Call: record("read_file")},
+		{Name: "finish", Description: smokeToolList[1].Description, Schema: smokeSchema, Call: record("finish")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +86,7 @@ func runSmokeAgent(t *testing.T, profile config.ModelProfile, trace func()) {
 	defer cancel()
 	result, err := client.RunAgent(ctx, llm.AgentRun{
 		System: "You work only through the tools you are given.", Prompt: "Call read_file with path notes.txt, then call finish with a one-line summary of what it says. Then reply Done.",
-		MCPURL: server.URL, MCPToken: server.Token, ToolNames: []string{"read_file", "finish"}, MaxTurns: 8, ToolTimeout: time.Minute,
+		MCPURL: server.URL, MCPToken: server.Token, Tools: smokeToolList, MaxTurns: 8, ToolTimeout: time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("%s run: %v (result %+v)", profile.Provider, err, result)
@@ -134,7 +142,7 @@ func TestRealAgyKeepsItsBuiltInToolsOff(t *testing.T) {
 	defer cancel()
 	result, err := llm.NewClient(config.ModelProfile{Provider: config.AgyProvider, Model: model, CLIPath: cli}).RunAgent(ctx, llm.AgentRun{
 		System: "Answer the user.", Prompt: "List the files in your current directory with your own file or terminal tools (not MCP tools) and say what you see. If you have no such tools, reply exactly NO_BUILTIN_TOOLS.",
-		MCPURL: server.URL, MCPToken: server.Token, ToolNames: []string{"read_file", "finish"}, MaxTurns: 4, ToolTimeout: time.Minute,
+		MCPURL: server.URL, MCPToken: server.Token, Tools: smokeToolList, MaxTurns: 4, ToolTimeout: time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("agy run: %v (result %+v); a call outside Mini-Orca's server means agy's built-in tools are reachable", err, result)
